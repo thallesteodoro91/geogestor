@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, Settings, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ const navigation = [
   { name: "Serviços", href: "/servicos", icon: Briefcase },
   { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
   { name: "Cadastros", href: "/cadastros", icon: FileText },
-  { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
 export const Sidebar = () => {

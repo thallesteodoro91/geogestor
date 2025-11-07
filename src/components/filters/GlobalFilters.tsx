@@ -41,7 +41,7 @@ export const GlobalFilters = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   const handleFilterChange = (key: keyof FilterState, value: string) => {
-    const newFilters = { ...filters, [key]: value };
+    const newFilters = { ...filters, [key]: value === "all" ? "" : value };
     setFilters(newFilters);
     onFilterChange?.(newFilters);
   };
@@ -116,7 +116,7 @@ export const GlobalFilters = ({
                   <SelectValue placeholder="Todos os clientes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   {clientes.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.nome}
@@ -134,7 +134,7 @@ export const GlobalFilters = ({
                   <SelectValue placeholder="Todas as categorias" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="all">Todas</SelectItem>
                   <SelectItem value="Topografia">Topografia</SelectItem>
                   <SelectItem value="Ambiental">Ambiental</SelectItem>
                   <SelectItem value="Jurídico">Jurídico</SelectItem>
@@ -151,7 +151,7 @@ export const GlobalFilters = ({
                   <SelectValue placeholder="Todas as situações" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas</SelectItem>
+                  <SelectItem value="all">Todas</SelectItem>
                   <SelectItem value="Concluído">Concluído</SelectItem>
                   <SelectItem value="Em Andamento">Em Andamento</SelectItem>
                   <SelectItem value="Cancelado">Cancelado</SelectItem>
@@ -168,9 +168,9 @@ export const GlobalFilters = ({
                   <SelectTrigger>
                     <SelectValue placeholder="Todas as empresas" />
                   </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Todas</SelectItem>
-                    {empresas.map((e) => (
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {empresas.map((e) => (
                       <SelectItem key={e.id} value={e.id}>
                         {e.nome}
                       </SelectItem>

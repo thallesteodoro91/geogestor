@@ -1,53 +1,92 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
+import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
+import { useKPIs } from "@/hooks/useKPIs";
 import { DollarSign, TrendingUp, Percent, Target } from "lucide-react";
 
 const Dashboard = () => {
+  const [filters, setFilters] = useState<FilterState>({
+    dataInicio: "",
+    dataFim: "",
+    clienteId: "",
+    empresaId: "",
+    categoria: "",
+    situacao: "",
+  });
+
+  const { data: kpis, isLoading } = useKPIs();
+
+  const { data: clientes = [] } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_cliente')
+        .select('id_cliente, nome')
+        .order('nome');
+      if (error) throw error;
+      return data.map(c => ({ id: c.id_cliente, nome: c.nome }));
+    },
+  });
+
+  const { data: empresas = [] } = useQuery({
+    queryKey: ['empresas'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_empresa')
+        .select('id_empresa, nome')
+        .order('nome');
+      if (error) throw error;
+      return data.map(e => ({ id: e.id_empresa, nome: e.nome }));
+    },
+  });
+
   return (
     <AppLayout>
       <div className="space-y-8">
         {/* Header */}
         <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Dashboard Executivo</h1>
-          <p className="text-muted-foreground mt-2">Visão completa do desempenho da TopoVision</p>
+          <h1 className="text-3xl font-heading font-bold text-foreground">Dashboard Executivo</h1>
+          <p className="text-muted-foreground">Sala de Operação - Visão geral da performance da empresa</p>
         </div>
 
+        {/* Filtros Globais */}
+        <GlobalFilters
+          clientes={clientes}
+          empresas={empresas}
+          onFilterChange={setFilters}
+        />
+
         {/* KPIs */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="Receita Total"
-            value="R$ 2,34M"
-            change="+12,5%"
-            changeType="positive"
+            value={isLoading ? "Carregando..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
-            subtitle="Últimos 6 meses"
+            subtitle={`${kpis?.total_servicos || 0} serviços`}
           />
           <KPICard
             title="Lucro Líquido"
-            value="R$ 847K"
-            change="+8,3%"
-            changeType="positive"
+            value={isLoading ? "Carregando..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={TrendingUp}
-            subtitle="Crescimento sustentável"
+            subtitle={`margem de ${(kpis?.margem_liquida || 0).toFixed(1)}%`}
           />
           <KPICard
             title="Margem Líquida"
-            value="36,2%"
-            change="+2,1%"
-            changeType="positive"
+            value={isLoading ? "..." : `${(kpis?.margem_liquida || 0).toFixed(1)}%`}
             icon={Percent}
-            subtitle="Eficiência operacional"
+            subtitle={`Lucro / Receita`}
           />
           <KPICard
             title="Taxa de Conversão"
-            value="68%"
-            change="-3,2%"
-            changeType="negative"
+            value={isLoading ? "..." : `${(kpis?.taxa_conversao || 0).toFixed(1)}%`}
             icon={Target}
-            subtitle="Pipeline comercial"
+            subtitle="orçamentos convertidos"
           />
         </div>
 

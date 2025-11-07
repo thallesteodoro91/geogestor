@@ -14,12 +14,21 @@ import { Plus, Trash2, Edit, DollarSign, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState<FilterState>({
+    dataInicio: "",
+    dataFim: "",
+    clienteId: "",
+    empresaId: "",
+    categoria: "",
+    situacao: "",
+  });
   const [formData, setFormData] = useState({
     valor_da_despesa: "",
     data_da_despesa: new Date().toISOString().split('T')[0],
@@ -165,11 +174,30 @@ export default function Despesas() {
     valor,
   }));
 
-  const filteredDespesas = despesas.filter(d =>
-    d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredDespesas = despesas.filter(d => {
+    const matchesSearch = 
+      d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesDataInicio = !filters.dataInicio || d.data_da_despesa >= filters.dataInicio;
+    const matchesDataFim = !filters.dataFim || d.data_da_despesa <= filters.dataFim;
+    const matchesCategoria = !filters.categoria || d.dim_tipodespesa?.categoria === filters.categoria;
+
+    return matchesSearch && matchesDataInicio && matchesDataFim && matchesCategoria;
+  });
+
+  const { data: clientes = [] } = useQuery({
+    queryKey: ['clientes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_cliente')
+        .select('id_cliente, nome')
+        .order('nome');
+      if (error) throw error;
+      return data.map(c => ({ id: c.id_cliente, nome: c.nome }));
+    },
+  });
 
   return (
     <AppLayout>
@@ -178,6 +206,12 @@ export default function Despesas() {
           <h1 className="text-3xl font-heading font-bold text-foreground">Despesas</h1>
           <p className="text-muted-foreground">Gerencie todas as despesas da empresa</p>
         </div>
+
+        <GlobalFilters
+          clientes={clientes}
+          onFilterChange={setFilters}
+          showEmpresa={false}
+        />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KPICard

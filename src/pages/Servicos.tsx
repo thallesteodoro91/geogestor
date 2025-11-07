@@ -14,12 +14,21 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 
 export default function Servicos() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [filters, setFilters] = useState<FilterState>({
+    dataInicio: "",
+    dataFim: "",
+    clienteId: "",
+    empresaId: "",
+    categoria: "",
+    situacao: "",
+  });
   const [formData, setFormData] = useState({
     nome_do_servico: "",
     categoria: "",
@@ -166,10 +175,31 @@ export default function Servicos() {
   const servicosConcluidos = servicos.filter(s => s.situacao_do_servico === 'Concluído').length;
   const servicosEmAndamento = servicos.filter(s => s.situacao_do_servico === 'Em Andamento').length;
 
-  const filteredServicos = servicos.filter(s =>
-    s.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.dim_cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredServicos = servicos.filter(s => {
+    const matchesSearch = 
+      s.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.dim_cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesDataInicio = !filters.dataInicio || s.data_do_servico_inicio >= filters.dataInicio;
+    const matchesDataFim = !filters.dataFim || (s.data_do_servico_fim && s.data_do_servico_fim <= filters.dataFim);
+    const matchesCliente = !filters.clienteId || s.id_cliente === filters.clienteId;
+    const matchesCategoria = !filters.categoria || s.categoria === filters.categoria;
+    const matchesSituacao = !filters.situacao || s.situacao_do_servico === filters.situacao;
+
+    return matchesSearch && matchesDataInicio && matchesDataFim && matchesCliente && matchesCategoria && matchesSituacao;
+  });
+
+  const { data: clientesFilter = [] } = useQuery({
+    queryKey: ['clientes-filter'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_cliente')
+        .select('id_cliente, nome')
+        .order('nome');
+      if (error) throw error;
+      return data.map(c => ({ id: c.id_cliente, nome: c.nome }));
+    },
+  });
 
   return (
     <AppLayout>
@@ -178,6 +208,12 @@ export default function Servicos() {
           <h1 className="text-3xl font-heading font-bold text-foreground">Serviços</h1>
           <p className="text-muted-foreground">Gerencie todos os serviços da empresa</p>
         </div>
+
+        <GlobalFilters
+          clientes={clientesFilter}
+          onFilterChange={setFilters}
+          showEmpresa={false}
+        />
 
         <div className="grid gap-4 md:grid-cols-3">
           <KPICard

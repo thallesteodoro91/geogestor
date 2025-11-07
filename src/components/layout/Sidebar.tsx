@@ -1,6 +1,11 @@
-import { LayoutDashboard, DollarSign, Target, Users, Settings, FileText, TrendingUp } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, Settings, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
+import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { Separator } from "@/components/ui/separator";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -8,11 +13,22 @@ const navigation = [
   { name: "Planejamento", href: "/planejamento", icon: Target },
   { name: "Operacional", href: "/operacional", icon: TrendingUp },
   { name: "Clientes", href: "/clientes", icon: Users },
+  { name: "Despesas", href: "/despesas", icon: Receipt },
+  { name: "Serviços", href: "/servicos", icon: Briefcase },
+  { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
   { name: "Cadastros", href: "/cadastros", icon: FileText },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];
 
 export const Sidebar = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast.success("Logout realizado com sucesso!");
+    navigate("/auth");
+  };
+
   return (
     <>
       {/* Desktop Sidebar */}
@@ -47,6 +63,17 @@ export const Sidebar = () => {
                     </li>
                   ))}
                 </ul>
+              </li>
+              <li className="mt-auto">
+                <Separator className="mb-4" />
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start gap-x-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-5 w-5 shrink-0" />
+                  Sair
+                </Button>
               </li>
             </ul>
           </nav>

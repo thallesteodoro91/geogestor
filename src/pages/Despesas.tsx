@@ -15,6 +15,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
+import { despesaSchema } from "@/lib/validations";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
@@ -158,7 +159,32 @@ export default function Despesas() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(editingId ? { ...formData, id_despesas: editingId } : formData);
+    
+    try {
+      const validatedData = despesaSchema.parse({
+        valor_da_despesa: parseFloat(formData.valor_da_despesa),
+        data_da_despesa: formData.data_da_despesa,
+        id_tipodespesa: formData.id_tipodespesa || null,
+        id_servico: formData.id_servico || null,
+        observacoes: formData.observacoes || undefined,
+      });
+      
+      const dataToSubmit = {
+        valor_da_despesa: validatedData.valor_da_despesa.toString(),
+        data_da_despesa: validatedData.data_da_despesa,
+        id_tipodespesa: validatedData.id_tipodespesa || "",
+        id_servico: validatedData.id_servico || "",
+        observacoes: validatedData.observacoes || "",
+      };
+      
+      mutation.mutate(editingId ? { ...dataToSubmit, id_despesas: editingId } : dataToSubmit);
+    } catch (error: any) {
+      if (error.errors) {
+        error.errors.forEach((err: any) => toast.error(err.message));
+      } else {
+        toast.error("Erro na validação dos dados");
+      }
+    }
   };
 
   // Calcular KPIs

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { authSchema } from "@/lib/validations";
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -18,35 +19,57 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      const validatedData = authSchema.parse({ email, password });
+      
+      const { error } = await supabase.auth.signUp({
+        email: validatedData.email,
+        password: validatedData.password,
+      });
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Conta criada! Faça login para continuar.");
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Conta criada! Faça login para continuar.");
+      }
+    } catch (error: any) {
+      if (error.errors) {
+        error.errors.forEach((err: any) => toast.error(err.message));
+      } else {
+        toast.error("Erro ao cadastrar");
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const validatedData = authSchema.parse({ email, password });
+      
+      const { error } = await supabase.auth.signInWithPassword({
+        email: validatedData.email,
+        password: validatedData.password,
+      });
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Login realizado com sucesso!");
-      navigate("/");
+      if (error) {
+        toast.error(error.message);
+      } else {
+        toast.success("Login realizado com sucesso!");
+        navigate("/");
+      }
+    } catch (error: any) {
+      if (error.errors) {
+        error.errors.forEach((err: any) => toast.error(err.message));
+      } else {
+        toast.error("Erro ao fazer login");
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -115,7 +138,7 @@ export default function Auth() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                 </div>
                 <Button type="submit" className="w-full" disabled={loading}>

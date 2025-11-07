@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
+import { servicoSchema } from "@/lib/validations";
 
 export default function Servicos() {
   const queryClient = useQueryClient();
@@ -169,7 +170,40 @@ export default function Servicos() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(editingId ? { ...formData, id_servico: editingId } : formData);
+    
+    try {
+      const validatedData = servicoSchema.parse({
+        nome_do_servico: formData.nome_do_servico,
+        id_cliente: formData.id_cliente || null,
+        id_propriedade: formData.id_propriedade || null,
+        categoria: formData.categoria || null,
+        data_do_servico_inicio: formData.data_do_servico_inicio || null,
+        data_do_servico_fim: formData.data_do_servico_fim || null,
+        situacao_do_servico: formData.situacao_do_servico || null,
+        receita_servico: formData.receita_servico ? parseFloat(formData.receita_servico) : null,
+        custo_servico: formData.custo_servico ? parseFloat(formData.custo_servico) : null,
+      });
+      
+      const dataToSubmit = {
+        nome_do_servico: validatedData.nome_do_servico,
+        categoria: validatedData.categoria || "",
+        situacao_do_servico: validatedData.situacao_do_servico || "Em Andamento",
+        data_do_servico_inicio: validatedData.data_do_servico_inicio || "",
+        data_do_servico_fim: validatedData.data_do_servico_fim || "",
+        id_cliente: validatedData.id_cliente || "",
+        id_propriedade: validatedData.id_propriedade || "",
+        receita_servico: validatedData.receita_servico?.toString() || "",
+        custo_servico: validatedData.custo_servico?.toString() || "",
+      };
+      
+      mutation.mutate(editingId ? { ...dataToSubmit, id_servico: editingId } : dataToSubmit);
+    } catch (error: any) {
+      if (error.errors) {
+        error.errors.forEach((err: any) => toast.error(err.message));
+      } else {
+        toast.error("Erro na validação dos dados");
+      }
+    }
   };
 
   const servicosConcluidos = servicos.filter(s => s.situacao_do_servico === 'Concluído').length;

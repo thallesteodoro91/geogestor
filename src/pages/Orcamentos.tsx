@@ -13,6 +13,7 @@ import { Plus, Trash2, Edit, FileText, TrendingUp, Target } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { orcamentoSchema } from "@/lib/validations";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
@@ -153,7 +154,37 @@ export default function Orcamentos() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    mutation.mutate(editingId ? { ...formData, id_orcamento: editingId } : formData);
+    
+    try {
+      const validatedData = orcamentoSchema.parse({
+        id_cliente: formData.id_cliente || null,
+        id_servico: formData.id_servico || null,
+        data_orcamento: formData.data_orcamento,
+        valor_unitario: parseFloat(formData.valor_unitario),
+        quantidade: parseInt(formData.quantidade),
+        situacao_do_pagamento: formData.situacao_do_pagamento || null,
+        forma_de_pagamento: formData.forma_de_pagamento || null,
+      });
+      
+      const dataToSubmit = {
+        id_cliente: validatedData.id_cliente || "",
+        id_servico: validatedData.id_servico || "",
+        data_orcamento: validatedData.data_orcamento,
+        valor_unitario: validatedData.valor_unitario.toString(),
+        quantidade: validatedData.quantidade.toString(),
+        desconto: formData.desconto || "0",
+        situacao_do_pagamento: validatedData.situacao_do_pagamento || "Pendente",
+        forma_de_pagamento: validatedData.forma_de_pagamento || "",
+      };
+      
+      mutation.mutate(editingId ? { ...dataToSubmit, id_orcamento: editingId } : dataToSubmit);
+    } catch (error: any) {
+      if (error.errors) {
+        error.errors.forEach((err: any) => toast.error(err.message));
+      } else {
+        toast.error("Erro na validação dos dados");
+      }
+    }
   };
 
   const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);

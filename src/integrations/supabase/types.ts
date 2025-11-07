@@ -14,13 +14,495 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      dim_cliente: {
+        Row: {
+          categoria: string | null
+          cnpj: string | null
+          cpf: string | null
+          created_at: string | null
+          data_cadastro: string | null
+          email: string | null
+          endereco: string | null
+          id_cliente: string
+          idade: number | null
+          nome: string
+          origem: string | null
+          situacao: string | null
+          telefone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          categoria?: string | null
+          cnpj?: string | null
+          cpf?: string | null
+          created_at?: string | null
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          id_cliente?: string
+          idade?: number | null
+          nome: string
+          origem?: string | null
+          situacao?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          categoria?: string | null
+          cnpj?: string | null
+          cpf?: string | null
+          created_at?: string | null
+          data_cadastro?: string | null
+          email?: string | null
+          endereco?: string | null
+          id_cliente?: string
+          idade?: number | null
+          nome?: string
+          origem?: string | null
+          situacao?: string | null
+          telefone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      dim_data: {
+        Row: {
+          ano: number | null
+          created_at: string | null
+          data: string
+          dia_semana: string | null
+          id_data: string
+          mes: number | null
+          trimestre: number | null
+        }
+        Insert: {
+          ano?: number | null
+          created_at?: string | null
+          data: string
+          dia_semana?: string | null
+          id_data?: string
+          mes?: number | null
+          trimestre?: number | null
+        }
+        Update: {
+          ano?: number | null
+          created_at?: string | null
+          data?: string
+          dia_semana?: string | null
+          id_data?: string
+          mes?: number | null
+          trimestre?: number | null
+        }
+        Relationships: []
+      }
+      dim_empresa: {
+        Row: {
+          created_at: string | null
+          custo: number | null
+          custos_variaveis: number | null
+          despesas: number | null
+          id_empresa: string
+          lucro_bruto: number | null
+          lucro_liquido: number | null
+          margem_de_contribuicao: number | null
+          nome: string
+          ponto_de_equilibrio: number | null
+          receita: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          custo?: number | null
+          custos_variaveis?: number | null
+          despesas?: number | null
+          id_empresa?: string
+          lucro_bruto?: number | null
+          lucro_liquido?: number | null
+          margem_de_contribuicao?: number | null
+          nome: string
+          ponto_de_equilibrio?: number | null
+          receita?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          custo?: number | null
+          custos_variaveis?: number | null
+          despesas?: number | null
+          id_empresa?: string
+          lucro_bruto?: number | null
+          lucro_liquido?: number | null
+          margem_de_contribuicao?: number | null
+          nome?: string
+          ponto_de_equilibrio?: number | null
+          receita?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      dim_propriedade: {
+        Row: {
+          area_ha: number | null
+          averbacao: string | null
+          car: string | null
+          ccir: string | null
+          cidade: string | null
+          created_at: string | null
+          documentacao: string | null
+          id_propriedade: string
+          itr: string | null
+          latitude: number | null
+          longitude: number | null
+          marco: string | null
+          matricula: string | null
+          memorial_descritivo: string | null
+          municipio: string | null
+          nome_da_propriedade: string
+          observacoes: string | null
+          situacao: string | null
+          situacao_imovel: string | null
+          tipo: string | null
+          tipo_de_documento: string | null
+          updated_at: string | null
+          usucapiao: string | null
+        }
+        Insert: {
+          area_ha?: number | null
+          averbacao?: string | null
+          car?: string | null
+          ccir?: string | null
+          cidade?: string | null
+          created_at?: string | null
+          documentacao?: string | null
+          id_propriedade?: string
+          itr?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          marco?: string | null
+          matricula?: string | null
+          memorial_descritivo?: string | null
+          municipio?: string | null
+          nome_da_propriedade: string
+          observacoes?: string | null
+          situacao?: string | null
+          situacao_imovel?: string | null
+          tipo?: string | null
+          tipo_de_documento?: string | null
+          updated_at?: string | null
+          usucapiao?: string | null
+        }
+        Update: {
+          area_ha?: number | null
+          averbacao?: string | null
+          car?: string | null
+          ccir?: string | null
+          cidade?: string | null
+          created_at?: string | null
+          documentacao?: string | null
+          id_propriedade?: string
+          itr?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          marco?: string | null
+          matricula?: string | null
+          memorial_descritivo?: string | null
+          municipio?: string | null
+          nome_da_propriedade?: string
+          observacoes?: string | null
+          situacao?: string | null
+          situacao_imovel?: string | null
+          tipo?: string | null
+          tipo_de_documento?: string | null
+          updated_at?: string | null
+          usucapiao?: string | null
+        }
+        Relationships: []
+      }
+      dim_tipodespesa: {
+        Row: {
+          categoria: string
+          created_at: string | null
+          descricao: string | null
+          id_tipodespesa: string
+          subcategoria: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          categoria: string
+          created_at?: string | null
+          descricao?: string | null
+          id_tipodespesa?: string
+          subcategoria?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          categoria?: string
+          created_at?: string | null
+          descricao?: string | null
+          id_tipodespesa?: string
+          subcategoria?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      fato_despesas: {
+        Row: {
+          created_at: string | null
+          data_da_despesa: string
+          id_data: string | null
+          id_despesas: string
+          id_servico: string | null
+          id_tipodespesa: string | null
+          observacoes: string | null
+          updated_at: string | null
+          valor_da_despesa: number
+        }
+        Insert: {
+          created_at?: string | null
+          data_da_despesa: string
+          id_data?: string | null
+          id_despesas?: string
+          id_servico?: string | null
+          id_tipodespesa?: string | null
+          observacoes?: string | null
+          updated_at?: string | null
+          valor_da_despesa: number
+        }
+        Update: {
+          created_at?: string | null
+          data_da_despesa?: string
+          id_data?: string | null
+          id_despesas?: string
+          id_servico?: string | null
+          id_tipodespesa?: string | null
+          observacoes?: string | null
+          updated_at?: string | null
+          valor_da_despesa?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fato_despesas_id_data_fkey"
+            columns: ["id_data"]
+            isOneToOne: false
+            referencedRelation: "dim_data"
+            referencedColumns: ["id_data"]
+          },
+          {
+            foreignKeyName: "fato_despesas_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
+            foreignKeyName: "fato_despesas_id_tipodespesa_fkey"
+            columns: ["id_tipodespesa"]
+            isOneToOne: false
+            referencedRelation: "dim_tipodespesa"
+            referencedColumns: ["id_tipodespesa"]
+          },
+        ]
+      }
+      fato_orcamento: {
+        Row: {
+          created_at: string | null
+          data_do_faturamento: string | null
+          data_orcamento: string
+          desconto: number | null
+          faturamento: boolean | null
+          forma_de_pagamento: string | null
+          id_cliente: string | null
+          id_data: string | null
+          id_orcamento: string
+          id_servico: string | null
+          lucro_esperado: number | null
+          margem_esperada: number | null
+          orcamento_convertido: boolean | null
+          quantidade: number
+          receita_esperada: number | null
+          receita_esperada_imposto: number | null
+          receita_realizada: number | null
+          situacao_do_pagamento: string | null
+          updated_at: string | null
+          valor_faturado: number | null
+          valor_imposto: number | null
+          valor_unitario: number
+        }
+        Insert: {
+          created_at?: string | null
+          data_do_faturamento?: string | null
+          data_orcamento: string
+          desconto?: number | null
+          faturamento?: boolean | null
+          forma_de_pagamento?: string | null
+          id_cliente?: string | null
+          id_data?: string | null
+          id_orcamento?: string
+          id_servico?: string | null
+          lucro_esperado?: number | null
+          margem_esperada?: number | null
+          orcamento_convertido?: boolean | null
+          quantidade?: number
+          receita_esperada?: number | null
+          receita_esperada_imposto?: number | null
+          receita_realizada?: number | null
+          situacao_do_pagamento?: string | null
+          updated_at?: string | null
+          valor_faturado?: number | null
+          valor_imposto?: number | null
+          valor_unitario: number
+        }
+        Update: {
+          created_at?: string | null
+          data_do_faturamento?: string | null
+          data_orcamento?: string
+          desconto?: number | null
+          faturamento?: boolean | null
+          forma_de_pagamento?: string | null
+          id_cliente?: string | null
+          id_data?: string | null
+          id_orcamento?: string
+          id_servico?: string | null
+          lucro_esperado?: number | null
+          margem_esperada?: number | null
+          orcamento_convertido?: boolean | null
+          quantidade?: number
+          receita_esperada?: number | null
+          receita_esperada_imposto?: number | null
+          receita_realizada?: number | null
+          situacao_do_pagamento?: string | null
+          updated_at?: string | null
+          valor_faturado?: number | null
+          valor_imposto?: number | null
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fato_orcamento_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fato_orcamento_id_data_fkey"
+            columns: ["id_data"]
+            isOneToOne: false
+            referencedRelation: "dim_data"
+            referencedColumns: ["id_data"]
+          },
+          {
+            foreignKeyName: "fato_orcamento_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+        ]
+      }
+      fato_servico: {
+        Row: {
+          categoria: string | null
+          created_at: string | null
+          custo_servico: number | null
+          data_do_servico_fim: string | null
+          data_do_servico_inicio: string | null
+          id_cliente: string | null
+          id_data: string | null
+          id_empresa: string | null
+          id_propriedade: string | null
+          id_servico: string
+          nome_do_servico: string
+          numero_de_servicos_concluidos: number | null
+          receita_servico: number | null
+          situacao_do_servico: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          categoria?: string | null
+          created_at?: string | null
+          custo_servico?: number | null
+          data_do_servico_fim?: string | null
+          data_do_servico_inicio?: string | null
+          id_cliente?: string | null
+          id_data?: string | null
+          id_empresa?: string | null
+          id_propriedade?: string | null
+          id_servico?: string
+          nome_do_servico: string
+          numero_de_servicos_concluidos?: number | null
+          receita_servico?: number | null
+          situacao_do_servico?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          categoria?: string | null
+          created_at?: string | null
+          custo_servico?: number | null
+          data_do_servico_fim?: string | null
+          data_do_servico_inicio?: string | null
+          id_cliente?: string | null
+          id_data?: string | null
+          id_empresa?: string | null
+          id_propriedade?: string | null
+          id_servico?: string
+          nome_do_servico?: string
+          numero_de_servicos_concluidos?: number | null
+          receita_servico?: number | null
+          situacao_do_servico?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fato_servico_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fato_servico_id_data_fkey"
+            columns: ["id_data"]
+            isOneToOne: false
+            referencedRelation: "dim_data"
+            referencedColumns: ["id_data"]
+          },
+          {
+            foreignKeyName: "fato_servico_id_empresa_fkey"
+            columns: ["id_empresa"]
+            isOneToOne: false
+            referencedRelation: "dim_empresa"
+            referencedColumns: ["id_empresa"]
+          },
+          {
+            foreignKeyName: "fato_servico_id_propriedade_fkey"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calcular_kpis: {
+        Args: never
+        Returns: {
+          lucro_bruto: number
+          lucro_liquido: number
+          margem_bruta: number
+          margem_liquida: number
+          receita_total: number
+          servicos_concluidos: number
+          taxa_conversao: number
+          ticket_medio: number
+          total_despesas: number
+          total_servicos: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

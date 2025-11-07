@@ -3,19 +3,21 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Dashboard from "./pages/Dashboard";
-import Financeiro from "./pages/Financeiro";
-import Operacional from "./pages/Operacional";
-import Planejamento from "./pages/Planejamento";
-import Clientes from "./pages/Clientes";
-import Cadastros from "./pages/Cadastros";
-import Configuracoes from "./pages/Configuracoes";
-import NotFound from "./pages/NotFound";
-import Auth from "./pages/Auth";
-import Despesas from "./pages/Despesas";
-import Servicos from "./pages/Servicos";
-import Orcamentos from "./pages/Orcamentos";
+import { lazy, Suspense } from "react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Financeiro = lazy(() => import("./pages/Financeiro"));
+const Operacional = lazy(() => import("./pages/Operacional"));
+const Planejamento = lazy(() => import("./pages/Planejamento"));
+const Clientes = lazy(() => import("./pages/Clientes"));
+const Cadastros = lazy(() => import("./pages/Cadastros"));
+const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Despesas = lazy(() => import("./pages/Despesas"));
+const Servicos = lazy(() => import("./pages/Servicos"));
+const Orcamentos = lazy(() => import("./pages/Orcamentos"));
 
 const queryClient = new QueryClient();
 
@@ -25,20 +27,22 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-          <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
-          <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
-          <Route path="/planejamento" element={<ProtectedRoute><Planejamento /></ProtectedRoute>} />
-          <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
-          <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
-          <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-          <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
-          <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
-          <Route path="/orcamentos" element={<ProtectedRoute><Orcamentos /></ProtectedRoute>} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-pulse text-muted-foreground">Carregando...</div></div>}>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
+            <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
+            <Route path="/planejamento" element={<ProtectedRoute><Planejamento /></ProtectedRoute>} />
+            <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+            <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
+            <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
+            <Route path="/orcamentos" element={<ProtectedRoute><Orcamentos /></ProtectedRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

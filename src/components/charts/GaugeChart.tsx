@@ -18,9 +18,9 @@ export const GaugeChart = ({ value, max, title, subtitle }: GaugeChartProps) => 
   };
 
   return (
-    <Card>
+    <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="text-xl font-heading">{title}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col items-center">
         <div className="relative w-48 h-24 mb-4">
@@ -29,7 +29,7 @@ export const GaugeChart = ({ value, max, title, subtitle }: GaugeChartProps) => 
             <path
               d="M 20 80 A 80 80 0 0 1 180 80"
               fill="none"
-              stroke="hsl(var(--muted))"
+              stroke="hsl(0, 0%, 14.9%)"
               strokeWidth="20"
               strokeLinecap="round"
             />
@@ -37,7 +37,7 @@ export const GaugeChart = ({ value, max, title, subtitle }: GaugeChartProps) => 
             <path
               d="M 20 80 A 80 80 0 0 1 180 80"
               fill="none"
-              stroke="hsl(var(--primary))"
+              stroke="hsl(262, 83%, 65%)"
               strokeWidth="20"
               strokeLinecap="round"
               strokeDasharray={`${(percentage / 100) * 251.2} 251.2`}
@@ -48,22 +48,22 @@ export const GaugeChart = ({ value, max, title, subtitle }: GaugeChartProps) => 
               y1="80"
               x2="100"
               y2="20"
-              stroke="hsl(var(--foreground))"
+              stroke="hsl(189, 94%, 43%)"
               strokeWidth="3"
               strokeLinecap="round"
               transform={`rotate(${rotation} 100 80)`}
             />
-            <circle cx="100" cy="80" r="5" fill="hsl(var(--foreground))" />
+            <circle cx="100" cy="80" r="5" fill="hsl(189, 94%, 43%)" />
           </svg>
         </div>
         <div className="text-center">
           <p className={`text-3xl font-heading font-bold ${getColor()}`}>
             {value.toLocaleString('pt-BR', { minimumFractionDigits: 0 })}
           </p>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground/80">
             {percentage.toFixed(1)}% de {max}
           </p>
-          {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
+          {subtitle && <p className="text-xs text-muted-foreground/70 mt-1">{subtitle}</p>}
         </div>
       </CardContent>
     </Card>

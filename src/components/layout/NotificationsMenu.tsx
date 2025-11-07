@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useToast } from "@/hooks/use-toast";
 
 interface Notification {
   id: string;
@@ -61,6 +62,14 @@ const getIcon = (type: Notification["type"]) => {
 
 export const NotificationsMenu = () => {
   const unreadCount = mockNotifications.filter((n) => n.unread).length;
+  const { toast } = useToast();
+
+  const handleViewAll = () => {
+    toast({
+      title: "Notificações",
+      description: "Funcionalidade em desenvolvimento - em breve você poderá visualizar todas as notificações.",
+    });
+  };
 
   return (
     <DropdownMenu>
@@ -77,7 +86,7 @@ export const NotificationsMenu = () => {
           )}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-80 bg-popover">
+      <DropdownMenuContent align="end" className="w-80 bg-popover z-50">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
           {unreadCount > 0 && (
@@ -120,7 +129,10 @@ export const NotificationsMenu = () => {
           )}
         </ScrollArea>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="justify-center text-sm text-primary cursor-pointer">
+        <DropdownMenuItem 
+          className="justify-center text-sm text-primary cursor-pointer hover:bg-accent"
+          onClick={handleViewAll}
+        >
           Ver todas as notificações
         </DropdownMenuItem>
       </DropdownMenuContent>

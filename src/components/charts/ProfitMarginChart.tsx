@@ -40,9 +40,10 @@ export const ProfitMarginChart = () => {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(0, 0%, 3.9%)",
-              border: "1px solid hsl(var(--border))",
+              backgroundColor: "hsl(0, 0%, 10%)",
+              border: "1px solid hsl(262, 83%, 65%)",
               borderRadius: "0.5rem",
+              color: "hsl(0, 0%, 98%)",
             }}
             formatter={(value: number, name: string) => {
               if (name === "margem") return [`${value}%`, "Margem"];

@@ -20,8 +20,8 @@ const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) 
   const color = trend === "up" ? "hsl(189, 94%, 43%)" : trend === "down" ? "hsl(0, 72%, 51%)" : "hsl(262, 83%, 65%)";
   
   return (
-    <svg width="100" height="24" viewBox="0 0 100 24" className="absolute bottom-0 right-0 opacity-40">
-      <path d={path} fill="none" stroke={color} strokeWidth="2" />
+    <svg width="100" height="24" viewBox="0 0 100 24" className="absolute bottom-2 right-2 opacity-20">
+      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
     </svg>
   );
 };

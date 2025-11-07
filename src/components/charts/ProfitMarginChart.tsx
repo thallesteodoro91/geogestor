@@ -12,14 +12,14 @@ const data = [
 
 export const ProfitMarginChart = () => {
   return (
-    <Card className="p-6">
-      <div className="space-y-2 mb-6">
-        <h3 className="text-lg font-heading font-semibold text-foreground">Lucro e Margem</h3>
-        <p className="text-sm text-muted-foreground">Lucro líquido e margem percentual ao longo do tempo</p>
+    <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
+      <div className="space-y-1.5 mb-6">
+        <h3 className="text-xl font-heading font-semibold text-foreground">Lucro e Margem</h3>
+        <p className="text-sm text-muted-foreground/80">Lucro líquido e margem percentual ao longo do tempo</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
           <XAxis 
             dataKey="month" 
             stroke="hsl(var(--muted-foreground))"
@@ -40,9 +40,9 @@ export const ProfitMarginChart = () => {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
+              backgroundColor: "hsl(0, 0%, 3.9%)",
               border: "1px solid hsl(var(--border))",
-              borderRadius: "var(--radius)",
+              borderRadius: "0.5rem",
             }}
             formatter={(value: number, name: string) => {
               if (name === "margem") return [`${value}%`, "Margem"];
@@ -53,7 +53,7 @@ export const ProfitMarginChart = () => {
           <Bar
             yAxisId="left"
             dataKey="lucro"
-            fill="hsl(var(--secondary))"
+            fill="hsl(262, 83%, 65%)"
             radius={[8, 8, 0, 0]}
             name="Lucro Líquido"
           />
@@ -61,9 +61,9 @@ export const ProfitMarginChart = () => {
             yAxisId="right"
             type="monotone"
             dataKey="margem"
-            stroke="hsl(var(--accent))"
+            stroke="hsl(189, 94%, 43%)"
             strokeWidth={3}
-            dot={{ fill: "hsl(var(--accent))", r: 4 }}
+            dot={{ fill: "hsl(189, 94%, 43%)", r: 5 }}
             name="Margem %"
           />
         </ComposedChart>

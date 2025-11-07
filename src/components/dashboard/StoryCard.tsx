@@ -10,25 +10,25 @@ interface StoryCardProps {
 
 export const StoryCard = ({ title, insight, category = "financial" }: StoryCardProps) => {
   const categoryColors = {
-    financial: "bg-primary/10 text-primary border-primary/20",
-    operational: "bg-secondary/10 text-secondary border-secondary/20",
-    strategic: "bg-accent/10 text-accent-foreground border-accent/20",
+    financial: "bg-primary/10 text-primary border-primary/30",
+    operational: "bg-accent/10 text-accent border-accent/30",
+    strategic: "bg-chart-3/10 text-chart-3 border-chart-3/30",
   };
 
   return (
-    <Card className="p-6 transition-smooth hover:shadow-md bg-gradient-to-br from-card to-muted/20">
+    <Card className="p-6 transition-smooth hover:shadow-lg bg-gradient-to-br from-card via-card to-muted/10 border-border/50">
       <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/20">
-          <Sparkles className="h-5 w-5 text-accent" />
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-sm">
+          <Sparkles className="h-5 w-5 text-primary" />
         </div>
-        <div className="space-y-2 flex-1">
-          <div className="flex items-center gap-2">
-            <h4 className="font-heading font-semibold text-foreground">{title}</h4>
-            <Badge variant="outline" className={categoryColors[category]}>
+        <div className="space-y-2.5 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h4 className="font-heading font-semibold text-foreground text-base">{title}</h4>
+            <Badge variant="outline" className={`${categoryColors[category]} text-xs`}>
               AI Insight
             </Badge>
           </div>
-          <p className="text-sm leading-relaxed text-muted-foreground">{insight}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground/90">{insight}</p>
         </div>
       </div>
     </Card>

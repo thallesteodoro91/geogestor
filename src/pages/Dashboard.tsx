@@ -48,11 +48,11 @@ const Dashboard = () => {
 
   return (
     <AppLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground">Dashboard Executivo</h1>
-          <p className="text-muted-foreground">Sala de Operação - Visão geral da performance da empresa</p>
+        <div className="space-y-1">
+          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard Executivo</h1>
+          <p className="text-muted-foreground/80">Visão geral da performance da empresa</p>
         </div>
 
         {/* Filtros Globais */}
@@ -63,37 +63,45 @@ const Dashboard = () => {
         />
 
         {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
           <KPICard
             title="Receita Total"
-            value={isLoading ? "Carregando..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
             subtitle={`${kpis?.total_servicos || 0} serviços`}
+            change="+12.5%"
+            changeType="positive"
           />
           <KPICard
             title="Lucro Líquido"
-            value={isLoading ? "Carregando..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={TrendingUp}
             subtitle={`margem de ${(kpis?.margem_liquida || 0).toFixed(1)}%`}
+            change="+8.2%"
+            changeType="positive"
           />
           <KPICard
             title="Margem Líquida"
             value={isLoading ? "..." : `${(kpis?.margem_liquida || 0).toFixed(1)}%`}
             icon={Percent}
-            subtitle={`Lucro / Receita`}
+            subtitle="Lucro / Receita"
+            change="+2.1%"
+            changeType="positive"
           />
           <KPICard
             title="Taxa de Conversão"
             value={isLoading ? "..." : `${(kpis?.taxa_conversao || 0).toFixed(1)}%`}
             icon={Target}
             subtitle="orçamentos convertidos"
+            change="+4.5%"
+            changeType="positive"
           />
         </div>
 
         {/* Story Cards */}
-        <div>
-          <h2 className="text-2xl font-heading font-semibold text-foreground mb-4">Insights Narrativos</h2>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
+          <h2 className="text-2xl font-heading font-semibold text-foreground">Insights Narrativos</h2>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <StoryCard
               title="Margem em Crescimento"
               insight="A margem líquida apresentou crescimento consistente de 2,1% no semestre, refletindo maior eficiência operacional e controle de custos. A tendência indica consolidação da rentabilidade."
@@ -118,7 +126,7 @@ const Dashboard = () => {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <RevenueChart />
           <ProfitMarginChart />
         </div>

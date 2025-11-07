@@ -12,24 +12,24 @@ const data = [
 
 export const RevenueChart = () => {
   return (
-    <Card className="p-6">
-      <div className="space-y-2 mb-6">
-        <h3 className="text-lg font-heading font-semibold text-foreground">Receita vs Despesa</h3>
-        <p className="text-sm text-muted-foreground">Evolução mensal do desempenho financeiro</p>
+    <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
+      <div className="space-y-1.5 mb-6">
+        <h3 className="text-xl font-heading font-semibold text-foreground">Receita vs Despesa</h3>
+        <p className="text-sm text-muted-foreground/80">Evolução mensal do desempenho financeiro</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+              <stop offset="5%" stopColor="hsl(262, 83%, 65%)" stopOpacity={0.4}/>
+              <stop offset="95%" stopColor="hsl(262, 83%, 65%)" stopOpacity={0}/>
             </linearGradient>
             <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="hsl(var(--destructive))" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="hsl(var(--destructive))" stopOpacity={0}/>
+              <stop offset="5%" stopColor="hsl(189, 94%, 43%)" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="hsl(189, 94%, 43%)" stopOpacity={0}/>
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
           <XAxis 
             dataKey="month" 
             stroke="hsl(var(--muted-foreground))"
@@ -42,9 +42,9 @@ export const RevenueChart = () => {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: "hsl(var(--card))",
+              backgroundColor: "hsl(0, 0%, 3.9%)",
               border: "1px solid hsl(var(--border))",
-              borderRadius: "var(--radius)",
+              borderRadius: "0.5rem",
             }}
             formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
           />
@@ -52,17 +52,17 @@ export const RevenueChart = () => {
           <Area
             type="monotone"
             dataKey="receita"
-            stroke="hsl(var(--primary))"
+            stroke="hsl(262, 83%, 65%)"
             fill="url(#colorReceita)"
-            strokeWidth={2}
+            strokeWidth={2.5}
             name="Receita"
           />
           <Area
             type="monotone"
             dataKey="despesa"
-            stroke="hsl(var(--destructive))"
+            stroke="hsl(189, 94%, 43%)"
             fill="url(#colorDespesa)"
-            strokeWidth={2}
+            strokeWidth={2.5}
             name="Despesa"
           />
         </AreaChart>

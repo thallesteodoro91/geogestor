@@ -123,7 +123,10 @@ export const RevenueChart = () => {
           <YAxis 
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
-            tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+            tickFormatter={(value) => {
+              if (value === 0) return 'R$ 0';
+              return `R$ ${(value / 1000).toFixed(0)}k`;
+            }}
           />
           <Tooltip
             contentStyle={{

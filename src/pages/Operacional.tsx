@@ -16,8 +16,8 @@ const tempoMedioData = [
 ];
 
 const statusData = [
-  { name: "Concluídos", value: 75, color: "hsl(var(--chart-1))" },
-  { name: "Em Andamento", value: 25, color: "hsl(var(--chart-2))" },
+  { name: "Concluídos", value: 75, color: "hsl(142, 76%, 56%)" }, // Verde
+  { name: "Em Andamento", value: 25, color: "hsl(38, 92%, 50%)" }, // Laranja
 ];
 
 const ticketMedioData = [

@@ -5,7 +5,7 @@ import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartTitle } from "@/components/charts/ChartTitle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Clock, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
+import { Clock, CheckCircle2, TrendingUp, DollarSign, Zap, Award } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const tempoMedioData = [
@@ -62,7 +62,7 @@ export default function Operacional() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KPICard
             title="Tempo Médio Conclusão"
-            value="10.3 dias"
+            value="10 dias"
             change="-8%"
             changeType="positive"
             icon={Clock}
@@ -97,13 +97,15 @@ export default function Operacional() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StoryCard
             title="Produtividade em Alta"
-            insight="A produtividade das equipes subiu 5% este mês — tempo médio de entrega caiu para 10.3 dias, refletindo melhor coordenação e eficiência operacional."
+            insight="A produtividade das equipes subiu 5% este mês — tempo médio de entrega caiu para 10 dias, refletindo melhor coordenação e eficiência operacional."
             category="operational"
+            icon={Zap}
           />
           <StoryCard
             title="Taxa de Conclusão"
             insight="Mais de 75% dos serviços foram concluídos no prazo estabelecido. A gestão de prazos está funcionando bem, mantendo alta satisfação dos clientes."
             category="operational"
+            icon={Award}
           />
         </div>
 

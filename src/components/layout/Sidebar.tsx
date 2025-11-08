@@ -70,10 +70,7 @@ export const Sidebar = () => {
             <ul role="list" className="flex flex-1 flex-col gap-y-6">
               {navigationSections.map((section, index) => (
                 <li key={section.title} className="animate-fade-in" style={{ animationDelay: `${index * 0.1}s` }}>
-                  <div className={cn(
-                    "flex items-center gap-2 px-3 py-2 mb-3 rounded-lg transition-all",
-                    section.bgColor
-                  )}>
+                  <div className="flex items-center gap-2 px-3 py-2 mb-2">
                     <section.icon className={cn("h-5 w-5", section.color)} />
                     <span className={cn(
                       "text-sm font-bold uppercase tracking-wide",

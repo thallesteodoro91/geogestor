@@ -1,5 +1,5 @@
 import { Card } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, AlertCircle, Lightbulb, Target, Activity } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertCircle, Lightbulb, Target, Activity, LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ interface StoryCardProps {
   trend?: "up" | "down" | "neutral" | "alert";
   emphasis?: "high" | "medium" | "low";
   action?: string;
+  icon?: LucideIcon;
 }
 
 export const StoryCard = ({ 
@@ -18,7 +19,8 @@ export const StoryCard = ({
   category = "financial",
   trend = "neutral",
   emphasis = "medium",
-  action
+  action,
+  icon
 }: StoryCardProps) => {
   // Princípio 1: Design com propósito - ícones que comunicam significado
   const trendIcons = {
@@ -60,7 +62,7 @@ export const StoryCard = ({
   };
   
   const config = categoryConfig[category];
-  const CategoryIcon = config.icon;
+  const CategoryIcon = icon || config.icon;
   
   // Princípio 3: Hierarquia visual baseada em ênfase
   const emphasisStyles = {

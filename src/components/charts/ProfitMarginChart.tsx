@@ -1,21 +1,21 @@
 import { Card } from "@/components/ui/card";
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const data = [
-  { month: "Jan", lucro: 120000, margem: 42 },
-  { month: "Fev", lucro: 132000, margem: 43 },
-  { month: "Mar", lucro: 123000, margem: 42 },
-  { month: "Abr", lucro: 145000, margem: 43 },
-  { month: "Mai", lucro: 157000, margem: 43 },
-  { month: "Jun", lucro: 170000, margem: 44 },
+  { month: "Jan", margemBruta: 40, margemLiquida: 28 },
+  { month: "Fev", margemBruta: 41, margemLiquida: 29 },
+  { month: "Mar", margemBruta: 40, margemLiquida: 28 },
+  { month: "Abr", margemBruta: 42, margemLiquida: 30 },
+  { month: "Mai", margemBruta: 42, margemLiquida: 30 },
+  { month: "Jun", margemBruta: 43, margemLiquida: 31 },
 ];
 
 export const ProfitMarginChart = () => {
   return (
     <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
       <div className="space-y-1.5 mb-6">
-        <h3 className="text-xl font-heading font-semibold text-foreground">Lucro e Margem</h3>
-        <p className="text-sm text-muted-foreground/80">Lucro líquido e margem percentual ao longo do tempo</p>
+        <h3 className="text-xl font-heading font-semibold text-foreground">Margens de Lucratividade</h3>
+        <p className="text-sm text-muted-foreground/80">Evolução das margens bruta e líquida ao longo do tempo</p>
       </div>
       <ResponsiveContainer width="100%" height={300}>
         <ComposedChart data={data}>
@@ -26,17 +26,10 @@ export const ProfitMarginChart = () => {
             fontSize={12}
           />
           <YAxis 
-            yAxisId="left"
-            stroke="hsl(var(--muted-foreground))"
-            fontSize={12}
-            tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
-          />
-          <YAxis 
-            yAxisId="right"
-            orientation="right"
             stroke="hsl(var(--muted-foreground))"
             fontSize={12}
             tickFormatter={(value) => `${value}%`}
+            domain={[0, 50]}
           />
           <Tooltip
             contentStyle={{
@@ -48,26 +41,27 @@ export const ProfitMarginChart = () => {
             }}
             cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
             formatter={(value: number, name: string) => {
-              if (name === "margem") return [`${value}%`, "Margem"];
-              return [`R$ ${value.toLocaleString('pt-BR')}`, "Lucro"];
+              if (name === "Margem Bruta") return [`${value}%`, "Margem Bruta"];
+              if (name === "Margem Líquida") return [`${value}%`, "Margem Líquida"];
+              return [`${value}%`, name];
             }}
           />
           <Legend />
-          <Bar
-            yAxisId="left"
-            dataKey="lucro"
-            fill="hsl(262, 83%, 65%)"
-            radius={[8, 8, 0, 0]}
-            name="Lucro Líquido"
+          <Line
+            type="monotone"
+            dataKey="margemBruta"
+            stroke="hsl(262, 83%, 65%)"
+            strokeWidth={3}
+            dot={{ fill: "hsl(262, 83%, 65%)", r: 5 }}
+            name="Margem Bruta"
           />
           <Line
-            yAxisId="right"
             type="monotone"
-            dataKey="margem"
+            dataKey="margemLiquida"
             stroke="hsl(189, 94%, 43%)"
             strokeWidth={3}
             dot={{ fill: "hsl(189, 94%, 43%)", r: 5 }}
-            name="Margem %"
+            name="Margem Líquida"
           />
         </ComposedChart>
       </ResponsiveContainer>

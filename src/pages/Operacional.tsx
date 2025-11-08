@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Clock, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
@@ -32,6 +34,12 @@ const custoReceitaData = [
 ];
 
 export default function Operacional() {
+  const [servicoSelecionado, setServicoSelecionado] = useState<string>("todos");
+
+  const custoReceitaFiltrado = servicoSelecionado === "todos" 
+    ? custoReceitaData 
+    : custoReceitaData.filter(item => item.servico === servicoSelecionado);
+
   return (
     <AppLayout>
       <div className="space-y-8">
@@ -184,15 +192,29 @@ export default function Operacional() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Custo vs Receita por Serviço</CardTitle>
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between">
+                <CardTitle>Custo vs Receita por Serviço</CardTitle>
+                <Select value={servicoSelecionado} onValueChange={setServicoSelecionado}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Selecione o serviço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os Serviços</SelectItem>
+                    <SelectItem value="Levantamento">Levantamento</SelectItem>
+                    <SelectItem value="Georreferenciamento">Georreferenciamento</SelectItem>
+                    <SelectItem value="Desmembramento">Desmembramento</SelectItem>
+                    <SelectItem value="Planta Topográfica">Planta Topográfica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={custoReceitaData}>
+                <BarChart data={custoReceitaFiltrado}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`} />
                   <Tooltip 
                     contentStyle={{ 
                       backgroundColor: "hsl(var(--popover))",
@@ -202,12 +224,17 @@ export default function Operacional() {
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                    formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                    formatter={(value: number, name: string) => {
+                      const margemBruta = name === "Lucro" && custoReceitaFiltrado.length > 0 
+                        ? ` (${((value / custoReceitaFiltrado[0].receita) * 100).toFixed(1)}%)`
+                        : '';
+                      return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${margemBruta}`, name];
+                    }}
                   />
                   <Legend />
-                  <Bar dataKey="custo" fill="hsl(var(--destructive))" radius={[8, 8, 0, 0]} name="Custo" />
+                  <Bar dataKey="custo" fill="hsl(var(--destructive))" radius={[8, 8, 0, 0]} name="Custo Direto" />
                   <Bar dataKey="receita" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} name="Receita" />
-                  <Bar dataKey="lucro" fill="hsl(142, 76%, 56%)" radius={[8, 8, 0, 0]} name="Lucro" />
+                  <Bar dataKey="lucro" fill="hsl(142, 76%, 56%)" radius={[8, 8, 0, 0]} name="Lucro Bruto" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

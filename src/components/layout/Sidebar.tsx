@@ -89,7 +89,8 @@ export const Sidebar = () => {
                           to={item.href}
                           className={cn(
                             "group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-smooth hover-scale",
-                            "text-muted-foreground hover:text-foreground hover:bg-muted"
+                            "text-muted-foreground hover:text-foreground hover:bg-muted",
+                            "focus:outline-none focus-visible:outline-none focus-visible:ring-0"
                           )}
                           activeClassName="bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary"
                         >

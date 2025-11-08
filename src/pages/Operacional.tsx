@@ -3,7 +3,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Clock, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, ScatterChart, Scatter, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const tempoMedioData = [
   { servico: "Levantamento", tempo: 8 },
@@ -25,12 +25,10 @@ const ticketMedioData = [
 ];
 
 const custoReceitaData = [
-  { custo: 2000, receita: 3500, name: "Lev. 1" },
-  { custo: 5000, receita: 8500, name: "Geo. 1" },
-  { custo: 4000, receita: 6200, name: "Desm. 1" },
-  { custo: 1800, receita: 2800, name: "Planta 1" },
-  { custo: 2200, receita: 3600, name: "Lev. 2" },
-  { custo: 5500, receita: 8800, name: "Geo. 2" },
+  { servico: "Levantamento", custo: 2000, receita: 3500, lucro: 1500 },
+  { servico: "Georreferenciamento", custo: 5000, receita: 8500, lucro: 3500 },
+  { servico: "Desmembramento", custo: 4000, receita: 6200, lucro: 2200 },
+  { servico: "Planta Topográfica", custo: 1800, receita: 2800, lucro: 1000 },
 ];
 
 export default function Operacional() {
@@ -98,15 +96,19 @@ export default function Operacional() {
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={tempoMedioData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis stroke="hsl(var(--muted-foreground))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: "hsl(var(--card))", 
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px"
-                    }} 
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--primary))",
+                      borderRadius: "0.5rem",
+                      color: "hsl(var(--popover-foreground))",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                    }}
+                    cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
+                    formatter={(value: number) => [`${value} dias`, 'Tempo']}
                   />
                   <Bar dataKey="tempo" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
                 </BarChart>
@@ -129,6 +131,8 @@ export default function Operacional() {
                     outerRadius={100}
                     paddingAngle={5}
                     dataKey="value"
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    labelLine={false}
                   >
                     {statusData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
@@ -136,10 +140,13 @@ export default function Operacional() {
                   </Pie>
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: "hsl(var(--card))", 
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px"
-                    }} 
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--primary))",
+                      borderRadius: "0.5rem",
+                      color: "hsl(var(--popover-foreground))",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                    }}
+                    formatter={(value: number) => [`${value} serviços`, 'Total']}
                   />
                   <Legend />
                 </PieChart>
@@ -156,15 +163,19 @@ export default function Operacional() {
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={ticketMedioData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis dataKey="servico" type="category" stroke="hsl(var(--muted-foreground))" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis dataKey="servico" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={150} />
                   <Tooltip 
                     contentStyle={{ 
-                      backgroundColor: "hsl(var(--card))", 
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px"
-                    }} 
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--primary))",
+                      borderRadius: "0.5rem",
+                      color: "hsl(var(--popover-foreground))",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                    }}
+                    cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
+                    formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Ticket Médio']}
                   />
                   <Bar dataKey="valor" fill="hsl(var(--chart-3))" radius={[0, 8, 8, 0]} />
                 </BarChart>
@@ -178,20 +189,26 @@ export default function Operacional() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <ScatterChart>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="custo" name="Custo" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis dataKey="receita" name="Receita" stroke="hsl(var(--muted-foreground))" />
+                <BarChart data={custoReceitaData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <Tooltip 
-                    cursor={{ strokeDasharray: '3 3' }}
                     contentStyle={{ 
-                      backgroundColor: "hsl(var(--card))", 
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px"
-                    }} 
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--primary))",
+                      borderRadius: "0.5rem",
+                      color: "hsl(var(--popover-foreground))",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                    }}
+                    cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
+                    formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
                   />
-                  <Scatter name="Serviços" data={custoReceitaData} fill="hsl(var(--chart-4))" />
-                </ScatterChart>
+                  <Legend />
+                  <Bar dataKey="custo" fill="hsl(var(--destructive))" radius={[8, 8, 0, 0]} name="Custo" />
+                  <Bar dataKey="receita" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} name="Receita" />
+                  <Bar dataKey="lucro" fill="hsl(142, 76%, 56%)" radius={[8, 8, 0, 0]} name="Lucro" />
+                </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>

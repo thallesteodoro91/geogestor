@@ -41,11 +41,13 @@ export const WaterfallChart = ({ data, title }: WaterfallChartProps) => {
             />
             <Tooltip 
               contentStyle={{
-                backgroundColor: "hsl(0, 0%, 10%)",
-                border: "1px solid hsl(262, 83%, 65%)",
+                backgroundColor: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--primary))",
                 borderRadius: "0.5rem",
-                color: "hsl(0, 0%, 98%)",
+                color: "hsl(var(--popover-foreground))",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
               }}
+              cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
               formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Valor']}
             />
             <Legend />

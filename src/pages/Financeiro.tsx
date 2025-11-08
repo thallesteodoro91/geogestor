@@ -61,10 +61,13 @@ const Financeiro = () => {
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "var(--radius)",
+                      backgroundColor: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--primary))",
+                      borderRadius: "0.5rem",
+                      color: "hsl(var(--popover-foreground))",
+                      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => `R$ ${Math.abs(value).toLocaleString('pt-BR')}`}
                   />
                   <Bar
@@ -137,11 +140,13 @@ const Financeiro = () => {
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "var(--radius)",
+                        backgroundColor: "hsl(var(--popover))",
+                        border: "1px solid hsl(var(--primary))",
+                        borderRadius: "0.5rem",
+                        color: "hsl(var(--popover-foreground))",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                       }}
-                      formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`}
+                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>

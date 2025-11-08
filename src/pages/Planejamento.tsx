@@ -121,10 +121,13 @@ export default function Planejamento() {
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--primary))",
+                          borderRadius: "0.5rem",
+                          color: "hsl(var(--popover-foreground))",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                        }}
+                        cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                       />
                       <Bar dataKey="orcado" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
                       <Bar dataKey="realizado" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
@@ -145,10 +148,13 @@ export default function Planejamento() {
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--primary))",
+                          borderRadius: "0.5rem",
+                          color: "hsl(var(--popover-foreground))",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                        }}
+                        cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                       />
                       <Bar dataKey="desvio" radius={[8, 8, 0, 0]}>
                         {desvioData.map((entry, index) => (
@@ -182,10 +188,13 @@ export default function Planejamento() {
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--primary))",
+                          borderRadius: "0.5rem",
+                          color: "hsl(var(--popover-foreground))",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                        }}
+                        cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                       />
                       <Bar dataKey="receita" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
                       <Bar dataKey="custoTotal" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
@@ -207,10 +216,13 @@ export default function Planejamento() {
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
                         contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
+                          backgroundColor: "hsl(var(--popover))",
+                          border: "1px solid hsl(var(--primary))",
+                          borderRadius: "0.5rem",
+                          color: "hsl(var(--popover-foreground))",
+                          boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                        }}
+                        cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                       />
                       <Bar dataKey="fixo" stackId="a" fill="hsl(var(--chart-3))" radius={[0, 0, 0, 0]} />
                       <Bar dataKey="variavel" stackId="a" fill="hsl(var(--chart-4))" radius={[8, 8, 0, 0]} />
@@ -244,10 +256,12 @@ export default function Planejamento() {
                   <FunnelChart>
                     <Tooltip 
                       contentStyle={{ 
-                        backgroundColor: "hsl(var(--card))", 
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px"
-                      }} 
+                        backgroundColor: "hsl(var(--popover))",
+                        border: "1px solid hsl(var(--primary))",
+                        borderRadius: "0.5rem",
+                        color: "hsl(var(--popover-foreground))",
+                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
+                      }}
                     />
                     <Funnel dataKey="value" data={pipelineData} isAnimationActive>
                       <LabelList position="right" fill="hsl(var(--foreground))" stroke="none" dataKey="name" />

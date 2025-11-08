@@ -36,10 +36,20 @@ const custoReceitaData = [
 
 export default function Operacional() {
   const [servicoSelecionado, setServicoSelecionado] = useState<string>("todos");
+  const [tempoMedioFiltro, setTempoMedioFiltro] = useState<string>("todos");
+  const [ticketMedioFiltro, setTicketMedioFiltro] = useState<string>("todos");
 
   const custoReceitaFiltrado = servicoSelecionado === "todos" 
     ? custoReceitaData 
     : custoReceitaData.filter(item => item.servico === servicoSelecionado);
+
+  const tempoMedioFiltrado = tempoMedioFiltro === "todos"
+    ? tempoMedioData
+    : tempoMedioData.filter(item => item.servico === tempoMedioFiltro);
+
+  const ticketMedioFiltrado = ticketMedioFiltro === "todos"
+    ? ticketMedioData
+    : ticketMedioData.filter(item => item.servico === ticketMedioFiltro);
 
   return (
     <AppLayout>
@@ -99,16 +109,30 @@ export default function Operacional() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <CardHeader>
-              <ChartTitle 
-                title="Tempo Médio por Serviço"
-                description="Mostra o tempo médio de conclusão (em dias) para cada tipo de serviço oferecido, indicando eficiência operacional."
-                calculation="Tempo Médio = Σ Dias de Execução / Número de Serviços"
-              />
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between">
+                <ChartTitle 
+                  title="Tempo Médio por Serviço"
+                  description="Mostra o tempo médio de conclusão (em dias) para cada tipo de serviço oferecido, indicando eficiência operacional."
+                  calculation="Tempo Médio = Σ Dias de Execução / Número de Serviços"
+                />
+                <Select value={tempoMedioFiltro} onValueChange={setTempoMedioFiltro}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Selecione o serviço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os Serviços</SelectItem>
+                    <SelectItem value="Levantamento">Levantamento</SelectItem>
+                    <SelectItem value="Georreferenciamento">Georreferenciamento</SelectItem>
+                    <SelectItem value="Desmembramento">Desmembramento</SelectItem>
+                    <SelectItem value="Planta Topográfica">Planta Topográfica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={tempoMedioData}>
+                <BarChart data={tempoMedioFiltrado}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
@@ -174,16 +198,30 @@ export default function Operacional() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
-            <CardHeader>
-              <ChartTitle 
-                title="Ticket Médio por Serviço"
-                description="Valor médio de receita gerado por cada tipo de serviço, permitindo identificar quais são os mais rentáveis."
-                calculation="Ticket Médio = Receita Total do Serviço / Quantidade de Serviços"
-              />
+            <CardHeader className="space-y-3">
+              <div className="flex items-center justify-between">
+                <ChartTitle 
+                  title="Ticket Médio por Serviço"
+                  description="Valor médio de receita gerado por cada tipo de serviço, permitindo identificar quais são os mais rentáveis."
+                  calculation="Ticket Médio = Receita Total do Serviço / Quantidade de Serviços"
+                />
+                <Select value={ticketMedioFiltro} onValueChange={setTicketMedioFiltro}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="Selecione o serviço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os Serviços</SelectItem>
+                    <SelectItem value="Levantamento">Levantamento</SelectItem>
+                    <SelectItem value="Georreferenciamento">Georreferenciamento</SelectItem>
+                    <SelectItem value="Desmembramento">Desmembramento</SelectItem>
+                    <SelectItem value="Planta Topográfica">Planta Topográfica</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={ticketMedioData} layout="vertical">
+                <BarChart data={ticketMedioFiltrado} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                   <YAxis dataKey="servico" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={150} />

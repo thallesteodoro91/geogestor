@@ -163,29 +163,40 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Story Cards */}
+        {/* Story Cards - Storytelling Visual com Contexto */}
         <div className="space-y-4">
           <h2 className="text-xl font-heading font-semibold text-foreground">Insights Narrativos</h2>
+          <p className="text-sm text-muted-foreground">Análises que transformam dados em decisões</p>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <StoryCard
-              title="Margem em Crescimento"
-              insight="A margem líquida apresentou crescimento consistente de 2,1% no semestre, refletindo maior eficiência operacional e controle de custos. A tendência indica consolidação da rentabilidade."
+              title="Receita em Alta, Margem sob Atenção"
+              insight="A receita cresceu 12,5% no período, sinalizando forte demanda. Porém, as despesas avançaram 5,1%, pressionando a margem líquida. Recomenda-se revisar a estrutura de custos fixos para preservar a rentabilidade."
               category="financial"
+              trend="alert"
+              emphasis="high"
+              action="Análise detalhada de custos operacionais prioritária"
             />
             <StoryCard
-              title="Performance Operacional"
-              insight="O tempo médio de conclusão de serviços reduziu 15% neste período, impactando positivamente a satisfação dos clientes e aumentando a capacidade de execução de novos projetos."
+              title="Eficiência Operacional em Destaque"
+              insight="O tempo médio de conclusão reduziu 15%, resultado direto da otimização de rotas e melhor coordenação das equipes de campo. Isso amplia a capacidade de atender novos clientes sem expandir recursos."
               category="operational"
+              trend="up"
+              emphasis="high"
             />
             <StoryCard
-              title="Estrutura de Custos Equilibrada"
-              insight="Os custos diretos mantiveram-se proporcionais ao crescimento da receita, preservando a margem bruta. A despesa operacional está sob controle, com variação inferior a 3%."
-              category="financial"
-            />
-            <StoryCard
-              title="Oportunidade de Expansão"
-              insight="A taxa de conversão de 68% indica forte demanda. Com otimização do pipeline comercial, há potencial para crescimento de 20% na receita sem comprometer a estrutura atual."
+              title="Taxa de Conversão Sólida"
+              insight="Com 68% de conversão de orçamentos em serviços, o desempenho comercial está acima da média do setor. Este é um indicador de boa qualidade técnica e precificação competitiva."
               category="strategic"
+              trend="up"
+              emphasis="medium"
+              action="Manter estratégia de precificação e follow-up comercial"
+            />
+            <StoryCard
+              title="Ticket Médio em Expansão"
+              insight="O ticket médio subiu 6,3%, reflexo de serviços mais complexos e de maior valor agregado. A empresa está capturando projetos de topografia para grandes propriedades rurais com sucesso."
+              category="financial"
+              trend="up"
+              emphasis="medium"
             />
           </div>
         </div>

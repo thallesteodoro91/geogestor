@@ -18,7 +18,7 @@ export const ProfitMarginChart = () => {
         <ChartTitle 
           title="Margens de Lucratividade"
           description="Acompanha a evolução das margens bruta e líquida ao longo do tempo. A margem bruta indica eficiência operacional; a líquida mostra rentabilidade final."
-          calculation="Margem Bruta = (Lucro Bruto / Receita) × 100 | Margem Líquida = (Lucro Líquido / Receita) × 100"
+          calculation="Margem Bruta (%) = (Lucro Bruto / Receita Bruta) × 100 | Margem Líquida (%) = (Lucro Líquido / Receita Líquida) × 100"
         />
       </CardHeader>
       <CardContent>

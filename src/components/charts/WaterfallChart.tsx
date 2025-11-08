@@ -1,4 +1,5 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ChartTitle } from "./ChartTitle";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from "recharts";
 
 interface WaterfallChartProps {
@@ -24,7 +25,11 @@ export const WaterfallChart = ({ data, title }: WaterfallChartProps) => {
   return (
     <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
       <CardHeader>
-        <CardTitle className="text-xl font-heading">{title}</CardTitle>
+        <ChartTitle 
+          title={title}
+          description="Visualiza o fluxo acumulado de valores ao longo do tempo, mostrando como entradas e saídas afetam o saldo final."
+          calculation="Saldo Final = Saldo Inicial + Entradas − Saídas | Fluxo de Caixa Operacional = Recebimentos − Pagamentos"
+        />
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>

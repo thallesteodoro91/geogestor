@@ -18,7 +18,7 @@ export const RevenueChart = () => {
         <ChartTitle 
           title="Receita vs Despesa"
           description="Mostra a evolução mensal da receita e despesa, permitindo identificar tendências de crescimento e controle de custos."
-          calculation="Lucro = Receita Total - Despesas Totais"
+          calculation="Receita Líquida = Receita Bruta − Impostos e Deduções | Crescimento (%) = ((Período Atual − Período Anterior) / Período Anterior) × 100"
         />
       </CardHeader>
       <CardContent>

@@ -5,39 +5,114 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Search, Edit, Trash2 } from "lucide-react";
-import { useState } from "react";
-
-const clientesMock = [
-  { id: 1, nome: "João Silva", cpf: "123.456.789-00", email: "joao@email.com", telefone: "(11) 99999-9999" },
-  { id: 2, nome: "Maria Santos", cpf: "987.654.321-00", email: "maria@email.com", telefone: "(11) 98888-8888" },
-  { id: 3, nome: "Pedro Oliveira", cpf: "456.789.123-00", email: "pedro@email.com", telefone: "(11) 97777-7777" },
-];
-
-const empresasMock = [
-  { id: 1, nome: "Empresa ABC Ltda", cnpj: "12.345.678/0001-90", razaoSocial: "ABC Serviços Ltda" },
-  { id: 2, nome: "XYZ Construções", cnpj: "98.765.432/0001-10", razaoSocial: "XYZ Construções S.A." },
-];
-
-const propriedadesMock = [
-  { id: 1, nome: "Fazenda São José", area: "250 ha", localizacao: "Rural - Interior SP" },
-  { id: 2, nome: "Terreno Urbano Central", area: "1.200 m²", localizacao: "Centro - São Paulo" },
-  { id: 3, nome: "Loteamento Jardins", area: "85 ha", localizacao: "Subúrbio - Grande SP" },
-];
-
-const tiposDespesaMock = [
-  { id: 1, categoria: "Equipamentos", subcategoria: "Manutenção", descricao: "Manutenção de equipamentos topográficos" },
-  { id: 2, categoria: "Pessoal", subcategoria: "Salários", descricao: "Folha de pagamento" },
-  { id: 3, categoria: "Transporte", subcategoria: "Combustível", descricao: "Combustível para deslocamentos" },
-];
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
+import { EmpresaDialog } from "@/components/cadastros/EmpresaDialog";
+import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
+import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
 
 export default function Cadastros() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [clientes, setClientes] = useState<any[]>([]);
+  const [empresas, setEmpresas] = useState<any[]>([]);
+  const [propriedades, setPropriedades] = useState<any[]>([]);
+  const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Dialog states
+  const [clienteDialog, setClienteDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [empresaDialog, setEmpresaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [propriedadeDialog, setPropriedadeDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [tipoDespesaDialog, setTipoDespesaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  
+  // Delete dialog
+  const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; table?: string; id?: string }>({ open: false });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [clientesRes, empresasRes, propriedadesRes, tiposDespesaRes] = await Promise.all([
+        supabase.from('dim_cliente').select('*').order('nome'),
+        supabase.from('dim_empresa').select('*').order('nome'),
+        supabase.from('dim_propriedade').select('*').order('nome_da_propriedade'),
+        supabase.from('dim_tipodespesa').select('*').order('categoria'),
+      ]);
+
+      if (clientesRes.data) setClientes(clientesRes.data);
+      if (empresasRes.data) setEmpresas(empresasRes.data);
+      if (propriedadesRes.data) setPropriedades(propriedadesRes.data);
+      if (tiposDespesaRes.data) setTiposDespesa(tiposDespesaRes.data);
+    } catch (error: any) {
+      toast.error("Erro ao carregar dados");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteDialog.table || !deleteDialog.id) return;
+    
+    try {
+      let error;
+      
+      switch (deleteDialog.table) {
+        case 'cliente':
+          ({ error } = await supabase
+            .from('dim_cliente')
+            .delete()
+            .eq('id_cliente', deleteDialog.id));
+          break;
+        case 'empresa':
+          ({ error } = await supabase
+            .from('dim_empresa')
+            .delete()
+            .eq('id_empresa', deleteDialog.id));
+          break;
+        case 'propriedade':
+          ({ error } = await supabase
+            .from('dim_propriedade')
+            .delete()
+            .eq('id_propriedade', deleteDialog.id));
+          break;
+        case 'tipodespesa':
+          ({ error } = await supabase
+            .from('dim_tipodespesa')
+            .delete()
+            .eq('id_tipodespesa', deleteDialog.id));
+          break;
+        default:
+          return;
+      }
+      
+      if (error) throw error;
+      
+      toast.success("Registro excluído com sucesso!");
+      fetchData();
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao excluir registro");
+    } finally {
+      setDeleteDialog({ open: false });
+    }
+  };
+
+  const filteredClientes = clientes.filter(c => 
+    c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.cpf?.includes(searchTerm) ||
+    c.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <AppLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Cadastros</h1>
+          <h1 className="text-4xl font-heading font-bold text-foreground">Base de Dados</h1>
           <p className="text-muted-foreground mt-2">Gerenciar clientes, empresas, propriedades e tipos de despesa</p>
         </div>
 
@@ -49,12 +124,13 @@ export default function Cadastros() {
             <TabsTrigger value="despesas">Tipos de Despesa</TabsTrigger>
           </TabsList>
 
+          {/* Clientes */}
           <TabsContent value="clientes" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Lista de Clientes</CardTitle>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => setClienteDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
                     Adicionar Cliente
                   </Button>
@@ -67,7 +143,7 @@ export default function Cadastros() {
                     placeholder="Buscar por nome, CPF ou email..."
                     className="pl-9"
                     value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   />
                 </div>
                 <div className="rounded-md border">
@@ -75,31 +151,55 @@ export default function Cadastros() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        <TableHead>CPF</TableHead>
+                        <TableHead>CPF/CNPJ</TableHead>
                         <TableHead>Email</TableHead>
                         <TableHead>Telefone</TableHead>
+                        <TableHead>Situação</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {clientesMock.map((cliente) => (
-                        <TableRow key={cliente.id}>
-                          <TableCell className="font-medium">{cliente.nome}</TableCell>
-                          <TableCell>{cliente.cpf}</TableCell>
-                          <TableCell>{cliente.email}</TableCell>
-                          <TableCell>{cliente.telefone}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8">
+                            Carregando...
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : filteredClientes.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            Nenhum cliente encontrado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredClientes.map((cliente) => (
+                          <TableRow key={cliente.id_cliente}>
+                            <TableCell className="font-medium">{cliente.nome}</TableCell>
+                            <TableCell>{cliente.cpf || cliente.cnpj || '-'}</TableCell>
+                            <TableCell>{cliente.email || '-'}</TableCell>
+                            <TableCell>{cliente.telefone || '-'}</TableCell>
+                            <TableCell>{cliente.situacao || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setClienteDialog({ open: true, data: cliente })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'cliente', id: cliente.id_cliente })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -107,53 +207,63 @@ export default function Cadastros() {
             </Card>
           </TabsContent>
 
+          {/* Empresas */}
           <TabsContent value="empresas" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Lista de Empresas</CardTitle>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => setEmpresaDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
                     Adicionar Empresa
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por nome ou CNPJ..."
-                    className="pl-9"
-                  />
-                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome Fantasia</TableHead>
-                        <TableHead>CNPJ</TableHead>
-                        <TableHead>Razão Social</TableHead>
+                        <TableHead>Nome</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {empresasMock.map((empresa) => (
-                        <TableRow key={empresa.id}>
-                          <TableCell className="font-medium">{empresa.nome}</TableCell>
-                          <TableCell>{empresa.cnpj}</TableCell>
-                          <TableCell>{empresa.razaoSocial}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center py-8">Carregando...</TableCell>
+                        </TableRow>
+                      ) : empresas.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                            Nenhuma empresa encontrada
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        empresas.map((empresa) => (
+                          <TableRow key={empresa.id_empresa}>
+                            <TableCell className="font-medium">{empresa.nome}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setEmpresaDialog({ open: true, data: empresa })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'empresa', id: empresa.id_empresa })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -161,53 +271,69 @@ export default function Cadastros() {
             </Card>
           </TabsContent>
 
+          {/* Propriedades */}
           <TabsContent value="propriedades" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Lista de Propriedades</CardTitle>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => setPropriedadeDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
                     Adicionar Propriedade
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por nome ou localização..."
-                    className="pl-9"
-                  />
-                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
-                        <TableHead>Área</TableHead>
-                        <TableHead>Localização</TableHead>
+                        <TableHead>Área (ha)</TableHead>
+                        <TableHead>Cidade</TableHead>
+                        <TableHead>Situação</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {propriedadesMock.map((prop) => (
-                        <TableRow key={prop.id}>
-                          <TableCell className="font-medium">{prop.nome}</TableCell>
-                          <TableCell>{prop.area}</TableCell>
-                          <TableCell>{prop.localizacao}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell>
+                        </TableRow>
+                      ) : propriedades.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            Nenhuma propriedade encontrada
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        propriedades.map((prop) => (
+                          <TableRow key={prop.id_propriedade}>
+                            <TableCell className="font-medium">{prop.nome_da_propriedade}</TableCell>
+                            <TableCell>{prop.area_ha || '-'}</TableCell>
+                            <TableCell>{prop.cidade || '-'}</TableCell>
+                            <TableCell>{prop.situacao || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setPropriedadeDialog({ open: true, data: prop })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'propriedade', id: prop.id_propriedade })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -215,25 +341,19 @@ export default function Cadastros() {
             </Card>
           </TabsContent>
 
+          {/* Tipos de Despesa */}
           <TabsContent value="despesas" className="space-y-6">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>Lista de Tipos de Despesa</CardTitle>
-                  <Button className="gap-2">
+                  <Button className="gap-2" onClick={() => setTipoDespesaDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
                     Adicionar Tipo
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar por categoria ou subcategoria..."
-                    className="pl-9"
-                  />
-                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -245,23 +365,43 @@ export default function Cadastros() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {tiposDespesaMock.map((tipo) => (
-                        <TableRow key={tipo.id}>
-                          <TableCell className="font-medium">{tipo.categoria}</TableCell>
-                          <TableCell>{tipo.subcategoria}</TableCell>
-                          <TableCell>{tipo.descricao}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="icon">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-8">Carregando...</TableCell>
+                        </TableRow>
+                      ) : tiposDespesa.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                            Nenhum tipo de despesa encontrado
                           </TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        tiposDespesa.map((tipo) => (
+                          <TableRow key={tipo.id_tipodespesa}>
+                            <TableCell className="font-medium">{tipo.categoria}</TableCell>
+                            <TableCell>{tipo.subcategoria || '-'}</TableCell>
+                            <TableCell>{tipo.descricao || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setTipoDespesaDialog({ open: true, data: tipo })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'tipodespesa', id: tipo.id_tipodespesa })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
                 </div>
@@ -270,6 +410,51 @@ export default function Cadastros() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Dialogs */}
+      <ClienteDialog 
+        open={clienteDialog.open} 
+        onOpenChange={(open) => setClienteDialog({ open })}
+        cliente={clienteDialog.data}
+        onSuccess={fetchData}
+      />
+      
+      <EmpresaDialog 
+        open={empresaDialog.open} 
+        onOpenChange={(open) => setEmpresaDialog({ open })}
+        empresa={empresaDialog.data}
+        onSuccess={fetchData}
+      />
+      
+      <PropriedadeDialog 
+        open={propriedadeDialog.open} 
+        onOpenChange={(open) => setPropriedadeDialog({ open })}
+        propriedade={propriedadeDialog.data}
+        onSuccess={fetchData}
+      />
+      
+      <TipoDespesaDialog 
+        open={tipoDespesaDialog.open} 
+        onOpenChange={(open) => setTipoDespesaDialog({ open })}
+        tipoDespesa={tipoDespesaDialog.data}
+        onSuccess={fetchData}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

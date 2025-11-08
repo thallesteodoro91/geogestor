@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -7,16 +7,31 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Gestão Financeira", href: "/financeiro", icon: DollarSign },
-  { name: "Planejamento", href: "/planejamento", icon: Target },
-  { name: "Operacional", href: "/operacional", icon: TrendingUp },
-  { name: "Clientes", href: "/clientes", icon: Users },
-  { name: "Despesas", href: "/despesas", icon: Receipt },
-  { name: "Serviços", href: "/servicos", icon: Briefcase },
-  { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
-  { name: "Cadastros", href: "/cadastros", icon: FileText },
+const navigationSections = [
+  {
+    title: "Visão",
+    items: [
+      { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Financeiro", href: "/financeiro", icon: DollarSign },
+      { name: "Operacional", href: "/operacional", icon: TrendingUp },
+      { name: "Planejamento", href: "/planejamento", icon: Target },
+    ]
+  },
+  {
+    title: "Operações",
+    items: [
+      { name: "Serviços", href: "/servicos", icon: Briefcase },
+      { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
+      { name: "Despesas", href: "/despesas", icon: Receipt },
+    ]
+  },
+  {
+    title: "Base de Dados",
+    items: [
+      { name: "Clientes", href: "/clientes", icon: Users },
+      { name: "Cadastros", href: "/cadastros", icon: FileText },
+    ]
+  }
 ];
 
 export const Sidebar = () => {
@@ -44,25 +59,30 @@ export const Sidebar = () => {
           </div>
           <nav className="flex flex-1 flex-col">
             <ul role="list" className="flex flex-1 flex-col gap-y-7">
-              <li>
-                <ul role="list" className="-mx-2 space-y-1">
-                  {navigation.map((item) => (
-                    <li key={item.name}>
-                      <NavLink
-                        to={item.href}
-                        className={cn(
-                          "group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-smooth",
-                          "text-muted-foreground hover:text-foreground hover:bg-muted"
-                        )}
-                        activeClassName="bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary"
-                      >
-                        <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
-                        {item.name}
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </li>
+              {navigationSections.map((section) => (
+                <li key={section.title}>
+                  <div className="text-xs font-semibold leading-6 text-muted-foreground px-2 mb-2">
+                    {section.title}
+                  </div>
+                  <ul role="list" className="-mx-2 space-y-1">
+                    {section.items.map((item) => (
+                      <li key={item.name}>
+                        <NavLink
+                          to={item.href}
+                          className={cn(
+                            "group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-smooth",
+                            "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          )}
+                          activeClassName="bg-primary/10 text-primary hover:bg-primary/10 hover:text-primary"
+                        >
+                          <item.icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                          {item.name}
+                        </NavLink>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
               <li className="mt-auto">
                 <Separator className="mb-4" />
                 <Button

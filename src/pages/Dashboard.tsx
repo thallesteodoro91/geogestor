@@ -8,7 +8,18 @@ import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
-import { DollarSign, TrendingUp, Percent, Target } from "lucide-react";
+import { 
+  Banknote, 
+  TrendingUp, 
+  CircleDollarSign, 
+  TrendingDown, 
+  Percent, 
+  Calculator, 
+  Target, 
+  Receipt, 
+  ClipboardList, 
+  CheckCircle2 
+} from "lucide-react";
 
 const Dashboard = () => {
   const [filters, setFilters] = useState<FilterState>({
@@ -69,7 +80,7 @@ const Dashboard = () => {
             <KPICard
               title="Receita Total"
               value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-              icon={DollarSign}
+              icon={Banknote}
               subtitle={`${kpis?.total_servicos || 0} serviços`}
               change="+12.5%"
               changeType="positive"
@@ -85,7 +96,7 @@ const Dashboard = () => {
             <KPICard
               title="Lucro Líquido"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-              icon={TrendingUp}
+              icon={CircleDollarSign}
               subtitle={`margem de ${(kpis?.margem_liquida || 0).toFixed(1)}%`}
               change="+8.2%"
               changeType="positive"
@@ -93,7 +104,7 @@ const Dashboard = () => {
             <KPICard
               title="Total de Despesas"
               value={isLoading ? "..." : `R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-              icon={DollarSign}
+              icon={TrendingDown}
               subtitle="custos operacionais"
               change="+5.1%"
               changeType="negative"
@@ -116,7 +127,7 @@ const Dashboard = () => {
             <KPICard
               title="Margem Líquida"
               value={isLoading ? "..." : `${(kpis?.margem_liquida || 0).toFixed(1)}%`}
-              icon={Percent}
+              icon={Calculator}
               subtitle="Lucro Líquido / Receita"
               change="+2.1%"
               changeType="positive"
@@ -132,7 +143,7 @@ const Dashboard = () => {
             <KPICard
               title="Ticket Médio"
               value={isLoading ? "..." : `R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-              icon={DollarSign}
+              icon={Receipt}
               subtitle="por serviço"
               change="+6.3%"
               changeType="positive"
@@ -147,7 +158,7 @@ const Dashboard = () => {
             <KPICard
               title="Total de Serviços"
               value={isLoading ? "..." : String(kpis?.total_servicos || 0)}
-              icon={Target}
+              icon={ClipboardList}
               subtitle="serviços registrados"
               change="+15"
               changeType="positive"
@@ -155,7 +166,7 @@ const Dashboard = () => {
             <KPICard
               title="Serviços Concluídos"
               value={isLoading ? "..." : String(kpis?.servicos_concluidos || 0)}
-              icon={Target}
+              icon={CheckCircle2}
               subtitle={`${kpis?.total_servicos ? ((kpis.servicos_concluidos / kpis.total_servicos) * 100).toFixed(1) : 0}% do total`}
               change="+12"
               changeType="positive"

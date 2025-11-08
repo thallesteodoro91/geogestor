@@ -89,7 +89,7 @@ export default function Planejamento() {
         </div>
 
         <Tabs defaultValue="orcamento" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-3 gap-2">
             <TabsTrigger value="orcamento">Orçamento</TabsTrigger>
             <TabsTrigger value="equilibrio">Ponto de Equilíbrio</TabsTrigger>
             <TabsTrigger value="pipeline">Pipeline</TabsTrigger>

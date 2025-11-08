@@ -18,7 +18,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const Despesas = lazy(() => import("./pages/Despesas"));
 const Servicos = lazy(() => import("./pages/Servicos"));
 const Orcamentos = lazy(() => import("./pages/Orcamentos"));
-const JSMentor = lazy(() => import("./pages/JSMentor"));
+
 
 const queryClient = new QueryClient();
 
@@ -46,7 +46,7 @@ const App = () => {
               <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
               <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
               <Route path="/orcamentos" element={<ProtectedRoute><Orcamentos /></ProtectedRoute>} />
-              <Route path="/js-mentor" element={<ProtectedRoute><JSMentor /></ProtectedRoute>} />
+              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -1,5 +1,6 @@
-import { Card } from "@/components/ui/card";
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { ChartTitle } from "./ChartTitle";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const data = [
   { month: "Jan", receita: 285000, despesa: 165000, lucro: 120000 },
@@ -12,12 +13,16 @@ const data = [
 
 export const RevenueChart = () => {
   return (
-    <Card className="p-6 bg-gradient-to-br from-card to-card/50 border-border/50">
-      <div className="space-y-1.5 mb-6">
-        <h3 className="text-xl font-heading font-semibold text-foreground">Receita vs Despesa</h3>
-        <p className="text-sm text-muted-foreground/80">Evolução mensal do desempenho financeiro</p>
-      </div>
-      <ResponsiveContainer width="100%" height={300}>
+    <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
+      <CardHeader>
+        <ChartTitle 
+          title="Receita vs Despesa"
+          description="Mostra a evolução mensal da receita e despesa, permitindo identificar tendências de crescimento e controle de custos."
+          calculation="Lucro = Receita Total - Despesas Totais"
+        />
+      </CardHeader>
+      <CardContent>
+        <ResponsiveContainer width="100%" height={300}>
         <AreaChart data={data}>
           <defs>
             <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
@@ -70,6 +75,7 @@ export const RevenueChart = () => {
           />
         </AreaChart>
       </ResponsiveContainer>
+      </CardContent>
     </Card>
   );
 };

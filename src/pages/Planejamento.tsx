@@ -1,8 +1,9 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ChartTitle } from "@/components/charts/ChartTitle";
 import { Target, TrendingUp, Users, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
 
@@ -111,7 +112,11 @@ export default function Planejamento() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Orçado vs Realizado</CardTitle>
+                  <ChartTitle 
+                    title="Orçado vs Realizado"
+                    description="Compara os valores planejados (orçados) com os valores efetivamente executados (realizados) para cada categoria financeira."
+                    calculation="Desvio = ((Realizado - Orçado) / Orçado) × 100"
+                  />
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
@@ -138,7 +143,11 @@ export default function Planejamento() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Desvio Orçamentário (%)</CardTitle>
+                  <ChartTitle 
+                    title="Desvio Orçamentário (%)"
+                    description="Mostra a diferença percentual entre o orçado e o realizado ao longo dos meses. Valores positivos indicam economia; negativos indicam excesso de gasto."
+                    calculation="Desvio % = ((Realizado - Orçado) / Orçado) × 100"
+                  />
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
@@ -178,7 +187,11 @@ export default function Planejamento() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Receita vs Custo Total</CardTitle>
+                  <ChartTitle 
+                    title="Receita vs Custo Total"
+                    description="Compara a receita obtida com o custo total (fixo + variável). A linha tracejada indica o ponto de equilíbrio — nível mínimo de receita para cobrir todos os custos."
+                    calculation="Ponto de Equilíbrio = Custos Fixos / (1 - (Custos Variáveis / Receita))"
+                  />
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
@@ -206,7 +219,11 @@ export default function Planejamento() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Custo Fixo vs Variável</CardTitle>
+                  <ChartTitle 
+                    title="Custo Fixo vs Variável"
+                    description="Mostra a composição dos custos totais em fixos (não variam com produção) e variáveis (variam proporcionalmente com a atividade)."
+                    calculation="Custo Total = Custos Fixos + Custos Variáveis"
+                  />
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
@@ -249,7 +266,11 @@ export default function Planejamento() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Funil Comercial</CardTitle>
+                <ChartTitle 
+                  title="Funil Comercial"
+                  description="Representa o processo de conversão comercial, desde os leads iniciais até os negócios fechados. Cada etapa mostra quantos prospectos avançaram."
+                  calculation="Taxa de Conversão = (Fechados / Leads) × 100"
+                />
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>

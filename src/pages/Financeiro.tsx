@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { ChartTitle } from "@/components/charts/ChartTitle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 
@@ -38,11 +39,15 @@ const Financeiro = () => {
           </TabsList>
 
           <TabsContent value="dre" className="space-y-6">
-            <Card className="p-6">
-              <div className="space-y-2 mb-6">
-                <h3 className="text-lg font-heading font-semibold text-foreground">DRE - Demonstração do Resultado</h3>
-                <p className="text-sm text-muted-foreground">Estrutura de lucratividade consolidada</p>
-              </div>
+            <Card>
+              <CardHeader>
+                <ChartTitle 
+                  title="DRE - Demonstração do Resultado"
+                  description="Estrutura contábil que mostra a formação do resultado (lucro ou prejuízo) a partir da receita bruta até o lucro líquido, deduzindo impostos, custos e despesas."
+                  calculation="Lucro Líquido = Receita Bruta - Impostos - Custos Diretos - Despesas Operacionais"
+                />
+              </CardHeader>
+              <CardContent>
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart data={dreData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -86,6 +91,7 @@ const Financeiro = () => {
                   </p>
                 </div>
               </div>
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -117,11 +123,15 @@ const Financeiro = () => {
 
           <TabsContent value="despesas" className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-6">
-                <div className="space-y-2 mb-6">
-                  <h3 className="text-lg font-heading font-semibold text-foreground">Composição de Despesas</h3>
-                  <p className="text-sm text-muted-foreground">Distribuição por categoria</p>
-                </div>
+              <Card>
+                <CardHeader>
+                  <ChartTitle 
+                    title="Composição de Despesas"
+                    description="Distribuição percentual das despesas operacionais por categoria, mostrando onde a empresa investe seus recursos."
+                    calculation="% Categoria = (Valor da Categoria / Total de Despesas) × 100"
+                  />
+                </CardHeader>
+                <CardContent>
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
@@ -150,13 +160,18 @@ const Financeiro = () => {
                     />
                   </PieChart>
                 </ResponsiveContainer>
+                </CardContent>
               </Card>
               
-              <Card className="p-6">
-                <div className="space-y-2 mb-6">
-                  <h3 className="text-lg font-heading font-semibold text-foreground">Despesas Mensais</h3>
-                  <p className="text-sm text-muted-foreground">Total: R$ 206.000</p>
-                </div>
+              <Card>
+                <CardHeader>
+                  <ChartTitle 
+                    title="Despesas Mensais"
+                    description="Detalhamento das despesas operacionais mensais por categoria, com valores absolutos e proporção relativa ao total."
+                    calculation="Total de Despesas = Σ Todas as Categorias de Despesas"
+                  />
+                </CardHeader>
+                <CardContent>
                 <div className="space-y-4">
                   {expenseData.map((item, index) => (
                     <div key={index} className="space-y-2">
@@ -176,6 +191,7 @@ const Financeiro = () => {
                     </div>
                   ))}
                 </div>
+                </CardContent>
               </Card>
             </div>
           </TabsContent>

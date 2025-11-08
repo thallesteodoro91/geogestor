@@ -2,7 +2,8 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { ChartTitle } from "@/components/charts/ChartTitle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Clock, CheckCircle2, TrendingUp, DollarSign } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
@@ -99,7 +100,11 @@ export default function Operacional() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Tempo Médio por Serviço</CardTitle>
+              <ChartTitle 
+                title="Tempo Médio por Serviço"
+                description="Mostra o tempo médio de conclusão (em dias) para cada tipo de serviço oferecido, indicando eficiência operacional."
+                calculation="Tempo Médio = Σ Dias de Execução / Número de Serviços"
+              />
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -126,7 +131,11 @@ export default function Operacional() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Status dos Serviços</CardTitle>
+              <ChartTitle 
+                title="Status dos Serviços"
+                description="Distribuição percentual dos serviços entre concluídos e em andamento, oferecendo visão da carga de trabalho atual."
+                calculation="% Status = (Quantidade do Status / Total de Serviços) × 100"
+              />
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -166,7 +175,11 @@ export default function Operacional() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Ticket Médio por Serviço</CardTitle>
+              <ChartTitle 
+                title="Ticket Médio por Serviço"
+                description="Valor médio de receita gerado por cada tipo de serviço, permitindo identificar quais são os mais rentáveis."
+                calculation="Ticket Médio = Receita Total do Serviço / Quantidade de Serviços"
+              />
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
@@ -194,7 +207,11 @@ export default function Operacional() {
           <Card>
             <CardHeader className="space-y-3">
               <div className="flex items-center justify-between">
-                <CardTitle>Custo vs Receita por Serviço</CardTitle>
+                <ChartTitle 
+                  title="Custo vs Receita por Serviço"
+                  description="Compara custo direto, receita e lucro bruto por tipo de serviço. Permite identificar quais serviços são mais rentáveis."
+                  calculation="Lucro Bruto = Receita - Custo Direto | Margem Bruta = (Lucro Bruto / Receita) × 100"
+                />
                 <Select value={servicoSelecionado} onValueChange={setServicoSelecionado}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Selecione o serviço" />

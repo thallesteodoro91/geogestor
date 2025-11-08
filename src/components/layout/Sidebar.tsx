@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ const navigation = [
   { name: "Serviços", href: "/servicos", icon: Briefcase },
   { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
   { name: "Cadastros", href: "/cadastros", icon: FileText },
+  { name: "JS Mentor", href: "/js-mentor", icon: Sparkles },
 ];
 
 export const Sidebar = () => {

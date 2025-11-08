@@ -27,30 +27,36 @@ const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) 
 };
 
 export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, subtitle }: KPICardProps) => {
+  // Remove operation signs from change value
+  const cleanChange = change?.replace(/^[+-]\s*/, '');
+  
   return (
     <Card className="relative overflow-hidden p-6 transition-smooth hover:shadow-lg bg-gradient-to-br from-card to-card/50 border-border/50">
-      <div className="flex items-start justify-between relative z-10">
-        <div className="space-y-1.5">
+      <div className="flex items-start gap-4 relative z-10">
+        {/* Icon on the left */}
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-glow">
+          <Icon className="h-5 w-5 text-primary-foreground" />
+        </div>
+        
+        {/* Content */}
+        <div className="space-y-1.5 flex-1 min-w-0">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="flex items-baseline gap-2">
+          <div className="flex items-center gap-2">
             <h3 className="text-3xl font-heading font-bold text-foreground">{value}</h3>
-            {change && (
+            {cleanChange && (
               <div className={cn(
-                "flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full",
+                "flex items-center justify-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
                 changeType === "positive" && "text-accent bg-accent/10",
                 changeType === "negative" && "text-destructive bg-destructive/10",
                 changeType === "neutral" && "text-muted-foreground bg-muted/10"
               )}>
                 {changeType === "positive" && <TrendingUp className="h-3 w-3" />}
                 {changeType === "negative" && <TrendingDown className="h-3 w-3" />}
-                {change}
+                <span>{cleanChange}</span>
               </div>
             )}
           </div>
           {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
-        </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-glow">
-          <Icon className="h-6 w-6 text-primary-foreground" />
         </div>
       </div>
       <MiniSparkline trend={changeType === "positive" ? "up" : changeType === "negative" ? "down" : "neutral"} />

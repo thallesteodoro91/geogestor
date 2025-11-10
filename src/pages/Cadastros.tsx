@@ -82,13 +82,17 @@ export default function Cadastros() {
           return;
       }
       
-      if (error) throw error;
+      if (error) {
+        console.error('Erro ao deletar:', error);
+        throw error;
+      }
       
       toast.success("Registro excluído com sucesso!");
-      fetchData();
+      setDeleteDialog({ open: false });
+      await fetchData();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao excluir registro");
-    } finally {
+      console.error('Erro completo:', error);
+      toast.error(error.message || "Erro ao excluir registro. Verifique as permissões.");
       setDeleteDialog({ open: false });
     }
   };

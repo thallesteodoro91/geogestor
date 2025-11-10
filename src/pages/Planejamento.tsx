@@ -175,43 +175,6 @@ export default function Planejamento() {
                 </CardContent>
               </Card>
             </div>
-
-            <Card>
-              <CardHeader>
-                <ChartTitle 
-                  title="Evolução do Desvio Temporal"
-                  description="Tendência de desempenho orçamentário ao longo do tempo. A linha mostra se a empresa mantém controle sobre execução financeira ou apresenta desvios crescentes."
-                  calculation="Desvio % = ((Realizado - Orçado) / Orçado) × 100"
-                />
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <ComposedChart data={desvioData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
-                    <YAxis stroke="hsl(var(--muted-foreground))" />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--primary))",
-                        borderRadius: "0.5rem",
-                        color: "hsl(var(--popover-foreground))",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                      }}
-                      cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="desvio" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={3}
-                      dot={{ fill: "hsl(var(--primary))", r: 5 }}
-                      activeDot={{ r: 7 }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="equilibrio" className="space-y-6">

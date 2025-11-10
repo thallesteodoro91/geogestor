@@ -15,12 +15,32 @@ const servicoCores: Record<string, string> = {
   "Planta Topográfica": "hsl(var(--chart-4))",
 };
 
-const tempoMedioData = [
-  { servico: "Levantamento", tempo: 8 },
-  { servico: "Georreferenciamento", tempo: 15 },
-  { servico: "Desmembramento", tempo: 12 },
-  { servico: "Planta Topográfica", tempo: 6 },
-];
+const tempoMedioDataPorPeriodo = {
+  "2024-01": [
+    { servico: "Levantamento", tempo: 9 },
+    { servico: "Georreferenciamento", tempo: 16 },
+    { servico: "Desmembramento", tempo: 13 },
+    { servico: "Planta Topográfica", tempo: 7 },
+  ],
+  "2024-02": [
+    { servico: "Levantamento", tempo: 8 },
+    { servico: "Georreferenciamento", tempo: 15 },
+    { servico: "Desmembramento", tempo: 12 },
+    { servico: "Planta Topográfica", tempo: 6 },
+  ],
+  "2024-03": [
+    { servico: "Levantamento", tempo: 7 },
+    { servico: "Georreferenciamento", tempo: 14 },
+    { servico: "Desmembramento", tempo: 11 },
+    { servico: "Planta Topográfica", tempo: 5 },
+  ],
+  "2024-04": [
+    { servico: "Levantamento", tempo: 8 },
+    { servico: "Georreferenciamento", tempo: 13 },
+    { servico: "Desmembramento", tempo: 10 },
+    { servico: "Planta Topográfica", tempo: 6 },
+  ],
+};
 
 const statusData = [
   { name: "Concluídos", value: 75, color: "hsl(142, 76%, 56%)" }, // Verde
@@ -45,11 +65,14 @@ export default function Operacional() {
   const [servicoSelecionado, setServicoSelecionado] = useState<string>("todos");
   const [tempoMedioFiltro, setTempoMedioFiltro] = useState<string>("todos");
   const [ticketMedioFiltro, setTicketMedioFiltro] = useState<string>("todos");
+  const [periodoSelecionado, setPeriodoSelecionado] = useState<string>("2024-02");
 
   const custoReceitaFiltrado = servicoSelecionado === "todos" 
     ? custoReceitaData 
     : custoReceitaData.filter(item => item.servico === servicoSelecionado);
 
+  const tempoMedioData = tempoMedioDataPorPeriodo[periodoSelecionado as keyof typeof tempoMedioDataPorPeriodo];
+  
   const tempoMedioFiltrado = tempoMedioFiltro === "todos"
     ? tempoMedioData
     : tempoMedioData.filter(item => item.servico === tempoMedioFiltro);
@@ -119,12 +142,23 @@ export default function Operacional() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader className="space-y-3">
-              <div className="flex items-center justify-between">
-                <ChartTitle 
-                  title="Tempo Médio por Serviço"
-                  description="Mostra o tempo médio de conclusão (em dias) para cada tipo de serviço oferecido, indicando eficiência operacional."
-                  calculation="Tempo Médio = Σ Dias de Execução / Número de Serviços"
-                />
+              <ChartTitle 
+                title="Tempo Médio por Serviço"
+                description="Mostra o tempo médio de conclusão (em dias) para cada tipo de serviço oferecido, indicando eficiência operacional."
+                calculation="Tempo Médio = Σ Dias de Execução / Número de Serviços"
+              />
+              <div className="flex items-center gap-3 flex-wrap">
+                <Select value={periodoSelecionado} onValueChange={setPeriodoSelecionado}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Selecione o período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="2024-01">Janeiro 2024</SelectItem>
+                    <SelectItem value="2024-02">Fevereiro 2024</SelectItem>
+                    <SelectItem value="2024-03">Março 2024</SelectItem>
+                    <SelectItem value="2024-04">Abril 2024</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Select value={tempoMedioFiltro} onValueChange={setTempoMedioFiltro}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue placeholder="Selecione o serviço" />

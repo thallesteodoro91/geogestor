@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -212,6 +213,11 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
                   ))}
                 </div>
               </div>
+            </div>
+            
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="anotacoes">Anotações</Label>
+              <Textarea id="anotacoes" {...register("anotacoes")} rows={4} placeholder="Anotações sobre o cliente..." />
             </div>
           </div>
 

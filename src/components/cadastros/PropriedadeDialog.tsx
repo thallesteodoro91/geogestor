@@ -139,6 +139,11 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
               <Label htmlFor="observacoes">Observações</Label>
               <Textarea id="observacoes" {...register("observacoes")} rows={3} />
             </div>
+            
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="anotacoes">Anotações</Label>
+              <Textarea id="anotacoes" {...register("anotacoes")} rows={4} placeholder="Anotações sobre a propriedade..." />
+            </div>
           </div>
 
           <DialogFooter>

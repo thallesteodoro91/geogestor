@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       dim_cliente: {
         Row: {
+          anotacoes: string | null
           categoria: string | null
           celular: string | null
           cnpj: string | null
@@ -33,6 +34,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          anotacoes?: string | null
           categoria?: string | null
           celular?: string | null
           cnpj?: string | null
@@ -50,6 +52,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          anotacoes?: string | null
           categoria?: string | null
           celular?: string | null
           cnpj?: string | null
@@ -151,6 +154,7 @@ export type Database = {
       }
       dim_propriedade: {
         Row: {
+          anotacoes: string | null
           area_ha: number | null
           averbacao: string | null
           car: string | null
@@ -176,6 +180,7 @@ export type Database = {
           usucapiao: string | null
         }
         Insert: {
+          anotacoes?: string | null
           area_ha?: number | null
           averbacao?: string | null
           car?: string | null
@@ -201,6 +206,7 @@ export type Database = {
           usucapiao?: string | null
         }
         Update: {
+          anotacoes?: string | null
           area_ha?: number | null
           averbacao?: string | null
           car?: string | null

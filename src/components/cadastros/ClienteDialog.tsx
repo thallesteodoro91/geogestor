@@ -152,7 +152,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="situacao">Situação</Label>
+              <Label htmlFor="situacao">Situação do Serviço</Label>
               <Select onValueChange={(value) => setValue("situacao", value)} defaultValue={cliente?.situacao}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />
@@ -160,50 +160,52 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
                 <SelectContent>
                   <SelectItem value="Ativo">Ativo</SelectItem>
                   <SelectItem value="Inativo">Inativo</SelectItem>
-                  <SelectItem value="Prospecto">Prospecto</SelectItem>
+                  <SelectItem value="Pendente">Pendente</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             
-            <div className="space-y-3">
-              <Label>Prospecção</Label>
-              <div className="space-y-2">
-                {["Indicação", "Evento", "Cliente antigo", "Site", "Rede social"].map(option => (
-                  <div key={option} className="flex items-center space-x-2">
-                    <Checkbox 
-                      id={`prospeccao-${option}`}
-                      checked={prospeccaoOptions.includes(option)}
-                      onCheckedChange={() => handleProspeccaoToggle(option)}
-                    />
-                    <Label 
-                      htmlFor={`prospeccao-${option}`} 
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {option}
-                    </Label>
-                  </div>
-                ))}
+            <div className="col-span-2 grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <Label>Prospecção</Label>
+                <div className="space-y-2">
+                  {["Indicação", "Evento", "Cliente antigo", "Site", "Rede social"].map(option => (
+                    <div key={option} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`prospeccao-${option}`}
+                        checked={prospeccaoOptions.includes(option)}
+                        onCheckedChange={() => handleProspeccaoToggle(option)}
+                      />
+                      <Label 
+                        htmlFor={`prospeccao-${option}`} 
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {option}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            
-            <div className="space-y-3">
-              <Label>Categoria do Cliente</Label>
-              <div className="space-y-2">
-                {["Governo", "Pessoa Física", "Pessoa Jurídica"].map(option => (
-                  <div key={option} className="flex items-center space-x-2">
-                    <Checkbox 
-                      id={`categoria-${option}`}
-                      checked={categoriaOptions.includes(option)}
-                      onCheckedChange={() => handleCategoriaToggle(option)}
-                    />
-                    <Label 
-                      htmlFor={`categoria-${option}`} 
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {option}
-                    </Label>
-                  </div>
-                ))}
+              
+              <div className="space-y-3">
+                <Label>Categoria do Cliente</Label>
+                <div className="space-y-2">
+                  {["Governo", "Pessoa Física", "Pessoa Jurídica"].map(option => (
+                    <div key={option} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`categoria-${option}`}
+                        checked={categoriaOptions.includes(option)}
+                        onCheckedChange={() => handleCategoriaToggle(option)}
+                      />
+                      <Label 
+                        htmlFor={`categoria-${option}`} 
+                        className="text-sm font-normal cursor-pointer"
+                      >
+                        {option}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
             

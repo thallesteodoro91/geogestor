@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,9 +7,109 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Bot, Database, Info } from "lucide-react";
+import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export default function Configuracoes() {
+  const queryClient = useQueryClient();
+  const [uploadingTemplate, setUploadingTemplate] = useState(false);
+
+  const { data: empresa } = useQuery({
+    queryKey: ['empresa-config'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_empresa')
+        .select('*')
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const updateEmpresaMutation = useMutation({
+    mutationFn: async (updates: any) => {
+      if (!empresa?.id_empresa) {
+        throw new Error('Empresa não encontrada');
+      }
+      const { error } = await supabase
+        .from('dim_empresa')
+        .update(updates)
+        .eq('id_empresa', empresa.id_empresa);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresa-config'] });
+      toast.success('Configurações atualizadas!');
+    },
+    onError: (error: any) => {
+      toast.error(`Erro: ${error.message}`);
+    },
+  });
+
+  const handleTemplateUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.type !== 'application/pdf') {
+      toast.error('Apenas arquivos PDF são permitidos');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Arquivo muito grande. Máximo: 5MB');
+      return;
+    }
+
+    setUploadingTemplate(true);
+
+    try {
+      const fileName = `template-orcamento-${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage
+        .from('empresa-assets')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('empresa-assets')
+        .getPublicUrl(fileName);
+
+      await updateEmpresaMutation.mutateAsync({
+        template_orcamento_url: publicUrl,
+      });
+
+      toast.success('Template carregado com sucesso!');
+    } catch (error: any) {
+      toast.error(`Erro ao fazer upload: ${error.message}`);
+    } finally {
+      setUploadingTemplate(false);
+    }
+  };
+
+  const handleRemoveTemplate = async () => {
+    if (!empresa?.template_orcamento_url) return;
+
+    try {
+      const fileName = empresa.template_orcamento_url.split('/').pop();
+      if (fileName) {
+        await supabase.storage.from('empresa-assets').remove([fileName]);
+      }
+
+      await updateEmpresaMutation.mutateAsync({
+        template_orcamento_url: null,
+      });
+
+      toast.success('Template removido!');
+    } catch (error: any) {
+      toast.error(`Erro ao remover: ${error.message}`);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="space-y-8">
@@ -132,6 +234,73 @@ export default function Configuracoes() {
                   <option>Mensal</option>
                 </select>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                <CardTitle>Template de Orçamento</CardTitle>
+              </div>
+              <CardDescription>Faça upload do seu PDF personalizado para gerar orçamentos</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {empresa?.template_orcamento_url ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-8 w-8 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">Template PDF Configurado</p>
+                        <p className="text-xs text-muted-foreground">Pronto para gerar orçamentos</p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRemoveTemplate}
+                      disabled={updateEmpresaMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Remover
+                    </Button>
+                  </div>
+                  <a
+                    href={empresa.template_orcamento_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline"
+                  >
+                    Visualizar template atual
+                  </a>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label htmlFor="template-upload">Upload do Template PDF</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="template-upload"
+                      type="file"
+                      accept="application/pdf"
+                      onChange={handleTemplateUpload}
+                      disabled={uploadingTemplate}
+                      className="cursor-pointer"
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={uploadingTemplate}
+                      onClick={() => document.getElementById('template-upload')?.click()}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {uploadingTemplate ? 'Enviando...' : 'Enviar'}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Formato: PDF | Tamanho máximo: 5MB
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

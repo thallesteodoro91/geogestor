@@ -108,6 +108,8 @@ export type Database = {
           nome: string
           ponto_de_equilibrio: number | null
           receita: number | null
+          template_config: Json | null
+          template_orcamento_url: string | null
           updated_at: string | null
         }
         Insert: {
@@ -122,6 +124,8 @@ export type Database = {
           nome: string
           ponto_de_equilibrio?: number | null
           receita?: number | null
+          template_config?: Json | null
+          template_orcamento_url?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -136,6 +140,8 @@ export type Database = {
           nome?: string
           ponto_de_equilibrio?: number | null
           receita?: number | null
+          template_config?: Json | null
+          template_orcamento_url?: string | null
           updated_at?: string | null
         }
         Relationships: []

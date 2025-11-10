@@ -9,16 +9,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, TrendingUp, Target } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
+import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     id_cliente: "",
     id_servico: "",
@@ -67,6 +69,19 @@ export default function Orcamentos() {
         .order('nome_do_servico');
       if (error) throw error;
       return data || [];
+    },
+  });
+
+  const { data: empresa } = useQuery({
+    queryKey: ['empresa-pdf'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('dim_empresa')
+        .select('template_orcamento_url, template_config')
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
     },
   });
 
@@ -184,6 +199,36 @@ export default function Orcamentos() {
       } else {
         toast.error("Erro na validação dos dados");
       }
+    }
+  };
+
+  const handleExportPDF = async (orcamento: any) => {
+    if (!empresa?.template_orcamento_url) {
+      toast.error('Configure o template de orçamento nas Configurações primeiro!');
+      return;
+    }
+
+    setGeneratingPDF(orcamento.id_orcamento);
+
+    try {
+      const cliente = orcamento.dim_cliente || null;
+      const servico = orcamento.fato_servico || null;
+      const config = (empresa.template_config || {}) as any;
+
+      await generateOrcamentoPDF(
+        orcamento,
+        cliente,
+        servico,
+        empresa.template_orcamento_url,
+        config
+      );
+
+      toast.success('PDF gerado com sucesso!');
+    } catch (error: any) {
+      console.error('Erro ao gerar PDF:', error);
+      toast.error('Erro ao gerar PDF. Verifique o template e tente novamente.');
+    } finally {
+      setGeneratingPDF(null);
     }
   };
 
@@ -378,7 +423,16 @@ export default function Orcamentos() {
                           {orc.situacao_do_pagamento}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right">
+                       <TableCell className="text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleExportPDF(orc)}
+                          disabled={generatingPDF === orc.id_orcamento}
+                          title="Exportar PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(orc)}>
                           <Edit className="h-4 w-4" />
                         </Button>

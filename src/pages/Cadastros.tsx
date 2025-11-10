@@ -10,21 +10,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
-import { EmpresaDialog } from "@/components/cadastros/EmpresaDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
 
 export default function Cadastros() {
   const [searchTerm, setSearchTerm] = useState("");
   const [clientes, setClientes] = useState<any[]>([]);
-  const [empresas, setEmpresas] = useState<any[]>([]);
   const [propriedades, setPropriedades] = useState<any[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Dialog states
   const [clienteDialog, setClienteDialog] = useState<{ open: boolean; data?: any }>({ open: false });
-  const [empresaDialog, setEmpresaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [propriedadeDialog, setPropriedadeDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [tipoDespesaDialog, setTipoDespesaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   
@@ -38,15 +35,13 @@ export default function Cadastros() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [clientesRes, empresasRes, propriedadesRes, tiposDespesaRes] = await Promise.all([
+      const [clientesRes, propriedadesRes, tiposDespesaRes] = await Promise.all([
         supabase.from('dim_cliente').select('*').order('nome'),
-        supabase.from('dim_empresa').select('*').order('nome'),
         supabase.from('dim_propriedade').select('*').order('nome_da_propriedade'),
         supabase.from('dim_tipodespesa').select('*').order('categoria'),
       ]);
 
       if (clientesRes.data) setClientes(clientesRes.data);
-      if (empresasRes.data) setEmpresas(empresasRes.data);
       if (propriedadesRes.data) setPropriedades(propriedadesRes.data);
       if (tiposDespesaRes.data) setTiposDespesa(tiposDespesaRes.data);
     } catch (error: any) {
@@ -68,12 +63,6 @@ export default function Cadastros() {
             .from('dim_cliente')
             .delete()
             .eq('id_cliente', deleteDialog.id));
-          break;
-        case 'empresa':
-          ({ error } = await supabase
-            .from('dim_empresa')
-            .delete()
-            .eq('id_empresa', deleteDialog.id));
           break;
         case 'propriedade':
           ({ error } = await supabase
@@ -113,13 +102,12 @@ export default function Cadastros() {
       <div className="space-y-8">
         <div>
           <h1 className="text-4xl font-heading font-bold text-foreground">Base de Dados</h1>
-          <p className="text-muted-foreground mt-2">Gerenciar clientes, empresas, propriedades e tipos de despesa</p>
+          <p className="text-muted-foreground mt-2">Gerenciar clientes, propriedades e tipos de despesa</p>
         </div>
 
         <Tabs defaultValue="clientes" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="clientes">Clientes</TabsTrigger>
-            <TabsTrigger value="empresas">Empresas</TabsTrigger>
             <TabsTrigger value="propriedades">Propriedades</TabsTrigger>
             <TabsTrigger value="despesas">Tipos de Despesa</TabsTrigger>
           </TabsList>
@@ -192,70 +180,6 @@ export default function Cadastros() {
                                   variant="ghost" 
                                   size="icon"
                                   onClick={() => setDeleteDialog({ open: true, table: 'cliente', id: cliente.id_cliente })}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Empresas */}
-          <TabsContent value="empresas" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Lista de Empresas</CardTitle>
-                  <Button className="gap-2" onClick={() => setEmpresaDialog({ open: true })}>
-                    <Plus className="h-4 w-4" />
-                    Adicionar Empresa
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        <TableRow>
-                          <TableCell colSpan={2} className="text-center py-8">Carregando...</TableCell>
-                        </TableRow>
-                      ) : empresas.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
-                            Nenhuma empresa encontrada
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        empresas.map((empresa) => (
-                          <TableRow key={empresa.id_empresa}>
-                            <TableCell className="font-medium">{empresa.nome}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => setEmpresaDialog({ open: true, data: empresa })}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon"
-                                  onClick={() => setDeleteDialog({ open: true, table: 'empresa', id: empresa.id_empresa })}
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -419,14 +343,7 @@ export default function Cadastros() {
         onSuccess={fetchData}
       />
       
-      <EmpresaDialog 
-        open={empresaDialog.open} 
-        onOpenChange={(open) => setEmpresaDialog({ open })}
-        empresa={empresaDialog.data}
-        onSuccess={fetchData}
-      />
-      
-      <PropriedadeDialog 
+      <PropriedadeDialog
         open={propriedadeDialog.open} 
         onOpenChange={(open) => setPropriedadeDialog({ open })}
         propriedade={propriedadeDialog.data}

@@ -40,8 +40,10 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       setCategoriaOptions(
         cliente.categoria ? cliente.categoria.split(',').map((c: string) => c.trim()) : []
       );
+      setValue("telefone", cliente.telefone || '');
+      setValue("celular", cliente.celular || '');
     }
-  }, [cliente]);
+  }, [cliente, setValue]);
 
   const handleProspeccaoToggle = (option: string) => {
     setProspeccaoOptions(prev => 
@@ -116,8 +118,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             <div className="space-y-2">
               <Label htmlFor="telefone">Telefone</Label>
               <Input 
-                id="telefone" 
-                {...register("telefone")} 
+                id="telefone"
                 onChange={(e) => {
                   const formatted = formatPhoneNumber(e.target.value);
                   setValue("telefone", formatted);
@@ -130,8 +131,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             <div className="space-y-2">
               <Label htmlFor="celular">Celular</Label>
               <Input 
-                id="celular" 
-                {...register("celular")} 
+                id="celular"
                 onChange={(e) => {
                   const formatted = formatPhoneNumber(e.target.value);
                   setValue("celular", formatted);

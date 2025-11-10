@@ -4,16 +4,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
 
 export default function Cadastros() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [clientes, setClientes] = useState<any[]>([]);
   const [propriedades, setPropriedades] = useState<any[]>([]);
@@ -37,7 +39,7 @@ export default function Cadastros() {
     try {
       const [clientesRes, propriedadesRes, tiposDespesaRes] = await Promise.all([
         supabase.from('dim_cliente').select('*').order('nome'),
-        supabase.from('dim_propriedade').select('*').order('nome_da_propriedade'),
+        supabase.from('dim_propriedade').select('*, dim_cliente(nome)').order('nome_da_propriedade'),
         supabase.from('dim_tipodespesa').select('*').order('categoria'),
       ]);
 
@@ -162,13 +164,28 @@ export default function Cadastros() {
                       ) : (
                         filteredClientes.map((cliente) => (
                           <TableRow key={cliente.id_cliente}>
-                            <TableCell className="font-medium">{cliente.nome}</TableCell>
+                            <TableCell className="font-medium">
+                              <button
+                                onClick={() => navigate(`/cliente/${cliente.id_cliente}`)}
+                                className="text-primary hover:underline font-medium"
+                              >
+                                {cliente.nome}
+                              </button>
+                            </TableCell>
                             <TableCell>{cliente.cpf || cliente.cnpj || '-'}</TableCell>
                             <TableCell>{cliente.email || '-'}</TableCell>
                             <TableCell>{cliente.telefone || '-'}</TableCell>
                             <TableCell>{cliente.situacao || '-'}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => navigate(`/cliente/${cliente.id_cliente}`)}
+                                  title="Ver Detalhes"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
                                 <Button 
                                   variant="ghost" 
                                   size="icon"
@@ -213,6 +230,7 @@ export default function Cadastros() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nome</TableHead>
+                        <TableHead>Cliente</TableHead>
                         <TableHead>Área (ha)</TableHead>
                         <TableHead>Cidade</TableHead>
                         <TableHead>Situação</TableHead>
@@ -222,11 +240,11 @@ export default function Cadastros() {
                     <TableBody>
                       {loading ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell>
+                          <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
                         </TableRow>
                       ) : propriedades.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                             Nenhuma propriedade encontrada
                           </TableCell>
                         </TableRow>
@@ -234,6 +252,18 @@ export default function Cadastros() {
                         propriedades.map((prop) => (
                           <TableRow key={prop.id_propriedade}>
                             <TableCell className="font-medium">{prop.nome_da_propriedade}</TableCell>
+                            <TableCell>
+                              {prop.dim_cliente?.nome ? (
+                                <button
+                                  onClick={() => navigate(`/cliente/${prop.id_cliente}`)}
+                                  className="text-primary hover:underline"
+                                >
+                                  {prop.dim_cliente.nome}
+                                </button>
+                              ) : (
+                                '-'
+                              )}
+                            </TableCell>
                             <TableCell>{prop.area_ha || '-'}</TableCell>
                             <TableCell>{prop.cidade || '-'}</TableCell>
                             <TableCell>{prop.situacao || '-'}</TableCell>

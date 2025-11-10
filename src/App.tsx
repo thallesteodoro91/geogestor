@@ -12,6 +12,7 @@ const Operacional = lazy(() => import("./pages/Operacional"));
 const Planejamento = lazy(() => import("./pages/Planejamento"));
 const Clientes = lazy(() => import("./pages/Clientes"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
+const ClienteDetalhes = lazy(() => import("./pages/ClienteDetalhes"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -41,6 +42,7 @@ const App = () => {
               <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
               <Route path="/planejamento" element={<ProtectedRoute><Planejamento /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+              <Route path="/cliente/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
               <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
               <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
               <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />

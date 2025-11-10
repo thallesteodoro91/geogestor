@@ -162,6 +162,7 @@ export type Database = {
           cidade: string | null
           created_at: string | null
           documentacao: string | null
+          id_cliente: string | null
           id_propriedade: string
           itr: string | null
           latitude: number | null
@@ -188,6 +189,7 @@ export type Database = {
           cidade?: string | null
           created_at?: string | null
           documentacao?: string | null
+          id_cliente?: string | null
           id_propriedade?: string
           itr?: string | null
           latitude?: number | null
@@ -214,6 +216,7 @@ export type Database = {
           cidade?: string | null
           created_at?: string | null
           documentacao?: string | null
+          id_cliente?: string | null
           id_propriedade?: string
           itr?: string | null
           latitude?: number | null
@@ -231,7 +234,15 @@ export type Database = {
           updated_at?: string | null
           usucapiao?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "dim_propriedade_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+        ]
       }
       dim_tipodespesa: {
         Row: {

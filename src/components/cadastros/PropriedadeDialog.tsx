@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
 
 interface PropriedadeDialogProps {
   open: boolean;
@@ -19,6 +20,29 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
   const { register, handleSubmit, setValue, reset } = useForm({
     defaultValues: propriedade || {}
   });
+  
+  const [clientes, setClientes] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      fetchClientes();
+      if (propriedade) {
+        // Preencher campos do formulário
+        Object.keys(propriedade).forEach(key => {
+          setValue(key as any, propriedade[key]);
+        });
+      }
+    }
+  }, [open, propriedade, setValue]);
+
+  const fetchClientes = async () => {
+    const { data } = await supabase
+      .from('dim_cliente')
+      .select('id_cliente, nome')
+      .order('nome');
+    
+    if (data) setClientes(data);
+  };
 
   const onSubmit = async (data: any) => {
     try {
@@ -59,6 +83,23 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             <div className="col-span-2 space-y-2">
               <Label htmlFor="nome_da_propriedade">Nome da Propriedade *</Label>
               <Input id="nome_da_propriedade" {...register("nome_da_propriedade", { required: true })} />
+            </div>
+            
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="id_cliente">Cliente Proprietário</Label>
+              <Select onValueChange={(value) => setValue("id_cliente", value)} defaultValue={propriedade?.id_cliente}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um cliente..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Nenhum</SelectItem>
+                  {clientes.map((cliente) => (
+                    <SelectItem key={cliente.id_cliente} value={cliente.id_cliente}>
+                      {cliente.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="space-y-2">

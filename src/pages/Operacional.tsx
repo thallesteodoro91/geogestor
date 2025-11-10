@@ -184,9 +184,10 @@ export default function Operacional() {
                       backgroundColor: "hsl(var(--popover))",
                       border: "1px solid hsl(var(--primary))",
                       borderRadius: "0.5rem",
-                      color: "hsl(var(--popover-foreground))",
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    labelStyle={{ color: "hsl(var(--popover-foreground))" }}
+                    itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => [`${value} dias`, 'Tempo Médio']}
                   />
@@ -231,9 +232,10 @@ export default function Operacional() {
                       backgroundColor: "hsl(var(--popover))",
                       border: "1px solid hsl(var(--primary))",
                       borderRadius: "0.5rem",
-                      color: "hsl(var(--popover-foreground))",
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    labelStyle={{ color: "hsl(var(--popover-foreground))" }}
+                    itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     formatter={(value: number) => [`${value} serviços`, 'Total']}
                   />
                   <Legend />
@@ -282,9 +284,10 @@ export default function Operacional() {
                       backgroundColor: "hsl(var(--popover))",
                       border: "1px solid hsl(var(--primary))",
                       borderRadius: "0.5rem",
-                      color: "hsl(var(--popover-foreground))",
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    labelStyle={{ color: "hsl(var(--popover-foreground))" }}
+                    itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Ticket Médio']}
                   />
@@ -331,12 +334,13 @@ export default function Operacional() {
                       backgroundColor: "hsl(var(--popover))",
                       border: "1px solid hsl(var(--primary))",
                       borderRadius: "0.5rem",
-                      color: "hsl(var(--popover-foreground))",
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    labelStyle={{ color: "hsl(var(--popover-foreground))" }}
+                    itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number, name: string) => {
-                      const margemBruta = name === "Lucro" && custoReceitaFiltrado.length > 0 
+                      const margemBruta = name === "Lucro Bruto" && custoReceitaFiltrado.length > 0 
                         ? ` (${((value / custoReceitaFiltrado[0].receita) * 100).toFixed(1)}%)`
                         : '';
                       return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${margemBruta}`, name];

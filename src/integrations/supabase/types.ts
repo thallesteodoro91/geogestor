@@ -17,6 +17,7 @@ export type Database = {
       dim_cliente: {
         Row: {
           categoria: string | null
+          celular: string | null
           cnpj: string | null
           cpf: string | null
           created_at: string | null
@@ -33,6 +34,7 @@ export type Database = {
         }
         Insert: {
           categoria?: string | null
+          celular?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null
@@ -49,6 +51,7 @@ export type Database = {
         }
         Update: {
           categoria?: string | null
+          celular?: string | null
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null

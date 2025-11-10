@@ -3,9 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useState, useEffect } from "react";
+import { formatPhoneNumber } from "@/lib/formatPhone";
 
 interface ClienteDialogProps {
   open: boolean;
@@ -15,16 +18,59 @@ interface ClienteDialogProps {
 }
 
 export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: ClienteDialogProps) {
-  const { register, handleSubmit, setValue, reset } = useForm({
+  const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: cliente || {}
   });
 
+  const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
+    cliente?.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []
+  );
+  const [categoriaOptions, setCategoriaOptions] = useState<string[]>(
+    cliente?.categoria ? cliente.categoria.split(',').map((c: string) => c.trim()) : []
+  );
+
+  const telefone = watch("telefone");
+  const celular = watch("celular");
+
+  useEffect(() => {
+    if (cliente) {
+      setProspeccaoOptions(
+        cliente.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []
+      );
+      setCategoriaOptions(
+        cliente.categoria ? cliente.categoria.split(',').map((c: string) => c.trim()) : []
+      );
+    }
+  }, [cliente]);
+
+  const handleProspeccaoToggle = (option: string) => {
+    setProspeccaoOptions(prev => 
+      prev.includes(option) 
+        ? prev.filter(o => o !== option)
+        : [...prev, option]
+    );
+  };
+
+  const handleCategoriaToggle = (option: string) => {
+    setCategoriaOptions(prev => 
+      prev.includes(option) 
+        ? prev.filter(c => c !== option)
+        : [...prev, option]
+    );
+  };
+
   const onSubmit = async (data: any) => {
     try {
+      const submitData = {
+        ...data,
+        origem: prospeccaoOptions.join(', '),
+        categoria: categoriaOptions.join(', ')
+      };
+
       if (cliente) {
         const { error } = await supabase
           .from('dim_cliente')
-          .update(data)
+          .update(submitData)
           .eq('id_cliente', cliente.id_cliente);
         
         if (error) throw error;
@@ -32,13 +78,15 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       } else {
         const { error } = await supabase
           .from('dim_cliente')
-          .insert([data]);
+          .insert([submitData]);
         
         if (error) throw error;
         toast.success("Cliente cadastrado com sucesso!");
       }
       
       reset();
+      setProspeccaoOptions([]);
+      setCategoriaOptions([]);
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
@@ -67,7 +115,30 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             
             <div className="space-y-2">
               <Label htmlFor="telefone">Telefone</Label>
-              <Input id="telefone" {...register("telefone")} />
+              <Input 
+                id="telefone" 
+                {...register("telefone")} 
+                onChange={(e) => {
+                  const formatted = formatPhoneNumber(e.target.value);
+                  setValue("telefone", formatted);
+                }}
+                value={telefone || ''}
+                placeholder="(00) 000000000"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="celular">Celular</Label>
+              <Input 
+                id="celular" 
+                {...register("celular")} 
+                onChange={(e) => {
+                  const formatted = formatPhoneNumber(e.target.value);
+                  setValue("celular", formatted);
+                }}
+                value={celular || ''}
+                placeholder="(00) 000000000"
+              />
             </div>
             
             <div className="space-y-2">
@@ -94,14 +165,46 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
               </Select>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="origem">Origem</Label>
-              <Input id="origem" {...register("origem")} />
+            <div className="space-y-3">
+              <Label>Prospecção</Label>
+              <div className="space-y-2">
+                {["Indicação", "Evento", "Cliente antigo", "Site", "Rede social"].map(option => (
+                  <div key={option} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`prospeccao-${option}`}
+                      checked={prospeccaoOptions.includes(option)}
+                      onCheckedChange={() => handleProspeccaoToggle(option)}
+                    />
+                    <Label 
+                      htmlFor={`prospeccao-${option}`} 
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      {option}
+                    </Label>
+                  </div>
+                ))}
+              </div>
             </div>
             
-            <div className="space-y-2">
-              <Label htmlFor="categoria">Categoria</Label>
-              <Input id="categoria" {...register("categoria")} />
+            <div className="space-y-3">
+              <Label>Categoria do Cliente</Label>
+              <div className="space-y-2">
+                {["Governo", "Pessoa Física", "Pessoa Jurídica"].map(option => (
+                  <div key={option} className="flex items-center space-x-2">
+                    <Checkbox 
+                      id={`categoria-${option}`}
+                      checked={categoriaOptions.includes(option)}
+                      onCheckedChange={() => handleCategoriaToggle(option)}
+                    />
+                    <Label 
+                      htmlFor={`categoria-${option}`} 
+                      className="text-sm font-normal cursor-pointer"
+                    >
+                      {option}
+                    </Label>
+                  </div>
+                ))}
+              </div>
             </div>
             
             <div className="col-span-2 space-y-2">

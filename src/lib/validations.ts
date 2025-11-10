@@ -162,6 +162,11 @@ export const clienteSchema = z.object({
     .max(20, { message: "Telefone deve ter no máximo 20 caracteres" })
     .optional()
     .nullable(),
+  celular: z
+    .string()
+    .max(20, { message: "Celular deve ter no máximo 20 caracteres" })
+    .optional()
+    .nullable(),
   cpf: z
     .string()
     .max(14, { message: "CPF deve ter no máximo 14 caracteres" })

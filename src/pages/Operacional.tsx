@@ -225,7 +225,12 @@ export default function Operacional() {
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={ticketMedioFiltrado} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                  <XAxis 
+                    type="number" 
+                    stroke="hsl(var(--muted-foreground))" 
+                    fontSize={12}
+                    tickFormatter={(value) => `R$ ${value.toLocaleString('pt-BR')}`}
+                  />
                   <YAxis dataKey="servico" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={150} />
                   <Tooltip 
                     contentStyle={{ 
@@ -238,7 +243,17 @@ export default function Operacional() {
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Ticket Médio']}
                   />
-                  <Bar dataKey="valor" fill="hsl(var(--chart-3))" radius={[0, 8, 8, 0]} />
+                  <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                    {ticketMedioFiltrado.map((entry, index) => {
+                      const colors = [
+                        'hsl(var(--chart-1))',
+                        'hsl(var(--chart-2))',
+                        'hsl(var(--chart-3))',
+                        'hsl(var(--chart-4))',
+                      ];
+                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
+                    })}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

@@ -46,10 +46,18 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
 
   const onSubmit = async (data: any) => {
     try {
+      // Converter strings vazias em null para campos numéricos
+      const sanitizedData = {
+        ...data,
+        area_ha: data.area_ha === '' || data.area_ha === null || data.area_ha === undefined ? null : Number(data.area_ha),
+        latitude: data.latitude === '' || data.latitude === null || data.latitude === undefined ? null : Number(data.latitude),
+        longitude: data.longitude === '' || data.longitude === null || data.longitude === undefined ? null : Number(data.longitude),
+      };
+
       if (propriedade) {
         const { error } = await supabase
           .from('dim_propriedade')
-          .update(data)
+          .update(sanitizedData)
           .eq('id_propriedade', propriedade.id_propriedade);
         
         if (error) throw error;
@@ -57,7 +65,7 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
       } else {
         const { error } = await supabase
           .from('dim_propriedade')
-          .insert([data]);
+          .insert([sanitizedData]);
         
         if (error) throw error;
         toast.success("Propriedade cadastrada com sucesso!");
@@ -67,6 +75,7 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
+      console.error('Erro ao salvar propriedade:', error);
       toast.error(error.message || "Erro ao salvar propriedade");
     }
   };

@@ -14,6 +14,16 @@ const dreData = [
   { categoria: "Lucro Líquido", valor: 617680 },
 ];
 
+const dreCores: Record<string, string> = {
+  "Receita Bruta": "hsl(var(--chart-1))",
+  "(-) Impostos": "hsl(var(--destructive))",
+  "Receita Líquida": "hsl(var(--chart-2))",
+  "(-) Custos Diretos": "hsl(var(--destructive))",
+  "Lucro Bruto": "hsl(var(--chart-3))",
+  "(-) Despesas Op.": "hsl(var(--destructive))",
+  "Lucro Líquido": "hsl(142, 76%, 56%)",
+};
+
 const expenseData = [
   { name: "Pessoal", value: 95000, color: "hsl(var(--chart-1))" },
   { name: "Equipamentos", value: 42000, color: "hsl(var(--chart-2))" },
@@ -69,17 +79,21 @@ const Financeiro = () => {
                       backgroundColor: "hsl(var(--popover))",
                       border: "1px solid hsl(var(--primary))",
                       borderRadius: "0.5rem",
-                      color: "hsl(var(--popover-foreground))",
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
+                    labelStyle={{ color: "hsl(var(--popover-foreground))" }}
+                    itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => `R$ ${Math.abs(value).toLocaleString('pt-BR')}`}
                   />
                   <Bar
                     dataKey="valor"
                     radius={[0, 8, 8, 0]}
-                    fill="hsl(var(--primary))"
-                  />
+                  >
+                    {dreData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={dreCores[entry.categoria]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
               

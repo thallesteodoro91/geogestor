@@ -165,6 +165,11 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
               </Select>
             </div>
             
+            <div className="space-y-2">
+              <Label htmlFor="endereco">Endereço</Label>
+              <Input id="endereco" {...register("endereco")} />
+            </div>
+            
             <div className="col-span-2 grid grid-cols-2 gap-4">
               <div className="space-y-3">
                 <Label>Prospecção</Label>
@@ -207,11 +212,6 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
                   ))}
                 </div>
               </div>
-            </div>
-            
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="endereco">Endereço</Label>
-              <Input id="endereco" {...register("endereco")} />
             </div>
           </div>
 

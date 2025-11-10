@@ -17,6 +17,11 @@ import { ClienteServicos } from "@/components/cliente/ClienteServicos";
 import { ClienteOrcamentos } from "@/components/cliente/ClienteOrcamentos";
 import { ClienteFinanceiro } from "@/components/cliente/ClienteFinanceiro";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
+import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
+import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
+import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
+import { useState } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -30,11 +35,16 @@ export default function ClienteDetalhes() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: cliente, isLoading: loadingCliente } = useClienteDetalhes(id!);
-  const { data: propriedades = [], isLoading: loadingPropriedades } = useClientePropriedades(id!);
-  const { data: servicos = [], isLoading: loadingServicos } = useClienteServicos(id!);
-  const { data: orcamentos = [], isLoading: loadingOrcamentos } = useClienteOrcamentos(id!);
-  const { data: kpis, isLoading: loadingKPIs } = useClienteKPIs(id!);
+  const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
+  const [propriedadeDialogOpen, setPropriedadeDialogOpen] = useState(false);
+  const [servicoDialogOpen, setServicoDialogOpen] = useState(false);
+  const [orcamentoDialogOpen, setOrcamentoDialogOpen] = useState(false);
+
+  const { data: cliente, isLoading: loadingCliente, refetch: refetchCliente } = useClienteDetalhes(id!);
+  const { data: propriedades = [], isLoading: loadingPropriedades, refetch: refetchPropriedades } = useClientePropriedades(id!);
+  const { data: servicos = [], isLoading: loadingServicos, refetch: refetchServicos } = useClienteServicos(id!);
+  const { data: orcamentos = [], isLoading: loadingOrcamentos, refetch: refetchOrcamentos } = useClienteOrcamentos(id!);
+  const { data: kpis, isLoading: loadingKPIs, refetch: refetchKPIs } = useClienteKPIs(id!);
 
   if (loadingCliente) {
     return (
@@ -87,19 +97,19 @@ export default function ClienteDetalhes() {
             Voltar
           </Button>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Editar Cliente
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setPropriedadeDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Nova Propriedade
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={() => setServicoDialogOpen(true)}>
               <Wrench className="h-4 w-4 mr-2" />
               Novo Serviço
             </Button>
-            <Button size="sm">
+            <Button size="sm" onClick={() => setOrcamentoDialogOpen(true)}>
               <FileText className="h-4 w-4 mr-2" />
               Novo Orçamento
             </Button>
@@ -161,6 +171,46 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Dialogs */}
+        <ClienteDialog 
+          open={clienteDialogOpen}
+          onOpenChange={setClienteDialogOpen}
+          cliente={cliente}
+          onSuccess={() => {
+            refetchCliente();
+            refetchKPIs();
+          }}
+        />
+
+        <PropriedadeDialog
+          open={propriedadeDialogOpen}
+          onOpenChange={setPropriedadeDialogOpen}
+          onSuccess={() => {
+            refetchPropriedades();
+            refetchKPIs();
+          }}
+        />
+
+        <ServicoDialog
+          open={servicoDialogOpen}
+          onOpenChange={setServicoDialogOpen}
+          clienteId={id}
+          onSuccess={() => {
+            refetchServicos();
+            refetchKPIs();
+          }}
+        />
+
+        <OrcamentoDialog
+          open={orcamentoDialogOpen}
+          onOpenChange={setOrcamentoDialogOpen}
+          clienteId={id}
+          onSuccess={() => {
+            refetchOrcamentos();
+            refetchKPIs();
+          }}
+        />
       </div>
     </AppLayout>
   );

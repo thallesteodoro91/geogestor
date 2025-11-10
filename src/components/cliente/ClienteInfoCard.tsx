@@ -8,6 +8,17 @@ interface ClienteInfoCardProps {
 }
 
 export function ClienteInfoCard({ cliente }: ClienteInfoCardProps) {
+  const getSituacaoBadgeClass = () => {
+    switch(cliente.situacao) {
+      case 'Ativo':
+        return 'bg-green-500 hover:bg-green-600 text-white';
+      case 'Inativo':
+        return 'bg-yellow-500 hover:bg-yellow-600 text-white';
+      default:
+        return 'bg-muted';
+    }
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -16,7 +27,7 @@ export function ClienteInfoCard({ cliente }: ClienteInfoCardProps) {
             <User className="h-5 w-5" />
             {cliente.nome}
           </CardTitle>
-          <Badge variant={cliente.situacao === 'Ativo' ? 'default' : 'secondary'}>
+          <Badge className={getSituacaoBadgeClass()}>
             {cliente.situacao || 'Não definido'}
           </Badge>
         </div>

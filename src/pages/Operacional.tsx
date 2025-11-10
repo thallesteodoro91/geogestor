@@ -8,6 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Clock, CheckCircle2, TrendingUp, DollarSign, Zap, Award } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
+const servicoCores: Record<string, string> = {
+  "Levantamento": "hsl(var(--chart-1))",
+  "Georreferenciamento": "hsl(var(--chart-2))",
+  "Desmembramento": "hsl(var(--chart-3))",
+  "Planta Topográfica": "hsl(var(--chart-4))",
+};
+
 const tempoMedioData = [
   { servico: "Levantamento", tempo: 8 },
   { servico: "Georreferenciamento", tempo: 15 },
@@ -149,7 +156,11 @@ export default function Operacional() {
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
                     formatter={(value: number) => [`${value} dias`, 'Tempo']}
                   />
-                  <Bar dataKey="tempo" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="tempo" radius={[8, 8, 0, 0]}>
+                    {tempoMedioFiltrado.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={servicoCores[entry.servico]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -244,15 +255,9 @@ export default function Operacional() {
                     formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Ticket Médio']}
                   />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
-                    {ticketMedioFiltrado.map((entry, index) => {
-                      const colors = [
-                        'hsl(var(--chart-1))',
-                        'hsl(var(--chart-2))',
-                        'hsl(var(--chart-3))',
-                        'hsl(var(--chart-4))',
-                      ];
-                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                    })}
+                    {ticketMedioFiltrado.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={servicoCores[entry.servico]} />
+                    ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

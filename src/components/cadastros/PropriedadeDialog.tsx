@@ -86,13 +86,15 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             </div>
             
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="id_cliente">Cliente Proprietário</Label>
-              <Select onValueChange={(value) => setValue("id_cliente", value)} defaultValue={propriedade?.id_cliente}>
+              <Label htmlFor="id_cliente">Cliente Proprietário (opcional)</Label>
+              <Select 
+                onValueChange={(value) => setValue("id_cliente", value)} 
+                defaultValue={propriedade?.id_cliente || undefined}
+              >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione um cliente..." />
+                  <SelectValue placeholder="Nenhum - deixar sem proprietário" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
                   {clientes.map((cliente) => (
                     <SelectItem key={cliente.id_cliente} value={cliente.id_cliente}>
                       {cliente.nome}

@@ -188,7 +188,7 @@ export default function Operacional() {
                       boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
                     }}
                     cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                    formatter={(value: number) => [`${value} dias`, 'Tempo']}
+                    formatter={(value: number) => [`${value} dias`, 'Tempo Médio']}
                   />
                   <Bar dataKey="tempo" radius={[8, 8, 0, 0]}>
                     {tempoMedioFiltrado.map((entry, index) => (

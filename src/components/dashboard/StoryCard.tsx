@@ -13,7 +13,28 @@ interface StoryCardProps {
   icon?: LucideIcon;
 }
 
-export const StoryCard = ({ 
+/**
+ * Story Card Component - Narrative Data Visualization
+ * 
+ * UX/UI Principles Applied (from UX/UI Design 2021-2022):
+ * 
+ * 1. "Benefits of Empathy" (Chapter 2):
+ *    - Transforms raw data into human-readable narratives
+ *    - Uses emotional color coding to communicate urgency and sentiment
+ * 
+ * 2. "Understanding Hierarchy" (Chapter 3):
+ *    - Visual emphasis levels (high/medium/low) guide user attention
+ *    - Icon → Title → Insight → Action creates natural reading flow
+ * 
+ * 3. "How to Apply Contrast" (Chapter 3):
+ *    - Border intensity and shadow depth vary by emphasis
+ *    - Trend icons pulse for non-neutral states (alert, up, down)
+ * 
+ * 4. "Benefits of Anticipation":
+ *    - Hover effects lift card and intensify shadow
+ *    - Smooth transitions create predictable, comfortable interactions
+ */
+export const StoryCard = ({
   title, 
   insight, 
   category = "financial",
@@ -74,10 +95,11 @@ export const StoryCard = ({
   return (
     <Card 
       className={cn(
-        "p-6 transition-smooth hover:shadow-xl bg-gradient-to-br",
+        "p-6 transition-smooth hover:shadow-xl hover:-translate-y-1 bg-gradient-to-br group",
         config.bgGradient,
         config.borderColor,
-        emphasisStyles[emphasis]
+        emphasisStyles[emphasis],
+        "focus-visible-ring"
       )}
     >
       {/* Princípio 4: Clareza visual - estrutura clara e limpa */}
@@ -95,33 +117,33 @@ export const StoryCard = ({
           {/* Cabeçalho com título e indicador de tendência */}
           <div className="flex items-start justify-between gap-3">
             <h4 className={cn(
-              "font-heading font-semibold text-foreground leading-tight",
+              "font-heading font-semibold text-foreground leading-tight tracking-tight",
               emphasis === "high" ? "text-lg" : "text-base"
             )}>
               {title}
             </h4>
             
-            {/* Princípio 5: Contraste para guiar atenção */}
+            {/* Princípio 5: Contraste para guiar atenção + micro-animação */}
             <TrendIcon className={cn(
-              "h-5 w-5 shrink-0 mt-0.5",
+              "h-5 w-5 shrink-0 mt-0.5 transition-all",
               trendColors[trend],
-              trend !== "neutral" && "animate-pulse"
+              trend !== "neutral" && "animate-pulse group-hover:scale-110"
             )} />
           </div>
           
           {/* Princípio 6: Narrativa com contexto - insight em linguagem clara */}
           <p className={cn(
-            "leading-relaxed",
+            "leading-loose tracking-wide text-content",
             emphasis === "high" ? "text-base text-foreground/90" : "text-sm text-muted-foreground/90"
           )}>
             {insight}
           </p>
           
-          {/* Call-to-action quando há recomendação */}
+          {/* Call-to-action quando há recomendação - aumenta actionability */}
           {action && (
-            <div className="pt-2 border-t border-border/50">
-              <p className="text-sm font-medium text-accent flex items-center gap-2">
-                <Target className="h-4 w-4" />
+            <div className="pt-2 border-t border-border/50 mt-3">
+              <p className="text-sm font-medium text-accent flex items-center gap-2 hover:gap-3 transition-all cursor-pointer group-hover:text-accent/90">
+                <Target className="h-4 w-4 transition-transform group-hover:scale-110" />
                 {action}
               </p>
             </div>

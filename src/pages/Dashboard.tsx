@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
+import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
@@ -74,9 +75,21 @@ const Dashboard = () => {
         />
 
         {/* KPIs Principais - Financeiros */}
-        <div className="space-y-3">
-          <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Financeiros</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-3 animate-fade-in">
+          <div className="space-y-1">
+            <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Financeiros</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">Visão consolidada da saúde financeira</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
+            {isLoading ? (
+              <>
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+              </>
+            ) : (
+              <>
             <KPICard
               title="Receita Total"
               value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
@@ -109,13 +122,27 @@ const Dashboard = () => {
               change="+5.1%"
               changeType="negative"
             />
+              </>
+            )}
           </div>
         </div>
 
         {/* KPIs Secundários - Margens e Operacionais */}
-        <div className="space-y-3">
-          <h2 className="text-xl font-heading font-semibold text-foreground">Margens e Performance Operacional</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-3 animate-fade-in" style={{ animationDelay: "0.1s" }}>
+          <div className="space-y-1">
+            <h2 className="text-xl font-heading font-semibold text-foreground">Margens e Performance Operacional</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">Análise de rentabilidade e conversão</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
+            {isLoading ? (
+              <>
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+              </>
+            ) : (
+              <>
             <KPICard
               title="Margem Bruta"
               value={isLoading ? "..." : `${(kpis?.margem_bruta || 0).toFixed(1)}%`}
@@ -148,13 +175,25 @@ const Dashboard = () => {
               change="+6.3%"
               changeType="positive"
             />
+              </>
+            )}
           </div>
         </div>
 
         {/* KPIs Operacionais */}
-        <div className="space-y-3">
-          <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Operacionais</h2>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="space-y-3 animate-fade-in" style={{ animationDelay: "0.2s" }}>
+          <div className="space-y-1">
+            <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Operacionais</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">Acompanhamento de entregas e execução</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
+            {isLoading ? (
+              <>
+                <SkeletonKPI />
+                <SkeletonKPI />
+              </>
+            ) : (
+              <>
             <KPICard
               title="Total de Serviços"
               value={isLoading ? "..." : String(kpis?.total_servicos || 0)}
@@ -171,14 +210,20 @@ const Dashboard = () => {
               change="+12"
               changeType="positive"
             />
+              </>
+            )}
           </div>
         </div>
 
         {/* Story Cards - Storytelling Visual com Contexto */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-heading font-semibold text-foreground">Insights Narrativos</h2>
-          <p className="text-sm text-muted-foreground">Análises que transformam dados em decisões</p>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4 animate-fade-in" style={{ animationDelay: "0.3s" }}>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-heading font-bold text-foreground">Insights Narrativos</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Análises que transformam dados em decisões — seu consultor financeiro digital
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 grid-8pt">
             <StoryCard
               title="Receita em Alta, Margem sob Atenção"
               insight="A receita cresceu 12,5% no período, sinalizando forte demanda. Porém, as despesas avançaram 5,1%, pressionando a margem líquida. Recomenda-se revisar a estrutura de custos fixos para preservar a rentabilidade."
@@ -213,9 +258,14 @@ const Dashboard = () => {
         </div>
 
         {/* Charts */}
-        <div className="space-y-3">
-          <h2 className="text-xl font-heading font-semibold text-foreground">Análise Temporal</h2>
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="space-y-4 animate-fade-in" style={{ animationDelay: "0.4s" }}>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-heading font-bold text-foreground">Análise Temporal</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Evolução de receita e margens ao longo do tempo — identifique padrões e tendências
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 grid-8pt">
             <RevenueChart />
             <ProfitMarginChart />
           </div>

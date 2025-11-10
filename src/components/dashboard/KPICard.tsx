@@ -1,4 +1,4 @@
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 
@@ -26,40 +26,63 @@ const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) 
   );
 };
 
+/**
+ * KPI Card Component
+ * UX/UI Principles Applied:
+ * - "Benefits of Playfulness": Interactive lift on hover, icon scale animation
+ * - "Understanding Hierarchy": Clear visual hierarchy (title → value → change)
+ * - "How to Apply Contrast": Color-coded change indicators with background
+ * - "Benefits of Anticipation": Smooth transitions create predictable interactions
+ */
 export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, subtitle }: KPICardProps) => {
   // Remove operation signs from change value
   const cleanChange = change?.replace(/^[+-]\s*/, '');
   
   return (
-    <Card className="relative overflow-hidden p-6 transition-smooth hover:shadow-lg bg-gradient-to-br from-card to-card/50 border-border/50">
-      <div className="flex items-start gap-4 relative z-10">
-        {/* Icon on the left */}
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary shadow-glow">
-          <Icon className="h-5 w-5 text-primary-foreground" />
-        </div>
-        
-        {/* Content */}
-        <div className="space-y-1.5 flex-1 min-w-0">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <div className="flex items-center gap-2">
-            <h3 className="text-3xl font-heading font-bold text-foreground">{value}</h3>
-            {cleanChange && (
-              <div className={cn(
-                "flex items-center justify-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
-                changeType === "positive" && "text-accent bg-accent/10",
-                changeType === "negative" && "text-destructive bg-destructive/10",
-                changeType === "neutral" && "text-muted-foreground bg-muted/10"
-              )}>
-                {changeType === "positive" && <TrendingUp className="h-3 w-3" />}
-                {changeType === "negative" && <TrendingDown className="h-3 w-3" />}
-                <span>{cleanChange}</span>
-              </div>
+    <Card className="relative overflow-hidden interactive-lift group bg-gradient-to-br from-card to-card/50 border-border/50">
+      <CardContent className="p-6">
+        <div className="flex items-start gap-4 relative z-10">
+          {/* Icon with micro-interaction - "Benefits of Playfulness" */}
+          <div className={cn(
+            "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl",
+            "bg-gradient-to-br from-primary to-secondary shadow-glow",
+            "transition-all group-hover:scale-110 group-hover:rotate-3"
+          )}>
+            <Icon className="h-5 w-5 text-primary-foreground transition-transform group-hover:scale-110" />
+          </div>
+          
+          {/* Content with improved typography - Chapter 4: Typography */}
+          <div className="space-y-1.5 flex-1 min-w-0">
+            <p className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground leading-relaxed">
+              {title}
+            </p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-3xl font-heading font-bold text-foreground leading-tight tracking-tight">
+                {value}
+              </h3>
+              {cleanChange && (
+                <div className={cn(
+                  "flex items-center justify-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
+                  "transition-all hover:scale-105",
+                  changeType === "positive" && "text-accent bg-accent/10 hover:bg-accent/20",
+                  changeType === "negative" && "text-destructive bg-destructive/10 hover:bg-destructive/20",
+                  changeType === "neutral" && "text-muted-foreground bg-muted/10 hover:bg-muted/20"
+                )}>
+                  {changeType === "positive" && <TrendingUp className="h-3 w-3" />}
+                  {changeType === "negative" && <TrendingDown className="h-3 w-3" />}
+                  <span>{cleanChange}</span>
+                </div>
+              )}
+            </div>
+            {subtitle && (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {subtitle}
+              </p>
             )}
           </div>
-          {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         </div>
-      </div>
-      <MiniSparkline trend={changeType === "positive" ? "up" : changeType === "negative" ? "down" : "neutral"} />
+        <MiniSparkline trend={changeType === "positive" ? "up" : changeType === "negative" ? "down" : "neutral"} />
+      </CardContent>
     </Card>
   );
 };

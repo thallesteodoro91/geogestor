@@ -135,8 +135,26 @@ All colors MUST be HSL.
     @apply bg-background text-foreground font-sans antialiased;
   }
   
+  /* Typography Hierarchy - UX/UI Design Book: Chapter 4 */
   h1, h2, h3, h4, h5, h6 {
     @apply font-heading;
+  }
+  
+  h1 {
+    @apply leading-tight tracking-tight;
+  }
+  
+  h2 {
+    @apply leading-snug;
+  }
+  
+  p {
+    @apply leading-relaxed;
+  }
+  
+  /* Emotional Design - Reading comfort */
+  .text-content {
+    @apply leading-loose tracking-wide;
   }
 }
 
@@ -155,5 +173,25 @@ All colors MUST be HSL.
   
   .transition-smooth {
     transition: var(--transition-smooth);
+  }
+  
+  /* Grid 8pt System - UX/UI Design: Understanding Alignment */
+  .grid-8pt {
+    @apply gap-4;
+  }
+  
+  /* Micro-interactions - Benefits of Playfulness */
+  .interactive-lift {
+    @apply transition-smooth hover:-translate-y-1 hover:shadow-glow;
+  }
+  
+  /* Loading States - Benefits of Anticipation */
+  .skeleton {
+    @apply animate-pulse bg-muted/50 rounded-lg;
+  }
+  
+  /* Focus States - Accessibility */
+  .focus-visible-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 }

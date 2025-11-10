@@ -15,11 +15,11 @@ const dreData = [
 ];
 
 const dreCores: Record<string, string> = {
-  "Receita Bruta": "hsl(var(--chart-1))",
+  "Receita Bruta": "hsl(142, 76%, 56%)",
   "(-) Impostos": "hsl(var(--destructive))",
-  "Receita Líquida": "hsl(var(--chart-2))",
+  "Receita Líquida": "hsl(142, 76%, 56%)",
   "(-) Custos Diretos": "hsl(var(--destructive))",
-  "Lucro Bruto": "hsl(var(--chart-3))",
+  "Lucro Bruto": "hsl(142, 76%, 56%)",
   "(-) Despesas Op.": "hsl(var(--destructive))",
   "Lucro Líquido": "hsl(142, 76%, 56%)",
 };

@@ -532,6 +532,15 @@ export type Database = {
       }
     }
     Views: {
+      vw_alertas_financeiros: {
+        Row: {
+          alerta_conversao: Json | null
+          alerta_custos: Json | null
+          alerta_equilibrio: Json | null
+          alerta_margem: Json | null
+        }
+        Relationships: []
+      }
       vw_kpis_financeiros: {
         Row: {
           custo_total: number | null

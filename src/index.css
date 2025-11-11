@@ -66,6 +66,12 @@ All colors MUST be HSL.
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    
+    /* GeoBot Colors */
+    --geobot: 174 100% 33%;
+    --geobot-foreground: 0 0% 98%;
+    --geobot-bg: 0 0% 3.9%;
+    --geobot-border: 0 0% 14.9%;
 
     --sidebar-background: 0 0% 0.4%;
     --sidebar-foreground: 0 0% 98%;

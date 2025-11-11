@@ -9,6 +9,7 @@ import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
+import { GeoBot } from "@/components/dashboard/GeoBot";
 import { 
   Banknote, 
   TrendingUp, 
@@ -269,6 +270,17 @@ const Dashboard = () => {
             <RevenueChart />
             <ProfitMarginChart />
           </div>
+        </div>
+
+        {/* GeoBot - Assistente IA */}
+        <div className="space-y-4 animate-fade-in" style={{ animationDelay: "0.5s" }}>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-heading font-bold text-foreground">GeoBot - Consultor Financeiro IA</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Converse com o GeoBot para obter insights personalizados sobre seus dados financeiros
+            </p>
+          </div>
+          <GeoBot kpis={kpis} />
         </div>
       </div>
     </AppLayout>

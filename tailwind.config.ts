@@ -79,6 +79,12 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        geobot: {
+          DEFAULT: "hsl(var(--geobot))",
+          foreground: "hsl(var(--geobot-foreground))",
+          bg: "hsl(var(--geobot-bg))",
+          border: "hsl(var(--geobot-border))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

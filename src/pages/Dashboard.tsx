@@ -102,7 +102,7 @@ const Dashboard = () => {
               title="Lucro Bruto"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
-              subtitle={`margem de ${(kpis?.margem_bruta || 0).toFixed(1)}%`}
+              subtitle={`margem de ${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               change="+10.3%"
               changeType="positive"
             />
@@ -110,7 +110,7 @@ const Dashboard = () => {
               title="Lucro Líquido"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={CircleDollarSign}
-              subtitle={`margem de ${(kpis?.margem_liquida || 0).toFixed(1)}%`}
+              subtitle={`margem de ${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               change="+8.2%"
               changeType="positive"
             />
@@ -145,7 +145,7 @@ const Dashboard = () => {
               <>
             <KPICard
               title="Margem Bruta"
-              value={isLoading ? "..." : `${(kpis?.margem_bruta || 0).toFixed(1)}%`}
+              value={isLoading ? "..." : `${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
               subtitle="Lucro Bruto / Receita"
               change="+1.8%"
@@ -153,7 +153,7 @@ const Dashboard = () => {
             />
             <KPICard
               title="Margem Líquida"
-              value={isLoading ? "..." : `${(kpis?.margem_liquida || 0).toFixed(1)}%`}
+              value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               icon={Calculator}
               subtitle="Lucro Líquido / Receita"
               change="+2.1%"
@@ -161,7 +161,7 @@ const Dashboard = () => {
             />
             <KPICard
               title="Taxa de Conversão"
-              value={isLoading ? "..." : `${(kpis?.taxa_conversao || 0).toFixed(1)}%`}
+              value={isLoading ? "..." : `${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
               subtitle="orçamentos convertidos"
               change="+4.5%"

@@ -15,7 +15,7 @@ const navigationSections = [
     bgColor: "bg-blue-500/10",
     items: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Financeiro", href: "/financeiro", icon: DollarSign },
+      { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
       { name: "Planejamento", href: "/planejamento", icon: Target },
     ]

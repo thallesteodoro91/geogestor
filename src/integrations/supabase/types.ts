@@ -532,7 +532,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      vw_kpis_financeiros: {
+        Row: {
+          custo_total: number | null
+          custos_variaveis_total: number | null
+          despesas_fixas_total: number | null
+          desvio_orcamentario_percent: number | null
+          lucro_bruto: number | null
+          lucro_liquido: number | null
+          margem_bruta_percent: number | null
+          margem_contribuicao_percent: number | null
+          margem_liquida_percent: number | null
+          ponto_equilibrio_receita: number | null
+          receita_realizada_total: number | null
+          receita_total: number | null
+          servicos_concluidos: number | null
+          taxa_conversao_percent: number | null
+          ticket_medio: number | null
+          total_clientes: number | null
+          total_despesas: number | null
+          total_orcamentos: number | null
+          total_servicos: number | null
+          valor_faturado_total: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       calcular_kpis: {
@@ -548,6 +572,29 @@ export type Database = {
           ticket_medio: number
           total_despesas: number
           total_servicos: number
+        }[]
+      }
+      calcular_kpis_v2: {
+        Args: never
+        Returns: {
+          custo_total: number
+          desvio_orcamentario_percent: number
+          lucro_bruto: number
+          lucro_liquido: number
+          margem_bruta_percent: number
+          margem_contribuicao_percent: number
+          margem_liquida_percent: number
+          ponto_equilibrio_receita: number
+          receita_realizada_total: number
+          receita_total: number
+          servicos_concluidos: number
+          taxa_conversao_percent: number
+          ticket_medio: number
+          total_clientes: number
+          total_despesas: number
+          total_orcamentos: number
+          total_servicos: number
+          valor_faturado_total: number
         }[]
       }
       has_role: {

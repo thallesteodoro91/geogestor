@@ -183,8 +183,19 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             </div>
             
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="memorial_descritivo">Memorial Descritivo</Label>
-              <Textarea id="memorial_descritivo" {...register("memorial_descritivo")} rows={4} />
+              <Label htmlFor="possui_memorial_descritivo">Possui Memorial Descritivo?</Label>
+              <Select 
+                onValueChange={(value) => setValue("possui_memorial_descritivo", value)}
+                defaultValue={propriedade?.possui_memorial_descritivo || undefined}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma opção" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Sim">Sim</SelectItem>
+                  <SelectItem value="Não">Não</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             
             <div className="col-span-2 space-y-2">

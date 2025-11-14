@@ -83,10 +83,9 @@ export default function Clientes() {
         </div>
 
         <Tabs defaultValue="analise" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="analise">Análise de Clientes</TabsTrigger>
             <TabsTrigger value="projetos">Projetos</TabsTrigger>
-            <TabsTrigger value="mapa">Distribuição</TabsTrigger>
           </TabsList>
 
           <TabsContent value="analise" className="space-y-6">
@@ -187,70 +186,6 @@ export default function Clientes() {
                 </ResponsiveContainer>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="mapa" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoryCard
-                title="Concentração Regional"
-                insight="As regiões Centro e Sul concentram as propriedades mais lucrativas, representando 54% da receita total. Maior densidade de receita observada no eixo central da área de atuação."
-                category="strategic"
-              />
-              <StoryCard
-                title="Oportunidades de Expansão"
-                insight="As regiões Leste e Oeste apresentam menor penetração mas mostram potencial de crescimento. Uma estratégia de expansão focada pode diversificar a base de receita."
-                category="operational"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Receita por Região</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={distribuicaoGeoData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="regiao" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
-                      />
-                      <Bar dataKey="receita" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Distribuição Geográfica (Scatter)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <ScatterChart>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="clientes" name="Clientes" stroke="hsl(var(--muted-foreground))" />
-                      <YAxis dataKey="receita" name="Receita" stroke="hsl(var(--muted-foreground))" />
-                      <Tooltip 
-                        cursor={{ strokeDasharray: '3 3' }}
-                        contentStyle={{ 
-                          backgroundColor: "hsl(var(--card))", 
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px"
-                        }} 
-                      />
-                      <Scatter name="Regiões" data={distribuicaoGeoData} fill="hsl(var(--chart-4))" />
-                    </ScatterChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-            </div>
           </TabsContent>
         </Tabs>
       </div>

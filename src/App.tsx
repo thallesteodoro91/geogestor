@@ -6,20 +6,18 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
-const Dashboard = lazy(() => import("./pages/Dashboard"));
+const GestaoEmpresa = lazy(() => import("./pages/GestaoEmpresa"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
 const DashboardFinanceiro = lazy(() => import("./pages/DashboardFinanceiro"));
 const Operacional = lazy(() => import("./pages/Operacional"));
-const Planejamento = lazy(() => import("./pages/Planejamento"));
 const Clientes = lazy(() => import("./pages/Clientes"));
+const ServicosOrcamentos = lazy(() => import("./pages/ServicosOrcamentos"));
+const Despesas = lazy(() => import("./pages/Despesas"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
 const ClienteDetalhes = lazy(() => import("./pages/ClienteDetalhes"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
-const Despesas = lazy(() => import("./pages/Despesas"));
-const Servicos = lazy(() => import("./pages/Servicos"));
-const Orcamentos = lazy(() => import("./pages/Orcamentos"));
 
 
 const queryClient = new QueryClient();
@@ -38,19 +36,16 @@ const App = () => {
           <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-pulse text-muted-foreground">Carregando...</div></div>}>
             <Routes>
               <Route path="/auth" element={<Auth />} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
               <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
               <Route path="/dashboard-financeiro" element={<ProtectedRoute><DashboardFinanceiro /></ProtectedRoute>} />
               <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
-              <Route path="/planejamento" element={<ProtectedRoute><Planejamento /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
-              <Route path="/cliente/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
+              <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
+              <Route path="/servicos-orcamentos" element={<ProtectedRoute><ServicosOrcamentos /></ProtectedRoute>} />
+              <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
               <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
               <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-              <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
-              <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
-              <Route path="/orcamentos" element={<ProtectedRoute><Orcamentos /></ProtectedRoute>} />
-              
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

@@ -14,10 +14,9 @@ const navigationSections = [
     color: "text-blue-500",
     bgColor: "bg-blue-500/10",
     items: [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Gestão da Empresa", href: "/", icon: LayoutDashboard },
       { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
-      { name: "Planejamento", href: "/planejamento", icon: Target },
     ]
   },
   {
@@ -26,8 +25,7 @@ const navigationSections = [
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
     items: [
-      { name: "Serviços", href: "/servicos", icon: Briefcase },
-      { name: "Orçamentos", href: "/orcamentos", icon: FileBarChart },
+      { name: "Serviços e Orçamentos", href: "/servicos-orcamentos", icon: Briefcase },
       { name: "Despesas", href: "/despesas", icon: Receipt },
     ]
   },
@@ -37,7 +35,7 @@ const navigationSections = [
     color: "text-emerald-500",
     bgColor: "bg-emerald-500/10",
     items: [
-      { name: "Clientes", href: "/clientes", icon: Users },
+      { name: "Clientes e Projetos", href: "/clientes", icon: Users },
       { name: "Cadastros", href: "/cadastros", icon: FileText },
     ]
   }

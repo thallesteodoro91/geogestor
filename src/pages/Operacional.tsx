@@ -89,7 +89,7 @@ export default function Operacional() {
           <p className="text-muted-foreground mt-2">Análise de produtividade, tempo e eficiência operacional</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <KPICard
             title="Tempo Médio Conclusão"
             value="10 dias"
@@ -97,14 +97,6 @@ export default function Operacional() {
             changeType="positive"
             icon={Clock}
             subtitle="vs mês anterior"
-          />
-          <KPICard
-            title="Serviços Concluídos"
-            value="45"
-            change="+12%"
-            changeType="positive"
-            icon={CheckCircle2}
-            subtitle="no período"
           />
           <KPICard
             title="Produtividade"

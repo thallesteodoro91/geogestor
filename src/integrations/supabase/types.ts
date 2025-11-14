@@ -173,6 +173,7 @@ export type Database = {
           municipio: string | null
           nome_da_propriedade: string
           observacoes: string | null
+          possui_memorial_descritivo: string | null
           situacao: string | null
           situacao_imovel: string | null
           tipo: string | null
@@ -200,6 +201,7 @@ export type Database = {
           municipio?: string | null
           nome_da_propriedade: string
           observacoes?: string | null
+          possui_memorial_descritivo?: string | null
           situacao?: string | null
           situacao_imovel?: string | null
           tipo?: string | null
@@ -227,6 +229,7 @@ export type Database = {
           municipio?: string | null
           nome_da_propriedade?: string
           observacoes?: string | null
+          possui_memorial_descritivo?: string | null
           situacao?: string | null
           situacao_imovel?: string | null
           tipo?: string | null
@@ -333,13 +336,16 @@ export type Database = {
         Row: {
           created_at: string | null
           data_do_faturamento: string | null
+          data_inicio: string | null
           data_orcamento: string
+          data_termino: string | null
           desconto: number | null
           faturamento: boolean | null
           forma_de_pagamento: string | null
           id_cliente: string | null
           id_data: string | null
           id_orcamento: string
+          id_propriedade: string | null
           id_servico: string | null
           lucro_esperado: number | null
           margem_esperada: number | null
@@ -348,6 +354,7 @@ export type Database = {
           receita_esperada: number | null
           receita_esperada_imposto: number | null
           receita_realizada: number | null
+          situacao: string | null
           situacao_do_pagamento: string | null
           updated_at: string | null
           valor_faturado: number | null
@@ -357,13 +364,16 @@ export type Database = {
         Insert: {
           created_at?: string | null
           data_do_faturamento?: string | null
+          data_inicio?: string | null
           data_orcamento: string
+          data_termino?: string | null
           desconto?: number | null
           faturamento?: boolean | null
           forma_de_pagamento?: string | null
           id_cliente?: string | null
           id_data?: string | null
           id_orcamento?: string
+          id_propriedade?: string | null
           id_servico?: string | null
           lucro_esperado?: number | null
           margem_esperada?: number | null
@@ -372,6 +382,7 @@ export type Database = {
           receita_esperada?: number | null
           receita_esperada_imposto?: number | null
           receita_realizada?: number | null
+          situacao?: string | null
           situacao_do_pagamento?: string | null
           updated_at?: string | null
           valor_faturado?: number | null
@@ -381,13 +392,16 @@ export type Database = {
         Update: {
           created_at?: string | null
           data_do_faturamento?: string | null
+          data_inicio?: string | null
           data_orcamento?: string
+          data_termino?: string | null
           desconto?: number | null
           faturamento?: boolean | null
           forma_de_pagamento?: string | null
           id_cliente?: string | null
           id_data?: string | null
           id_orcamento?: string
+          id_propriedade?: string | null
           id_servico?: string | null
           lucro_esperado?: number | null
           margem_esperada?: number | null
@@ -396,6 +410,7 @@ export type Database = {
           receita_esperada?: number | null
           receita_esperada_imposto?: number | null
           receita_realizada?: number | null
+          situacao?: string | null
           situacao_do_pagamento?: string | null
           updated_at?: string | null
           valor_faturado?: number | null
@@ -418,7 +433,65 @@ export type Database = {
             referencedColumns: ["id_data"]
           },
           {
+            foreignKeyName: "fato_orcamento_id_propriedade_fkey"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
             foreignKeyName: "fato_orcamento_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+        ]
+      }
+      fato_orcamento_itens: {
+        Row: {
+          created_at: string | null
+          desconto: number | null
+          id_item: string
+          id_orcamento: string | null
+          id_servico: string | null
+          quantidade: number
+          updated_at: string | null
+          valor_mao_obra: number | null
+          valor_unitario: number
+        }
+        Insert: {
+          created_at?: string | null
+          desconto?: number | null
+          id_item?: string
+          id_orcamento?: string | null
+          id_servico?: string | null
+          quantidade?: number
+          updated_at?: string | null
+          valor_mao_obra?: number | null
+          valor_unitario: number
+        }
+        Update: {
+          created_at?: string | null
+          desconto?: number | null
+          id_item?: string
+          id_orcamento?: string | null
+          id_servico?: string | null
+          quantidade?: number
+          updated_at?: string | null
+          valor_mao_obra?: number | null
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fato_orcamento_itens_id_orcamento_fkey"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fato_orcamento_itens_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
             referencedRelation: "fato_servico"

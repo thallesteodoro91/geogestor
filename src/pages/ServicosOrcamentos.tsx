@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, Briefcase, FileText, Download } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, Download, TrendingUp, DollarSign, Calculator } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -182,28 +182,12 @@ export default function ServicosOrcamentos() {
     <AppLayout>
       <div className="space-y-8">
         <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground">Serviços e Orçamentos</h1>
-          <p className="text-base text-muted-foreground">Gestão unificada de serviços e propostas comerciais</p>
+          <h1 className="text-4xl font-heading font-bold text-foreground">Orçamento</h1>
+          <p className="text-base text-muted-foreground">Gestão de orçamentos e propostas comerciais</p>
         </div>
 
         {/* KPIs */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <KPICard
-            title="Total de Serviços"
-            value={totalServicos.toString()}
-            icon={Briefcase}
-            subtitle={`${servicosConcluidos} concluídos`}
-            change={`${Math.round((servicosConcluidos / totalServicos) * 100)}%`}
-            changeType="positive"
-          />
-          <KPICard
-            title="Receita de Serviços"
-            value={`R$ ${receitaServicos.toLocaleString('pt-BR')}`}
-            icon={Briefcase}
-            subtitle="total realizado"
-            change="+12%"
-            changeType="positive"
-          />
           <KPICard
             title="Total de Orçamentos"
             value={totalOrcamentos.toString()}
@@ -213,100 +197,33 @@ export default function ServicosOrcamentos() {
             changeType="positive"
           />
           <KPICard
+            title="Taxa de Conversão"
+            value={`${Math.round(taxaConversao)}%`}
+            icon={TrendingUp}
+            subtitle="orçamentos convertidos"
+            change="+8%"
+            changeType="positive"
+          />
+          <KPICard
             title="Receita Orçada"
             value={`R$ ${receitaOrcada.toLocaleString('pt-BR')}`}
-            icon={FileText}
+            icon={DollarSign}
             subtitle="pipeline total"
             change="+15%"
             changeType="positive"
           />
+          <KPICard
+            title="Ticket Médio"
+            value={`R$ ${totalOrcamentos > 0 ? Math.round(receitaOrcada / totalOrcamentos).toLocaleString('pt-BR') : '0'}`}
+            icon={Calculator}
+            subtitle="valor médio por orçamento"
+            change="+5%"
+            changeType="positive"
+          />
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="servicos" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="servicos">Serviços</TabsTrigger>
-            <TabsTrigger value="orcamentos">Orçamentos</TabsTrigger>
-          </TabsList>
-
-          {/* Tab Serviços */}
-          <TabsContent value="servicos" className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Input
-                placeholder="Buscar serviços..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-sm"
-              />
-              <Button onClick={handleNewServico}>
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Serviço
-              </Button>
-            </div>
-
-            <div className="rounded-lg border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome do Serviço</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data Início</TableHead>
-                    <TableHead>Receita</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingServicos ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center">Carregando...</TableCell>
-                    </TableRow>
-                  ) : filteredServicos.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center">Nenhum serviço encontrado</TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredServicos.map((servico) => (
-                      <TableRow key={servico.id_servico}>
-                        <TableCell className="font-medium">{servico.nome_do_servico}</TableCell>
-                        <TableCell>{servico.dim_cliente?.nome || '-'}</TableCell>
-                        <TableCell>{servico.categoria || '-'}</TableCell>
-                        <TableCell>
-                          <Badge variant={servico.situacao_do_servico === 'Concluído' ? 'default' : 'secondary'}>
-                            {servico.situacao_do_servico || 'Pendente'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{servico.data_do_servico_inicio ? new Date(servico.data_do_servico_inicio).toLocaleDateString('pt-BR') : '-'}</TableCell>
-                        <TableCell>R$ {(servico.receita_servico || 0).toLocaleString('pt-BR')}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditServico(servico)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteServico(servico.id_servico)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-
-          {/* Tab Orçamentos */}
-          <TabsContent value="orcamentos" className="space-y-4">
+        {/* Orçamentos */}
+        <div className="space-y-4">
             <div className="flex items-center gap-4">
               <Input
                 placeholder="Buscar orçamentos..."
@@ -391,8 +308,7 @@ export default function ServicosOrcamentos() {
                 </TableBody>
               </Table>
             </div>
-          </TabsContent>
-        </Tabs>
+        </div>
 
         {/* Dialogs */}
         <ServicoDialog

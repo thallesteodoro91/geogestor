@@ -32,7 +32,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         quantidade: 1,
         valor_unitario: 0,
         valor_imposto: 0,
-        desconto: 0
+        desconto: 0,
+        custo_servico: 0
       }],
       orcamento_convertido: orcamento?.orcamento_convertido || false,
       faturamento: orcamento?.faturamento || false,
@@ -68,7 +69,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             quantidade: 1,
             valor_unitario: 0,
             valor_imposto: 0,
-            desconto: 0
+            desconto: 0,
+            custo_servico: 0
           }],
           orcamento_convertido: orcamento.orcamento_convertido,
           faturamento: orcamento.faturamento,
@@ -113,19 +115,42 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   };
 
   const calcularTotais = () => {
-    const subtotal = watchedItens.reduce((acc, item) => {
+    // Custo Total = soma dos custos de cada serviço
+    const custoTotal = watchedItens.reduce((acc, item) => {
+      const custoItem = (item.quantidade || 0) * (item.custo_servico || 0);
+      return acc + custoItem;
+    }, 0);
+
+    // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto)
+    const receitaEsperada = watchedItens.reduce((acc, item) => {
       const valorItem = (item.quantidade || 0) * (item.valor_unitario || 0);
       const valorComDesconto = valorItem - (item.desconto || 0);
       return acc + valorComDesconto;
     }, 0);
 
+    // Total de Impostos
     const totalImpostos = watchedItens.reduce((acc, item) => acc + (item.valor_imposto || 0), 0);
-    const receitaEsperada = subtotal - totalImpostos;
     
-    return { subtotal, totalImpostos, receitaEsperada };
+    // Receita Esperada + Impostos
+    const receitaComImposto = receitaEsperada + totalImpostos;
+    
+    // Lucro Esperado = Receita - Custos
+    const lucroEsperado = receitaEsperada - custoTotal;
+    
+    // Margem Esperada = (Lucro / Receita) * 100
+    const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;
+    
+    return { 
+      custoTotal, 
+      receitaEsperada, 
+      totalImpostos, 
+      receitaComImposto,
+      lucroEsperado, 
+      margemEsperada 
+    };
   };
 
-  const { subtotal, totalImpostos, receitaEsperada } = calcularTotais();
+  const { custoTotal, receitaEsperada, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const onSubmit = async (data: any) => {
     try {
@@ -133,11 +158,13 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         id_cliente: data.id_cliente,
         data_orcamento: data.data_orcamento,
         quantidade: data.itens.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
-        valor_unitario: subtotal / data.itens.length,
+        valor_unitario: receitaEsperada / data.itens.length,
         desconto: data.itens.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
         valor_imposto: totalImpostos,
         receita_esperada: receitaEsperada,
-        receita_esperada_imposto: receitaEsperada,
+        receita_esperada_imposto: receitaComImposto,
+        lucro_esperado: lucroEsperado,
+        margem_esperada: margemEsperada,
         orcamento_convertido: data.orcamento_convertido,
         faturamento: data.faturamento,
         data_do_faturamento: data.data_do_faturamento || null,
@@ -180,7 +207,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         quantidade: item.quantidade,
         valor_unitario: item.valor_unitario,
         valor_imposto: item.valor_imposto,
-        desconto: item.desconto
+        desconto: item.desconto,
+        valor_mao_obra: item.custo_servico
       }));
 
       const { error: itensError } = await supabase
@@ -264,7 +292,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   quantidade: 1,
                   valor_unitario: 0,
                   valor_imposto: 0,
-                  desconto: 0
+                  desconto: 0,
+                  custo_servico: 0
                 })}
               >
                 <Plus className="h-4 w-4 mr-2" />
@@ -345,26 +374,49 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                       {...register(`itens.${index}.desconto` as const)}
                     />
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Custo do Serviço</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      {...register(`itens.${index}.custo_servico` as const)}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Resumo Financeiro */}
-          <div className="p-4 bg-muted rounded-lg space-y-2">
+          <div className="p-4 bg-muted rounded-lg space-y-3">
             <h3 className="font-semibold">Resumo Financeiro</h3>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Subtotal:</span>
-                <p className="font-semibold">R$ {subtotal.toFixed(2)}</p>
+                <span className="text-muted-foreground">Custo Total:</span>
+                <p className="font-semibold">R$ {custoTotal.toFixed(2)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Receita Esperada:</span>
+                <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Impostos:</span>
                 <p className="font-semibold">R$ {totalImpostos.toFixed(2)}</p>
               </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
               <div>
-                <span className="text-muted-foreground">Receita Esperada:</span>
-                <p className="font-semibold text-primary">R$ {receitaEsperada.toFixed(2)}</p>
+                <span className="text-muted-foreground">Receita + Impostos:</span>
+                <p className="font-semibold">R$ {receitaComImposto.toFixed(2)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Lucro Esperado:</span>
+                <p className="font-semibold text-primary">R$ {lucroEsperado.toFixed(2)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Margem Esperada:</span>
+                <p className="font-semibold text-primary">{margemEsperada.toFixed(2)}%</p>
               </div>
             </div>
           </div>

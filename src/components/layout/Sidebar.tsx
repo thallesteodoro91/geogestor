@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Eye, Zap, Database } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Eye, Zap, Database, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,15 @@ const navigationSections = [
       { name: "Gestão da Empresa", href: "/", icon: LayoutDashboard },
       { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
+    ]
+  },
+  {
+    title: "Inteligência",
+    icon: Bot,
+    color: "text-purple-500",
+    bgColor: "bg-purple-500/10",
+    items: [
+      { name: "GeoBot", href: "/geobot", icon: Bot },
     ]
   },
   {

@@ -469,14 +469,19 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   value={watchedSituacao}
                   onValueChange={(value) => setValue("situacao_do_pagamento", value)}
                 >
-                  <SelectTrigger className={watchedSituacao === "Cancelado" ? "text-[#FF0000]" : ""}>
+                  <SelectTrigger className={
+                    watchedSituacao === "Pago" ? "text-[hsl(142,76%,36%)]" : 
+                    watchedSituacao === "Cancelado" ? "text-[hsl(0,100%,50%)]" : 
+                    watchedSituacao === "Pendente" ? "text-[hsl(48,96%,53%)]" :
+                    watchedSituacao === "Parcial" ? "text-[hsl(217,91%,60%)]" : ""
+                  }>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Pendente">Pendente</SelectItem>
-                    <SelectItem value="Pago">Pago</SelectItem>
-                    <SelectItem value="Cancelado" className="text-[#FF0000]">Cancelado</SelectItem>
-                    <SelectItem value="Parcial">Parcial</SelectItem>
+                    <SelectItem value="Pendente" className="text-[hsl(48,96%,53%)]">Pendente</SelectItem>
+                    <SelectItem value="Pago" className="text-[hsl(142,76%,36%)]">Pago</SelectItem>
+                    <SelectItem value="Cancelado" className="text-[hsl(0,100%,50%)]">Cancelado</SelectItem>
+                    <SelectItem value="Parcial" className="text-[hsl(217,91%,60%)]">Parcial</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -487,15 +492,21 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   value={watch("forma_de_pagamento")}
                   onValueChange={(value) => setValue("forma_de_pagamento", value)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={
+                    watch("forma_de_pagamento") === "PIX" ? "text-[hsl(142,76%,36%)]" :
+                    watch("forma_de_pagamento") === "Dinheiro" ? "text-[hsl(142,76%,45%)]" :
+                    watch("forma_de_pagamento") === "Cartão" ? "text-[hsl(217,91%,60%)]" :
+                    watch("forma_de_pagamento") === "Transferência" ? "text-[hsl(262,83%,58%)]" :
+                    watch("forma_de_pagamento") === "Boleto" ? "text-[hsl(25,95%,53%)]" : ""
+                  }>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PIX">PIX</SelectItem>
-                    <SelectItem value="Dinheiro">Dinheiro</SelectItem>
-                    <SelectItem value="Cartão">Cartão</SelectItem>
-                    <SelectItem value="Transferência">Transferência</SelectItem>
-                    <SelectItem value="Boleto">Boleto</SelectItem>
+                    <SelectItem value="PIX" className="text-[hsl(142,76%,36%)]">PIX</SelectItem>
+                    <SelectItem value="Dinheiro" className="text-[hsl(142,76%,45%)]">Dinheiro</SelectItem>
+                    <SelectItem value="Cartão" className="text-[hsl(217,91%,60%)]">Cartão</SelectItem>
+                    <SelectItem value="Transferência" className="text-[hsl(262,83%,58%)]">Transferência</SelectItem>
+                    <SelectItem value="Boleto" className="text-[hsl(25,95%,53%)]">Boleto</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

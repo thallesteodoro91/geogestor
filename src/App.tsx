@@ -16,6 +16,7 @@ const Despesas = lazy(() => import("./pages/Despesas"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
 const ClienteDetalhes = lazy(() => import("./pages/ClienteDetalhes"));
 const Configuracoes = lazy(() => import("./pages/Configuracoes"));
+const GeoBotPage = lazy(() => import("./pages/GeoBot"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 
@@ -39,6 +40,7 @@ const App = () => {
               <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
               <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
               <Route path="/dashboard-financeiro" element={<ProtectedRoute><DashboardFinanceiro /></ProtectedRoute>} />
+              <Route path="/geobot" element={<ProtectedRoute><GeoBotPage /></ProtectedRoute>} />
               <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
               <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
               <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />

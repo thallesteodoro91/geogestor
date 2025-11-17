@@ -53,6 +53,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedClienteId = watch("id_cliente");
   const watchedSituacao = watch("situacao_do_pagamento");
 
+  // Função para buscar o nome do serviço selecionado
+  const getServicoNome = (servicoId: string) => {
+    const servico = servicos.find(s => s.id_servico === servicoId);
+    return servico?.nome_do_servico || null;
+  };
+
   useEffect(() => {
     if (open) {
       fetchData();
@@ -282,7 +288,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           {/* II. Valores e Cálculos */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
+                <span className="text-sm text-muted-foreground">
+                  ({fields.length} {fields.length === 1 ? 'serviço' : 'serviços'})
+                </span>
+              </div>
               <Button
                 type="button"
                 variant="outline"
@@ -304,7 +315,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             {fields.map((field, index) => (
               <div key={field.id} className="p-4 border rounded-lg space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">Serviço {index + 1}</span>
+                  <span className="font-medium">
+                    {watchedItens[index]?.id_servico 
+                      ? `#${index + 1} - ${getServicoNome(watchedItens[index].id_servico)}`
+                      : `Serviço #${index + 1}`
+                    }
+                  </span>
                   {fields.length > 1 && (
                     <Button
                       type="button"

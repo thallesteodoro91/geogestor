@@ -22,8 +22,8 @@ const navigationSections = [
   {
     title: "Inteligência",
     icon: Bot,
-    color: "text-purple-500",
-    bgColor: "bg-purple-500/10",
+    color: "text-pink-500",
+    bgColor: "bg-pink-500/10",
     items: [
       { name: "GeoBot", href: "/geobot", icon: Bot },
       { name: "Calendário", href: "/calendario", icon: CalendarDays },

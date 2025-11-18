@@ -10,7 +10,6 @@ import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
 import { ChartTitle } from "@/components/charts/ChartTitle";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
-import { GeoBot } from "@/components/dashboard/GeoBot";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -432,9 +431,6 @@ const GestaoEmpresa = () => {
           </div>
           <AlertasFinanceiros />
         </div>
-
-        {/* GeoBot */}
-        <GeoBot />
       </div>
     </AppLayout>
   );

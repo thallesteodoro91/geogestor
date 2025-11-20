@@ -86,10 +86,14 @@ export const CalendarioSemanal = () => {
 
   const getStatusColor = (status: string) => {
     const statusLower = status.toLowerCase();
-    if (statusLower.includes("concluído") || statusLower.includes("aprovado")) return "bg-green-500";
-    if (statusLower.includes("cancelado")) return "bg-red-500";
-    if (statusLower.includes("andamento")) return "bg-blue-500";
-    return "bg-yellow-500";
+    if (statusLower.includes("concluído") || statusLower.includes("aprovado")) return "bg-emerald-500 text-white";
+    if (statusLower.includes("cancelado")) return "bg-red-500 text-white";
+    if (statusLower.includes("andamento")) return "bg-blue-500 text-white";
+    return "bg-amber-500 text-white";
+  };
+
+  const getTipoIcon = (tipo: string) => {
+    return tipo === "orcamento" ? "💰" : "🔧";
   };
 
   return (
@@ -153,12 +157,17 @@ export const CalendarioSemanal = () => {
           >
             <div className="flex items-start justify-between">
               <div className="space-y-3 flex-1">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
                   <Badge className={getStatusColor(evento.status)}>{evento.status}</Badge>
-                  <Badge variant="outline">{evento.tipo === "orcamento" ? "Orçamento" : "Serviço"}</Badge>
+                  <Badge variant="outline" className="gap-1">
+                    {getTipoIcon(evento.tipo)} {evento.tipo === "orcamento" ? "Orçamento" : "Serviço"}
+                  </Badge>
+                  <Badge variant="secondary">{evento.categoria}</Badge>
                 </div>
 
-                <h3 className="text-xl font-semibold">{evento.titulo}</h3>
+                <h3 className="text-xl font-semibold flex items-center gap-2">
+                  {evento.titulo}
+                </h3>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">

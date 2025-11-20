@@ -86,10 +86,14 @@ export const CalendarioTabela = () => {
   const getStatusColor = (status: string) => {
     const statusLower = status.toLowerCase();
     if (statusLower.includes("concluído") || statusLower.includes("aprovado"))
-      return "bg-green-500";
-    if (statusLower.includes("cancelado")) return "bg-red-500";
-    if (statusLower.includes("andamento")) return "bg-blue-500";
-    return "bg-yellow-500";
+      return "bg-emerald-500 text-white";
+    if (statusLower.includes("cancelado")) return "bg-red-500 text-white";
+    if (statusLower.includes("andamento")) return "bg-blue-500 text-white";
+    return "bg-amber-500 text-white";
+  };
+
+  const getTipoIcon = (tipo: string) => {
+    return tipo === "orcamento" ? "💰" : "🔧";
   };
 
   return (
@@ -132,7 +136,9 @@ export const CalendarioTabela = () => {
                 <TableCell>{evento.propriedade}</TableCell>
                 <TableCell>{evento.municipio}</TableCell>
                 <TableCell>
-                  <Badge className={getStatusColor(evento.status)}>{evento.status}</Badge>
+                  <Badge className={getStatusColor(evento.status)}>
+                    {getTipoIcon(evento.tipo)} {evento.status}
+                  </Badge>
                 </TableCell>
                 <TableCell>{evento.pagamento}</TableCell>
                 <TableCell>

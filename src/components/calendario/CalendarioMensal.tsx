@@ -102,32 +102,49 @@ export const CalendarioMensal = () => {
   });
 
   const eventStyleGetter = (event: CalendarEvent) => {
-    const { status, categoria } = event.resource;
+    const { status, categoria, tipo } = event.resource;
     
     let backgroundColor = "hsl(var(--primary))";
+    let borderLeft = "4px solid white";
     
-    // Cores por categoria
+    // Cores por categoria com gradientes
     if (categoria?.toLowerCase().includes("topografia")) {
-      backgroundColor = "hsl(217, 91%, 60%)"; // Azul
+      backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)";
     } else if (categoria?.toLowerCase().includes("georreferenciamento")) {
-      backgroundColor = "hsl(142, 71%, 45%)"; // Verde
+      backgroundColor = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
     } else if (categoria?.toLowerCase().includes("projeto")) {
-      backgroundColor = "hsl(280, 65%, 60%)"; // Roxo
+      backgroundColor = "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)";
     }
 
-    // Status cancelado
+    // Cores por status
     if (status?.toLowerCase().includes("cancelado")) {
-      backgroundColor = "hsl(0, 72%, 51%)";
+      backgroundColor = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
+    } else if (status?.toLowerCase().includes("concluído") || status?.toLowerCase().includes("aprovado")) {
+      backgroundColor = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+    } else if (status?.toLowerCase().includes("andamento")) {
+      backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)";
+    }
+
+    // Borda por tipo
+    if (tipo === "orcamento") {
+      borderLeft = "4px solid #fbbf24";
+    } else {
+      borderLeft = "4px solid #8b5cf6";
     }
 
     return {
       style: {
-        backgroundColor,
-        borderRadius: "4px",
-        opacity: 0.9,
+        background: backgroundColor,
+        borderRadius: "6px",
+        opacity: 0.95,
         color: "white",
         border: "0px",
+        borderLeft,
         display: "block",
+        padding: "4px 8px",
+        fontWeight: "600",
+        fontSize: "0.85rem",
+        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
       },
     };
   };

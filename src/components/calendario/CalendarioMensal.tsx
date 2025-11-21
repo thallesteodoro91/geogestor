@@ -32,6 +32,8 @@ interface CalendarEvent {
     status: string;
     cliente: string;
     categoria: string;
+    propriedade?: string;
+    municipio?: string;
   };
 }
 
@@ -56,7 +58,8 @@ export const CalendarioMensal = () => {
         .from("fato_servico")
         .select(`
           *,
-          cliente:dim_cliente(nome)
+          cliente:dim_cliente(nome),
+          propriedade:dim_propriedade(nome_da_propriedade, municipio)
         `);
 
       const events: CalendarEvent[] = [];
@@ -82,16 +85,19 @@ export const CalendarioMensal = () => {
       // Adicionar serviços ao calendário
       servicos?.forEach((srv) => {
         if (srv.data_do_servico_inicio) {
+          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
           events.push({
             id: `srv-${srv.id_servico}`,
-            title: `🔧 ${srv.cliente?.nome || "Cliente"} - ${srv.nome_do_servico}`,
+            title: `🛠️ ${srv.nome_do_servico}`,
             start: new Date(srv.data_do_servico_inicio),
             end: srv.data_do_servico_fim ? new Date(srv.data_do_servico_fim) : new Date(srv.data_do_servico_inicio),
             resource: {
               tipo: "servico",
-              status: srv.situacao_do_servico || "Em andamento",
+              status,
               cliente: srv.cliente?.nome || "Cliente",
               categoria: srv.categoria || "Geral",
+              propriedade: srv.propriedade?.nome_da_propriedade || "-",
+              municipio: srv.propriedade?.municipio || "-",
             },
           });
         }
@@ -104,10 +110,29 @@ export const CalendarioMensal = () => {
   const eventStyleGetter = (event: CalendarEvent) => {
     const { status, categoria, tipo } = event.resource;
     
+    // Cor específica para serviços: azul #246BCE
+    if (tipo === "servico") {
+      return {
+        style: {
+          background: "linear-gradient(135deg, #246BCE 0%, #1a5299 100%)",
+          borderRadius: "6px",
+          opacity: 0.95,
+          color: "white",
+          border: "0px",
+          borderLeft: "4px solid #1e88e5",
+          display: "block",
+          padding: "4px 8px",
+          fontWeight: "600",
+          fontSize: "0.85rem",
+          boxShadow: "0 2px 4px rgba(36, 107, 206, 0.3)",
+        },
+      };
+    }
+    
     let backgroundColor = "hsl(var(--primary))";
     let borderLeft = "4px solid white";
     
-    // Cores por categoria com gradientes
+    // Cores para orçamentos por categoria
     if (categoria?.toLowerCase().includes("topografia")) {
       backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)";
     } else if (categoria?.toLowerCase().includes("georreferenciamento")) {
@@ -116,7 +141,7 @@ export const CalendarioMensal = () => {
       backgroundColor = "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)";
     }
 
-    // Cores por status
+    // Cores por status para orçamentos
     if (status?.toLowerCase().includes("cancelado")) {
       backgroundColor = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
     } else if (status?.toLowerCase().includes("concluído") || status?.toLowerCase().includes("aprovado")) {
@@ -125,12 +150,7 @@ export const CalendarioMensal = () => {
       backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)";
     }
 
-    // Borda por tipo
-    if (tipo === "orcamento") {
-      borderLeft = "4px solid #fbbf24";
-    } else {
-      borderLeft = "4px solid #8b5cf6";
-    }
+    borderLeft = "4px solid #fbbf24";
 
     return {
       style: {
@@ -162,6 +182,11 @@ export const CalendarioMensal = () => {
     );
   }
 
+  const eventTooltip = (event: CalendarEvent) => {
+    const { cliente, propriedade, municipio } = event.resource;
+    return `${cliente} • ${propriedade} • ${municipio}`;
+  };
+
   return (
     <Card className="p-6">
       <Calendar
@@ -172,6 +197,7 @@ export const CalendarioMensal = () => {
         style={{ height: 600 }}
         onSelectEvent={handleSelectEvent}
         eventPropGetter={eventStyleGetter}
+        tooltipAccessor={eventTooltip}
         date={date}
         onNavigate={setDate}
         messages={{

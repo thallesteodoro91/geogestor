@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Eye, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { cn } from "@/lib/utils";
 
 export const CalendarioTabela = () => {
   const navigate = useNavigate();
@@ -57,18 +58,21 @@ export const CalendarioTabela = () => {
           pagamento: orc.forma_de_pagamento || "-",
           valor: orc.valor_unitario || 0,
         })),
-        ...(servicos || []).map((srv) => ({
-          id: `srv-${srv.id_servico}`,
-          tipo: "servico" as const,
-          data: srv.data_do_servico_inicio ? new Date(srv.data_do_servico_inicio) : null,
-          cliente: srv.cliente?.nome || "Cliente",
-          servico: srv.nome_do_servico,
-          propriedade: srv.propriedade?.nome_da_propriedade || "-",
-          municipio: srv.propriedade?.municipio || "-",
-          status: srv.situacao_do_servico || "Em andamento",
-          pagamento: "-",
-          valor: srv.receita_servico || 0,
-        })),
+        ...(servicos || []).map((srv) => {
+          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          return {
+            id: `srv-${srv.id_servico}`,
+            tipo: "servico" as const,
+            data: srv.data_do_servico_inicio ? new Date(srv.data_do_servico_inicio) : null,
+            cliente: srv.cliente?.nome || "Cliente",
+            servico: srv.nome_do_servico,
+            propriedade: srv.propriedade?.nome_da_propriedade || "-",
+            municipio: srv.propriedade?.municipio || "-",
+            status,
+            pagamento: "-",
+            valor: srv.receita_servico || 0,
+          };
+        }),
       ].sort((a, b) => {
         if (!a.data) return 1;
         if (!b.data) return -1;
@@ -93,7 +97,11 @@ export const CalendarioTabela = () => {
   };
 
   const getTipoIcon = (tipo: string) => {
-    return tipo === "orcamento" ? "💰" : "🔧";
+    return tipo === "orcamento" ? "💰" : "🛠️";
+  };
+
+  const getRowColor = (tipo: string) => {
+    return tipo === "servico" ? "bg-[#246BCE]/5" : "";
   };
 
   return (
@@ -127,7 +135,11 @@ export const CalendarioTabela = () => {
           </TableHeader>
           <TableBody>
             {eventosFiltrados.map((evento) => (
-              <TableRow key={evento.id} className="hover:bg-muted/50">
+              <TableRow 
+                key={evento.id} 
+                className={cn("hover:bg-muted/50", getRowColor(evento.tipo))}
+                title={evento.tipo === "servico" ? `${evento.cliente} • ${evento.propriedade} • ${evento.municipio}` : ""}
+              >
                 <TableCell>
                   {evento.data ? format(evento.data, "dd/MM/yyyy", { locale: ptBR }) : "-"}
                 </TableCell>
@@ -136,7 +148,7 @@ export const CalendarioTabela = () => {
                 <TableCell>{evento.propriedade}</TableCell>
                 <TableCell>{evento.municipio}</TableCell>
                 <TableCell>
-                  <Badge className={getStatusColor(evento.status)}>
+                  <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : getStatusColor(evento.status)}>
                     {getTipoIcon(evento.tipo)} {evento.status}
                   </Badge>
                 </TableCell>

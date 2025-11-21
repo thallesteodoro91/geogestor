@@ -231,7 +231,6 @@ export default function Operacional() {
                     itemStyle={{ color: "hsl(var(--popover-foreground))" }}
                     formatter={(value: number, name: string) => [`${value} serviços`, name]}
                   />
-                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>

@@ -43,8 +43,9 @@ const tempoMedioDataPorPeriodo = {
 };
 
 const statusData = [
-  { name: "Concluídos", value: 75, color: "hsl(142, 76%, 56%)" }, // Verde
+  { name: "Concluídos", value: 45, color: "hsl(142, 76%, 56%)" }, // Verde
   { name: "Em Andamento", value: 25, color: "hsl(38, 92%, 50%)" }, // Laranja
+  { name: "Pendentes", value: 30, color: "hsl(217, 91%, 60%)" }, // Azul
 ];
 
 const ticketMedioData = [
@@ -125,7 +126,7 @@ export default function Operacional() {
           />
           <StoryCard
             title="Taxa de Conclusão"
-            insight="Mais de 75% dos serviços foram concluídos no prazo estabelecido. A gestão de prazos está funcionando bem, mantendo alta satisfação dos clientes."
+            insight="45 serviços foram concluídos, 25 estão em andamento e 30 aguardam início. A gestão de prazos está funcionando bem, com pipeline saudável de trabalho."
             category="operational"
             icon={Award}
           />
@@ -197,8 +198,8 @@ export default function Operacional() {
             <CardHeader>
               <ChartTitle 
                 title="Status dos Serviços"
-                description="Distribuição percentual dos serviços entre concluídos e em andamento, oferecendo visão da carga de trabalho atual."
-                calculation="% Status = (Quantidade do Status / Total de Serviços) × 100"
+                description="Distribuição quantitativa dos serviços entre concluídos, em andamento e pendentes, oferecendo visão da carga de trabalho atual."
+                calculation="Total de Serviços = Concluídos + Em Andamento + Pendentes"
               />
             </CardHeader>
             <CardContent>
@@ -210,9 +211,9 @@ export default function Operacional() {
                     cy="50%"
                     innerRadius={60}
                     outerRadius={100}
-                    paddingAngle={5}
+                    paddingAngle={0}
                     dataKey="value"
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ value }) => `${value}`}
                     labelLine={false}
                   >
                     {statusData.map((entry, index) => (
@@ -228,7 +229,7 @@ export default function Operacional() {
                     }}
                     labelStyle={{ color: "hsl(var(--popover-foreground))" }}
                     itemStyle={{ color: "hsl(var(--popover-foreground))" }}
-                    formatter={(value: number) => [`${value} serviços`, 'Total']}
+                    formatter={(value: number, name: string) => [`${value} serviços`, name]}
                   />
                   <Legend />
                 </PieChart>

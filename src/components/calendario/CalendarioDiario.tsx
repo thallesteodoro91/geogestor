@@ -56,20 +56,23 @@ export const CalendarioDiario = () => {
           valor: orc.valor_unitario || 0,
           descricao: `Orçamento para ${orc.servico?.nome_do_servico || "serviço"}`,
         })),
-        ...(servicos || []).map((srv) => ({
-          id: `srv-${srv.id_servico}`,
-          tipo: "servico" as const,
-          hora: new Date(srv.data_do_servico_inicio!),
-          titulo: srv.nome_do_servico,
-          cliente: srv.cliente?.nome || "Cliente",
-          clienteContato: srv.cliente?.celular || srv.cliente?.email || "-",
-          propriedade: srv.propriedade?.nome_da_propriedade || "-",
-          municipio: srv.propriedade?.municipio || "-",
-          status: srv.situacao_do_servico || "Em andamento",
-          categoria: srv.categoria || "Geral",
-          valor: srv.receita_servico || 0,
-          descricao: srv.nome_do_servico,
-        })),
+        ...(servicos || []).map((srv) => {
+          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          return {
+            id: `srv-${srv.id_servico}`,
+            tipo: "servico" as const,
+            hora: new Date(srv.data_do_servico_inicio!),
+            titulo: srv.nome_do_servico,
+            cliente: srv.cliente?.nome || "Cliente",
+            clienteContato: srv.cliente?.celular || srv.cliente?.email || "-",
+            propriedade: srv.propriedade?.nome_da_propriedade || "-",
+            municipio: srv.propriedade?.municipio || "-",
+            status,
+            categoria: srv.categoria || "Geral",
+            valor: srv.receita_servico || 0,
+            descricao: srv.nome_do_servico,
+          };
+        }),
       ].sort((a, b) => a.hora.getTime() - b.hora.getTime());
 
       return eventos;
@@ -90,7 +93,10 @@ export const CalendarioDiario = () => {
     return { color: "bg-amber-500 text-white", icon: "⏱" };
   };
 
-  const getCategoriaColor = (categoria: string) => {
+  const getCategoriaColor = (categoria: string, tipo: string) => {
+    // Serviços sempre têm cor azul #246BCE
+    if (tipo === "servico") return "border-l-[#246BCE]";
+    
     const catLower = categoria.toLowerCase();
     if (catLower.includes("topografia")) return "border-l-blue-500";
     if (catLower.includes("georreferenciamento")) return "border-l-emerald-500";
@@ -156,21 +162,22 @@ export const CalendarioDiario = () => {
                 key={evento.id}
                 className={cn(
                   "border-l-4 hover:shadow-lg transition-all cursor-pointer",
-                  getCategoriaColor(evento.categoria)
+                  getCategoriaColor(evento.categoria, evento.tipo)
                 )}
                 onClick={() => {
                   const [tipo, id] = evento.id.split("-");
                   navigate(`/calendario/${tipo}/${id}`);
                 }}
+                title={`${evento.cliente} • ${evento.propriedade} • ${evento.municipio}`}
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <Badge className={statusConfig.color}>
+                        <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : statusConfig.color}>
                           {statusConfig.icon} {evento.status}
                         </Badge>
-                        <Badge variant="outline" className="gap-1">
+                        <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-[#246BCE]/10 text-[#246BCE] border-[#246BCE]")}>
                           {evento.tipo === "orcamento" ? (
                             <>
                               <FileText className="h-3 w-3" />
@@ -178,8 +185,7 @@ export const CalendarioDiario = () => {
                             </>
                           ) : (
                             <>
-                              <Briefcase className="h-3 w-3" />
-                              Serviço
+                              🛠️ Serviço
                             </>
                           )}
                         </Badge>
@@ -188,7 +194,9 @@ export const CalendarioDiario = () => {
                           {format(evento.hora, "HH:mm")}
                         </Badge>
                       </div>
-                      <CardTitle className="text-xl">{evento.titulo}</CardTitle>
+                      <CardTitle className="text-xl">
+                        {evento.tipo === "servico" && "🛠️ "}{evento.titulo}
+                      </CardTitle>
                     </div>
                   </div>
                 </CardHeader>

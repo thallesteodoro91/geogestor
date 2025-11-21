@@ -198,8 +198,8 @@ export default function Operacional() {
             <CardHeader>
               <ChartTitle 
                 title="Status dos Serviços"
-                description="Distribuição quantitativa dos serviços entre concluídos, em andamento e pendentes, oferecendo visão da carga de trabalho atual."
-                calculation="Total de Serviços = Concluídos + Em Andamento + Pendentes"
+                description="Distribuição percentual dos serviços entre concluídos, em andamento e pendentes, oferecendo visão da carga de trabalho atual."
+                calculation="% Status = (Quantidade do Status / Total de Serviços) × 100"
               />
             </CardHeader>
             <CardContent>
@@ -213,7 +213,7 @@ export default function Operacional() {
                     outerRadius={100}
                     paddingAngle={0}
                     dataKey="value"
-                    label={({ value }) => `${value}`}
+                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                     labelLine={false}
                   >
                     {statusData.map((entry, index) => (

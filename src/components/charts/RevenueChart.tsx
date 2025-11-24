@@ -1,9 +1,5 @@
-import { useState } from "react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ChartTitle } from "./ChartTitle";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const data2023 = [
@@ -40,62 +36,20 @@ const dataByYear: Record<string, any[]> = {
 };
 
 export const RevenueChart = () => {
-  const [selectedYear, setSelectedYear] = useState("2024");
-  const [compareYears, setCompareYears] = useState(false);
-
-  const currentYearData = dataByYear[selectedYear];
-  const previousYear = (parseInt(selectedYear) - 1).toString();
-  const previousYearData = dataByYear[previousYear];
-
-  const combinedData = compareYears && previousYearData
-    ? currentYearData.map((item, index) => ({
-        month: item.month,
-        [`receita${selectedYear}`]: item.receita,
-        [`despesa${selectedYear}`]: item.despesa,
-        [`receita${previousYear}`]: previousYearData[index]?.receita,
-        [`despesa${previousYear}`]: previousYearData[index]?.despesa,
-      }))
-    : currentYearData;
+  const currentYearData = data2024;
 
   return (
     <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
-      <CardHeader className="space-y-4">
+      <CardHeader>
         <ChartTitle 
           title="Receita vs Despesa"
           description="Mostra a evolução mensal da receita e despesa, permitindo identificar tendências de crescimento e controle de custos."
           calculation="Receita Líquida = Receita Bruta − Impostos e Deduções | Crescimento (%) = ((Período Atual − Período Anterior) / Período Anterior) × 100"
         />
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="year-select" className="text-sm text-muted-foreground">Ano:</Label>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger id="year-select" className="w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2023">2023</SelectItem>
-                <SelectItem value="2024">2024</SelectItem>
-                <SelectItem value="2025">2025</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {previousYearData && (
-            <div className="flex items-center gap-2">
-              <Switch 
-                id="compare-years" 
-                checked={compareYears}
-                onCheckedChange={setCompareYears}
-              />
-              <Label htmlFor="compare-years" className="text-sm text-muted-foreground cursor-pointer">
-                Comparar com {previousYear}
-              </Label>
-            </div>
-          )}
-        </div>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={combinedData}>
+        <AreaChart data={currentYearData}>
           <defs>
             <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(262, 83%, 65%)" stopOpacity={0.4}/>
@@ -140,63 +94,22 @@ export const RevenueChart = () => {
             formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']}
           />
           <Legend />
-          {!compareYears ? (
-            <>
-              <Area
-                type="monotone"
-                dataKey="receita"
-                stroke="hsl(262, 83%, 65%)"
-                fill="url(#colorReceita)"
-                strokeWidth={2.5}
-                name="Receita"
-              />
-              <Area
-                type="monotone"
-                dataKey="despesa"
-                stroke="hsl(189, 94%, 43%)"
-                fill="url(#colorDespesa)"
-                strokeWidth={2.5}
-                name="Despesa"
-              />
-            </>
-          ) : (
-            <>
-              <Area
-                type="monotone"
-                dataKey={`receita${selectedYear}`}
-                stroke="hsl(262, 83%, 65%)"
-                fill="url(#colorReceita)"
-                strokeWidth={2.5}
-                name={`Receita ${selectedYear}`}
-              />
-              <Area
-                type="monotone"
-                dataKey={`despesa${selectedYear}`}
-                stroke="hsl(189, 94%, 43%)"
-                fill="url(#colorDespesa)"
-                strokeWidth={2.5}
-                name={`Despesa ${selectedYear}`}
-              />
-              <Area
-                type="monotone"
-                dataKey={`receita${previousYear}`}
-                stroke="hsl(262, 83%, 65%)"
-                fill="url(#colorReceitaPrev)"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                name={`Receita ${previousYear}`}
-              />
-              <Area
-                type="monotone"
-                dataKey={`despesa${previousYear}`}
-                stroke="hsl(189, 94%, 43%)"
-                fill="url(#colorDespesaPrev)"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                name={`Despesa ${previousYear}`}
-              />
-            </>
-          )}
+          <Area
+            type="monotone"
+            dataKey="receita"
+            stroke="hsl(262, 83%, 65%)"
+            fill="url(#colorReceita)"
+            strokeWidth={2.5}
+            name="Receita"
+          />
+          <Area
+            type="monotone"
+            dataKey="despesa"
+            stroke="hsl(189, 94%, 43%)"
+            fill="url(#colorDespesa)"
+            strokeWidth={2.5}
+            name="Despesa"
+          />
         </AreaChart>
       </ResponsiveContainer>
       </CardContent>

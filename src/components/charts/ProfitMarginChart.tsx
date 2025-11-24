@@ -1,5 +1,3 @@
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { ChartTitle } from "./ChartTitle";
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const data2023 = [
@@ -39,17 +37,8 @@ export const ProfitMarginChart = () => {
   const currentYearData = data2024;
 
   return (
-    <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
-      <CardHeader>
-        <ChartTitle 
-          title="Margens de Lucratividade"
-          description="Acompanha a evolução das margens bruta e líquida ao longo do tempo. A margem bruta indica eficiência operacional; a líquida mostra rentabilidade final."
-          calculation="Margem Bruta (%) = (Lucro Bruto / Receita Bruta) × 100 | Margem Líquida (%) = (Lucro Líquido / Receita Líquida) × 100"
-        />
-      </CardHeader>
-      <CardContent>
-      <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={currentYearData}>
+    <ResponsiveContainer width="100%" height={300}>
+      <ComposedChart data={currentYearData}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
           <XAxis 
             dataKey="month" 
@@ -90,9 +79,7 @@ export const ProfitMarginChart = () => {
             dot={{ fill: "hsl(189, 94%, 43%)", r: 5 }}
             name="Margem Líquida"
           />
-        </ComposedChart>
-      </ResponsiveContainer>
-      </CardContent>
-    </Card>
+      </ComposedChart>
+    </ResponsiveContainer>
   );
 };

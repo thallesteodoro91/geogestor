@@ -1,5 +1,3 @@
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
-import { ChartTitle } from "./ChartTitle";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const data2023 = [
@@ -39,17 +37,8 @@ export const RevenueChart = () => {
   const currentYearData = data2024;
 
   return (
-    <Card className="bg-gradient-to-br from-card to-card/50 border-border/50">
-      <CardHeader>
-        <ChartTitle 
-          title="Receita vs Despesa"
-          description="Mostra a evolução mensal da receita e despesa, permitindo identificar tendências de crescimento e controle de custos."
-          calculation="Receita Líquida = Receita Bruta − Impostos e Deduções | Crescimento (%) = ((Período Atual − Período Anterior) / Período Anterior) × 100"
-        />
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={currentYearData}>
+    <ResponsiveContainer width="100%" height={300}>
+      <AreaChart data={currentYearData}>
           <defs>
             <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="hsl(262, 83%, 65%)" stopOpacity={0.4}/>
@@ -110,9 +99,7 @@ export const RevenueChart = () => {
             strokeWidth={2.5}
             name="Despesa"
           />
-        </AreaChart>
-      </ResponsiveContainer>
-      </CardContent>
-    </Card>
+      </AreaChart>
+    </ResponsiveContainer>
   );
 };

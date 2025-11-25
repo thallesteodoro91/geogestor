@@ -1,17 +1,61 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+// Tipos de validação
+interface ChatRequest {
+  messages: Array<{
+    role: string;
+    content: string;
+  }>;
+}
+
+// Validação de entrada
+function validateChatRequest(body: any): ChatRequest {
+  if (!body || typeof body !== 'object') {
+    throw new Error('Invalid request body');
+  }
+
+  if (!Array.isArray(body.messages)) {
+    throw new Error('Messages must be an array');
+  }
+
+  if (body.messages.length === 0) {
+    throw new Error('Messages array cannot be empty');
+  }
+
+  for (const msg of body.messages) {
+    if (!msg.role || !msg.content) {
+      throw new Error('Each message must have role and content');
+    }
+    if (typeof msg.role !== 'string' || typeof msg.content !== 'string') {
+      throw new Error('Role and content must be strings');
+    }
+  }
+
+  return body as ChatRequest;
+}
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
+  const startTime = Date.now();
+  
+  // Log estruturado
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    method: req.method,
+    url: req.url,
+  }));
+
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { messages } = await req.json();
+    const body = await req.json();
+    const { messages } = validateChatRequest(body);
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
@@ -102,9 +146,21 @@ Responda sempre em português brasileiro de forma concisa e objetiva.`;
       headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
     });
   } catch (e) {
-    console.error("GeoBot chat error:", e);
+    const duration = Date.now() - startTime;
+    
+    // Log estruturado de erro
+    console.error(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      error: e instanceof Error ? e.message : "Unknown error",
+      stack: e instanceof Error ? e.stack : undefined,
+      duration_ms: duration,
+    }));
+
     return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }),
+      JSON.stringify({ 
+        error: e instanceof Error ? e.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

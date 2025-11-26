@@ -145,6 +145,8 @@ const GestaoEmpresa = () => {
               subtitle={`${kpis?.total_servicos || 0} serviços`}
               change="+12.5%"
               changeType="positive"
+              description="Soma de toda a receita gerada pelos serviços prestados no período"
+              calculation="Σ (Receita de Serviços + Receita Realizada)"
             />
             <KPICard
               title="Lucro Bruto"
@@ -153,6 +155,8 @@ const GestaoEmpresa = () => {
               subtitle={`margem de ${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               change="+10.3%"
               changeType="positive"
+              description="Lucro após dedução dos custos diretos dos serviços"
+              calculation="Receita Total - Custos Diretos"
             />
             <KPICard
               title="Lucro Líquido"
@@ -161,6 +165,8 @@ const GestaoEmpresa = () => {
               subtitle={`margem de ${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               change="+8.7%"
               changeType="positive"
+              description="Lucro final após todas as deduções (custos e despesas operacionais)"
+              calculation="Receita Total - Custos Totais - Despesas"
             />
             <KPICard
               title="Total Despesas"
@@ -169,6 +175,8 @@ const GestaoEmpresa = () => {
               subtitle="custos operacionais"
               change="+5.2%"
               changeType="negative"
+              description="Soma de todas as despesas operacionais e administrativas"
+              calculation="Σ (Despesas Fixas + Despesas Variáveis)"
             />
               </>
             )}
@@ -198,6 +206,8 @@ const GestaoEmpresa = () => {
               subtitle="eficiência operacional"
               change="+2.1%"
               changeType="positive"
+              description="Percentual da receita que sobra após dedução dos custos variáveis"
+              calculation="((Receita - Custos Variáveis) / Receita) × 100"
             />
             <KPICard
               title="Ponto de Equilíbrio"
@@ -206,6 +216,8 @@ const GestaoEmpresa = () => {
               subtitle="meta mensal"
               change="-3.2%"
               changeType="positive"
+              description="Receita mínima necessária para cobrir todos os custos fixos"
+              calculation="Custos Fixos / (Margem de Contribuição %)"
             />
             <KPICard
               title="Desvio Orçamentário"
@@ -214,6 +226,8 @@ const GestaoEmpresa = () => {
               subtitle="vs planejado"
               change="+0.3%"
               changeType="neutral"
+              description="Diferença percentual entre o valor orçado e o realizado"
+              calculation="((Realizado - Orçado) / Orçado) × 100"
             />
             <KPICard
               title="Taxa de Conversão"
@@ -222,6 +236,8 @@ const GestaoEmpresa = () => {
               subtitle="orçamentos → vendas"
               change="+3.5%"
               changeType="positive"
+              description="Percentual de orçamentos que foram convertidos em serviços efetivos"
+              calculation="(Orçamentos Convertidos / Total de Orçamentos) × 100"
             />
               </>
             )}
@@ -251,7 +267,7 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <h3 className="text-lg font-heading font-semibold text-foreground">Evolução da Receita</h3>
@@ -290,7 +306,7 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <h3 className="text-lg font-heading font-semibold text-foreground">Margem de Lucro</h3>
@@ -346,10 +362,10 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <ChartTitle 
-                    title="Orçado x Realizado" 
+                    title="Orçado x Realizado"
                     description="Comparativo por categoria"
                   />
                 </CardHeader>
@@ -373,10 +389,10 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <ChartTitle 
-                    title="Desvio Orçamentário (%)" 
+                    title="Desvio Orçamentário (%)"
                     description="Últimos 5 meses"
                   />
                 </CardHeader>
@@ -423,10 +439,10 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <ChartTitle 
-                    title="Receita vs Ponto de Equilíbrio" 
+                    title="Receita vs Ponto de Equilíbrio"
                     description="Análise mensal"
                   />
                 </CardHeader>
@@ -451,10 +467,10 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card>
+              <Card className="interactive-lift">
                 <CardHeader>
                   <ChartTitle 
-                    title="Custos Fixos vs Variáveis" 
+                    title="Custos Fixos vs Variáveis"
                     description="Estrutura de custos"
                   />
                 </CardHeader>

@@ -114,7 +114,7 @@ export const StoryCard = ({
         </div>
         
         <div className="space-y-3 flex-1 min-w-0">
-          {/* Cabeçalho com título e indicador de tendência */}
+          {/* Cabeçalho com título */}
           <div className="flex items-start justify-between gap-3">
             <h4 className={cn(
               "font-heading font-semibold text-foreground leading-tight tracking-tight",
@@ -122,13 +122,6 @@ export const StoryCard = ({
             )}>
               {title}
             </h4>
-            
-            {/* Princípio 5: Contraste para guiar atenção + micro-animação */}
-            <TrendIcon className={cn(
-              "h-5 w-5 shrink-0 mt-0.5 transition-all",
-              trendColors[trend],
-              trend !== "neutral" && "animate-pulse group-hover:scale-110"
-            )} />
           </div>
           
           {/* Princípio 6: Narrativa com contexto - insight em linguagem clara */}

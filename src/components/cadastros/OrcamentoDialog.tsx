@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
@@ -35,6 +36,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         desconto: 0,
         custo_servico: 0
       }],
+      incluir_marco: orcamento?.incluir_marco || false,
+      marco_quantidade: orcamento?.marco_quantidade || 0,
+      marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
       orcamento_convertido: orcamento?.orcamento_convertido || false,
       faturamento: orcamento?.faturamento || false,
       data_do_faturamento: orcamento?.data_do_faturamento || "",
@@ -52,6 +56,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedItens = watch("itens");
   const watchedClienteId = watch("id_cliente");
   const watchedSituacao = watch("situacao_do_pagamento");
+  const watchedIncluirMarco = watch("incluir_marco");
+  const watchedMarcoQuantidade = watch("marco_quantidade");
+  const watchedMarcoValorUnitario = watch("marco_valor_unitario");
 
   // Função para buscar o nome do serviço selecionado
   const getServicoNome = (servicoId: string) => {
@@ -78,6 +85,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             desconto: 0,
             custo_servico: 0
           }],
+          incluir_marco: orcamento.incluir_marco || false,
+          marco_quantidade: orcamento.marco_quantidade || 0,
+          marco_valor_unitario: orcamento.marco_valor_unitario || 0,
           orcamento_convertido: orcamento.orcamento_convertido,
           faturamento: orcamento.faturamento,
           data_do_faturamento: orcamento.data_do_faturamento,
@@ -128,11 +138,19 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     }, 0);
 
     // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto)
-    const receitaEsperada = watchedItens.reduce((acc, item) => {
+    const receitaEsperadaServicos = watchedItens.reduce((acc, item) => {
       const valorItem = (item.quantidade || 0) * (item.valor_unitario || 0);
       const valorComDesconto = valorItem - (item.desconto || 0);
       return acc + valorComDesconto;
     }, 0);
+
+    // Valor total dos marcos
+    const marcoValorTotal = watchedIncluirMarco 
+      ? (watchedMarcoQuantidade || 0) * (watchedMarcoValorUnitario || 0) 
+      : 0;
+
+    // Receita total incluindo marcos
+    const receitaEsperada = receitaEsperadaServicos + marcoValorTotal;
 
     // Total de Impostos
     const totalImpostos = watchedItens.reduce((acc, item) => acc + (item.valor_imposto || 0), 0);
@@ -149,6 +167,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return { 
       custoTotal, 
       receitaEsperada, 
+      marcoValorTotal,
       totalImpostos, 
       receitaComImposto,
       lucroEsperado, 
@@ -156,7 +175,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, receitaEsperada, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, receitaEsperada, marcoValorTotal, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const onSubmit = async (data: any) => {
     try {
@@ -171,6 +190,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         receita_esperada_imposto: receitaComImposto,
         lucro_esperado: lucroEsperado,
         margem_esperada: margemEsperada,
+        incluir_marco: data.incluir_marco,
+        marco_quantidade: data.incluir_marco ? data.marco_quantidade : 0,
+        marco_valor_unitario: data.incluir_marco ? data.marco_valor_unitario : 0,
+        marco_valor_total: marcoValorTotal,
         orcamento_convertido: data.orcamento_convertido,
         faturamento: data.faturamento,
         data_do_faturamento: data.data_do_faturamento || null,
@@ -402,6 +425,44 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 </div>
               </div>
             ))}
+
+            {/* Opção Marco */}
+            <div className="p-4 border rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="font-medium">Marco</span>
+                  <p className="text-xs text-muted-foreground">Incluir marcos topográficos no orçamento</p>
+                </div>
+                <Switch 
+                  checked={watchedIncluirMarco}
+                  onCheckedChange={(checked) => setValue("incluir_marco", checked)}
+                />
+              </div>
+              
+              {watchedIncluirMarco && (
+                <div className="grid grid-cols-2 gap-4 pt-2">
+                  <div className="space-y-2">
+                    <Label>Quantidade</Label>
+                    <Input 
+                      type="number" 
+                      min="0"
+                      {...register("marco_quantidade", { valueAsNumber: true })} 
+                      placeholder="0"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Valor Unitário (R$)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      {...register("marco_valor_unitario", { valueAsNumber: true })} 
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Resumo Financeiro */}
@@ -413,14 +474,26 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 <p className="font-semibold">R$ {custoTotal.toFixed(2)}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Receita Esperada:</span>
-                <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
+                <span className="text-muted-foreground">Receita Serviços:</span>
+                <p className="font-semibold">R$ {(receitaEsperada - marcoValorTotal).toFixed(2)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Impostos:</span>
                 <p className="font-semibold">R$ {totalImpostos.toFixed(2)}</p>
               </div>
             </div>
+            {marcoValorTotal > 0 && (
+              <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
+                <div>
+                  <span className="text-muted-foreground">Marcos ({watchedMarcoQuantidade}x):</span>
+                  <p className="font-semibold text-accent">R$ {marcoValorTotal.toFixed(2)}</p>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-muted-foreground">Receita Total:</span>
+                  <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
               <div>
                 <span className="text-muted-foreground">Receita + Impostos:</span>

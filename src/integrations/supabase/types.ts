@@ -347,7 +347,11 @@ export type Database = {
           id_orcamento: string
           id_propriedade: string | null
           id_servico: string | null
+          incluir_marco: boolean | null
           lucro_esperado: number | null
+          marco_quantidade: number | null
+          marco_valor_total: number | null
+          marco_valor_unitario: number | null
           margem_esperada: number | null
           orcamento_convertido: boolean | null
           quantidade: number
@@ -375,7 +379,11 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_marco?: boolean | null
           lucro_esperado?: number | null
+          marco_quantidade?: number | null
+          marco_valor_total?: number | null
+          marco_valor_unitario?: number | null
           margem_esperada?: number | null
           orcamento_convertido?: boolean | null
           quantidade?: number
@@ -403,7 +411,11 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_marco?: boolean | null
           lucro_esperado?: number | null
+          marco_quantidade?: number | null
+          marco_valor_total?: number | null
+          marco_valor_unitario?: number | null
           margem_esperada?: number | null
           orcamento_convertido?: boolean | null
           quantidade?: number

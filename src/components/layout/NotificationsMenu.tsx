@@ -1,4 +1,4 @@
-import { Bell, DollarSign, FileText, CheckCircle } from "lucide-react";
+import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,65 +10,64 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/hooks/use-toast";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useNavigate } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { useEffect } from "react";
 
-interface Notification {
-  id: string;
-  type: "budget" | "expense" | "service";
-  title: string;
-  description: string;
-  time: string;
-  unread: boolean;
-}
-
-// Mock data - em produção viria do banco de dados
-const mockNotifications: Notification[] = [
-  {
-    id: "1",
-    type: "budget",
-    title: "Novo Orçamento",
-    description: "Orçamento #1234 aguarda aprovação",
-    time: "5 min atrás",
-    unread: true,
-  },
-  {
-    id: "2",
-    type: "service",
-    title: "Serviço Concluído",
-    description: "Levantamento topográfico finalizado",
-    time: "1 hora atrás",
-    unread: true,
-  },
-  {
-    id: "3",
-    type: "expense",
-    title: "Despesa Vencendo",
-    description: "Pagamento vence em 3 dias",
-    time: "2 horas atrás",
-    unread: false,
-  },
-];
-
-const getIcon = (type: Notification["type"]) => {
-  switch (type) {
-    case "budget":
+const getIcon = (tipo: string) => {
+  switch (tipo) {
+    case "orcamento":
       return <FileText className="h-4 w-4 text-primary" />;
-    case "expense":
-      return <DollarSign className="h-4 w-4 text-destructive" />;
-    case "service":
+    case "despesa":
+      return <DollarSign className="h-4 w-4 text-orange-500" />;
+    case "servico":
       return <CheckCircle className="h-4 w-4 text-success" />;
+    case "pagamento":
+      return <CreditCard className="h-4 w-4 text-destructive" />;
+    default:
+      return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
+  }
+};
+
+const getPriorityColor = (prioridade: string) => {
+  switch (prioridade) {
+    case "alta":
+      return "text-destructive";
+    case "normal":
+      return "text-foreground";
+    case "baixa":
+      return "text-muted-foreground";
+    default:
+      return "text-foreground";
   }
 };
 
 export const NotificationsMenu = () => {
-  const unreadCount = mockNotifications.filter((n) => n.unread).length;
-  const { toast } = useToast();
+  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, checkPendingPayments } = useNotifications();
+  const navigate = useNavigate();
 
-  const handleViewAll = () => {
-    toast({
-      title: "Notificações",
-      description: "Funcionalidade em desenvolvimento - em breve você poderá visualizar todas as notificações.",
-    });
+  // Verificar pagamentos pendentes ao montar o componente
+  useEffect(() => {
+    checkPendingPayments();
+    
+    // Verificar a cada 1 hora
+    const interval = setInterval(() => {
+      checkPendingPayments();
+    }, 60 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleNotificationClick = async (notification: any) => {
+    // Marcar como lida
+    await markAsRead(notification.id_notificacao);
+    
+    // Redirecionar se tiver link
+    if (notification.link) {
+      navigate(notification.link);
+    }
   };
 
   return (
@@ -90,34 +89,52 @@ export const NotificationsMenu = () => {
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
           {unreadCount > 0 && (
-            <Badge variant="secondary" className="ml-auto">
-              {unreadCount} nova{unreadCount > 1 ? "s" : ""}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">
+                {unreadCount} nova{unreadCount > 1 ? "s" : ""}
+              </Badge>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 text-xs"
+                onClick={markAllAsRead}
+              >
+                Marcar todas
+              </Button>
+            </div>
           )}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <ScrollArea className="h-[300px]">
-          {mockNotifications.length > 0 ? (
-            mockNotifications.map((notification) => (
+          {loading ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              Carregando...
+            </div>
+          ) : notifications.length > 0 ? (
+            notifications.map((notification) => (
               <DropdownMenuItem
-                key={notification.id}
-                className="flex gap-3 p-3 cursor-pointer"
+                key={notification.id_notificacao}
+                className="flex gap-3 p-3 cursor-pointer hover:bg-accent"
+                onClick={() => handleNotificationClick(notification)}
               >
-                <div className="mt-1">{getIcon(notification.type)}</div>
+                <div className="mt-1">{getIcon(notification.tipo)}</div>
                 <div className="flex-1 space-y-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium leading-none">
-                      {notification.title}
+                    <p className={`text-sm font-medium leading-none ${getPriorityColor(notification.prioridade)}`}>
+                      {notification.titulo}
                     </p>
-                    {notification.unread && (
+                    {!notification.lida && (
                       <div className="h-2 w-2 rounded-full bg-primary" />
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {notification.description}
+                    {notification.mensagem}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {notification.time}
+                    {formatDistanceToNow(new Date(notification.created_at), {
+                      addSuffix: true,
+                      locale: ptBR,
+                    })}
                   </p>
                 </div>
               </DropdownMenuItem>
@@ -128,13 +145,6 @@ export const NotificationsMenu = () => {
             </div>
           )}
         </ScrollArea>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem 
-          className="justify-center text-sm text-primary cursor-pointer hover:bg-accent"
-          onClick={handleViewAll}
-        >
-          Ver todas as notificações
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

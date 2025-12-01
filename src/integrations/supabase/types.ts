@@ -594,6 +594,42 @@ export type Database = {
           },
         ]
       }
+      notificacoes: {
+        Row: {
+          created_at: string | null
+          id_notificacao: string
+          id_referencia: string | null
+          lida: boolean | null
+          link: string | null
+          mensagem: string
+          prioridade: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          created_at?: string | null
+          id_notificacao?: string
+          id_referencia?: string | null
+          lida?: boolean | null
+          link?: string | null
+          mensagem: string
+          prioridade?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          created_at?: string | null
+          id_notificacao?: string
+          id_referencia?: string | null
+          lida?: boolean | null
+          link?: string | null
+          mensagem?: string
+          prioridade?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -698,6 +734,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "user"

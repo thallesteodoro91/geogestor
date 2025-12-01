@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, MapPin } from "lucide-react";
 
 interface OrcamentoDialogProps {
   open: boolean;
@@ -430,7 +430,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             <div className="p-4 border rounded-lg space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <span className="font-medium">Marco</span>
+                  <div className="flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-primary" />
+                    <span className="font-medium">Marco</span>
+                  </div>
                   <p className="text-xs text-muted-foreground">Incluir marcos topográficos no orçamento</p>
                 </div>
                 <Switch 

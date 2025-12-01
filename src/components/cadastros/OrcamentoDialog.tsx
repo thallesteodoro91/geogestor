@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, MapPin } from "lucide-react";
+import { useNotifications } from "@/hooks/useNotifications";
 
 interface OrcamentoDialogProps {
   open: boolean;
@@ -23,6 +24,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const [clientes, setClientes] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [clienteData, setClienteData] = useState<any>(null);
+  const { createNotification } = useNotifications();
 
   const { register, handleSubmit, setValue, watch, control, reset } = useForm({
     defaultValues: {
@@ -245,6 +247,19 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         .insert(itensData);
 
       if (itensError) throw itensError;
+
+      // Criar notificação para novo orçamento
+      if (!orcamento) {
+        const clienteNome = clientes.find(c => c.id_cliente === data.id_cliente)?.nome || 'Cliente';
+        await createNotification(
+          'orcamento',
+          'Novo Orçamento',
+          `Orçamento criado para ${clienteNome} - R$ ${receitaEsperada.toFixed(2)}`,
+          '/servicos-orcamentos',
+          'normal',
+          orcamentoId
+        );
+      }
 
       toast.success(orcamento ? "Orçamento atualizado com sucesso!" : "Orçamento criado com sucesso!");
       onSuccess();

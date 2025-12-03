@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { KPICard } from "@/components/dashboard/KPICard";
 import { useKPIs } from "@/hooks/useKPIs";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import {
@@ -163,57 +164,45 @@ const DashboardFinanceiro = () => {
             </>
           ) : (
             <>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(kpis?.receita_total || 0)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {kpis?.total_orcamentos || 0} orçamentos emitidos
-                  </p>
-                </CardContent>
-              </Card>
+              <KPICard
+                title="Receita Total"
+                value={formatCurrency(kpis?.receita_total || 0)}
+                icon={DollarSign}
+                subtitle={`${kpis?.total_orcamentos || 0} orçamentos emitidos`}
+                changeType="neutral"
+                description="Soma total de todas as receitas esperadas dos orçamentos"
+                calculation="Σ (Receita Esperada de todos os Orçamentos)"
+              />
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Lucro Líquido</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-success" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(kpis?.lucro_liquido || 0)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Margem: {formatPercent(kpis?.margem_liquida_percent || 0)}
-                  </p>
-                </CardContent>
-              </Card>
+              <KPICard
+                title="Lucro Líquido"
+                value={formatCurrency(kpis?.lucro_liquido || 0)}
+                icon={TrendingUp}
+                subtitle={`Margem: ${formatPercent(kpis?.margem_liquida_percent || 0)}`}
+                changeType="positive"
+                description="Lucro final após todas as deduções de custos e despesas"
+                calculation="Receita Total - Custos Totais - Despesas Operacionais"
+              />
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Margem Contribuição</CardTitle>
-                  <Target className="h-4 w-4 text-accent" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatPercent(kpis?.margem_contribuicao_percent || 0)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Receita - Custos Variáveis
-                  </p>
-                </CardContent>
-              </Card>
+              <KPICard
+                title="Margem Contribuição"
+                value={formatPercent(kpis?.margem_contribuicao_percent || 0)}
+                icon={Target}
+                subtitle="Receita - Custos Variáveis"
+                changeType="positive"
+                description="Percentual da receita disponível para cobrir custos fixos e gerar lucro"
+                calculation="((Receita - Custos Variáveis) / Receita) × 100"
+              />
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Ponto de Equilíbrio</CardTitle>
-                  <AlertCircle className="h-4 w-4 text-warning" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(kpis?.ponto_equilibrio_receita || 0)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Receita mínima necessária
-                  </p>
-                </CardContent>
-              </Card>
+              <KPICard
+                title="Ponto de Equilíbrio"
+                value={formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
+                icon={AlertCircle}
+                subtitle="Receita mínima necessária"
+                changeType="neutral"
+                description="Receita necessária para cobrir todos os custos sem gerar lucro nem prejuízo"
+                calculation="Custos Fixos / Margem de Contribuição (%)"
+              />
             </>
           )}
         </div>

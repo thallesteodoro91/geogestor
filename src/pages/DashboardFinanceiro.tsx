@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/KPICard";
+import { GaugeChart } from "@/components/charts/GaugeChart";
 import { useKPIs } from "@/hooks/useKPIs";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import {
@@ -12,17 +13,14 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
+  ReferenceLine,
 } from "recharts";
 import {
   TrendingUp,
-  TrendingDown,
   DollarSign,
   Target,
   AlertCircle,
@@ -49,7 +47,6 @@ const DashboardFinanceiro = () => {
 
       if (error) throw error;
 
-      // Agrupar por cliente
       const grouped = data.reduce((acc: any[], curr) => {
         const cliente = curr.dim_cliente.nome;
         const existing = acc.find((item) => item.cliente === cliente);
@@ -57,14 +54,14 @@ const DashboardFinanceiro = () => {
           existing.lucro += curr.lucro_esperado || 0;
         } else {
           acc.push({
-            cliente: cliente.length > 20 ? cliente.substring(0, 17) + "..." : cliente,
+            cliente: cliente.length > 15 ? cliente.substring(0, 12) + "..." : cliente,
             lucro: curr.lucro_esperado || 0,
           });
         }
         return acc;
       }, []);
 
-      return grouped.slice(0, 8);
+      return grouped.sort((a, b) => b.lucro - a.lucro).slice(0, 6);
     },
   });
 
@@ -86,9 +83,9 @@ const DashboardFinanceiro = () => {
       if (error) throw error;
 
       return data.map((s) => ({
-        servico: s.nome_do_servico.length > 25 ? s.nome_do_servico.substring(0, 22) + "..." : s.nome_do_servico,
+        servico: s.nome_do_servico.length > 18 ? s.nome_do_servico.substring(0, 15) + "..." : s.nome_do_servico,
         margem: s.receita_servico > 0 ? ((s.receita_servico - s.custo_servico) / s.receita_servico * 100) : 0,
-      })).slice(0, 8);
+      })).slice(0, 6);
     },
   });
 
@@ -105,37 +102,33 @@ const DashboardFinanceiro = () => {
 
       if (error) throw error;
 
-      // Agrupar por categoria
       const grouped = data.reduce((acc: any[], curr) => {
         const categoria = curr.dim_tipodespesa.categoria;
-        const existing = acc.find((item) => item.categoria === categoria);
+        const existing = acc.find((item) => item.name === categoria);
         if (existing) {
-          existing.valor += curr.valor_da_despesa;
+          existing.value += curr.valor_da_despesa;
         } else {
           acc.push({
-            categoria,
-            valor: curr.valor_da_despesa,
+            name: categoria,
+            value: curr.valor_da_despesa,
           });
         }
         return acc;
       }, []);
 
-      return grouped.sort((a, b) => b.valor - a.valor);
+      return grouped.sort((a, b) => b.value - a.value);
     },
   });
 
-  // Dados de Receita Esperada x Realizada
-  const receitaComparacao = {
-    esperada: kpis?.receita_total || 0,
-    realizada: kpis?.receita_realizada_total || 0,
-    faturada: kpis?.valor_faturado_total || 0,
-  };
-
-  const receitaData = [
-    { tipo: "Esperada", valor: receitaComparacao.esperada },
-    { tipo: "Realizada", valor: receitaComparacao.realizada },
-    { tipo: "Faturada", valor: receitaComparacao.faturada },
+  // Dados do Waterfall Chart - Fluxo Financeiro
+  const waterfallData = [
+    { name: "Receita", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-1))" },
+    { name: "Custos", valor: -(kpis?.custo_total || 0), fill: "hsl(var(--destructive))" },
+    { name: "Despesas", valor: -(kpis?.total_despesas || 0), fill: "hsl(var(--warning))" },
+    { name: "Lucro", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--success))" },
   ];
+
+  const totalDespesas = custosPorCategoria.reduce((acc, curr) => acc + curr.value, 0);
 
   const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
@@ -208,7 +201,7 @@ const DashboardFinanceiro = () => {
         </div>
 
         {/* Análise Textual */}
-        <Card className="bg-gradient-to-br from-card to-card/80">
+        <Card className="bg-gradient-to-br from-card to-card/80 interactive-lift">
           <CardHeader>
             <CardTitle>Resumo Executivo</CardTitle>
             <CardDescription>Análise automática do período</CardDescription>
@@ -241,10 +234,60 @@ const DashboardFinanceiro = () => {
           </CardContent>
         </Card>
 
-        {/* Gráficos */}
+        {/* Gráficos - Primeira Linha */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Lucro por Cliente */}
-          <Card>
+          {/* Waterfall Chart - Fluxo Financeiro */}
+          <Card className="interactive-lift">
+            <CardHeader>
+              <CardTitle>Fluxo Financeiro</CardTitle>
+              <CardDescription>Da receita ao lucro líquido</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={waterfallData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
+                  <XAxis 
+                    type="number" 
+                    stroke="hsl(var(--muted-foreground))"
+                    tickFormatter={(value) => `R$ ${(Math.abs(value) / 1000).toFixed(0)}k`}
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="name" 
+                    stroke="hsl(var(--muted-foreground))"
+                    width={80}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "hsl(var(--card))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: "8px",
+                    }}
+                    formatter={(value: number) => formatCurrency(Math.abs(value))}
+                  />
+                  <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                    {waterfallData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Gauge Chart - Ponto de Equilíbrio */}
+          <GaugeChart
+            value={kpis?.receita_total || 0}
+            max={Math.max((kpis?.ponto_equilibrio_receita || 0) * 1.5, kpis?.receita_total || 1)}
+            title="Ponto de Equilíbrio"
+            subtitle={`Meta: ${formatCurrency(kpis?.ponto_equilibrio_receita || 0)}`}
+          />
+        </div>
+
+        {/* Gráficos - Segunda Linha */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Lucro por Cliente - Horizontal Bar */}
+          <Card className="interactive-lift">
             <CardHeader>
               <CardTitle>Lucro por Cliente</CardTitle>
               <CardDescription>Top clientes por lucratividade esperada</CardDescription>
@@ -256,20 +299,20 @@ const DashboardFinanceiro = () => {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={lucroPorCliente}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <BarChart data={lucroPorCliente} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
                     <XAxis
-                      dataKey="cliente"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis
+                      type="number"
                       stroke="hsl(var(--muted-foreground))"
                       fontSize={12}
                       tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="cliente"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      width={100}
                     />
                     <Tooltip
                       contentStyle={{
@@ -279,18 +322,18 @@ const DashboardFinanceiro = () => {
                       }}
                       formatter={(value: number) => formatCurrency(value)}
                     />
-                    <Bar dataKey="lucro" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="lucro" fill="hsl(var(--chart-1))" radius={[0, 8, 8, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
 
-          {/* Margem por Serviço */}
-          <Card>
+          {/* Margem por Serviço - Horizontal Bar com Linha de Referência */}
+          <Card className="interactive-lift">
             <CardHeader>
               <CardTitle>Margem por Serviço</CardTitle>
-              <CardDescription>Rentabilidade dos principais serviços (%)</CardDescription>
+              <CardDescription>Rentabilidade dos principais serviços (meta: 30%)</CardDescription>
             </CardHeader>
             <CardContent>
               {servicosLoading ? (
@@ -299,20 +342,21 @@ const DashboardFinanceiro = () => {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={margemPorServico}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <BarChart data={margemPorServico} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
                     <XAxis
-                      dataKey="servico"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                      angle={-45}
-                      textAnchor="end"
-                      height={80}
-                    />
-                    <YAxis
+                      type="number"
                       stroke="hsl(var(--muted-foreground))"
                       fontSize={12}
                       tickFormatter={(value) => `${value}%`}
+                      domain={[0, 100]}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="servico"
+                      stroke="hsl(var(--muted-foreground))"
+                      fontSize={11}
+                      width={120}
                     />
                     <Tooltip
                       contentStyle={{
@@ -322,15 +366,26 @@ const DashboardFinanceiro = () => {
                       }}
                       formatter={(value: number) => formatPercent(value)}
                     />
-                    <Bar dataKey="margem" fill="hsl(var(--chart-2))" radius={[8, 8, 0, 0]} />
+                    <ReferenceLine x={30} stroke="hsl(var(--warning))" strokeDasharray="5 5" label={{ value: "Meta", fill: "hsl(var(--warning))", fontSize: 10 }} />
+                    <Bar dataKey="margem" radius={[0, 8, 8, 0]}>
+                      {margemPorServico.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.margem >= 30 ? "hsl(var(--success))" : "hsl(var(--destructive))"} 
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* Custos por Categoria */}
-          <Card>
+        {/* Gráficos - Terceira Linha */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Custos por Categoria - Donut Chart */}
+          <Card className="interactive-lift">
             <CardHeader>
               <CardTitle>Custos por Categoria</CardTitle>
               <CardDescription>Distribuição das despesas operacionais</CardDescription>
@@ -341,52 +396,77 @@ const DashboardFinanceiro = () => {
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart>
-                    <Pie
-                      data={custosPorCategoria}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ categoria, percent }) =>
-                        `${categoria}: ${(percent * 100).toFixed(0)}%`
-                      }
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="valor"
-                    >
-                      {custosPorCategoria.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="relative">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <PieChart>
+                      <Pie
+                        data={custosPorCategoria}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, percent }) =>
+                          `${name}: ${(percent * 100).toFixed(0)}%`
+                        }
+                        labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+                      >
+                        {custosPorCategoria.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                        formatter={(value: number) => formatCurrency(value)}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  {/* Centro do Donut */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <p className="text-xs text-muted-foreground">Total</p>
+                      <p className="text-sm font-bold text-foreground">
+                        {formatCurrency(totalDespesas)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Receita Esperada x Realizada */}
-          <Card>
+          {/* Receita Comparativa */}
+          <Card className="interactive-lift">
             <CardHeader>
               <CardTitle>Receita: Esperada x Realizada</CardTitle>
               <CardDescription>Comparativo de execução financeira</CardDescription>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={receitaData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="tipo" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis
+                <BarChart 
+                  data={[
+                    { tipo: "Esperada", valor: kpis?.receita_total || 0 },
+                    { tipo: "Realizada", valor: kpis?.receita_realizada_total || 0 },
+                    { tipo: "Faturada", valor: kpis?.valor_faturado_total || 0 },
+                  ]} 
+                  layout="vertical"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
+                  <XAxis 
+                    type="number"
                     stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                  />
+                  <YAxis 
+                    type="category"
+                    dataKey="tipo" 
+                    stroke="hsl(var(--muted-foreground))"
+                    width={80}
                   />
                   <Tooltip
                     contentStyle={{
@@ -396,7 +476,11 @@ const DashboardFinanceiro = () => {
                     }}
                     formatter={(value: number) => formatCurrency(value)}
                   />
-                  <Bar dataKey="valor" fill="hsl(var(--chart-3))" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
+                    <Cell fill="hsl(var(--chart-1))" />
+                    <Cell fill="hsl(var(--chart-2))" />
+                    <Cell fill="hsl(var(--chart-3))" />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>

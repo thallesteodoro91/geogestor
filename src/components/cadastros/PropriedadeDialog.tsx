@@ -8,6 +8,9 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
 
 interface PropriedadeDialogProps {
   open: boolean;
@@ -20,6 +23,10 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
   const { register, handleSubmit, setValue, reset } = useForm({
     defaultValues: propriedade || {}
   });
+  const { isWithinLimit } = usePlanLimits();
+  const { propertiesCount } = useResourceCounts();
+  const isEditing = !!propriedade;
+  const canAddProperty = isEditing || isWithinLimit('properties', propertiesCount);
   
   const [clientes, setClientes] = useState<any[]>([]);
 
@@ -45,6 +52,11 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
   };
 
   const onSubmit = async (data: any) => {
+    if (!isEditing && !canAddProperty) {
+      toast.error("Limite de propriedades atingido. Faça upgrade do seu plano.");
+      return;
+    }
+    
     try {
       // Converter strings vazias em null para campos numéricos
       const sanitizedData = {
@@ -86,6 +98,8 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
         <DialogHeader>
           <DialogTitle>{propriedade ? "Editar Propriedade" : "Nova Propriedade"}</DialogTitle>
         </DialogHeader>
+        
+        {!isEditing && <PlanLimitAlert resource="properties" currentCount={propertiesCount} />}
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -208,7 +222,7 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={!isEditing && !canAddProperty}>Salvar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

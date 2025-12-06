@@ -10,6 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { formatPhoneNumber } from "@/lib/formatPhone";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
 
 interface ClienteDialogProps {
   open: boolean;
@@ -22,6 +25,10 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: cliente || {}
   });
+  const { isWithinLimit } = usePlanLimits();
+  const { clientsCount } = useResourceCounts();
+  const isEditing = !!cliente;
+  const canAddClient = isEditing || isWithinLimit('clients', clientsCount);
 
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
     cliente?.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []
@@ -63,6 +70,11 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   };
 
   const onSubmit = async (data: any) => {
+    if (!isEditing && !canAddClient) {
+      toast.error("Limite de clientes atingido. Faça upgrade do seu plano.");
+      return;
+    }
+    
     try {
       const submitData = {
         ...data,
@@ -103,6 +115,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
         <DialogHeader>
           <DialogTitle>{cliente ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
         </DialogHeader>
+        
+        {!isEditing && <PlanLimitAlert resource="clients" currentCount={clientsCount} />}
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -225,7 +239,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={!isEditing && !canAddClient}>Salvar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

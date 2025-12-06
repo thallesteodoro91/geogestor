@@ -10,8 +10,12 @@ import { Separator } from "@/components/ui/separator";
 import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { TenantSettingsCard } from "@/components/plan/TenantSettingsCard";
+import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
+import { useResourceCounts } from "@/hooks/useResourceCounts";
 
 export default function Configuracoes() {
+  const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const queryClient = useQueryClient();
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
 
@@ -119,6 +123,14 @@ export default function Configuracoes() {
         </div>
 
         <div className="grid gap-6">
+          <TenantSettingsCard />
+          
+          <PlanInfoCard 
+            clientsCount={clientsCount}
+            propertiesCount={propertiesCount}
+            usersCount={usersCount}
+          />
+
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">

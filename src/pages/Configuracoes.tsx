@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,50 @@ export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const queryClient = useQueryClient();
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userEmail, setUserEmail] = useState("");
+
+  // Fetch current user data
+  const { data: currentUser } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) throw error;
+      return user;
+    },
+  });
+
+  // Set initial values when user data loads
+  useEffect(() => {
+    if (currentUser) {
+      setUserEmail(currentUser.email || "");
+      setUserName(currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || "");
+    }
+  }, [currentUser]);
+
+  // Mutation to update user profile
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ name, email }: { name: string; email: string }) => {
+      const updates: any = {
+        data: { full_name: name }
+      };
+      
+      // Only update email if it changed
+      if (email !== currentUser?.email) {
+        updates.email = email;
+      }
+
+      const { error } = await supabase.auth.updateUser(updates);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['current-user'] });
+      toast.success('Perfil atualizado com sucesso!');
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao atualizar perfil: ${error.message}`);
+    },
+  });
 
   const { data: empresa } = useQuery({
     queryKey: ['empresa-config'],
@@ -146,15 +190,31 @@ export default function Configuracoes() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome Completo</Label>
-                  <Input id="nome" placeholder="Seu nome" defaultValue="Administrador TopoVision" />
+                  <Input 
+                    id="nome" 
+                    placeholder="Seu nome" 
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" placeholder="seu@email.com" defaultValue="admin@topovision.com" />
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="seu@email.com" 
+                    value={userEmail}
+                    onChange={(e) => setUserEmail(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="flex justify-end">
-                <Button>Salvar Alterações</Button>
+                <Button 
+                  onClick={() => updateUserMutation.mutate({ name: userName, email: userEmail })}
+                  disabled={updateUserMutation.isPending}
+                >
+                  {updateUserMutation.isPending ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -243,10 +303,11 @@ export default function Configuracoes() {
                 <select 
                   id="frequencia" 
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                  defaultValue="Semanal"
                 >
-                  <option>Diária</option>
-                  <option selected>Semanal</option>
-                  <option>Mensal</option>
+                  <option value="Diária">Diária</option>
+                  <option value="Semanal">Semanal</option>
+                  <option value="Mensal">Mensal</option>
                 </select>
               </div>
             </CardContent>

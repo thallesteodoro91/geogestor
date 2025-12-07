@@ -1,1 +1,10 @@
 project_id = "itbgesjofnprqcsrukos"
+
+[functions.geobot-chat]
+verify_jwt = true
+
+[functions.invite-user]
+verify_jwt = true
+
+[functions.accept-invite]
+verify_jwt = true

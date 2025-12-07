@@ -19,18 +19,29 @@ export default function Auth() {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/");
+        handlePostLoginRedirect();
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
-        navigate("/");
+        handlePostLoginRedirect();
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  const handlePostLoginRedirect = () => {
+    // Check if there's a pending invite token
+    const pendingToken = sessionStorage.getItem("pending_invite_token");
+    if (pendingToken) {
+      sessionStorage.removeItem("pending_invite_token");
+      navigate(`/aceitar-convite?token=${pendingToken}`);
+    } else {
+      navigate("/");
+    }
+  };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,7 +63,7 @@ export default function Auth() {
         }
       } else {
         toast.success("Login realizado com sucesso!");
-        navigate("/");
+        handlePostLoginRedirect();
       }
     } catch (error: any) {
       if (error.errors) {

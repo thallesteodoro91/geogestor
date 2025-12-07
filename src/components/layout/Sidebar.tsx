@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { useTenant } from "@/contexts/TenantContext";
 
 const navigationSections = [
   {
@@ -53,6 +54,16 @@ const navigationSections = [
 
 export const Sidebar = () => {
   const navigate = useNavigate();
+  const { tenant } = useTenant();
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .slice(0, 2)
+      .map(word => word[0])
+      .join('')
+      .toUpperCase();
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -67,10 +78,12 @@ export const Sidebar = () => {
         <div className="flex grow flex-col gap-y-5 overflow-y-auto border-r border-border bg-card px-6 pb-4">
           <div className="flex h-16 shrink-0 items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary">
-              <span className="text-lg font-heading font-bold text-primary-foreground">TV</span>
+              <span className="text-lg font-heading font-bold text-primary-foreground">
+                {tenant ? getInitials(tenant.name) : 'SG'}
+              </span>
             </div>
             <div>
-              <h1 className="text-xl font-heading font-bold text-foreground">TopoVision</h1>
+              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'SkyGeo'}</h1>
               <p className="text-xs text-muted-foreground">Performance & Insights</p>
             </div>
           </div>

@@ -57,6 +57,7 @@ export default function Configuracoes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['current-user'] });
+      queryClient.invalidateQueries({ queryKey: ['team-members'] });
       toast.success('Perfil atualizado com sucesso!');
     },
     onError: (error: any) => {

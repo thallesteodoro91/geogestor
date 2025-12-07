@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Users, Crown, User, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useTenant } from "@/contexts/TenantContext";
@@ -24,6 +24,7 @@ interface Profile {
   id: string;
   full_name: string | null;
   email: string | null;
+  avatar_url: string | null;
 }
 
 interface TeamMember {
@@ -57,7 +58,7 @@ export function TeamMembersList() {
       const userIds = membersData.map(m => m.user_id);
       const { data: profilesData } = await supabase
         .from("profiles")
-        .select("id, full_name, email")
+        .select("id, full_name, email, avatar_url")
         .in("id", userIds);
 
       // Map profiles to members
@@ -176,6 +177,7 @@ export function TeamMembersList() {
             >
               <div className="flex items-center gap-4">
                 <Avatar>
+                  <AvatarImage src={member.profile?.avatar_url || undefined} alt={getDisplayName(member)} />
                   <AvatarFallback className="bg-primary/10 text-primary">
                     {getInitials(member.profile?.full_name, member.profile?.email)}
                   </AvatarFallback>

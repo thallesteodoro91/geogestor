@@ -20,12 +20,18 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+interface Profile {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
 interface TeamMember {
   id: string;
   user_id: string;
   role: "admin" | "user";
   joined_at: string;
-  email?: string;
+  profile?: Profile | null;
 }
 
 export function TeamMembersList() {
@@ -38,14 +44,29 @@ export function TeamMembersList() {
     queryFn: async () => {
       if (!tenant?.id) return [];
 
-      const { data, error } = await supabase
+      // Fetch members
+      const { data: membersData, error: membersError } = await supabase
         .from("tenant_members")
         .select("*")
         .eq("tenant_id", tenant.id)
         .order("joined_at", { ascending: true });
 
-      if (error) throw error;
-      return data as TeamMember[];
+      if (membersError) throw membersError;
+
+      // Fetch profiles for all members
+      const userIds = membersData.map(m => m.user_id);
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      // Map profiles to members
+      const membersWithProfiles = membersData.map(member => ({
+        ...member,
+        profile: profilesData?.find(p => p.id === member.user_id) || null
+      }));
+
+      return membersWithProfiles as TeamMember[];
     },
     enabled: !!tenant?.id,
   });
@@ -89,9 +110,16 @@ export function TeamMembersList() {
     },
   });
 
-  const getInitials = (email?: string) => {
-    if (!email) return "U";
-    return email.charAt(0).toUpperCase();
+  const getInitials = (name?: string | null, email?: string | null) => {
+    if (name) return name.charAt(0).toUpperCase();
+    if (email) return email.charAt(0).toUpperCase();
+    return "U";
+  };
+
+  const getDisplayName = (member: TeamMember) => {
+    if (member.profile?.full_name) return member.profile.full_name;
+    if (member.profile?.email) return member.profile.email;
+    return `Usuário ${member.user_id.slice(0, 8)}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -149,13 +177,13 @@ export function TeamMembersList() {
               <div className="flex items-center gap-4">
                 <Avatar>
                   <AvatarFallback className="bg-primary/10 text-primary">
-                    {getInitials(member.email || member.user_id)}
+                    {getInitials(member.profile?.full_name, member.profile?.email)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium">
-                      {member.email || `Usuário ${member.user_id.slice(0, 8)}`}
+                      {getDisplayName(member)}
                     </p>
                     {member.user_id === user?.id && (
                       <Badge variant="outline" className="text-xs">Você</Badge>

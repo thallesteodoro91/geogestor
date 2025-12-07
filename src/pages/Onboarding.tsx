@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,10 +13,17 @@ import { Building2, ArrowRight, CheckCircle } from "lucide-react";
 export default function Onboarding() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { refetchTenant } = useTenant();
+  const { tenant, refetchTenant } = useTenant();
   const [loading, setLoading] = useState(false);
   const [companyName, setCompanyName] = useState("");
   const [step, setStep] = useState(1);
+
+  // Redireciona para dashboard se já tem tenant
+  useEffect(() => {
+    if (tenant) {
+      navigate("/", { replace: true });
+    }
+  }, [tenant, navigate]);
 
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();

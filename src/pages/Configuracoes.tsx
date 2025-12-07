@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { TenantSettingsCard } from "@/components/plan/TenantSettingsCard";
 import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { TeamManagementSection } from "@/components/team";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -130,6 +131,8 @@ export default function Configuracoes() {
             propertiesCount={propertiesCount}
             usersCount={usersCount}
           />
+
+          <TeamManagementSection />
 
           <Card>
             <CardHeader>

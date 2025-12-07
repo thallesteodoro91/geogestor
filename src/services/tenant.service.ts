@@ -47,9 +47,9 @@ export async function createTenant(userId: string, companyName: string) {
 
   if (planError) throw planError;
 
-  // Criar assinatura trial
+  // Criar assinatura trial (7 dias)
   const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + 14);
+  trialEnd.setDate(trialEnd.getDate() + 7);
 
   const { error: subError } = await supabase
     .from('tenant_subscriptions')

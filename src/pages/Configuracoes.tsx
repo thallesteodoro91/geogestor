@@ -14,6 +14,7 @@ import { TenantSettingsCard } from "@/components/plan/TenantSettingsCard";
 import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { TeamManagementSection } from "@/components/team";
+import { AvatarUpload } from "@/components/settings/AvatarUpload";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -30,6 +31,22 @@ export default function Configuracoes() {
       if (error) throw error;
       return user;
     },
+  });
+
+  // Fetch user profile for avatar
+  const { data: userProfile } = useQuery({
+    queryKey: ['user-profile', currentUser?.id],
+    queryFn: async () => {
+      if (!currentUser?.id) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('avatar_url')
+        .eq('id', currentUser.id)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!currentUser?.id,
   });
 
   // Set initial values when user data loads
@@ -187,7 +204,16 @@ export default function Configuracoes() {
               </div>
               <CardDescription>Informações pessoais e dados de acesso</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {currentUser && (
+                <AvatarUpload
+                  userId={currentUser.id}
+                  currentAvatarUrl={userProfile?.avatar_url}
+                  userName={userName}
+                  userEmail={userEmail}
+                />
+              )}
+              <Separator />
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="nome">Nome Completo</Label>

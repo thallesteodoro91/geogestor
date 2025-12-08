@@ -531,6 +531,7 @@ export type Database = {
           id_orcamento: string | null
           id_servico: string | null
           quantidade: number
+          tenant_id: string | null
           updated_at: string | null
           valor_mao_obra: number | null
           valor_unitario: number
@@ -542,6 +543,7 @@ export type Database = {
           id_orcamento?: string | null
           id_servico?: string | null
           quantidade?: number
+          tenant_id?: string | null
           updated_at?: string | null
           valor_mao_obra?: number | null
           valor_unitario: number
@@ -553,6 +555,7 @@ export type Database = {
           id_orcamento?: string | null
           id_servico?: string | null
           quantidade?: number
+          tenant_id?: string | null
           updated_at?: string | null
           valor_mao_obra?: number | null
           valor_unitario?: number

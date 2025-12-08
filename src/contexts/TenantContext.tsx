@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { createTenant } from "@/services/tenant.service";
 
 export interface Tenant {
   id: string;
@@ -73,12 +74,63 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         throw memberError;
       }
 
+      // Se não tem tenant, criar automaticamente
       if (!memberData) {
-        // Usuário não tem tenant associado ainda
-        setTenant(null);
-        setSubscription(null);
-        setIsLoading(false);
-        return;
+        console.log('[TenantContext] No tenant found, auto-creating...');
+        const companyName = user.user_metadata?.full_name || 
+                          user.email?.split('@')[0] || 
+                          'Minha Empresa';
+        
+        try {
+          const newTenant = await createTenant(user.id, companyName);
+          console.log('[TenantContext] Auto-created tenant:', newTenant.name);
+          
+          // Buscar dados do tenant recém-criado
+          setTenant({
+            id: newTenant.id,
+            name: newTenant.name,
+            slug: newTenant.slug,
+            logo_url: newTenant.logo_url,
+            settings: (newTenant.settings as Record<string, unknown>) || {},
+          });
+
+          // Buscar assinatura do tenant recém-criado
+          const { data: subData } = await supabase
+            .from('tenant_subscriptions')
+            .select(`*, plan:subscription_plans(*)`)
+            .eq('tenant_id', newTenant.id)
+            .maybeSingle();
+
+          if (subData) {
+            const planData = subData.plan as unknown as SubscriptionPlan;
+            setSubscription({
+              id: subData.id,
+              tenant_id: subData.tenant_id,
+              plan_id: subData.plan_id,
+              status: subData.status,
+              current_period_start: subData.current_period_start,
+              current_period_end: subData.current_period_end,
+              plan: planData ? {
+                id: planData.id,
+                name: planData.name,
+                slug: planData.slug,
+                price_cents: planData.price_cents,
+                interval: planData.interval,
+                features: (planData.features as Record<string, boolean>) || {},
+                max_users: planData.max_users,
+                max_properties: planData.max_properties,
+                max_clients: planData.max_clients,
+                is_active: planData.is_active,
+              } : undefined,
+            });
+          }
+          
+          setIsLoading(false);
+          return;
+        } catch (createError) {
+          console.error('[TenantContext] Failed to auto-create tenant:', createError);
+          throw createError;
+        }
       }
 
       // Buscar dados do tenant

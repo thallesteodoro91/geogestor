@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      dim_categoria_despesa: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id_categoria_despesa: string
+          nome: string
+          tenant_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria_despesa?: string
+          nome: string
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria_despesa?: string
+          nome?: string
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dim_categoria_despesa_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dim_categoria_servico: {
         Row: {
           created_at: string | null
@@ -319,6 +354,7 @@ export type Database = {
           categoria: string
           created_at: string | null
           descricao: string | null
+          id_categoria_despesa: string | null
           id_tipodespesa: string
           subcategoria: string | null
           tenant_id: string | null
@@ -328,6 +364,7 @@ export type Database = {
           categoria: string
           created_at?: string | null
           descricao?: string | null
+          id_categoria_despesa?: string | null
           id_tipodespesa?: string
           subcategoria?: string | null
           tenant_id?: string | null
@@ -337,12 +374,20 @@ export type Database = {
           categoria?: string
           created_at?: string | null
           descricao?: string | null
+          id_categoria_despesa?: string | null
           id_tipodespesa?: string
           subcategoria?: string | null
           tenant_id?: string | null
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "dim_tipodespesa_id_categoria_despesa_fkey"
+            columns: ["id_categoria_despesa"]
+            isOneToOne: false
+            referencedRelation: "dim_categoria_despesa"
+            referencedColumns: ["id_categoria_despesa"]
+          },
           {
             foreignKeyName: "dim_tipodespesa_tenant_id_fkey"
             columns: ["tenant_id"]

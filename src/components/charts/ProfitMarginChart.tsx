@@ -1,4 +1,5 @@
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { RichTooltip } from "./RichTooltip";
 
 const data2023 = [
   { month: "Jan", margemBruta: 38, margemLiquida: 26 },
@@ -52,15 +53,8 @@ export const ProfitMarginChart = () => {
             domain={[0, 50]}
           />
           <Tooltip
-            contentStyle={{
-              backgroundColor: "hsl(var(--popover))",
-              border: "1px solid hsl(var(--primary))",
-              borderRadius: "0.5rem",
-              color: "hsl(var(--popover-foreground))",
-              boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-            }}
-            cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-            formatter={(value: number) => [`${value}%`, '']}
+            content={<RichTooltip format="percent" showVariation={false} />}
+            cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
           />
           <Legend />
           <Line

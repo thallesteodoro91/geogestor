@@ -455,6 +455,7 @@ const DashboardFinanceiro = () => {
                   />
                   <Tooltip
                     content={<RichTooltip format="currency" showVariation={false} />}
+                    cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                   />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                     <Cell fill={colors[0]} />

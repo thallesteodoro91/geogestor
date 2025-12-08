@@ -22,6 +22,17 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@Lovable" />
     <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+    <!-- Critical CSS inline to prevent render blocking -->
+    <style>
+      /* Minimal critical CSS for initial render */
+      *,*::before,*::after{box-sizing:border-box}
+      html{line-height:1.5;-webkit-text-size-adjust:100%;tab-size:4}
+      body{margin:0;font-family:Inter,IBM Plex Sans,system-ui,-apple-system,sans-serif;line-height:inherit}
+      #root{min-height:100vh;display:flex;flex-direction:column}
+      .loading-skeleton{background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:shimmer 1.5s infinite}
+      @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+    </style>
   </head>
 
   <body>

@@ -282,6 +282,7 @@ const DashboardFinanceiro = () => {
                   />
                   <Tooltip
                     content={<RichTooltip format="currency" showVariation={false} />}
+                    cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                   />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                     {waterfallData.map((entry, index) => (
@@ -334,6 +335,7 @@ const DashboardFinanceiro = () => {
                     />
                     <Tooltip
                       content={<RichTooltip format="currency" showVariation={false} />}
+                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                     />
                     <Bar dataKey="lucro" fill={colors[0]} radius={[0, 8, 8, 0]} />
                   </BarChart>
@@ -373,6 +375,7 @@ const DashboardFinanceiro = () => {
                     />
                     <Tooltip
                       content={<RichTooltip format="percent" showVariation={false} />}
+                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                     />
                     <ReferenceLine 
                       x={30} 

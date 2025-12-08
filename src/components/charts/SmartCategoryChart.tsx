@@ -15,6 +15,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  Sector,
 } from "recharts";
 import { standardChartColors, colorblindSafeColors } from "@/data/financial-mock-data";
 import { RichTooltip } from "./RichTooltip";
@@ -92,6 +93,7 @@ export const SmartCategoryChart = ({
             />
             <Tooltip
               content={<RichTooltip format={format} showVariation={false} />}
+              cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
             />
             <Bar dataKey="value" radius={[0, 8, 8, 0]}>
               {dataWithPercentages.map((_, index) => (
@@ -142,6 +144,33 @@ export const SmartCategoryChart = ({
             dataKey="value"
             label={({ name, percentage }) => `${name}: ${percentage?.toFixed(0)}%`}
             labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
+            activeShape={(props: any) => {
+              const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+              return (
+                <g>
+                  <defs>
+                    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                      <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                  </defs>
+                  <Sector
+                    cx={cx}
+                    cy={cy}
+                    innerRadius={innerRadius - 4}
+                    outerRadius={outerRadius + 8}
+                    startAngle={startAngle}
+                    endAngle={endAngle}
+                    fill={fill}
+                    filter="url(#glow)"
+                    style={{ transition: 'all 0.2s ease-out' }}
+                  />
+                </g>
+              );
+            }}
           >
             {dataWithPercentages.map((_, index) => (
               <Cell

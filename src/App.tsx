@@ -20,7 +20,6 @@ const Configuracoes = lazy(() => import("./pages/Configuracoes"));
 const GeoBotPage = lazy(() => import("./pages/GeoBot"));
 const Calendario = lazy(() => import("./pages/Calendario"));
 const CalendarioDetalhes = lazy(() => import("./pages/CalendarioDetalhes"));
-const Onboarding = lazy(() => import("./pages/Onboarding"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -45,7 +44,6 @@ const App = () => {
                 <Routes>
                   <Route path="/auth" element={<Auth />} />
                   <Route path="/aceitar-convite" element={<AceitarConvite />} />
-                  <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
                   <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
                   <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
                   <Route path="/dashboard-financeiro" element={<ProtectedRoute><DashboardFinanceiro /></ProtectedRoute>} />

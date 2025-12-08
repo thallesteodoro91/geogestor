@@ -92,11 +92,8 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Se não tem tenant e não está na página de onboarding, redireciona
-  if (!tenant && location.pathname !== "/onboarding") {
-    console.log('[ProtectedRoute] No tenant, redirecting to onboarding');
-    return <Navigate to="/onboarding" replace />;
-  }
+  // Tenant is now auto-created in TenantContext, so we just wait for it
+  // No more redirect to onboarding needed
 
   return <>{children}</>;
 };

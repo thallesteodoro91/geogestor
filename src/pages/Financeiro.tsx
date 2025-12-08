@@ -51,6 +51,7 @@ const Financeiro = () => {
                     />
                     <Tooltip
                       content={<RichTooltip format="currency" showVariation={false} />}
+                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                     />
                     <Bar
                       dataKey="valor"

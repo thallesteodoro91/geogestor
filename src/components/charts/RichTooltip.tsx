@@ -66,59 +66,74 @@ export const RichTooltip = ({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-popover p-3 shadow-lg",
-        "border-border/50 backdrop-blur-sm",
+        "relative rounded-xl border-2 p-4 shadow-2xl",
+        "bg-gradient-to-br from-card via-card to-background/95",
+        "border-primary/30 backdrop-blur-md",
+        "shadow-primary/20",
         className
       )}
       role="tooltip"
       aria-live="polite"
     >
-      {/* Label */}
-      {customLabel && (
-        <p className="text-sm font-medium text-foreground mb-1">
-          {customLabel}
+      {/* Colored side indicator */}
+      <div 
+        className={cn(
+          "absolute left-0 top-0 bottom-0 w-1 rounded-l-xl",
+          variation?.type === 'positive' && "bg-chart-positive",
+          variation?.type === 'negative' && "bg-chart-negative",
+          (!variation || variation.type === 'neutral') && "bg-primary"
+        )}
+        aria-hidden="true"
+      />
+
+      <div className="pl-2">
+        {/* Label */}
+        {customLabel && (
+          <p className="text-sm font-medium text-foreground mb-1">
+            {customLabel}
+          </p>
+        )}
+
+        {/* Value */}
+        <p className="text-xl font-bold text-foreground">
+          {formatValue(value, format)}
         </p>
-      )}
 
-      {/* Value */}
-      <p className="text-lg font-bold text-foreground">
-        {formatValue(value, format)}
-      </p>
+        {/* Variation */}
+        {showVariation && variation && (
+          <div
+            className={cn(
+              "flex items-center gap-1 mt-2 text-xs font-semibold",
+              variation.type === 'positive' && "text-chart-positive",
+              variation.type === 'negative' && "text-chart-negative",
+              variation.type === 'neutral' && "text-muted-foreground"
+            )}
+          >
+            <span className="text-base">
+              {variation.type === 'positive' && '↑'}
+              {variation.type === 'negative' && '↓'}
+              {variation.type === 'neutral' && '→'}
+            </span>
+            <span>
+              {Math.abs(variation.value).toFixed(1)}% vs anterior
+            </span>
+          </div>
+        )}
 
-      {/* Variation */}
-      {showVariation && variation && (
-        <div
-          className={cn(
-            "flex items-center gap-1 mt-1 text-xs font-medium",
-            variation.type === 'positive' && "text-chart-positive",
-            variation.type === 'negative' && "text-chart-negative",
-            variation.type === 'neutral' && "text-muted-foreground"
-          )}
-        >
-          <span>
-            {variation.type === 'positive' && '↑'}
-            {variation.type === 'negative' && '↓'}
-            {variation.type === 'neutral' && '→'}
-          </span>
-          <span>
-            {Math.abs(variation.value).toFixed(1)}% vs anterior
-          </span>
-        </div>
-      )}
+        {/* Previous value reference */}
+        {previousValue !== undefined && (
+          <p className="text-xs text-muted-foreground mt-1">
+            Anterior: {formatValue(previousValue, format)}
+          </p>
+        )}
 
-      {/* Previous value reference */}
-      {previousValue !== undefined && (
-        <p className="text-xs text-muted-foreground mt-1">
-          Anterior: {formatValue(previousValue, format)}
-        </p>
-      )}
-
-      {/* Context */}
-      {context && (
-        <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/50">
-          {context}
-        </p>
-      )}
+        {/* Context */}
+        {context && (
+          <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30">
+            {context}
+          </p>
+        )}
+      </div>
     </div>
   );
 };

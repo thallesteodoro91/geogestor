@@ -11,6 +11,13 @@ function slugify(text: string): string {
 }
 
 export async function createTenant(userId: string, companyName: string) {
+  // Verificar se há sessão ativa antes de prosseguir
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError || !session) {
+    throw new Error('Sessão não encontrada. Por favor, faça login novamente.');
+  }
+
   // Gerar slug único
   const baseSlug = slugify(companyName);
   const uniqueSlug = `${baseSlug}-${Date.now().toString(36)}`;

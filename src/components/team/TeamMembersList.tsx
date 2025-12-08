@@ -45,49 +45,44 @@ export function TeamMembersList() {
     queryFn: async () => {
       if (!tenant?.id) return [];
 
-      // Fetch members
-      const { data: membersData, error: membersError } = await supabase
-        .from("tenant_members")
-        .select("*")
-        .eq("tenant_id", tenant.id)
-        .order("joined_at", { ascending: true });
+      // Usar função RPC SECURITY DEFINER para evitar recursão RLS
+      const { data, error } = await supabase.rpc('get_tenant_members');
 
-      if (membersError) throw membersError;
+      if (error) throw error;
 
-      // Fetch profiles for all members
-      const userIds = membersData.map(m => m.user_id);
-      const { data: profilesData } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url")
-        .in("id", userIds);
-
-      // Map profiles to members
-      const membersWithProfiles = membersData.map(member => ({
-        ...member,
-        profile: profilesData?.find(p => p.id === member.user_id) || null
-      }));
-
-      return membersWithProfiles as TeamMember[];
+      // Mapear para o formato esperado pelo componente
+      return (data || []).map((m: any) => ({
+        id: m.id,
+        user_id: m.user_id,
+        role: m.role,
+        joined_at: m.joined_at,
+        profile: {
+          id: m.user_id,
+          full_name: m.full_name,
+          email: m.email,
+          avatar_url: m.avatar_url
+        }
+      })) as TeamMember[];
     },
     enabled: !!tenant?.id,
   });
 
   const { data: currentMember } = useQuery({
-    queryKey: ["current-member", tenant?.id, user?.id],
+    queryKey: ["current-member", user?.id],
     queryFn: async () => {
-      if (!tenant?.id || !user?.id) return null;
+      if (!user?.id) return null;
 
+      // Usuário pode ler seu próprio registro diretamente
       const { data, error } = await supabase
         .from("tenant_members")
         .select("role")
-        .eq("tenant_id", tenant.id)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
       if (error) return null;
       return data;
     },
-    enabled: !!tenant?.id && !!user?.id,
+    enabled: !!user?.id,
   });
 
   const isAdmin = currentMember?.role === "admin";

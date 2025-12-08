@@ -17,6 +17,7 @@ import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
 export default function Cadastros() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [searchPropriedade, setSearchPropriedade] = useState("");
   const [clientes, setClientes] = useState<any[]>([]);
   const [propriedades, setPropriedades] = useState<any[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
@@ -101,6 +102,13 @@ export default function Cadastros() {
     c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.cpf?.includes(searchTerm) ||
     c.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredPropriedades = propriedades.filter(p => 
+    p.nome_da_propriedade?.toLowerCase().includes(searchPropriedade.toLowerCase()) ||
+    p.dim_cliente?.nome?.toLowerCase().includes(searchPropriedade.toLowerCase()) ||
+    p.cidade?.toLowerCase().includes(searchPropriedade.toLowerCase()) ||
+    p.municipio?.toLowerCase().includes(searchPropriedade.toLowerCase())
   );
 
   return (
@@ -229,6 +237,15 @@ export default function Cadastros() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome, cliente ou cidade..."
+                    className="pl-9"
+                    value={searchPropriedade}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchPropriedade(e.target.value)}
+                  />
+                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -246,14 +263,14 @@ export default function Cadastros() {
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
                         </TableRow>
-                      ) : propriedades.length === 0 ? (
+                      ) : filteredPropriedades.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                             Nenhuma propriedade encontrada
                           </TableCell>
                         </TableRow>
                       ) : (
-                        propriedades.map((prop) => (
+                        filteredPropriedades.map((prop) => (
                           <TableRow key={prop.id_propriedade}>
                             <TableCell className="font-medium">{prop.nome_da_propriedade}</TableCell>
                             <TableCell>

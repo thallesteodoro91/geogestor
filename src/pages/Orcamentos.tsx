@@ -39,7 +39,7 @@ export default function Orcamentos() {
         .from('fato_orcamento')
         .select(`
           *,
-          dim_cliente(nome),
+          dim_cliente(nome, email, telefone),
           fato_servico(nome_do_servico)
         `)
         .order('data_orcamento', { ascending: false });
@@ -77,7 +77,7 @@ export default function Orcamentos() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('dim_empresa')
-        .select('template_orcamento_url, template_config')
+        .select('nome, template_orcamento_url, template_config')
         .limit(1)
         .maybeSingle();
       if (error) throw error;
@@ -203,30 +203,28 @@ export default function Orcamentos() {
   };
 
   const handleExportPDF = async (orcamento: any) => {
-    if (!empresa?.template_orcamento_url) {
-      toast.error('Configure o template de orçamento nas Configurações primeiro!');
-      return;
-    }
-
     setGeneratingPDF(orcamento.id_orcamento);
 
     try {
       const cliente = orcamento.dim_cliente || null;
       const servico = orcamento.fato_servico || null;
-      const config = (empresa.template_config || {}) as any;
+      const templateUrl = empresa?.template_orcamento_url || null;
+      const config = (empresa?.template_config || null) as any;
+      const empresaData = empresa ? { nome: empresa.nome } : null;
 
       await generateOrcamentoPDF(
         orcamento,
         cliente,
         servico,
-        empresa.template_orcamento_url,
-        config
+        templateUrl,
+        config,
+        empresaData
       );
 
       toast.success('PDF gerado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao gerar PDF:', error);
-      toast.error('Erro ao gerar PDF. Verifique o template e tente novamente.');
+      toast.error('Erro ao gerar PDF. Tente novamente.');
     } finally {
       setGeneratingPDF(null);
     }

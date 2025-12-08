@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartTitle } from "./ChartTitle";
-import { RichTooltip } from "./RichTooltip";
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Cell } from "recharts";
+import { ChartTooltip } from "./ChartTooltip";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, Cell } from "recharts";
 
 interface WaterfallChartProps {
   data: Array<{
@@ -45,10 +45,7 @@ export const WaterfallChart = ({ data, title }: WaterfallChartProps) => {
               stroke="hsl(var(--muted-foreground))"
               fontSize={12}
             />
-            <Tooltip 
-              content={<RichTooltip format="currency" showVariation={false} />}
-              cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
-            />
+            <ChartTooltip format="currency" />
             <Legend />
             <Bar dataKey="value" fill="hsl(262, 83%, 65%)" name="Valor">
               {processedData.map((entry, index) => (

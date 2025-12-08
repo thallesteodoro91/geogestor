@@ -221,3 +221,40 @@ export function calcularVariacaoPercentual(
   if (valorAnterior === 0) return valorAtual > 0 ? 100 : 0;
   return ((valorAtual - valorAnterior) / valorAnterior) * 100;
 }
+
+/**
+ * Calcula markup multiplicador
+ * Fórmula: Markup = 100 / [100 - (DV + DF + ML)]
+ * 
+ * @param despesasVariaveis - DV: % de despesas variáveis (impostos, comissões)
+ * @param despesasFixas - DF: % de despesas fixas (administrativas, financeiras)
+ * @param margemLucro - ML: % da margem de lucro desejada
+ * @returns Markup multiplicador (ex: 1.5 significa multiplicar custo por 1.5)
+ */
+export function calcularMarkupMultiplicador(
+  despesasVariaveis: number,
+  despesasFixas: number,
+  margemLucro: number
+): number {
+  const denominador = 100 - (despesasVariaveis + despesasFixas + margemLucro);
+  if (denominador <= 0) return 0; // Evitar divisão por zero ou negativo
+  return 100 / denominador;
+}
+
+/**
+ * Calcula margem de lucro a partir do markup
+ * Fórmula inversa: ML = 100 - (DV + DF) - (100 / Markup)
+ * 
+ * @param markup - Markup multiplicador
+ * @param despesasVariaveis - DV: % de despesas variáveis
+ * @param despesasFixas - DF: % de despesas fixas
+ * @returns Margem de lucro em percentual
+ */
+export function calcularMargemDoMarkup(
+  markup: number,
+  despesasVariaveis: number,
+  despesasFixas: number
+): number {
+  if (markup <= 0) return 0;
+  return 100 - despesasVariaveis - despesasFixas - (100 / markup);
+}

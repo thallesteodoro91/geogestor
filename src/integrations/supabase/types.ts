@@ -534,6 +534,7 @@ export type Database = {
           id_orcamento: string
           id_propriedade: string | null
           id_servico: string | null
+          incluir_imposto: boolean | null
           incluir_marco: boolean | null
           lucro_esperado: number | null
           marco_quantidade: number | null
@@ -541,6 +542,7 @@ export type Database = {
           marco_valor_unitario: number | null
           margem_esperada: number | null
           orcamento_convertido: boolean | null
+          percentual_imposto: number | null
           quantidade: number
           receita_esperada: number | null
           receita_esperada_imposto: number | null
@@ -567,6 +569,7 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_imposto?: boolean | null
           incluir_marco?: boolean | null
           lucro_esperado?: number | null
           marco_quantidade?: number | null
@@ -574,6 +577,7 @@ export type Database = {
           marco_valor_unitario?: number | null
           margem_esperada?: number | null
           orcamento_convertido?: boolean | null
+          percentual_imposto?: number | null
           quantidade?: number
           receita_esperada?: number | null
           receita_esperada_imposto?: number | null
@@ -600,6 +604,7 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_imposto?: boolean | null
           incluir_marco?: boolean | null
           lucro_esperado?: number | null
           marco_quantidade?: number | null
@@ -607,6 +612,7 @@ export type Database = {
           marco_valor_unitario?: number | null
           margem_esperada?: number | null
           orcamento_convertido?: boolean | null
+          percentual_imposto?: number | null
           quantidade?: number
           receita_esperada?: number | null
           receita_esperada_imposto?: number | null

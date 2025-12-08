@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin } from "lucide-react";
+import { Plus, Trash2, MapPin, Info } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 
 interface OrcamentoDialogProps {
@@ -34,13 +34,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         id_servico: "",
         quantidade: 1,
         valor_unitario: 0,
-        valor_imposto: 0,
         desconto: 0,
         custo_servico: 0
       }],
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
+      incluir_imposto: orcamento?.incluir_imposto || false,
+      percentual_imposto: orcamento?.percentual_imposto || 0,
       orcamento_convertido: orcamento?.orcamento_convertido || false,
       faturamento: orcamento?.faturamento || false,
       data_do_faturamento: orcamento?.data_do_faturamento || "",
@@ -61,6 +62,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
   const watchedMarcoValorUnitario = watch("marco_valor_unitario");
+  const watchedIncluirImposto = watch("incluir_imposto");
+  const watchedPercentualImposto = watch("percentual_imposto");
 
   // Função para buscar o nome do serviço selecionado
   const getServicoNome = (servicoId: string) => {
@@ -83,13 +86,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             id_servico: "",
             quantidade: 1,
             valor_unitario: 0,
-            valor_imposto: 0,
             desconto: 0,
             custo_servico: 0
           }],
           incluir_marco: orcamento.incluir_marco || false,
           marco_quantidade: orcamento.marco_quantidade || 0,
           marco_valor_unitario: orcamento.marco_valor_unitario || 0,
+          incluir_imposto: orcamento.incluir_imposto || false,
+          percentual_imposto: orcamento.percentual_imposto || 0,
           orcamento_convertido: orcamento.orcamento_convertido,
           faturamento: orcamento.faturamento,
           data_do_faturamento: orcamento.data_do_faturamento,
@@ -160,8 +164,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     // Receita total incluindo marcos
     const receitaEsperada = receitaEsperadaServicos + marcoValorTotal;
 
-    // Total de Impostos
-    const totalImpostos = (watchedItens || []).reduce((acc, item) => acc + toNum(item?.valor_imposto), 0);
+    // Total de Impostos (calculado por percentual sobre a receita esperada)
+    const percentualImposto = watchedIncluirImposto ? toNum(watchedPercentualImposto) : 0;
+    const totalImpostos = receitaEsperada * (percentualImposto / 100);
     
     // Receita Esperada + Impostos
     const receitaComImposto = receitaEsperada + totalImpostos;
@@ -176,14 +181,15 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       custoTotal, 
       receitaEsperada, 
       marcoValorTotal,
-      totalImpostos, 
+      totalImpostos,
+      percentualImposto,
       receitaComImposto,
       lucroEsperado, 
       margemEsperada 
     };
   };
 
-  const { custoTotal, receitaEsperada, marcoValorTotal, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, receitaEsperada, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const onSubmit = async (data: any) => {
     try {
@@ -193,6 +199,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         quantidade: data.itens.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
         valor_unitario: receitaEsperada / data.itens.length,
         desconto: data.itens.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
+        incluir_imposto: data.incluir_imposto,
+        percentual_imposto: data.incluir_imposto ? data.percentual_imposto : 0,
         valor_imposto: totalImpostos,
         receita_esperada: receitaEsperada,
         receita_esperada_imposto: receitaComImposto,
@@ -243,7 +251,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         id_servico: item.id_servico,
         quantidade: item.quantidade,
         valor_unitario: item.valor_unitario,
-        valor_imposto: item.valor_imposto,
         desconto: item.desconto,
         valor_mao_obra: item.custo_servico
       }));
@@ -346,7 +353,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   id_servico: "",
                   quantidade: 1,
                   valor_unitario: 0,
-                  valor_imposto: 0,
                   desconto: 0,
                   custo_servico: 0
                 })}
@@ -377,7 +383,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   )}
                 </div>
 
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Quantidade</Label>
                     <Input
@@ -421,18 +427,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                       {...register(`itens.${index}.valor_unitario` as const)}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Valor Imposto</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...register(`itens.${index}.valor_imposto` as const)}
-                    />
-                  </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Desconto</Label>
                     <Input
@@ -509,7 +506,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 <p className="font-semibold">R$ {(receitaEsperada - marcoValorTotal).toFixed(2)}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Impostos:</span>
+                <span className="text-muted-foreground">
+                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}:
+                </span>
                 <p className="font-semibold">R$ {totalImpostos.toFixed(2)}</p>
               </div>
             </div>
@@ -544,6 +543,40 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           {/* III. Situação e Faturamento */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Situação e Faturamento</h3>
+            
+            {/* Toggle de Imposto */}
+            <div className="p-4 border rounded-lg space-y-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Info className="h-3 w-3" />
+                <span>A inclusão de impostos não é obrigatória.</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <span className="font-medium">Incluir Imposto?</span>
+                  <p className="text-xs text-muted-foreground">Aplicar percentual de imposto sobre a receita</p>
+                </div>
+                <Switch 
+                  checked={watchedIncluirImposto}
+                  onCheckedChange={(checked) => setValue("incluir_imposto", checked)}
+                />
+              </div>
+              
+              {watchedIncluirImposto && (
+                <div className="pt-2">
+                  <div className="space-y-2">
+                    <Label>Percentual de Imposto (%)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      {...register("percentual_imposto", { valueAsNumber: true })} 
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

@@ -52,7 +52,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const fetchTenantData = async () => {
     if (!user) {
-      console.log('[TenantContext] No user, clearing tenant data');
       setTenant(null);
       setSubscription(null);
       setIsLoading(false);
@@ -63,32 +62,24 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      console.log('[TenantContext] Fetching tenant for user:', user.id);
-
-      // Buscar tenant do usuário - agora a política permite ler seu próprio registro
+      // Buscar tenant do usuário
       const { data: memberData, error: memberError } = await supabase
         .from('tenant_members')
         .select('tenant_id')
         .eq('user_id', user.id)
         .maybeSingle();
 
-      console.log('[TenantContext] Member query result:', { memberData, memberError });
-
       if (memberError) {
-        console.error('[TenantContext] Error fetching member:', memberError);
         throw memberError;
       }
 
       if (!memberData) {
-        console.log('[TenantContext] No tenant_member found for user, needs onboarding');
         // Usuário não tem tenant associado ainda
         setTenant(null);
         setSubscription(null);
         setIsLoading(false);
         return;
       }
-
-      console.log('[TenantContext] Found tenant_id:', memberData.tenant_id);
 
       // Buscar dados do tenant
       const { data: tenantData, error: tenantError } = await supabase

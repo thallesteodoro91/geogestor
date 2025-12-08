@@ -64,8 +64,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
   // Função para buscar o nome do serviço selecionado
   const getServicoNome = (servicoId: string) => {
-    const servico = servicos.find(s => s.id_servico === servicoId);
-    return servico?.nome_do_servico || null;
+    const servico = servicos.find(s => s.id_tiposervico === servicoId);
+    return servico?.nome || null;
   };
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const fetchData = async () => {
     const [clientesRes, servicosRes] = await Promise.all([
       supabase.from('dim_cliente').select('id_cliente, nome').order('nome'),
-      supabase.from('fato_servico').select('id_servico, nome_do_servico, custo_servico').order('nome_do_servico')
+      supabase.from('dim_tiposervico').select('id_tiposervico, nome, valor_sugerido, dim_categoria_servico(nome)').eq('ativo', true).order('nome')
     ]);
 
     if (clientesRes.data) setClientes(clientesRes.data);
@@ -385,15 +385,22 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <Label>Serviço</Label>
                     <Select
                       value={watchedItens[index]?.id_servico}
-                      onValueChange={(value) => setValue(`itens.${index}.id_servico`, value)}
+                      onValueChange={(value) => {
+                        setValue(`itens.${index}.id_servico`, value);
+                        // Auto-fill valor_sugerido when service is selected
+                        const selectedServico = servicos.find(s => s.id_tiposervico === value);
+                        if (selectedServico?.valor_sugerido) {
+                          setValue(`itens.${index}.valor_unitario`, selectedServico.valor_sugerido);
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
                         {servicos.map((servico) => (
-                          <SelectItem key={servico.id_servico} value={servico.id_servico}>
-                            {servico.nome_do_servico}
+                          <SelectItem key={servico.id_tiposervico} value={servico.id_tiposervico}>
+                            {servico.dim_categoria_servico?.nome ? `${servico.dim_categoria_servico.nome} - ` : ''}{servico.nome}
                           </SelectItem>
                         ))}
                       </SelectContent>

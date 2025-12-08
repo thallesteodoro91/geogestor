@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Trash2, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,20 +14,28 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
+import { TipoServicoDialog } from "@/components/cadastros/TipoServicoDialog";
+import { CategoriaServicoDialog } from "@/components/cadastros/CategoriaServicoDialog";
 
 export default function Cadastros() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [searchPropriedade, setSearchPropriedade] = useState("");
+  const [searchServico, setSearchServico] = useState("");
+  const [searchCategoria, setSearchCategoria] = useState("");
   const [clientes, setClientes] = useState<any[]>([]);
   const [propriedades, setPropriedades] = useState<any[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
+  const [tiposServico, setTiposServico] = useState<any[]>([]);
+  const [categorias, setCategorias] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   
   // Dialog states
   const [clienteDialog, setClienteDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [propriedadeDialog, setPropriedadeDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [tipoDespesaDialog, setTipoDespesaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [tipoServicoDialog, setTipoServicoDialog] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [categoriaDialog, setCategoriaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   
   // Delete dialog
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; table?: string; id?: string }>({ open: false });
@@ -38,15 +47,19 @@ export default function Cadastros() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [clientesRes, propriedadesRes, tiposDespesaRes] = await Promise.all([
+      const [clientesRes, propriedadesRes, tiposDespesaRes, tiposServicoRes, categoriasRes] = await Promise.all([
         supabase.from('dim_cliente').select('*').order('nome'),
         supabase.from('dim_propriedade').select('*, dim_cliente(nome)').order('nome_da_propriedade'),
         supabase.from('dim_tipodespesa').select('*').order('categoria'),
+        supabase.from('dim_tiposervico').select('*, dim_categoria_servico(nome)').order('nome'),
+        supabase.from('dim_categoria_servico').select('*').order('nome'),
       ]);
 
       if (clientesRes.data) setClientes(clientesRes.data);
       if (propriedadesRes.data) setPropriedades(propriedadesRes.data);
       if (tiposDespesaRes.data) setTiposDespesa(tiposDespesaRes.data);
+      if (tiposServicoRes.data) setTiposServico(tiposServicoRes.data);
+      if (categoriasRes.data) setCategorias(categoriasRes.data);
     } catch (error: any) {
       toast.error("Erro ao carregar dados");
     } finally {
@@ -78,6 +91,18 @@ export default function Cadastros() {
             .from('dim_tipodespesa')
             .delete()
             .eq('id_tipodespesa', deleteDialog.id));
+          break;
+        case 'tiposervico':
+          ({ error } = await supabase
+            .from('dim_tiposervico')
+            .delete()
+            .eq('id_tiposervico', deleteDialog.id));
+          break;
+        case 'categoria':
+          ({ error } = await supabase
+            .from('dim_categoria_servico')
+            .delete()
+            .eq('id_categoria', deleteDialog.id));
           break;
         default:
           return;
@@ -111,18 +136,33 @@ export default function Cadastros() {
     p.municipio?.toLowerCase().includes(searchPropriedade.toLowerCase())
   );
 
+  const filteredTiposServico = tiposServico.filter(s =>
+    s.nome?.toLowerCase().includes(searchServico.toLowerCase()) ||
+    s.dim_categoria_servico?.nome?.toLowerCase().includes(searchServico.toLowerCase())
+  );
+
+  const filteredCategorias = categorias.filter(c =>
+    c.nome?.toLowerCase().includes(searchCategoria.toLowerCase())
+  );
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
+  };
+
   return (
     <AppLayout>
       <div className="space-y-8">
         <div>
           <h1 className="text-4xl font-heading font-bold text-foreground">Base de Dados</h1>
-          <p className="text-muted-foreground mt-2">Gerenciar clientes, propriedades e tipos de despesa</p>
+          <p className="text-muted-foreground mt-2">Gerenciar clientes, propriedades, serviços e categorias</p>
         </div>
 
         <Tabs defaultValue="clientes" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="clientes">Clientes</TabsTrigger>
             <TabsTrigger value="propriedades">Propriedades</TabsTrigger>
+            <TabsTrigger value="servicos">Serviços</TabsTrigger>
+            <TabsTrigger value="categorias">Categorias</TabsTrigger>
             <TabsTrigger value="despesas">Tipos de Despesa</TabsTrigger>
           </TabsList>
 
@@ -316,6 +356,164 @@ export default function Cadastros() {
             </Card>
           </TabsContent>
 
+          {/* Serviços */}
+          <TabsContent value="servicos" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Lista de Serviços</CardTitle>
+                  <Button className="gap-2" onClick={() => setTipoServicoDialog({ open: true })}>
+                    <Plus className="h-4 w-4" />
+                    Adicionar Serviço
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome ou categoria..."
+                    className="pl-9"
+                    value={searchServico}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchServico(e.target.value)}
+                  />
+                </div>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead>Valor Sugerido</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8">Carregando...</TableCell>
+                        </TableRow>
+                      ) : filteredTiposServico.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            Nenhum serviço encontrado
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredTiposServico.map((servico) => (
+                          <TableRow key={servico.id_tiposervico}>
+                            <TableCell className="font-medium">{servico.nome}</TableCell>
+                            <TableCell>{servico.dim_categoria_servico?.nome || '-'}</TableCell>
+                            <TableCell>{formatCurrency(servico.valor_sugerido)}</TableCell>
+                            <TableCell>
+                              <Badge variant={servico.ativo ? "default" : "secondary"}>
+                                {servico.ativo ? "Ativo" : "Inativo"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setTipoServicoDialog({ open: true, data: servico })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'tiposervico', id: servico.id_tiposervico })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Categorias */}
+          <TabsContent value="categorias" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Lista de Categorias</CardTitle>
+                  <Button className="gap-2" onClick={() => setCategoriaDialog({ open: true })}>
+                    <Plus className="h-4 w-4" />
+                    Adicionar Categoria
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nome..."
+                    className="pl-9"
+                    value={searchCategoria}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchCategoria(e.target.value)}
+                  />
+                </div>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-8">Carregando...</TableCell>
+                        </TableRow>
+                      ) : filteredCategorias.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                            Nenhuma categoria encontrada
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredCategorias.map((categoria) => (
+                          <TableRow key={categoria.id_categoria}>
+                            <TableCell className="font-medium">{categoria.nome}</TableCell>
+                            <TableCell>{categoria.descricao || '-'}</TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setCategoriaDialog({ open: true, data: categoria })}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={() => setDeleteDialog({ open: true, table: 'categoria', id: categoria.id_categoria })}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* Tipos de Despesa */}
           <TabsContent value="despesas" className="space-y-6">
             <Card>
@@ -393,14 +591,14 @@ export default function Cadastros() {
         cliente={clienteDialog.data}
         onSuccess={fetchData}
       />
-      
-      <PropriedadeDialog
+
+      <PropriedadeDialog 
         open={propriedadeDialog.open} 
         onOpenChange={(open) => setPropriedadeDialog({ open })}
         propriedade={propriedadeDialog.data}
         onSuccess={fetchData}
       />
-      
+
       <TipoDespesaDialog 
         open={tipoDespesaDialog.open} 
         onOpenChange={(open) => setTipoDespesaDialog({ open })}
@@ -408,18 +606,33 @@ export default function Cadastros() {
         onSuccess={fetchData}
       />
 
-      {/* Delete Confirmation */}
+      <TipoServicoDialog 
+        open={tipoServicoDialog.open} 
+        onOpenChange={(open) => setTipoServicoDialog({ open })}
+        tipoServico={tipoServicoDialog.data}
+        onSuccess={fetchData}
+      />
+
+      <CategoriaServicoDialog 
+        open={categoriaDialog.open} 
+        onOpenChange={(open) => setCategoriaDialog({ open })}
+        categoria={categoriaDialog.data}
+        onSuccess={fetchData}
+      />
+
       <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog({ open })}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
+              Esta ação não pode ser desfeita. Tem certeza que deseja excluir este registro?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>Excluir</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

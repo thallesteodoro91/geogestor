@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      dim_categoria_servico: {
+        Row: {
+          created_at: string | null
+          descricao: string | null
+          id_categoria: string
+          nome: string
+          tenant_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria?: string
+          nome: string
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria?: string
+          nome?: string
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dim_categoria_servico_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dim_cliente: {
         Row: {
           anotacoes: string | null
@@ -310,6 +345,57 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "dim_tipodespesa_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dim_tiposervico: {
+        Row: {
+          ativo: boolean | null
+          created_at: string | null
+          descricao: string | null
+          id_categoria: string | null
+          id_tiposervico: string
+          nome: string
+          tenant_id: string | null
+          updated_at: string | null
+          valor_sugerido: number | null
+        }
+        Insert: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria?: string | null
+          id_tiposervico?: string
+          nome: string
+          tenant_id?: string | null
+          updated_at?: string | null
+          valor_sugerido?: number | null
+        }
+        Update: {
+          ativo?: boolean | null
+          created_at?: string | null
+          descricao?: string | null
+          id_categoria?: string | null
+          id_tiposervico?: string
+          nome?: string
+          tenant_id?: string | null
+          updated_at?: string | null
+          valor_sugerido?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dim_tiposervico_id_categoria_fkey"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "dim_categoria_servico"
+            referencedColumns: ["id_categoria"]
+          },
+          {
+            foreignKeyName: "dim_tiposervico_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

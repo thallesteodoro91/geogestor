@@ -4,8 +4,13 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
+import { SmartCategoryChart } from "@/components/charts/SmartCategoryChart";
+import { RichTooltip } from "@/components/charts/RichTooltip";
+import { TimeGranularityControl, DensityToggle, ColorblindToggle } from "@/components/controls";
 import { useKPIs } from "@/hooks/useKPIs";
+import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
+import { standardChartColors, colorblindSafeColors } from "@/data/financial-mock-data";
 import {
   BarChart,
   Bar,
@@ -14,8 +19,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
   Cell,
   ReferenceLine,
 } from "recharts";
@@ -26,10 +29,11 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-const COLORS = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-
 const DashboardFinanceiro = () => {
   const { data: kpis, isLoading: kpisLoading } = useKPIs();
+  const { colorblindMode, density } = useChartSettings();
+  
+  const colors = colorblindMode ? colorblindSafeColors : standardChartColors;
 
   // Buscar dados de lucro por cliente
   const { data: lucroPorCliente = [], isLoading: clientesLoading } = useQuery({
@@ -47,7 +51,7 @@ const DashboardFinanceiro = () => {
 
       if (error) throw error;
 
-      const grouped = data.reduce((acc: any[], curr) => {
+      const grouped = data.reduce((acc: { cliente: string; lucro: number }[], curr) => {
         const cliente = curr.dim_cliente.nome;
         const existing = acc.find((item) => item.cliente === cliente);
         if (existing) {
@@ -102,7 +106,7 @@ const DashboardFinanceiro = () => {
 
       if (error) throw error;
 
-      const grouped = data.reduce((acc: any[], curr) => {
+      const grouped = data.reduce((acc: { name: string; value: number }[], curr) => {
         const categoria = curr.dim_tipodespesa.categoria;
         const existing = acc.find((item) => item.name === categoria);
         if (existing) {
@@ -122,148 +126,162 @@ const DashboardFinanceiro = () => {
 
   // Dados do Waterfall Chart - Fluxo Financeiro
   const waterfallData = [
-    { name: "Receita", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-1))" },
-    { name: "Custos", valor: -(kpis?.custo_total || 0), fill: "hsl(var(--destructive))" },
-    { name: "Despesas", valor: -(kpis?.total_despesas || 0), fill: "hsl(var(--warning))" },
-    { name: "Lucro", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--success))" },
+    { name: "Receita", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-primary))" },
+    { name: "Custos", valor: -(kpis?.custo_total || 0), fill: "hsl(var(--chart-negative))" },
+    { name: "Despesas", valor: -(kpis?.total_despesas || 0), fill: "hsl(var(--chart-warning))" },
+    { name: "Lucro", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--chart-positive))" },
   ];
-
-  const totalDespesas = custosPorCategoria.reduce((acc, curr) => acc + curr.value, 0);
 
   const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
 
+  // Density-based spacing classes
+  const sectionSpacing = density === 'compact' ? 'space-y-4' : 'space-y-6';
+  const gridGap = density === 'compact' ? 'gap-4' : 'gap-6';
+  const cardPadding = density === 'compact' ? 'p-4' : 'p-6';
+
   return (
     <AppLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">
-            Dashboard Financeiro
-          </h1>
-          <p className="text-base text-muted-foreground">
-            Análise contábil detalhada e performance financeira
-          </p>
-        </div>
+      <div className={sectionSpacing}>
+        {/* Header with Controls */}
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-1">
+            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
+              Dashboard Financeiro
+            </h1>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Análise contábil detalhada e performance financeira
+            </p>
+          </div>
+          
+          {/* Chart Controls */}
+          <nav className="flex items-center gap-2" aria-label="Controles de visualização">
+            <TimeGranularityControl size="sm" />
+            <DensityToggle />
+            <ColorblindToggle />
+          </nav>
+        </header>
 
-        {/* Indicadores Principais */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          {kpisLoading ? (
-            <>
-              <SkeletonKPI />
-              <SkeletonKPI />
-              <SkeletonKPI />
-              <SkeletonKPI />
-            </>
-          ) : (
-            <>
-              <KPICard
-                title="Receita Total"
-                value={formatCurrency(kpis?.receita_total || 0)}
-                icon={DollarSign}
-                subtitle={`${kpis?.total_orcamentos || 0} orçamentos emitidos`}
-                changeType="neutral"
-                description="Soma total de todas as receitas esperadas dos orçamentos"
-                calculation="Σ (Receita Esperada de todos os Orçamentos)"
-              />
+        {/* Main KPIs Section - First in DOM for accessibility */}
+        <section aria-labelledby="kpis-heading" role="region">
+          <h2 id="kpis-heading" className="sr-only">Indicadores Principais</h2>
+          <div className={`grid md:grid-cols-2 lg:grid-cols-4 ${gridGap}`}>
+            {kpisLoading ? (
+              <>
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+                <SkeletonKPI />
+              </>
+            ) : (
+              <>
+                <KPICard
+                  title="Receita Total"
+                  value={formatCurrency(kpis?.receita_total || 0)}
+                  icon={DollarSign}
+                  subtitle={`${kpis?.total_orcamentos || 0} orçamentos emitidos`}
+                  changeType="neutral"
+                  description="Soma total de todas as receitas esperadas dos orçamentos"
+                  calculation="Σ (Receita Esperada de todos os Orçamentos)"
+                />
 
-              <KPICard
-                title="Lucro Líquido"
-                value={formatCurrency(kpis?.lucro_liquido || 0)}
-                icon={TrendingUp}
-                subtitle={`Margem: ${formatPercent(kpis?.margem_liquida_percent || 0)}`}
-                changeType="positive"
-                description="Lucro final após todas as deduções de custos e despesas"
-                calculation="Receita Total - Custos Totais - Despesas Operacionais"
-              />
+                <KPICard
+                  title="Lucro Líquido"
+                  value={formatCurrency(kpis?.lucro_liquido || 0)}
+                  icon={TrendingUp}
+                  subtitle={`Margem: ${formatPercent(kpis?.margem_liquida_percent || 0)}`}
+                  changeType="positive"
+                  description="Lucro final após todas as deduções de custos e despesas"
+                  calculation="Receita Total - Custos Totais - Despesas Operacionais"
+                />
 
-              <KPICard
-                title="Margem Contribuição"
-                value={formatPercent(kpis?.margem_contribuicao_percent || 0)}
-                icon={Target}
-                subtitle="Receita - Custos Variáveis"
-                changeType="positive"
-                description="Percentual da receita disponível para cobrir custos fixos e gerar lucro"
-                calculation="((Receita - Custos Variáveis) / Receita) × 100"
-              />
+                <KPICard
+                  title="Margem Contribuição"
+                  value={formatPercent(kpis?.margem_contribuicao_percent || 0)}
+                  icon={Target}
+                  subtitle="Receita - Custos Variáveis"
+                  changeType="positive"
+                  description="Percentual da receita disponível para cobrir custos fixos e gerar lucro"
+                  calculation="((Receita - Custos Variáveis) / Receita) × 100"
+                />
 
-              <KPICard
-                title="Ponto de Equilíbrio"
-                value={formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
-                icon={AlertCircle}
-                subtitle="Receita mínima necessária"
-                changeType="neutral"
-                description="Receita necessária para cobrir todos os custos sem gerar lucro nem prejuízo"
-                calculation="Custos Fixos / Margem de Contribuição (%)"
-              />
-            </>
-          )}
-        </div>
+                <KPICard
+                  title="Ponto de Equilíbrio"
+                  value={formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
+                  icon={AlertCircle}
+                  subtitle="Receita mínima necessária"
+                  changeType="neutral"
+                  description="Receita necessária para cobrir todos os custos sem gerar lucro nem prejuízo"
+                  calculation="Custos Fixos / Margem de Contribuição (%)"
+                />
+              </>
+            )}
+          </div>
+        </section>
 
         {/* Análise Textual */}
-        <Card className="bg-gradient-to-br from-card to-card/80 interactive-lift">
-          <CardHeader>
-            <CardTitle>Resumo Executivo</CardTitle>
-            <CardDescription>Análise automática do período</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-foreground leading-relaxed">
-              A margem média da empresa neste período foi de{" "}
-              <span className="font-bold text-accent">
-                {formatPercent(kpis?.margem_contribuicao_percent || 0)}
-              </span>
-              , com lucro líquido de{" "}
-              <span className="font-bold text-success">
-                {formatCurrency(kpis?.lucro_liquido || 0)}
-              </span>
-              . O ponto de equilíbrio está em{" "}
-              <span className="font-bold text-warning">
-                {formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
-              </span>{" "}
-              reais. A receita total do período{" "}
-              {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0) ? (
-                <span className="font-bold text-success">superou o ponto de equilíbrio</span>
-              ) : (
-                <span className="font-bold text-destructive">está abaixo do ponto de equilíbrio</span>
-              )}
-              , demonstrando{" "}
-              {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0)
-                ? "uma operação saudável e sustentável"
-                : "necessidade de atenção aos custos ou aumento de receita"}.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Gráficos - Primeira Linha */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Waterfall Chart - Fluxo Financeiro */}
-          <Card className="interactive-lift">
+        <section aria-labelledby="summary-heading" role="region">
+          <Card className="bg-gradient-to-br from-card to-card/80 interactive-lift">
             <CardHeader>
-              <CardTitle>Fluxo Financeiro</CardTitle>
-              <CardDescription>Da receita ao lucro líquido</CardDescription>
+              <CardTitle id="summary-heading">Resumo Executivo</CardTitle>
+              <CardDescription>Análise automática do período</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+              <p className="text-foreground leading-relaxed">
+                A margem média da empresa neste período foi de{" "}
+                <span className="font-bold text-accent">
+                  {formatPercent(kpis?.margem_contribuicao_percent || 0)}
+                </span>
+                , com lucro líquido de{" "}
+                <span className="font-bold text-success">
+                  {formatCurrency(kpis?.lucro_liquido || 0)}
+                </span>
+                . O ponto de equilíbrio está em{" "}
+                <span className="font-bold text-warning">
+                  {formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
+                </span>{" "}
+                reais. A receita total do período{" "}
+                {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0) ? (
+                  <span className="font-bold text-success">superou o ponto de equilíbrio</span>
+                ) : (
+                  <span className="font-bold text-destructive">está abaixo do ponto de equilíbrio</span>
+                )}
+                , demonstrando{" "}
+                {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0)
+                  ? "uma operação saudável e sustentável"
+                  : "necessidade de atenção aos custos ou aumento de receita"}.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Gráficos - Primeira Linha */}
+        <section className={`grid lg:grid-cols-2 ${gridGap}`} aria-label="Gráficos financeiros principais">
+          {/* Waterfall Chart - Fluxo Financeiro */}
+          <Card className="interactive-lift" role="region" aria-labelledby="waterfall-title">
+            <CardHeader>
+              <CardTitle id="waterfall-title">Fluxo Financeiro</CardTitle>
+              <CardDescription>Da receita ao lucro líquido</CardDescription>
+            </CardHeader>
+            <CardContent className={cardPadding}>
+              <ResponsiveContainer width="100%" height={density === 'compact' ? 250 : 300}>
                 <BarChart data={waterfallData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
                   <XAxis 
                     type="number" 
                     stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(value) => `R$ ${(Math.abs(value) / 1000).toFixed(0)}k`}
+                    fontSize={12}
                   />
                   <YAxis 
                     type="category" 
                     dataKey="name" 
                     stroke="hsl(var(--muted-foreground))"
                     width={80}
+                    fontSize={12}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value: number) => formatCurrency(Math.abs(value))}
+                    content={<RichTooltip format="currency" showVariation={false} />}
                   />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                     {waterfallData.map((entry, index) => (
@@ -282,23 +300,23 @@ const DashboardFinanceiro = () => {
             title="Ponto de Equilíbrio"
             subtitle={`Meta: ${formatCurrency(kpis?.ponto_equilibrio_receita || 0)}`}
           />
-        </div>
+        </section>
 
         {/* Gráficos - Segunda Linha */}
-        <div className="grid gap-6 lg:grid-cols-2">
+        <section className={`grid lg:grid-cols-2 ${gridGap}`} aria-label="Análise de lucratividade">
           {/* Lucro por Cliente - Horizontal Bar */}
-          <Card className="interactive-lift">
+          <Card className="interactive-lift" role="region" aria-labelledby="profit-client-title">
             <CardHeader>
-              <CardTitle>Lucro por Cliente</CardTitle>
+              <CardTitle id="profit-client-title">Lucro por Cliente</CardTitle>
               <CardDescription>Top clientes por lucratividade esperada</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className={cardPadding}>
               {clientesLoading ? (
                 <div className="h-[300px] flex items-center justify-center">
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={density === 'compact' ? 250 : 300}>
                   <BarChart data={lucroPorCliente} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
                     <XAxis
@@ -315,14 +333,9 @@ const DashboardFinanceiro = () => {
                       width={100}
                     />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      content={<RichTooltip format="currency" showVariation={false} />}
                     />
-                    <Bar dataKey="lucro" fill="hsl(var(--chart-1))" radius={[0, 8, 8, 0]} />
+                    <Bar dataKey="lucro" fill={colors[0]} radius={[0, 8, 8, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -330,18 +343,18 @@ const DashboardFinanceiro = () => {
           </Card>
 
           {/* Margem por Serviço - Horizontal Bar com Linha de Referência */}
-          <Card className="interactive-lift">
+          <Card className="interactive-lift" role="region" aria-labelledby="margin-service-title">
             <CardHeader>
-              <CardTitle>Margem por Serviço</CardTitle>
+              <CardTitle id="margin-service-title">Margem por Serviço</CardTitle>
               <CardDescription>Rentabilidade dos principais serviços (meta: 30%)</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className={cardPadding}>
               {servicosLoading ? (
                 <div className="h-[300px] flex items-center justify-center">
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={density === 'compact' ? 250 : 300}>
                   <BarChart data={margemPorServico} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
                     <XAxis
@@ -359,19 +372,19 @@ const DashboardFinanceiro = () => {
                       width={120}
                     />
                     <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                      formatter={(value: number) => formatPercent(value)}
+                      content={<RichTooltip format="percent" showVariation={false} />}
                     />
-                    <ReferenceLine x={30} stroke="hsl(var(--warning))" strokeDasharray="5 5" label={{ value: "Meta", fill: "hsl(var(--warning))", fontSize: 10 }} />
+                    <ReferenceLine 
+                      x={30} 
+                      stroke="hsl(var(--chart-warning))" 
+                      strokeDasharray="5 5" 
+                      label={{ value: "Meta", fill: "hsl(var(--chart-warning))", fontSize: 10 }} 
+                    />
                     <Bar dataKey="margem" radius={[0, 8, 8, 0]}>
                       {margemPorServico.map((entry, index) => (
                         <Cell 
                           key={`cell-${index}`} 
-                          fill={entry.margem >= 30 ? "hsl(var(--success))" : "hsl(var(--destructive))"} 
+                          fill={entry.margem >= 30 ? "hsl(var(--chart-positive))" : "hsl(var(--chart-negative))"} 
                         />
                       ))}
                     </Bar>
@@ -380,74 +393,41 @@ const DashboardFinanceiro = () => {
               )}
             </CardContent>
           </Card>
-        </div>
+        </section>
 
         {/* Gráficos - Terceira Linha */}
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Custos por Categoria - Donut Chart */}
-          <Card className="interactive-lift">
+        <section className={`grid lg:grid-cols-2 ${gridGap}`} aria-label="Análise de custos e receitas">
+          {/* Custos por Categoria - Smart Chart (auto pie/bar) */}
+          <Card className="interactive-lift" role="region" aria-labelledby="costs-category-title">
             <CardHeader>
-              <CardTitle>Custos por Categoria</CardTitle>
+              <CardTitle id="costs-category-title">Custos por Categoria</CardTitle>
               <CardDescription>Distribuição das despesas operacionais</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className={cardPadding}>
               {custosLoading ? (
                 <div className="h-[300px] flex items-center justify-center">
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>
               ) : (
-                <div className="relative">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie
-                        data={custosPorCategoria}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, percent }) =>
-                          `${name}: ${(percent * 100).toFixed(0)}%`
-                        }
-                        labelLine={{ stroke: "hsl(var(--muted-foreground))", strokeWidth: 1 }}
-                      >
-                        {custosPorCategoria.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                        formatter={(value: number) => formatCurrency(value)}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  {/* Centro do Donut */}
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <p className="text-xs text-muted-foreground">Total</p>
-                      <p className="text-sm font-bold text-foreground">
-                        {formatCurrency(totalDespesas)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <SmartCategoryChart
+                  data={custosPorCategoria}
+                  height={density === 'compact' ? 250 : 300}
+                  maxPieCategories={4}
+                  format="currency"
+                  ariaLabel="Gráfico de custos por categoria"
+                />
               )}
             </CardContent>
           </Card>
 
           {/* Receita Comparativa */}
-          <Card className="interactive-lift">
+          <Card className="interactive-lift" role="region" aria-labelledby="revenue-compare-title">
             <CardHeader>
-              <CardTitle>Receita: Esperada x Realizada</CardTitle>
+              <CardTitle id="revenue-compare-title">Receita: Esperada x Realizada</CardTitle>
               <CardDescription>Comparativo de execução financeira</CardDescription>
             </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
+            <CardContent className={cardPadding}>
+              <ResponsiveContainer width="100%" height={density === 'compact' ? 250 : 300}>
                 <BarChart 
                   data={[
                     { tipo: "Esperada", valor: kpis?.receita_total || 0 },
@@ -461,31 +441,28 @@ const DashboardFinanceiro = () => {
                     type="number"
                     stroke="hsl(var(--muted-foreground))"
                     tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                    fontSize={12}
                   />
                   <YAxis 
                     type="category"
                     dataKey="tipo" 
                     stroke="hsl(var(--muted-foreground))"
                     width={80}
+                    fontSize={12}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: "hsl(var(--card))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "8px",
-                    }}
-                    formatter={(value: number) => formatCurrency(value)}
+                    content={<RichTooltip format="currency" showVariation={false} />}
                   />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
-                    <Cell fill="hsl(var(--chart-1))" />
-                    <Cell fill="hsl(var(--chart-2))" />
-                    <Cell fill="hsl(var(--chart-3))" />
+                    <Cell fill={colors[0]} />
+                    <Cell fill={colors[1]} />
+                    <Cell fill={colors[2]} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-        </div>
+        </section>
       </div>
     </AppLayout>
   );

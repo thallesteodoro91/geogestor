@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, Info } from "lucide-react";
+import { Plus, Trash2, MapPin, Info, Smartphone, Banknote, CreditCard, ArrowLeftRight, FileText } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 
 interface OrcamentoDialogProps {
@@ -143,42 +143,44 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    // Custo Total = soma dos custos de cada serviço
-    const custoTotal = (watchedItens || []).reduce((acc, item) => {
-      const custoItem = toNum(item?.quantidade) * toNum(item?.custo_servico);
-      return acc + custoItem;
-    }, 0);
-
-    // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto)
-    const receitaEsperadaServicos = (watchedItens || []).reduce((acc, item) => {
-      const valorItem = toNum(item?.quantidade) * toNum(item?.valor_unitario);
-      const valorComDesconto = valorItem - toNum(item?.desconto);
+    // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto em %)
+    const receitaEsperada = (watchedItens || []).reduce((acc, item) => {
+      const valorItem = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
+      const descontoPercent = toNum(item?.desconto);
+      const valorComDesconto = valorItem * (1 - descontoPercent / 100);
       return acc + valorComDesconto;
     }, 0);
 
-    // Valor total dos marcos
+    // Custo Total = soma dos custos de cada serviço
+    const custoServicos = (watchedItens || []).reduce((acc, item) => {
+      const custoItem = Math.floor(toNum(item?.quantidade)) * toNum(item?.custo_servico);
+      return acc + custoItem;
+    }, 0);
+
+    // Valor total dos marcos (COMO CUSTO, não receita)
     const marcoValorTotal = watchedIncluirMarco 
-      ? toNum(watchedMarcoQuantidade) * toNum(watchedMarcoValorUnitario) 
+      ? Math.floor(toNum(watchedMarcoQuantidade)) * Math.floor(toNum(watchedMarcoValorUnitario))
       : 0;
 
-    // Receita total incluindo marcos
-    const receitaEsperada = receitaEsperadaServicos + marcoValorTotal;
+    // Custo total incluindo marcos
+    const custoTotal = custoServicos + marcoValorTotal;
 
     // Total de Impostos (calculado por percentual sobre a receita esperada)
     const percentualImposto = watchedIncluirImposto ? toNum(watchedPercentualImposto) : 0;
     const totalImpostos = receitaEsperada * (percentualImposto / 100);
     
-    // Receita Esperada + Impostos
+    // Receita Esperada + Impostos (valor que cliente paga)
     const receitaComImposto = receitaEsperada + totalImpostos;
     
-    // Lucro Esperado = Receita - Custos
+    // Lucro Esperado = Receita - Custos (incluindo marcos como custo)
     const lucroEsperado = receitaEsperada - custoTotal;
     
     // Margem Esperada = (Lucro / Receita) * 100
     const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;
     
     return { 
-      custoTotal, 
+      custoTotal,
+      custoServicos,
       receitaEsperada, 
       marcoValorTotal,
       totalImpostos,
@@ -189,7 +191,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, receitaEsperada, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, custoServicos, receitaEsperada, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const onSubmit = async (data: any) => {
     try {
@@ -383,13 +385,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   )}
                 </div>
 
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-5 gap-4">
                   <div className="space-y-2">
                     <Label>Quantidade</Label>
                     <Input
                       type="number"
-                      step="0.01"
-                      {...register(`itens.${index}.quantidade` as const)}
+                      step="1"
+                      min="1"
+                      {...register(`itens.${index}.quantidade` as const, { valueAsNumber: true })}
                     />
                   </div>
 
@@ -402,7 +405,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                         // Auto-fill valor_sugerido when service is selected
                         const selectedServico = servicos.find(s => s.id_tiposervico === value);
                         if (selectedServico?.valor_sugerido) {
-                          setValue(`itens.${index}.valor_unitario`, selectedServico.valor_sugerido);
+                          setValue(`itens.${index}.valor_unitario`, Math.floor(selectedServico.valor_sugerido));
                         }
                       }}
                     >
@@ -420,31 +423,35 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Valor Unitário</Label>
+                    <Label>Valor Unitário (R$)</Label>
                     <Input
                       type="number"
-                      step="0.01"
-                      {...register(`itens.${index}.valor_unitario` as const)}
+                      step="1"
+                      min="0"
+                      {...register(`itens.${index}.valor_unitario` as const, { valueAsNumber: true })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Desconto (%)</Label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      max="100"
+                      {...register(`itens.${index}.desconto` as const, { valueAsNumber: true })}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-5 gap-4">
                   <div className="space-y-2">
-                    <Label>Desconto</Label>
+                    <Label>Custo do Serviço (R$)</Label>
                     <Input
                       type="number"
                       step="0.01"
-                      {...register(`itens.${index}.desconto` as const)}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Custo do Serviço</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      {...register(`itens.${index}.custo_servico` as const)}
+                      min="0"
+                      {...register(`itens.${index}.custo_servico` as const, { valueAsNumber: true })}
                     />
                   </div>
                 </div>
@@ -473,6 +480,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <Label>Quantidade</Label>
                     <Input 
                       type="number" 
+                      step="1"
                       min="0"
                       {...register("marco_quantidade", { valueAsNumber: true })} 
                       placeholder="0"
@@ -482,10 +490,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <Label>Valor Unitário (R$)</Label>
                     <Input 
                       type="number" 
-                      step="0.01"
+                      step="1"
                       min="0"
                       {...register("marco_valor_unitario", { valueAsNumber: true })} 
-                      placeholder="0.00"
+                      placeholder="0"
                     />
                   </div>
                 </div>
@@ -498,12 +506,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             <h3 className="font-semibold">Resumo Financeiro</h3>
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
-                <span className="text-muted-foreground">Custo Total:</span>
-                <p className="font-semibold">R$ {custoTotal.toFixed(2)}</p>
+                <span className="text-muted-foreground">Receita Esperada:</span>
+                <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
               </div>
               <div>
-                <span className="text-muted-foreground">Receita Serviços:</span>
-                <p className="font-semibold">R$ {(receitaEsperada - marcoValorTotal).toFixed(2)}</p>
+                <span className="text-muted-foreground">Custo Serviços:</span>
+                <p className="font-semibold">R$ {custoServicos.toFixed(2)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">
@@ -515,12 +523,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             {marcoValorTotal > 0 && (
               <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
                 <div>
-                  <span className="text-muted-foreground">Marcos ({watchedMarcoQuantidade}x):</span>
-                  <p className="font-semibold text-accent">R$ {marcoValorTotal.toFixed(2)}</p>
+                  <span className="text-muted-foreground">Marcos ({watchedMarcoQuantidade}x) - Custo:</span>
+                  <p className="font-semibold text-destructive">R$ {marcoValorTotal.toFixed(2)}</p>
                 </div>
-                <div className="col-span-2">
-                  <span className="text-muted-foreground">Receita Total:</span>
-                  <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
+                <div>
+                  <span className="text-muted-foreground">Custo Total:</span>
+                  <p className="font-semibold">R$ {custoTotal.toFixed(2)}</p>
                 </div>
               </div>
             )}
@@ -646,7 +654,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   onValueChange={(value) => setValue("forma_de_pagamento", value)}
                 >
                   <SelectTrigger className={
-                    watch("forma_de_pagamento") === "PIX" ? "text-[hsl(142,76%,36%)]" :
+                    watch("forma_de_pagamento") === "PIX" ? "text-[hsl(48,96%,53%)]" :
                     watch("forma_de_pagamento") === "Dinheiro" ? "text-[hsl(142,76%,45%)]" :
                     watch("forma_de_pagamento") === "Cartão" ? "text-[hsl(217,91%,60%)]" :
                     watch("forma_de_pagamento") === "Transferência" ? "text-[hsl(262,83%,58%)]" :
@@ -655,11 +663,36 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="PIX" className="text-[hsl(142,76%,36%)]">PIX</SelectItem>
-                    <SelectItem value="Dinheiro" className="text-[hsl(142,76%,45%)]">Dinheiro</SelectItem>
-                    <SelectItem value="Cartão" className="text-[hsl(217,91%,60%)]">Cartão</SelectItem>
-                    <SelectItem value="Transferência" className="text-[hsl(262,83%,58%)]">Transferência</SelectItem>
-                    <SelectItem value="Boleto" className="text-[hsl(25,95%,53%)]">Boleto</SelectItem>
+                    <SelectItem value="PIX">
+                      <span className="flex items-center gap-2 text-[hsl(48,96%,53%)]">
+                        <Smartphone className="h-4 w-4" />
+                        PIX
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Dinheiro">
+                      <span className="flex items-center gap-2 text-[hsl(142,76%,45%)]">
+                        <Banknote className="h-4 w-4" />
+                        Dinheiro
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Cartão">
+                      <span className="flex items-center gap-2 text-[hsl(217,91%,60%)]">
+                        <CreditCard className="h-4 w-4" />
+                        Cartão
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Transferência">
+                      <span className="flex items-center gap-2 text-[hsl(262,83%,58%)]">
+                        <ArrowLeftRight className="h-4 w-4" />
+                        Transferência
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Boleto">
+                      <span className="flex items-center gap-2 text-[hsl(25,95%,53%)]">
+                        <FileText className="h-4 w-4" />
+                        Boleto
+                      </span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

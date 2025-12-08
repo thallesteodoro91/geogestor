@@ -400,6 +400,7 @@ export type Database = {
       dim_tiposervico: {
         Row: {
           ativo: boolean | null
+          categoria: string | null
           created_at: string | null
           descricao: string | null
           id_categoria: string | null
@@ -411,6 +412,7 @@ export type Database = {
         }
         Insert: {
           ativo?: boolean | null
+          categoria?: string | null
           created_at?: string | null
           descricao?: string | null
           id_categoria?: string | null
@@ -422,6 +424,7 @@ export type Database = {
         }
         Update: {
           ativo?: boolean | null
+          categoria?: string | null
           created_at?: string | null
           descricao?: string | null
           id_categoria?: string | null

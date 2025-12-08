@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -18,41 +16,23 @@ interface TipoServicoDialogProps {
 }
 
 export function TipoServicoDialog({ open, onOpenChange, tipoServico, onSuccess }: TipoServicoDialogProps) {
-  const [categorias, setCategorias] = useState<any[]>([]);
-
-  const { register, handleSubmit, setValue, watch, reset } = useForm({
+  const { register, handleSubmit, reset } = useForm({
     defaultValues: {
       nome: tipoServico?.nome || "",
-      id_categoria: tipoServico?.id_categoria || "",
+      categoria: tipoServico?.categoria || "",
       descricao: tipoServico?.descricao || "",
-      valor_sugerido: tipoServico?.valor_sugerido || 0,
-      ativo: tipoServico?.ativo ?? true
     }
   });
 
-  const watchedCategoria = watch("id_categoria");
-  const watchedAtivo = watch("ativo");
-
   useEffect(() => {
     if (open) {
-      fetchCategorias();
       reset({
         nome: tipoServico?.nome || "",
-        id_categoria: tipoServico?.id_categoria || "",
+        categoria: tipoServico?.categoria || "",
         descricao: tipoServico?.descricao || "",
-        valor_sugerido: tipoServico?.valor_sugerido || 0,
-        ativo: tipoServico?.ativo ?? true
       });
     }
   }, [open, tipoServico, reset]);
-
-  const fetchCategorias = async () => {
-    const { data } = await supabase
-      .from('dim_categoria_servico')
-      .select('*')
-      .order('nome');
-    if (data) setCategorias(data);
-  };
 
   const onSubmit = async (data: any) => {
     try {
@@ -65,10 +45,8 @@ export function TipoServicoDialog({ open, onOpenChange, tipoServico, onSuccess }
 
       const servicoData = {
         nome: data.nome,
-        id_categoria: data.id_categoria || null,
+        categoria: data.categoria || null,
         descricao: data.descricao || null,
-        valor_sugerido: data.valor_sugerido || 0,
-        ativo: data.ativo,
         tenant_id: tenantData
       };
 
@@ -110,45 +88,12 @@ export function TipoServicoDialog({ open, onOpenChange, tipoServico, onSuccess }
 
           <div className="space-y-2">
             <Label>Categoria</Label>
-            <Select
-              value={watchedCategoria}
-              onValueChange={(value) => setValue("id_categoria", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categorias.map((cat) => (
-                  <SelectItem key={cat.id_categoria} value={cat.id_categoria}>
-                    {cat.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Valor Sugerido (R$)</Label>
-            <Input
-              type="number"
-              step="0.01"
-              min="0"
-              {...register("valor_sugerido", { valueAsNumber: true })}
-              placeholder="0.00"
-            />
+            <Input {...register("categoria")} placeholder="Ex: Topografia, Georreferenciamento..." />
           </div>
 
           <div className="space-y-2">
             <Label>Descrição</Label>
             <Textarea {...register("descricao")} placeholder="Descrição opcional" rows={3} />
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label>Ativo</Label>
-            <Switch
-              checked={watchedAtivo}
-              onCheckedChange={(checked) => setValue("ativo", checked)}
-            />
           </div>
 
           <DialogFooter>

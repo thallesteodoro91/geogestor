@@ -1,5 +1,5 @@
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
-import { ChartTooltip } from "./ChartTooltip";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { RichTooltip } from "./RichTooltip";
 
 const data2023 = [
   { month: "Jan", receita: 245000, despesa: 145000 },
@@ -72,7 +72,10 @@ export const RevenueChart = () => {
               return `R$ ${(value / 1000).toFixed(0)}k`;
             }}
           />
-          <ChartTooltip format="currency" />
+          <Tooltip
+            content={<RichTooltip format="currency" showVariation={false} />}
+            cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+          />
           <Legend />
           <Area
             type="monotone"

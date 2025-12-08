@@ -1,5 +1,5 @@
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Legend } from "recharts";
-import { ChartTooltip } from "./ChartTooltip";
+import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { RichTooltip } from "./RichTooltip";
 
 const data2023 = [
   { month: "Jan", margemBruta: 38, margemLiquida: 26 },
@@ -52,7 +52,10 @@ export const ProfitMarginChart = () => {
             tickFormatter={(value) => `${value}%`}
             domain={[0, 50]}
           />
-          <ChartTooltip format="percent" />
+          <Tooltip
+            content={<RichTooltip format="percent" showVariation={false} />}
+            cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+          />
           <Legend />
           <Line
             type="monotone"

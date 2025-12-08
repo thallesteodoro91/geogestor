@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
 import { SmartCategoryChart } from "@/components/charts/SmartCategoryChart";
-import { ChartTooltip } from "@/components/charts/ChartTooltip";
+import { RichTooltip } from "@/components/charts/RichTooltip";
 import { TimeGranularityControl, DensityToggle, ColorblindToggle } from "@/components/controls";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
@@ -17,6 +17,7 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   Cell,
   ReferenceLine,
@@ -279,7 +280,10 @@ const DashboardFinanceiro = () => {
                     width={80}
                     fontSize={12}
                   />
-                  <ChartTooltip format="currency" />
+                  <Tooltip
+                    content={<RichTooltip format="currency" showVariation={false} />}
+                    cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                  />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                     {waterfallData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -329,7 +333,10 @@ const DashboardFinanceiro = () => {
                       fontSize={11}
                       width={100}
                     />
-                    <ChartTooltip format="currency" />
+                    <Tooltip
+                      content={<RichTooltip format="currency" showVariation={false} />}
+                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                    />
                     <Bar dataKey="lucro" fill={colors[0]} radius={[0, 8, 8, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -366,7 +373,10 @@ const DashboardFinanceiro = () => {
                       fontSize={11}
                       width={120}
                     />
-                    <ChartTooltip format="percent" />
+                    <Tooltip
+                      content={<RichTooltip format="percent" showVariation={false} />}
+                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                    />
                     <ReferenceLine 
                       x={30} 
                       stroke="hsl(var(--chart-warning))" 
@@ -443,7 +453,10 @@ const DashboardFinanceiro = () => {
                     width={80}
                     fontSize={12}
                   />
-                  <ChartTooltip format="currency" />
+                  <Tooltip
+                    content={<RichTooltip format="currency" showVariation={false} />}
+                    cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                  />
                   <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                     <Cell fill={colors[0]} />
                     <Cell fill={colors[1]} />

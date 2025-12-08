@@ -6,7 +6,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
 import { SmartCategoryChart } from "@/components/charts/SmartCategoryChart";
 import { RichTooltip } from "@/components/charts/RichTooltip";
-import { TimeGranularityControl, DensityToggle, ColorblindToggle } from "@/components/controls";
+import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
@@ -158,7 +158,6 @@ const DashboardFinanceiro = () => {
           <nav className="flex items-center gap-2" aria-label="Controles de visualização">
             <TimeGranularityControl size="sm" />
             <DensityToggle />
-            <ColorblindToggle />
           </nav>
         </header>
 

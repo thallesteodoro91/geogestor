@@ -29,6 +29,7 @@ import {
   Users
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
+import { RichTooltip } from "@/components/charts/RichTooltip";
 
 const orcamentoData = [
   { categoria: "Receita", orcado: 120000, realizado: 118500 },
@@ -376,11 +377,8 @@ const GestaoEmpresa = () => {
                       <XAxis dataKey="categoria" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
-                        contentStyle={{ 
-                          background: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
+                        content={<RichTooltip format="currency" showVariation={false} />}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                       />
                       <Bar dataKey="orcado" fill="hsl(var(--chart-1))" name="Orçado" />
                       <Bar dataKey="realizado" fill="hsl(var(--chart-2))" name="Realizado" />
@@ -403,11 +401,8 @@ const GestaoEmpresa = () => {
                       <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
-                        contentStyle={{ 
-                          background: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
+                        content={<RichTooltip format="percent" showVariation={false} />}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                       />
                       <Bar dataKey="desvio" name="Desvio (%)">
                         {desvioData.map((entry, index) => (
@@ -453,11 +448,8 @@ const GestaoEmpresa = () => {
                       <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
-                        contentStyle={{ 
-                          background: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
+                        content={<RichTooltip format="currency" showVariation={false} />}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                       />
                       <Bar dataKey="custoTotal" fill="hsl(var(--chart-3))" name="Custo Total" />
                       <Line type="monotone" dataKey="receita" stroke="hsl(var(--chart-1))" strokeWidth={2} name="Receita" />
@@ -481,11 +473,8 @@ const GestaoEmpresa = () => {
                       <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
                       <YAxis stroke="hsl(var(--muted-foreground))" />
                       <Tooltip 
-                        contentStyle={{ 
-                          background: 'hsl(var(--card))', 
-                          border: '1px solid hsl(var(--border))',
-                          borderRadius: '8px'
-                        }}
+                        content={<RichTooltip format="currency" showVariation={false} />}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                       />
                       <Bar dataKey="fixo" stackId="a" fill="hsl(var(--chart-1))" name="Fixo" />
                       <Bar dataKey="variavel" stackId="a" fill="hsl(var(--chart-2))" name="Variável" />

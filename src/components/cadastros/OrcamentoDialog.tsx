@@ -133,29 +133,35 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   };
 
   const calcularTotais = () => {
+    // Helper to safely parse numbers
+    const toNum = (val: any): number => {
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? 0 : parsed;
+    };
+
     // Custo Total = soma dos custos de cada serviço
-    const custoTotal = watchedItens.reduce((acc, item) => {
-      const custoItem = (item.quantidade || 0) * (item.custo_servico || 0);
+    const custoTotal = (watchedItens || []).reduce((acc, item) => {
+      const custoItem = toNum(item?.quantidade) * toNum(item?.custo_servico);
       return acc + custoItem;
     }, 0);
 
     // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto)
-    const receitaEsperadaServicos = watchedItens.reduce((acc, item) => {
-      const valorItem = (item.quantidade || 0) * (item.valor_unitario || 0);
-      const valorComDesconto = valorItem - (item.desconto || 0);
+    const receitaEsperadaServicos = (watchedItens || []).reduce((acc, item) => {
+      const valorItem = toNum(item?.quantidade) * toNum(item?.valor_unitario);
+      const valorComDesconto = valorItem - toNum(item?.desconto);
       return acc + valorComDesconto;
     }, 0);
 
     // Valor total dos marcos
     const marcoValorTotal = watchedIncluirMarco 
-      ? (watchedMarcoQuantidade || 0) * (watchedMarcoValorUnitario || 0) 
+      ? toNum(watchedMarcoQuantidade) * toNum(watchedMarcoValorUnitario) 
       : 0;
 
     // Receita total incluindo marcos
     const receitaEsperada = receitaEsperadaServicos + marcoValorTotal;
 
     // Total de Impostos
-    const totalImpostos = watchedItens.reduce((acc, item) => acc + (item.valor_imposto || 0), 0);
+    const totalImpostos = (watchedItens || []).reduce((acc, item) => acc + toNum(item?.valor_imposto), 0);
     
     // Receita Esperada + Impostos
     const receitaComImposto = receitaEsperada + totalImpostos;

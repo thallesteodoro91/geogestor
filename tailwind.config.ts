@@ -17,6 +17,13 @@ export default {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         heading: ['IBM Plex Sans', 'system-ui', 'sans-serif'],
       },
+      spacing: {
+        'xs': '0.5rem',
+        'sm': '1rem',
+        'md': '1.5rem',
+        'lg': '2rem',
+        'xl': '3rem',
+      },
       colors: {
         success: {
           DEFAULT: "hsl(var(--success))",
@@ -32,6 +39,19 @@ export default {
           3: "hsl(var(--chart-3))",
           4: "hsl(var(--chart-4))",
           5: "hsl(var(--chart-5))",
+          primary: "hsl(var(--chart-primary))",
+          secondary: "hsl(var(--chart-secondary))",
+          positive: "hsl(var(--chart-positive))",
+          negative: "hsl(var(--chart-negative))",
+          warning: "hsl(var(--chart-warning))",
+          neutral: "hsl(var(--chart-neutral))",
+          // Colorblind-safe palette
+          cb1: "hsl(var(--chart-cb-1))",
+          cb2: "hsl(var(--chart-cb-2))",
+          cb3: "hsl(var(--chart-cb-3))",
+          cb4: "hsl(var(--chart-cb-4))",
+          cb5: "hsl(var(--chart-cb-5))",
+          cb6: "hsl(var(--chart-cb-6))",
         },
         cyan: "hsl(189, 94%, 43%)",
         lime: "hsl(84, 81%, 67%)",

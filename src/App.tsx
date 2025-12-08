@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense, useEffect } from "react";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { TenantProvider } from "./contexts/TenantContext";
-
+import { ChartSettingsProvider } from "./contexts/ChartSettingsContext";
 const GestaoEmpresa = lazy(() => import("./pages/GestaoEmpresa"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
 const DashboardFinanceiro = lazy(() => import("./pages/DashboardFinanceiro"));
@@ -36,33 +36,35 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TenantProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-pulse text-muted-foreground">Carregando...</div></div>}>
-              <Routes>
-              <Route path="/auth" element={<Auth />} />
-                <Route path="/aceitar-convite" element={<AceitarConvite />} />
-                <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-                <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
-                <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
-                <Route path="/dashboard-financeiro" element={<ProtectedRoute><DashboardFinanceiro /></ProtectedRoute>} />
-                <Route path="/geobot" element={<ProtectedRoute><GeoBotPage /></ProtectedRoute>} />
-                <Route path="/calendario" element={<ProtectedRoute><Calendario /></ProtectedRoute>} />
-                <Route path="/calendario/:tipo/:id" element={<ProtectedRoute><CalendarioDetalhes /></ProtectedRoute>} />
-                <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
-                <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
-                <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
-                <Route path="/servicos-orcamentos" element={<ProtectedRoute><ServicosOrcamentos /></ProtectedRoute>} />
-                <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
-                <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
-                <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </Suspense>
-          </BrowserRouter>
-        </TooltipProvider>
+        <ChartSettingsProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <Suspense fallback={<div className="flex items-center justify-center min-h-screen"><div className="animate-pulse text-muted-foreground">Carregando...</div></div>}>
+                <Routes>
+                  <Route path="/auth" element={<Auth />} />
+                  <Route path="/aceitar-convite" element={<AceitarConvite />} />
+                  <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
+                  <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
+                  <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />
+                  <Route path="/dashboard-financeiro" element={<ProtectedRoute><DashboardFinanceiro /></ProtectedRoute>} />
+                  <Route path="/geobot" element={<ProtectedRoute><GeoBotPage /></ProtectedRoute>} />
+                  <Route path="/calendario" element={<ProtectedRoute><Calendario /></ProtectedRoute>} />
+                  <Route path="/calendario/:tipo/:id" element={<ProtectedRoute><CalendarioDetalhes /></ProtectedRoute>} />
+                  <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
+                  <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
+                  <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
+                  <Route path="/servicos-orcamentos" element={<ProtectedRoute><ServicosOrcamentos /></ProtectedRoute>} />
+                  <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
+                  <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
+                  <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </Suspense>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ChartSettingsProvider>
       </TenantProvider>
     </QueryClientProvider>
   );

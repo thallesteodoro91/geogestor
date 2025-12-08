@@ -50,11 +50,35 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
     
+    /* Semantic Chart Tokens */
+    --chart-primary: 262 83% 65%;
+    --chart-secondary: 189 94% 43%;
+    --chart-positive: 142 76% 56%;
+    --chart-negative: 0 72% 51%;
+    --chart-warning: 38 92% 50%;
+    --chart-neutral: 0 0% 63.9%;
+    
+    /* Legacy chart colors (mapped to semantic) */
     --chart-1: 262 83% 65%;
     --chart-2: 189 94% 43%;
     --chart-3: 84 81% 67%;
     --chart-4: 326 78% 64%;
     --chart-5: 29 93% 54%;
+    
+    /* Colorblind-safe palette (Okabe-Ito) */
+    --chart-cb-1: 230 66% 52%;
+    --chart-cb-2: 28 87% 62%;
+    --chart-cb-3: 200 18% 46%;
+    --chart-cb-4: 48 95% 53%;
+    --chart-cb-5: 194 58% 65%;
+    --chart-cb-6: 349 70% 48%;
+    
+    /* Spacing scale (8pt system) */
+    --space-xs: 0.5rem;
+    --space-sm: 1rem;
+    --space-md: 1.5rem;
+    --space-lg: 2rem;
+    --space-xl: 3rem;
     
     /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 65%), hsl(262, 83%, 50%));
@@ -199,5 +223,31 @@ All colors MUST be HSL.
   /* Focus States - Accessibility */
   .focus-visible-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+
+  /* Density Mode Classes */
+  .density-compact .kpi-card {
+    @apply p-3 gap-2;
+  }
+  
+  .density-comfortable .kpi-card {
+    @apply p-6 gap-4;
+  }
+
+  /* Chart semantic color classes */
+  .text-chart-positive {
+    color: hsl(var(--chart-positive));
+  }
+  
+  .text-chart-negative {
+    color: hsl(var(--chart-negative));
+  }
+  
+  .text-chart-warning {
+    color: hsl(var(--chart-warning));
+  }
+
+  .bg-chart-primary {
+    background-color: hsl(var(--chart-primary));
   }
 }

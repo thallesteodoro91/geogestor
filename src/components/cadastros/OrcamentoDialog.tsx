@@ -293,6 +293,13 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           <DialogTitle>{orcamento ? 'Editar Orçamento' : 'Novo Orçamento'}</DialogTitle>
         </DialogHeader>
 
+        {!orcamento && (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/50 rounded-md border border-border/50">
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            <span>Certifique-se de cadastrar o cliente antes de criar o orçamento.</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* I. Dados Básicos */}
           <div className="space-y-4">

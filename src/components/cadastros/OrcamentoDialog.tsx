@@ -207,6 +207,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
   const { custoTotal, custoServicos, receitaEsperada, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
+  // Formatação de moeda brasileira
+  const formatCurrency = (value: number): string => {
+    return value.toLocaleString('pt-BR', { 
+      minimumFractionDigits: 2, 
+      maximumFractionDigits: 2 
+    });
+  };
+
   const onSubmit = async (data: any) => {
     try {
       const orcamentoData = {
@@ -303,16 +311,16 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{orcamento ? 'Editar Orçamento' : 'Novo Orçamento'}</DialogTitle>
-        </DialogHeader>
-
         {!orcamento && (
           <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/50 rounded-md border border-border/50">
             <Info className="w-3.5 h-3.5 shrink-0" />
             <span>Certifique-se de cadastrar o cliente antes de criar o orçamento.</span>
           </div>
         )}
+        
+        <DialogHeader>
+          <DialogTitle>{orcamento ? 'Editar Orçamento' : 'Novo Orçamento'}</DialogTitle>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* I. Dados Básicos */}
@@ -532,39 +540,39 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             <div className="grid grid-cols-3 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Receita Esperada:</span>
-                <p className="font-semibold">R$ {receitaEsperada.toFixed(2)}</p>
+                <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Custo Serviços:</span>
-                <p className="font-semibold">R$ {custoServicos.toFixed(2)}</p>
+                <p className="font-semibold">R$ {formatCurrency(custoServicos)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">
                   Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}:
                 </span>
-                <p className="font-semibold">R$ {totalImpostos.toFixed(2)}</p>
+                <p className="font-semibold">R$ {formatCurrency(totalImpostos)}</p>
               </div>
             </div>
             {marcoValorTotal > 0 && (
               <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
                 <div>
                   <span className="text-muted-foreground">Marcos ({watchedMarcoQuantidade}x) - Custo:</span>
-                  <p className="font-semibold text-destructive">R$ {marcoValorTotal.toFixed(2)}</p>
+                  <p className="font-semibold text-destructive">R$ {formatCurrency(marcoValorTotal)}</p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Custo Total:</span>
-                  <p className="font-semibold">R$ {custoTotal.toFixed(2)}</p>
+                  <p className="font-semibold">R$ {formatCurrency(custoTotal)}</p>
                 </div>
               </div>
             )}
             <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
               <div>
                 <span className="text-muted-foreground">Receita + Impostos:</span>
-                <p className="font-semibold">R$ {receitaComImposto.toFixed(2)}</p>
+                <p className="font-semibold">R$ {formatCurrency(receitaComImposto)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Lucro Esperado:</span>
-                <p className="font-semibold text-primary">R$ {lucroEsperado.toFixed(2)}</p>
+                <p className="font-semibold text-primary">R$ {formatCurrency(lucroEsperado)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Margem Esperada:</span>

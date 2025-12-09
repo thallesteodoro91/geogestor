@@ -245,7 +245,7 @@ export default function ServicosOrcamentos() {
                     <TableHead>Serviço</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead>Valor Total</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <TableHead>Situação Pagamento</TableHead>
                     <TableHead>Convertido</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -267,8 +267,16 @@ export default function ServicosOrcamentos() {
                         <TableCell>{new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
                         <TableCell>R$ {((orcamento.receita_esperada || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell>
-                          <Badge variant={orcamento.situacao === 'Aprovado' ? 'default' : 'secondary'}>
-                            {orcamento.situacao || 'Pendente'}
+                          <Badge 
+                            className={
+                              orcamento.situacao_do_pagamento === "Pago" ? "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]" :
+                              orcamento.situacao_do_pagamento === "Cancelado" ? "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]" :
+                              orcamento.situacao_do_pagamento === "Pendente" ? "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]" :
+                              orcamento.situacao_do_pagamento === "Parcial" ? "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]" :
+                              "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {orcamento.situacao_do_pagamento || 'Não definido'}
                           </Badge>
                         </TableCell>
                         <TableCell>

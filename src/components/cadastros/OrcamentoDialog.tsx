@@ -186,8 +186,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     // Receita Esperada + Impostos (valor que cliente paga)
     const receitaComImposto = receitaEsperada + totalImpostos;
     
-    // Lucro Esperado = Receita - Custos (incluindo marcos como custo)
-    const lucroEsperado = receitaEsperada - custoTotal;
+    // Lucro Esperado = Receita - Custos - Impostos (impostos deduzidos do lucro)
+    const lucroEsperado = receitaEsperada - custoTotal - totalImpostos;
     
     // Margem Esperada = (Lucro / Receita) * 100
     const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;

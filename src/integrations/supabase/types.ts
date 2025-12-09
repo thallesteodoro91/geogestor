@@ -715,8 +715,8 @@ export type Database = {
             foreignKeyName: "fato_orcamento_itens_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
-            referencedRelation: "fato_servico"
-            referencedColumns: ["id_servico"]
+            referencedRelation: "dim_tiposervico"
+            referencedColumns: ["id_tiposervico"]
           },
         ]
       }

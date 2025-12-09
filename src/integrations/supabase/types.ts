@@ -521,6 +521,7 @@ export type Database = {
       }
       fato_orcamento: {
         Row: {
+          anotacoes: string | null
           created_at: string | null
           data_do_faturamento: string | null
           data_inicio: string | null
@@ -556,6 +557,7 @@ export type Database = {
           valor_unitario: number
         }
         Insert: {
+          anotacoes?: string | null
           created_at?: string | null
           data_do_faturamento?: string | null
           data_inicio?: string | null
@@ -591,6 +593,7 @@ export type Database = {
           valor_unitario: number
         }
         Update: {
+          anotacoes?: string | null
           created_at?: string | null
           data_do_faturamento?: string | null
           data_inicio?: string | null

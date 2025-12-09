@@ -557,10 +557,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <Label>Valor Unitário (R$)</Label>
                     <Input 
                       type="number" 
-                      step="1"
+                      step="0.01"
                       min="0"
                       {...register("marco_valor_unitario", { valueAsNumber: true })} 
-                      placeholder="0"
+                      placeholder="0,00"
                     />
                   </div>
                 </div>

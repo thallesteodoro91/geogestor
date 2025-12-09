@@ -124,12 +124,13 @@ const DashboardFinanceiro = () => {
     },
   });
 
-  // Dados do Waterfall Chart - Fluxo Financeiro
+  // Dados do Waterfall Chart - Fluxo Financeiro (inclui impostos)
   const waterfallData = [
-    { name: "Receita", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-primary))" },
+    { name: "Receita Bruta", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-primary))" },
+    { name: "Impostos", valor: -(kpis?.total_impostos || 0), fill: "hsl(var(--chart-secondary))" },
     { name: "Custos", valor: -(kpis?.custo_total || 0), fill: "hsl(var(--chart-negative))" },
     { name: "Despesas", valor: -(kpis?.total_despesas || 0), fill: "hsl(var(--chart-warning))" },
-    { name: "Lucro", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--chart-positive))" },
+    { name: "Lucro Líquido", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--chart-positive))" },
   ];
 
   const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
@@ -175,23 +176,23 @@ const DashboardFinanceiro = () => {
             ) : (
               <>
                 <KPICard
-                  title="Receita Total"
+                  title="Receita Bruta"
                   value={formatCurrency(kpis?.receita_total || 0)}
                   icon={DollarSign}
                   subtitle={`${kpis?.total_orcamentos || 0} orçamentos emitidos`}
                   changeType="neutral"
-                  description="Soma total de todas as receitas esperadas dos orçamentos"
+                  description="Soma total de todas as receitas esperadas dos orçamentos (antes de impostos)"
                   calculation="Σ (Receita Esperada de todos os Orçamentos)"
                 />
 
                 <KPICard
-                  title="Lucro Líquido"
-                  value={formatCurrency(kpis?.lucro_liquido || 0)}
-                  icon={TrendingUp}
-                  subtitle={`Margem: ${formatPercent(kpis?.margem_liquida_percent || 0)}`}
-                  changeType="positive"
-                  description="Lucro final após todas as deduções de custos e despesas"
-                  calculation="Receita Total - Custos Totais - Despesas Operacionais"
+                  title="Receita Líquida"
+                  value={formatCurrency(kpis?.receita_liquida || 0)}
+                  icon={DollarSign}
+                  subtitle={`Impostos: ${formatCurrency(kpis?.total_impostos || 0)}`}
+                  changeType="neutral"
+                  description="Receita após dedução dos impostos"
+                  calculation="Receita Bruta - Impostos"
                 />
 
                 <KPICard

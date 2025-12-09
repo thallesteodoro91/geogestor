@@ -41,16 +41,34 @@ export default function ServicosOrcamentos() {
   const { data: orcamentos = [], isLoading: loadingOrcamentos, refetch: refetchOrcamentos } = useQuery({
     queryKey: ['orcamentos'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data: orcamentosData, error } = await supabase
         .from('fato_orcamento')
         .select(`
           *,
           dim_cliente(nome),
-          fato_servico(nome_do_servico)
+          dim_propriedade(nome_da_propriedade)
         `)
         .order('data_orcamento', { ascending: false });
       if (error) throw error;
-      return data || [];
+
+      // Buscar itens de cada orçamento com nomes dos serviços
+      const orcamentosComItens = await Promise.all(
+        (orcamentosData || []).map(async (orc) => {
+          const { data: itensData } = await supabase
+            .from('fato_orcamento_itens')
+            .select(`
+              *,
+              dim_tiposervico(nome)
+            `)
+            .eq('id_orcamento', orc.id_orcamento);
+          return {
+            ...orc,
+            itens: itensData || []
+          };
+        })
+      );
+
+      return orcamentosComItens;
     },
   });
 
@@ -166,7 +184,7 @@ export default function ServicosOrcamentos() {
 
   const filteredOrcamentos = orcamentos.filter(o => 
     o.dim_cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    o.fato_servico?.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase())
+    o.itens?.some((item: any) => item.dim_tiposervico?.nome?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   // Calcular KPIs
@@ -263,7 +281,11 @@ export default function ServicosOrcamentos() {
                     filteredOrcamentos.map((orcamento) => (
                       <TableRow key={orcamento.id_orcamento}>
                         <TableCell className="font-medium">{orcamento.dim_cliente?.nome || '-'}</TableCell>
-                        <TableCell>{orcamento.fato_servico?.nome_do_servico || '-'}</TableCell>
+                        <TableCell>
+                          {orcamento.itens?.length > 0 
+                            ? orcamento.itens.map((item: any) => item.dim_tiposervico?.nome).filter(Boolean).join(', ') 
+                            : '-'}
+                        </TableCell>
                         <TableCell>{new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
                         <TableCell>R$ {((orcamento.receita_esperada || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell>

@@ -1,4 +1,4 @@
-import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard } from "lucide-react";
+import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,7 +45,7 @@ const getPriorityColor = (prioridade: string) => {
 };
 
 export const NotificationsMenu = () => {
-  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, checkPendingPayments } = useNotifications();
+  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, checkPendingPayments } = useNotifications();
   const navigate = useNavigate();
 
   // Verificar pagamentos pendentes ao montar o componente
@@ -88,21 +88,37 @@ export const NotificationsMenu = () => {
       <DropdownMenuContent align="end" className="w-80 bg-popover z-50">
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
-          {unreadCount > 0 && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary">
-                {unreadCount} nova{unreadCount > 1 ? "s" : ""}
-              </Badge>
+          <div className="flex items-center gap-2">
+            {notifications.length > 0 && (
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-6 text-xs"
-                onClick={markAllAsRead}
+                className="h-6 text-xs text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  clearAllNotifications();
+                }}
               >
-                Marcar todas
+                <Trash2 className="h-3 w-3 mr-1" />
+                Limpar
               </Button>
-            </div>
-          )}
+            )}
+            {unreadCount > 0 && (
+              <>
+                <Badge variant="secondary">
+                  {unreadCount} nova{unreadCount > 1 ? "s" : ""}
+                </Badge>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 text-xs"
+                  onClick={markAllAsRead}
+                >
+                  Marcar todas
+                </Button>
+              </>
+            )}
+          </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <ScrollArea className="h-[300px]">

@@ -72,6 +72,18 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return servico?.nome || null;
   };
 
+  const fetchOrcamentoItens = async (orcamentoId: string) => {
+    const { data, error } = await supabase
+      .from('fato_orcamento_itens')
+      .select('*')
+      .eq('id_orcamento', orcamentoId);
+    if (error) {
+      console.error('Erro ao buscar itens do orçamento:', error);
+      return [];
+    }
+    return data || [];
+  };
+
   useEffect(() => {
     if (open) {
       fetchData();
@@ -80,28 +92,42 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         fetchClienteData(clienteId);
       }
       if (orcamento) {
-        reset({
-          id_cliente: orcamento.id_cliente,
-          data_orcamento: orcamento.data_orcamento,
-          itens: orcamento.itens || [{
-            id_servico: "",
-            quantidade: 1,
-            valor_unitario: 0,
-            desconto: 0,
-            custo_servico: 0
-          }],
-          incluir_marco: orcamento.incluir_marco || false,
-          marco_quantidade: orcamento.marco_quantidade || 0,
-          marco_valor_unitario: orcamento.marco_valor_unitario || 0,
-          incluir_imposto: orcamento.incluir_imposto || false,
-          percentual_imposto: orcamento.percentual_imposto || 0,
-          orcamento_convertido: orcamento.orcamento_convertido,
-          faturamento: orcamento.faturamento,
-          data_do_faturamento: orcamento.data_do_faturamento,
-          situacao_do_pagamento: orcamento.situacao_do_pagamento,
-          forma_de_pagamento: orcamento.forma_de_pagamento,
-          anotacoes: orcamento.anotacoes || ""
+        // Buscar itens do orçamento para edição
+        fetchOrcamentoItens(orcamento.id_orcamento).then((itensDb) => {
+          const itensFormatados = itensDb.length > 0 
+            ? itensDb.map((item: any) => ({
+                id_servico: item.id_servico || "",
+                quantidade: item.quantidade || 1,
+                valor_unitario: item.valor_unitario || 0,
+                desconto: item.desconto || 0,
+                custo_servico: item.valor_mao_obra || 0
+              }))
+            : [{
+                id_servico: "",
+                quantidade: 1,
+                valor_unitario: 0,
+                desconto: 0,
+                custo_servico: 0
+              }];
+
+          reset({
+            id_cliente: orcamento.id_cliente,
+            data_orcamento: orcamento.data_orcamento,
+            itens: itensFormatados,
+            incluir_marco: orcamento.incluir_marco || false,
+            marco_quantidade: orcamento.marco_quantidade || 0,
+            marco_valor_unitario: orcamento.marco_valor_unitario || 0,
+            incluir_imposto: orcamento.incluir_imposto || false,
+            percentual_imposto: orcamento.percentual_imposto || 0,
+            orcamento_convertido: orcamento.orcamento_convertido,
+            faturamento: orcamento.faturamento,
+            data_do_faturamento: orcamento.data_do_faturamento,
+            situacao_do_pagamento: orcamento.situacao_do_pagamento,
+            forma_de_pagamento: orcamento.forma_de_pagamento,
+            anotacoes: orcamento.anotacoes || ""
+          });
         });
+        
         if (orcamento.id_cliente) {
           fetchClienteData(orcamento.id_cliente);
         }
@@ -328,13 +354,27 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         if (itensError) throw itensError;
       }
 
-      // Criar notificação para novo orçamento
+      // Criar notificação para novo orçamento com nome do cliente e propriedade
       if (!orcamento) {
         const clienteNome = clientes.find(c => c.id_cliente === data.id_cliente)?.nome || 'Cliente';
+        
+        // Buscar propriedade do cliente
+        const { data: propriedadeData } = await supabase
+          .from('dim_propriedade')
+          .select('nome_da_propriedade')
+          .eq('id_cliente', data.id_cliente)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        const mensagem = propriedadeData?.nome_da_propriedade
+          ? `Novo orçamento para ${clienteNome}, propriedade ${propriedadeData.nome_da_propriedade} - R$ ${formatCurrency(receitaEsperada)}`
+          : `Novo orçamento para ${clienteNome} - R$ ${formatCurrency(receitaEsperada)}`;
+
         await createNotification(
           'orcamento',
           'Novo Orçamento',
-          `Orçamento criado para ${clienteNome} - R$ ${receitaEsperada.toFixed(2)}`,
+          mensagem,
           '/servicos-orcamentos',
           'normal',
           orcamentoId

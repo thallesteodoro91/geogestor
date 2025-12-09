@@ -158,6 +158,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       return isNaN(parsed) ? 0 : parsed;
     };
 
+    // Desconto Total = soma dos descontos em valor absoluto
+    const descontoTotal = (watchedItens || []).reduce((acc, item) => {
+      const valorBruto = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
+      const descontoPercent = toNum(item?.desconto);
+      const valorDesconto = valorBruto * (descontoPercent / 100);
+      return acc + valorDesconto;
+    }, 0);
+
     // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto em %)
     const receitaEsperada = (watchedItens || []).reduce((acc, item) => {
       const valorItem = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
@@ -174,7 +182,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
     // Valor total dos marcos (COMO CUSTO, não receita)
     const marcoValorTotal = watchedIncluirMarco 
-      ? Math.floor(toNum(watchedMarcoQuantidade)) * Math.floor(toNum(watchedMarcoValorUnitario))
+      ? Math.floor(toNum(watchedMarcoQuantidade)) * toNum(watchedMarcoValorUnitario)
       : 0;
 
     // Custo total incluindo marcos
@@ -196,7 +204,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return { 
       custoTotal,
       custoServicos,
-      receitaEsperada, 
+      receitaEsperada,
+      descontoTotal,
       marcoValorTotal,
       totalImpostos,
       percentualImposto,
@@ -206,7 +215,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, custoServicos, receitaEsperada, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, custoServicos, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   // Formatação de moeda brasileira
   const formatCurrency = (value: number): string => {
@@ -571,10 +580,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           {/* Resumo Financeiro */}
           <div className="p-4 bg-muted rounded-lg space-y-3">
             <h3 className="font-semibold">Resumo Financeiro</h3>
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="grid grid-cols-4 gap-4 text-sm">
               <div>
                 <span className="text-muted-foreground">Receita Esperada:</span>
                 <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Desconto Total:</span>
+                <p className="font-semibold text-destructive">- R$ {formatCurrency(descontoTotal)}</p>
               </div>
               <div>
                 <span className="text-muted-foreground">Custo Serviços:</span>

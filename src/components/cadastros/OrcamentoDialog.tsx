@@ -580,50 +580,50 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           {/* Resumo Financeiro */}
           <div className="p-4 bg-muted rounded-lg space-y-3">
             <h3 className="font-semibold">Resumo Financeiro</h3>
-            <div className="grid grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Receita Esperada:</span>
-                <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita Esperada</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaEsperada)}</p>
               </div>
-              <div>
-                <span className="text-muted-foreground">Desconto Total:</span>
-                <p className="font-semibold text-destructive">- R$ {formatCurrency(descontoTotal)}</p>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Desconto Total</span>
+                <p className="font-semibold text-destructive whitespace-nowrap">- R$ {formatCurrency(descontoTotal)}</p>
               </div>
-              <div>
-                <span className="text-muted-foreground">Custo Serviços:</span>
-                <p className="font-semibold">R$ {formatCurrency(custoServicos)}</p>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Serviços</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(custoServicos)}</p>
               </div>
-              <div>
-                <span className="text-muted-foreground">
-                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}:
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">
+                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
                 </span>
-                <p className="font-semibold">R$ {formatCurrency(totalImpostos)}</p>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalImpostos)}</p>
               </div>
             </div>
             {marcoValorTotal > 0 && (
-              <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
-                <div>
-                  <span className="text-muted-foreground">Marcos ({watchedMarcoQuantidade}x) - Custo:</span>
-                  <p className="font-semibold text-destructive">R$ {formatCurrency(marcoValorTotal)}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm pt-2 border-t border-border">
+                <div className="text-center">
+                  <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade}x) - Custo</span>
+                  <p className="font-semibold text-destructive whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Custo Total:</span>
-                  <p className="font-semibold">R$ {formatCurrency(custoTotal)}</p>
+                <div className="text-center">
+                  <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Total</span>
+                  <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(custoTotal)}</p>
                 </div>
               </div>
             )}
             <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
-              <div>
-                <span className="text-muted-foreground">Receita + Impostos:</span>
-                <p className="font-semibold">R$ {formatCurrency(receitaComImposto)}</p>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>
               </div>
-              <div>
-                <span className="text-muted-foreground">Lucro Esperado:</span>
-                <p className="font-semibold text-primary">R$ {formatCurrency(lucroEsperado)}</p>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Lucro Esperado</span>
+                <p className="font-semibold text-primary whitespace-nowrap">R$ {formatCurrency(lucroEsperado)}</p>
               </div>
-              <div>
-                <span className="text-muted-foreground">Margem Esperada:</span>
-                <p className="font-semibold text-primary">{margemEsperada.toFixed(2)}%</p>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Margem Esperada</span>
+                <p className="font-semibold text-primary whitespace-nowrap">{margemEsperada.toFixed(2)}%</p>
               </div>
             </div>
           </div>

@@ -125,14 +125,28 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   };
 
   const fetchClienteData = async (clienteId: string) => {
-    const { data } = await supabase
-      .from('dim_cliente')
-      .select('endereco, telefone, celular')
-      .eq('id_cliente', clienteId)
-      .single();
+    const [clienteRes, propriedadeRes] = await Promise.all([
+      supabase
+        .from('dim_cliente')
+        .select('endereco, telefone, celular')
+        .eq('id_cliente', clienteId)
+        .maybeSingle(),
+      supabase
+        .from('dim_propriedade')
+        .select('cidade, municipio')
+        .eq('id_cliente', clienteId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ]);
     
-    if (data) {
-      setClienteData(data);
+    const cidade = propriedadeRes.data?.cidade || propriedadeRes.data?.municipio || '';
+    
+    if (clienteRes.data) {
+      setClienteData({
+        ...clienteRes.data,
+        cidade
+      });
     }
   };
 
@@ -332,10 +346,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
 
             {clienteData && (
-              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+              <div className="grid grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
                 <div className="space-y-2">
                   <Label>Endereço</Label>
                   <Input value={clienteData.endereco || ''} readOnly className="bg-background" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Cidade</Label>
+                  <Input value={clienteData.cidade || ''} readOnly className="bg-background" />
                 </div>
                 <div className="space-y-2">
                   <Label>Telefone</Label>

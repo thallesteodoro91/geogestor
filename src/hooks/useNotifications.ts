@@ -69,6 +69,26 @@ export const useNotifications = () => {
     }
   };
 
+  const clearAllNotifications = async () => {
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+      
+      const { error } = await supabase
+        .from('notificacoes')
+        .delete()
+        .eq('tenant_id', tenantId);
+
+      if (error) throw error;
+      
+      setNotifications([]);
+      toast.success("Notificações limpas com sucesso");
+    } catch (error: any) {
+      console.error('Erro ao limpar notificações:', error);
+      toast.error("Erro ao limpar notificações");
+    }
+  };
+
   const createNotification = async (
     tipo: string,
     titulo: string,
@@ -155,6 +175,7 @@ export const useNotifications = () => {
     unreadCount,
     markAsRead,
     markAllAsRead,
+    clearAllNotifications,
     createNotification,
     checkPendingPayments,
     refetch: fetchNotifications

@@ -86,14 +86,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
   useEffect(() => {
     if (open) {
-      fetchData();
-      if (clienteId) {
-        setValue("id_cliente", clienteId);
-        fetchClienteData(clienteId);
-      }
-      if (orcamento) {
-        // Buscar itens do orçamento para edição
-        fetchOrcamentoItens(orcamento.id_orcamento).then((itensDb) => {
+      const loadData = async () => {
+        // 1. Primeiro, buscar dados de clientes e serviços (aguardar completar)
+        await fetchData();
+        
+        // 2. Se for modo de edição, buscar dados do orçamento
+        if (orcamento) {
+          const itensDb = await fetchOrcamentoItens(orcamento.id_orcamento);
+          
           const itensFormatados = itensDb.length > 0 
             ? itensDb.map((item: any) => ({
                 id_servico: item.id_servico || "",
@@ -110,8 +110,9 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 custo_servico: 0
               }];
 
+          // 3. Reset com todos os dados (clientes já carregados)
           reset({
-            id_cliente: orcamento.id_cliente,
+            id_cliente: orcamento.id_cliente || "",
             data_orcamento: orcamento.data_orcamento,
             itens: itensFormatados,
             incluir_marco: orcamento.incluir_marco || false,
@@ -119,19 +120,24 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             marco_valor_unitario: orcamento.marco_valor_unitario || 0,
             incluir_imposto: orcamento.incluir_imposto || false,
             percentual_imposto: orcamento.percentual_imposto || 0,
-            orcamento_convertido: orcamento.orcamento_convertido,
-            faturamento: orcamento.faturamento,
-            data_do_faturamento: orcamento.data_do_faturamento,
-            situacao_do_pagamento: orcamento.situacao_do_pagamento,
-            forma_de_pagamento: orcamento.forma_de_pagamento,
+            orcamento_convertido: orcamento.orcamento_convertido || false,
+            faturamento: orcamento.faturamento || false,
+            data_do_faturamento: orcamento.data_do_faturamento || "",
+            situacao_do_pagamento: orcamento.situacao_do_pagamento || "",
+            forma_de_pagamento: orcamento.forma_de_pagamento || "",
             anotacoes: orcamento.anotacoes || ""
           });
-        });
-        
-        if (orcamento.id_cliente) {
-          fetchClienteData(orcamento.id_cliente);
+          
+          if (orcamento.id_cliente) {
+            fetchClienteData(orcamento.id_cliente);
+          }
+        } else if (clienteId) {
+          setValue("id_cliente", clienteId);
+          fetchClienteData(clienteId);
         }
-      }
+      };
+      
+      loadData();
     }
   }, [open, orcamento, clienteId]);
 

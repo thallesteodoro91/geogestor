@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getCurrentTenantId } from "@/services/supabase.service";
 
 export interface Notification {
   id_notificacao: string;
@@ -77,6 +78,14 @@ export const useNotifications = () => {
     id_referencia: string | null = null
   ) => {
     try {
+      // Obter tenant_id do usuário atual
+      const tenantId = await getCurrentTenantId();
+      
+      if (!tenantId) {
+        console.warn('Notificação não criada: tenant_id não encontrado');
+        return null;
+      }
+
       const { data, error } = await supabase
         .from('notificacoes')
         .insert({
@@ -85,7 +94,8 @@ export const useNotifications = () => {
           mensagem,
           link,
           prioridade,
-          id_referencia
+          id_referencia,
+          tenant_id: tenantId
         })
         .select()
         .single();

@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plus, Trash2, MapPin, Info, Smartphone, Banknote, CreditCard, ArrowLeftRight, FileText } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
+import { getCurrentTenantId } from "@/services/supabase.service";
 
 interface OrcamentoDialogProps {
   open: boolean;
@@ -217,12 +218,40 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
   const onSubmit = async (data: any) => {
     try {
+      // Obter tenant_id para RLS
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        toast.error("Erro: Sessão inválida. Faça login novamente.");
+        return;
+      }
+
+      // Sanitizar campos UUID: converter "" para null
+      const sanitizeUuid = (value: string | null | undefined): string | null => {
+        return value && value.trim() !== '' ? value : null;
+      };
+
+      // Validar cliente obrigatório
+      if (!data.id_cliente || data.id_cliente.trim() === '') {
+        toast.error("Por favor, selecione um cliente.");
+        return;
+      }
+
+      // Filtrar apenas itens com serviço válido
+      const servicosValidos = data.itens.filter(
+        (item: any) => item.id_servico && item.id_servico.trim() !== ''
+      );
+
+      if (servicosValidos.length === 0) {
+        toast.error("Por favor, adicione pelo menos um serviço.");
+        return;
+      }
+
       const orcamentoData = {
-        id_cliente: data.id_cliente,
+        id_cliente: sanitizeUuid(data.id_cliente),
         data_orcamento: data.data_orcamento,
-        quantidade: data.itens.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
-        valor_unitario: receitaEsperada / data.itens.length,
-        desconto: data.itens.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
+        quantidade: servicosValidos.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
+        valor_unitario: servicosValidos.length > 0 ? receitaEsperada / servicosValidos.length : 0,
+        desconto: servicosValidos.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
         incluir_imposto: data.incluir_imposto,
         percentual_imposto: data.incluir_imposto ? data.percentual_imposto : 0,
         valor_imposto: totalImpostos,
@@ -237,9 +266,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         orcamento_convertido: data.orcamento_convertido,
         faturamento: data.faturamento,
         data_do_faturamento: data.data_do_faturamento || null,
-        situacao_do_pagamento: data.situacao_do_pagamento,
-        forma_de_pagamento: data.forma_de_pagamento,
-        anotacoes: data.anotacoes
+        situacao_do_pagamento: sanitizeUuid(data.situacao_do_pagamento) ? data.situacao_do_pagamento : null,
+        forma_de_pagamento: sanitizeUuid(data.forma_de_pagamento) ? data.forma_de_pagamento : null,
+        anotacoes: data.anotacoes || null,
+        tenant_id: tenantId
       };
 
       let orcamentoId = orcamento?.id_orcamento;
@@ -270,20 +300,24 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           .eq('id_orcamento', orcamentoId);
       }
 
-      const itensData = data.itens.map((item: any) => ({
+      // Inserir apenas itens com serviço válido
+      const itensData = servicosValidos.map((item: any) => ({
         id_orcamento: orcamentoId,
-        id_servico: item.id_servico,
-        quantidade: item.quantidade,
-        valor_unitario: item.valor_unitario,
-        desconto: item.desconto,
-        valor_mao_obra: item.custo_servico
+        id_servico: sanitizeUuid(item.id_servico),
+        quantidade: item.quantidade || 1,
+        valor_unitario: item.valor_unitario || 0,
+        desconto: item.desconto || 0,
+        valor_mao_obra: item.custo_servico || 0,
+        tenant_id: tenantId
       }));
 
-      const { error: itensError } = await supabase
-        .from('fato_orcamento_itens')
-        .insert(itensData);
+      if (itensData.length > 0) {
+        const { error: itensError } = await supabase
+          .from('fato_orcamento_itens')
+          .insert(itensData);
 
-      if (itensError) throw itensError;
+        if (itensError) throw itensError;
+      }
 
       // Criar notificação para novo orçamento
       if (!orcamento) {

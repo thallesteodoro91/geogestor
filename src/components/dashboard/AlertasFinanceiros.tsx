@@ -65,7 +65,7 @@ export function AlertasFinanceiros() {
 
   if (isLoading) {
     return (
-      <Card className="interactive-lift p-6">
+      <Card className="interactive-lift p-6 border-0">
         <div className="space-y-4">
           <Skeleton className="h-6 w-48" />
           <Skeleton className="h-20 w-full" />
@@ -77,7 +77,7 @@ export function AlertasFinanceiros() {
 
   if (alertas.length === 0) {
     return (
-      <Card className="interactive-lift p-6">
+      <Card className="interactive-lift p-6 border-0">
         <div className="flex items-center gap-3 text-success">
           <div className="flex items-center justify-center w-10 h-10 rounded-full bg-success/10">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -94,7 +94,7 @@ export function AlertasFinanceiros() {
   }
 
   return (
-    <Card className="interactive-lift p-6">
+    <Card className="interactive-lift p-6 border-0">
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-5 h-5 text-warning" />

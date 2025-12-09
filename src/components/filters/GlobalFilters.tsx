@@ -62,7 +62,7 @@ export const GlobalFilters = ({
   const activeFiltersCount = Object.values(filters).filter(v => v !== "").length;
 
   return (
-    <Card className="mb-6">
+    <Card className="mb-6 border-0">
       <CardHeader className="cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

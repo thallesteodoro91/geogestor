@@ -268,7 +268,7 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <h3 className="text-lg font-heading font-semibold text-foreground">Evolução da Receita</h3>
@@ -307,7 +307,7 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <h3 className="text-lg font-heading font-semibold text-foreground">Margem de Lucro</h3>
@@ -363,7 +363,7 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <ChartTitle 
                     title="Orçado x Realizado"
@@ -387,7 +387,7 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <ChartTitle 
                     title="Desvio Orçamentário (%)"
@@ -434,7 +434,7 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <ChartTitle 
                     title="Receita vs Ponto de Equilíbrio"
@@ -459,7 +459,7 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              <Card className="interactive-lift">
+              <Card className="interactive-lift border-0">
                 <CardHeader>
                   <ChartTitle 
                     title="Custos Fixos vs Variáveis"

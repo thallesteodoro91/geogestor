@@ -152,7 +152,7 @@ Pergunta do usuário: ${input}`
   ];
 
   return (
-    <Card className="interactive-lift flex flex-col h-[600px] border-geobot-border bg-geobot-bg">
+    <Card className="interactive-lift flex flex-col h-[600px] border-0 bg-geobot-bg">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b border-geobot-border">
         <div className="flex items-center justify-center w-10 h-10 rounded-full bg-geobot text-white">

@@ -1127,6 +1127,7 @@ export type Database = {
           margem_contribuicao_percent: number | null
           margem_liquida_percent: number | null
           ponto_equilibrio_receita: number | null
+          receita_liquida: number | null
           receita_realizada_total: number | null
           receita_total: number | null
           servicos_concluidos: number | null
@@ -1134,6 +1135,7 @@ export type Database = {
           ticket_medio: number | null
           total_clientes: number | null
           total_despesas: number | null
+          total_impostos: number | null
           total_orcamentos: number | null
           total_servicos: number | null
           valor_faturado_total: number | null
@@ -1168,6 +1170,7 @@ export type Database = {
           margem_contribuicao_percent: number
           margem_liquida_percent: number
           ponto_equilibrio_receita: number
+          receita_liquida: number
           receita_realizada_total: number
           receita_total: number
           servicos_concluidos: number
@@ -1175,6 +1178,7 @@ export type Database = {
           ticket_medio: number
           total_clientes: number
           total_despesas: number
+          total_impostos: number
           total_orcamentos: number
           total_servicos: number
           valor_faturado_total: number

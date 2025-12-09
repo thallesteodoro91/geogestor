@@ -37,6 +37,8 @@ export function getDefaultKPIs(): KPIData {
     receita_total: 0,
     receita_realizada_total: 0,
     valor_faturado_total: 0,
+    total_impostos: 0,
+    receita_liquida: 0,
     lucro_bruto: 0,
     lucro_liquido: 0,
     margem_bruta_percent: 0,

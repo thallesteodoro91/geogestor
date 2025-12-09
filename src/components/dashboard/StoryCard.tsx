@@ -87,9 +87,9 @@ export const StoryCard = ({
   
   // Princípio 3: Hierarquia visual baseada em ênfase
   const emphasisStyles = {
-    high: "border-2 shadow-glow",
-    medium: "border shadow-lg",
-    low: "border-border/50",
+    high: "shadow-glow",
+    medium: "shadow-lg",
+    low: "",
   };
 
   return (

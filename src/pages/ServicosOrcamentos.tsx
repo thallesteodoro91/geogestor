@@ -1,18 +1,22 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, Download, TrendingUp, DollarSign, Calculator } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, Download, TrendingUp, DollarSign, Calculator, CalendarIcon, X, Info } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 export default function ServicosOrcamentos() {
   const [isServicoDialogOpen, setIsServicoDialogOpen] = useState(false);
@@ -21,6 +25,8 @@ export default function ServicosOrcamentos() {
   const [editingOrcamento, setEditingOrcamento] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
+  const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
+  const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
 
   const { data: servicos = [], isLoading: loadingServicos, refetch: refetchServicos } = useQuery({
     queryKey: ['servicos'],
@@ -182,19 +188,48 @@ export default function ServicosOrcamentos() {
     s.dim_cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const filteredOrcamentos = orcamentos.filter(o => 
+  // Filtrar orçamentos por período
+  const orcamentosFiltradosPorData = orcamentos.filter(o => {
+    if (!dataInicio && !dataFim) return true;
+    
+    const dataOrcamento = new Date(o.data_orcamento);
+    dataOrcamento.setHours(0, 0, 0, 0);
+    
+    if (dataInicio && dataFim) {
+      const inicio = new Date(dataInicio);
+      inicio.setHours(0, 0, 0, 0);
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+      return dataOrcamento >= inicio && dataOrcamento <= fim;
+    }
+    if (dataInicio) {
+      const inicio = new Date(dataInicio);
+      inicio.setHours(0, 0, 0, 0);
+      return dataOrcamento >= inicio;
+    }
+    if (dataFim) {
+      const fim = new Date(dataFim);
+      fim.setHours(23, 59, 59, 999);
+      return dataOrcamento <= fim;
+    }
+    return true;
+  });
+
+  const filteredOrcamentos = orcamentosFiltradosPorData.filter(o => 
     o.dim_cliente?.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     o.itens?.some((item: any) => item.dim_tiposervico?.nome?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  // Calcular KPIs
+  // Calcular KPIs usando orçamentos filtrados por período
+  const filtroAtivo = dataInicio || dataFim;
+  const orcamentosParaKPI = orcamentosFiltradosPorData;
   const totalServicos = servicos.length;
   const servicosConcluidos = servicos.filter(s => s.situacao_do_servico === 'Concluído').length;
   const receitaServicos = servicos.reduce((acc, s) => acc + (s.receita_servico || 0), 0);
-  const totalOrcamentos = orcamentos.length;
-  const orcamentosAprovados = orcamentos.filter(o => o.orcamento_convertido).length;
+  const totalOrcamentos = orcamentosParaKPI.length;
+  const orcamentosAprovados = orcamentosParaKPI.filter(o => o.orcamento_convertido).length;
   const taxaConversao = totalOrcamentos > 0 ? (orcamentosAprovados / totalOrcamentos) * 100 : 0;
-  const receitaOrcada = orcamentos.reduce((acc, o) => acc + (o.receita_esperada || 0), 0);
+  const receitaOrcada = orcamentosParaKPI.reduce((acc, o) => acc + (o.receita_esperada || 0), 0);
 
   return (
     <AppLayout>
@@ -242,18 +277,102 @@ export default function ServicosOrcamentos() {
 
         {/* Orçamentos */}
         <div className="space-y-4">
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-end gap-4">
               <Input
                 placeholder="Buscar orçamentos..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="max-w-sm"
               />
-              <Button onClick={handleNewOrcamento}>
+              
+              <div className="flex items-center gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Data Início</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className={cn(
+                          "w-[140px] justify-start text-left font-normal",
+                          !dataInicio && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dataInicio ? format(dataInicio, "dd/MM/yyyy") : "Selecionar"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dataInicio}
+                        onSelect={setDataInicio}
+                        className="pointer-events-auto"
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Data Fim</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button 
+                        variant="outline" 
+                        className={cn(
+                          "w-[140px] justify-start text-left font-normal",
+                          !dataFim && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dataFim ? format(dataFim, "dd/MM/yyyy") : "Selecionar"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dataFim}
+                        onSelect={setDataFim}
+                        className="pointer-events-auto"
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+                
+                {filtroAtivo && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="mt-5"
+                    onClick={() => {
+                      setDataInicio(undefined);
+                      setDataFim(undefined);
+                    }}
+                  >
+                    <X className="mr-1 h-4 w-4" />
+                    Limpar filtro
+                  </Button>
+                )}
+              </div>
+              
+              <Button onClick={handleNewOrcamento} className="ml-auto">
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Orçamento
               </Button>
             </div>
+
+            {/* Disclaimer do filtro */}
+            {filtroAtivo && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Os indicadores (KPIs) acima estão mostrando valores filtrados pelo período selecionado 
+                  ({dataInicio ? format(dataInicio, "dd/MM/yyyy") : "início"} - {dataFim ? format(dataFim, "dd/MM/yyyy") : "atual"}).
+                  Limpe o filtro para ver os valores totais.
+                </p>
+              </div>
+            )}
 
             <div className="rounded-lg border bg-card">
               <Table>

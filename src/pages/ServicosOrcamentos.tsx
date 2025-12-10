@@ -264,6 +264,7 @@ export default function ServicosOrcamentos() {
                     <TableHead>Data</TableHead>
                     <TableHead>Valor Total</TableHead>
                     <TableHead>Situação Pagamento</TableHead>
+                    <TableHead>Forma Pagamento</TableHead>
                     <TableHead>Convertido</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -271,11 +272,11 @@ export default function ServicosOrcamentos() {
                 <TableBody>
                   {loadingOrcamentos ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center">Carregando...</TableCell>
+                      <TableCell colSpan={8} className="text-center">Carregando...</TableCell>
                     </TableRow>
                   ) : filteredOrcamentos.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center">Nenhum orçamento encontrado</TableCell>
+                      <TableCell colSpan={8} className="text-center">Nenhum orçamento encontrado</TableCell>
                     </TableRow>
                   ) : (
                     filteredOrcamentos.map((orcamento) => (
@@ -299,6 +300,20 @@ export default function ServicosOrcamentos() {
                             }
                           >
                             {orcamento.situacao_do_pagamento || 'Não definido'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            className={
+                              orcamento.forma_de_pagamento === "PIX" ? "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]" :
+                              orcamento.forma_de_pagamento === "Dinheiro" ? "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]" :
+                              orcamento.forma_de_pagamento === "Cartão" ? "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]" :
+                              orcamento.forma_de_pagamento === "Transferência" ? "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]" :
+                              orcamento.forma_de_pagamento === "Boleto" ? "bg-[hsl(25,95%,53%)] text-white hover:bg-[hsl(25,95%,45%)]" :
+                              "bg-muted text-muted-foreground"
+                            }
+                          >
+                            {orcamento.forma_de_pagamento || 'Não definido'}
                           </Badge>
                         </TableCell>
                         <TableCell>

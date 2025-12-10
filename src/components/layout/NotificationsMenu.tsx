@@ -104,19 +104,14 @@ export const NotificationsMenu = () => {
               </Button>
             )}
             {unreadCount > 0 && (
-              <>
-                <Badge variant="secondary">
-                  {unreadCount} nova{unreadCount > 1 ? "s" : ""}
-                </Badge>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  className="h-6 text-xs"
-                  onClick={markAllAsRead}
-                >
-                  Marcar todas
-                </Button>
-              </>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 text-xs"
+                onClick={markAllAsRead}
+              >
+                Marcar todas
+              </Button>
             )}
           </div>
         </DropdownMenuLabel>

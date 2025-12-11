@@ -72,3 +72,13 @@ export async function fetchDespesasPorCategoria() {
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;
 }
+
+export async function fetchDespesasByOrcamento(orcamentoId: string) {
+  const tenantId = await getCurrentTenantId();
+  let query = supabase.from('fato_despesas').select(`
+    *,
+    dim_tipodespesa(categoria, subcategoria)
+  `).eq('id_orcamento', orcamentoId);
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  return query.order('data_da_despesa', { ascending: false });
+}

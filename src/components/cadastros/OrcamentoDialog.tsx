@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, Info, Smartphone, Banknote, CreditCard, ArrowLeftRight, FileText } from "lucide-react";
+import { Plus, Trash2, MapPin, Info, Smartphone, Banknote, CreditCard, ArrowLeftRight, FileText, Receipt } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
 
@@ -24,6 +24,7 @@ interface OrcamentoDialogProps {
 export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSuccess }: OrcamentoDialogProps) {
   const [clientes, setClientes] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
+  const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
   const [clienteData, setClienteData] = useState<any>(null);
   const { createNotification } = useNotifications();
 
@@ -38,6 +39,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         desconto: 0,
         custo_servico: 0
       }],
+      despesas: [] as { id_tipodespesa: string; descricao: string; valor: number }[],
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
@@ -57,7 +59,13 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     name: "itens"
   });
 
+  const { fields: despesaFields, append: appendDespesa, remove: removeDespesa } = useFieldArray({
+    control,
+    name: "despesas"
+  });
+
   const watchedItens = watch("itens");
+  const watchedDespesas = watch("despesas");
   const watchedClienteId = watch("id_cliente");
   const watchedSituacao = watch("situacao_do_pagamento");
   const watchedIncluirMarco = watch("incluir_marco");
@@ -84,15 +92,30 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return data || [];
   };
 
+  const fetchOrcamentoDespesas = async (orcamentoId: string) => {
+    const { data, error } = await supabase
+      .from('fato_despesas')
+      .select('*, dim_tipodespesa(categoria)')
+      .eq('id_orcamento', orcamentoId);
+    if (error) {
+      console.error('Erro ao buscar despesas do orçamento:', error);
+      return [];
+    }
+    return data || [];
+  };
+
   useEffect(() => {
     if (open) {
       const loadData = async () => {
-        // 1. Primeiro, buscar dados de clientes e serviços (aguardar completar)
+        // 1. Primeiro, buscar dados de clientes, serviços e tipos de despesa
         await fetchData();
         
         // 2. Se for modo de edição, buscar dados do orçamento
         if (orcamento) {
-          const itensDb = await fetchOrcamentoItens(orcamento.id_orcamento);
+          const [itensDb, despesasDb] = await Promise.all([
+            fetchOrcamentoItens(orcamento.id_orcamento),
+            fetchOrcamentoDespesas(orcamento.id_orcamento)
+          ]);
           
           const itensFormatados = itensDb.length > 0 
             ? itensDb.map((item: any) => ({
@@ -110,11 +133,18 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 custo_servico: 0
               }];
 
+          const despesasFormatadas = despesasDb.map((d: any) => ({
+            id_tipodespesa: d.id_tipodespesa || "",
+            descricao: d.observacoes || "",
+            valor: d.valor_da_despesa || 0
+          }));
+
           // 3. Reset com todos os dados (clientes já carregados)
           reset({
             id_cliente: orcamento.id_cliente || "",
             data_orcamento: orcamento.data_orcamento,
             itens: itensFormatados,
+            despesas: despesasFormatadas,
             incluir_marco: orcamento.incluir_marco || false,
             marco_quantidade: orcamento.marco_quantidade || 0,
             marco_valor_unitario: orcamento.marco_valor_unitario || 0,
@@ -148,13 +178,15 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   }, [watchedClienteId]);
 
   const fetchData = async () => {
-    const [clientesRes, servicosRes] = await Promise.all([
+    const [clientesRes, servicosRes, tiposDespesaRes] = await Promise.all([
       supabase.from('dim_cliente').select('id_cliente, nome').order('nome'),
-      supabase.from('dim_tiposervico').select('id_tiposervico, nome, valor_sugerido, dim_categoria_servico(nome)').eq('ativo', true).order('nome')
+      supabase.from('dim_tiposervico').select('id_tiposervico, nome, valor_sugerido, dim_categoria_servico(nome)').eq('ativo', true).order('nome'),
+      supabase.from('dim_tipodespesa').select('id_tipodespesa, categoria, subcategoria').order('categoria')
     ]);
 
     if (clientesRes.data) setClientes(clientesRes.data);
     if (servicosRes.data) setServicos(servicosRes.data);
+    if (tiposDespesaRes.data) setTiposDespesa(tiposDespesaRes.data);
   };
 
   const fetchClienteData = async (clienteId: string) => {
@@ -206,19 +238,22 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       return acc + valorComDesconto;
     }, 0);
 
-    // Custo Total = soma dos custos de cada serviço
+    // Custo dos Serviços = soma dos custos de cada serviço
     const custoServicos = (watchedItens || []).reduce((acc, item) => {
       const custoItem = Math.floor(toNum(item?.quantidade)) * toNum(item?.custo_servico);
       return acc + custoItem;
     }, 0);
+
+    // Total de Despesas do Orçamento
+    const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
 
     // Valor total dos marcos (COMO CUSTO, não receita)
     const marcoValorTotal = watchedIncluirMarco 
       ? Math.floor(toNum(watchedMarcoQuantidade)) * toNum(watchedMarcoValorUnitario)
       : 0;
 
-    // Custo total incluindo marcos
-    const custoTotal = custoServicos + marcoValorTotal;
+    // Custo total incluindo marcos e despesas
+    const custoTotal = custoServicos + marcoValorTotal + totalDespesasOrcamento;
 
     // Total de Impostos (calculado por percentual sobre a receita esperada)
     const percentualImposto = watchedIncluirImposto ? toNum(watchedPercentualImposto) : 0;
@@ -236,6 +271,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return { 
       custoTotal,
       custoServicos,
+      totalDespesasOrcamento,
       receitaEsperada,
       descontoTotal,
       marcoValorTotal,
@@ -247,7 +283,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, custoServicos, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, custoServicos, totalDespesasOrcamento, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   // Formatação de moeda brasileira
   const formatCurrency = (value: number): string => {
@@ -339,6 +375,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           .from('fato_orcamento_itens')
           .delete()
           .eq('id_orcamento', orcamentoId);
+
+        // Deletar despesas antigas vinculadas ao orçamento
+        await supabase
+          .from('fato_despesas')
+          .delete()
+          .eq('id_orcamento', orcamentoId);
       }
 
       // Inserir apenas itens com serviço válido
@@ -358,6 +400,28 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           .insert(itensData);
 
         if (itensError) throw itensError;
+      }
+
+      // Inserir despesas vinculadas ao orçamento
+      const despesasValidas = (data.despesas || []).filter(
+        (d: any) => d.valor && d.valor > 0
+      );
+
+      if (despesasValidas.length > 0) {
+        const despesasData = despesasValidas.map((d: any) => ({
+          id_orcamento: orcamentoId,
+          id_tipodespesa: sanitizeUuid(d.id_tipodespesa),
+          valor_da_despesa: d.valor,
+          data_da_despesa: data.data_orcamento,
+          observacoes: d.descricao || null,
+          tenant_id: tenantId
+        }));
+
+        const { error: despesasError } = await supabase
+          .from('fato_despesas')
+          .insert(despesasData);
+
+        if (despesasError) throw despesasError;
       }
 
       // Criar notificação para novo orçamento com nome do cliente e propriedade
@@ -623,58 +687,154 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
           </div>
 
-          {/* Resumo Financeiro */}
-          <div className="p-4 bg-muted rounded-lg space-y-3">
-            <h3 className="font-semibold">Resumo Financeiro</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita Esperada</span>
-                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaEsperada)}</p>
-              </div>
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Desconto Total</span>
-                <p className="font-semibold text-destructive whitespace-nowrap">- R$ {formatCurrency(descontoTotal)}</p>
-              </div>
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Serviços</span>
-                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(custoServicos)}</p>
-              </div>
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">
-                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
+          {/* III. Despesas do Orçamento */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold text-lg">Despesas do Orçamento</h3>
+                <span className="text-sm text-muted-foreground">
+                  ({despesaFields.length} {despesaFields.length === 1 ? 'despesa' : 'despesas'})
                 </span>
-                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalImpostos)}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendDespesa({
+                  id_tipodespesa: "",
+                  descricao: "",
+                  valor: 0
+                })}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Despesa
+              </Button>
+            </div>
+            
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <Info className="h-3 w-3" />
+              Despesas adicionadas aqui serão contabilizadas como custos internos. No documento do cliente, aparecerão apenas como "Custo dos Serviços".
+            </p>
+
+            {despesaFields.map((field, index) => (
+              <div key={field.id} className="p-4 border rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm">Despesa #{index + 1}</span>
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => removeDespesa(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo de Despesa</Label>
+                    <Select
+                      value={watchedDespesas[index]?.id_tipodespesa || ""}
+                      onValueChange={(value) => setValue(`despesas.${index}.id_tipodespesa`, value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposDespesa.map((tipo) => (
+                          <SelectItem key={tipo.id_tipodespesa} value={tipo.id_tipodespesa}>
+                            {tipo.categoria}{tipo.subcategoria ? ` - ${tipo.subcategoria}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <Input 
+                      placeholder="Ex: Combustível ida/volta" 
+                      {...register(`despesas.${index}.descricao`)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Valor (R$)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01" 
+                      min="0"
+                      placeholder="0,00"
+                      {...register(`despesas.${index}.valor`, { valueAsNumber: true })}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Resumo Financeiro */}
+          <div className="p-4 bg-muted rounded-lg space-y-4">
+            <h3 className="font-semibold">Resumo Financeiro</h3>
+            
+            {/* Linha 1 - 4 colunas */}
+            <div className="grid grid-cols-4 gap-4 text-sm">
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Receita Esperada</span>
+                <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Desconto Total</span>
+                <p className="font-semibold text-destructive">- R$ {formatCurrency(descontoTotal)}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Custo Serviços</span>
+                <p className="font-semibold">R$ {formatCurrency(custoServicos)}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Despesas</span>
+                <p className="font-semibold">R$ {formatCurrency(totalDespesasOrcamento)}</p>
               </div>
             </div>
-            {marcoValorTotal > 0 && (
-              <div className="grid grid-cols-2 gap-4 text-sm pt-2 border-t border-border">
-                <div className="text-center">
-                  <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade}x) - Custo</span>
-                  <p className="font-semibold text-destructive whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
-                </div>
-                <div className="text-center">
-                  <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Total</span>
-                  <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(custoTotal)}</p>
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-3 gap-4 text-sm pt-2 border-t border-border">
+            
+            {/* Linha 2 - 4 colunas */}
+            <div className="grid grid-cols-4 gap-4 text-sm pt-3 border-t border-border">
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
-                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>
+                <span className="text-muted-foreground text-xs block">
+                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
+                </span>
+                <p className="font-semibold">R$ {formatCurrency(totalImpostos)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Lucro Esperado</span>
-                <p className="font-semibold text-primary whitespace-nowrap">R$ {formatCurrency(lucroEsperado)}</p>
+                <span className="text-muted-foreground text-xs block">Marcos ({watchedMarcoQuantidade || 0}x)</span>
+                <p className="font-semibold">R$ {formatCurrency(marcoValorTotal)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block whitespace-nowrap">Margem Esperada</span>
-                <p className="font-semibold text-primary whitespace-nowrap">{margemEsperada.toFixed(2)}%</p>
+                <span className="text-muted-foreground text-xs block">Receita + Impostos</span>
+                <p className="font-semibold">R$ {formatCurrency(receitaComImposto)}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Custo Total</span>
+                <p className="font-semibold text-destructive">R$ {formatCurrency(custoTotal)}</p>
+              </div>
+            </div>
+            
+            {/* Linha 3 - 2 colunas centralizadas */}
+            <div className="flex justify-center gap-12 pt-3 border-t border-border">
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Lucro Esperado</span>
+                <p className={`font-semibold text-lg ${lucroEsperado >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  R$ {formatCurrency(lucroEsperado)}
+                </p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block">Margem Esperada</span>
+                <p className={`font-semibold text-lg ${margemEsperada >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                  {margemEsperada.toFixed(2)}%
+                </p>
               </div>
             </div>
           </div>
 
-          {/* III. Situação e Faturamento */}
+          {/* IV. Situação e Faturamento */}
           <div className="space-y-4">
             <h3 className="font-semibold text-lg">Situação e Faturamento</h3>
             

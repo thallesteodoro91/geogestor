@@ -457,6 +457,7 @@ export type Database = {
           data_da_despesa: string
           id_data: string | null
           id_despesas: string
+          id_orcamento: string | null
           id_servico: string | null
           id_tipodespesa: string | null
           observacoes: string | null
@@ -469,6 +470,7 @@ export type Database = {
           data_da_despesa: string
           id_data?: string | null
           id_despesas?: string
+          id_orcamento?: string | null
           id_servico?: string | null
           id_tipodespesa?: string | null
           observacoes?: string | null
@@ -481,6 +483,7 @@ export type Database = {
           data_da_despesa?: string
           id_data?: string | null
           id_despesas?: string
+          id_orcamento?: string | null
           id_servico?: string | null
           id_tipodespesa?: string | null
           observacoes?: string | null
@@ -495,6 +498,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "dim_data"
             referencedColumns: ["id_data"]
+          },
+          {
+            foreignKeyName: "fato_despesas_id_orcamento_fkey"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
           },
           {
             foreignKeyName: "fato_despesas_id_servico_fkey"

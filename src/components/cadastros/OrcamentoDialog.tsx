@@ -36,8 +36,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         id_servico: "",
         quantidade: 1,
         valor_unitario: 0,
-        desconto: 0,
-        custo_servico: 0
+        desconto: 0
       }],
       despesas: [] as { id_tipodespesa: string; descricao: string; valor: number }[],
       incluir_marco: orcamento?.incluir_marco || false,
@@ -78,6 +77,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const getServicoNome = (servicoId: string) => {
     const servico = servicos.find(s => s.id_tiposervico === servicoId);
     return servico?.nome || null;
+  };
+
+  // Função para buscar o nome do tipo de despesa
+  const getTipoDespesaNome = (tipoDespesaId: string) => {
+    const tipo = tiposDespesa.find(t => t.id_tipodespesa === tipoDespesaId);
+    return tipo?.categoria || null;
   };
 
   const fetchOrcamentoItens = async (orcamentoId: string) => {
@@ -122,15 +127,13 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 id_servico: item.id_servico || "",
                 quantidade: item.quantidade || 1,
                 valor_unitario: item.valor_unitario || 0,
-                desconto: item.desconto || 0,
-                custo_servico: item.valor_mao_obra || 0
+                desconto: item.desconto || 0
               }))
             : [{
                 id_servico: "",
                 quantidade: 1,
                 valor_unitario: 0,
-                desconto: 0,
-                custo_servico: 0
+                desconto: 0
               }];
 
           const despesasFormatadas = despesasDb.map((d: any) => ({
@@ -238,12 +241,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       return acc + valorComDesconto;
     }, 0);
 
-    // Custo dos Serviços = soma dos custos de cada serviço
-    const custoServicos = (watchedItens || []).reduce((acc, item) => {
-      const custoItem = Math.floor(toNum(item?.quantidade)) * toNum(item?.custo_servico);
-      return acc + custoItem;
-    }, 0);
-
     // Total de Despesas do Orçamento
     const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
 
@@ -253,7 +250,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       : 0;
 
     // Custo total incluindo marcos e despesas
-    const custoTotal = custoServicos + marcoValorTotal + totalDespesasOrcamento;
+    const custoTotal = marcoValorTotal + totalDespesasOrcamento;
 
     // Total de Impostos (calculado por percentual sobre a receita esperada)
     const percentualImposto = watchedIncluirImposto ? toNum(watchedPercentualImposto) : 0;
@@ -270,7 +267,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     
     return { 
       custoTotal,
-      custoServicos,
       totalDespesasOrcamento,
       receitaEsperada,
       descontoTotal,
@@ -283,7 +279,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, custoServicos, totalDespesasOrcamento, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, totalDespesasOrcamento, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   // Formatação de moeda brasileira
   const formatCurrency = (value: number): string => {
@@ -390,7 +386,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         quantidade: item.quantidade || 1,
         valor_unitario: item.valor_unitario || 0,
         desconto: item.desconto || 0,
-        valor_mao_obra: item.custo_servico || 0,
+        valor_mao_obra: 0,
         tenant_id: tenantId
       }));
 
@@ -630,17 +626,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-4">
-                  <div className="space-y-2">
-                    <Label>Custo do Serviço (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      {...register(`itens.${index}.custo_servico` as const, { valueAsNumber: true })}
-                    />
-                  </div>
-                </div>
               </div>
             ))}
 
@@ -687,12 +672,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
           </div>
 
-          {/* III. Despesas do Orçamento */}
+          {/* III. Despesas */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Receipt className="h-5 w-5 text-muted-foreground" />
-                <h3 className="font-semibold text-lg">Despesas do Orçamento</h3>
+                <h3 className="font-semibold text-lg">Despesas</h3>
                 <span className="text-sm text-muted-foreground">
                   ({despesaFields.length} {despesaFields.length === 1 ? 'despesa' : 'despesas'})
                 </span>
@@ -720,7 +705,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             {despesaFields.map((field, index) => (
               <div key={field.id} className="p-4 border rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-sm">Despesa #{index + 1}</span>
+                  <span className="font-medium text-sm">
+                    {watchedDespesas[index]?.id_tipodespesa 
+                      ? `#${index + 1} - ${getTipoDespesaNome(watchedDespesas[index].id_tipodespesa)}`
+                      : `Despesa #${index + 1}`
+                    }
+                  </span>
                   <Button 
                     type="button" 
                     variant="ghost" 
@@ -743,7 +733,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                       <SelectContent>
                         {tiposDespesa.map((tipo) => (
                           <SelectItem key={tipo.id_tipodespesa} value={tipo.id_tipodespesa}>
-                            {tipo.categoria}{tipo.subcategoria ? ` - ${tipo.subcategoria}` : ''}
+                            {tipo.categoria}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -775,8 +765,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           <div className="p-4 bg-muted rounded-lg space-y-4">
             <h3 className="font-semibold">Resumo Financeiro</h3>
             
-            {/* Linha 1 - 4 colunas */}
-            <div className="grid grid-cols-4 gap-4 text-sm">
+            {/* Linha 1 - 3 colunas */}
+            <div className="grid grid-cols-3 gap-4 text-sm">
               <div className="text-center">
                 <span className="text-muted-foreground text-xs block">Receita Esperada</span>
                 <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
@@ -784,10 +774,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
               <div className="text-center">
                 <span className="text-muted-foreground text-xs block">Desconto Total</span>
                 <p className="font-semibold text-destructive">- R$ {formatCurrency(descontoTotal)}</p>
-              </div>
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Custo Serviços</span>
-                <p className="font-semibold">R$ {formatCurrency(custoServicos)}</p>
               </div>
               <div className="text-center">
                 <span className="text-muted-foreground text-xs block">Despesas</span>

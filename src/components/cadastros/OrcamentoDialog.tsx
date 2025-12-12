@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, Info, Smartphone, Banknote, CreditCard, ArrowLeftRight, FileText, Receipt } from "lucide-react";
+import { Plus, Trash2, MapPin, Info, Receipt, User, Calculator, DollarSign, StickyNote, Percent } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
 
@@ -474,7 +474,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* I. Dados Básicos */}
           <div className="space-y-4">
-            <h3 className="font-semibold text-lg">Dados Básicos</h3>
+            <div className="flex items-center gap-2">
+              <User className="h-5 w-5 text-blue-500" />
+              <h3 className="font-semibold text-lg">Dados Básicos</h3>
+            </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -524,6 +527,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-orange-500" />
                 <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
                 <span className="text-sm text-muted-foreground">
                   ({fields.length} {fields.length === 1 ? 'serviço' : 'serviços'})
@@ -629,7 +633,11 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
               </div>
             ))}
 
-            {/* Opção Marco */}
+          </div>
+
+          {/* Marco e Imposto - lado a lado */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Marco */}
             <div className="p-4 border rounded-lg space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -637,7 +645,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     <MapPin className="h-5 w-5 text-primary" />
                     <span className="font-medium">Marco</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Incluir marcos topográficos no orçamento</p>
+                  <p className="text-xs text-muted-foreground">Marcos topográficos</p>
                 </div>
                 <Switch 
                   checked={watchedIncluirMarco}
@@ -646,7 +654,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
               </div>
               
               {watchedIncluirMarco && (
-                <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="space-y-3 pt-2">
                   <div className="space-y-2">
                     <Label>Quantidade</Label>
                     <Input 
@@ -670,13 +678,46 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 </div>
               )}
             </div>
+
+            {/* Imposto */}
+            <div className="p-4 border rounded-lg space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Percent className="h-5 w-5 text-orange-500" />
+                    <span className="font-medium">Imposto</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Não obrigatório</p>
+                </div>
+                <Switch 
+                  checked={watchedIncluirImposto}
+                  onCheckedChange={(checked) => setValue("incluir_imposto", checked)}
+                />
+              </div>
+              
+              {watchedIncluirImposto && (
+                <div className="pt-2">
+                  <div className="space-y-2">
+                    <Label>Percentual (%)</Label>
+                    <Input 
+                      type="number" 
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      {...register("percentual_imposto", { valueAsNumber: true })} 
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* III. Despesas */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Receipt className="h-5 w-5 text-muted-foreground" />
+                <Receipt className="h-5 w-5 text-green-500" />
                 <h3 className="font-semibold text-lg">Despesas</h3>
                 <span className="text-sm text-muted-foreground">
                   ({despesaFields.length} {despesaFields.length === 1 ? 'despesa' : 'despesas'})
@@ -761,9 +802,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             ))}
           </div>
 
-          {/* Resumo Financeiro */}
+          {/* IV. Resumo Financeiro */}
           <div className="p-4 bg-muted rounded-lg space-y-4">
-            <h3 className="font-semibold">Resumo Financeiro</h3>
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5 text-primary" />
+              <h3 className="font-semibold">Resumo Financeiro</h3>
+            </div>
             
             {/* Linha 1 - 4 colunas */}
             <div className="grid grid-cols-4 gap-4 text-sm">
@@ -820,160 +864,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
           </div>
 
-          {/* IV. Situação e Faturamento */}
-          <div className="space-y-4">
-            <h3 className="font-semibold text-lg">Situação e Faturamento</h3>
-            
-            {/* Toggle de Imposto */}
-            <div className="p-4 border rounded-lg space-y-3">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Info className="h-3 w-3" />
-                <span>A inclusão de impostos não é obrigatória.</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <span className="font-medium">Incluir Imposto?</span>
-                  <p className="text-xs text-muted-foreground">Aplicar percentual de imposto sobre a receita</p>
-                </div>
-                <Switch 
-                  checked={watchedIncluirImposto}
-                  onCheckedChange={(checked) => setValue("incluir_imposto", checked)}
-                />
-              </div>
-              
-              {watchedIncluirImposto && (
-                <div className="pt-2">
-                  <div className="space-y-2">
-                    <Label>Percentual de Imposto (%)</Label>
-                    <Input 
-                      type="number" 
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      {...register("percentual_imposto", { valueAsNumber: true })} 
-                      placeholder="0.00"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Orçamento Convertido?</Label>
-                <Select
-                  value={watch("orcamento_convertido") ? "sim" : "nao"}
-                  onValueChange={(value) => setValue("orcamento_convertido", value === "sim")}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sim">Sim</SelectItem>
-                    <SelectItem value="nao">Não</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Faturamento Realizado?</Label>
-                <Select
-                  value={watch("faturamento") ? "sim" : "nao"}
-                  onValueChange={(value) => setValue("faturamento", value === "sim")}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sim">Sim</SelectItem>
-                    <SelectItem value="nao">Não</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Data do Faturamento</Label>
-                <Input type="date" {...register("data_do_faturamento")} />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Situação do Pagamento</Label>
-                <Select
-                  value={watchedSituacao}
-                  onValueChange={(value) => setValue("situacao_do_pagamento", value)}
-                >
-                  <SelectTrigger className={
-                    watchedSituacao === "Pago" ? "text-[hsl(142,76%,36%)]" : 
-                    watchedSituacao === "Cancelado" ? "text-[hsl(0,100%,50%)]" : 
-                    watchedSituacao === "Pendente" ? "text-[hsl(48,96%,53%)]" :
-                    watchedSituacao === "Parcial" ? "text-[hsl(217,91%,60%)]" : ""
-                  }>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pendente" className="text-[hsl(48,96%,53%)]">Pendente</SelectItem>
-                    <SelectItem value="Pago" className="text-[hsl(142,76%,36%)]">Pago</SelectItem>
-                    <SelectItem value="Cancelado" className="text-[hsl(0,100%,50%)]">Cancelado</SelectItem>
-                    <SelectItem value="Parcial" className="text-[hsl(217,91%,60%)]">Parcial</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 col-span-2">
-                <Label>Forma de Pagamento</Label>
-                <Select
-                  value={watch("forma_de_pagamento")}
-                  onValueChange={(value) => setValue("forma_de_pagamento", value)}
-                >
-                  <SelectTrigger className={
-                    watch("forma_de_pagamento") === "PIX" ? "text-[hsl(48,96%,53%)]" :
-                    watch("forma_de_pagamento") === "Dinheiro" ? "text-[hsl(142,76%,45%)]" :
-                    watch("forma_de_pagamento") === "Cartão" ? "text-[hsl(217,91%,60%)]" :
-                    watch("forma_de_pagamento") === "Transferência" ? "text-[hsl(262,83%,58%)]" :
-                    watch("forma_de_pagamento") === "Boleto" ? "text-[hsl(25,95%,53%)]" : ""
-                  }>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="PIX">
-                      <span className="flex items-center gap-2 text-[hsl(48,96%,53%)]">
-                        <Smartphone className="h-4 w-4" />
-                        PIX
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="Dinheiro">
-                      <span className="flex items-center gap-2 text-[hsl(142,76%,45%)]">
-                        <Banknote className="h-4 w-4" />
-                        Dinheiro
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="Cartão">
-                      <span className="flex items-center gap-2 text-[hsl(217,91%,60%)]">
-                        <CreditCard className="h-4 w-4" />
-                        Cartão
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="Transferência">
-                      <span className="flex items-center gap-2 text-[hsl(262,83%,58%)]">
-                        <ArrowLeftRight className="h-4 w-4" />
-                        Transferência
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="Boleto">
-                      <span className="flex items-center gap-2 text-[hsl(25,95%,53%)]">
-                        <FileText className="h-4 w-4" />
-                        Boleto
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Anotações */}
+          {/* V. Anotações */}
           <div className="space-y-2">
-            <Label>Anotações</Label>
+            <div className="flex items-center gap-2">
+              <StickyNote className="h-5 w-5 text-yellow-500" />
+              <Label className="font-semibold text-lg">Anotações</Label>
+            </div>
             <Textarea
               {...register("anotacoes")}
               placeholder="Observações adicionais..."

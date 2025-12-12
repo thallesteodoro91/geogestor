@@ -706,8 +706,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
               <div key={field.id} className="p-4 border rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm">
-                    {watchedDespesas[index]?.id_tipodespesa 
-                      ? `#${index + 1} - ${getTipoDespesaNome(watchedDespesas[index].id_tipodespesa)}`
+                    {watchedDespesas[index]?.descricao 
+                      ? `#${index + 1} - ${watchedDespesas[index].descricao}`
                       : `Despesa #${index + 1}`
                     }
                   </span>
@@ -765,52 +765,52 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           <div className="p-4 bg-muted rounded-lg space-y-4">
             <h3 className="font-semibold">Resumo Financeiro</h3>
             
-            {/* Linha 1 - 3 colunas */}
-            <div className="grid grid-cols-3 gap-4 text-sm">
+            {/* Linha 1 - 4 colunas */}
+            <div className="grid grid-cols-4 gap-4 text-sm">
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Receita Esperada</span>
-                <p className="font-semibold">R$ {formatCurrency(receitaEsperada)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita Esperada</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaEsperada)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Desconto Total</span>
-                <p className="font-semibold text-destructive">- R$ {formatCurrency(descontoTotal)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Desconto Total</span>
+                <p className="font-semibold text-destructive whitespace-nowrap">- R$ {formatCurrency(descontoTotal)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Despesas</span>
-                <p className="font-semibold">R$ {formatCurrency(totalDespesasOrcamento)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Despesas</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalDespesasOrcamento)}</p>
+              </div>
+              <div className="text-center">
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">
+                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
+                </span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalImpostos)}</p>
               </div>
             </div>
             
             {/* Linha 2 - 4 colunas */}
             <div className="grid grid-cols-4 gap-4 text-sm pt-3 border-t border-border">
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">
-                  Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
-                </span>
-                <p className="font-semibold">R$ {formatCurrency(totalImpostos)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade || 0}x)</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Marcos ({watchedMarcoQuantidade || 0}x)</span>
-                <p className="font-semibold">R$ {formatCurrency(marcoValorTotal)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
+                <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Receita + Impostos</span>
-                <p className="font-semibold">R$ {formatCurrency(receitaComImposto)}</p>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Total</span>
+                <p className="font-semibold text-destructive whitespace-nowrap">R$ {formatCurrency(custoTotal)}</p>
               </div>
               <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Custo Total</span>
-                <p className="font-semibold text-destructive">R$ {formatCurrency(custoTotal)}</p>
-              </div>
-            </div>
-            
-            {/* Linha 3 - 2 colunas centralizadas */}
-            <div className="flex justify-center gap-12 pt-3 border-t border-border">
-              <div className="text-center">
-                <span className="text-muted-foreground text-xs block">Lucro Esperado</span>
-                <p className={`font-semibold text-lg ${lucroEsperado >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                <span className="text-muted-foreground text-xs block whitespace-nowrap">Lucro Esperado</span>
+                <p className={`font-semibold whitespace-nowrap ${lucroEsperado >= 0 ? 'text-primary' : 'text-destructive'}`}>
                   R$ {formatCurrency(lucroEsperado)}
                 </p>
               </div>
+            </div>
+            
+            {/* Linha 3 - Margem centralizada */}
+            <div className="flex justify-center pt-3 border-t border-border">
               <div className="text-center">
                 <span className="text-muted-foreground text-xs block">Margem Esperada</span>
                 <p className={`font-semibold text-lg ${margemEsperada >= 0 ? 'text-primary' : 'text-destructive'}`}>

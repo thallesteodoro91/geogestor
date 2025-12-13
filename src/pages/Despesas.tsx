@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentTenantId } from "@/services/supabase.service";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,12 @@ export default function Despesas() {
   // Criar/Atualizar despesa
   const mutation = useMutation({
     mutationFn: async (data: typeof formData & { id_despesas?: string }) => {
+      const tenantId = await getCurrentTenantId();
+      
+      if (!tenantId) {
+        throw new Error('Usuário não está associado a um tenant');
+      }
+      
       if (data.id_despesas) {
         const { error } = await supabase
           .from('fato_despesas')
@@ -104,6 +111,7 @@ export default function Despesas() {
           id_tipodespesa: data.id_tipodespesa || null,
           id_servico: data.id_servico || null,
           observacoes: data.observacoes,
+          tenant_id: tenantId,
         });
         if (error) throw error;
       }

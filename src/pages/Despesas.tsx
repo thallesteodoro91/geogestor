@@ -223,7 +223,11 @@ export default function Despesas() {
 
   // Componente customizado para as células do Treemap
   const CustomTreemapContent = (props: any) => {
-    const { x, y, width, height, name, size, fill } = props;
+    const { x, y, width, height, name, fill } = props;
+    const size = props.size ?? props.value ?? 0;
+    
+    // Skip rendering if dimensions are invalid
+    if (!width || !height || width <= 0 || height <= 0) return null;
     
     return (
       <g>
@@ -232,12 +236,12 @@ export default function Despesas() {
           y={y}
           width={width}
           height={height}
-          fill={fill}
+          fill={fill || "hsl(var(--primary))"}
           stroke="hsl(var(--background))"
           strokeWidth={2}
           rx={4}
         />
-        {width > 60 && height > 40 && (
+        {width > 60 && height > 40 && name && (
           <>
             <text
               x={x + width / 2}
@@ -256,7 +260,7 @@ export default function Despesas() {
               fill="white"
               fontSize={11}
             >
-              R$ {(size as number).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              R$ {Number(size).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </text>
           </>
         )}

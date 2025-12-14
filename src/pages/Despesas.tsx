@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Edit, DollarSign, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { Treemap, ResponsiveContainer } from "recharts";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { despesaSchema } from "@/lib/validations";
 
@@ -203,10 +203,66 @@ export default function Despesas() {
     return acc;
   }, {});
 
-  const chartData = Object.entries(despesasPorCategoria).map(([categoria, valor]) => ({
-    categoria,
-    valor,
+  // Cores para o Treemap
+  const TREEMAP_COLORS = [
+    "hsl(217, 91%, 60%)",  // blue
+    "hsl(142, 76%, 36%)",  // green
+    "hsl(48, 96%, 53%)",   // yellow
+    "hsl(0, 84%, 60%)",    // red
+    "hsl(280, 68%, 60%)",  // purple
+    "hsl(25, 95%, 53%)",   // orange
+    "hsl(189, 94%, 43%)",  // cyan
+    "hsl(330, 81%, 60%)",  // pink
+  ];
+
+  const treemapData = Object.entries(despesasPorCategoria).map(([name, value], index) => ({
+    name,
+    size: value as number,
+    fill: TREEMAP_COLORS[index % TREEMAP_COLORS.length],
   }));
+
+  // Componente customizado para as células do Treemap
+  const CustomTreemapContent = (props: any) => {
+    const { x, y, width, height, name, size, fill } = props;
+    
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill={fill}
+          stroke="hsl(var(--background))"
+          strokeWidth={2}
+          rx={4}
+        />
+        {width > 60 && height > 40 && (
+          <>
+            <text
+              x={x + width / 2}
+              y={y + height / 2 - 8}
+              textAnchor="middle"
+              fill="white"
+              fontSize={12}
+              fontWeight="600"
+            >
+              {name}
+            </text>
+            <text
+              x={x + width / 2}
+              y={y + height / 2 + 10}
+              textAnchor="middle"
+              fill="white"
+              fontSize={11}
+            >
+              R$ {(size as number).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </text>
+          </>
+        )}
+      </g>
+    );
+  };
 
   const filteredDespesas = despesas.filter(d => {
     const matchesSearch = 
@@ -245,6 +301,8 @@ export default function Despesas() {
           clientes={clientes}
           onFilterChange={setFilters}
           showEmpresa={false}
+          showCategoria={false}
+          showSituacao={false}
         />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -269,16 +327,20 @@ export default function Despesas() {
             <CardTitle>Despesas por Categoria</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="categoria" />
-                <YAxis />
-                <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />
-                <Legend />
-                <Bar dataKey="valor" fill="hsl(var(--primary))" />
-              </BarChart>
-            </ResponsiveContainer>
+            {treemapData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <Treemap
+                  data={treemapData}
+                  dataKey="size"
+                  aspectRatio={4 / 3}
+                  content={<CustomTreemapContent />}
+                />
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                Nenhuma despesa cadastrada
+              </div>
+            )}
           </CardContent>
         </Card>
 

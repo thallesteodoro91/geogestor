@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Edit, DollarSign, TrendingDown } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Treemap, ResponsiveContainer } from "recharts";
+import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { despesaSchema } from "@/lib/validations";
 
@@ -219,7 +219,38 @@ export default function Despesas() {
     name,
     size: value as number,
     fill: TREEMAP_COLORS[index % TREEMAP_COLORS.length],
+    percentage: totalDespesas > 0 ? ((value as number) / totalDespesas * 100).toFixed(1) : "0",
   }));
+
+  // Tooltip customizado para o Treemap
+  const CustomTreemapTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    
+    const data = payload[0].payload;
+    return (
+      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[180px]">
+        <div className="flex items-center gap-2 mb-2">
+          <div 
+            className="w-3 h-3 rounded-sm" 
+            style={{ backgroundColor: data.fill }}
+          />
+          <span className="font-semibold text-foreground">{data.name}</span>
+        </div>
+        <div className="space-y-1 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Valor:</span>
+            <span className="font-medium text-foreground">
+              R$ {Number(data.size).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Proporção:</span>
+            <span className="font-medium text-foreground">{data.percentage}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   // Componente customizado para as células do Treemap
   const CustomTreemapContent = (props: any) => {
@@ -338,7 +369,9 @@ export default function Despesas() {
                   dataKey="size"
                   aspectRatio={4 / 3}
                   content={<CustomTreemapContent />}
-                />
+                >
+                  <Tooltip content={<CustomTreemapTooltip />} />
+                </Treemap>
               </ResponsiveContainer>
             ) : (
               <div className="h-[300px] flex items-center justify-center text-muted-foreground">

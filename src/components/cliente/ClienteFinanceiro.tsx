@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { DollarSign, TrendingUp } from "lucide-react";
 
 interface ClienteFinanceiroProps {
   servicos: any[];
@@ -17,10 +17,6 @@ export function ClienteFinanceiro({ servicos, orcamentos }: ClienteFinanceiroPro
     0
   );
 
-  const receitaEsperada = orcamentos
-    .filter(o => !o.orcamento_convertido)
-    .reduce((sum, o) => sum + (Number(o.receita_esperada) || 0), 0);
-
   const totalReceita = receitaServicos + receitaOrcamentos;
 
   const formatCurrency = (value: number) =>
@@ -31,7 +27,7 @@ export function ClienteFinanceiro({ servicos, orcamentos }: ClienteFinanceiroPro
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Receita Total</CardTitle>
@@ -54,19 +50,6 @@ export function ClienteFinanceiro({ servicos, orcamentos }: ClienteFinanceiroPro
             <div className="text-2xl font-bold">{formatCurrency(receitaServicos)}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {servicos.length} serviço(s)
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Receita Esperada</CardTitle>
-            <TrendingDown className="h-4 w-4 text-yellow-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(receitaEsperada)}</div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Orçamentos pendentes
             </p>
           </CardContent>
         </Card>

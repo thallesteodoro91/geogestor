@@ -12,6 +12,8 @@ interface GlobalFiltersProps {
   empresas?: Array<{ id: string; nome: string }>;
   onFilterChange?: (filters: FilterState) => void;
   showEmpresa?: boolean;
+  showCategoria?: boolean;
+  showSituacao?: boolean;
 }
 
 export interface FilterState {
@@ -27,7 +29,9 @@ export const GlobalFilters = ({
   clientes = [], 
   empresas = [],
   onFilterChange,
-  showEmpresa = true 
+  showEmpresa = true,
+  showCategoria = true,
+  showSituacao = true,
 }: GlobalFiltersProps) => {
   const [filters, setFilters] = useState<FilterState>({
     dataInicio: "",
@@ -127,38 +131,42 @@ export const GlobalFilters = ({
             </div>
 
             {/* Categoria */}
-            <div className="space-y-2">
-              <Label htmlFor="categoria">Categoria</Label>
-              <Select value={filters.categoria} onValueChange={(v) => handleFilterChange("categoria", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as categorias" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="Topografia">Topografia</SelectItem>
-                  <SelectItem value="Ambiental">Ambiental</SelectItem>
-                  <SelectItem value="Jurídico">Jurídico</SelectItem>
-                  <SelectItem value="Especial">Especial</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {showCategoria && (
+              <div className="space-y-2">
+                <Label htmlFor="categoria">Categoria</Label>
+                <Select value={filters.categoria} onValueChange={(v) => handleFilterChange("categoria", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as categorias" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="Topografia">Topografia</SelectItem>
+                    <SelectItem value="Ambiental">Ambiental</SelectItem>
+                    <SelectItem value="Jurídico">Jurídico</SelectItem>
+                    <SelectItem value="Especial">Especial</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Situação */}
-            <div className="space-y-2">
-              <Label htmlFor="situacao">Situação</Label>
-              <Select value={filters.situacao} onValueChange={(v) => handleFilterChange("situacao", v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as situações" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="Concluído">Concluído</SelectItem>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Cancelado">Cancelado</SelectItem>
-                  <SelectItem value="Pendente">Pendente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {showSituacao && (
+              <div className="space-y-2">
+                <Label htmlFor="situacao">Situação</Label>
+                <Select value={filters.situacao} onValueChange={(v) => handleFilterChange("situacao", v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas as situações" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="Concluído">Concluído</SelectItem>
+                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+                    <SelectItem value="Cancelado">Cancelado</SelectItem>
+                    <SelectItem value="Pendente">Pendente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Empresa (opcional) */}
             {showEmpresa && empresas.length > 0 && (

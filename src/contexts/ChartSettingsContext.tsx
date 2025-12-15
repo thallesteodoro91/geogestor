@@ -2,19 +2,26 @@
  * Chart Settings Context
  * Global state for chart preferences including:
  * - Time granularity (month/quarter/year)
+ * - Period offset (navigation between periods)
  * - Density mode (compact/comfortable)
- * - Colorblind mode
  */
 
 import { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 
-type TimeGranularity = 'month' | 'quarter' | 'year';
+export type TimeGranularity = 'month' | 'quarter' | 'year';
 type DensityMode = 'compact' | 'comfortable';
 
 interface ChartSettingsContextType {
   // Time granularity
   granularity: TimeGranularity;
   setGranularity: (granularity: TimeGranularity) => void;
+  
+  // Period offset (0 = current, -1 = previous, 1 = next)
+  periodOffset: number;
+  setPeriodOffset: (offset: number) => void;
+  goToPreviousPeriod: () => void;
+  goToNextPeriod: () => void;
+  goToCurrentPeriod: () => void;
   
   // Density mode
   density: DensityMode;
@@ -42,6 +49,8 @@ export const ChartSettingsProvider = ({ children }: { children: ReactNode }) => 
     return (stored as TimeGranularity) || 'month';
   });
 
+  const [periodOffset, setPeriodOffsetState] = useState<number>(0);
+
   const [density, setDensityState] = useState<DensityMode>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.density);
     return (stored as DensityMode) || 'comfortable';
@@ -55,7 +64,24 @@ export const ChartSettingsProvider = ({ children }: { children: ReactNode }) => 
   // Persist to localStorage
   const setGranularity = useCallback((value: TimeGranularity) => {
     setGranularityState(value);
+    setPeriodOffsetState(0); // Reset offset when changing granularity
     localStorage.setItem(STORAGE_KEYS.granularity, value);
+  }, []);
+
+  const setPeriodOffset = useCallback((offset: number) => {
+    setPeriodOffsetState(offset);
+  }, []);
+
+  const goToPreviousPeriod = useCallback(() => {
+    setPeriodOffsetState(prev => prev - 1);
+  }, []);
+
+  const goToNextPeriod = useCallback(() => {
+    setPeriodOffsetState(prev => prev + 1);
+  }, []);
+
+  const goToCurrentPeriod = useCallback(() => {
+    setPeriodOffsetState(0);
   }, []);
 
   const setDensity = useCallback((value: DensityMode) => {
@@ -87,6 +113,11 @@ export const ChartSettingsProvider = ({ children }: { children: ReactNode }) => 
       value={{
         granularity,
         setGranularity,
+        periodOffset,
+        setPeriodOffset,
+        goToPreviousPeriod,
+        goToNextPeriod,
+        goToCurrentPeriod,
         density,
         setDensity,
         toggleDensity,
@@ -107,6 +138,11 @@ export const useChartSettings = (): ChartSettingsContextType => {
     return {
       granularity: 'month',
       setGranularity: () => {},
+      periodOffset: 0,
+      setPeriodOffset: () => {},
+      goToPreviousPeriod: () => {},
+      goToNextPeriod: () => {},
+      goToCurrentPeriod: () => {},
       density: 'comfortable',
       setDensity: () => {},
       toggleDensity: () => {},

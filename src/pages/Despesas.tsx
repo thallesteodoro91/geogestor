@@ -19,11 +19,11 @@ import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { despesaSchema } from "@/lib/validations";
 import { TimeGranularityControl } from "@/components/controls/TimeGranularityControl";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
-import { startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, format } from "date-fns";
+import { startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, format, addMonths, addQuarters, addYears } from "date-fns";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
-  const { granularity } = useChartSettings();
+  const { granularity, periodOffset } = useChartSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -43,25 +43,31 @@ export default function Despesas() {
     observacoes: "",
   });
 
-  // Atualizar filtros de data baseado na granularidade selecionada
-  const getDateRangeByGranularity = useCallback((gran: 'month' | 'quarter' | 'year') => {
+  // Atualizar filtros de data baseado na granularidade e offset selecionados
+  const getDateRangeByGranularity = useCallback((gran: 'month' | 'quarter' | 'year', offset: number) => {
     const now = new Date();
     let start: Date;
     let end: Date;
 
     switch (gran) {
-      case 'month':
-        start = startOfMonth(now);
-        end = endOfMonth(now);
+      case 'month': {
+        const targetDate = addMonths(now, offset);
+        start = startOfMonth(targetDate);
+        end = endOfMonth(targetDate);
         break;
-      case 'quarter':
-        start = startOfQuarter(now);
-        end = endOfQuarter(now);
+      }
+      case 'quarter': {
+        const targetDate = addQuarters(now, offset);
+        start = startOfQuarter(targetDate);
+        end = endOfQuarter(targetDate);
         break;
-      case 'year':
-        start = startOfYear(now);
-        end = endOfYear(now);
+      }
+      case 'year': {
+        const targetDate = addYears(now, offset);
+        start = startOfYear(targetDate);
+        end = endOfYear(targetDate);
         break;
+      }
     }
 
     return {
@@ -70,15 +76,15 @@ export default function Despesas() {
     };
   }, []);
 
-  // Atualizar filtros quando granularidade muda
+  // Atualizar filtros quando granularidade ou offset muda
   useEffect(() => {
-    const { dataInicio, dataFim } = getDateRangeByGranularity(granularity);
+    const { dataInicio, dataFim } = getDateRangeByGranularity(granularity, periodOffset);
     setFilters(prev => ({
       ...prev,
       dataInicio,
       dataFim,
     }));
-  }, [granularity, getDateRangeByGranularity]);
+  }, [granularity, periodOffset, getDateRangeByGranularity]);
 
   // Buscar despesas
   const { data: despesas = [], isLoading } = useQuery({

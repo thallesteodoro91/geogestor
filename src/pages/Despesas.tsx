@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
@@ -17,9 +17,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { despesaSchema } from "@/lib/validations";
+import { TimeGranularityControl } from "@/components/controls/TimeGranularityControl";
+import { useChartSettings } from "@/contexts/ChartSettingsContext";
+import { startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, format } from "date-fns";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
+  const { granularity } = useChartSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -38,6 +42,43 @@ export default function Despesas() {
     id_servico: "",
     observacoes: "",
   });
+
+  // Atualizar filtros de data baseado na granularidade selecionada
+  const getDateRangeByGranularity = useCallback((gran: 'month' | 'quarter' | 'year') => {
+    const now = new Date();
+    let start: Date;
+    let end: Date;
+
+    switch (gran) {
+      case 'month':
+        start = startOfMonth(now);
+        end = endOfMonth(now);
+        break;
+      case 'quarter':
+        start = startOfQuarter(now);
+        end = endOfQuarter(now);
+        break;
+      case 'year':
+        start = startOfYear(now);
+        end = endOfYear(now);
+        break;
+    }
+
+    return {
+      dataInicio: format(start, 'yyyy-MM-dd'),
+      dataFim: format(end, 'yyyy-MM-dd'),
+    };
+  }, []);
+
+  // Atualizar filtros quando granularidade muda
+  useEffect(() => {
+    const { dataInicio, dataFim } = getDateRangeByGranularity(granularity);
+    setFilters(prev => ({
+      ...prev,
+      dataInicio,
+      dataFim,
+    }));
+  }, [granularity, getDateRangeByGranularity]);
 
   // Buscar despesas
   const { data: despesas = [], isLoading } = useQuery({
@@ -382,14 +423,24 @@ export default function Despesas() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground">Despesas</h1>
-          <p className="text-muted-foreground">Gerencie todas as despesas da empresa</p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-foreground">Despesas</h1>
+            <p className="text-muted-foreground">Gerencie todas as despesas da empresa</p>
+          </div>
+          <TimeGranularityControl />
         </div>
 
         <GlobalFilters
           clientes={clientes}
-          onFilterChange={setFilters}
+          onFilterChange={(newFilters) => {
+            // Manter datas da granularidade se o usuário não especificar
+            setFilters(prev => ({
+              ...newFilters,
+              dataInicio: newFilters.dataInicio || prev.dataInicio,
+              dataFim: newFilters.dataFim || prev.dataFim,
+            }));
+          }}
           showEmpresa={false}
           showCategoria={false}
           showSituacao={false}

@@ -276,25 +276,59 @@ export default function Despesas() {
     );
   };
 
-  // Componente customizado para as células do Treemap
+  // Estado para controlar hover das células
+  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+
+  // Componente customizado para as células do Treemap com hover
   const CustomTreemapContent = (props: any) => {
     const { x, y, width, height, name, fill } = props;
     const size = props.size ?? props.value ?? 0;
+    const isHovered = hoveredCell === name;
     
     // Skip rendering if dimensions are invalid
     if (!width || !height || width <= 0 || height <= 0) return null;
     
+    // Calcular transformação para hover
+    const hoverScale = isHovered ? 0.98 : 1;
+    const hoverOffset = isHovered ? 2 : 0;
+    
     return (
-      <g>
+      <g
+        onMouseEnter={() => setHoveredCell(name)}
+        onMouseLeave={() => setHoveredCell(null)}
+        style={{ cursor: 'pointer' }}
+      >
+        {/* Sombra de destaque no hover */}
+        {isHovered && (
+          <rect
+            x={x - 2}
+            y={y - 2}
+            width={width + 4}
+            height={height + 4}
+            fill="none"
+            stroke="hsl(var(--primary))"
+            strokeWidth={3}
+            rx={6}
+            style={{ 
+              filter: 'drop-shadow(0 4px 12px hsl(var(--primary) / 0.4))',
+              opacity: 0.8
+            }}
+          />
+        )}
         <rect
-          x={x}
-          y={y}
-          width={width}
-          height={height}
+          x={x + hoverOffset}
+          y={y + hoverOffset}
+          width={width * hoverScale}
+          height={height * hoverScale}
           fill={fill || "hsl(var(--primary))"}
           stroke="hsl(var(--background))"
-          strokeWidth={2}
+          strokeWidth={isHovered ? 3 : 2}
           rx={4}
+          style={{
+            transition: 'all 0.2s ease-out',
+            filter: isHovered ? 'brightness(1.15)' : 'brightness(1)',
+            transformOrigin: `${x + width / 2}px ${y + height / 2}px`,
+          }}
         />
         {width > 60 && height > 40 && name && (
           <>
@@ -303,8 +337,12 @@ export default function Despesas() {
               y={y + height / 2 - 8}
               textAnchor="middle"
               fill="white"
-              fontSize={12}
-              fontWeight="600"
+              fontSize={isHovered ? 13 : 12}
+              fontWeight={isHovered ? "700" : "600"}
+              style={{ 
+                transition: 'all 0.2s ease-out',
+                textShadow: isHovered ? '0 2px 4px rgba(0,0,0,0.3)' : 'none'
+              }}
             >
               {name}
             </text>
@@ -313,7 +351,11 @@ export default function Despesas() {
               y={y + height / 2 + 10}
               textAnchor="middle"
               fill="white"
-              fontSize={11}
+              fontSize={isHovered ? 12 : 11}
+              style={{ 
+                transition: 'all 0.2s ease-out',
+                textShadow: isHovered ? '0 2px 4px rgba(0,0,0,0.3)' : 'none'
+              }}
             >
               R$ {Number(size).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </text>

@@ -195,11 +195,35 @@ export default function Despesas() {
     }
   };
 
-  // Calcular KPIs
-  const totalDespesas = despesas.reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
-  const despesasPorCategoria = despesas.reduce((acc: any, d) => {
-    const cat = d.dim_tipodespesa?.categoria || 'Sem categoria';
-    acc[cat] = (acc[cat] || 0) + parseFloat(String(d.valor_da_despesa || 0));
+  // Filtrar despesas primeiro (movido para cima para usar nos KPIs)
+  const getFilteredDespesas = () => {
+    return despesas.filter(d => {
+      const matchesSearch = 
+        d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      const matchesDataInicio = !filters.dataInicio || d.data_da_despesa >= filters.dataInicio;
+      const matchesDataFim = !filters.dataFim || d.data_da_despesa <= filters.dataFim;
+      const matchesCategoria = !filters.categoria || d.dim_tipodespesa?.categoria === filters.categoria;
+
+      return matchesSearch && matchesDataInicio && matchesDataFim && matchesCategoria;
+    });
+  };
+
+  const filteredDespesas = getFilteredDespesas();
+
+  // Verificar se há filtros de data ativos
+  const hasDateFilter = filters.dataInicio || filters.dataFim;
+
+  // Calcular KPIs baseado nos dados filtrados
+  const totalDespesasFiltradas = filteredDespesas.reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
+  const totalDespesasGeral = despesas.reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
+
+  // Agrupar por subcategoria usando dados filtrados
+  const despesasPorSubcategoria = filteredDespesas.reduce((acc: any, d) => {
+    const subcat = d.dim_tipodespesa?.subcategoria || 'Sem subcategoria';
+    acc[subcat] = (acc[subcat] || 0) + parseFloat(String(d.valor_da_despesa || 0));
     return acc;
   }, {});
 
@@ -215,11 +239,11 @@ export default function Despesas() {
     "hsl(330, 81%, 60%)",  // pink
   ];
 
-  const treemapData = Object.entries(despesasPorCategoria).map(([name, value], index) => ({
+  const treemapData = Object.entries(despesasPorSubcategoria).map(([name, value], index) => ({
     name,
     size: value as number,
     fill: TREEMAP_COLORS[index % TREEMAP_COLORS.length],
-    percentage: totalDespesas > 0 ? ((value as number) / totalDespesas * 100).toFixed(1) : "0",
+    percentage: totalDespesasFiltradas > 0 ? ((value as number) / totalDespesasFiltradas * 100).toFixed(1) : "0",
   }));
 
   // Tooltip customizado para o Treemap
@@ -299,18 +323,7 @@ export default function Despesas() {
     );
   };
 
-  const filteredDespesas = despesas.filter(d => {
-    const matchesSearch = 
-      d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesDataInicio = !filters.dataInicio || d.data_da_despesa >= filters.dataInicio;
-    const matchesDataFim = !filters.dataFim || d.data_da_despesa <= filters.dataFim;
-    const matchesCategoria = !filters.categoria || d.dim_tipodespesa?.categoria === filters.categoria;
-
-    return matchesSearch && matchesDataInicio && matchesDataFim && matchesCategoria;
-  });
+  // filteredDespesas já calculado acima
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes'],
@@ -342,24 +355,26 @@ export default function Despesas() {
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KPICard
-            title="Total de Despesas"
-            value={`R$ ${totalDespesas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            title={hasDateFilter ? "Total no Período" : "Total de Despesas"}
+            value={`R$ ${totalDespesasFiltradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
-            subtitle={`${despesas.length} lançamentos`}
+            subtitle={`${filteredDespesas.length} lançamentos`}
           />
           <KPICard
-            title="Despesas do Mês"
-            value={`R$ ${despesas
-              .filter(d => new Date(d.data_da_despesa).getMonth() === new Date().getMonth())
-              .reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa)), 0)
-              .toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            title={hasDateFilter ? "Despesas Filtradas" : "Despesas do Mês"}
+            value={`R$ ${(hasDateFilter 
+              ? totalDespesasFiltradas 
+              : despesas
+                  .filter(d => new Date(d.data_da_despesa).getMonth() === new Date().getMonth())
+                  .reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa)), 0)
+            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={TrendingDown}
           />
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Despesas por Categoria</CardTitle>
+            <CardTitle>Despesas por Subcategoria</CardTitle>
           </CardHeader>
           <CardContent>
             {treemapData.length > 0 ? (

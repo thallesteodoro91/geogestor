@@ -15,6 +15,7 @@ import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
+import { getCurrentTenantId } from "@/services/supabase.service";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -85,12 +86,36 @@ export default function Configuracoes() {
   const { data: empresa } = useQuery({
     queryKey: ['empresa-config'],
     queryFn: async () => {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return null;
+      
+      // Buscar empresa existente
       const { data, error } = await supabase
         .from('dim_empresa')
         .select('*')
-        .limit(1)
+        .eq('tenant_id', tenantId)
         .maybeSingle();
+      
       if (error) throw error;
+      
+      // Se não existir, criar automaticamente
+      if (!data) {
+        const { data: tenant } = await supabase
+          .from('tenants')
+          .select('name')
+          .eq('id', tenantId)
+          .single();
+        
+        const { data: newEmpresa, error: createError } = await supabase
+          .from('dim_empresa')
+          .insert({ nome: tenant?.name || 'Minha Empresa', tenant_id: tenantId })
+          .select()
+          .single();
+        
+        if (createError) throw createError;
+        return newEmpresa;
+      }
+      
       return data;
     },
   });

@@ -376,32 +376,59 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               {empresa?.template_orcamento_url ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg bg-muted/20">
-                    <div className="flex items-center gap-3">
-                      <FileText className="h-8 w-8 text-primary" />
+                  <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/20">
+                    {/* PDF Preview Thumbnail */}
+                    <div className="relative w-32 h-40 rounded-md border bg-background overflow-hidden flex-shrink-0 group">
+                      <iframe
+                        src={`${empresa.template_orcamento_url}#toolbar=0&navpanes=0&scrollbar=0`}
+                        className="w-[200%] h-[200%] scale-50 origin-top-left pointer-events-none"
+                        title="Preview do Template"
+                      />
+                      <a
+                        href={empresa.template_orcamento_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center"
+                      >
+                        <span className="text-white opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium">
+                          Abrir PDF
+                        </span>
+                      </a>
+                    </div>
+                    
+                    <div className="flex-1 space-y-3">
                       <div>
                         <p className="text-sm font-medium">Template PDF Configurado</p>
-                        <p className="text-xs text-muted-foreground">Pronto para gerar orçamentos</p>
+                        <p className="text-xs text-muted-foreground">Pronto para gerar orçamentos personalizados</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          asChild
+                        >
+                          <a
+                            href={empresa.template_orcamento_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            Visualizar
+                          </a>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRemoveTemplate}
+                          disabled={updateEmpresaMutation.isPending}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Remover
+                        </Button>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleRemoveTemplate}
-                      disabled={updateEmpresaMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remover
-                    </Button>
                   </div>
-                  <a
-                    href={empresa.template_orcamento_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Visualizar template atual
-                  </a>
                 </div>
               ) : (
                 <div className="space-y-2">

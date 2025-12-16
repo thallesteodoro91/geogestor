@@ -70,6 +70,19 @@ export async function createTenant(userId: string, companyName: string) {
 
   if (subError) throw subError;
 
+  // Criar registro de empresa automaticamente
+  const { error: empresaError } = await supabase
+    .from('dim_empresa')
+    .insert({
+      nome: companyName,
+      tenant_id: tenant.id,
+    });
+
+  if (empresaError) {
+    console.error('Erro ao criar empresa:', empresaError);
+    // Não throw - empresa pode ser criada depois se necessário
+  }
+
   return tenant;
 }
 

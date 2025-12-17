@@ -79,10 +79,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return servico?.nome || null;
   };
 
-  // Função para buscar o nome do tipo de despesa
+  // Função para buscar o nome do tipo de despesa (prioriza subcategoria)
   const getTipoDespesaNome = (tipoDespesaId: string) => {
     const tipo = tiposDespesa.find(t => t.id_tipodespesa === tipoDespesaId);
-    return tipo?.categoria || null;
+    return tipo?.subcategoria || tipo?.categoria || null;
   };
 
   const fetchOrcamentoItens = async (orcamentoId: string) => {
@@ -410,7 +410,8 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           valor_da_despesa: d.valor,
           data_da_despesa: data.data_orcamento,
           observacoes: d.descricao || null,
-          tenant_id: tenantId
+          tenant_id: tenantId,
+          status: 'pendente' // Despesas de orçamento ficam pendentes até confirmação
         }));
 
         const { error: despesasError } = await supabase
@@ -774,7 +775,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                       <SelectContent>
                         {tiposDespesa.map((tipo) => (
                           <SelectItem key={tipo.id_tipodespesa} value={tipo.id_tipodespesa}>
-                            {tipo.categoria}
+                            {tipo.subcategoria || tipo.categoria}
                           </SelectItem>
                         ))}
                       </SelectContent>

@@ -86,7 +86,7 @@ export default function Despesas() {
     }));
   }, [granularity, periodOffset, getDateRangeByGranularity]);
 
-  // Buscar despesas
+  // Buscar despesas (apenas confirmadas ou sem status - não mostrar pendentes)
   const { data: despesas = [], isLoading } = useQuery({
     queryKey: ['despesas'],
     queryFn: async () => {
@@ -97,6 +97,7 @@ export default function Despesas() {
           dim_tipodespesa(categoria, subcategoria, descricao),
           fato_servico(nome_do_servico)
         `)
+        .or('status.eq.confirmada,status.is.null')
         .order('data_da_despesa', { ascending: false });
       
       if (error) throw error;

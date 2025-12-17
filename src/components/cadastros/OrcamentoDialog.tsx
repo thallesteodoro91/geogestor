@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, Info, Receipt, User, Calculator, DollarSign, StickyNote, Percent } from "lucide-react";
+import { Plus, Trash2, MapPin, Info, Receipt, User, Calculator, DollarSign, StickyNote, Percent, CreditCard, Banknote, Smartphone, ArrowLeftRight, FileText } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
 
@@ -803,7 +803,117 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             ))}
           </div>
 
-          {/* IV. Resumo Financeiro */}
+          {/* IV. Situação e Faturamento */}
+          <div className="space-y-4 p-4 border rounded-lg">
+            <div className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-blue-500" />
+              <h3 className="font-semibold text-lg">Situação e Faturamento</h3>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Situação do Pagamento</Label>
+                <Select
+                  value={watchedSituacao || ""}
+                  onValueChange={(value) => setValue("situacao_do_pagamento", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a situação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Pendente">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[hsl(48,96%,53%)]" />
+                        Pendente
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Pago">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[hsl(142,76%,36%)]" />
+                        Pago
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Parcial">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[hsl(217,91%,60%)]" />
+                        Parcial
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Cancelado">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-[hsl(0,100%,50%)]" />
+                        Cancelado
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Forma de Pagamento</Label>
+                <Select
+                  value={watch("forma_de_pagamento") || ""}
+                  onValueChange={(value) => setValue("forma_de_pagamento", value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a forma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PIX">
+                      <span className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-[hsl(48,96%,53%)]" />
+                        PIX
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Dinheiro">
+                      <span className="flex items-center gap-2">
+                        <Banknote className="h-4 w-4 text-[hsl(142,76%,36%)]" />
+                        Dinheiro
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Cartão">
+                      <span className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-[hsl(217,91%,60%)]" />
+                        Cartão
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Transferência">
+                      <span className="flex items-center gap-2">
+                        <ArrowLeftRight className="h-4 w-4 text-[hsl(280,70%,50%)]" />
+                        Transferência
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="Boleto">
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-[hsl(25,95%,53%)]" />
+                        Boleto
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Data do Faturamento</Label>
+                <Input 
+                  type="date" 
+                  {...register("data_do_faturamento")}
+                />
+              </div>
+              
+              <div className="flex items-center gap-3 pt-6">
+                <Switch
+                  checked={watch("orcamento_convertido") || false}
+                  onCheckedChange={(checked) => setValue("orcamento_convertido", checked)}
+                />
+                <Label className="cursor-pointer">Orçamento Convertido</Label>
+              </div>
+            </div>
+          </div>
+
+          {/* V. Resumo Financeiro */}
           <div className="p-4 bg-muted rounded-lg space-y-4">
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-primary" />
@@ -865,7 +975,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
           </div>
 
-          {/* V. Anotações */}
+          {/* VI. Anotações */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <StickyNote className="h-5 w-5 text-yellow-500" />

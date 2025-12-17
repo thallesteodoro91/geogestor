@@ -461,6 +461,7 @@ export type Database = {
           id_servico: string | null
           id_tipodespesa: string | null
           observacoes: string | null
+          status: string | null
           tenant_id: string | null
           updated_at: string | null
           valor_da_despesa: number
@@ -474,6 +475,7 @@ export type Database = {
           id_servico?: string | null
           id_tipodespesa?: string | null
           observacoes?: string | null
+          status?: string | null
           tenant_id?: string | null
           updated_at?: string | null
           valor_da_despesa: number
@@ -487,6 +489,7 @@ export type Database = {
           id_servico?: string | null
           id_tipodespesa?: string | null
           observacoes?: string | null
+          status?: string | null
           tenant_id?: string | null
           updated_at?: string | null
           valor_da_despesa?: number

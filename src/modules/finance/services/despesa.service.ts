@@ -9,9 +9,11 @@ export interface Despesa {
   id_despesas: string;
   id_tipodespesa?: string | null;
   id_servico?: string | null;
+  id_orcamento?: string | null;
   data_da_despesa: string;
   valor_da_despesa: number;
   observacoes?: string | null;
+  status?: string | null; // 'pendente', 'confirmada', 'cancelada'
   created_at?: string | null;
   updated_at?: string | null;
 }

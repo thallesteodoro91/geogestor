@@ -12,6 +12,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { Badge } from "@/components/ui/badge";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
+import { DespesasPendentes } from "@/components/despesas/DespesasPendentes";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -274,6 +275,9 @@ export default function ServicosOrcamentos() {
             changeType="positive"
           />
         </div>
+
+        {/* Despesas Pendentes de Confirmação */}
+        <DespesasPendentes />
 
         {/* Orçamentos */}
         <div className="space-y-4">

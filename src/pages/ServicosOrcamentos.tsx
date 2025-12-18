@@ -289,8 +289,8 @@ export default function ServicosOrcamentos() {
                 className="max-w-sm"
               />
               
-              <div className="flex items-center gap-2">
-                <div className="space-y-1">
+              <div className="flex items-center gap-4">
+                <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Data Início</Label>
                   <Popover>
                     <PopoverTrigger asChild>
@@ -317,7 +317,7 @@ export default function ServicosOrcamentos() {
                   </Popover>
                 </div>
                 
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Data Fim</Label>
                   <Popover>
                     <PopoverTrigger asChild>

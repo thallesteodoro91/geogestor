@@ -25,7 +25,9 @@ const getIcon = (tipo: string) => {
     case "servico":
       return <CheckCircle className="h-4 w-4 text-success" />;
     case "pagamento":
-      return <CreditCard className="h-4 w-4 text-destructive" />;
+      return <CreditCard className="h-4 w-4 text-yellow-500" />;
+    case "vencido":
+      return <AlertTriangle className="h-4 w-4 text-destructive" />;
     default:
       return <AlertTriangle className="h-4 w-4 text-muted-foreground" />;
   }

@@ -2,6 +2,14 @@ import { PDFDocument, rgb, StandardFonts, PDFPage, PDFFont } from 'pdf-lib';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+interface OrcamentoItem {
+  id_servico: string | null;
+  quantidade: number;
+  valor_unitario: number;
+  desconto: number | null;
+  nome_servico?: string;
+}
+
 interface OrcamentoData {
   id_orcamento: string;
   data_orcamento: string;
@@ -12,6 +20,11 @@ interface OrcamentoData {
   receita_esperada: number | null;
   forma_de_pagamento: string | null;
   situacao_do_pagamento: string | null;
+  incluir_marco?: boolean;
+  marco_quantidade?: number;
+  marco_valor_unitario?: number;
+  marco_valor_total?: number;
+  itens?: OrcamentoItem[];
 }
 
 interface ClienteData {
@@ -286,44 +299,85 @@ export async function generateStandardPDF(
     page.drawText('DESC.', { x: colDesconto, y: currentY, size: 9, font: helveticaBold, color: textColor });
     page.drawText('TOTAL', { x: colTotal, y: currentY, size: 9, font: helveticaBold, color: textColor });
     
-    // Table row
+    // Table rows - use itens if available
     currentY -= 30;
-    const descricaoServico = servico?.nome_do_servico || 'Serviço de Topografia';
-    const valorUnitario = orcamento.valor_unitario;
-    const quantidade = orcamento.quantidade;
-    const desconto = orcamento.desconto || 0;
-    const totalLinha = (valorUnitario * quantidade) - desconto;
+    let subtotal = 0;
     
-    // Truncate description if too long
-    const maxDescLength = 40;
-    const descricaoDisplay = descricaoServico.length > maxDescLength 
-      ? descricaoServico.substring(0, maxDescLength) + '...' 
-      : descricaoServico;
+    if (orcamento.itens && orcamento.itens.length > 0) {
+      // Render each item from budget
+      for (const item of orcamento.itens) {
+        const descricaoServico = item.nome_servico || 'Serviço';
+        const valorUnitario = item.valor_unitario || 0;
+        const quantidade = item.quantidade || 1;
+        const desconto = item.desconto || 0;
+        const totalLinha = (valorUnitario * quantidade) * (1 - desconto / 100);
+        subtotal += totalLinha;
+        
+        // Truncate description if too long
+        const maxDescLength = 40;
+        const descricaoDisplay = descricaoServico.length > maxDescLength 
+          ? descricaoServico.substring(0, maxDescLength) + '...' 
+          : descricaoServico;
+        
+        page.drawText(descricaoDisplay, { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
+        page.drawText(quantidade.toString(), { x: colQtd, y: currentY, size: 10, font: helvetica, color: textColor });
+        page.drawText(formatCurrency(valorUnitario), { x: colUnitario, y: currentY, size: 10, font: helvetica, color: textColor });
+        page.drawText(`${desconto}%`, { x: colDesconto, y: currentY, size: 10, font: helvetica, color: textColor });
+        page.drawText(formatCurrency(totalLinha), { x: colTotal, y: currentY, size: 10, font: helveticaBold, color: textColor });
+        
+        currentY -= 20;
+      }
+    } else {
+      // Fallback to single row
+      const descricaoServico = servico?.nome_do_servico || 'Serviço de Topografia';
+      const valorUnitario = orcamento.valor_unitario;
+      const quantidade = orcamento.quantidade;
+      const desconto = orcamento.desconto || 0;
+      const totalLinha = (valorUnitario * quantidade) - desconto;
+      subtotal = totalLinha;
+      
+      const maxDescLength = 40;
+      const descricaoDisplay = descricaoServico.length > maxDescLength 
+        ? descricaoServico.substring(0, maxDescLength) + '...' 
+        : descricaoServico;
+      
+      page.drawText(descricaoDisplay, { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(quantidade.toString(), { x: colQtd, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(formatCurrency(valorUnitario), { x: colUnitario, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(formatCurrency(desconto), { x: colDesconto, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(formatCurrency(totalLinha), { x: colTotal, y: currentY, size: 10, font: helveticaBold, color: textColor });
+      
+      currentY -= 20;
+    }
     
-    page.drawText(descricaoDisplay, { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
-    page.drawText(quantidade.toString(), { x: colQtd, y: currentY, size: 10, font: helvetica, color: textColor });
-    page.drawText(formatCurrency(valorUnitario), { x: colUnitario, y: currentY, size: 10, font: helvetica, color: textColor });
-    page.drawText(formatCurrency(desconto), { x: colDesconto, y: currentY, size: 10, font: helvetica, color: textColor });
-    page.drawText(formatCurrency(totalLinha), { x: colTotal, y: currentY, size: 10, font: helveticaBold, color: textColor });
+    // Add marcos geodésicos if included
+    if (orcamento.incluir_marco && orcamento.marco_quantidade && orcamento.marco_quantidade > 0) {
+      const marcoValorUnit = orcamento.marco_valor_unitario || 0;
+      const marcoQtd = orcamento.marco_quantidade;
+      const marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
+      subtotal += marcoTotal;
+      
+      page.drawText('Marcos Geodésicos', { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(marcoQtd.toString(), { x: colQtd, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(formatCurrency(marcoValorUnit), { x: colUnitario, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText('0%', { x: colDesconto, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(formatCurrency(marcoTotal), { x: colTotal, y: currentY, size: 10, font: helveticaBold, color: textColor });
+      
+      currentY -= 20;
+    }
     
     // Line below table
-    currentY -= 15;
+    currentY -= 5;
     drawLine(page, margin, currentY, width - margin);
     
-    // ===== TOTALS SECTION =====
+    // ===== TOTALS SECTION (sem impostos) =====
     currentY -= 30;
-    const subtotal = totalLinha;
-    const impostos = orcamento.valor_imposto || (subtotal * 0.12);
-    const totalGeral = orcamento.receita_esperada || (subtotal + impostos);
+    const totalGeral = orcamento.receita_esperada || subtotal;
     
     const totalsX = width - margin - 180;
     
     page.drawText('Subtotal:', { x: totalsX, y: currentY, size: 10, font: helvetica, color: mutedColor });
     page.drawText(formatCurrency(subtotal), { x: totalsX + 80, y: currentY, size: 10, font: helvetica, color: textColor });
-    
-    currentY -= 18;
-    page.drawText('Impostos (12%):', { x: totalsX, y: currentY, size: 10, font: helvetica, color: mutedColor });
-    page.drawText(formatCurrency(impostos), { x: totalsX + 80, y: currentY, size: 10, font: helvetica, color: textColor });
     
     currentY -= 25;
     drawLine(page, totalsX, currentY + 10, width - margin);
@@ -344,6 +398,7 @@ export async function generateStandardPDF(
     const conditions = [
       'Validade do orçamento: 30 dias',
       orcamento.forma_de_pagamento ? `Forma de pagamento: ${orcamento.forma_de_pagamento}` : null,
+      orcamento.situacao_do_pagamento ? `Situação do pagamento: ${orcamento.situacao_do_pagamento}` : null,
       'Prazo de execução: A combinar',
     ].filter(Boolean);
     
@@ -469,7 +524,7 @@ export async function generateOrcamentoPDF(
     }
 
     // Add table headers
-    const tabelaY = finalConfig.tabela.inicio_y;
+    let tabelaY = finalConfig.tabela.inicio_y;
     const colunas = finalConfig.tabela.colunas;
 
     firstPage.drawText('Descrição', {
@@ -512,76 +567,176 @@ export async function generateOrcamentoPDF(
       color: blackColor,
     });
 
-    // Add service row
-    const linhaY = tabelaY - finalConfig.tabela.altura_linha;
-    const descricaoServico = servico?.nome_do_servico || 'Serviço de Topografia';
-    const valorUnitario = orcamento.valor_unitario;
-    const quantidade = orcamento.quantidade;
-    const desconto = orcamento.desconto || 0;
-    const totalLinha = (valorUnitario * quantidade) - desconto;
-
-    // Truncate long descriptions to avoid overflow
+    // Add service rows
+    let linhaY = tabelaY - finalConfig.tabela.altura_linha;
+    let subtotal = 0;
     const maxDescLength = 35;
-    const descricaoDisplay = descricaoServico.length > maxDescLength
-      ? descricaoServico.substring(0, maxDescLength) + '...'
-      : descricaoServico;
 
-    firstPage.drawText(descricaoDisplay, {
-      x: colunas.descricao,
-      y: linhaY,
-      size: 9,
-      font: helveticaFont,
-      color: blackColor,
-    });
+    if (orcamento.itens && orcamento.itens.length > 0) {
+      for (const item of orcamento.itens) {
+        const descricaoServico = item.nome_servico || 'Serviço';
+        const valorUnitario = item.valor_unitario || 0;
+        const quantidade = item.quantidade || 1;
+        const desconto = item.desconto || 0;
+        const totalLinha = (valorUnitario * quantidade) * (1 - desconto / 100);
+        subtotal += totalLinha;
 
-    firstPage.drawText(quantidade.toString(), {
-      x: colunas.qtd,
-      y: linhaY,
-      size: 9,
-      font: helveticaFont,
-      color: blackColor,
-    });
+        const descricaoDisplay = descricaoServico.length > maxDescLength
+          ? descricaoServico.substring(0, maxDescLength) + '...'
+          : descricaoServico;
 
-    firstPage.drawText(formatCurrency(valorUnitario), {
-      x: colunas.valor_unit,
-      y: linhaY,
-      size: 9,
-      font: helveticaFont,
-      color: blackColor,
-    });
+        firstPage.drawText(descricaoDisplay, {
+          x: colunas.descricao,
+          y: linhaY,
+          size: 9,
+          font: helveticaFont,
+          color: blackColor,
+        });
 
-    firstPage.drawText(formatCurrency(desconto), {
-      x: colunas.desconto,
-      y: linhaY,
-      size: 9,
-      font: helveticaFont,
-      color: blackColor,
-    });
+        firstPage.drawText(quantidade.toString(), {
+          x: colunas.qtd,
+          y: linhaY,
+          size: 9,
+          font: helveticaFont,
+          color: blackColor,
+        });
 
-    firstPage.drawText(formatCurrency(totalLinha), {
-      x: colunas.total,
-      y: linhaY,
-      size: 9,
-      font: helveticaFont,
-      color: blackColor,
-    });
+        firstPage.drawText(formatCurrency(valorUnitario), {
+          x: colunas.valor_unit,
+          y: linhaY,
+          size: 9,
+          font: helveticaFont,
+          color: blackColor,
+        });
 
-    // Calculate and add totals
-    const subtotal = totalLinha;
-    const impostos = orcamento.valor_imposto || (subtotal * 0.12);
-    const totalGeral = orcamento.receita_esperada || (subtotal + impostos);
+        firstPage.drawText(`${desconto}%`, {
+          x: colunas.desconto,
+          y: linhaY,
+          size: 9,
+          font: helveticaFont,
+          color: blackColor,
+        });
+
+        firstPage.drawText(formatCurrency(totalLinha), {
+          x: colunas.total,
+          y: linhaY,
+          size: 9,
+          font: helveticaFont,
+          color: blackColor,
+        });
+
+        linhaY -= finalConfig.tabela.altura_linha;
+      }
+    } else {
+      // Fallback single row
+      const descricaoServico = servico?.nome_do_servico || 'Serviço de Topografia';
+      const valorUnitario = orcamento.valor_unitario;
+      const quantidade = orcamento.quantidade;
+      const desconto = orcamento.desconto || 0;
+      const totalLinha = (valorUnitario * quantidade) - desconto;
+      subtotal = totalLinha;
+
+      const descricaoDisplay = descricaoServico.length > maxDescLength
+        ? descricaoServico.substring(0, maxDescLength) + '...'
+        : descricaoServico;
+
+      firstPage.drawText(descricaoDisplay, {
+        x: colunas.descricao,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(quantidade.toString(), {
+        x: colunas.qtd,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(formatCurrency(valorUnitario), {
+        x: colunas.valor_unit,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(formatCurrency(desconto), {
+        x: colunas.desconto,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(formatCurrency(totalLinha), {
+        x: colunas.total,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      linhaY -= finalConfig.tabela.altura_linha;
+    }
+
+    // Add marcos geodésicos if included
+    if (orcamento.incluir_marco && orcamento.marco_quantidade && orcamento.marco_quantidade > 0) {
+      const marcoValorUnit = orcamento.marco_valor_unitario || 0;
+      const marcoQtd = orcamento.marco_quantidade;
+      const marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
+      subtotal += marcoTotal;
+
+      firstPage.drawText('Marcos Geodésicos', {
+        x: colunas.descricao,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(marcoQtd.toString(), {
+        x: colunas.qtd,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(formatCurrency(marcoValorUnit), {
+        x: colunas.valor_unit,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText('0%', {
+        x: colunas.desconto,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+
+      firstPage.drawText(formatCurrency(marcoTotal), {
+        x: colunas.total,
+        y: linhaY,
+        size: 9,
+        font: helveticaFont,
+        color: blackColor,
+      });
+    }
+
+    // Calculate and add totals (sem impostos)
+    const totalGeral = orcamento.receita_esperada || subtotal;
 
     firstPage.drawText(`Subtotal: ${formatCurrency(subtotal)}`, {
       x: finalConfig.totais.x,
       y: finalConfig.totais.subtotal_y,
-      size: 10,
-      font: helveticaFont,
-      color: blackColor,
-    });
-
-    firstPage.drawText(`Impostos (12%): ${formatCurrency(impostos)}`, {
-      x: finalConfig.totais.x,
-      y: finalConfig.totais.impostos_y,
       size: 10,
       font: helveticaFont,
       color: blackColor,
@@ -616,6 +771,16 @@ export async function generateOrcamentoPDF(
       firstPage.drawText(`Forma de pagamento: ${orcamento.forma_de_pagamento}`, {
         x: finalConfig.rodape.pagamento.x,
         y: finalConfig.rodape.pagamento.y,
+        size: finalConfig.rodape.pagamento.size,
+        font: helveticaFont,
+        color: blackColor,
+      });
+    }
+
+    if (orcamento.situacao_do_pagamento) {
+      firstPage.drawText(`Situação do pagamento: ${orcamento.situacao_do_pagamento}`, {
+        x: finalConfig.rodape.pagamento.x,
+        y: finalConfig.rodape.pagamento.y - 15,
         size: finalConfig.rodape.pagamento.size,
         font: helveticaFont,
         color: blackColor,

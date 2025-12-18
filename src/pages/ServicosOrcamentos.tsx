@@ -147,11 +147,6 @@ export default function ServicosOrcamentos() {
   };
 
   const handleGeneratePDF = async (orcamento: any) => {
-    if (!empresa?.template_orcamento_url) {
-      toast.error('Template de orçamento não configurado');
-      return;
-    }
-
     setGeneratingPDF(orcamento.id_orcamento);
 
     try {
@@ -161,18 +156,39 @@ export default function ServicosOrcamentos() {
         .eq('id_cliente', orcamento.id_cliente)
         .single();
 
-      const { data: servicoData } = await supabase
-        .from('fato_servico')
-        .select('*')
-        .eq('id_servico', orcamento.id_servico)
-        .single();
+      // Buscar itens do orçamento com nomes dos serviços
+      const { data: itensData } = await supabase
+        .from('fato_orcamento_itens')
+        .select(`
+          id_servico,
+          quantidade,
+          valor_unitario,
+          desconto,
+          dim_tiposervico(nome)
+        `)
+        .eq('id_orcamento', orcamento.id_orcamento);
+
+      // Formatar itens com nome do serviço
+      const itensFormatados = (itensData || []).map((item: any) => ({
+        id_servico: item.id_servico,
+        quantidade: item.quantidade,
+        valor_unitario: item.valor_unitario,
+        desconto: item.desconto,
+        nome_servico: item.dim_tiposervico?.nome || 'Serviço'
+      }));
+
+      // Preparar dados do orçamento com itens
+      const orcamentoComItens = {
+        ...orcamento,
+        itens: itensFormatados
+      };
 
       await generateOrcamentoPDF(
-        orcamento,
+        orcamentoComItens,
         clienteData,
-        servicoData,
-        empresa.template_orcamento_url,
-        empresa.template_config as any
+        null, // servico não é mais necessário pois usamos itens
+        empresa?.template_orcamento_url || null,
+        empresa?.template_config as any
       );
 
       toast.success('PDF gerado com sucesso!');

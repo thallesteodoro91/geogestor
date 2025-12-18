@@ -208,7 +208,7 @@ export const CompromissoDialog = ({
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             <TabsContent value="orcamento" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="space-y-2">
                   <Label>Cliente *</Label>
                   <Select
                     value={formData.id_cliente}
@@ -227,7 +227,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Serviço</Label>
                   <Select
                     value={formData.id_servico}
@@ -246,7 +246,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Propriedade</Label>
                   <Select
                     value={formData.id_propriedade}
@@ -266,7 +266,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Valor (R$)</Label>
                   <Input
                     type="number"
@@ -277,7 +277,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Data Início *</Label>
                   <Input
                     type="date"
@@ -286,7 +286,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Data Término</Label>
                   <Input
                     type="date"
@@ -295,7 +295,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Status</Label>
                   <Select
                     value={formData.situacao}
@@ -316,7 +316,7 @@ export const CompromissoDialog = ({
 
             <TabsContent value="servico" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="space-y-2">
                   <Label>Cliente *</Label>
                   <Select
                     value={formData.id_cliente}
@@ -335,7 +335,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Propriedade</Label>
                   <Select
                     value={formData.id_propriedade}
@@ -355,7 +355,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Valor (R$)</Label>
                   <Input
                     type="number"
@@ -366,7 +366,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Status</Label>
                   <Select
                     value={formData.situacao_servico}
@@ -384,7 +384,7 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Data Início *</Label>
                   <Input
                     type="date"
@@ -393,7 +393,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
 
-                <div>
+                <div className="space-y-2">
                   <Label>Data Término</Label>
                   <Input
                     type="date"

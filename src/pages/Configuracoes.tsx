@@ -17,6 +17,7 @@ import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
+import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -24,6 +25,7 @@ export default function Configuracoes() {
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -469,7 +471,10 @@ export default function Configuracoes() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-4">
-                <Button variant="outline">Importar Planilhas Excel</Button>
+                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar CSV
+                </Button>
                 <Button variant="outline">Exportar Dados</Button>
                 <Button variant="outline">Fazer Backup</Button>
               </div>
@@ -508,6 +513,17 @@ export default function Configuracoes() {
           </Card>
         </div>
       </div>
+
+      <CsvImportDialog 
+        open={csvImportOpen} 
+        onOpenChange={setCsvImportOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['clientes'] });
+          queryClient.invalidateQueries({ queryKey: ['propriedades'] });
+          queryClient.invalidateQueries({ queryKey: ['tipos-servico'] });
+          queryClient.invalidateQueries({ queryKey: ['tipos-despesa'] });
+        }}
+      />
     </AppLayout>
   );
 }

@@ -398,7 +398,6 @@ export async function generateStandardPDF(
     const conditions = [
       'Validade do orçamento: 30 dias',
       orcamento.forma_de_pagamento ? `Forma de pagamento: ${orcamento.forma_de_pagamento}` : null,
-      orcamento.situacao_do_pagamento ? `Situação do pagamento: ${orcamento.situacao_do_pagamento}` : null,
       'Prazo de execução: A combinar',
     ].filter(Boolean);
     
@@ -771,16 +770,6 @@ export async function generateOrcamentoPDF(
       firstPage.drawText(`Forma de pagamento: ${orcamento.forma_de_pagamento}`, {
         x: finalConfig.rodape.pagamento.x,
         y: finalConfig.rodape.pagamento.y,
-        size: finalConfig.rodape.pagamento.size,
-        font: helveticaFont,
-        color: blackColor,
-      });
-    }
-
-    if (orcamento.situacao_do_pagamento) {
-      firstPage.drawText(`Situação do pagamento: ${orcamento.situacao_do_pagamento}`, {
-        x: finalConfig.rodape.pagamento.x,
-        y: finalConfig.rodape.pagamento.y - 15,
         size: finalConfig.rodape.pagamento.size,
         font: helveticaFont,
         color: blackColor,

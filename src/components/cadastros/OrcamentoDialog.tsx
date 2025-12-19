@@ -25,12 +25,14 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const [clientes, setClientes] = useState<any[]>([]);
   const [servicos, setServicos] = useState<any[]>([]);
   const [tiposDespesa, setTiposDespesa] = useState<any[]>([]);
+  const [propriedades, setPropriedades] = useState<any[]>([]);
   const [clienteData, setClienteData] = useState<any>(null);
   const { createNotification } = useNotifications();
 
   const { register, handleSubmit, setValue, watch, control, reset } = useForm({
     defaultValues: {
       id_cliente: clienteId || orcamento?.id_cliente || "",
+      id_propriedade: orcamento?.id_propriedade || "",
       data_orcamento: orcamento?.data_orcamento || new Date().toISOString().split('T')[0],
       itens: orcamento?.itens || [{
         id_servico: "",
@@ -66,6 +68,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedItens = watch("itens");
   const watchedDespesas = watch("despesas");
   const watchedClienteId = watch("id_cliente");
+  const watchedPropriedadeId = watch("id_propriedade");
   const watchedSituacao = watch("situacao_do_pagamento");
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
@@ -145,6 +148,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           // 3. Reset com todos os dados (clientes já carregados)
           reset({
             id_cliente: orcamento.id_cliente || "",
+            id_propriedade: orcamento.id_propriedade || "",
             data_orcamento: orcamento.data_orcamento,
             itens: itensFormatados,
             despesas: despesasFormatadas,
@@ -193,7 +197,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   };
 
   const fetchClienteData = async (clienteId: string) => {
-    const [clienteRes, propriedadeRes] = await Promise.all([
+    const [clienteRes, propriedadesRes] = await Promise.all([
       supabase
         .from('dim_cliente')
         .select('endereco, telefone, celular')
@@ -201,14 +205,21 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         .maybeSingle(),
       supabase
         .from('dim_propriedade')
-        .select('cidade, municipio')
+        .select('id_propriedade, nome_da_propriedade, cidade, municipio')
         .eq('id_cliente', clienteId)
         .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
     ]);
     
-    const cidade = propriedadeRes.data?.cidade || propriedadeRes.data?.municipio || '';
+    const propriedadesData = propriedadesRes.data || [];
+    setPropriedades(propriedadesData);
+    
+    // Auto-selecionar primeira propriedade se não tiver uma selecionada
+    const currentPropriedade = watch("id_propriedade");
+    if (propriedadesData.length > 0 && !currentPropriedade) {
+      setValue("id_propriedade", propriedadesData[0].id_propriedade);
+    }
+    
+    const cidade = propriedadesData[0]?.cidade || propriedadesData[0]?.municipio || '';
     
     if (clienteRes.data) {
       setClienteData({
@@ -321,6 +332,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
       const orcamentoData = {
         id_cliente: sanitizeUuid(data.id_cliente),
+        id_propriedade: sanitizeUuid(data.id_propriedade),
         data_orcamento: data.data_orcamento,
         quantidade: servicosValidos.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
         valor_unitario: servicosValidos.length > 0 ? receitaEsperada / servicosValidos.length : 0,
@@ -480,12 +492,16 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
               <h3 className="font-semibold text-lg">Dados Básicos</h3>
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label>Cliente *</Label>
                 <Select
                   value={watchedClienteId}
-                  onValueChange={(value) => setValue("id_cliente", value)}
+                  onValueChange={(value) => {
+                    setValue("id_cliente", value);
+                    setValue("id_propriedade", ""); // Reset propriedade ao trocar cliente
+                    setPropriedades([]);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o cliente" />
@@ -494,6 +510,26 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                     {clientes.map((cliente) => (
                       <SelectItem key={cliente.id_cliente} value={cliente.id_cliente}>
                         {cliente.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Propriedade</Label>
+                <Select
+                  value={watchedPropriedadeId}
+                  onValueChange={(value) => setValue("id_propriedade", value)}
+                  disabled={propriedades.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={propriedades.length === 0 ? "Selecione um cliente" : "Selecione a propriedade"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {propriedades.map((prop) => (
+                      <SelectItem key={prop.id_propriedade} value={prop.id_propriedade}>
+                        {prop.nome_da_propriedade}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -313,11 +313,11 @@ export default function ServicosOrcamentos() {
                       <Button 
                         variant="outline" 
                         className={cn(
-                          "w-[140px] justify-start text-left font-normal",
+                          "w-[150px] justify-start text-left font-normal gap-2",
                           !dataInicio && "text-muted-foreground"
                         )}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        <CalendarIcon className="h-4 w-4 shrink-0" />
                         {dataInicio ? format(dataInicio, "dd/MM/yyyy") : "Selecionar"}
                       </Button>
                     </PopoverTrigger>
@@ -340,11 +340,11 @@ export default function ServicosOrcamentos() {
                       <Button 
                         variant="outline" 
                         className={cn(
-                          "w-[140px] justify-start text-left font-normal",
+                          "w-[150px] justify-start text-left font-normal gap-2",
                           !dataFim && "text-muted-foreground"
                         )}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        <CalendarIcon className="h-4 w-4 shrink-0" />
                         {dataFim ? format(dataFim, "dd/MM/yyyy") : "Selecionar"}
                       </Button>
                     </PopoverTrigger>

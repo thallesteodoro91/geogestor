@@ -535,6 +535,7 @@ export type Database = {
       fato_orcamento: {
         Row: {
           anotacoes: string | null
+          codigo_orcamento: string | null
           created_at: string | null
           data_do_faturamento: string | null
           data_inicio: string | null
@@ -571,6 +572,7 @@ export type Database = {
         }
         Insert: {
           anotacoes?: string | null
+          codigo_orcamento?: string | null
           created_at?: string | null
           data_do_faturamento?: string | null
           data_inicio?: string | null
@@ -607,6 +609,7 @@ export type Database = {
         }
         Update: {
           anotacoes?: string | null
+          codigo_orcamento?: string | null
           created_at?: string | null
           data_do_faturamento?: string | null
           data_inicio?: string | null
@@ -1207,6 +1210,10 @@ export type Database = {
           current_users: number
           max_users: number
         }[]
+      }
+      gerar_codigo_orcamento: {
+        Args: { p_cliente_nome: string; p_tenant_id: string }
+        Returns: string
       }
       get_tenant_members: {
         Args: never

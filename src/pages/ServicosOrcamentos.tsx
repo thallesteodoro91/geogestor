@@ -398,6 +398,7 @@ export default function ServicosOrcamentos() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-[80px]">ID</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Serviço</TableHead>
                     <TableHead>Data</TableHead>
@@ -411,15 +412,16 @@ export default function ServicosOrcamentos() {
                 <TableBody>
                   {loadingOrcamentos ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center">Carregando...</TableCell>
+                      <TableCell colSpan={9} className="text-center">Carregando...</TableCell>
                     </TableRow>
                   ) : filteredOrcamentos.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center">Nenhum orçamento encontrado</TableCell>
+                      <TableCell colSpan={9} className="text-center">Nenhum orçamento encontrado</TableCell>
                     </TableRow>
                   ) : (
                     filteredOrcamentos.map((orcamento) => (
                       <TableRow key={orcamento.id_orcamento}>
+                        <TableCell className="font-mono text-sm font-semibold text-primary">{orcamento.codigo_orcamento || '-'}</TableCell>
                         <TableCell className="font-medium">{orcamento.dim_cliente?.nome || '-'}</TableCell>
                         <TableCell>
                           {orcamento.itens?.length > 0 

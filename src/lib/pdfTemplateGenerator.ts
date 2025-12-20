@@ -25,6 +25,7 @@ interface OrcamentoData {
   marco_valor_unitario?: number;
   marco_valor_total?: number;
   itens?: OrcamentoItem[];
+  codigo_orcamento?: string | null;
 }
 
 interface ClienteData {
@@ -192,7 +193,7 @@ export async function generateStandardPDF(
     });
     
     // Budget number and date on the right
-    const orcamentoNumero = orcamento.id_orcamento.slice(0, 8).toUpperCase();
+    const orcamentoNumero = orcamento.codigo_orcamento || orcamento.id_orcamento.slice(0, 8).toUpperCase();
     const dataFormatada = format(new Date(orcamento.data_orcamento), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
     
     page.drawText(`ORÇAMENTO Nº ${orcamentoNumero}`, {
@@ -434,7 +435,8 @@ export async function generateStandardPDF(
     const link = document.createElement('a');
     link.href = url;
     const nomeCliente = cliente?.nome.replace(/\s+/g, '_') || 'Cliente';
-    link.download = `Orcamento_${orcamentoNumero}_${nomeCliente}_${format(new Date(), 'dd-MM-yyyy')}.pdf`;
+    const codigoArquivo = orcamento.codigo_orcamento || orcamentoNumero;
+    link.download = `Orcamento_${codigoArquivo}_${nomeCliente}_${format(new Date(), 'dd-MM-yyyy')}.pdf`;
     link.click();
     
     URL.revokeObjectURL(url);
@@ -481,7 +483,7 @@ export async function generateOrcamentoPDF(
     const blackColor = rgb(0, 0, 0);
 
     // Add header
-    const orcamentoNumero = orcamento.id_orcamento.slice(0, 8).toUpperCase();
+    const orcamentoNumero = orcamento.codigo_orcamento || orcamento.id_orcamento.slice(0, 8).toUpperCase();
     const dataFormatada = format(new Date(orcamento.data_orcamento), "dd/MM/yyyy", { locale: ptBR });
 
     firstPage.drawText(`ORÇAMENTO Nº ${orcamentoNumero}`, {

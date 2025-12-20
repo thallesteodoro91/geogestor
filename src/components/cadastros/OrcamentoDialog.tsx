@@ -34,6 +34,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       id_cliente: clienteId || orcamento?.id_cliente || "",
       id_propriedade: orcamento?.id_propriedade || "",
       data_orcamento: orcamento?.data_orcamento || new Date().toISOString().split('T')[0],
+      codigo_orcamento: orcamento?.codigo_orcamento || "",
       itens: orcamento?.itens || [{
         id_servico: "",
         quantidade: 1,
@@ -150,6 +151,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             id_cliente: orcamento.id_cliente || "",
             id_propriedade: orcamento.id_propriedade || "",
             data_orcamento: orcamento.data_orcamento,
+            codigo_orcamento: orcamento.codigo_orcamento || "",
             itens: itensFormatados,
             despesas: despesasFormatadas,
             incluir_marco: orcamento.incluir_marco || false,
@@ -330,10 +332,30 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         return;
       }
 
+      // Gerar código do orçamento se for novo ou usar o código editado
+      let codigoOrcamento = data.codigo_orcamento;
+      
+      if (!orcamento && !codigoOrcamento) {
+        // Gerar código automaticamente para novo orçamento
+        const clienteNome = clientes.find(c => c.id_cliente === data.id_cliente)?.nome || '';
+        const { data: codigoGerado, error: codigoError } = await supabase
+          .rpc('gerar_codigo_orcamento', {
+            p_cliente_nome: clienteNome,
+            p_tenant_id: tenantId
+          });
+        
+        if (codigoError) {
+          console.error('Erro ao gerar código:', codigoError);
+        } else {
+          codigoOrcamento = codigoGerado;
+        }
+      }
+
       const orcamentoData = {
         id_cliente: sanitizeUuid(data.id_cliente),
         id_propriedade: sanitizeUuid(data.id_propriedade),
         data_orcamento: data.data_orcamento,
+        codigo_orcamento: codigoOrcamento || null,
         quantidade: servicosValidos.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
         valor_unitario: servicosValidos.length > 0 ? receitaEsperada / servicosValidos.length : 0,
         desconto: servicosValidos.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
@@ -540,6 +562,19 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 <Label>Data do Orçamento *</Label>
                 <Input type="date" {...register("data_orcamento")} required />
               </div>
+
+              {orcamento && (
+                <div className="space-y-2">
+                  <Label>Código do Orçamento</Label>
+                  <Input 
+                    {...register("codigo_orcamento")} 
+                    placeholder="Ex: TT001"
+                    maxLength={5}
+                    className="font-mono uppercase"
+                  />
+                  <p className="text-xs text-muted-foreground">Formato: 2 letras + 3 números (ex: TT001)</p>
+                </div>
+              )}
             </div>
 
             {clienteData && (

@@ -87,6 +87,8 @@ All colors MUST be HSL.
     /* Shadows */
     --shadow-elegant: 0 4px 20px -4px hsl(262 83% 65% / 0.4);
     --shadow-glow: 0 0 30px hsl(262 83% 65% / 0.3);
+    --shadow-glow-positive: 0 0 30px hsl(142 76% 56% / 0.4);
+    --shadow-glow-negative: 0 0 30px hsl(0 72% 51% / 0.4);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -212,7 +214,24 @@ All colors MUST be HSL.
   
   /* Micro-interactions - Benefits of Playfulness */
   .interactive-lift {
-    @apply transition-smooth hover:-translate-y-1 hover:shadow-glow;
+    @apply transition-smooth hover:-translate-y-1;
+  }
+  .interactive-lift:hover {
+    box-shadow: var(--shadow-glow);
+  }
+  
+  .interactive-lift-positive {
+    @apply transition-smooth hover:-translate-y-1;
+  }
+  .interactive-lift-positive:hover {
+    box-shadow: var(--shadow-glow-positive);
+  }
+  
+  .interactive-lift-negative {
+    @apply transition-smooth hover:-translate-y-1;
+  }
+  .interactive-lift-negative:hover {
+    box-shadow: var(--shadow-glow-negative);
   }
   
   /* Loading States - Benefits of Anticipation */

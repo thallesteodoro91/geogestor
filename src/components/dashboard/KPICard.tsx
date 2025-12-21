@@ -41,8 +41,15 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
   // Remove operation signs from change value
   const cleanChange = change?.replace(/^[+-]\s*/, '');
   
+  // Dynamic lift class based on changeType
+  const liftClass = changeType === "positive" 
+    ? "interactive-lift-positive" 
+    : changeType === "negative" 
+      ? "interactive-lift-negative" 
+      : "interactive-lift";
+  
   return (
-    <Card className="relative overflow-hidden interactive-lift group bg-gradient-to-br from-card to-card/50 border-border/50">
+    <Card className={cn("relative overflow-hidden group bg-gradient-to-br from-card to-card/50 border-border/50", liftClass)}>
       <CardContent className="p-6">
         <div className="flex items-start gap-4 relative z-10">
           {/* Icon with micro-interaction - "Benefits of Playfulness" */}

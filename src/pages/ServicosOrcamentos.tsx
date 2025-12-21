@@ -313,7 +313,7 @@ export default function ServicosOrcamentos() {
                       <Button 
                         variant="outline" 
                         className={cn(
-                          "w-[150px] justify-start text-left font-normal gap-2",
+                          "w-[160px] justify-start text-left font-normal gap-2 rounded-sm px-4",
                           !dataInicio && "text-muted-foreground"
                         )}
                       >
@@ -340,7 +340,7 @@ export default function ServicosOrcamentos() {
                       <Button 
                         variant="outline" 
                         className={cn(
-                          "w-[150px] justify-start text-left font-normal gap-2",
+                          "w-[160px] justify-start text-left font-normal gap-2 rounded-sm px-4",
                           !dataFim && "text-muted-foreground"
                         )}
                       >

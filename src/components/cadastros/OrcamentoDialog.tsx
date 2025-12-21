@@ -507,6 +507,22 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+          {/* Código do Orçamento - apenas em modo edição */}
+          {orcamento && (
+            <div className="p-4 border rounded-lg bg-muted/30">
+              <div className="space-y-2">
+                <Label>Código do Orçamento</Label>
+                <Input 
+                  {...register("codigo_orcamento")} 
+                  placeholder="Ex: TT001"
+                  maxLength={5}
+                  className="font-mono uppercase max-w-[150px]"
+                />
+                <p className="text-xs text-muted-foreground">Formato: 2 letras + 3 números (ex: TT001)</p>
+              </div>
+            </div>
+          )}
+
           {/* I. Dados Básicos */}
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -562,19 +578,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 <Label>Data do Orçamento *</Label>
                 <Input type="date" {...register("data_orcamento")} required />
               </div>
-
-              {orcamento && (
-                <div className="space-y-2">
-                  <Label>Código do Orçamento</Label>
-                  <Input 
-                    {...register("codigo_orcamento")} 
-                    placeholder="Ex: TT001"
-                    maxLength={5}
-                    className="font-mono uppercase"
-                  />
-                  <p className="text-xs text-muted-foreground">Formato: 2 letras + 3 números (ex: TT001)</p>
-                </div>
-              )}
             </div>
 
             {clienteData && (

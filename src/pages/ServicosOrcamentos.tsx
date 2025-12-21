@@ -312,8 +312,9 @@ export default function ServicosOrcamentos() {
                     <PopoverTrigger asChild>
                       <Button 
                         variant="outline" 
+                        size="sm"
                         className={cn(
-                          "w-[160px] justify-start text-left font-normal gap-2 rounded-sm px-4",
+                          "w-[140px] justify-start text-left font-normal gap-2 rounded-sm px-3",
                           !dataInicio && "text-muted-foreground"
                         )}
                       >
@@ -339,8 +340,9 @@ export default function ServicosOrcamentos() {
                     <PopoverTrigger asChild>
                       <Button 
                         variant="outline" 
+                        size="sm"
                         className={cn(
-                          "w-[160px] justify-start text-left font-normal gap-2 rounded-sm px-4",
+                          "w-[140px] justify-start text-left font-normal gap-2 rounded-sm px-3",
                           !dataFim && "text-muted-foreground"
                         )}
                       >

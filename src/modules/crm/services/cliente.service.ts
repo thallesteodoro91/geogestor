@@ -56,9 +56,27 @@ export async function deleteCliente(id: string) {
   return query;
 }
 
+/**
+ * Sanitizes search term for safe use in ILIKE queries
+ * Escapes special PostgreSQL ILIKE pattern characters (% and _)
+ */
+function sanitizeSearchTerm(term: string): string {
+  // Escape ILIKE special characters to prevent pattern injection
+  return term.replace(/[%_\\]/g, '\\$&');
+}
+
 export async function searchClientes(searchTerm: string) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('dim_cliente').select('*').ilike('nome', `%${searchTerm}%`);
+  
+  // Validate and sanitize search term
+  const trimmedTerm = searchTerm.trim();
+  if (!trimmedTerm || trimmedTerm.length > 100) {
+    // Return empty result for invalid input
+    return { data: [], error: null };
+  }
+  
+  const sanitizedTerm = sanitizeSearchTerm(trimmedTerm);
+  let query = supabase.from('dim_cliente').select('*').ilike('nome', `%${sanitizedTerm}%`);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('nome').limit(20);
 }

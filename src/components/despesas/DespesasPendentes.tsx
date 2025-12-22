@@ -114,6 +114,25 @@ export function DespesasPendentes() {
     },
   });
 
+  const excluirTodasMutation = useMutation({
+    mutationFn: async (orcamentoId: string) => {
+      const { error } = await supabase
+        .from('fato_despesas')
+        .delete()
+        .eq('id_orcamento', orcamentoId)
+        .eq('status', 'pendente');
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['despesas-pendentes'] });
+      queryClient.invalidateQueries({ queryKey: ['despesas'] });
+      toast.success("Todas as despesas do orçamento foram excluídas!");
+    },
+    onError: (error) => {
+      toast.error(`Erro ao excluir: ${error.message}`);
+    },
+  });
+
   // Agrupar despesas por orçamento
   const despesasAgrupadas = despesasPendentes.reduce((acc, despesa) => {
     const orcamentoId = despesa.id_orcamento;
@@ -252,7 +271,17 @@ export function DespesasPendentes() {
                       </div>
                     ))}
                     
-                    <div className="flex justify-end pt-2 border-t">
+                    <div className="flex justify-end gap-2 pt-2 border-t">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-destructive hover:bg-destructive/10"
+                        onClick={() => excluirTodasMutation.mutate(orcamentoId)}
+                        disabled={excluirTodasMutation.isPending}
+                      >
+                        <X className="mr-2 h-4 w-4" />
+                        Excluir Todas
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"

@@ -181,19 +181,20 @@ export default function Cadastros() {
                         <TableHead>Email</TableHead>
                         <TableHead>Telefone</TableHead>
                         <TableHead>Situação</TableHead>
+                        <TableHead>Observação</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {loading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">
+                          <TableCell colSpan={7} className="text-center py-8">
                             Carregando...
                           </TableCell>
                         </TableRow>
                       ) : filteredClientes.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                             Nenhum cliente encontrado
                           </TableCell>
                         </TableRow>
@@ -202,7 +203,7 @@ export default function Cadastros() {
                           <TableRow key={cliente.id_cliente}>
                             <TableCell className="font-medium">
                               <button
-                                onClick={() => navigate(`/cliente/${cliente.id_cliente}`)}
+                                onClick={() => navigate(`/clientes/${cliente.id_cliente}`)}
                                 className="text-primary hover:underline font-medium"
                               >
                                 {cliente.nome}
@@ -212,12 +213,13 @@ export default function Cadastros() {
                             <TableCell>{cliente.email || '-'}</TableCell>
                             <TableCell>{cliente.telefone || '-'}</TableCell>
                             <TableCell>{cliente.situacao || '-'}</TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={cliente.anotacoes || ''}>{cliente.anotacoes || '-'}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
                                 <Button 
                                   variant="ghost" 
                                   size="icon"
-                                  onClick={() => navigate(`/cliente/${cliente.id_cliente}`)}
+                                  onClick={() => navigate(`/clientes/${cliente.id_cliente}`)}
                                   title="Ver Detalhes"
                                 >
                                   <Eye className="h-4 w-4" />
@@ -279,17 +281,18 @@ export default function Cadastros() {
                         <TableHead>Área (ha)</TableHead>
                         <TableHead>Cidade</TableHead>
                         <TableHead>Situação</TableHead>
+                        <TableHead>Observação</TableHead>
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {loading ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8">Carregando...</TableCell>
+                          <TableCell colSpan={7} className="text-center py-8">Carregando...</TableCell>
                         </TableRow>
                       ) : filteredPropriedades.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                             Nenhuma propriedade encontrada
                           </TableCell>
                         </TableRow>
@@ -300,7 +303,7 @@ export default function Cadastros() {
                             <TableCell>
                               {prop.dim_cliente?.nome ? (
                                 <button
-                                  onClick={() => navigate(`/cliente/${prop.id_cliente}`)}
+                                  onClick={() => navigate(`/clientes/${prop.id_cliente}`)}
                                   className="text-primary hover:underline"
                                 >
                                   {prop.dim_cliente.nome}
@@ -312,6 +315,7 @@ export default function Cadastros() {
                             <TableCell>{prop.area_ha || '-'}</TableCell>
                             <TableCell>{prop.cidade || '-'}</TableCell>
                             <TableCell>{prop.situacao || '-'}</TableCell>
+                            <TableCell className="max-w-[200px] truncate" title={prop.observacoes || ''}>{prop.observacoes || '-'}</TableCell>
                             <TableCell className="text-right">
                               <div className="flex justify-end gap-2">
                                 <Button 

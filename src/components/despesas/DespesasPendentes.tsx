@@ -271,7 +271,7 @@ export function DespesasPendentes() {
                       </div>
                     ))}
                     
-                    <div className="flex justify-end gap-2 pt-2 border-t">
+                    <div className="flex justify-between pt-2 border-t">
                       <Button
                         size="sm"
                         variant="outline"

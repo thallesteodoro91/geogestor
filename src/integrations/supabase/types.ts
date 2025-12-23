@@ -743,13 +743,16 @@ export type Database = {
           custo_servico: number | null
           data_do_servico_fim: string | null
           data_do_servico_inicio: string | null
+          descricao: string | null
           id_cliente: string | null
           id_data: string | null
           id_empresa: string | null
+          id_orcamento: string | null
           id_propriedade: string | null
           id_servico: string
           nome_do_servico: string
           numero_de_servicos_concluidos: number | null
+          progresso: number | null
           receita_servico: number | null
           situacao_do_servico: string | null
           tenant_id: string | null
@@ -761,13 +764,16 @@ export type Database = {
           custo_servico?: number | null
           data_do_servico_fim?: string | null
           data_do_servico_inicio?: string | null
+          descricao?: string | null
           id_cliente?: string | null
           id_data?: string | null
           id_empresa?: string | null
+          id_orcamento?: string | null
           id_propriedade?: string | null
           id_servico?: string
           nome_do_servico: string
           numero_de_servicos_concluidos?: number | null
+          progresso?: number | null
           receita_servico?: number | null
           situacao_do_servico?: string | null
           tenant_id?: string | null
@@ -779,13 +785,16 @@ export type Database = {
           custo_servico?: number | null
           data_do_servico_fim?: string | null
           data_do_servico_inicio?: string | null
+          descricao?: string | null
           id_cliente?: string | null
           id_data?: string | null
           id_empresa?: string | null
+          id_orcamento?: string | null
           id_propriedade?: string | null
           id_servico?: string
           nome_do_servico?: string
           numero_de_servicos_concluidos?: number | null
+          progresso?: number | null
           receita_servico?: number | null
           situacao_do_servico?: string | null
           tenant_id?: string | null
@@ -899,6 +908,165 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      servico_anexos: {
+        Row: {
+          created_at: string | null
+          id_anexo: string
+          id_servico: string
+          nome_arquivo: string
+          storage_path: string
+          tamanho_bytes: number | null
+          tenant_id: string | null
+          tipo_arquivo: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id_anexo?: string
+          id_servico: string
+          nome_arquivo: string
+          storage_path: string
+          tamanho_bytes?: number | null
+          tenant_id?: string | null
+          tipo_arquivo?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id_anexo?: string
+          id_servico?: string
+          nome_arquivo?: string
+          storage_path?: string
+          tamanho_bytes?: number | null
+          tenant_id?: string | null
+          tipo_arquivo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_anexos_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+        ]
+      }
+      servico_equipes: {
+        Row: {
+          created_at: string | null
+          funcao: string
+          id_designacao: string
+          id_servico: string
+          tenant_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          funcao: string
+          id_designacao?: string
+          id_servico: string
+          tenant_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          funcao?: string
+          id_designacao?: string
+          id_servico?: string
+          tenant_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_equipes_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
+            foreignKeyName: "servico_equipes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      servico_eventos: {
+        Row: {
+          created_at: string | null
+          descricao: string
+          id_evento: string
+          id_servico: string
+          tenant_id: string | null
+          tipo: string
+        }
+        Insert: {
+          created_at?: string | null
+          descricao: string
+          id_evento?: string
+          id_servico: string
+          tenant_id?: string | null
+          tipo: string
+        }
+        Update: {
+          created_at?: string | null
+          descricao?: string
+          id_evento?: string
+          id_servico?: string
+          tenant_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_eventos_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+        ]
+      }
+      servico_tarefas: {
+        Row: {
+          concluida: boolean | null
+          created_at: string | null
+          id_servico: string
+          id_tarefa: string
+          ordem: number | null
+          tenant_id: string | null
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          concluida?: boolean | null
+          created_at?: string | null
+          id_servico: string
+          id_tarefa?: string
+          ordem?: number | null
+          tenant_id?: string | null
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          concluida?: boolean | null
+          created_at?: string | null
+          id_servico?: string
+          id_tarefa?: string
+          ordem?: number | null
+          tenant_id?: string | null
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "servico_tarefas_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+        ]
       }
       subscription_plans: {
         Row: {

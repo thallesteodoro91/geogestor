@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useTenant } from '@/contexts/TenantContext';
+import { toast } from 'sonner';
+import { createServico, updateServico } from '@/modules/operations';
+import { registrarCriacaoServico, registrarMudancaStatus } from '@/modules/operations/services/servico-eventos.service';
 
 export interface ServicoFormData {
   nome_do_servico: string;
@@ -23,10 +26,7 @@ export interface ServicoFormData {
 interface NovoServicoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: ServicoFormData) => void;
-  initialData?: Partial<ServicoFormData>;
-  isEditing?: boolean;
-  isPending?: boolean;
+  editingServico?: any;
 }
 
 const STATUS_OPTIONS = [
@@ -36,42 +36,44 @@ const STATUS_OPTIONS = [
   { value: 'Concluído', label: 'Concluído' }
 ];
 
+const initialFormData: ServicoFormData = {
+  nome_do_servico: '',
+  descricao: '',
+  id_cliente: '',
+  id_propriedade: '',
+  id_orcamento: '',
+  data_do_servico_inicio: '',
+  data_do_servico_fim: '',
+  situacao_do_servico: 'Pendente'
+};
+
 export function NovoServicoDialog({
   open,
   onOpenChange,
-  onSubmit,
-  initialData,
-  isEditing = false,
-  isPending = false
+  editingServico
 }: NovoServicoDialogProps) {
   const { tenant } = useTenant();
-  const [formData, setFormData] = useState<ServicoFormData>({
-    nome_do_servico: '',
-    descricao: '',
-    id_cliente: '',
-    id_propriedade: '',
-    id_orcamento: '',
-    data_do_servico_inicio: '',
-    data_do_servico_fim: '',
-    situacao_do_servico: 'Pendente'
-  });
+  const queryClient = useQueryClient();
+  const isEditing = !!editingServico;
+
+  const [formData, setFormData] = useState<ServicoFormData>(initialFormData);
 
   useEffect(() => {
-    if (initialData) {
-      setFormData(prev => ({ ...prev, ...initialData }));
-    } else if (!open) {
+    if (editingServico) {
       setFormData({
-        nome_do_servico: '',
-        descricao: '',
-        id_cliente: '',
-        id_propriedade: '',
-        id_orcamento: '',
-        data_do_servico_inicio: '',
-        data_do_servico_fim: '',
-        situacao_do_servico: 'Pendente'
+        nome_do_servico: editingServico.nome_do_servico || '',
+        descricao: editingServico.descricao || '',
+        id_cliente: editingServico.id_cliente || '',
+        id_propriedade: editingServico.id_propriedade || '',
+        id_orcamento: editingServico.id_orcamento || '',
+        data_do_servico_inicio: editingServico.data_do_servico_inicio || '',
+        data_do_servico_fim: editingServico.data_do_servico_fim || '',
+        situacao_do_servico: editingServico.situacao_do_servico || 'Pendente'
       });
+    } else if (!open) {
+      setFormData(initialFormData);
     }
-  }, [initialData, open]);
+  }, [editingServico, open]);
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes', tenant?.id],
@@ -116,12 +118,66 @@ export function NovoServicoDialog({
     enabled: open
   });
 
+  const mutation = useMutation({
+    mutationFn: async (data: ServicoFormData) => {
+      if (isEditing && editingServico?.id_servico) {
+        const oldStatus = editingServico.situacao_do_servico;
+        const { error } = await updateServico(editingServico.id_servico, {
+          nome_do_servico: data.nome_do_servico,
+          descricao: data.descricao || null,
+          id_cliente: data.id_cliente || null,
+          id_propriedade: data.id_propriedade || null,
+          id_orcamento: data.id_orcamento || null,
+          data_do_servico_inicio: data.data_do_servico_inicio || null,
+          data_do_servico_fim: data.data_do_servico_fim || null,
+          situacao_do_servico: data.situacao_do_servico
+        });
+        if (error) throw error;
+
+        // Registrar evento de mudança de status
+        if (oldStatus !== data.situacao_do_servico) {
+          await registrarMudancaStatus(editingServico.id_servico, oldStatus || 'Pendente', data.situacao_do_servico);
+        }
+      } else {
+        const { data: newServico, error } = await createServico({
+          nome_do_servico: data.nome_do_servico,
+          descricao: data.descricao || null,
+          id_cliente: data.id_cliente || null,
+          id_propriedade: data.id_propriedade || null,
+          id_orcamento: data.id_orcamento || null,
+          data_do_servico_inicio: data.data_do_servico_inicio || null,
+          data_do_servico_fim: data.data_do_servico_fim || null,
+          situacao_do_servico: data.situacao_do_servico,
+          progresso: 0
+        });
+        if (error) throw error;
+
+        // Registrar evento de criação
+        if (newServico) {
+          await registrarCriacaoServico(newServico.id_servico, data.nome_do_servico);
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['servicos'] });
+      queryClient.invalidateQueries({ queryKey: ['servico', editingServico?.id_servico] });
+      queryClient.invalidateQueries({ queryKey: ['servico-eventos'] });
+      toast.success(isEditing ? 'Serviço atualizado com sucesso!' : 'Serviço criado com sucesso!');
+      onOpenChange(false);
+      setFormData(initialFormData);
+    },
+    onError: (error: any) => {
+      toast.error(`Erro: ${error.message}`);
+    }
+  });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nome_do_servico || !formData.id_cliente || !formData.data_do_servico_inicio || !formData.data_do_servico_fim) {
+      toast.error('Preencha todos os campos obrigatórios');
       return;
     }
-    onSubmit(formData);
+    mutation.mutate(formData);
   };
 
   return (
@@ -265,8 +321,8 @@ export function NovoServicoDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? 'Salvando...' : isEditing ? 'Salvar' : 'Criar Serviço'}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Salvando...' : isEditing ? 'Salvar' : 'Criar Serviço'}
             </Button>
           </div>
         </form>

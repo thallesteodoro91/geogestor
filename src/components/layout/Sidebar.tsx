@@ -36,7 +36,8 @@ const navigationSections = [
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
     items: [
-      { name: "Orçamento", href: "/servicos-orcamentos", icon: Briefcase },
+      { name: "Serviços", href: "/servicos", icon: Briefcase },
+      { name: "Orçamento", href: "/servicos-orcamentos", icon: FileBarChart },
       { name: "Despesas", href: "/despesas", icon: Receipt },
     ]
   },

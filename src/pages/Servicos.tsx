@@ -1,22 +1,24 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, TrendingUp } from "lucide-react";
+import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, TrendingUp, CalendarIcon, X } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { NovoServicoDialog, ServicoFormData } from "@/components/servicos";
+import { NovoServicoDialog } from "@/components/servicos";
 import { fetchServicos, deleteServico } from "@/modules/operations";
-import { format } from "date-fns";
+import { format, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 const statusOptions = [
   { value: "all", label: "Todos os Status" },
@@ -47,6 +49,8 @@ export default function Servicos() {
   const [editingServico, setEditingServico] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
+  const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
 
   const { data: servicos = [], isLoading } = useQuery({
     queryKey: ['servicos'],
@@ -87,6 +91,11 @@ export default function Servicos() {
     setEditingServico(null);
   };
 
+  const clearDateFilters = () => {
+    setDataInicio(undefined);
+    setDataFim(undefined);
+  };
+
   // Filtros
   const filteredServicos = servicos.filter((s: any) => {
     const matchesSearch =
@@ -96,7 +105,21 @@ export default function Servicos() {
 
     const matchesStatus = statusFilter === "all" || s.situacao_do_servico === statusFilter;
 
-    return matchesSearch && matchesStatus;
+    // Filtro por período de datas
+    let matchesDateRange = true;
+    if (dataInicio || dataFim) {
+      const servicoInicio = s.data_do_servico_inicio ? startOfDay(new Date(s.data_do_servico_inicio)) : null;
+      const servicoFim = s.data_do_servico_fim ? startOfDay(new Date(s.data_do_servico_fim)) : null;
+      
+      if (dataInicio && servicoInicio) {
+        matchesDateRange = matchesDateRange && (isAfter(servicoInicio, dataInicio) || isEqual(servicoInicio, dataInicio));
+      }
+      if (dataFim && servicoFim) {
+        matchesDateRange = matchesDateRange && (isBefore(servicoFim, dataFim) || isEqual(servicoFim, dataFim));
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesDateRange;
   });
 
   // KPIs
@@ -161,25 +184,96 @@ export default function Servicos() {
             <CardTitle>Lista de Serviços</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Input
-                placeholder="Buscar por nome, cliente ou propriedade..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1"
-              />
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue placeholder="Filtrar por status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Input
+                  placeholder="Buscar por nome, cliente ou propriedade..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1"
+                />
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <SelectValue placeholder="Filtrar por status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {statusOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtro por período */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                <span className="text-sm text-muted-foreground">Período:</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-[160px] justify-start text-left font-normal",
+                          !dataInicio && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dataInicio ? format(dataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Data início"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dataInicio}
+                        onSelect={setDataInicio}
+                        initialFocus
+                        locale={ptBR}
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <span className="text-muted-foreground">até</span>
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-[160px] justify-start text-left font-normal",
+                          !dataFim && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {dataFim ? format(dataFim, "dd/MM/yyyy", { locale: ptBR }) : "Data fim"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={dataFim}
+                        onSelect={setDataFim}
+                        initialFocus
+                        locale={ptBR}
+                        className={cn("p-3 pointer-events-auto")}
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  {(dataInicio || dataFim) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={clearDateFilters}
+                      className="h-9 w-9"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
 
             {isLoading ? (

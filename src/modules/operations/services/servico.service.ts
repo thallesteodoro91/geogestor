@@ -8,13 +8,16 @@ import { getCurrentTenantId } from '@/services/supabase.service';
 export interface Servico {
   id_servico: string;
   nome_do_servico: string;
+  descricao?: string | null;
   id_cliente?: string | null;
   id_propriedade?: string | null;
   id_empresa?: string | null;
+  id_orcamento?: string | null;
   categoria?: string | null;
   data_do_servico_inicio?: string | null;
   data_do_servico_fim?: string | null;
   situacao_do_servico?: string | null;
+  progresso?: number | null;
   receita_servico?: number | null;
   custo_servico?: number | null;
   numero_de_servicos_concluidos?: number | null;

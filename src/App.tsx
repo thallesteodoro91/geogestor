@@ -12,6 +12,8 @@ const Financeiro = lazy(() => import("./pages/Financeiro"));
 const DashboardFinanceiro = lazy(() => import("./pages/DashboardFinanceiro"));
 const Operacional = lazy(() => import("./pages/Operacional"));
 const Clientes = lazy(() => import("./pages/Clientes"));
+const Servicos = lazy(() => import("./pages/Servicos"));
+const ServicoDetalhes = lazy(() => import("./pages/ServicoDetalhes"));
 const ServicosOrcamentos = lazy(() => import("./pages/ServicosOrcamentos"));
 const Despesas = lazy(() => import("./pages/Despesas"));
 const Cadastros = lazy(() => import("./pages/Cadastros"));
@@ -53,6 +55,8 @@ const App = () => {
                   <Route path="/operacional" element={<ProtectedRoute><Operacional /></ProtectedRoute>} />
                   <Route path="/clientes" element={<ProtectedRoute><Clientes /></ProtectedRoute>} />
                   <Route path="/clientes/:id" element={<ProtectedRoute><ClienteDetalhes /></ProtectedRoute>} />
+                  <Route path="/servicos" element={<ProtectedRoute><Servicos /></ProtectedRoute>} />
+                  <Route path="/servicos/:id" element={<ProtectedRoute><ServicoDetalhes /></ProtectedRoute>} />
                   <Route path="/servicos-orcamentos" element={<ProtectedRoute><ServicosOrcamentos /></ProtectedRoute>} />
                   <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
                   <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />

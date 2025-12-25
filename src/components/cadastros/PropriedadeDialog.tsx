@@ -11,15 +11,17 @@ import { useState, useEffect } from "react";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+import { StickyNote } from "lucide-react";
 
 interface PropriedadeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   propriedade?: any;
+  defaultClienteId?: string;
   onSuccess: () => void;
 }
 
-export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }: PropriedadeDialogProps) {
+export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClienteId, onSuccess }: PropriedadeDialogProps) {
   const { register, handleSubmit, setValue, reset } = useForm({
     defaultValues: propriedade || {}
   });
@@ -29,6 +31,9 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
   const canAddProperty = isEditing || isWithinLimit('properties', propertiesCount);
   
   const [clientes, setClientes] = useState<any[]>([]);
+  const [selectedClienteId, setSelectedClienteId] = useState<string | undefined>(
+    propriedade?.id_cliente || defaultClienteId
+  );
 
   useEffect(() => {
     if (open) {
@@ -38,9 +43,16 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
         Object.keys(propriedade).forEach(key => {
           setValue(key as any, propriedade[key]);
         });
+        setSelectedClienteId(propriedade.id_cliente);
+      } else if (defaultClienteId) {
+        setValue("id_cliente", defaultClienteId);
+        setSelectedClienteId(defaultClienteId);
       }
+    } else {
+      // Reset when dialog closes
+      setSelectedClienteId(undefined);
     }
-  }, [open, propriedade, setValue]);
+  }, [open, propriedade, defaultClienteId, setValue]);
 
   const fetchClientes = async () => {
     const { data } = await supabase
@@ -111,8 +123,11 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             <div className="col-span-2 space-y-2">
               <Label htmlFor="id_cliente">Cliente Proprietário (opcional)</Label>
               <Select 
-                onValueChange={(value) => setValue("id_cliente", value)} 
-                defaultValue={propriedade?.id_cliente || undefined}
+                onValueChange={(value) => {
+                  setValue("id_cliente", value);
+                  setSelectedClienteId(value);
+                }} 
+                value={selectedClienteId}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Nenhum - deixar sem proprietário" />
@@ -213,8 +228,11 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, onSuccess }
             </div>
             
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea id="observacoes" {...register("observacoes")} rows={3} />
+              <Label htmlFor="observacoes" className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-amber-500" />
+                Observações
+              </Label>
+              <Textarea id="observacoes" {...register("observacoes")} rows={3} placeholder="Observações sobre a propriedade..." />
             </div>
           </div>
 

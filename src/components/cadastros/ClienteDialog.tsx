@@ -13,6 +13,7 @@ import { formatPhoneNumber } from "@/lib/formatPhone";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+import { StickyNote } from "lucide-react";
 
 interface ClienteDialogProps {
   open: boolean;
@@ -230,8 +231,11 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             </div>
             
             <div className="col-span-2 space-y-2">
-              <Label htmlFor="anotacoes">Anotações</Label>
-              <Textarea id="anotacoes" {...register("anotacoes")} rows={4} placeholder="Anotações sobre o cliente..." />
+              <Label htmlFor="anotacoes" className="flex items-center gap-2">
+                <StickyNote className="h-4 w-4 text-amber-500" />
+                Observações
+              </Label>
+              <Textarea id="anotacoes" {...register("anotacoes")} rows={4} placeholder="Observações sobre o cliente..." />
             </div>
           </div>
 

@@ -180,99 +180,97 @@ export default function Servicos() {
 
         {/* Filtros */}
         <Card>
-          <CardHeader>
-            <CardTitle>Lista de Serviços</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Lista de Serviços</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row gap-4">
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
                 <Input
-                  placeholder="Buscar por nome, cliente ou propriedade..."
+                  placeholder="Buscar..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1"
+                  className="h-9 text-sm"
                 />
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full sm:w-[200px]">
-                    <SelectValue placeholder="Filtrar por status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {statusOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
-
-              {/* Filtro por período */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                <span className="text-sm text-muted-foreground">Período:</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[160px] justify-start text-left font-normal",
-                          !dataInicio && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dataInicio ? format(dataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Data início"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dataInicio}
-                        onSelect={setDataInicio}
-                        initialFocus
-                        locale={ptBR}
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
-
-                  <span className="text-muted-foreground">até</span>
-
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-[160px] justify-start text-left font-normal",
-                          !dataFim && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {dataFim ? format(dataFim, "dd/MM/yyyy", { locale: ptBR }) : "Data fim"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dataFim}
-                        onSelect={setDataFim}
-                        initialFocus
-                        locale={ptBR}
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
-
-                  {(dataInicio || dataFim) && (
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px] h-9 text-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {statusOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={clearDateFilters}
-                      className="h-9 w-9"
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-9 w-[130px] justify-start text-left font-normal text-sm",
+                        !dataInicio && "text-muted-foreground"
+                      )}
                     >
-                      <X className="h-4 w-4" />
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dataInicio ? format(dataInicio, "dd/MM/yy", { locale: ptBR }) : "Início"}
                     </Button>
-                  )}
-                </div>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dataInicio}
+                      onSelect={setDataInicio}
+                      initialFocus
+                      locale={ptBR}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <span className="text-xs text-muted-foreground">até</span>
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={cn(
+                        "h-9 w-[130px] justify-start text-left font-normal text-sm",
+                        !dataFim && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dataFim ? format(dataFim, "dd/MM/yy", { locale: ptBR }) : "Fim"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dataFim}
+                      onSelect={setDataFim}
+                      initialFocus
+                      locale={ptBR}
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                {(dataInicio || dataFim) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearDateFilters}
+                    className="h-8 w-8"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
 

@@ -171,30 +171,24 @@ export default function Cadastros() {
           {/* Clientes e Propriedades Unificado */}
           <TabsContent value="clientes-propriedades" className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <Users className="h-5 w-5 text-primary" />
                     Clientes e Propriedades
                   </CardTitle>
-                  <div className="flex gap-2">
-                    <Button variant="outline" className="gap-2" onClick={() => setPropriedadeDialog({ open: true })}>
-                      <MapPin className="h-4 w-4" />
-                      Nova Propriedade
-                    </Button>
-                    <Button className="gap-2" onClick={() => setClienteDialog({ open: true })}>
-                      <Plus className="h-4 w-4" />
-                      Novo Cliente
-                    </Button>
-                  </div>
+                  <Button size="sm" className="gap-2" onClick={() => setClienteDialog({ open: true })}>
+                    <Plus className="h-4 w-4" />
+                    Novo Cliente
+                  </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
+              <CardContent className="space-y-3">
+                <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por nome, CPF ou email..."
-                    className="pl-9"
+                    placeholder="Buscar..."
+                    className="pl-9 h-9 text-sm"
                     value={searchTerm}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   />
@@ -463,21 +457,21 @@ export default function Cadastros() {
           {/* Serviços */}
           <TabsContent value="servicos" className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle>Lista de Serviços</CardTitle>
-                  <Button className="gap-2" onClick={() => setTipoServicoDialog({ open: true })}>
+                  <CardTitle className="text-lg">Tipos de Serviço</CardTitle>
+                  <Button size="sm" className="gap-2" onClick={() => setTipoServicoDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
-                    Adicionar Serviço
+                    Adicionar
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
+              <CardContent className="space-y-3">
+                <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por nome ou categoria..."
-                    className="pl-9"
+                    placeholder="Buscar..."
+                    className="pl-9 h-9 text-sm"
                     value={searchServico}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchServico(e.target.value)}
                   />
@@ -538,21 +532,21 @@ export default function Cadastros() {
           {/* Tipos de Despesa */}
           <TabsContent value="despesas" className="space-y-6">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle>Tipos de Despesa</CardTitle>
-                  <Button className="gap-2" onClick={() => setTipoDespesaDialog({ open: true })}>
+                  <CardTitle className="text-lg">Tipos de Despesa</CardTitle>
+                  <Button size="sm" className="gap-2" onClick={() => setTipoDespesaDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
-                    Adicionar Tipo
+                    Adicionar
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="relative">
+              <CardContent className="space-y-3">
+                <div className="relative max-w-sm">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por categoria ou descrição..."
-                    className="pl-9"
+                    placeholder="Buscar..."
+                    className="pl-9 h-9 text-sm"
                     value={searchDespesa}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchDespesa(e.target.value)}
                   />

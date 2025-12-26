@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { TipoDespesaDialog } from "@/components/cadastros/TipoDespesaDialog";
@@ -30,6 +31,7 @@ export default function Cadastros() {
   const [expandedClients, setExpandedClients] = useState<Set<string>>(new Set());
   
   // Dialog states
+  const [clienteUnificadoDialog, setClienteUnificadoDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [clienteDialog, setClienteDialog] = useState<{ open: boolean; data?: any }>({ open: false });
   const [propriedadeDialog, setPropriedadeDialog] = useState<{ open: boolean; data?: any; clienteId?: string }>({ open: false });
   const [tipoDespesaDialog, setTipoDespesaDialog] = useState<{ open: boolean; data?: any }>({ open: false });
@@ -177,7 +179,7 @@ export default function Cadastros() {
                     <Users className="h-5 w-5 text-primary" />
                     Clientes e Propriedades
                   </CardTitle>
-                  <Button size="sm" className="gap-2" onClick={() => setClienteDialog({ open: true })}>
+                  <Button size="sm" className="gap-2" onClick={() => setClienteUnificadoDialog({ open: true })}>
                     <Plus className="h-4 w-4" />
                     Novo Cliente
                   </Button>
@@ -304,7 +306,7 @@ export default function Cadastros() {
                                       <Button 
                                         variant="ghost" 
                                         size="icon"
-                                        onClick={() => setClienteDialog({ open: true, data: cliente })}
+                                        onClick={() => setClienteUnificadoDialog({ open: true, data: cliente })}
                                         title="Editar Cliente"
                                       >
                                         <Edit className="h-4 w-4" />
@@ -607,6 +609,13 @@ export default function Cadastros() {
       </div>
 
       {/* Dialogs */}
+      <ClientePropriedadeUnificadoDialog 
+        open={clienteUnificadoDialog.open} 
+        onOpenChange={(open) => setClienteUnificadoDialog({ open })}
+        cliente={clienteUnificadoDialog.data}
+        onSuccess={fetchData}
+      />
+
       <ClienteDialog 
         open={clienteDialog.open} 
         onOpenChange={(open) => setClienteDialog({ open })}

@@ -21,7 +21,7 @@ import {
   Target, 
   Receipt, 
   ClipboardList, 
-  CheckCircle2 
+  ClipboardCheck 
 } from "lucide-react";
 
 const Dashboard = () => {
@@ -225,7 +225,7 @@ const Dashboard = () => {
             <KPICard
               title="Serviços Concluídos"
               value={isLoading ? "..." : String(kpis?.servicos_concluidos || 0)}
-              icon={CheckCircle2}
+              icon={ClipboardCheck}
               subtitle={`${kpis?.total_servicos ? ((kpis.servicos_concluidos / kpis.total_servicos) * 100).toFixed(1) : 0}% do total`}
               change="+12"
               changeType="positive"

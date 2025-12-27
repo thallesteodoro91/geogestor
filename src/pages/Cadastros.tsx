@@ -267,10 +267,23 @@ export default function Cadastros() {
                                     </div>
                                   </TableCell>
                                   <TableCell>
-                                    <Badge variant="secondary" className="gap-1">
-                                      <MapPin className="h-3 w-3" />
-                                      {clientePropriedades.length}
-                                    </Badge>
+                                    {clientePropriedades.length > 0 ? (
+                                      <div className="flex flex-col gap-1">
+                                        {clientePropriedades.slice(0, 2).map((prop: any) => (
+                                          <Badge key={prop.id_propriedade} variant="secondary" className="gap-1 text-xs">
+                                            <MapPin className="h-3 w-3" />
+                                            {prop.nome_da_propriedade}
+                                          </Badge>
+                                        ))}
+                                        {clientePropriedades.length > 2 && (
+                                          <span className="text-xs text-muted-foreground">
+                                            +{clientePropriedades.length - 2} mais
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-muted-foreground text-sm">-</span>
+                                    )}
                                   </TableCell>
                                   <TableCell>
                                     {cliente.situacao && (

@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MapPin, Plus } from "lucide-react";
+import { MapPin, Plus, Map, Building2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { PropriedadeDetalhesDialog } from "@/components/map";
 
 interface ClientePropriedadesProps {
   propriedades: Tables<"dim_propriedade">[];
@@ -10,6 +12,14 @@ interface ClientePropriedadesProps {
 }
 
 export function ClientePropriedades({ propriedades, onNovaPropriedade }: ClientePropriedadesProps) {
+  const [selectedPropriedade, setSelectedPropriedade] = useState<Tables<"dim_propriedade"> | null>(null);
+  const [mapDialogOpen, setMapDialogOpen] = useState(false);
+
+  const handleOpenMap = (propriedade: Tables<"dim_propriedade">) => {
+    setSelectedPropriedade(propriedade);
+    setMapDialogOpen(true);
+  };
+
   if (propriedades.length === 0) {
     return (
       <div className="text-center py-12">
@@ -46,6 +56,7 @@ export function ClientePropriedades({ propriedades, onNovaPropriedade }: Cliente
             <TableHead>Tipo</TableHead>
             <TableHead>Situação</TableHead>
             <TableHead>Coordenadas</TableHead>
+            <TableHead className="w-[80px]">Mapa</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -79,12 +90,28 @@ export function ClientePropriedades({ propriedades, onNovaPropriedade }: Cliente
                   '-'
                 )}
               </TableCell>
+              <TableCell>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleOpenMap(prop)}
+                  title="Ver mapa da propriedade"
+                >
+                  <Map className="h-4 w-4" />
+                </Button>
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+
+      {selectedPropriedade && (
+        <PropriedadeDetalhesDialog
+          open={mapDialogOpen}
+          onOpenChange={setMapDialogOpen}
+          propriedade={selectedPropriedade}
+        />
+      )}
     </div>
   );
 }
-
-import { Building2 } from "lucide-react";

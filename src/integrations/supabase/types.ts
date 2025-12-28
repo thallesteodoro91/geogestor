@@ -909,6 +909,69 @@ export type Database = {
         }
         Relationships: []
       }
+      propriedade_geometria: {
+        Row: {
+          area_calculada_ha: number | null
+          arquivo_original_nome: string | null
+          arquivo_original_path: string | null
+          centroide_lat: number | null
+          centroide_lng: number | null
+          created_at: string | null
+          geojson: Json
+          glebas: Json | null
+          id_geometria: string
+          id_propriedade: string
+          perimetro_m: number | null
+          tenant_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          area_calculada_ha?: number | null
+          arquivo_original_nome?: string | null
+          arquivo_original_path?: string | null
+          centroide_lat?: number | null
+          centroide_lng?: number | null
+          created_at?: string | null
+          geojson: Json
+          glebas?: Json | null
+          id_geometria?: string
+          id_propriedade: string
+          perimetro_m?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          area_calculada_ha?: number | null
+          arquivo_original_nome?: string | null
+          arquivo_original_path?: string | null
+          centroide_lat?: number | null
+          centroide_lng?: number | null
+          created_at?: string | null
+          geojson?: Json
+          glebas?: Json | null
+          id_geometria?: string
+          id_propriedade?: string
+          perimetro_m?: number | null
+          tenant_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "propriedade_geometria_id_propriedade_fkey"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "propriedade_geometria_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       servico_anexos: {
         Row: {
           created_at: string | null

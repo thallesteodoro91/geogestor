@@ -1,79 +1,83 @@
 import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { RichTooltip } from "./RichTooltip";
-
-const data2023 = [
-  { month: "Jan", margemBruta: 38, margemLiquida: 26 },
-  { month: "Fev", margemBruta: 39, margemLiquida: 27 },
-  { month: "Mar", margemBruta: 38, margemLiquida: 26 },
-  { month: "Abr", margemBruta: 40, margemLiquida: 28 },
-  { month: "Mai", margemBruta: 40, margemLiquida: 28 },
-  { month: "Jun", margemBruta: 41, margemLiquida: 29 },
-];
-
-const data2024 = [
-  { month: "Jan", margemBruta: 40, margemLiquida: 28 },
-  { month: "Fev", margemBruta: 41, margemLiquida: 29 },
-  { month: "Mar", margemBruta: 40, margemLiquida: 28 },
-  { month: "Abr", margemBruta: 42, margemLiquida: 30 },
-  { month: "Mai", margemBruta: 42, margemLiquida: 30 },
-  { month: "Jun", margemBruta: 43, margemLiquida: 31 },
-];
-
-const data2025 = [
-  { month: "Jan", margemBruta: 42, margemLiquida: 30 },
-  { month: "Fev", margemBruta: 43, margemLiquida: 31 },
-  { month: "Mar", margemBruta: 42, margemLiquida: 30 },
-  { month: "Abr", margemBruta: 44, margemLiquida: 32 },
-  { month: "Mai", margemBruta: 44, margemLiquida: 32 },
-  { month: "Jun", margemBruta: 45, margemLiquida: 33 },
-];
-
-const dataByYear: Record<string, any[]> = {
-  "2023": data2023,
-  "2024": data2024,
-  "2025": data2025,
-};
+import { useProfitMarginChartData } from "@/hooks/useChartData";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const ProfitMarginChart = () => {
-  const currentYearData = data2024;
+  const currentYear = new Date().getFullYear();
+  const { data, isLoading } = useProfitMarginChartData(currentYear);
+
+  if (isLoading) {
+    return (
+      <Card className="interactive-lift">
+        <CardHeader>
+          <CardTitle className="text-lg">Evolução das Margens</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-[300px] w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Filter to only show months with data or up to current month
+  const currentMonth = new Date().getMonth();
+  const filteredData = (data || []).slice(0, currentMonth + 1);
+  
+  // If no data, show placeholder
+  const hasData = filteredData.some(d => d.margemBruta > 0 || d.margemLiquida > 0);
 
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <ComposedChart data={currentYearData}>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-          <XAxis 
-            dataKey="month" 
-            stroke="hsl(var(--muted-foreground))"
-            fontSize={12}
-          />
-          <YAxis 
-            stroke="hsl(var(--muted-foreground))"
-            fontSize={12}
-            tickFormatter={(value) => `${value}%`}
-            domain={[0, 50]}
-          />
-          <Tooltip
-            content={<RichTooltip format="percent" showVariation={false} />}
-            cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
-          />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="margemBruta"
-            stroke="hsl(262, 83%, 65%)"
-            strokeWidth={3}
-            dot={{ fill: "hsl(262, 83%, 65%)", r: 5 }}
-            name="Margem Bruta"
-          />
-          <Line
-            type="monotone"
-            dataKey="margemLiquida"
-            stroke="hsl(189, 94%, 43%)"
-            strokeWidth={3}
-            dot={{ fill: "hsl(189, 94%, 43%)", r: 5 }}
-            name="Margem Líquida"
-          />
-      </ComposedChart>
-    </ResponsiveContainer>
+    <Card className="interactive-lift">
+      <CardHeader>
+        <CardTitle className="text-lg">Evolução das Margens ({currentYear})</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!hasData ? (
+          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+            <p>Sem dados de margem para exibir neste período</p>
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={filteredData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+              <XAxis 
+                dataKey="month" 
+                stroke="hsl(var(--muted-foreground))"
+                fontSize={12}
+              />
+              <YAxis 
+                stroke="hsl(var(--muted-foreground))"
+                fontSize={12}
+                tickFormatter={(value) => `${value}%`}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                content={<RichTooltip format="percent" showVariation={false} />}
+                cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+              />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="margemBruta"
+                stroke="hsl(var(--chart-primary))"
+                strokeWidth={3}
+                dot={{ fill: "hsl(var(--chart-primary))", r: 5 }}
+                name="Margem Bruta"
+              />
+              <Line
+                type="monotone"
+                dataKey="margemLiquida"
+                stroke="hsl(var(--chart-secondary))"
+                strokeWidth={3}
+                dot={{ fill: "hsl(var(--chart-secondary))", r: 5 }}
+                name="Margem Líquida"
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
   );
 };

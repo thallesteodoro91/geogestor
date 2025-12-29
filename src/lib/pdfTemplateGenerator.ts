@@ -351,18 +351,20 @@ export async function generateStandardPDF(
       currentY -= 20;
     }
     
-    // Add marcos geodésicos if included
+    // Add marcos geodésicos if included (as separate cost line, NOT added to subtotal)
+    // Marcos are a cost item that the company provides, not charged to client as revenue
+    let marcoTotal = 0;
     if (orcamento.incluir_marco && orcamento.marco_quantidade && orcamento.marco_quantidade > 0) {
       const marcoValorUnit = orcamento.marco_valor_unitario || 0;
       const marcoQtd = orcamento.marco_quantidade;
-      const marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
-      subtotal += marcoTotal;
+      marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
+      // NOTE: marcoTotal is NOT added to subtotal - it's a separate cost line shown for transparency
       
-      page.drawText('Marcos Geodésicos', { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
+      page.drawText(`Marcos Geodésicos (${marcoQtd}x)`, { x: colDescricao, y: currentY, size: 10, font: helvetica, color: textColor });
       page.drawText(marcoQtd.toString(), { x: colQtd, y: currentY, size: 10, font: helvetica, color: textColor });
       page.drawText(formatCurrency(marcoValorUnit), { x: colUnitario, y: currentY, size: 10, font: helvetica, color: textColor });
-      page.drawText('0%', { x: colDesconto, y: currentY, size: 10, font: helvetica, color: textColor });
-      page.drawText(formatCurrency(marcoTotal), { x: colTotal, y: currentY, size: 10, font: helveticaBold, color: textColor });
+      page.drawText('-', { x: colDesconto, y: currentY, size: 10, font: helvetica, color: mutedColor });
+      page.drawText(`(${formatCurrency(marcoTotal)})`, { x: colTotal, y: currentY, size: 10, font: helvetica, color: mutedColor });
       
       currentY -= 20;
     }
@@ -371,19 +373,27 @@ export async function generateStandardPDF(
     currentY -= 5;
     drawLine(page, margin, currentY, width - margin);
     
-    // ===== TOTALS SECTION (sem impostos) =====
+    // ===== TOTALS SECTION (sem impostos, marcos como custo separado) =====
     currentY -= 30;
+    // Total to client is subtotal of services only (marcos are cost, not charged)
     const totalGeral = orcamento.receita_esperada || subtotal;
     
     const totalsX = width - margin - 180;
     
-    page.drawText('Subtotal:', { x: totalsX, y: currentY, size: 10, font: helvetica, color: mutedColor });
-    page.drawText(formatCurrency(subtotal), { x: totalsX + 80, y: currentY, size: 10, font: helvetica, color: textColor });
+    page.drawText('Subtotal Serviços:', { x: totalsX, y: currentY, size: 10, font: helvetica, color: mutedColor });
+    page.drawText(formatCurrency(subtotal), { x: totalsX + 100, y: currentY, size: 10, font: helvetica, color: textColor });
+    
+    // Show marcos as included cost (informational only)
+    if (marcoTotal > 0) {
+      currentY -= 18;
+      page.drawText('Marcos inclusos:', { x: totalsX, y: currentY, size: 9, font: helvetica, color: mutedColor });
+      page.drawText(`(${formatCurrency(marcoTotal)})`, { x: totalsX + 100, y: currentY, size: 9, font: helvetica, color: mutedColor });
+    }
     
     currentY -= 25;
     drawLine(page, totalsX, currentY + 10, width - margin);
     page.drawText('TOTAL:', { x: totalsX, y: currentY, size: 12, font: helveticaBold, color: primaryColor });
-    page.drawText(formatCurrency(totalGeral), { x: totalsX + 80, y: currentY, size: 12, font: helveticaBold, color: primaryColor });
+    page.drawText(formatCurrency(totalGeral), { x: totalsX + 100, y: currentY, size: 12, font: helveticaBold, color: primaryColor });
     
     // ===== CONDITIONS SECTION =====
     currentY -= 60;
@@ -684,14 +694,15 @@ export async function generateOrcamentoPDF(
       linhaY -= finalConfig.tabela.altura_linha;
     }
 
-    // Add marcos geodésicos if included
+    // Add marcos geodésicos if included (as separate cost line, NOT added to subtotal)
+    let marcoTotal = 0;
     if (orcamento.incluir_marco && orcamento.marco_quantidade && orcamento.marco_quantidade > 0) {
       const marcoValorUnit = orcamento.marco_valor_unitario || 0;
       const marcoQtd = orcamento.marco_quantidade;
-      const marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
-      subtotal += marcoTotal;
+      marcoTotal = orcamento.marco_valor_total || (marcoValorUnit * marcoQtd);
+      // NOTE: marcoTotal is NOT added to subtotal - it's a cost item shown for transparency
 
-      firstPage.drawText('Marcos Geodésicos', {
+      firstPage.drawText(`Marcos Geodésicos (${marcoQtd}x)`, {
         x: colunas.descricao,
         y: linhaY,
         size: 9,
@@ -715,21 +726,23 @@ export async function generateOrcamentoPDF(
         color: blackColor,
       });
 
-      firstPage.drawText('0%', {
+      firstPage.drawText('-', {
         x: colunas.desconto,
         y: linhaY,
         size: 9,
         font: helveticaFont,
-        color: blackColor,
+        color: rgb(0.5, 0.5, 0.5),
       });
 
-      firstPage.drawText(formatCurrency(marcoTotal), {
+      firstPage.drawText(`(${formatCurrency(marcoTotal)})`, {
         x: colunas.total,
         y: linhaY,
         size: 9,
         font: helveticaFont,
-        color: blackColor,
+        color: rgb(0.5, 0.5, 0.5),
       });
+      
+      linhaY -= finalConfig.tabela.altura_linha;
     }
 
     // Calculate and add totals (sem impostos)

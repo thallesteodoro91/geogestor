@@ -9,6 +9,7 @@ import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
+import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { GeoBot } from "@/components/dashboard/GeoBot";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
 import { 
@@ -35,6 +36,7 @@ const Dashboard = () => {
   });
 
   const { data: kpis, isLoading } = useKPIs();
+  const { data: kpiVariation } = useKPIVariation();
 
   const { data: clientes = [] } = useQuery({
     queryKey: ['clientes'],
@@ -97,8 +99,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Banknote}
               subtitle={`${kpis?.total_servicos || 0} serviços`}
-              change="+12.5%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
+              changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
               description="Soma de toda a receita gerada pelos serviços prestados no período"
               calculation="Σ (Receita de Serviços + Receita Realizada)"
             />
@@ -107,8 +109,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
               subtitle={`margem de ${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
-              change="+10.3%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
+              changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
               description="Lucro após dedução dos custos diretos dos serviços"
               calculation="Receita Total - Custos Diretos"
             />
@@ -117,8 +119,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={CircleDollarSign}
               subtitle={`margem de ${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
-              change="+8.2%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
+              changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
               description="Lucro final após todas as deduções (custos e despesas operacionais)"
               calculation="Receita Total - Custos Totais - Despesas"
             />
@@ -127,8 +129,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingDown}
               subtitle="custos operacionais"
-              change="+5.1%"
-              changeType="negative"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
+              changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
               description="Soma de todas as despesas operacionais e administrativas"
               calculation="Σ (Despesas Fixas + Despesas Variáveis)"
             />
@@ -158,8 +160,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
               subtitle="Lucro Bruto / Receita"
-              change="+1.8%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
+              changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
               description="Percentual de receita que resta após dedução dos custos diretos"
               calculation="(Lucro Bruto / Receita Total) × 100"
             />
@@ -168,8 +170,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               icon={Calculator}
               subtitle="Lucro Líquido / Receita"
-              change="+2.1%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
+              changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
               description="Percentual de receita que vira lucro efetivo após todas as deduções"
               calculation="(Lucro Líquido / Receita Total) × 100"
             />
@@ -178,8 +180,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
               subtitle="orçamentos convertidos"
-              change="+4.5%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
+              changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
               description="Percentual de orçamentos que foram convertidos em serviços efetivos"
               calculation="(Orçamentos Convertidos / Total de Orçamentos) × 100"
             />
@@ -188,8 +190,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : `R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Receipt}
               subtitle="por serviço"
-              change="+6.3%"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
+              changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
               description="Valor médio de receita gerada por cada serviço executado"
               calculation="Receita Total / Quantidade de Serviços"
             />
@@ -217,8 +219,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : String(kpis?.total_servicos || 0)}
               icon={ClipboardList}
               subtitle="serviços registrados"
-              change="+15"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
+              changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
               description="Número total de serviços cadastrados no sistema"
               calculation="COUNT(Serviços)"
             />
@@ -227,8 +229,8 @@ const Dashboard = () => {
               value={isLoading ? "..." : String(kpis?.servicos_concluidos || 0)}
               icon={ClipboardCheck}
               subtitle={`${kpis?.total_servicos ? ((kpis.servicos_concluidos / kpis.total_servicos) * 100).toFixed(1) : 0}% do total`}
-              change="+12"
-              changeType="positive"
+              change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
+              changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
               description="Quantidade de serviços finalizados e entregues aos clientes"
               calculation="COUNT(Serviços WHERE situação = 'Concluído')"
             />

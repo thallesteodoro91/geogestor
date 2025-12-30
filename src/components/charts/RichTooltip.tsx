@@ -1,6 +1,6 @@
 /**
  * Rich Tooltip Component
- * Enhanced tooltip with full labels, % variation, and contextual information
+ * Enhanced tooltip with full labels, multiple series support, and contextual information
  */
 
 import { cn } from "@/lib/utils";
@@ -11,6 +11,9 @@ interface RichTooltipProps {
     value: number;
     name?: string;
     dataKey?: string;
+    color?: string;
+    stroke?: string;
+    fill?: string;
     payload?: {
       previousValue?: number;
       label?: string;
@@ -36,13 +39,8 @@ const formatValue = (value: number, format: 'currency' | 'percent' | 'number'): 
   }
 };
 
-const calculateVariation = (current: number, previous: number): { value: number; type: 'positive' | 'negative' | 'neutral' } => {
-  if (previous === 0) return { value: 0, type: 'neutral' };
-  const variation = ((current - previous) / Math.abs(previous)) * 100;
-  return {
-    value: variation,
-    type: variation > 0 ? 'positive' : variation < 0 ? 'negative' : 'neutral',
-  };
+const getSeriesColor = (item: RichTooltipProps['payload'][0]): string => {
+  return item.color || item.stroke || item.fill || 'hsl(var(--primary))';
 };
 
 export const RichTooltip = ({
@@ -50,23 +48,18 @@ export const RichTooltip = ({
   payload,
   label,
   format = 'currency',
-  showVariation = true,
+  showVariation = false,
   className,
 }: RichTooltipProps) => {
   if (!active || !payload || payload.length === 0) return null;
 
-  const data = payload[0];
-  const value = data.value;
-  const previousValue = data.payload?.previousValue;
-  const customLabel = data.payload?.label || data.name || label;
-  const context = data.payload?.context;
-
-  const variation = previousValue !== undefined ? calculateVariation(value, previousValue) : null;
+  // Get context from first item if available
+  const context = payload[0]?.payload?.context;
 
   return (
     <div
       className={cn(
-        "relative rounded-xl border-2 p-4 shadow-2xl",
+        "relative rounded-xl border-2 p-4 shadow-2xl min-w-[200px]",
         "bg-gradient-to-br from-card via-card to-background/95",
         "border-primary/30 backdrop-blur-md",
         "shadow-primary/20",
@@ -77,59 +70,57 @@ export const RichTooltip = ({
     >
       {/* Colored side indicator */}
       <div 
-        className={cn(
-          "absolute left-0 top-0 bottom-0 w-1 rounded-l-xl",
-          variation?.type === 'positive' && "bg-chart-positive",
-          variation?.type === 'negative' && "bg-chart-negative",
-          (!variation || variation.type === 'neutral') && "bg-primary"
-        )}
+        className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-primary"
         aria-hidden="true"
       />
 
       <div className="pl-2">
-        {/* Label */}
-        {customLabel && (
-          <p className="text-sm font-medium text-foreground mb-1">
-            {customLabel}
+        {/* Period Label */}
+        {label && (
+          <p className="text-sm font-semibold text-foreground mb-3 pb-2 border-b border-border/30">
+            {label}
           </p>
         )}
 
-        {/* Value */}
-        <p className="text-xl font-bold text-foreground">
-          {formatValue(value, format)}
-        </p>
+        {/* All Series Data */}
+        <div className="space-y-2">
+          {payload.map((item, index) => {
+            const seriesColor = getSeriesColor(item);
+            const seriesName = item.name || item.dataKey || `Série ${index + 1}`;
+            
+            return (
+              <div key={index} className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  {/* Color indicator */}
+                  <span 
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: seriesColor }}
+                    aria-hidden="true"
+                  />
+                  <span className="text-sm text-muted-foreground">
+                    {seriesName}
+                  </span>
+                </div>
+                <span className="text-sm font-bold text-foreground">
+                  {formatValue(item.value, format)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
 
-        {/* Variation */}
-        {showVariation && variation && (
-          <div
-            className={cn(
-              "flex items-center gap-1 mt-2 text-xs font-semibold",
-              variation.type === 'positive' && "text-chart-positive",
-              variation.type === 'negative' && "text-chart-negative",
-              variation.type === 'neutral' && "text-muted-foreground"
-            )}
-          >
-            <span className="text-base">
-              {variation.type === 'positive' && '↑'}
-              {variation.type === 'negative' && '↓'}
-              {variation.type === 'neutral' && '→'}
-            </span>
-            <span>
-              {Math.abs(variation.value).toFixed(1)}% vs anterior
-            </span>
+        {/* Variation for first item (if enabled) */}
+        {showVariation && payload[0]?.payload?.previousValue !== undefined && (
+          <div className="mt-3 pt-2 border-t border-border/30">
+            <p className="text-xs text-muted-foreground">
+              Anterior: {formatValue(payload[0].payload.previousValue, format)}
+            </p>
           </div>
-        )}
-
-        {/* Previous value reference */}
-        {previousValue !== undefined && (
-          <p className="text-xs text-muted-foreground mt-1">
-            Anterior: {formatValue(previousValue, format)}
-          </p>
         )}
 
         {/* Context */}
         {context && (
-          <p className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border/30">
+          <p className="text-xs text-muted-foreground mt-3 pt-2 border-t border-border/30">
             {context}
           </p>
         )}

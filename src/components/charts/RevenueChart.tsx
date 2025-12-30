@@ -66,7 +66,7 @@ export const RevenueChart = () => {
                 }}
               />
               <Tooltip
-                content={<RichTooltip format="currency" showVariation={false} />}
+                content={<RichTooltip format="currency" showDifference differenceLabel="Lucro" />}
                 cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
               />
               <Legend />

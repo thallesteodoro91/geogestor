@@ -54,7 +54,7 @@ export const ProfitMarginChart = () => {
                 domain={[0, 100]}
               />
               <Tooltip
-                content={<RichTooltip format="percent" showVariation={false} />}
+                content={<RichTooltip format="percent" showDifference differenceLabel="Diferença" />}
                 cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
               />
               <Legend />

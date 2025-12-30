@@ -24,6 +24,8 @@ interface RichTooltipProps {
   label?: string;
   format?: 'currency' | 'percent' | 'number';
   showVariation?: boolean;
+  showDifference?: boolean;
+  differenceLabel?: string;
   className?: string;
 }
 
@@ -49,12 +51,18 @@ export const RichTooltip = ({
   label,
   format = 'currency',
   showVariation = false,
+  showDifference = false,
+  differenceLabel = 'Lucro',
   className,
 }: RichTooltipProps) => {
   if (!active || !payload || payload.length === 0) return null;
 
   // Get context from first item if available
   const context = payload[0]?.payload?.context;
+
+  // Calculate difference between first two series (e.g., Receita - Despesa)
+  const difference = payload.length >= 2 ? payload[0].value - payload[1].value : null;
+  const isDifferencePositive = difference !== null && difference >= 0;
 
   return (
     <div
@@ -108,6 +116,23 @@ export const RichTooltip = ({
             );
           })}
         </div>
+
+        {/* Calculated Difference (Lucro) */}
+        {showDifference && difference !== null && (
+          <div className="mt-3 pt-2 border-t border-border/30">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-sm font-medium text-muted-foreground">
+                {differenceLabel}
+              </span>
+              <span className={cn(
+                "text-sm font-bold",
+                isDifferencePositive ? "text-chart-positive" : "text-chart-negative"
+              )}>
+                {isDifferencePositive ? '+' : ''}{formatValue(difference, format)}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Variation for first item (if enabled) */}
         {showVariation && payload[0]?.payload?.previousValue !== undefined && (

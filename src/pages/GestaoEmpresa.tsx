@@ -28,7 +28,8 @@ import {
   DollarSign,
   Users,
   BadgeCheck,
-  ShieldCheck
+  ShieldCheck,
+  HeartPulse
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
@@ -267,6 +268,7 @@ const GestaoEmpresa = () => {
                 title="Margem Líquida Saudável"
                 insight="Com margem líquida de 8.7%, a empresa demonstra capacidade de gerar lucro após todas as despesas. O controle de custos fixos tem sido efetivo."
                 category="operational"
+                icon={HeartPulse}
               />
             </div>
 

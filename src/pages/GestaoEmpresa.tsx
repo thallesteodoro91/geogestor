@@ -259,6 +259,7 @@ const GestaoEmpresa = () => {
                 title="Crescimento Consistente"
                 insight="A receita cresceu 12.5% no período, mantendo trajetória ascendente. Destaque para o aumento da margem bruta, indicando melhor eficiência na gestão de custos diretos."
                 category="operational"
+                icon={TrendingUp}
               />
               <StoryCard
                 title="Margem Líquida Saudável"

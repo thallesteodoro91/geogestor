@@ -27,7 +27,8 @@ import {
   CheckCircle2,
   DollarSign,
   Users,
-  BadgeCheck
+  BadgeCheck,
+  ShieldCheck
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
@@ -428,6 +429,7 @@ const GestaoEmpresa = () => {
                 title="Acima do Ponto de Equilíbrio"
                 insight="A empresa opera consistentemente acima do ponto de equilíbrio há 5 meses. A margem de segurança atual é de 58%, indicando zona confortável de operação."
                 category="operational"
+                icon={ShieldCheck}
               />
               <StoryCard
                 title="Custos sob Controle"

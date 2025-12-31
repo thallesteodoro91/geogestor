@@ -26,7 +26,8 @@ import {
   ClipboardList, 
   CheckCircle2,
   DollarSign,
-  Users
+  Users,
+  BadgeCheck
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
@@ -355,6 +356,7 @@ const GestaoEmpresa = () => {
                 title="Orçamento Cumprido"
                 insight="A receita realizada ficou 1.2% abaixo do orçado, mas as despesas foram controladas com economia de 4% vs planejado. Resultado líquido positivo em relação às metas."
                 category="operational"
+                icon={BadgeCheck}
               />
               <StoryCard
                 title="Investimentos no Prazo"

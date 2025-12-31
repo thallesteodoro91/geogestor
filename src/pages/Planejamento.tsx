@@ -4,7 +4,7 @@ import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChartTitle } from "@/components/charts/ChartTitle";
-import { Target, TrendingUp, Users, DollarSign } from "lucide-react";
+import { Target, TrendingUp, Users, DollarSign, BadgeCheck } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell, FunnelChart, Funnel, LabelList } from "recharts";
 
 const orcamentoData = [
@@ -101,6 +101,7 @@ export default function Planejamento() {
                 title="Orçamento Cumprido"
                 insight="O orçamento foi cumprido com variação inferior a 2% em todas as categorias. A execução financeira está alinhada com o planejado, demonstrando controle eficiente."
                 category="financial"
+                icon={BadgeCheck}
               />
               <StoryCard
                 title="Desvio Controlado"

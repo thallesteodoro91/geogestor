@@ -10,8 +10,9 @@ import {
   useClienteOrcamentos,
   useClienteKPIs,
 } from "@/hooks/useClienteDetalhes";
-import { ClienteInfoCard } from "@/components/cliente/ClienteInfoCard";
-import { ClienteKPIs } from "@/components/cliente/ClienteKPIs";
+import { ClienteInfoCompact } from "@/components/cliente/ClienteInfoCompact";
+import { ClienteKPIsCompact } from "@/components/cliente/ClienteKPIsCompact";
+import { ClienteMapSection } from "@/components/cliente/ClienteMapSection";
 import { ClientePropriedades } from "@/components/cliente/ClientePropriedades";
 import { ClienteServicos } from "@/components/cliente/ClienteServicos";
 import { ClienteOrcamentos } from "@/components/cliente/ClienteOrcamentos";
@@ -51,7 +52,15 @@ export default function ClienteDetalhes() {
       <AppLayout>
         <div className="space-y-6">
           <Skeleton className="h-12 w-64" />
-          <Skeleton className="h-64" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <Skeleton className="h-[500px]" />
+            </div>
+            <div className="space-y-4">
+              <Skeleton className="h-64" />
+              <Skeleton className="h-32" />
+            </div>
+          </div>
         </div>
       </AppLayout>
     );
@@ -72,7 +81,7 @@ export default function ClienteDetalhes() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-4">
         {/* Breadcrumb */}
         <Breadcrumb>
           <BreadcrumbList>
@@ -92,37 +101,51 @@ export default function ClienteDetalhes() {
 
         {/* Header with Actions */}
         <div className="flex items-center justify-between">
-          <Button variant="ghost" onClick={() => navigate('/clientes')}>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/clientes')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
-              Editar Cliente
+              Editar
             </Button>
             <Button variant="outline" size="sm" onClick={() => setPropriedadeDialogOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
-              Nova Propriedade
+              Propriedade
             </Button>
             <Button variant="outline" size="sm" onClick={() => setServicoDialogOpen(true)}>
               <Wrench className="h-4 w-4 mr-2" />
-              Novo Serviço
+              Serviço
             </Button>
             <Button size="sm" onClick={() => setOrcamentoDialogOpen(true)}>
               <FileText className="h-4 w-4 mr-2" />
-              Novo Orçamento
+              Orçamento
             </Button>
           </div>
         </div>
 
-        {/* Client Info */}
-        <ClienteInfoCard cliente={cliente} />
+        {/* Main Layout: Map + Client Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Mapa - 2/3 da tela */}
+          <div className="lg:col-span-2">
+            <ClienteMapSection 
+              propriedades={propriedades} 
+              isLoading={loadingPropriedades} 
+            />
+          </div>
 
-        {/* KPIs */}
-        <ClienteKPIs kpis={kpis || { totalPropriedades: 0, servicosRealizados: 0, totalServicos: 0, orcamentosEmitidos: 0, receitaTotal: 0 }} isLoading={loadingKPIs} />
+          {/* Info do Cliente + KPIs - 1/3 da tela */}
+          <div className="space-y-4">
+            <ClienteInfoCompact cliente={cliente} />
+            <ClienteKPIsCompact 
+              kpis={kpis || { totalPropriedades: 0, servicosRealizados: 0, totalServicos: 0, orcamentosEmitidos: 0, receitaTotal: 0 }} 
+              isLoading={loadingKPIs} 
+            />
+          </div>
+        </div>
 
-        {/* Tabs */}
+        {/* Tabs com detalhes */}
         <Tabs defaultValue="propriedades" className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="propriedades">
@@ -139,7 +162,7 @@ export default function ClienteDetalhes() {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="propriedades" className="mt-6">
+          <TabsContent value="propriedades" className="mt-4">
             {loadingPropriedades ? (
               <Skeleton className="h-64" />
             ) : (
@@ -147,7 +170,7 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
 
-          <TabsContent value="servicos" className="mt-6">
+          <TabsContent value="servicos" className="mt-4">
             {loadingServicos ? (
               <Skeleton className="h-64" />
             ) : (
@@ -155,7 +178,7 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
 
-          <TabsContent value="orcamentos" className="mt-6">
+          <TabsContent value="orcamentos" className="mt-4">
             {loadingOrcamentos ? (
               <Skeleton className="h-64" />
             ) : (
@@ -163,7 +186,7 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
 
-          <TabsContent value="financeiro" className="mt-6">
+          <TabsContent value="financeiro" className="mt-4">
             {loadingServicos || loadingOrcamentos ? (
               <Skeleton className="h-64" />
             ) : (

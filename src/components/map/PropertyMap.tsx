@@ -1,106 +1,71 @@
-import React, { useEffect, useRef } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
+import React, { useEffect } from 'react';
+import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertCircle } from 'lucide-react';
 
 interface PropertyMapProps {
   geojson: GeoJSON.FeatureCollection;
   centroide: { lat: number; lng: number };
-  mapboxToken: string;
   className?: string;
 }
 
-export function PropertyMap({ geojson, centroide, mapboxToken, className }: PropertyMapProps) {
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<mapboxgl.Map | null>(null);
+// Component to fit bounds when geojson changes
+function FitBounds({ geojson }: { geojson: GeoJSON.FeatureCollection }) {
+  const map = useMap();
 
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken) return;
+    if (geojson.features.length > 0) {
+      const geoJsonLayer = L.geoJSON(geojson);
+      const bounds = geoJsonLayer.getBounds();
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+  }, [geojson, map]);
 
-    mapboxgl.accessToken = mapboxToken;
+  return null;
+}
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/satellite-streets-v12',
-      center: [centroide.lng, centroide.lat],
-      zoom: 14,
-    });
-
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-    map.current.addControl(new mapboxgl.FullscreenControl(), 'top-right');
-    map.current.addControl(new mapboxgl.ScaleControl({ unit: 'metric' }), 'bottom-left');
-
-    map.current.on('load', () => {
-      if (!map.current) return;
-
-      // Adicionar fonte GeoJSON
-      map.current.addSource('property-polygon', {
-        type: 'geojson',
-        data: geojson
-      });
-
-      // Camada de preenchimento do polígono
-      map.current.addLayer({
-        id: 'property-fill',
-        type: 'fill',
-        source: 'property-polygon',
-        paint: {
-          'fill-color': '#22c55e',
-          'fill-opacity': 0.3
-        }
-      });
-
-      // Camada de contorno do polígono
-      map.current.addLayer({
-        id: 'property-outline',
-        type: 'line',
-        source: 'property-polygon',
-        paint: {
-          'line-color': '#16a34a',
-          'line-width': 3
-        }
-      });
-
-      // Ajustar zoom para mostrar todo o polígono
-      const bounds = new mapboxgl.LngLatBounds();
-      
-      geojson.features.forEach(feature => {
-        if (feature.geometry.type === 'Polygon') {
-          feature.geometry.coordinates[0].forEach(coord => {
-            bounds.extend(coord as [number, number]);
-          });
-        } else if (feature.geometry.type === 'MultiPolygon') {
-          feature.geometry.coordinates.forEach(polygon => {
-            polygon[0].forEach(coord => {
-              bounds.extend(coord as [number, number]);
-            });
-          });
-        }
-      });
-
-      map.current.fitBounds(bounds, { padding: 50 });
-    });
-
-    return () => {
-      map.current?.remove();
-    };
-  }, [geojson, centroide, mapboxToken]);
-
-  if (!mapboxToken) {
-    return (
-      <div className={`flex items-center justify-center bg-muted rounded-lg ${className}`}>
-        <div className="text-center p-4">
-          <AlertCircle className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-          <p className="text-sm text-muted-foreground">Token Mapbox não configurado</p>
-        </div>
-      </div>
-    );
-  }
+export function PropertyMap({ geojson, centroide, className }: PropertyMapProps) {
+  const polygonStyle = {
+    color: '#16a34a',
+    weight: 3,
+    fillColor: '#22c55e',
+    fillOpacity: 0.3,
+  };
 
   return (
     <div className={`relative rounded-lg overflow-hidden ${className}`}>
-      <div ref={mapContainer} className="absolute inset-0" />
+      <MapContainer
+        center={[centroide.lat, centroide.lng]}
+        zoom={14}
+        className="absolute inset-0"
+        zoomControl={true}
+        scrollWheelZoom={true}
+      >
+        {/* OpenStreetMap Tiles */}
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        
+        {/* ESRI Satellite as alternative - uncomment if you prefer satellite view */}
+        {/* <TileLayer
+          attribution='Tiles &copy; Esri'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        /> */}
+
+        {/* Property Polygon */}
+        <GeoJSON 
+          key={JSON.stringify(geojson)}
+          data={geojson} 
+          style={polygonStyle}
+        />
+
+        {/* Fit bounds to polygon */}
+        <FitBounds geojson={geojson} />
+      </MapContainer>
     </div>
   );
 }

@@ -13,7 +13,6 @@ import { Tables } from '@/integrations/supabase/types';
 import { PropertyMap, PropertyMapSkeleton } from './PropertyMap';
 import { PropertyInfoPanel } from './PropertyInfoPanel';
 import { KmlUploader } from './KmlUploader';
-import { useMapboxToken } from '@/hooks/useMapboxToken';
 import { fetchGeometriaByPropriedade, deleteGeometria } from '@/modules/crm/services/geometria.service';
 import { ParsedGeometry } from '@/lib/kmlParser';
 import { toast } from 'sonner';
@@ -40,7 +39,6 @@ export function PropriedadeDetalhesDialog({
   onOpenChange,
   propriedade
 }: PropriedadeDetalhesDialogProps) {
-  const { token: mapboxToken, loading: tokenLoading } = useMapboxToken();
   const [geometria, setGeometria] = useState<ParsedGeometry | null>(null);
   const [loadingGeometria, setLoadingGeometria] = useState(true);
   const [activeTab, setActiveTab] = useState('mapa');
@@ -120,14 +118,13 @@ export function PropriedadeDetalhesDialog({
               </div>
 
               <TabsContent value="mapa" className="flex-1 m-0 p-4">
-                {loadingGeometria || tokenLoading ? (
+                {loadingGeometria ? (
                   <PropertyMapSkeleton className="w-full h-full min-h-[400px]" />
-                ) : geometria && mapboxToken ? (
+                ) : geometria ? (
                   <div className="relative h-full">
                     <PropertyMap
                       geojson={geometria.geojson}
                       centroide={geometria.centroide}
-                      mapboxToken={mapboxToken}
                       className="w-full h-full min-h-[400px]"
                     />
                     

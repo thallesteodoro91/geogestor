@@ -1,8 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Map, Satellite } from 'lucide-react';
 
 interface PropertyMapProps {
   geojson: GeoJSON.FeatureCollection;
@@ -27,7 +29,22 @@ function FitBounds({ geojson }: { geojson: GeoJSON.FeatureCollection }) {
   return null;
 }
 
+type MapLayer = 'street' | 'satellite';
+
+const TILE_LAYERS = {
+  street: {
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  },
+  satellite: {
+    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri',
+  },
+};
+
 export function PropertyMap({ geojson, centroide, className }: PropertyMapProps) {
+  const [activeLayer, setActiveLayer] = useState<MapLayer>('satellite');
+
   const polygonStyle = {
     color: '#16a34a',
     weight: 3,
@@ -44,17 +61,11 @@ export function PropertyMap({ geojson, centroide, className }: PropertyMapProps)
         zoomControl={true}
         scrollWheelZoom={true}
       >
-        {/* OpenStreetMap Tiles */}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={activeLayer}
+          attribution={TILE_LAYERS[activeLayer].attribution}
+          url={TILE_LAYERS[activeLayer].url}
         />
-        
-        {/* ESRI Satellite as alternative - uncomment if you prefer satellite view */}
-        {/* <TileLayer
-          attribution='Tiles &copy; Esri'
-          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-        /> */}
 
         {/* Property Polygon */}
         <GeoJSON 
@@ -66,6 +77,28 @@ export function PropertyMap({ geojson, centroide, className }: PropertyMapProps)
         {/* Fit bounds to polygon */}
         <FitBounds geojson={geojson} />
       </MapContainer>
+
+      {/* Layer Toggle */}
+      <div className="absolute top-2 right-2 z-[1000] flex gap-1 bg-background/90 backdrop-blur-sm rounded-md p-1 shadow-md border">
+        <Button
+          variant={activeLayer === 'street' ? 'default' : 'ghost'}
+          size="sm"
+          className="h-8 px-2"
+          onClick={() => setActiveLayer('street')}
+          title="Mapa de rua"
+        >
+          <Map className="h-4 w-4" />
+        </Button>
+        <Button
+          variant={activeLayer === 'satellite' ? 'default' : 'ghost'}
+          size="sm"
+          className="h-8 px-2"
+          onClick={() => setActiveLayer('satellite')}
+          title="Satélite"
+        >
+          <Satellite className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

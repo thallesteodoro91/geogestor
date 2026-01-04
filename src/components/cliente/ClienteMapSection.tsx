@@ -18,7 +18,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
   Select,
@@ -43,6 +42,7 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
   const [geometria, setGeometria] = useState<ParsedGeometry | null>(null);
   const [loadingGeometria, setLoadingGeometria] = useState(false);
   const [activeTab, setActiveTab] = useState('mapa');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Seleciona a primeira propriedade automaticamente
   useEffect(() => {
@@ -151,38 +151,41 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
             {geometria && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Remover geometria?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta ação irá remover o polígono importado desta propriedade.
-                          Você poderá importar um novo arquivo posteriormente.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteGeometria}>
-                          Remover
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setShowDeleteDialog(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Remover geometria importada</p>
                 </TooltipContent>
               </Tooltip>
             )}
+
+            <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Deseja realmente remover o mapa?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta ação irá remover o polígono importado desta propriedade.
+                    Você poderá importar um novo arquivo posteriormente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDeleteGeometria}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Remover
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
           <div className="flex items-center gap-2">

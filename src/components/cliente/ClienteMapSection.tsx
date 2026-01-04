@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Map, Upload, Trash2, Building2 } from 'lucide-react';
@@ -28,6 +27,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface ClienteMapSectionProps {
   propriedades: Tables<'dim_propriedade'>[];
@@ -138,93 +142,119 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between gap-4">
-          <CardTitle className="flex items-center gap-2">
-            <Map className="h-5 w-5" />
-            Mapa da Propriedade
-          </CardTitle>
-          
-          {propriedades.length > 1 && (
-            <Select
-              value={selectedPropriedade?.id_propriedade}
-              onValueChange={handlePropriedadeChange}
-            >
-              <SelectTrigger className="w-[250px]">
-                <SelectValue placeholder="Selecione a propriedade" />
-              </SelectTrigger>
-              <SelectContent>
-                {propriedades.map((prop) => (
-                  <SelectItem key={prop.id_propriedade} value={prop.id_propriedade}>
-                    {prop.nome_da_propriedade}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+          <div className="flex items-center gap-3">
+            <CardTitle className="flex items-center gap-2">
+              <Map className="h-5 w-5" />
+              Mapa da Propriedade
+            </CardTitle>
+            
+            {geometria && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Remover geometria?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta ação irá remover o polígono importado desta propriedade.
+                          Você poderá importar um novo arquivo posteriormente.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteGeometria}>
+                          Remover
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Remover geometria importada</p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Botões Visualizar e Importar KML */}
+            <div className="flex gap-1 bg-muted/50 rounded-md p-1">
+              <Button
+                variant={activeTab === 'mapa' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 gap-2 text-xs"
+                onClick={() => setActiveTab('mapa')}
+              >
+                <Map className="h-3.5 w-3.5" />
+                Visualizar
+              </Button>
+              <Button
+                variant={activeTab === 'importar' ? 'default' : 'ghost'}
+                size="sm"
+                className="h-8 gap-2 text-xs"
+                onClick={() => setActiveTab('importar')}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Importar KML
+              </Button>
+            </div>
+            
+            {propriedades.length > 1 && (
+              <Select
+                value={selectedPropriedade?.id_propriedade}
+                onValueChange={handlePropriedadeChange}
+              >
+                <SelectTrigger className="w-[200px] h-8">
+                  <SelectValue placeholder="Selecione a propriedade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {propriedades.map((prop) => (
+                    <SelectItem key={prop.id_propriedade} value={prop.id_propriedade}>
+                      {prop.nome_da_propriedade}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
 
         {selectedPropriedade && (
           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-2">
             <span className="font-medium text-foreground">{selectedPropriedade.nome_da_propriedade}</span>
             {selectedPropriedade.municipio && <span>• {selectedPropriedade.municipio}</span>}
-            {geometria && <span>• {geometria.areaHa.toFixed(2)} ha</span>}
+            {geometria && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-primary/10 text-primary font-semibold text-sm">
+                <Map className="h-3.5 w-3.5" />
+                {geometria.areaHa.toFixed(2)} ha
+              </span>
+            )}
           </div>
         )}
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col min-h-0">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <TabsList className="h-9 w-fit">
-            <TabsTrigger value="mapa" className="gap-2 text-xs">
-              <Map className="h-3.5 w-3.5" />
-              Visualizar
-            </TabsTrigger>
-            <TabsTrigger value="importar" className="gap-2 text-xs">
-              <Upload className="h-3.5 w-3.5" />
-              Importar KML
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="mapa" className="flex-1 mt-3">
+      <CardContent className="flex-1 flex flex-col min-h-0 pt-0">
+        {activeTab === 'mapa' && (
+          <div className="flex-1 min-h-[450px]">
             {loadingGeometria ? (
-              <PropertyMapSkeleton className="w-full h-full min-h-[400px] rounded-lg" />
+              <PropertyMapSkeleton className="w-full h-full rounded-lg" />
             ) : geometria ? (
-              <div className="relative h-full min-h-[400px]">
-                <PropertyMap
-                  geojson={geometria.geojson}
-                  centroide={geometria.centroide}
-                  className="w-full h-full min-h-[400px] rounded-lg overflow-hidden"
-                />
-                
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      className="absolute top-2 left-2 z-[1000]"
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Remover
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Remover geometria?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta ação irá remover o polígono importado desta propriedade.
-                        Você poderá importar um novo arquivo posteriormente.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleDeleteGeometria}>
-                        Remover
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              <PropertyMap
+                geojson={geometria.geojson}
+                centroide={geometria.centroide}
+                className="w-full h-full rounded-lg overflow-hidden"
+              />
             ) : (
-              <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-muted/30 rounded-lg">
+              <div className="h-full flex flex-col items-center justify-center text-center p-8 bg-muted/30 rounded-lg">
                 <Map className="h-16 w-16 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Nenhum mapa disponível</h3>
                 <p className="text-muted-foreground mb-4 max-w-md">
@@ -236,33 +266,33 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
                 </Button>
               </div>
             )}
-          </TabsContent>
+          </div>
+        )}
 
-          <TabsContent value="importar" className="flex-1 mt-3">
-            {selectedPropriedade && (
-              <div className="max-w-lg mx-auto space-y-4 py-8">
-                <div className="text-center mb-6">
-                  <h3 className="text-lg font-semibold mb-2">Importar Arquivo KML/KMZ</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Arraste ou selecione um arquivo para importar o polígono da propriedade.
-                    {geometria && ' O arquivo atual será substituído.'}
-                  </p>
-                </div>
-                
-                <KmlUploader
-                  propriedadeId={selectedPropriedade.id_propriedade}
-                  onSuccess={handleUploadSuccess}
-                />
-
-                <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• Arquivos suportados: .kml e .kmz</p>
-                  <p>• Apenas polígonos serão importados</p>
-                  <p>• A área e perímetro serão calculados automaticamente</p>
-                </div>
+        {activeTab === 'importar' && selectedPropriedade && (
+          <div className="flex-1 min-h-[450px] flex items-center justify-center">
+            <div className="max-w-lg w-full space-y-4">
+              <div className="text-center mb-6">
+                <h3 className="text-lg font-semibold mb-2">Importar Arquivo KML/KMZ</h3>
+                <p className="text-sm text-muted-foreground">
+                  Arraste ou selecione um arquivo para importar o polígono da propriedade.
+                  {geometria && ' O arquivo atual será substituído.'}
+                </p>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
+              
+              <KmlUploader
+                propriedadeId={selectedPropriedade.id_propriedade}
+                onSuccess={handleUploadSuccess}
+              />
+
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>• Arquivos suportados: .kml e .kmz</p>
+                <p>• Apenas polígonos serão importados</p>
+                <p>• A área e perímetro serão calculados automaticamente</p>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

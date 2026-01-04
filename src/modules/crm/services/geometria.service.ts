@@ -70,12 +70,22 @@ export async function createGeometria(data: {
 
 export async function deleteGeometria(propriedadeId: string) {
   const tenantId = await getCurrentTenantId();
-  
-  const { error } = await supabase
+
+  if (!tenantId) {
+    throw new Error('Tenant não encontrado. Faça login novamente.');
+  }
+
+  const { data, error } = await supabase
     .from('propriedade_geometria')
     .delete()
     .eq('id_propriedade', propriedadeId)
-    .eq('tenant_id', tenantId);
-  
+    .eq('tenant_id', tenantId)
+    .select('id_geometria');
+
   if (error) throw error;
+
+  // Se não deletou nenhuma linha, provavelmente não encontrou registro (ou tenant incorreto)
+  if (!data || data.length === 0) {
+    throw new Error('Nenhum mapa encontrado para remover.');
+  }
 }

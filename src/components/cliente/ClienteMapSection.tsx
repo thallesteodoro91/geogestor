@@ -43,13 +43,14 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
   const [loadingGeometria, setLoadingGeometria] = useState(false);
   const [activeTab, setActiveTab] = useState('mapa');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deletingGeometria, setDeletingGeometria] = useState(false);
 
   // Seleciona a primeira propriedade automaticamente
   useEffect(() => {
     if (propriedades.length > 0 && !selectedPropriedade) {
       setSelectedPropriedade(propriedades[0]);
     }
-  }, [propriedades]);
+  }, [propriedades, selectedPropriedade]);
 
   // Carrega geometria quando uma propriedade é selecionada
   useEffect(() => {
@@ -60,7 +61,7 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
 
   const loadGeometria = async () => {
     if (!selectedPropriedade) return;
-    
+
     setLoadingGeometria(true);
     try {
       const data = await fetchGeometriaByPropriedade(selectedPropriedade.id_propriedade);
@@ -71,9 +72,9 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
           perimetroM: data.perimetro_m || 0,
           centroide: {
             lat: data.centroide_lat || 0,
-            lng: data.centroide_lng || 0
+            lng: data.centroide_lng || 0,
           },
-          glebas: (data.glebas as any[]) || []
+          glebas: (data.glebas as any[]) || [],
         });
       } else {
         setGeometria(null);
@@ -93,18 +94,23 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
 
   const handleDeleteGeometria = async () => {
     if (!selectedPropriedade) return;
-    
+
+    setDeletingGeometria(true);
     try {
       await deleteGeometria(selectedPropriedade.id_propriedade);
       setGeometria(null);
-      toast.success('Geometria removida com sucesso');
+      toast.success('Mapa removido com sucesso');
+      setShowDeleteDialog(false);
     } catch (error) {
-      toast.error('Erro ao remover geometria');
+      const message = error instanceof Error ? error.message : 'Erro ao remover mapa';
+      toast.error(message);
+    } finally {
+      setDeletingGeometria(false);
     }
   };
 
   const handlePropriedadeChange = (id: string) => {
-    const prop = propriedades.find(p => p.id_propriedade === id);
+    const prop = propriedades.find((p) => p.id_propriedade === id);
     if (prop) {
       setSelectedPropriedade(prop);
       setGeometria(null);
@@ -177,11 +183,15 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction 
-                    onClick={handleDeleteGeometria}
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleDeleteGeometria();
+                    }}
+                    disabled={deletingGeometria}
                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                   >
-                    Remover
+                    {deletingGeometria ? 'Removendo...' : 'Remover'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

@@ -100,12 +100,13 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
       await deleteGeometria(selectedPropriedade.id_propriedade);
       setGeometria(null);
       toast.success('Mapa removido com sucesso');
-      setShowDeleteDialog(false);
     } catch (error) {
+      console.error('Erro ao deletar geometria:', error);
       const message = error instanceof Error ? error.message : 'Erro ao remover mapa';
       toast.error(message);
     } finally {
       setDeletingGeometria(false);
+      setShowDeleteDialog(false); // Sempre fecha o dialog, mesmo em erro
     }
   };
 

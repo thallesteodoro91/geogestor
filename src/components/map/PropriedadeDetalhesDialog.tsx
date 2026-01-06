@@ -92,7 +92,7 @@ export function PropriedadeDetalhesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0">
+      <DialogContent className="max-w-5xl h-[85vh] flex flex-col p-0 z-[1000]">
         <DialogHeader className="px-6 pt-6 pb-2">
           <DialogTitle className="text-xl flex items-center gap-2">
             <Map className="h-5 w-5" />

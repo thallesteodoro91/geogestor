@@ -72,7 +72,7 @@ export function CategoriaServicoDialog({ open, onOpenChange, categoria, onSucces
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md z-[1000]">
         <DialogHeader>
           <DialogTitle>{categoria ? 'Editar Categoria' : 'Nova Categoria'}</DialogTitle>
         </DialogHeader>

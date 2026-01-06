@@ -285,7 +285,7 @@ export function CsvImportDialog({ open, onOpenChange, onSuccess }: CsvImportDial
       if (!isOpen) resetState();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col z-[1000]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />

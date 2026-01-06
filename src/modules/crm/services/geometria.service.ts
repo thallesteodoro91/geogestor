@@ -69,11 +69,22 @@ export async function createGeometria(data: {
 }
 
 export async function deleteGeometria(propriedadeId: string) {
+  console.log('[deleteGeometria] Iniciando remoção para propriedade:', propriedadeId);
+  
   const tenantId = await getCurrentTenantId();
+  console.log('[deleteGeometria] Tenant ID obtido:', tenantId);
 
   if (!tenantId) {
+    console.error('[deleteGeometria] Tenant não encontrado');
     throw new Error('Tenant não encontrado. Faça login novamente.');
   }
+
+  if (!propriedadeId) {
+    console.error('[deleteGeometria] ID da propriedade não fornecido');
+    throw new Error('ID da propriedade é obrigatório.');
+  }
+
+  console.log('[deleteGeometria] Executando DELETE com filtros:', { propriedadeId, tenantId });
 
   const { data, error } = await supabase
     .from('propriedade_geometria')
@@ -82,10 +93,19 @@ export async function deleteGeometria(propriedadeId: string) {
     .eq('tenant_id', tenantId)
     .select('id_geometria');
 
-  if (error) throw error;
+  console.log('[deleteGeometria] Resultado:', { data, error });
+
+  if (error) {
+    console.error('[deleteGeometria] Erro no Supabase:', error);
+    throw error;
+  }
 
   // Se não deletou nenhuma linha, provavelmente não encontrou registro (ou tenant incorreto)
   if (!data || data.length === 0) {
+    console.warn('[deleteGeometria] Nenhum registro deletado - possível id/tenant incorreto');
     throw new Error('Nenhum mapa encontrado para remover.');
   }
+
+  console.log('[deleteGeometria] Geometria removida com sucesso:', data);
+  return data;
 }

@@ -93,18 +93,30 @@ export function ClienteMapSection({ propriedades, isLoading }: ClienteMapSection
   };
 
   const handleDeleteGeometria = async () => {
-    if (!selectedPropriedade) return;
+    if (!selectedPropriedade) {
+      console.error('[handleDeleteGeometria] Nenhuma propriedade selecionada');
+      setShowDeleteDialog(false);
+      return;
+    }
+
+    console.log('[handleDeleteGeometria] Iniciando remoção para:', {
+      propriedadeId: selectedPropriedade.id_propriedade,
+      propriedadeNome: selectedPropriedade.nome_da_propriedade,
+      geometriaAtual: geometria ? 'presente' : 'ausente'
+    });
 
     setDeletingGeometria(true);
     try {
       await deleteGeometria(selectedPropriedade.id_propriedade);
+      console.log('[handleDeleteGeometria] Remoção bem-sucedida, limpando estado');
       setGeometria(null);
       toast.success('Mapa removido com sucesso');
     } catch (error) {
-      console.error('Erro ao deletar geometria:', error);
+      console.error('[handleDeleteGeometria] Erro:', error);
       const message = error instanceof Error ? error.message : 'Erro ao remover mapa';
       toast.error(message);
     } finally {
+      console.log('[handleDeleteGeometria] Finalizando, fechando dialog');
       setDeletingGeometria(false);
       setShowDeleteDialog(false); // Sempre fecha o dialog, mesmo em erro
     }

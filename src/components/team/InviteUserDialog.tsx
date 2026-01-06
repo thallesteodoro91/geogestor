@@ -84,7 +84,7 @@ export function InviteUserDialog() {
           Convidar Membro
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md z-[1000]">
         <DialogHeader>
           <DialogTitle>Convidar Novo Membro</DialogTitle>
           <DialogDescription>

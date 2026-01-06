@@ -75,7 +75,7 @@ export function TipoServicoDialog({ open, onOpenChange, tipoServico, onSuccess }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md z-[1000]">
         <DialogHeader>
           <DialogTitle>{tipoServico ? 'Editar Serviço' : 'Novo Serviço'}</DialogTitle>
         </DialogHeader>

@@ -47,7 +47,7 @@ export function EmpresaDialog({ open, onOpenChange, empresa, onSuccess }: Empres
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl z-[1000]">
         <DialogHeader>
           <DialogTitle>{empresa ? "Editar Empresa" : "Nova Empresa"}</DialogTitle>
         </DialogHeader>

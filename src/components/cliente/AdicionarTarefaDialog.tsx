@@ -3,7 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { ptBR } from 'date-fns/locale';
+import { CalendarIcon, Plus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -36,6 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useCreateTarefa } from '@/hooks/useClienteTarefas';
+import { useCategoriaEventos, useCreateCategoria } from '@/hooks/useCategoriaEventos';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -62,7 +64,8 @@ const formSchema = z.object({
 
 type FormData = z.infer<typeof formSchema>;
 
-const categorias = [
+// Categorias padrão (fallback quando não há categorias no banco)
+const categoriasPadrao = [
   { value: 'documento_cliente', label: 'Documento do Cliente' },
   { value: 'prefeitura', label: 'Prefeitura' },
   { value: 'cartorio', label: 'Cartório' },
@@ -86,7 +89,11 @@ export function AdicionarTarefaDialog({
   servicos = [],
 }: AdicionarTarefaDialogProps) {
   const createTarefa = useCreateTarefa();
+  const { data: categoriasDinamicas } = useCategoriaEventos('tarefa');
+  const createCategoria = useCreateCategoria();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [novaCategoria, setNovaCategoria] = useState('');
+  const [showNovaCategoriaInput, setShowNovaCategoriaInput] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -98,6 +105,31 @@ export function AdicionarTarefaDialog({
       id_servico: '_none',
     },
   });
+
+  // Combine dynamic categories with default ones
+  const categorias = categoriasDinamicas?.length
+    ? categoriasDinamicas.map((c) => ({ value: c.nome, label: c.nome }))
+    : categoriasPadrao;
+
+  const handleAddCategoria = async () => {
+    if (!novaCategoria.trim()) return;
+    
+    try {
+      await createCategoria.mutateAsync({
+        nome: novaCategoria.trim(),
+        tipo: 'tarefa',
+        cor: 'blue',
+        icone: 'ClipboardList',
+        ativo: true,
+      });
+      form.setValue('categoria', novaCategoria.trim());
+      setNovaCategoria('');
+      setShowNovaCategoriaInput(false);
+      toast.success('Categoria criada!');
+    } catch (error) {
+      toast.error('Erro ao criar categoria');
+    }
+  };
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
@@ -154,20 +186,31 @@ export function AdicionarTarefaDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categoria *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {categorias.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-1">
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Selecione" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categorias.map((cat) => (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              {cat.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setShowNovaCategoriaInput(!showNovaCategoriaInput)}
+                        title="Adicionar categoria"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -179,7 +222,7 @@ export function AdicionarTarefaDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Prioridade *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione" />
@@ -199,6 +242,25 @@ export function AdicionarTarefaDialog({
               />
             </div>
 
+            {showNovaCategoriaInput && (
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nova categoria"
+                  value={novaCategoria}
+                  onChange={(e) => setNovaCategoria(e.target.value)}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleAddCategoria}
+                  disabled={createCategoria.isPending}
+                >
+                  {createCategoria.isPending ? 'Salvando...' : 'Criar'}
+                </Button>
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="data_vencimento"
@@ -216,7 +278,7 @@ export function AdicionarTarefaDialog({
                           )}
                         >
                           {field.value ? (
-                            format(field.value, 'dd/MM/yyyy')
+                            format(field.value, 'dd/MM/yyyy', { locale: ptBR })
                           ) : (
                             <span>Selecione uma data (opcional)</span>
                           )}
@@ -231,6 +293,7 @@ export function AdicionarTarefaDialog({
                         onSelect={field.onChange}
                         disabled={(date) => date < new Date()}
                         initialFocus
+                        locale={ptBR}
                       />
                     </PopoverContent>
                   </Popover>
@@ -246,7 +309,7 @@ export function AdicionarTarefaDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vincular a Serviço</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Nenhum (opcional)" />

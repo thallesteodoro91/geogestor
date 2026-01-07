@@ -19,6 +19,7 @@ export interface ClienteEvento {
   metadata?: Record<string, unknown> | null;
   manual: boolean;
   created_at: string;
+  data_evento?: string | null;
   tenant_id?: string | null;
 }
 
@@ -206,9 +207,22 @@ export async function registrarNotaManual(
   titulo: string,
   descricao?: string,
   servicoId?: string,
-  categoria: string = 'interno'
+  categoria: string = 'interno',
+  dataEvento?: string
 ): Promise<ClienteEvento> {
-  return createEvento({
+  const tenantId = await getCurrentTenantId();
+  
+  const insertData: {
+    id_cliente: string;
+    id_servico?: string | null;
+    tipo: string;
+    categoria: string;
+    titulo: string;
+    descricao?: string | null;
+    manual: boolean;
+    data_evento?: string | null;
+    tenant_id: string | null;
+  } = {
     id_cliente: clienteId,
     id_servico: servicoId || null,
     tipo: 'nota',
@@ -216,5 +230,16 @@ export async function registrarNotaManual(
     titulo,
     descricao: descricao || null,
     manual: true,
-  });
+    data_evento: dataEvento || null,
+    tenant_id: tenantId,
+  };
+
+  const { data: evento, error } = await supabase
+    .from('cliente_eventos')
+    .insert([insertData])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return evento as ClienteEvento;
 }

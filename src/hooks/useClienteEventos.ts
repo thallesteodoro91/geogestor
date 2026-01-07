@@ -54,13 +54,15 @@ export function useRegistrarNota() {
       descricao,
       servicoId,
       categoria,
+      dataEvento,
     }: {
       clienteId: string;
       titulo: string;
       descricao?: string;
       servicoId?: string;
       categoria?: string;
-    }) => registrarNotaManual(clienteId, titulo, descricao, servicoId, categoria),
+      dataEvento?: string;
+    }) => registrarNotaManual(clienteId, titulo, descricao, servicoId, categoria, dataEvento),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ['cliente-eventos', variables.clienteId],

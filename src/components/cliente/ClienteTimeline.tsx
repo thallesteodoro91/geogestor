@@ -60,7 +60,8 @@ function groupEventsByDate(eventos: ClienteEvento[]) {
   const groupMap = new Map<string, ClienteEvento[]>();
 
   eventos.forEach((evento) => {
-    const date = new Date(evento.created_at);
+    // Use data_evento if available, otherwise use created_at
+    const date = new Date(evento.data_evento || evento.created_at);
     let label: string;
 
     if (isToday(date)) {
@@ -204,7 +205,7 @@ export function ClienteTimeline({
                             </p>
                           )}
                           <p className="text-xs text-muted-foreground mt-2">
-                            {format(new Date(evento.created_at), "dd/MM/yyyy 'às' HH:mm", {
+                            {format(new Date(evento.data_evento || evento.created_at), "dd/MM/yyyy 'às' HH:mm", {
                               locale: ptBR,
                             })}
                           </p>

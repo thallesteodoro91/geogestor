@@ -21,6 +21,9 @@ export interface ClienteEvento {
   created_at: string;
   data_evento?: string | null;
   tenant_id?: string | null;
+  // Campos do JOIN com dim_categoria_evento
+  categoria_icone?: string | null;
+  categoria_cor?: string | null;
 }
 
 type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -106,6 +109,27 @@ export async function deleteEvento(eventoId: string): Promise<void> {
     .eq('id_evento', eventoId);
 
   if (error) throw error;
+}
+
+export async function updateEvento(
+  eventoId: string,
+  data: Partial<Pick<ClienteEvento, 'titulo' | 'descricao' | 'categoria' | 'data_evento' | 'id_servico'>>
+): Promise<ClienteEvento> {
+  const { data: evento, error } = await supabase
+    .from('cliente_eventos')
+    .update({
+      titulo: data.titulo,
+      descricao: data.descricao,
+      categoria: data.categoria,
+      data_evento: data.data_evento,
+      id_servico: data.id_servico,
+    })
+    .eq('id_evento', eventoId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return evento as ClienteEvento;
 }
 
 // Helper functions for automatic event registration

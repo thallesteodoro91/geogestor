@@ -11,10 +11,9 @@ import {
   Hammer,
   Plus,
   Trash2,
-  CheckCircle2,
-  Circle,
   AlertCircle,
   Clock,
+  Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -35,13 +34,20 @@ import {
 import { useClienteTarefas, useMarcarTarefaConcluida, useDeleteTarefa } from '@/hooks/useClienteTarefas';
 import { useRegistrarNota } from '@/hooks/useClienteEventos';
 import { ClienteTarefa } from '@/modules/crm/services/cliente-tarefas.service';
+import { EditarTarefaDialog } from './EditarTarefaDialog';
 import { toast } from 'sonner';
+
+interface Servico {
+  id_servico: string;
+  nome_do_servico: string;
+}
 
 interface ClienteTarefasProps {
   clienteId: string;
   filtroCategoria?: string;
   filtroServico?: string;
   onAddTarefa: () => void;
+  servicos?: Servico[];
 }
 
 const categoriaConfig: Record<string, { icon: React.ElementType; color: string; label: string }> = {
@@ -83,6 +89,7 @@ export function ClienteTarefas({
   filtroCategoria,
   filtroServico,
   onAddTarefa,
+  servicos = [],
 }: ClienteTarefasProps) {
   const { data: tarefas, isLoading } = useClienteTarefas(clienteId, {
     categoria: filtroCategoria,
@@ -92,6 +99,7 @@ export function ClienteTarefas({
   const deleteTarefa = useDeleteTarefa();
   const registrarNota = useRegistrarNota();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [editingTarefa, setEditingTarefa] = useState<ClienteTarefa | null>(null);
 
   const handleToggleConcluida = async (tarefa: ClienteTarefa) => {
     try {
@@ -151,33 +159,33 @@ export function ClienteTarefas({
 
   if (!tarefas?.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <ClipboardList className="h-12 w-12 text-muted-foreground mb-4" />
-        <p className="text-muted-foreground mb-4">Nenhuma tarefa cadastrada</p>
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <ClipboardList className="h-10 w-10 text-muted-foreground mb-3" />
+        <p className="text-muted-foreground mb-3 text-sm">Nenhuma tarefa</p>
         <Button onClick={onAddTarefa} size="sm">
-          <Plus className="h-4 w-4 mr-2" />
-          Nova tarefa
+          <Plus className="h-4 w-4 mr-1" />
+          Nova
         </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Progress bar */}
-      <div className="space-y-2">
-        <div className="flex justify-between text-sm">
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs">
           <span className="text-muted-foreground">Progresso</span>
           <span className="font-medium">
-            {concluidas} de {total} ({Math.round(progresso)}%)
+            {concluidas}/{total} ({Math.round(progresso)}%)
           </span>
         </div>
-        <Progress value={progresso} className="h-2" />
+        <Progress value={progresso} className="h-1.5" />
       </div>
 
       {/* Add button */}
       <Button onClick={onAddTarefa} variant="outline" className="w-full" size="sm">
-        <Plus className="h-4 w-4 mr-2" />
+        <Plus className="h-3 w-3 mr-1" />
         Nova tarefa
       </Button>
 
@@ -192,7 +200,7 @@ export function ClienteTarefas({
           return (
             <div
               key={tarefa.id_tarefa}
-              className={`group flex items-start gap-3 p-3 rounded-lg border bg-card hover:shadow-sm transition-all border-l-4 ${
+              className={`group flex items-start gap-2 p-2 rounded-lg border bg-card hover:shadow-sm transition-all border-l-4 ${
                 prioConfig.color
               } ${tarefa.concluida ? 'opacity-60' : ''}`}
             >
@@ -203,9 +211,9 @@ export function ClienteTarefas({
               />
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span
-                    className={`font-medium text-sm ${
+                    className={`font-medium text-xs ${
                       tarefa.concluida ? 'line-through text-muted-foreground' : ''
                     }`}
                   >
@@ -213,65 +221,77 @@ export function ClienteTarefas({
                   </span>
                   <Badge
                     variant="outline"
-                    className={`text-xs ${catConfig.color}`}
+                    className={`text-[10px] px-1 py-0 ${catConfig.color}`}
                   >
-                    <Icon className="h-3 w-3 mr-1" />
+                    <Icon className="h-2.5 w-2.5 mr-0.5" />
                     {catConfig.label}
                   </Badge>
                   {vencimento && !tarefa.concluida && (
-                    <span className={`flex items-center gap-1 text-xs ${vencimento.color}`}>
-                      <vencimento.icon className="h-3 w-3" />
-                      {vencimento.status === 'vencida' ? 'Vencida' : 'Próxima'}
+                    <span className={`flex items-center gap-0.5 text-[10px] ${vencimento.color}`}>
+                      <vencimento.icon className="h-2.5 w-2.5" />
                     </span>
                   )}
                 </div>
 
-                {tarefa.observacoes && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                    {tarefa.observacoes}
-                  </p>
-                )}
-
                 {tarefa.data_vencimento && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Prazo: {format(new Date(tarefa.data_vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {format(new Date(tarefa.data_vencimento), "dd/MM", { locale: ptBR })}
                   </p>
                 )}
               </div>
 
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 text-muted-foreground hover:text-destructive"
-                    disabled={deletingId === tarefa.id_tarefa}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Remover tarefa?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta ação não pode ser desfeita. A tarefa será removida permanentemente.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={() => handleDelete(tarefa.id_tarefa)}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              <div className="flex items-center gap-0.5">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 text-muted-foreground hover:text-primary"
+                  onClick={() => setEditingTarefa(tarefa)}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 text-muted-foreground hover:text-destructive"
+                      disabled={deletingId === tarefa.id_tarefa}
                     >
-                      Remover
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remover tarefa?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta ação não pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => handleDelete(tarefa.id_tarefa)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Remover
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </div>
           );
         })}
       </div>
+
+      {/* Dialog de edição */}
+      <EditarTarefaDialog
+        open={!!editingTarefa}
+        onOpenChange={(open) => !open && setEditingTarefa(null)}
+        tarefa={editingTarefa}
+        clienteId={clienteId}
+        servicos={servicos}
+      />
     </div>
   );
 }

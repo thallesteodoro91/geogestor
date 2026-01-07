@@ -3,6 +3,7 @@ import {
   fetchEventosByCliente,
   createEvento,
   deleteEvento,
+  updateEvento,
   registrarNotaManual,
   FiltrosEvento,
   ClienteEvento,
@@ -36,6 +37,27 @@ export function useDeleteEvento() {
   return useMutation({
     mutationFn: ({ eventoId, clienteId }: { eventoId: string; clienteId: string }) =>
       deleteEvento(eventoId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['cliente-eventos', variables.clienteId],
+      });
+    },
+  });
+}
+
+export function useUpdateEvento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      eventoId,
+      clienteId,
+      data,
+    }: {
+      eventoId: string;
+      clienteId: string;
+      data: Partial<Pick<ClienteEvento, 'titulo' | 'descricao' | 'categoria' | 'data_evento' | 'id_servico'>>;
+    }) => updateEvento(eventoId, data),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({
         queryKey: ['cliente-eventos', variables.clienteId],

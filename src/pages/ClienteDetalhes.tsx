@@ -17,6 +17,7 @@ import { ClientePropriedades } from "@/components/cliente/ClientePropriedades";
 import { ClienteServicos } from "@/components/cliente/ClienteServicos";
 import { ClienteOrcamentos } from "@/components/cliente/ClienteOrcamentos";
 import { ClienteFinanceiro } from "@/components/cliente/ClienteFinanceiro";
+import { ClienteCentralControle } from "@/components/cliente/ClienteCentralControle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
@@ -147,7 +148,7 @@ export default function ClienteDetalhes() {
 
         {/* Tabs com detalhes */}
         <Tabs defaultValue="propriedades" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="propriedades">
               Propriedades ({propriedades.length})
             </TabsTrigger>
@@ -156,6 +157,9 @@ export default function ClienteDetalhes() {
             </TabsTrigger>
             <TabsTrigger value="orcamentos">
               Orçamentos ({orcamentos.length})
+            </TabsTrigger>
+            <TabsTrigger value="central">
+              Central de Controle
             </TabsTrigger>
             <TabsTrigger value="financeiro">
               Resumo Financeiro
@@ -184,6 +188,14 @@ export default function ClienteDetalhes() {
             ) : (
               <ClienteOrcamentos orcamentos={orcamentos} />
             )}
+          </TabsContent>
+
+          <TabsContent value="central" className="mt-4">
+            <ClienteCentralControle 
+              clienteId={id!} 
+              servicos={servicos}
+              propriedades={propriedades}
+            />
           </TabsContent>
 
           <TabsContent value="financeiro" className="mt-4">

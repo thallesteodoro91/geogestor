@@ -95,7 +95,7 @@ export function AdicionarTarefaDialog({
       categoria: 'documento_cliente',
       prioridade: 'media',
       observacoes: '',
-      id_servico: '',
+      id_servico: '_none',
     },
   });
 
@@ -110,7 +110,7 @@ export function AdicionarTarefaDialog({
         data_vencimento: data.data_vencimento
           ? format(data.data_vencimento, 'yyyy-MM-dd')
           : null,
-        id_servico: data.id_servico || null,
+        id_servico: data.id_servico === '_none' ? null : data.id_servico || null,
         observacoes: data.observacoes || null,
         concluida: false,
         ordem: 0,
@@ -253,7 +253,7 @@ export function AdicionarTarefaDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Nenhum</SelectItem>
+                        <SelectItem value="_none">Nenhum</SelectItem>
                         {servicos.map((servico) => (
                           <SelectItem key={servico.id_servico} value={servico.id_servico}>
                             {servico.nome_do_servico}

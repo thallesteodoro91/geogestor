@@ -1,0 +1,70 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  fetchEventosByCliente,
+  createEvento,
+  deleteEvento,
+  registrarNotaManual,
+  FiltrosEvento,
+  ClienteEvento,
+} from '@/modules/crm/services/cliente-eventos.service';
+
+export function useClienteEventos(clienteId: string, filtros?: FiltrosEvento) {
+  return useQuery({
+    queryKey: ['cliente-eventos', clienteId, filtros],
+    queryFn: () => fetchEventosByCliente(clienteId, filtros),
+    enabled: !!clienteId,
+  });
+}
+
+export function useCreateEvento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: Omit<ClienteEvento, 'id_evento' | 'created_at' | 'tenant_id'>) =>
+      createEvento(data),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['cliente-eventos', variables.id_cliente],
+      });
+    },
+  });
+}
+
+export function useDeleteEvento() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventoId, clienteId }: { eventoId: string; clienteId: string }) =>
+      deleteEvento(eventoId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['cliente-eventos', variables.clienteId],
+      });
+    },
+  });
+}
+
+export function useRegistrarNota() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      clienteId,
+      titulo,
+      descricao,
+      servicoId,
+      categoria,
+    }: {
+      clienteId: string;
+      titulo: string;
+      descricao?: string;
+      servicoId?: string;
+      categoria?: string;
+    }) => registrarNotaManual(clienteId, titulo, descricao, servicoId, categoria),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ['cliente-eventos', variables.clienteId],
+      });
+    },
+  });
+}

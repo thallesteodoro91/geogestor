@@ -14,6 +14,166 @@ export type Database = {
   }
   public: {
     Tables: {
+      cliente_eventos: {
+        Row: {
+          categoria: string
+          created_at: string | null
+          descricao: string | null
+          id_cliente: string
+          id_evento: string
+          id_propriedade: string | null
+          id_servico: string | null
+          manual: boolean | null
+          metadata: Json | null
+          tenant_id: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          categoria: string
+          created_at?: string | null
+          descricao?: string | null
+          id_cliente: string
+          id_evento?: string
+          id_propriedade?: string | null
+          id_servico?: string | null
+          manual?: boolean | null
+          metadata?: Json | null
+          tenant_id?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          categoria?: string
+          created_at?: string | null
+          descricao?: string | null
+          id_cliente?: string
+          id_evento?: string
+          id_propriedade?: string | null
+          id_servico?: string | null
+          manual?: boolean | null
+          metadata?: Json | null
+          tenant_id?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_eventos_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "cliente_eventos_id_propriedade_fkey"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "cliente_eventos_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
+            foreignKeyName: "cliente_eventos_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cliente_tarefas: {
+        Row: {
+          categoria: string
+          concluida: boolean | null
+          created_at: string | null
+          data_conclusao: string | null
+          data_vencimento: string | null
+          id_cliente: string
+          id_propriedade: string | null
+          id_servico: string | null
+          id_tarefa: string
+          observacoes: string | null
+          ordem: number | null
+          prioridade: string | null
+          responsavel: string | null
+          tenant_id: string | null
+          titulo: string
+          updated_at: string | null
+        }
+        Insert: {
+          categoria: string
+          concluida?: boolean | null
+          created_at?: string | null
+          data_conclusao?: string | null
+          data_vencimento?: string | null
+          id_cliente: string
+          id_propriedade?: string | null
+          id_servico?: string | null
+          id_tarefa?: string
+          observacoes?: string | null
+          ordem?: number | null
+          prioridade?: string | null
+          responsavel?: string | null
+          tenant_id?: string | null
+          titulo: string
+          updated_at?: string | null
+        }
+        Update: {
+          categoria?: string
+          concluida?: boolean | null
+          created_at?: string | null
+          data_conclusao?: string | null
+          data_vencimento?: string | null
+          id_cliente?: string
+          id_propriedade?: string | null
+          id_servico?: string | null
+          id_tarefa?: string
+          observacoes?: string | null
+          ordem?: number | null
+          prioridade?: string | null
+          responsavel?: string | null
+          tenant_id?: string | null
+          titulo?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cliente_tarefas_id_cliente_fkey"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "cliente_tarefas_id_propriedade_fkey"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "cliente_tarefas_id_servico_fkey"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
+            foreignKeyName: "cliente_tarefas_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dim_categoria_despesa: {
         Row: {
           created_at: string | null

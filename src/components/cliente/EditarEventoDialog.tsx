@@ -4,7 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, Plus } from 'lucide-react';
+import { IconPicker } from '@/components/ui/icon-picker';
+import { ColorPicker } from '@/components/ui/color-picker';
 import {
   Dialog,
   DialogContent,
@@ -37,7 +39,7 @@ import {
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useUpdateEvento } from '@/hooks/useClienteEventos';
-import { useCategoriaEventos } from '@/hooks/useCategoriaEventos';
+import { useCategoriaEventos, useCreateCategoria } from '@/hooks/useCategoriaEventos';
 import { ClienteEvento } from '@/modules/crm/services/cliente-eventos.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -85,7 +87,34 @@ export function EditarEventoDialog({
 }: EditarEventoDialogProps) {
   const updateEvento = useUpdateEvento();
   const { data: categoriasDinamicas } = useCategoriaEventos('evento');
+  const createCategoria = useCreateCategoria();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [novaCategoria, setNovaCategoria] = useState('');
+  const [novoIcone, setNovoIcone] = useState('StickyNote');
+  const [novaCor, setNovaCor] = useState('blue');
+  const [showNovaCategoriaInput, setShowNovaCategoriaInput] = useState(false);
+
+  const handleAddCategoria = async () => {
+    if (!novaCategoria.trim()) return;
+    
+    try {
+      await createCategoria.mutateAsync({
+        nome: novaCategoria.trim(),
+        tipo: 'evento',
+        cor: novaCor,
+        icone: novoIcone,
+        ativo: true,
+      });
+      form.setValue('categoria', novaCategoria.trim());
+      setNovaCategoria('');
+      setNovoIcone('StickyNote');
+      setNovaCor('blue');
+      setShowNovaCategoriaInput(false);
+      toast.success('Categoria criada!');
+    } catch (error) {
+      toast.error('Erro ao criar categoria');
+    }
+  };
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -223,20 +252,53 @@ export function EditarEventoDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categorias.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categorias.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowNovaCategoriaInput(!showNovaCategoriaInput)}
+                      title="Adicionar categoria"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {showNovaCategoriaInput && (
+                    <div className="space-y-2 mt-2 p-3 border rounded-lg bg-muted/30">
+                      <Input
+                        placeholder="Nome da categoria"
+                        value={novaCategoria}
+                        onChange={(e) => setNovaCategoria(e.target.value)}
+                      />
+                      <div className="flex items-center gap-2">
+                        <IconPicker value={novoIcone} onChange={setNovoIcone} />
+                        <ColorPicker value={novaCor} onChange={setNovaCor} />
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={handleAddCategoria}
+                          disabled={createCategoria.isPending || !novaCategoria.trim()}
+                          className="ml-auto"
+                        >
+                          {createCategoria.isPending ? 'Salvando...' : 'Criar'}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

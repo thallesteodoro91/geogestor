@@ -4,12 +4,14 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import { registrarOrcamentoEmitido } from '@/modules/crm/services/cliente-eventos.service';
 
 export interface Orcamento {
   id_orcamento: string;
   id_cliente?: string | null;
   id_propriedade?: string | null;
   id_servico?: string | null;
+  codigo_orcamento?: string | null;
   data_orcamento: string;
   data_inicio?: string | null;
   data_termino?: string | null;
@@ -70,7 +72,23 @@ export async function fetchOrcamentosByCliente(clienteId: string) {
 
 export async function createOrcamento(data: Omit<Orcamento, 'id_orcamento' | 'created_at' | 'updated_at'>) {
   const tenantId = await getCurrentTenantId();
-  return supabase.from('fato_orcamento').insert({ ...data, tenant_id: tenantId }).select().single();
+  const result = await supabase.from('fato_orcamento').insert({ ...data, tenant_id: tenantId }).select().single();
+  
+  // Registrar evento na timeline do cliente se houver cliente vinculado
+  if (result.data && !result.error && data.id_cliente) {
+    try {
+      const codigo = result.data.codigo_orcamento || result.data.id_orcamento.slice(0, 8);
+      await registrarOrcamentoEmitido(
+        data.id_cliente,
+        codigo,
+        data.id_servico || undefined
+      );
+    } catch (e) {
+      console.error('Erro ao registrar evento de orçamento:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function updateOrcamento(id: string, data: Partial<Orcamento>) {

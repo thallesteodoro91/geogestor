@@ -499,13 +499,11 @@ export default function Despesas() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Lista de Despesas</CardTitle>
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Adicionar Despesa
+            </Button>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Despesa
-                </Button>
-              </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>{editingId ? "Editar" : "Adicionar"} Despesa</DialogTitle>

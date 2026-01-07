@@ -265,13 +265,11 @@ export default function Orcamentos() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Lista de Orçamentos</CardTitle>
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Orçamento
+            </Button>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button onClick={resetForm}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Novo Orçamento
-                </Button>
-              </DialogTrigger>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>{editingId ? "Editar" : "Novo"} Orçamento</DialogTitle>

@@ -106,7 +106,7 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClie
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto z-[1000]">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{propriedade ? "Editar Propriedade" : "Nova Propriedade"}</DialogTitle>
         </DialogHeader>

@@ -88,7 +88,7 @@ export function ServicoDialog({ open, onOpenChange, servico, clienteId, onSucces
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto z-[1000]">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{servico ? "Editar Serviço" : "Novo Serviço"}</DialogTitle>
         </DialogHeader>

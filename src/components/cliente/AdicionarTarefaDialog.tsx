@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarIcon, Plus } from 'lucide-react';
+import { IconPicker } from '@/components/ui/icon-picker';
+import { ColorPicker } from '@/components/ui/color-picker';
 import {
   Dialog,
   DialogContent,
@@ -93,6 +95,8 @@ export function AdicionarTarefaDialog({
   const createCategoria = useCreateCategoria();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [novaCategoria, setNovaCategoria] = useState('');
+  const [novoIcone, setNovoIcone] = useState('ClipboardList');
+  const [novaCor, setNovaCor] = useState('blue');
   const [showNovaCategoriaInput, setShowNovaCategoriaInput] = useState(false);
 
   const form = useForm<FormData>({
@@ -118,12 +122,14 @@ export function AdicionarTarefaDialog({
       await createCategoria.mutateAsync({
         nome: novaCategoria.trim(),
         tipo: 'tarefa',
-        cor: 'blue',
-        icone: 'ClipboardList',
+        cor: novaCor,
+        icone: novoIcone,
         ativo: true,
       });
       form.setValue('categoria', novaCategoria.trim());
       setNovaCategoria('');
+      setNovoIcone('ClipboardList');
+      setNovaCor('blue');
       setShowNovaCategoriaInput(false);
       toast.success('Categoria criada!');
     } catch (error) {
@@ -243,21 +249,25 @@ export function AdicionarTarefaDialog({
             </div>
 
             {showNovaCategoriaInput && (
-              <div className="flex gap-2">
+              <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
                 <Input
-                  placeholder="Nova categoria"
+                  placeholder="Nome da categoria"
                   value={novaCategoria}
                   onChange={(e) => setNovaCategoria(e.target.value)}
-                  className="flex-1"
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleAddCategoria}
-                  disabled={createCategoria.isPending}
-                >
-                  {createCategoria.isPending ? 'Salvando...' : 'Criar'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <IconPicker value={novoIcone} onChange={setNovoIcone} />
+                  <ColorPicker value={novaCor} onChange={setNovaCor} />
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleAddCategoria}
+                    disabled={createCategoria.isPending || !novaCategoria.trim()}
+                    className="ml-auto"
+                  >
+                    {createCategoria.isPending ? 'Salvando...' : 'Criar'}
+                  </Button>
+                </div>
               </div>
             )}
 

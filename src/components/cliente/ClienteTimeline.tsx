@@ -206,7 +206,7 @@ export function ClienteTimeline({
             <h4 className="text-base font-semibold text-muted-foreground mb-4">
               {group.label}
             </h4>
-            <div className="relative pl-10 border-l-2 border-border space-y-5">
+            <div className="relative pl-12 ml-4 border-l-2 border-border space-y-4">
               {group.eventos.map((evento) => {
                 const { Icon, color } = getEventoStyle(evento);
 
@@ -215,15 +215,15 @@ export function ClienteTimeline({
                     key={evento.id_evento}
                     className="relative group animate-in fade-in slide-in-from-left-2 duration-300"
                   >
-                    {/* Timeline dot - MAIOR */}
+                    {/* Timeline dot */}
                     <div
-                      className={`absolute -left-[45px] w-10 h-10 rounded-full flex items-center justify-center ${color} shadow-sm`}
+                      className={`absolute -left-[33px] w-8 h-8 rounded-full flex items-center justify-center ${color} shadow-sm`}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className="h-4 w-4" />
                     </div>
 
-                    {/* Event content - MAIOR */}
-                    <div className="bg-card border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    {/* Event content */}
+                    <div className="bg-card border rounded-lg p-3 hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">

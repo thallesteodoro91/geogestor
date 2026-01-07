@@ -77,7 +77,7 @@ export function AdicionarEventoDialog({
       titulo: '',
       descricao: '',
       categoria: 'interno',
-      id_servico: '',
+      id_servico: '_none',
     },
   });
 
@@ -88,7 +88,7 @@ export function AdicionarEventoDialog({
         clienteId,
         titulo: data.titulo,
         descricao: data.descricao,
-        servicoId: data.id_servico || undefined,
+        servicoId: data.id_servico === '_none' ? undefined : data.id_servico || undefined,
         categoria: data.categoria,
       });
       toast.success('Nota adicionada com sucesso!');
@@ -180,7 +180,7 @@ export function AdicionarEventoDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">Nenhum</SelectItem>
+                        <SelectItem value="_none">Nenhum</SelectItem>
                         {servicos.map((servico) => (
                           <SelectItem key={servico.id_servico} value={servico.id_servico}>
                             {servico.nome_do_servico}

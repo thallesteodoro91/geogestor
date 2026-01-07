@@ -32,7 +32,7 @@ interface ClienteCentralControleProps {
 }
 
 const categorias = [
-  { value: '', label: 'Todas' },
+  { value: '_all', label: 'Todas' },
   { value: 'documento_cliente', label: 'Documentos' },
   { value: 'prefeitura', label: 'Prefeitura' },
   { value: 'cartorio', label: 'Cartório' },
@@ -46,8 +46,8 @@ export function ClienteCentralControle({
   servicos = [],
   propriedades = [],
 }: ClienteCentralControleProps) {
-  const [filtroCategoria, setFiltroCategoria] = useState('');
-  const [filtroServico, setFiltroServico] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('_all');
+  const [filtroServico, setFiltroServico] = useState('_all');
   const [eventoDialogOpen, setEventoDialogOpen] = useState(false);
   const [tarefaDialogOpen, setTarefaDialogOpen] = useState(false);
 
@@ -139,7 +139,7 @@ export function ClienteCentralControle({
               <SelectValue placeholder="Serviço" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Todos os serviços</SelectItem>
+              <SelectItem value="_all">Todos os serviços</SelectItem>
               {servicos.map((servico) => (
                 <SelectItem key={servico.id_servico} value={servico.id_servico}>
                   {servico.nome_do_servico}
@@ -181,8 +181,8 @@ export function ClienteCentralControle({
           <CardContent>
             <ClienteTimeline
               clienteId={clienteId}
-              filtroCategoria={filtroCategoria || undefined}
-              filtroServico={filtroServico || undefined}
+              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
+              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
               onAddEvento={() => setEventoDialogOpen(true)}
             />
           </CardContent>

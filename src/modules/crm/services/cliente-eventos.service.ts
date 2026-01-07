@@ -16,11 +16,13 @@ export interface ClienteEvento {
   categoria: string;
   titulo: string;
   descricao?: string | null;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | null;
   manual: boolean;
   created_at: string;
   tenant_id?: string | null;
 }
+
+type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
 export interface FiltrosEvento {
   categoria?: string;
@@ -62,9 +64,33 @@ export async function createEvento(
 ): Promise<ClienteEvento> {
   const tenantId = await getCurrentTenantId();
 
+  const insertData: {
+    id_cliente: string;
+    id_servico?: string | null;
+    id_propriedade?: string | null;
+    tipo: string;
+    categoria: string;
+    titulo: string;
+    descricao?: string | null;
+    metadata?: Json | null;
+    manual?: boolean;
+    tenant_id: string | null;
+  } = {
+    id_cliente: data.id_cliente,
+    id_servico: data.id_servico,
+    id_propriedade: data.id_propriedade,
+    tipo: data.tipo,
+    categoria: data.categoria,
+    titulo: data.titulo,
+    descricao: data.descricao,
+    metadata: data.metadata as Json | null,
+    manual: data.manual,
+    tenant_id: tenantId,
+  };
+
   const { data: evento, error } = await supabase
     .from('cliente_eventos')
-    .insert({ ...data, tenant_id: tenantId })
+    .insert([insertData])
     .select()
     .single();
 

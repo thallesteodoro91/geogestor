@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { CalendarIcon, Plus } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -27,8 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
 import { useRegistrarNota } from '@/hooks/useClienteEventos';
+import { useCategoriaEventos, useCreateCategoria } from '@/hooks/useCategoriaEventos';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface Servico {
   id_servico: string;
@@ -47,11 +58,13 @@ const formSchema = z.object({
   descricao: z.string().optional(),
   categoria: z.string().min(1, 'Categoria é obrigatória'),
   id_servico: z.string().optional(),
+  data_evento: z.date().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
 
-const categorias = [
+// Categorias padrão (fallback quando não há categorias no banco)
+const categoriasPadrao = [
   { value: 'cliente', label: 'Cliente' },
   { value: 'documento_cliente', label: 'Documento' },
   { value: 'prefeitura', label: 'Prefeitura' },
@@ -69,7 +82,11 @@ export function AdicionarEventoDialog({
   servicos = [],
 }: AdicionarEventoDialogProps) {
   const registrarNota = useRegistrarNota();
+  const { data: categoriasDinamicas } = useCategoriaEventos('evento');
+  const createCategoria = useCreateCategoria();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [novaCategoria, setNovaCategoria] = useState('');
+  const [showNovaCategoriaInput, setShowNovaCategoriaInput] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -78,8 +95,34 @@ export function AdicionarEventoDialog({
       descricao: '',
       categoria: 'interno',
       id_servico: '_none',
+      data_evento: undefined,
     },
   });
+
+  // Combine dynamic categories with default ones
+  const categorias = categoriasDinamicas?.length
+    ? categoriasDinamicas.map((c) => ({ value: c.nome, label: c.nome }))
+    : categoriasPadrao;
+
+  const handleAddCategoria = async () => {
+    if (!novaCategoria.trim()) return;
+    
+    try {
+      await createCategoria.mutateAsync({
+        nome: novaCategoria.trim(),
+        tipo: 'evento',
+        cor: 'blue',
+        icone: 'StickyNote',
+        ativo: true,
+      });
+      form.setValue('categoria', novaCategoria.trim());
+      setNovaCategoria('');
+      setShowNovaCategoriaInput(false);
+      toast.success('Categoria criada!');
+    } catch (error) {
+      toast.error('Erro ao criar categoria');
+    }
+  };
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
@@ -90,6 +133,7 @@ export function AdicionarEventoDialog({
         descricao: data.descricao,
         servicoId: data.id_servico === '_none' ? undefined : data.id_servico || undefined,
         categoria: data.categoria,
+        dataEvento: data.data_evento ? data.data_evento.toISOString() : undefined,
       });
       toast.success('Nota adicionada com sucesso!');
       form.reset();
@@ -143,24 +187,94 @@ export function AdicionarEventoDialog({
 
             <FormField
               control={form.control}
+              name="data_evento"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Data do Evento</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            'w-full pl-3 text-left font-normal',
+                            !field.value && 'text-muted-foreground'
+                          )}
+                        >
+                          {field.value ? (
+                            format(field.value, 'PPP', { locale: ptBR })
+                          ) : (
+                            <span>Usar data atual</span>
+                          )}
+                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) => date > new Date()}
+                        initialFocus
+                        locale={ptBR}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
               name="categoria"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma categoria" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {categorias.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Selecione uma categoria" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categorias.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={() => setShowNovaCategoriaInput(!showNovaCategoriaInput)}
+                      title="Adicionar categoria"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {showNovaCategoriaInput && (
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        placeholder="Nova categoria"
+                        value={novaCategoria}
+                        onChange={(e) => setNovaCategoria(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleAddCategoria}
+                        disabled={createCategoria.isPending}
+                      >
+                        {createCategoria.isPending ? 'Salvando...' : 'Criar'}
+                      </Button>
+                    </div>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
@@ -173,7 +287,7 @@ export function AdicionarEventoDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Vincular a Serviço</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Nenhum (opcional)" />

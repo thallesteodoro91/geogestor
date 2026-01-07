@@ -163,8 +163,8 @@ export function ClienteCentralControle({
           <CardContent>
             <ClienteTarefas
               clienteId={clienteId}
-              filtroCategoria={filtroCategoria || undefined}
-              filtroServico={filtroServico || undefined}
+              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
+              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
               onAddTarefa={() => setTarefaDialogOpen(true)}
             />
           </CardContent>

@@ -18,6 +18,7 @@ export type Database = {
         Row: {
           categoria: string
           created_at: string | null
+          data_evento: string | null
           descricao: string | null
           id_cliente: string
           id_evento: string
@@ -32,6 +33,7 @@ export type Database = {
         Insert: {
           categoria: string
           created_at?: string | null
+          data_evento?: string | null
           descricao?: string | null
           id_cliente: string
           id_evento?: string
@@ -46,6 +48,7 @@ export type Database = {
         Update: {
           categoria?: string
           created_at?: string | null
+          data_evento?: string | null
           descricao?: string | null
           id_cliente?: string
           id_evento?: string
@@ -202,6 +205,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "dim_categoria_despesa_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dim_categoria_evento: {
+        Row: {
+          ativo: boolean | null
+          cor: string | null
+          created_at: string | null
+          descricao: string | null
+          icone: string | null
+          id_categoria: string
+          nome: string
+          tenant_id: string | null
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id_categoria?: string
+          nome: string
+          tenant_id?: string | null
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean | null
+          cor?: string | null
+          created_at?: string | null
+          descricao?: string | null
+          icone?: string | null
+          id_categoria?: string
+          nome?: string
+          tenant_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dim_categoria_evento_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"

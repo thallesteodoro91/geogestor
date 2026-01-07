@@ -150,27 +150,9 @@ export function ClienteCentralControle({
         )}
       </div>
 
-      {/* Main content */}
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Checklist */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <ClipboardList className="h-5 w-5" />
-              Checklist de Pendências
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ClienteTarefas
-              clienteId={clienteId}
-              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
-              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
-              onAddTarefa={() => setTarefaDialogOpen(true)}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Timeline */}
+      {/* Main content - Timeline maior (2/3) e Checklist menor (1/3) */}
+      <div className="grid md:grid-cols-[2fr_1fr] gap-6">
+        {/* Timeline - Maior destaque */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -184,6 +166,26 @@ export function ClienteCentralControle({
               filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
               filtroServico={filtroServico === '_all' ? undefined : filtroServico}
               onAddEvento={() => setEventoDialogOpen(true)}
+              servicos={servicos}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Checklist - Menor */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Checklist
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ClienteTarefas
+              clienteId={clienteId}
+              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
+              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
+              onAddTarefa={() => setTarefaDialogOpen(true)}
+              servicos={servicos}
             />
           </CardContent>
         </Card>

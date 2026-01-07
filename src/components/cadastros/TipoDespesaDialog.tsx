@@ -68,7 +68,7 @@ export function TipoDespesaDialog({ open, onOpenChange, tipoDespesa, onSuccess }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl z-[1000]">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{tipoDespesa ? "Editar Tipo de Despesa" : "Novo Tipo de Despesa"}</DialogTitle>
         </DialogHeader>

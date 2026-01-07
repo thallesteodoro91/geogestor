@@ -494,7 +494,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto z-[1000]">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         {!orcamento && (
           <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground bg-muted/50 rounded-md border border-border/50">
             <Info className="w-3.5 h-3.5 shrink-0" />

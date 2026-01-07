@@ -4,6 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import { registrarServicoIniciado, registrarServicoConcluido } from '@/modules/crm/services/cliente-eventos.service';
 
 export interface Servico {
   id_servico: string;
@@ -67,14 +68,58 @@ export async function fetchServicosByPropriedade(propriedadeId: string) {
 
 export async function createServico(data: Omit<Servico, 'id_servico' | 'created_at' | 'updated_at'>) {
   const tenantId = await getCurrentTenantId();
-  return supabase.from('fato_servico').insert({ ...data, tenant_id: tenantId }).select().single();
+  const result = await supabase.from('fato_servico').insert({ ...data, tenant_id: tenantId }).select().single();
+  
+  // Registrar evento na timeline do cliente se houver cliente vinculado
+  if (result.data && !result.error && data.id_cliente) {
+    try {
+      await registrarServicoIniciado(
+        data.id_cliente,
+        result.data.id_servico,
+        result.data.nome_do_servico
+      );
+    } catch (e) {
+      console.error('Erro ao registrar evento de serviço:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function updateServico(id: string, data: Partial<Servico>) {
   const tenantId = await getCurrentTenantId();
+  
+  // Buscar dados atuais do serviço para verificar mudança de status
+  const { data: servicoAtual } = await supabase
+    .from('fato_servico')
+    .select('situacao_do_servico, id_cliente, nome_do_servico')
+    .eq('id_servico', id)
+    .single();
+  
   let query = supabase.from('fato_servico').update(data).eq('id_servico', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
-  return query.select().single();
+  const result = await query.select().single();
+  
+  // Registrar evento se o serviço foi concluído
+  if (
+    result.data && 
+    !result.error && 
+    servicoAtual?.id_cliente &&
+    data.situacao_do_servico === 'Concluído' && 
+    servicoAtual.situacao_do_servico !== 'Concluído'
+  ) {
+    try {
+      await registrarServicoConcluido(
+        servicoAtual.id_cliente,
+        id,
+        servicoAtual.nome_do_servico
+      );
+    } catch (e) {
+      console.error('Erro ao registrar evento de serviço concluído:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function deleteServico(id: string) {

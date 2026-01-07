@@ -4,6 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import { registrarPropriedadeAdicionada } from './cliente-eventos.service';
 
 export interface Propriedade {
   id_propriedade: string;
@@ -57,7 +58,22 @@ export async function fetchPropriedadesByCliente(clienteId: string) {
 
 export async function createPropriedade(data: Omit<Propriedade, 'id_propriedade' | 'created_at' | 'updated_at'>) {
   const tenantId = await getCurrentTenantId();
-  return supabase.from('dim_propriedade').insert({ ...data, tenant_id: tenantId }).select().single();
+  const result = await supabase.from('dim_propriedade').insert({ ...data, tenant_id: tenantId }).select().single();
+  
+  // Registrar evento na timeline do cliente se houver cliente vinculado
+  if (result.data && !result.error && data.id_cliente) {
+    try {
+      await registrarPropriedadeAdicionada(
+        data.id_cliente,
+        result.data.id_propriedade,
+        result.data.nome_da_propriedade
+      );
+    } catch (e) {
+      console.error('Erro ao registrar evento de propriedade:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function updatePropriedade(id: string, data: Partial<Propriedade>) {

@@ -4,6 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import { registrarCadastroCliente } from './cliente-eventos.service';
 
 export interface Cliente {
   id_cliente: string;
@@ -39,7 +40,18 @@ export async function fetchClienteById(id: string) {
 
 export async function createCliente(data: Omit<Cliente, 'id_cliente' | 'created_at' | 'updated_at'>) {
   const tenantId = await getCurrentTenantId();
-  return supabase.from('dim_cliente').insert({ ...data, tenant_id: tenantId }).select().single();
+  const result = await supabase.from('dim_cliente').insert({ ...data, tenant_id: tenantId }).select().single();
+  
+  // Registrar evento na timeline do cliente
+  if (result.data && !result.error) {
+    try {
+      await registrarCadastroCliente(result.data.id_cliente, result.data.nome);
+    } catch (e) {
+      console.error('Erro ao registrar evento de cadastro:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function updateCliente(id: string, data: Partial<Cliente>) {

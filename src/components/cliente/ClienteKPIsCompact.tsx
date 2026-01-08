@@ -30,7 +30,5 @@ export function ClienteKPIsCompact({
       maximumFractionDigits: 0
     }).format(value);
   };
-  return <Card>
-      
-    </Card>;
+  return;
 }

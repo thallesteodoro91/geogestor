@@ -230,14 +230,14 @@ export function ClienteInfoCompact({
                 Prospecção
               </h4>
               <div className="flex flex-wrap gap-2">
-                {(() => {
-              const config = getOrigemConfig(cliente.origem);
-              const IconComponent = config.icon;
-              return <Badge variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
-                      <IconComponent className="h-3 w-3" />
-                      {cliente.origem}
-                    </Badge>;
-            })()}
+                {cliente.origem.split(', ').map((origem, index) => {
+                  const config = getOrigemConfig(origem.trim());
+                  const IconComponent = config.icon;
+                  return <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+                    <IconComponent className="h-3 w-3" />
+                    {origem.trim()}
+                  </Badge>;
+                })}
               </div>
             </div>}
 

@@ -805,23 +805,12 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
 
       {/* II. Valores e Cálculos */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calculator className="h-5 w-5 text-orange-500" />
-            <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
-            <span className="text-sm text-muted-foreground">
-              ({fields.length} {fields.length === 1 ? 'serviço' : 'serviços'})
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => append({ id_servico: "", quantidade: 1, valor_unitario: 0 })}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Serviço
-          </Button>
+        <div className="flex items-center gap-2">
+          <Calculator className="h-5 w-5 text-orange-500" />
+          <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
+          <span className="text-sm text-muted-foreground">
+            ({fields.length} {fields.length === 1 ? 'serviço' : 'serviços'})
+          </span>
         </div>
 
         {fields.map((field, index) => {
@@ -884,6 +873,17 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             </div>
           );
         })}
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => append({ id_servico: "", quantidade: 1, valor_unitario: 0 })}
+          className="w-full"
+        >
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar Serviço
+        </Button>
 
         {/* Desconto Global */}
         <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">

@@ -1,64 +1,62 @@
 import { useState } from 'react';
 import { ClipboardList, Clock, Wrench, ListTodo } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ClienteTimeline } from './ClienteTimeline';
 import { ClienteTarefas } from './ClienteTarefas';
 import { AdicionarEventoDialog } from './AdicionarEventoDialog';
 import { AdicionarTarefaDialog } from './AdicionarTarefaDialog';
 import { useTarefasPendentes } from '@/hooks/useClienteTarefas';
-
 interface Servico {
   id_servico: string;
   nome_do_servico: string;
   situacao_do_servico?: string | null;
 }
-
 interface Propriedade {
   id_propriedade: string;
   nome_da_propriedade: string;
 }
-
 interface ClienteCentralControleProps {
   clienteId: string;
   servicos?: Servico[];
   propriedades?: Propriedade[];
 }
-
-const categorias = [
-  { value: '_all', label: 'Todas' },
-  { value: 'documento_cliente', label: 'Documentos' },
-  { value: 'prefeitura', label: 'Prefeitura' },
-  { value: 'cartorio', label: 'Cartório' },
-  { value: 'incra', label: 'INCRA' },
-  { value: 'trabalho', label: 'Trabalho' },
-  { value: 'interno', label: 'Interno' },
-];
-
+const categorias = [{
+  value: '_all',
+  label: 'Todas'
+}, {
+  value: 'documento_cliente',
+  label: 'Documentos'
+}, {
+  value: 'prefeitura',
+  label: 'Prefeitura'
+}, {
+  value: 'cartorio',
+  label: 'Cartório'
+}, {
+  value: 'incra',
+  label: 'INCRA'
+}, {
+  value: 'trabalho',
+  label: 'Trabalho'
+}, {
+  value: 'interno',
+  label: 'Interno'
+}];
 export function ClienteCentralControle({
   clienteId,
   servicos = [],
-  propriedades = [],
+  propriedades = []
 }: ClienteCentralControleProps) {
   const [filtroCategoria, setFiltroCategoria] = useState('_all');
   const [filtroServico, setFiltroServico] = useState('_all');
   const [eventoDialogOpen, setEventoDialogOpen] = useState(false);
   const [tarefaDialogOpen, setTarefaDialogOpen] = useState(false);
-
-  const { data: tarefasPendentes } = useTarefasPendentes(clienteId);
-
-  const servicosAtivos = servicos.filter(
-    (s) => s.situacao_do_servico && s.situacao_do_servico !== 'Concluído'
-  ).length;
-
-  return (
-    <div className="space-y-6">
+  const {
+    data: tarefasPendentes
+  } = useTarefasPendentes(clienteId);
+  const servicosAtivos = servicos.filter(s => s.situacao_do_servico && s.situacao_do_servico !== 'Concluído').length;
+  return <div className="space-y-6">
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -119,36 +117,7 @@ export function ClienteCentralControle({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Categoria" />
-          </SelectTrigger>
-          <SelectContent>
-            {categorias.map((cat) => (
-              <SelectItem key={cat.value} value={cat.value}>
-                {cat.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {servicos.length > 0 && (
-          <Select value={filtroServico} onValueChange={setFiltroServico}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Serviço" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">Todos os serviços</SelectItem>
-              {servicos.map((servico) => (
-                <SelectItem key={servico.id_servico} value={servico.id_servico}>
-                  {servico.nome_do_servico}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+      
 
       {/* Main content - Timeline maior (2/3) e Checklist menor (1/3) */}
       <div className="grid md:grid-cols-[2fr_1fr] gap-6">
@@ -161,13 +130,7 @@ export function ClienteCentralControle({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ClienteTimeline
-              clienteId={clienteId}
-              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
-              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
-              onAddEvento={() => setEventoDialogOpen(true)}
-              servicos={servicos}
-            />
+            <ClienteTimeline clienteId={clienteId} filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria} filtroServico={filtroServico === '_all' ? undefined : filtroServico} onAddEvento={() => setEventoDialogOpen(true)} servicos={servicos} />
           </CardContent>
         </Card>
 
@@ -180,31 +143,14 @@ export function ClienteCentralControle({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ClienteTarefas
-              clienteId={clienteId}
-              filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria}
-              filtroServico={filtroServico === '_all' ? undefined : filtroServico}
-              onAddTarefa={() => setTarefaDialogOpen(true)}
-              servicos={servicos}
-            />
+            <ClienteTarefas clienteId={clienteId} filtroCategoria={filtroCategoria === '_all' ? undefined : filtroCategoria} filtroServico={filtroServico === '_all' ? undefined : filtroServico} onAddTarefa={() => setTarefaDialogOpen(true)} servicos={servicos} />
           </CardContent>
         </Card>
       </div>
 
       {/* Dialogs */}
-      <AdicionarEventoDialog
-        open={eventoDialogOpen}
-        onOpenChange={setEventoDialogOpen}
-        clienteId={clienteId}
-        servicos={servicos}
-      />
+      <AdicionarEventoDialog open={eventoDialogOpen} onOpenChange={setEventoDialogOpen} clienteId={clienteId} servicos={servicos} />
 
-      <AdicionarTarefaDialog
-        open={tarefaDialogOpen}
-        onOpenChange={setTarefaDialogOpen}
-        clienteId={clienteId}
-        servicos={servicos}
-      />
-    </div>
-  );
+      <AdicionarTarefaDialog open={tarefaDialogOpen} onOpenChange={setTarefaDialogOpen} clienteId={clienteId} servicos={servicos} />
+    </div>;
 }

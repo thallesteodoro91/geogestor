@@ -271,6 +271,33 @@ export async function registrarOrcamentoConvertido(
   });
 }
 
+export async function registrarDespesaAdicionada(
+  clienteId: string,
+  servicoId: string,
+  valorDespesa: number,
+  categoriaDespesa?: string,
+  nomeServico?: string
+): Promise<ClienteEvento> {
+  const valorFormatado = valorDespesa.toLocaleString('pt-BR', { 
+    style: 'currency', 
+    currency: 'BRL' 
+  });
+  
+  const descricao = categoriaDespesa
+    ? `Despesa de ${categoriaDespesa} (${valorFormatado}) adicionada ao serviço "${nomeServico || 'N/A'}"`
+    : `Despesa de ${valorFormatado} adicionada ao serviço "${nomeServico || 'N/A'}"`;
+
+  return createEvento({
+    id_cliente: clienteId,
+    id_servico: servicoId,
+    tipo: 'despesa',
+    categoria: 'financeiro',
+    titulo: 'Despesa registrada',
+    descricao,
+    manual: false,
+  });
+}
+
 export async function registrarNotaManual(
   clienteId: string,
   titulo: string,

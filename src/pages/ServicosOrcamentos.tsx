@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, Download, TrendingUp, DollarSign, Calculator, CalendarIcon, X, Info } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, Download, TrendingUp, DollarSign, Calculator, CalendarIcon, X, Info, Wand2 } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Badge } from "@/components/ui/badge";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
+import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
 import { DespesasPendentes } from "@/components/despesas/DespesasPendentes";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 export default function ServicosOrcamentos() {
   const [isServicoDialogOpen, setIsServicoDialogOpen] = useState(false);
   const [isOrcamentoDialogOpen, setIsOrcamentoDialogOpen] = useState(false);
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingServico, setEditingServico] = useState<any>(null);
   const [editingOrcamento, setEditingOrcamento] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -399,10 +401,15 @@ export default function ServicosOrcamentos() {
                 )}
               </div>
               
-              <Button onClick={handleNewOrcamento} className="ml-auto">
-                <Plus className="mr-2 h-4 w-4" />
-                Novo Orçamento
-              </Button>
+              <div className="flex gap-2 ml-auto">
+                <Button onClick={() => setIsWizardOpen(true)} variant="default">
+                  <Wand2 className="mr-2 h-4 w-4" />
+                  Novo Orçamento
+                </Button>
+                <Button onClick={handleNewOrcamento} variant="outline" size="icon" title="Modo avançado">
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
 
             {/* Disclaimer do filtro */}
@@ -539,6 +546,15 @@ export default function ServicosOrcamentos() {
             refetchOrcamentos();
             setIsOrcamentoDialogOpen(false);
             setEditingOrcamento(null);
+          }}
+        />
+
+        <OrcamentoWizard
+          open={isWizardOpen}
+          onOpenChange={setIsWizardOpen}
+          onSuccess={() => {
+            refetchOrcamentos();
+            setIsWizardOpen(false);
           }}
         />
 

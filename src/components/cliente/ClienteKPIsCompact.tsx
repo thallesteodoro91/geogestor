@@ -31,8 +31,6 @@ export function ClienteKPIsCompact({
     }).format(value);
   };
   return <Card>
-      <CardContent className="p-4">
-        
-      </CardContent>
+      
     </Card>;
 }

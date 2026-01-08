@@ -4,6 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import { registrarDespesaAdicionada } from '@/modules/crm/services/cliente-eventos.service';
 
 export interface Despesa {
   id_despesas: string;
@@ -51,7 +52,44 @@ export async function fetchDespesasByPeriodo(dataInicio: string, dataFim: string
 
 export async function createDespesa(data: Omit<Despesa, 'id_despesas' | 'created_at' | 'updated_at'>) {
   const tenantId = await getCurrentTenantId();
-  return supabase.from('fato_despesas').insert({ ...data, tenant_id: tenantId }).select().single();
+  const result = await supabase.from('fato_despesas').insert({ ...data, tenant_id: tenantId }).select().single();
+  
+  // Registrar evento na timeline se a despesa estiver vinculada a um serviço
+  if (result.data && !result.error && data.id_servico) {
+    try {
+      // Buscar dados do serviço (cliente + nome)
+      const { data: servico } = await supabase
+        .from('fato_servico')
+        .select('id_cliente, nome_do_servico')
+        .eq('id_servico', data.id_servico)
+        .single();
+      
+      if (servico?.id_cliente) {
+        // Buscar categoria da despesa
+        let categoriaDespesa: string | undefined;
+        if (data.id_tipodespesa) {
+          const { data: tipo } = await supabase
+            .from('dim_tipodespesa')
+            .select('categoria')
+            .eq('id_tipodespesa', data.id_tipodespesa)
+            .single();
+          categoriaDespesa = tipo?.categoria;
+        }
+        
+        await registrarDespesaAdicionada(
+          servico.id_cliente,
+          data.id_servico,
+          data.valor_da_despesa,
+          categoriaDespesa,
+          servico.nome_do_servico
+        );
+      }
+    } catch (e) {
+      console.error('Erro ao registrar evento de despesa:', e);
+    }
+  }
+  
+  return result;
 }
 
 export async function updateDespesa(id: string, data: Partial<Despesa>) {

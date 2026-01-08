@@ -1,13 +1,41 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, MapPin, FileText, User, Building, StickyNote, SlidersHorizontal, ChevronRight } from "lucide-react";
+import { 
+  Mail, Phone, MapPin, FileText, User, Building, StickyNote, SlidersHorizontal, ChevronRight,
+  UserCircle, Users, Briefcase, Tractor, Building2, Factory,
+  Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star
+} from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
 interface ClienteInfoCompactProps {
   cliente: Tables<"dim_cliente">;
   onOpenCentralControle?: () => void;
 }
+
+// Mapeamento de categorias com ícones e cores
+const categoriaConfig: Record<string, { icon: React.ElementType; color: string; bg: string; border: string }> = {
+  'Pessoa Física': { icon: UserCircle, color: 'text-blue-600', bg: 'bg-blue-500/15', border: 'border-blue-500/30' },
+  'Pessoa Jurídica': { icon: Building2, color: 'text-violet-600', bg: 'bg-violet-500/15', border: 'border-violet-500/30' },
+  'Produtor Rural': { icon: Tractor, color: 'text-green-600', bg: 'bg-green-500/15', border: 'border-green-500/30' },
+  'Empresa': { icon: Factory, color: 'text-slate-600', bg: 'bg-slate-500/15', border: 'border-slate-500/30' },
+  'Parceiro': { icon: Users, color: 'text-cyan-600', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30' },
+};
+
+// Mapeamento de origens com ícones e cores
+const origemConfig: Record<string, { icon: React.ElementType; color: string; bg: string; border: string }> = {
+  'Indicação': { icon: UserPlus, color: 'text-emerald-600', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
+  'Site': { icon: Globe, color: 'text-blue-600', bg: 'bg-blue-500/15', border: 'border-blue-500/30' },
+  'Redes Sociais': { icon: Share2, color: 'text-pink-600', bg: 'bg-pink-500/15', border: 'border-pink-500/30' },
+  'Google': { icon: Search, color: 'text-amber-600', bg: 'bg-amber-500/15', border: 'border-amber-500/30' },
+  'Evento': { icon: CalendarDays, color: 'text-purple-600', bg: 'bg-purple-500/15', border: 'border-purple-500/30' },
+  'Marketing': { icon: Megaphone, color: 'text-orange-600', bg: 'bg-orange-500/15', border: 'border-orange-500/30' },
+  'WhatsApp': { icon: MessageCircle, color: 'text-green-600', bg: 'bg-green-500/15', border: 'border-green-500/30' },
+  'Parceria': { icon: Briefcase, color: 'text-indigo-600', bg: 'bg-indigo-500/15', border: 'border-indigo-500/30' },
+  'Recorrente': { icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30' },
+};
+
+const defaultConfig = { icon: User, color: 'text-muted-foreground', bg: 'bg-muted', border: 'border-muted' };
 
 export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteInfoCompactProps) {
   const getSituacaoBadgeClass = () => {
@@ -19,6 +47,16 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
       default:
         return 'bg-muted text-muted-foreground';
     }
+  };
+
+  const getCategoriaConfig = (categoria: string | null) => {
+    if (!categoria) return defaultConfig;
+    return categoriaConfig[categoria] || defaultConfig;
+  };
+
+  const getOrigemConfig = (origem: string | null) => {
+    if (!origem) return defaultConfig;
+    return origemConfig[origem] || defaultConfig;
   };
 
   return (
@@ -80,18 +118,26 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
                 Perfil
               </h4>
               <div className="flex flex-wrap gap-2">
-                {cliente.categoria && (
-                  <Badge variant="secondary" className="text-xs font-medium gap-1">
-                    <User className="h-3 w-3" />
-                    {cliente.categoria}
-                  </Badge>
-                )}
-                {cliente.origem && (
-                  <Badge variant="outline" className="text-xs font-medium gap-1 border-purple-500/30 text-purple-600">
-                    <Building className="h-3 w-3" />
-                    {cliente.origem}
-                  </Badge>
-                )}
+                {cliente.categoria && (() => {
+                  const config = getCategoriaConfig(cliente.categoria);
+                  const IconComponent = config.icon;
+                  return (
+                    <Badge variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+                      <IconComponent className="h-3 w-3" />
+                      {cliente.categoria}
+                    </Badge>
+                  );
+                })()}
+                {cliente.origem && (() => {
+                  const config = getOrigemConfig(cliente.origem);
+                  const IconComponent = config.icon;
+                  return (
+                    <Badge variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+                      <IconComponent className="h-3 w-3" />
+                      {cliente.origem}
+                    </Badge>
+                  );
+                })()}
               </div>
               {(cliente.cpf || cliente.cnpj) && (
                 <div className="flex flex-wrap gap-3 mt-2">

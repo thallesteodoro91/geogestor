@@ -39,82 +39,105 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
           </div>
         </div>
 
-        {/* Conteúdo principal com grid compacto */}
-        <div className="flex-1 p-3 space-y-3 overflow-auto">
-          {/* Contato - linha única com ícones */}
-          <div className="flex flex-wrap gap-3">
-            {cliente.email && (
-              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
-                <Mail className="h-3 w-3 text-blue-500" />
-                <span className="truncate max-w-[140px]">{cliente.email}</span>
+        {/* Conteúdo principal organizado por seções */}
+        <div className="flex-1 p-4 space-y-4 overflow-auto">
+          
+          {/* SEÇÃO: Contato */}
+          {(cliente.email || cliente.telefone || cliente.celular) && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="h-1 w-1 rounded-full bg-blue-500" />
+                Contato
+              </h4>
+              <div className="grid gap-1.5">
+                {cliente.email && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Mail className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                    <span className="truncate">{cliente.email}</span>
+                  </div>
+                )}
+                {cliente.telefone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                    <span>{cliente.telefone}</span>
+                  </div>
+                )}
+                {cliente.celular && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
+                    <span>{cliente.celular}</span>
+                  </div>
+                )}
               </div>
-            )}
-            {cliente.telefone && (
-              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
-                <Phone className="h-3 w-3 text-green-500" />
-                <span>{cliente.telefone}</span>
-              </div>
-            )}
-            {cliente.celular && (
-              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
-                <Phone className="h-3 w-3 text-green-500" />
-                <span>{cliente.celular}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Info comercial e documentos em grid */}
-          <div className="grid grid-cols-2 gap-2">
-            {/* Categoria e Origem */}
-            <div className="space-y-1.5">
-              {cliente.categoria && (
-                <Badge variant="secondary" className="text-xs font-medium">
-                  {cliente.categoria}
-                </Badge>
-              )}
-              {cliente.origem && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Building className="h-3 w-3 text-purple-500" />
-                  <span>{cliente.origem}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Documentos */}
-            <div className="space-y-1">
-              {cliente.cpf && (
-                <div className="flex items-center gap-1.5 text-xs">
-                  <FileText className="h-3 w-3 text-orange-500" />
-                  <span className="text-muted-foreground">CPF:</span>
-                  <span className="font-mono text-[10px]">{cliente.cpf}</span>
-                </div>
-              )}
-              {cliente.cnpj && (
-                <div className="flex items-center gap-1.5 text-xs">
-                  <FileText className="h-3 w-3 text-orange-500" />
-                  <span className="text-muted-foreground">CNPJ:</span>
-                  <span className="font-mono text-[10px]">{cliente.cnpj}</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Endereço */}
-          {cliente.endereco && (
-            <div className="flex items-start gap-1.5 text-xs bg-muted/30 rounded-md px-2 py-1.5">
-              <MapPin className="h-3 w-3 text-red-500 flex-shrink-0 mt-0.5" />
-              <span className="line-clamp-2 text-muted-foreground">{cliente.endereco}</span>
             </div>
           )}
 
-          {/* Observações */}
-          {cliente.anotacoes && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md px-2 py-1.5">
-              <div className="flex items-center gap-1 mb-0.5">
-                <StickyNote className="h-3 w-3 text-yellow-600" />
-                <span className="text-[10px] font-semibold text-yellow-700 uppercase">Observações</span>
+          {/* SEÇÃO: Perfil */}
+          {(cliente.categoria || cliente.origem || cliente.cpf || cliente.cnpj) && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="h-1 w-1 rounded-full bg-purple-500" />
+                Perfil
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {cliente.categoria && (
+                  <Badge variant="secondary" className="text-xs font-medium gap-1">
+                    <User className="h-3 w-3" />
+                    {cliente.categoria}
+                  </Badge>
+                )}
+                {cliente.origem && (
+                  <Badge variant="outline" className="text-xs font-medium gap-1 border-purple-500/30 text-purple-600">
+                    <Building className="h-3 w-3" />
+                    {cliente.origem}
+                  </Badge>
+                )}
               </div>
-              <p className="text-xs text-muted-foreground line-clamp-2">{cliente.anotacoes}</p>
+              {(cliente.cpf || cliente.cnpj) && (
+                <div className="flex flex-wrap gap-3 mt-2">
+                  {cliente.cpf && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <FileText className="h-3 w-3 text-orange-500" />
+                      <span>CPF:</span>
+                      <span className="font-mono">{cliente.cpf}</span>
+                    </div>
+                  )}
+                  {cliente.cnpj && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <FileText className="h-3 w-3 text-orange-500" />
+                      <span>CNPJ:</span>
+                      <span className="font-mono">{cliente.cnpj}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* SEÇÃO: Localização */}
+          {cliente.endereco && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="h-1 w-1 rounded-full bg-red-500" />
+                Localização
+              </h4>
+              <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                <span className="line-clamp-2">{cliente.endereco}</span>
+              </div>
+            </div>
+          )}
+
+          {/* SEÇÃO: Observações */}
+          {cliente.anotacoes && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <div className="h-1 w-1 rounded-full bg-yellow-500" />
+                Observações
+              </h4>
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md px-3 py-2">
+                <p className="text-xs text-muted-foreground line-clamp-3">{cliente.anotacoes}</p>
+              </div>
             </div>
           )}
         </div>

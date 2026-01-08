@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
+import { createDespesa, updateDespesa, deleteDespesa } from "@/modules/finance/services/despesa.service";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,37 +135,29 @@ export default function Despesas() {
     },
   });
 
-  // Criar/Atualizar despesa
+  // Criar/Atualizar despesa usando serviço centralizado
   const mutation = useMutation({
     mutationFn: async (data: typeof formData & { id_despesas?: string }) => {
-      const tenantId = await getCurrentTenantId();
-      
-      if (!tenantId) {
-        throw new Error('Usuário não está associado a um tenant');
-      }
-      
       if (data.id_despesas) {
-        const { error } = await supabase
-          .from('fato_despesas')
-          .update({
-            valor_da_despesa: parseFloat(data.valor_da_despesa),
-            data_da_despesa: data.data_da_despesa,
-            id_tipodespesa: data.id_tipodespesa || null,
-            id_servico: data.id_servico || null,
-            observacoes: data.observacoes,
-          })
-          .eq('id_despesas', data.id_despesas);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('fato_despesas').insert({
+        // Update
+        const result = await updateDespesa(data.id_despesas, {
           valor_da_despesa: parseFloat(data.valor_da_despesa),
           data_da_despesa: data.data_da_despesa,
           id_tipodespesa: data.id_tipodespesa || null,
           id_servico: data.id_servico || null,
           observacoes: data.observacoes,
-          tenant_id: tenantId,
         });
-        if (error) throw error;
+        if (result.error) throw result.error;
+      } else {
+        // Create - usa o serviço que já registra na timeline automaticamente
+        const result = await createDespesa({
+          valor_da_despesa: parseFloat(data.valor_da_despesa),
+          data_da_despesa: data.data_da_despesa,
+          id_tipodespesa: data.id_tipodespesa || null,
+          id_servico: data.id_servico || null,
+          observacoes: data.observacoes,
+        });
+        if (result.error) throw result.error;
       }
     },
     onSuccess: () => {
@@ -173,22 +166,22 @@ export default function Despesas() {
       setIsDialogOpen(false);
       resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error(`Erro: ${error.message}`);
     },
   });
 
-  // Deletar despesa
+  // Deletar despesa usando serviço centralizado
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('fato_despesas').delete().eq('id_despesas', id);
-      if (error) throw error;
+      const result = await deleteDespesa(id);
+      if (result.error) throw result.error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
       toast.success("Despesa excluída!");
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast.error(`Erro ao excluir: ${error.message}`);
     },
   });

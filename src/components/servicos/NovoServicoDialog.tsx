@@ -11,6 +11,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
 import { createServico, updateServico } from '@/modules/operations';
 import { registrarCriacaoServico, registrarMudancaStatus } from '@/modules/operations/services/servico-eventos.service';
+import { SERVICE_STATUS, SERVICE_STATUS_OPTIONS } from '@/constants/serviceStatus';
 
 export interface ServicoFormData {
   nome_do_servico: string;
@@ -29,13 +30,6 @@ interface NovoServicoDialogProps {
   editingServico?: any;
 }
 
-const STATUS_OPTIONS = [
-  { value: 'Pendente', label: 'Pendente' },
-  { value: 'Em Andamento', label: 'Em Andamento' },
-  { value: 'Em Revisão', label: 'Em Revisão' },
-  { value: 'Concluído', label: 'Concluído' }
-];
-
 const initialFormData: ServicoFormData = {
   nome_do_servico: '',
   descricao: '',
@@ -44,7 +38,7 @@ const initialFormData: ServicoFormData = {
   id_orcamento: '',
   data_do_servico_inicio: '',
   data_do_servico_fim: '',
-  situacao_do_servico: 'Pendente'
+  situacao_do_servico: SERVICE_STATUS.PENDENTE
 };
 
 export function NovoServicoDialog({
@@ -308,7 +302,7 @@ export function NovoServicoDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {STATUS_OPTIONS.map((s) => (
+                {SERVICE_STATUS_OPTIONS.map((s) => (
                   <SelectItem key={s.value} value={s.value}>
                     {s.label}
                   </SelectItem>

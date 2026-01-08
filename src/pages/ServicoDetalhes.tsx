@@ -28,31 +28,18 @@ import {
   NovoServicoDialog 
 } from "@/components/servicos";
 import { fetchServicoById } from "@/modules/operations";
+import { SERVICE_STATUS, getStatusBadgeVariant, isServiceInProgress } from "@/constants/serviceStatus";
 
 const getStatusIcon = (status: string) => {
   switch (status) {
-    case "Concluído":
+    case SERVICE_STATUS.CONCLUIDO:
       return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    case "Em Andamento":
-    case "Em Revisão":
+    case SERVICE_STATUS.EM_ANDAMENTO:
+    case SERVICE_STATUS.EM_REVISAO:
       return <Clock className="h-5 w-5 text-amber-500" />;
-    case "Pendente":
+    case SERVICE_STATUS.PENDENTE:
     default:
       return <AlertCircle className="h-5 w-5 text-red-500" />;
-  }
-};
-
-const getStatusBadgeVariant = (status: string) => {
-  switch (status) {
-    case "Concluído":
-      return "default";
-    case "Em Andamento":
-      return "secondary";
-    case "Em Revisão":
-      return "outline";
-    case "Pendente":
-    default:
-      return "destructive";
   }
 };
 

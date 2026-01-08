@@ -271,11 +271,15 @@ const CalendarioDetalhes = () => {
               <div className="space-y-2 text-sm text-muted-foreground">
                 <p>
                   Criado em:{" "}
-                  {format(new Date((detalhes as any).created_at), "dd/MM/yyyy", { locale: ptBR })}
+                  {(detalhes as any).created_at 
+                    ? format(new Date((detalhes as any).created_at), "dd/MM/yyyy", { locale: ptBR })
+                    : "-"}
                 </p>
                 <p>
                   Atualizado em:{" "}
-                  {format(new Date((detalhes as any).updated_at), "dd/MM/yyyy", { locale: ptBR })}
+                  {(detalhes as any).updated_at 
+                    ? format(new Date((detalhes as any).updated_at), "dd/MM/yyyy", { locale: ptBR })
+                    : "-"}
                 </p>
               </div>
             </Card>

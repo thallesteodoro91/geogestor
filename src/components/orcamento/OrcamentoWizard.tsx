@@ -18,6 +18,11 @@ import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
 import { cn } from "@/lib/utils";
 import { despesaOrcamentoSchema } from "@/lib/validations";
 import { z } from "zod";
+import { 
+  registrarCadastroCliente,
+  registrarPropriedadeAdicionada,
+  registrarOrcamentoEmitido
+} from '@/modules/crm/services/cliente-eventos.service';
 
 interface OrcamentoWizardProps {
   open: boolean;
@@ -279,6 +284,14 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       setNewClienteId(newCliente.id_cliente);
       setValue("id_cliente", newCliente.id_cliente);
       setClientes(prev => [...prev, { id_cliente: newCliente.id_cliente, nome: newCliente.nome }]);
+      
+      // Registrar evento na timeline
+      try {
+        await registrarCadastroCliente(newCliente.id_cliente, data.nome);
+      } catch (e) {
+        console.error('Erro ao registrar evento de cliente:', e);
+      }
+      
       toast.success("Cliente criado com sucesso!");
       return true;
     } catch (error: any) {
@@ -312,9 +325,25 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
 
       if (error) throw error;
       
+      const clienteIdProp = newClienteId || watchedClienteId;
+      
       setNewPropriedadeId(newProp.id_propriedade);
       setValue("id_propriedade", newProp.id_propriedade);
       setPropriedades(prev => [...prev, { id_propriedade: newProp.id_propriedade, nome_da_propriedade: newProp.nome_da_propriedade }]);
+      
+      // Registrar evento na timeline
+      if (clienteIdProp) {
+        try {
+          await registrarPropriedadeAdicionada(
+            clienteIdProp,
+            newProp.id_propriedade,
+            data.nome_da_propriedade
+          );
+        } catch (e) {
+          console.error('Erro ao registrar evento de propriedade:', e);
+        }
+      }
+      
       toast.success("Propriedade criada com sucesso!");
       return true;
     } catch (error: any) {
@@ -486,6 +515,13 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           `Orçamento ${codigoOrcamento} criado com sucesso`,
           '/servicos-orcamentos'
         );
+        
+        // Registrar evento de orçamento na timeline
+        try {
+          await registrarOrcamentoEmitido(effectiveClienteId, codigoOrcamento);
+        } catch (e) {
+          console.error('Erro ao registrar evento de orçamento:', e);
+        }
       }
 
       toast.success(orcamento ? "Orçamento atualizado!" : "Orçamento criado!");

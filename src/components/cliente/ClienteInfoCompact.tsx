@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, MapPin, FileText, User, Building, StickyNote, LayoutDashboard } from "lucide-react";
+import { Mail, Phone, MapPin, FileText, User, Building, StickyNote, LayoutDashboard, ChevronRight } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
 interface ClienteInfoCompactProps {
@@ -13,119 +13,123 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
   const getSituacaoBadgeClass = () => {
     switch(cliente.situacao) {
       case 'Ativo':
-        return 'bg-green-500 hover:bg-green-600 text-white';
+        return 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30';
       case 'Inativo':
-        return 'bg-yellow-500 hover:bg-yellow-600 text-white';
+        return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
       default:
-        return 'bg-muted';
+        return 'bg-muted text-muted-foreground';
     }
   };
 
   return (
-    <Card className="h-full flex flex-col">
-      <CardContent className="p-4 flex flex-col flex-1">
-        {/* Header com nome e status */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold">{cliente.nome}</span>
+    <Card className="h-full flex flex-col overflow-hidden">
+      <CardContent className="p-0 flex flex-col flex-1">
+        {/* Header com nome e status - fundo com gradiente sutil */}
+        <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-3 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="h-4 w-4 text-primary" />
+              </div>
+              <span className="font-semibold text-base">{cliente.nome}</span>
+            </div>
+            <Badge variant="outline" className={getSituacaoBadgeClass()}>
+              {cliente.situacao || 'Não definido'}
+            </Badge>
           </div>
-          <Badge className={getSituacaoBadgeClass()}>
-            {cliente.situacao || 'Não definido'}
-          </Badge>
         </div>
 
-        {/* Grid de informações reorganizado */}
-        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-          {/* Coluna Esquerda - Contato */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Contato</h4>
+        {/* Conteúdo principal com grid compacto */}
+        <div className="flex-1 p-3 space-y-3 overflow-auto">
+          {/* Contato - linha única com ícones */}
+          <div className="flex flex-wrap gap-3">
             {cliente.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="truncate text-xs">{cliente.email}</span>
+              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
+                <Mail className="h-3 w-3 text-blue-500" />
+                <span className="truncate max-w-[140px]">{cliente.email}</span>
               </div>
             )}
             {cliente.telefone && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs">{cliente.telefone}</span>
+              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
+                <Phone className="h-3 w-3 text-green-500" />
+                <span>{cliente.telefone}</span>
               </div>
             )}
             {cliente.celular && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs">{cliente.celular}</span>
+              <div className="flex items-center gap-1.5 text-xs bg-muted/50 rounded-md px-2 py-1">
+                <Phone className="h-3 w-3 text-green-500" />
+                <span>{cliente.celular}</span>
               </div>
             )}
           </div>
 
-          {/* Coluna Direita - Comercial */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Comercial</h4>
-            {cliente.categoria && (
-              <Badge variant="outline" className="text-xs">{cliente.categoria}</Badge>
-            )}
-            {cliente.origem && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Building className="h-3 w-3" />
-                <span>{cliente.origem}</span>
-              </div>
-            )}
-          </div>
-
-          {/* Documentos */}
-          {(cliente.cpf || cliente.cnpj) && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Documentos</h4>
-              {cliente.cpf && (
-                <div className="flex items-center gap-2 text-xs">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>CPF: {cliente.cpf}</span>
-                </div>
+          {/* Info comercial e documentos em grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {/* Categoria e Origem */}
+            <div className="space-y-1.5">
+              {cliente.categoria && (
+                <Badge variant="secondary" className="text-xs font-medium">
+                  {cliente.categoria}
+                </Badge>
               )}
-              {cliente.cnpj && (
-                <div className="flex items-center gap-2 text-xs">
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>CNPJ: {cliente.cnpj}</span>
+              {cliente.origem && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Building className="h-3 w-3 text-purple-500" />
+                  <span>{cliente.origem}</span>
                 </div>
               )}
             </div>
-          )}
+
+            {/* Documentos */}
+            <div className="space-y-1">
+              {cliente.cpf && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <FileText className="h-3 w-3 text-orange-500" />
+                  <span className="text-muted-foreground">CPF:</span>
+                  <span className="font-mono text-[10px]">{cliente.cpf}</span>
+                </div>
+              )}
+              {cliente.cnpj && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <FileText className="h-3 w-3 text-orange-500" />
+                  <span className="text-muted-foreground">CNPJ:</span>
+                  <span className="font-mono text-[10px]">{cliente.cnpj}</span>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Endereço */}
           {cliente.endereco && (
-            <div className="space-y-2">
-              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Endereço</h4>
-              <div className="flex items-start gap-2 text-xs">
-                <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <span className="line-clamp-2">{cliente.endereco}</span>
+            <div className="flex items-start gap-1.5 text-xs bg-muted/30 rounded-md px-2 py-1.5">
+              <MapPin className="h-3 w-3 text-red-500 flex-shrink-0 mt-0.5" />
+              <span className="line-clamp-2 text-muted-foreground">{cliente.endereco}</span>
+            </div>
+          )}
+
+          {/* Observações */}
+          {cliente.anotacoes && (
+            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md px-2 py-1.5">
+              <div className="flex items-center gap-1 mb-0.5">
+                <StickyNote className="h-3 w-3 text-yellow-600" />
+                <span className="text-[10px] font-semibold text-yellow-700 uppercase">Observações</span>
               </div>
+              <p className="text-xs text-muted-foreground line-clamp-2">{cliente.anotacoes}</p>
             </div>
           )}
         </div>
 
-        {/* Observações */}
-        {cliente.anotacoes && (
-          <div className="mt-3 pt-3 border-t">
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 mb-1">
-              <StickyNote className="h-3 w-3 text-yellow-500" />
-              Observações
-            </h4>
-            <p className="text-xs text-muted-foreground line-clamp-2">{cliente.anotacoes}</p>
-          </div>
-        )}
-
         {/* Botão Central de Controle - Destaque */}
         {onOpenCentralControle && (
-          <div className="mt-auto pt-4">
+          <div className="p-3 border-t bg-muted/30">
             <Button 
               onClick={onOpenCentralControle}
-              className="w-full gap-2"
-              size="lg"
+              className="w-full gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md"
+              size="default"
             >
-              <LayoutDashboard className="h-5 w-5" />
+              <LayoutDashboard className="h-4 w-4" />
               Central de Controle
+              <ChevronRight className="h-4 w-4 ml-auto" />
             </Button>
           </div>
         )}

@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { DespesasPendentes } from "@/components/despesas/DespesasPendentes";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -28,6 +29,8 @@ export default function ServicosOrcamentos() {
   const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
   const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'servico' | 'orcamento' } | null>(null);
 
   const { data: servicos = [], isLoading: loadingServicos, refetch: refetchServicos } = useQuery({
     queryKey: ['servicos'],
@@ -93,37 +96,48 @@ export default function ServicosOrcamentos() {
   });
 
   const handleDeleteServico = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
-    
-    const { error } = await supabase
-      .from('fato_servico')
-      .delete()
-      .eq('id_servico', id);
-
-    if (error) {
-      toast.error('Erro ao excluir serviço');
-      return;
-    }
-
-    toast.success('Serviço excluído com sucesso!');
-    refetchServicos();
+    setDeleteTarget({ id, type: 'servico' });
+    setDeleteConfirmOpen(true);
   };
 
   const handleDeleteOrcamento = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este orçamento?')) return;
+    setDeleteTarget({ id, type: 'orcamento' });
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     
-    const { error } = await supabase
-      .from('fato_orcamento')
-      .delete()
-      .eq('id_orcamento', id);
+    const { id, type } = deleteTarget;
+    
+    if (type === 'servico') {
+      const { error } = await supabase
+        .from('fato_servico')
+        .delete()
+        .eq('id_servico', id);
 
-    if (error) {
-      toast.error('Erro ao excluir orçamento');
-      return;
+      if (error) {
+        toast.error('Erro ao excluir serviço');
+      } else {
+        toast.success('Serviço excluído com sucesso!');
+        refetchServicos();
+      }
+    } else {
+      const { error } = await supabase
+        .from('fato_orcamento')
+        .delete()
+        .eq('id_orcamento', id);
+
+      if (error) {
+        toast.error('Erro ao excluir orçamento');
+      } else {
+        toast.success('Orçamento excluído com sucesso!');
+        refetchOrcamentos();
+      }
     }
-
-    toast.success('Orçamento excluído com sucesso!');
-    refetchOrcamentos();
+    
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
   };
 
   const handleEditServico = (servico: any) => {
@@ -519,6 +533,15 @@ export default function ServicosOrcamentos() {
             setIsOrcamentoDialogOpen(false);
             setEditingOrcamento(null);
           }}
+        />
+
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title={deleteTarget?.type === 'servico' ? 'Excluir serviço' : 'Excluir orçamento'}
+          description={`Tem certeza que deseja excluir este ${deleteTarget?.type === 'servico' ? 'serviço' : 'orçamento'}? Esta ação não pode ser desfeita.`}
+          confirmLabel="Excluir"
+          onConfirm={confirmDelete}
         />
       </div>
     </AppLayout>

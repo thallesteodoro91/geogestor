@@ -19,6 +19,7 @@ import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { despesaSchema } from "@/lib/validations";
 import { TimeGranularityControl } from "@/components/controls/TimeGranularityControl";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, format, addMonths, addQuarters, addYears } from "date-fns";
 
 export default function Despesas() {
@@ -42,6 +43,8 @@ export default function Despesas() {
     id_servico: "",
     observacoes: "",
   });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Atualizar filtros de data baseado na granularidade e offset selecionados
   const getDateRangeByGranularity = useCallback((gran: 'month' | 'quarter' | 'year', offset: number) => {
@@ -618,9 +621,8 @@ export default function Despesas() {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            if (confirm('Tem certeza que deseja excluir esta despesa?')) {
-                              deleteMutation.mutate(despesa.id_despesas);
-                            }
+                            setDeleteTargetId(despesa.id_despesas);
+                            setDeleteConfirmOpen(true);
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -633,6 +635,21 @@ export default function Despesas() {
             </Table>
           </CardContent>
         </Card>
+
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Excluir despesa"
+          description="Tem certeza que deseja excluir esta despesa? Esta ação não pode ser desfeita."
+          confirmLabel="Excluir"
+          onConfirm={() => {
+            if (deleteTargetId) {
+              deleteMutation.mutate(deleteTargetId);
+            }
+            setDeleteConfirmOpen(false);
+            setDeleteTargetId(null);
+          }}
+        />
       </div>
     </AppLayout>
   );

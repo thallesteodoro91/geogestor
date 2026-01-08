@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { formatPhoneNumber } from "@/lib/formatPhone";
+import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
@@ -40,6 +41,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
 
   const telefone = watch("telefone");
   const celular = watch("celular");
+  const cpf = watch("cpf");
+  const cnpj = watch("cnpj");
 
   useEffect(() => {
     if (cliente) {
@@ -51,6 +54,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       );
       setValue("telefone", cliente.telefone || '');
       setValue("celular", cliente.celular || '');
+      setValue("cpf", cliente.cpf || '');
+      setValue("cnpj", cliente.cnpj || '');
     }
   }, [cliente, setValue]);
 
@@ -159,12 +164,28 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             
             <div className="space-y-2">
               <Label htmlFor="cpf">CPF</Label>
-              <Input id="cpf" {...register("cpf")} />
+              <Input 
+                id="cpf"
+                onChange={(e) => {
+                  const formatted = formatCPF(e.target.value);
+                  setValue("cpf", formatted);
+                }}
+                value={cpf || ''}
+                placeholder="000.000.000-00"
+              />
             </div>
             
             <div className="space-y-2">
               <Label htmlFor="cnpj">CNPJ</Label>
-              <Input id="cnpj" {...register("cnpj")} />
+              <Input 
+                id="cnpj"
+                onChange={(e) => {
+                  const formatted = formatCNPJ(e.target.value);
+                  setValue("cnpj", formatted);
+                }}
+                value={cnpj || ''}
+                placeholder="00.000.000/0000-00"
+              />
             </div>
             
             <div className="space-y-2">

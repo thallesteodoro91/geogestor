@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
@@ -31,6 +32,8 @@ export default function Orcamentos() {
     situacao_do_pagamento: "Pendente",
     forma_de_pagamento: "",
   });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const { data: orcamentos = [], isLoading } = useQuery({
     queryKey: ['orcamentos'],
@@ -436,9 +439,8 @@ export default function Orcamentos() {
                           variant="ghost"
                           size="sm"
                           onClick={() => {
-                            if (confirm('Tem certeza que deseja excluir este orçamento?')) {
-                              deleteMutation.mutate(orc.id_orcamento);
-                            }
+                            setDeleteTargetId(orc.id_orcamento);
+                            setDeleteConfirmOpen(true);
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -451,6 +453,21 @@ export default function Orcamentos() {
             </Table>
           </CardContent>
         </Card>
+
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Excluir orçamento"
+          description="Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita."
+          confirmLabel="Excluir"
+          onConfirm={() => {
+            if (deleteTargetId) {
+              deleteMutation.mutate(deleteTargetId);
+            }
+            setDeleteConfirmOpen(false);
+            setDeleteTargetId(null);
+          }}
+        />
       </div>
     </AppLayout>
   );

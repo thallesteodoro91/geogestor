@@ -38,10 +38,10 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       itens: orcamento?.itens || [{
         id_servico: "",
         quantidade: 1,
-        valor_unitario: 0,
-        desconto: 0
+        valor_unitario: 0
       }],
       despesas: [] as { id_tipodespesa: string; descricao: string; valor: number }[],
+      desconto_global: orcamento?.desconto || 0, // Desconto global em %
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
@@ -70,6 +70,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedDespesas = watch("despesas");
   const watchedClienteId = watch("id_cliente");
   const watchedPropriedadeId = watch("id_propriedade");
+  const watchedDescontoGlobal = watch("desconto_global");
   const watchedSituacao = watch("situacao_do_pagamento");
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
@@ -130,14 +131,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             ? itensDb.map((item: any) => ({
                 id_servico: item.id_servico || "",
                 quantidade: item.quantidade || 1,
-                valor_unitario: item.valor_unitario || 0,
-                desconto: item.desconto || 0
+                valor_unitario: item.valor_unitario || 0
               }))
             : [{
                 id_servico: "",
                 quantidade: 1,
-                valor_unitario: 0,
-                desconto: 0
+                valor_unitario: 0
               }];
 
           const despesasFormatadas = despesasDb.map((d: any) => ({
@@ -154,6 +153,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
             codigo_orcamento: orcamento.codigo_orcamento || "",
             itens: itensFormatados,
             despesas: despesasFormatadas,
+            desconto_global: orcamento.desconto || 0,
             incluir_marco: orcamento.incluir_marco || false,
             marco_quantidade: orcamento.marco_quantidade || 0,
             marco_valor_unitario: orcamento.marco_valor_unitario || 0,
@@ -238,21 +238,15 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    // Desconto Total = soma dos descontos em valor absoluto
-    const descontoTotal = (watchedItens || []).reduce((acc, item) => {
-      const valorBruto = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
-      const descontoPercent = toNum(item?.desconto);
-      const valorDesconto = valorBruto * (descontoPercent / 100);
-      return acc + valorDesconto;
+    // Receita bruta (soma de todos os serviços sem desconto)
+    const receitaBruta = (watchedItens || []).reduce((acc, item) => {
+      return acc + Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
     }, 0);
 
-    // Receita Esperada = soma dos valores cobrados (valor unitário * quantidade - desconto em %)
-    const receitaEsperada = (watchedItens || []).reduce((acc, item) => {
-      const valorItem = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
-      const descontoPercent = toNum(item?.desconto);
-      const valorComDesconto = valorItem * (1 - descontoPercent / 100);
-      return acc + valorComDesconto;
-    }, 0);
+    // Desconto global aplicado sobre o total
+    const descontoGlobalPercent = toNum(watchedDescontoGlobal);
+    const descontoTotal = receitaBruta * (descontoGlobalPercent / 100);
+    const receitaEsperada = receitaBruta - descontoTotal;
 
     // Total de Despesas do Orçamento
     const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
@@ -281,6 +275,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     return { 
       custoTotal,
       totalDespesasOrcamento,
+      receitaBruta,
       receitaEsperada,
       descontoTotal,
       marcoValorTotal,
@@ -292,7 +287,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
     };
   };
 
-  const { custoTotal, totalDespesasOrcamento, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   // Formatação de moeda brasileira
   const formatCurrency = (value: number): string => {
@@ -358,7 +353,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         codigo_orcamento: codigoOrcamento || null,
         quantidade: servicosValidos.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
         valor_unitario: servicosValidos.length > 0 ? receitaEsperada / servicosValidos.length : 0,
-        desconto: servicosValidos.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
+        desconto: data.desconto_global || 0, // Desconto global em %
         incluir_imposto: data.incluir_imposto,
         percentual_imposto: data.incluir_imposto ? data.percentual_imposto : 0,
         valor_imposto: totalImpostos,
@@ -419,7 +414,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
         id_servico: sanitizeUuid(item.id_servico),
         quantidade: item.quantidade || 1,
         valor_unitario: item.valor_unitario || 0,
-        desconto: item.desconto || 0,
+        desconto: 0, // Desconto agora é global, não por item
         valor_mao_obra: 0,
         tenant_id: tenantId
       }));
@@ -615,13 +610,12 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 onClick={() => append({
                   id_servico: "",
                   quantidade: 1,
-                  valor_unitario: 0,
-                  desconto: 0,
-                  custo_servico: 0
+                  valor_unitario: 0
                 })}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar Serviço
+              </Button>
               </Button>
             </div>
 
@@ -646,7 +640,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                   )}
                 </div>
 
-                <div className="grid grid-cols-5 gap-4">
+                <div className="grid grid-cols-4 gap-4">
                   <div className="space-y-2">
                     <Label>Quantidade</Label>
                     <Input
@@ -692,21 +686,27 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                       {...register(`itens.${index}.valor_unitario` as const, { valueAsNumber: true })}
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label>Desconto (%)</Label>
-                    <Input
-                      type="number"
-                      step="1"
-                      min="0"
-                      max="100"
-                      {...register(`itens.${index}.desconto` as const, { valueAsNumber: true })}
-                    />
-                  </div>
                 </div>
 
               </div>
             ))}
+
+            {/* Desconto Global */}
+            <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">
+              <Percent className="h-5 w-5 text-orange-500" />
+              <div className="flex-1">
+                <Label>Desconto Global (%)</Label>
+                <p className="text-xs text-muted-foreground">Aplicado sobre o valor total dos serviços</p>
+              </div>
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                max="100"
+                className="w-24"
+                {...register("desconto_global", { valueAsNumber: true })}
+              />
+            </div>
 
           </div>
 

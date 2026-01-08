@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plus, Trash2, MapPin, User, Calculator, DollarSign, StickyNote, Percent, ChevronLeft, ChevronRight, Check, Building, UserPlus, Home } from "lucide-react";
+import { Plus, Trash2, MapPin, User, Calculator, DollarSign, StickyNote, Percent, ChevronLeft, ChevronRight, Check, Building, UserPlus, Home, Receipt, CreditCard, Banknote, Smartphone, ArrowLeftRight, FileText, Info } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
@@ -85,13 +85,18 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       id_propriedade: orcamento?.id_propriedade || "",
       data_orcamento: orcamento?.data_orcamento || new Date().toISOString().split('T')[0],
       codigo_orcamento: orcamento?.codigo_orcamento || "",
-      itens: orcamento?.itens || [{ id_servico: "", quantidade: 1, valor_unitario: 0, desconto: 0 }],
+      itens: orcamento?.itens || [{ id_servico: "", quantidade: 1, valor_unitario: 0 }],
       despesas: [] as { id_tipodespesa: string; descricao: string; valor: number }[],
+      desconto_global: orcamento?.desconto || 0, // Desconto global em %
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
       incluir_imposto: orcamento?.incluir_imposto || false,
       percentual_imposto: orcamento?.percentual_imposto || 0,
+      orcamento_convertido: orcamento?.orcamento_convertido || false,
+      situacao_do_pagamento: orcamento?.situacao_do_pagamento || "",
+      forma_de_pagamento: orcamento?.forma_de_pagamento || "",
+      data_do_faturamento: orcamento?.data_do_faturamento || "",
       anotacoes: orcamento?.anotacoes || ""
     }
   });
@@ -102,11 +107,13 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedItens = watch("itens");
   const watchedDespesas = watch("despesas");
   const watchedClienteId = watch("id_cliente");
+  const watchedDescontoGlobal = watch("desconto_global");
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
   const watchedMarcoValorUnitario = watch("marco_valor_unitario");
   const watchedIncluirImposto = watch("incluir_imposto");
   const watchedPercentualImposto = watch("percentual_imposto");
+  const watchedSituacao = watch("situacao_do_pagamento");
 
   useEffect(() => {
     if (open) {
@@ -150,14 +157,13 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         supabase.from('fato_despesas').select('*').eq('id_orcamento', orcamento.id_orcamento)
       ]);
 
-      const itensFormatados = itensDb.data?.length 
+        const itensFormatados = itensDb.data?.length 
         ? itensDb.data.map((item: any) => ({
             id_servico: item.id_servico || "",
             quantidade: item.quantidade || 1,
-            valor_unitario: item.valor_unitario || 0,
-            desconto: item.desconto || 0
+            valor_unitario: item.valor_unitario || 0
           }))
-        : [{ id_servico: "", quantidade: 1, valor_unitario: 0, desconto: 0 }];
+        : [{ id_servico: "", quantidade: 1, valor_unitario: 0 }];
 
       const despesasFormatadas = (despesasDb.data || []).map((d: any) => ({
         id_tipodespesa: d.id_tipodespesa || "",
@@ -172,11 +178,16 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         codigo_orcamento: orcamento.codigo_orcamento || "",
         itens: itensFormatados,
         despesas: despesasFormatadas,
+        desconto_global: orcamento.desconto || 0,
         incluir_marco: orcamento.incluir_marco || false,
         marco_quantidade: orcamento.marco_quantidade || 0,
         marco_valor_unitario: orcamento.marco_valor_unitario || 0,
         incluir_imposto: orcamento.incluir_imposto || false,
         percentual_imposto: orcamento.percentual_imposto || 0,
+        orcamento_convertido: orcamento.orcamento_convertido || false,
+        situacao_do_pagamento: orcamento.situacao_do_pagamento || "",
+        forma_de_pagamento: orcamento.forma_de_pagamento || "",
+        data_do_faturamento: orcamento.data_do_faturamento || "",
         anotacoes: orcamento.anotacoes || ""
       });
     }
@@ -211,11 +222,15 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       return isNaN(parsed) ? 0 : parsed;
     };
 
-    const receitaEsperada = (watchedItens || []).reduce((acc, item) => {
-      const valorItem = Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
-      const descontoPercent = toNum(item?.desconto);
-      return acc + valorItem * (1 - descontoPercent / 100);
+    // Receita bruta (soma de todos os serviços sem desconto)
+    const receitaBruta = (watchedItens || []).reduce((acc, item) => {
+      return acc + Math.floor(toNum(item?.quantidade)) * Math.floor(toNum(item?.valor_unitario));
     }, 0);
+
+    // Desconto global aplicado sobre o total
+    const descontoGlobalPercent = toNum(watchedDescontoGlobal);
+    const descontoTotal = receitaBruta * (descontoGlobalPercent / 100);
+    const receitaEsperada = receitaBruta - descontoTotal;
 
     const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
     const marcoValorTotal = watchedIncluirMarco ? Math.floor(toNum(watchedMarcoQuantidade)) * toNum(watchedMarcoValorUnitario) : 0;
@@ -226,10 +241,10 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     const lucroEsperado = receitaEsperada - custoTotal - totalImpostos;
     const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;
 
-    return { custoTotal, totalDespesasOrcamento, receitaEsperada, marcoValorTotal, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada };
+    return { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada };
   };
 
-  const { custoTotal, receitaEsperada, marcoValorTotal, totalImpostos, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const formatCurrency = (value: number): string => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -376,7 +391,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         codigo_orcamento: codigoOrcamento || null,
         quantidade: servicosValidos.reduce((acc: number, item: any) => acc + (item.quantidade || 0), 0),
         valor_unitario: servicosValidos.length > 0 ? receitaEsperada / servicosValidos.length : 0,
-        desconto: servicosValidos.reduce((acc: number, item: any) => acc + (item.desconto || 0), 0),
+        desconto: data.desconto_global || 0, // Desconto global em %
         incluir_imposto: data.incluir_imposto,
         percentual_imposto: data.incluir_imposto ? data.percentual_imposto : 0,
         valor_imposto: totalImpostos,
@@ -388,6 +403,10 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         marco_quantidade: data.incluir_marco ? data.marco_quantidade : 0,
         marco_valor_unitario: data.incluir_marco ? data.marco_valor_unitario : 0,
         marco_valor_total: marcoValorTotal,
+        orcamento_convertido: data.orcamento_convertido || false,
+        situacao_do_pagamento: data.situacao_do_pagamento || null,
+        forma_de_pagamento: data.forma_de_pagamento || null,
+        data_do_faturamento: data.data_do_faturamento || null,
         anotacoes: data.anotacoes || null,
         tenant_id: tenantId
       };
@@ -414,7 +433,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         id_servico: sanitizeUuid(item.id_servico),
         quantidade: item.quantidade || 1,
         valor_unitario: item.valor_unitario || 0,
-        desconto: item.desconto || 0,
+        desconto: 0, // Desconto agora é global, não por item
         tenant_id: tenantId
       }));
 
@@ -736,19 +755,75 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
 
   const renderOrcamentoStep = () => (
     <div className="space-y-6">
-      {/* Data */}
-      <div className="space-y-2">
-        <Label>Data do Orçamento</Label>
-        <Input type="date" {...register("data_orcamento")} className="w-48" />
-      </div>
-
-      {/* Serviços */}
-      <div className="space-y-3">
+      {/* I. Dados Básicos */}
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <Calculator className="h-5 w-5 text-primary" />
-          <Label className="text-base font-semibold">Serviços</Label>
+          <User className="h-5 w-5 text-blue-500" />
+          <h3 className="font-semibold text-lg">Dados Básicos</h3>
         </div>
         
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Cliente</Label>
+            <Input 
+              value={clientes.find(c => c.id_cliente === (newClienteId || watchedClienteId))?.nome || ''} 
+              readOnly 
+              className="bg-muted"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Propriedade</Label>
+            <Input 
+              value={propriedades.find(p => p.id_propriedade === (newPropriedadeId || watch("id_propriedade")))?.nome_da_propriedade || ''} 
+              readOnly 
+              className="bg-muted"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Data do Orçamento *</Label>
+            <Input type="date" {...register("data_orcamento")} required />
+          </div>
+        </div>
+
+        {clienteData && (
+          <div className="grid grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
+            <div className="space-y-2">
+              <Label>Endereço</Label>
+              <Input value={clienteData.endereco || ''} readOnly className="bg-background" />
+            </div>
+            <div className="space-y-2">
+              <Label>Cidade</Label>
+              <Input value={clienteData.cidade || ''} readOnly className="bg-background" />
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <Input value={clienteData.telefone || clienteData.celular || ''} readOnly className="bg-background" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* II. Valores e Cálculos */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calculator className="h-5 w-5 text-orange-500" />
+            <h3 className="font-semibold text-lg">Valores e Cálculos</h3>
+            <span className="text-sm text-muted-foreground">
+              ({fields.length} {fields.length === 1 ? 'serviço' : 'serviços'})
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => append({ id_servico: "", quantidade: 1, valor_unitario: 0 })}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Serviço
+          </Button>
+        </div>
+
         {fields.map((field, index) => {
           const servicoSelecionado = servicos.find(s => s.id_tiposervico === watchedItens[index]?.id_servico);
           const tituloServico = servicoSelecionado 
@@ -756,28 +831,37 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             : `Serviço #${index + 1}`;
           
           return (
-            <div key={field.id} className="p-3 border rounded-lg bg-muted/20 space-y-3">
+            <div key={field.id} className="p-4 border rounded-lg space-y-4">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm text-primary">{tituloServico}</span>
+                <span className="font-medium">{tituloServico}</span>
                 {fields.length > 1 && (
-                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
+                  <Button type="button" variant="ghost" size="sm" onClick={() => remove(index)}>
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>
-              <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-5 space-y-1">
-                  <Label className="text-xs">Serviço</Label>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="space-y-2">
+                  <Label>Quantidade</Label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="1"
+                    {...register(`itens.${index}.quantidade` as const, { valueAsNumber: true })}
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label>Serviço</Label>
                   <Select
                     value={watchedItens[index]?.id_servico || "_none"}
                     onValueChange={(v) => {
                       setValue(`itens.${index}.id_servico`, v === "_none" ? "" : v);
                       const srv = servicos.find(s => s.id_tiposervico === v);
-                      if (srv?.valor_sugerido) setValue(`itens.${index}.valor_unitario`, srv.valor_sugerido);
+                      if (srv?.valor_sugerido) setValue(`itens.${index}.valor_unitario`, Math.floor(srv.valor_sugerido));
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">Selecione...</SelectItem>
@@ -787,98 +871,164 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs">Qtd</Label>
-                  <Input type="number" min="1" {...register(`itens.${index}.quantidade`, { valueAsNumber: true })} />
-                </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">Valor Unit.</Label>
-                  <Input type="number" step="0.01" {...register(`itens.${index}.valor_unitario`, { valueAsNumber: true })} />
-                </div>
-                <div className="col-span-2 space-y-1">
-                  <Label className="text-xs">Desc. %</Label>
-                  <Input type="number" min="0" max="100" {...register(`itens.${index}.desconto`, { valueAsNumber: true })} />
+                <div className="space-y-2">
+                  <Label>Valor Unitário (R$)</Label>
+                  <Input
+                    type="number"
+                    step="1"
+                    min="0"
+                    {...register(`itens.${index}.valor_unitario` as const, { valueAsNumber: true })}
+                  />
                 </div>
               </div>
             </div>
           );
         })}
-        
-        <Button type="button" variant="outline" size="sm" onClick={() => append({ id_servico: "", quantidade: 1, valor_unitario: 0, desconto: 0 })}>
-          <Plus className="h-4 w-4 mr-1" /> Adicionar Serviço
-        </Button>
+
+        {/* Desconto Global */}
+        <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">
+          <Percent className="h-5 w-5 text-orange-500" />
+          <div className="flex-1">
+            <Label>Desconto Global (%)</Label>
+            <p className="text-xs text-muted-foreground">Aplicado sobre o valor total dos serviços</p>
+          </div>
+          <Input
+            type="number"
+            step="1"
+            min="0"
+            max="100"
+            className="w-24"
+            {...register("desconto_global", { valueAsNumber: true })}
+          />
+        </div>
       </div>
 
-      {/* Marco e Imposto */}
+      {/* Marco e Imposto - lado a lado */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="p-3 border rounded-lg space-y-3">
+        {/* Marco */}
+        <div className="p-4 border rounded-lg space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-primary" />
-              <Label>Marco Topográfico</Label>
-            </div>
-            <Switch checked={watchedIncluirMarco} onCheckedChange={(v) => setValue("incluir_marco", v)} />
-          </div>
-          {watchedIncluirMarco && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">Qtd</Label>
-                <Input type="number" {...register("marco_quantidade")} />
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-5 w-5 text-primary" />
+                <span className="font-medium">Marco</span>
               </div>
-              <div>
-                <Label className="text-xs">Valor Unit.</Label>
-                <Input type="number" step="0.01" {...register("marco_valor_unitario")} />
+              <p className="text-xs text-muted-foreground">Marcos topográficos</p>
+            </div>
+            <Switch 
+              checked={watchedIncluirMarco}
+              onCheckedChange={(checked) => setValue("incluir_marco", checked)}
+            />
+          </div>
+          
+          {watchedIncluirMarco && (
+            <div className="space-y-3 pt-2">
+              <div className="space-y-2">
+                <Label>Quantidade</Label>
+                <Input 
+                  type="number" 
+                  step="1"
+                  min="0"
+                  {...register("marco_quantidade", { valueAsNumber: true })} 
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Valor Unitário (R$)</Label>
+                <Input 
+                  type="number" 
+                  step="0.01"
+                  min="0"
+                  {...register("marco_valor_unitario", { valueAsNumber: true })} 
+                  placeholder="0,00"
+                />
               </div>
             </div>
           )}
         </div>
 
-        <div className="p-3 border rounded-lg space-y-3">
+        {/* Imposto */}
+        <div className="p-4 border rounded-lg space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Percent className="h-4 w-4 text-primary" />
-              <Label>Imposto</Label>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Percent className="h-5 w-5 text-orange-500" />
+                <span className="font-medium">Imposto</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Não obrigatório</p>
             </div>
-            <Switch checked={watchedIncluirImposto} onCheckedChange={(v) => setValue("incluir_imposto", v)} />
+            <Switch 
+              checked={watchedIncluirImposto}
+              onCheckedChange={(checked) => setValue("incluir_imposto", checked)}
+            />
           </div>
+          
           {watchedIncluirImposto && (
-            <div>
-              <Label className="text-xs">Percentual (%)</Label>
-              <Input type="number" step="0.01" {...register("percentual_imposto")} />
+            <div className="pt-2">
+              <div className="space-y-2">
+                <Label>Percentual (%)</Label>
+                <Input 
+                  type="number" 
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  {...register("percentual_imposto", { valueAsNumber: true })} 
+                  placeholder="0.00"
+                />
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Despesas */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <DollarSign className="h-5 w-5 text-destructive" />
-          <Label className="text-base font-semibold">Despesas</Label>
+      {/* III. Despesas */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Receipt className="h-5 w-5 text-green-500" />
+            <h3 className="font-semibold text-lg">Despesas</h3>
+            <span className="text-sm text-muted-foreground">
+              ({despesaFields.length} {despesaFields.length === 1 ? 'despesa' : 'despesas'})
+            </span>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => appendDespesa({ id_tipodespesa: "", descricao: "", valor: 0 })}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Adicionar Despesa
+          </Button>
         </div>
         
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          <Info className="h-3 w-3" />
+          Despesas adicionadas aqui serão contabilizadas como custos internos. No documento do cliente, aparecerão apenas como "Custo dos Serviços".
+        </p>
+
         {despesaFields.map((field, index) => {
           const tituloDespesa = watchedDespesas[index]?.descricao 
             ? `#${index + 1} - ${watchedDespesas[index].descricao}`
             : `Despesa #${index + 1}`;
           
           return (
-            <div key={field.id} className="p-3 border rounded-lg bg-muted/20 space-y-3">
+            <div key={field.id} className="p-4 border rounded-lg space-y-3">
               <div className="flex items-center justify-between">
-                <span className="font-medium text-sm text-destructive">{tituloDespesa}</span>
-                <Button type="button" variant="ghost" size="icon" onClick={() => removeDespesa(index)}>
+                <span className="font-medium text-sm">{tituloDespesa}</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => removeDespesa(index)}>
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               </div>
-              <div className="grid grid-cols-12 gap-2 items-end">
-                <div className="col-span-4 space-y-1">
-                  <Label className="text-xs">Tipo</Label>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo de Despesa</Label>
                   <Select
                     value={watchedDespesas[index]?.id_tipodespesa || "_none"}
                     onValueChange={(v) => setValue(`despesas.${index}.id_tipodespesa`, v === "_none" ? "" : v)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="_none">Selecione...</SelectItem>
@@ -890,64 +1040,214 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="col-span-5 space-y-1">
-                  <Label className="text-xs">Descrição</Label>
-                  <Input {...register(`despesas.${index}.descricao`)} placeholder="Descrição" />
+                <div className="space-y-2">
+                  <Label>Descrição</Label>
+                  <Input 
+                    placeholder="Ex: Combustível ida/volta" 
+                    {...register(`despesas.${index}.descricao`)}
+                  />
                 </div>
-                <div className="col-span-3 space-y-1">
-                  <Label className="text-xs">Valor (R$)</Label>
+                <div className="space-y-2">
+                  <Label>Valor (R$)</Label>
                   <Input 
                     type="number" 
                     step="0.01" 
                     min="0"
-                    {...register(`despesas.${index}.valor`, { valueAsNumber: true })} 
+                    placeholder="0,00"
+                    {...register(`despesas.${index}.valor`, { valueAsNumber: true })}
                   />
                 </div>
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* IV. Situação e Faturamento */}
+      <div className="space-y-4 p-4 border rounded-lg">
+        <div className="flex items-center gap-2">
+          <CreditCard className="h-5 w-5 text-blue-500" />
+          <h3 className="font-semibold text-lg">Situação e Faturamento</h3>
+        </div>
         
-        <Button type="button" variant="outline" size="sm" onClick={() => appendDespesa({ id_tipodespesa: "", descricao: "", valor: 0 })}>
-          <Plus className="h-4 w-4 mr-1" /> Adicionar Despesa
-        </Button>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Situação do Pagamento</Label>
+            <Select
+              value={watchedSituacao || "_none"}
+              onValueChange={(value) => setValue("situacao_do_pagamento", value === "_none" ? "" : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a situação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Selecione a situação</SelectItem>
+                <SelectItem value="Pendente">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[hsl(48,96%,53%)]" />
+                    Pendente
+                  </span>
+                </SelectItem>
+                <SelectItem value="Pago">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[hsl(142,76%,36%)]" />
+                    Pago
+                  </span>
+                </SelectItem>
+                <SelectItem value="Parcial">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[hsl(217,91%,60%)]" />
+                    Parcial
+                  </span>
+                </SelectItem>
+                <SelectItem value="Cancelado">
+                  <span className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-[hsl(0,100%,50%)]" />
+                    Cancelado
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="space-y-2">
+            <Label>Forma de Pagamento</Label>
+            <Select
+              value={watch("forma_de_pagamento") || "_none"}
+              onValueChange={(value) => setValue("forma_de_pagamento", value === "_none" ? "" : value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a forma" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="_none">Selecione a forma</SelectItem>
+                <SelectItem value="PIX">
+                  <span className="flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-[hsl(48,96%,53%)]" />
+                    PIX
+                  </span>
+                </SelectItem>
+                <SelectItem value="Dinheiro">
+                  <span className="flex items-center gap-2">
+                    <Banknote className="h-4 w-4 text-[hsl(142,76%,36%)]" />
+                    Dinheiro
+                  </span>
+                </SelectItem>
+                <SelectItem value="Cartão">
+                  <span className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-[hsl(217,91%,60%)]" />
+                    Cartão
+                  </span>
+                </SelectItem>
+                <SelectItem value="Transferência">
+                  <span className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-4 w-4 text-[hsl(280,70%,50%)]" />
+                    Transferência
+                  </span>
+                </SelectItem>
+                <SelectItem value="Boleto">
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-[hsl(25,95%,53%)]" />
+                    Boleto
+                  </span>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Data do Faturamento</Label>
+            <Input 
+              type="date" 
+              {...register("data_do_faturamento")}
+            />
+          </div>
+          
+          <div className="flex items-center gap-3 pt-6">
+            <Switch
+              checked={watch("orcamento_convertido") || false}
+              onCheckedChange={(checked) => setValue("orcamento_convertido", checked)}
+            />
+            <Label className="cursor-pointer">Orçamento Convertido</Label>
+          </div>
+        </div>
       </div>
 
-      {/* Resumo */}
-      <div className="p-4 border rounded-lg bg-primary/5 space-y-2">
-        <div className="flex items-center gap-2 mb-3">
+      {/* V. Resumo Financeiro */}
+      <div className="p-4 bg-muted rounded-lg space-y-4">
+        <div className="flex items-center gap-2">
           <DollarSign className="h-5 w-5 text-primary" />
-          <span className="font-semibold">Resumo Financeiro</span>
+          <h3 className="font-semibold">Resumo Financeiro</h3>
         </div>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <span className="text-muted-foreground">Receita:</span>
-          <span className="text-right font-medium">R$ {formatCurrency(receitaEsperada)}</span>
-          {totalImpostos > 0 && (
-            <>
-              <span className="text-muted-foreground">Impostos:</span>
-              <span className="text-right">R$ {formatCurrency(totalImpostos)}</span>
-            </>
-          )}
-          <span className="text-muted-foreground">Custos:</span>
-          <span className="text-right">R$ {formatCurrency(custoTotal)}</span>
-          <span className="text-muted-foreground font-medium">Lucro:</span>
-          <span className={cn("text-right font-bold", lucroEsperado >= 0 ? "text-green-600" : "text-destructive")}>
-            R$ {formatCurrency(lucroEsperado)}
-          </span>
-          <span className="text-muted-foreground">Margem:</span>
-          <span className={cn("text-right font-medium", margemEsperada >= 0 ? "text-green-600" : "text-destructive")}>
-            {margemEsperada.toFixed(1)}%
-          </span>
+        
+        {/* Linha 1 - 4 colunas */}
+        <div className="grid grid-cols-4 gap-4 text-sm">
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita Esperada</span>
+            <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaEsperada)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Desconto Total</span>
+            <p className="font-semibold text-destructive whitespace-nowrap">- R$ {formatCurrency(descontoTotal)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Despesas</span>
+            <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalDespesasOrcamento)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">
+              Impostos{watchedIncluirImposto ? ` (${percentualImposto}%)` : ''}
+            </span>
+            <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(totalImpostos)}</p>
+          </div>
+        </div>
+        
+        {/* Linha 2 - 4 colunas */}
+        <div className="grid grid-cols-4 gap-4 text-sm pt-3 border-t border-border">
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade || 0}x)</span>
+            <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
+            <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Custo Total</span>
+            <p className="font-semibold text-destructive whitespace-nowrap">R$ {formatCurrency(custoTotal)}</p>
+          </div>
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block whitespace-nowrap">Lucro Esperado</span>
+            <p className={`font-semibold whitespace-nowrap ${lucroEsperado >= 0 ? 'text-primary' : 'text-destructive'}`}>
+              R$ {formatCurrency(lucroEsperado)}
+            </p>
+          </div>
+        </div>
+        
+        {/* Linha 3 - Margem centralizada */}
+        <div className="flex justify-center pt-3 border-t border-border">
+          <div className="text-center">
+            <span className="text-muted-foreground text-xs block">Margem Esperada</span>
+            <p className={`font-semibold text-lg ${margemEsperada >= 0 ? 'text-primary' : 'text-destructive'}`}>
+              {margemEsperada.toFixed(2)}%
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Anotações */}
+      {/* VI. Anotações */}
       <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          <StickyNote className="h-4 w-4 text-amber-500" />
-          Anotações
-        </Label>
-        <Textarea {...register("anotacoes")} rows={3} placeholder="Observações sobre o orçamento..." />
+        <div className="flex items-center gap-2">
+          <StickyNote className="h-5 w-5 text-yellow-500" />
+          <Label className="font-semibold text-lg">Anotações</Label>
+        </div>
+        <Textarea
+          {...register("anotacoes")}
+          placeholder="Observações adicionais..."
+          rows={4}
+        />
       </div>
     </div>
   );

@@ -291,7 +291,7 @@ export function ClienteInfoCompact({
 
         {/* Botão Central de Controle */}
         {onOpenCentralControle && <div className="p-2 border-t bg-muted/30 flex justify-center">
-            <Button onClick={onOpenCentralControle} size="sm" className="w-1/2 gap-1.5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-sm text-xs h-10 justify-center py-[10px] mx-[10px] text-center">
+            <Button onClick={onOpenCentralControle} size="sm" className="w-1/2 gap-1.5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-sm text-xs h-10 justify-center mx-[10px] text-center py-[20px] px-[25px]">
               <SlidersHorizontal className="h-3 w-3" />
               Central de Controle
             </Button>

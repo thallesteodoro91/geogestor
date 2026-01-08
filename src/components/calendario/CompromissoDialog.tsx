@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Calendar, Loader2, FileText, Briefcase } from "lucide-react";
 import { SERVICE_STATUS, CALENDAR_STATUS_OPTIONS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
 
 interface CompromissoDialogProps {
   open: boolean;
@@ -306,9 +307,11 @@ export const CompromissoDialog = ({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Pendente">Pendente</SelectItem>
-                      <SelectItem value="Aprovado">Aprovado</SelectItem>
-                      <SelectItem value="Cancelado">Cancelado</SelectItem>
+                      {BUDGET_SITUATION_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

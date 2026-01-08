@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Mail, Phone, MapPin, FileText, User, Building, StickyNote, LayoutDashboard, ChevronRight } from "lucide-react";
+import { Mail, Phone, MapPin, FileText, User, Building, StickyNote, SlidersHorizontal, ChevronRight } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
 interface ClienteInfoCompactProps {
@@ -150,7 +150,7 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
               className="w-full gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-md"
               size="default"
             >
-              <LayoutDashboard className="h-4 w-4" />
+              <SlidersHorizontal className="h-4 w-4" />
               Central de Controle
               <ChevronRight className="h-4 w-4 ml-auto" />
             </Button>

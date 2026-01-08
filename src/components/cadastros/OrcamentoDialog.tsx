@@ -616,7 +616,6 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
                 <Plus className="h-4 w-4 mr-2" />
                 Adicionar Serviço
               </Button>
-              </Button>
             </div>
 
             {fields.map((field, index) => (

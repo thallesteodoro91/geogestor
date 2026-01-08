@@ -38,6 +38,7 @@ const ChartSettingsContext = createContext<ChartSettingsContextType | undefined>
 
 const STORAGE_KEYS = {
   granularity: 'chart-granularity',
+  periodOffset: 'chart-period-offset',
   density: 'chart-density',
   colorblind: 'chart-colorblind',
 } as const;
@@ -49,7 +50,10 @@ export const ChartSettingsProvider = ({ children }: { children: ReactNode }) => 
     return (stored as TimeGranularity) || 'month';
   });
 
-  const [periodOffset, setPeriodOffsetState] = useState<number>(0);
+  const [periodOffset, setPeriodOffsetState] = useState<number>(() => {
+    const stored = localStorage.getItem(STORAGE_KEYS.periodOffset);
+    return stored ? parseInt(stored, 10) : 0;
+  });
 
   const [density, setDensityState] = useState<DensityMode>(() => {
     const stored = localStorage.getItem(STORAGE_KEYS.density);
@@ -66,22 +70,33 @@ export const ChartSettingsProvider = ({ children }: { children: ReactNode }) => 
     setGranularityState(value);
     setPeriodOffsetState(0); // Reset offset when changing granularity
     localStorage.setItem(STORAGE_KEYS.granularity, value);
+    localStorage.setItem(STORAGE_KEYS.periodOffset, '0');
   }, []);
 
   const setPeriodOffset = useCallback((offset: number) => {
     setPeriodOffsetState(offset);
+    localStorage.setItem(STORAGE_KEYS.periodOffset, String(offset));
   }, []);
 
   const goToPreviousPeriod = useCallback(() => {
-    setPeriodOffsetState(prev => prev - 1);
+    setPeriodOffsetState(prev => {
+      const newOffset = prev - 1;
+      localStorage.setItem(STORAGE_KEYS.periodOffset, String(newOffset));
+      return newOffset;
+    });
   }, []);
 
   const goToNextPeriod = useCallback(() => {
-    setPeriodOffsetState(prev => prev + 1);
+    setPeriodOffsetState(prev => {
+      const newOffset = prev + 1;
+      localStorage.setItem(STORAGE_KEYS.periodOffset, String(newOffset));
+      return newOffset;
+    });
   }, []);
 
   const goToCurrentPeriod = useCallback(() => {
     setPeriodOffsetState(0);
+    localStorage.setItem(STORAGE_KEYS.periodOffset, '0');
   }, []);
 
   const setDensity = useCallback((value: DensityMode) => {

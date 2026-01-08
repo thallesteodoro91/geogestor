@@ -25,7 +25,16 @@ export const despesaSchema = z.object({
     .finite({ message: "Valor inválido" }),
   data_da_despesa: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Data inválida" }),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, { message: "Data inválida" })
+    .refine(
+      (date) => {
+        const inputDate = new Date(date);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999); // Allow today
+        return inputDate <= today;
+      },
+      { message: "Data não pode ser no futuro" }
+    ),
   id_tipodespesa: z
     .string()
     .uuid({ message: "Tipo de despesa inválido" })
@@ -40,6 +49,20 @@ export const despesaSchema = z.object({
     .string()
     .max(1000, { message: "Observações devem ter no máximo 1000 caracteres" })
     .optional(),
+});
+
+// Validation schema for expense items within budgets (OrcamentoWizard)
+export const despesaOrcamentoSchema = z.object({
+  id_tipodespesa: z.string().optional(),
+  descricao: z.string().max(500, { message: "Descrição muito longa" }).optional(),
+  valor: z
+    .number({
+      required_error: "Valor é obrigatório",
+      invalid_type_error: "Valor deve ser um número",
+    })
+    .min(0, { message: "Valor não pode ser negativo" })
+    .max(999999999, { message: "Valor muito alto" })
+    .finite({ message: "Valor inválido" }),
 });
 
 // Servicos validations

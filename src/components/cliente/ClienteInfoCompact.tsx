@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Mail, Phone, MapPin, FileText, User, Building, StickyNote, SlidersHorizontal, ChevronRight,
-  UserCircle, Users, Briefcase, Tractor, Building2, Factory,
+  UserCircle, Users, Briefcase, Tractor, Building2, Factory, Landmark, Heart,
   Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star
 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
@@ -20,6 +20,8 @@ const categoriaConfig: Record<string, { icon: React.ElementType; color: string; 
   'Produtor Rural': { icon: Tractor, color: 'text-green-600', bg: 'bg-green-500/15', border: 'border-green-500/30' },
   'Empresa': { icon: Factory, color: 'text-slate-600', bg: 'bg-slate-500/15', border: 'border-slate-500/30' },
   'Parceiro': { icon: Users, color: 'text-cyan-600', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30' },
+  'Governo': { icon: Landmark, color: 'text-amber-600', bg: 'bg-amber-500/15', border: 'border-amber-500/30' },
+  'ONG': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-500/15', border: 'border-pink-500/30' },
 };
 
 // Mapeamento de origens com ícones e cores
@@ -118,16 +120,16 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
                 Perfil
               </h4>
               <div className="flex flex-wrap gap-2">
-                {cliente.categoria && (() => {
-                  const config = getCategoriaConfig(cliente.categoria);
+                {cliente.categoria && cliente.categoria.split(', ').map((cat, index) => {
+                  const config = getCategoriaConfig(cat.trim());
                   const IconComponent = config.icon;
                   return (
-                    <Badge variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+                    <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
                       <IconComponent className="h-3 w-3" />
-                      {cliente.categoria}
+                      {cat.trim()}
                     </Badge>
                   );
-                })()}
+                })}
                 {cliente.origem && (() => {
                   const config = getOrigemConfig(cliente.origem);
                   const IconComponent = config.icon;

@@ -51,6 +51,7 @@ export default function ServicosOrcamentos() {
   const { data: orcamentos = [], isLoading: loadingOrcamentos, refetch: refetchOrcamentos } = useQuery({
     queryKey: ['orcamentos'],
     queryFn: async () => {
+      // Buscar orçamentos
       const { data: orcamentosData, error } = await supabase
         .from('fato_orcamento')
         .select(`
@@ -60,25 +61,31 @@ export default function ServicosOrcamentos() {
         `)
         .order('data_orcamento', { ascending: false });
       if (error) throw error;
+      if (!orcamentosData?.length) return [];
 
-      // Buscar itens de cada orçamento com nomes dos serviços
-      const orcamentosComItens = await Promise.all(
-        (orcamentosData || []).map(async (orc) => {
-          const { data: itensData } = await supabase
-            .from('fato_orcamento_itens')
-            .select(`
-              *,
-              dim_tiposervico(nome)
-            `)
-            .eq('id_orcamento', orc.id_orcamento);
-          return {
-            ...orc,
-            itens: itensData || []
-          };
-        })
-      );
+      // Buscar TODOS os itens de uma vez (evita N+1)
+      const orcamentoIds = orcamentosData.map(o => o.id_orcamento);
+      const { data: allItens } = await supabase
+        .from('fato_orcamento_itens')
+        .select(`
+          *,
+          dim_tiposervico(nome)
+        `)
+        .in('id_orcamento', orcamentoIds);
 
-      return orcamentosComItens;
+      // Agrupar itens por orçamento
+      const itensByOrcamento = (allItens || []).reduce((acc, item) => {
+        const id = item.id_orcamento;
+        if (!acc[id]) acc[id] = [];
+        acc[id].push(item);
+        return acc;
+      }, {} as Record<string, typeof allItens>);
+
+      // Combinar orçamentos com seus itens
+      return orcamentosData.map(orc => ({
+        ...orc,
+        itens: itensByOrcamento[orc.id_orcamento] || []
+      }));
     },
   });
 

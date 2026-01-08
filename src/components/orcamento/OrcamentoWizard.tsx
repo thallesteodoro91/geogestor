@@ -35,6 +35,10 @@ const WIZARD_STEPS: { id: WizardStep; label: string; icon: React.ReactNode }[] =
   { id: 'orcamento', label: 'Orçamento', icon: <Calculator className="h-4 w-4" /> },
 ];
 
+// Opções para Prospecção e Categoria do Cliente
+const PROSPECCAO_OPCOES = ["Indicação", "Redes Sociais", "Site", "Ligação", "WhatsApp", "Outro"];
+const CATEGORIA_CLIENTE_OPCOES = ["Produtor Rural", "Empresa", "Pessoa Física", "Governo", "ONG"];
+
 export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSuccess }: OrcamentoWizardProps) {
   const [currentStep, setCurrentStep] = useState<WizardStep>('cliente');
   const [clientes, setClientes] = useState<any[]>([]);
@@ -70,7 +74,6 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       nome_da_propriedade: "",
       area_ha: "",
       cidade: "",
-      municipio: "",
       observacoes: ""
     }
   });
@@ -287,7 +290,6 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           id_cliente: clienteId || null,
           area_ha: data.area_ha ? Number(data.area_ha) : null,
           cidade: data.cidade || null,
-          municipio: data.municipio || null,
           observacoes: data.observacoes || null
         }])
         .select()
@@ -599,6 +601,66 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <Label>Endereço</Label>
             <Input {...clienteForm.register("endereco")} placeholder="Endereço completo" />
           </div>
+
+          {/* Prospecção */}
+          <div className="col-span-2 space-y-2">
+            <Label>Prospecção (Origem)</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {PROSPECCAO_OPCOES.map((opcao) => {
+                const selectedOrigem = clienteForm.watch("origem") || [];
+                const isChecked = selectedOrigem.includes(opcao);
+                return (
+                  <div key={opcao} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`origem-${opcao}`}
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const current = clienteForm.getValues("origem") || [];
+                        if (checked) {
+                          clienteForm.setValue("origem", [...current, opcao]);
+                        } else {
+                          clienteForm.setValue("origem", current.filter((o: string) => o !== opcao));
+                        }
+                      }}
+                    />
+                    <Label htmlFor={`origem-${opcao}`} className="text-sm font-normal cursor-pointer">
+                      {opcao}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Categoria do Cliente */}
+          <div className="col-span-2 space-y-2">
+            <Label>Categoria do Cliente</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {CATEGORIA_CLIENTE_OPCOES.map((opcao) => {
+                const selectedCategoria = clienteForm.watch("categoria") || [];
+                const isChecked = selectedCategoria.includes(opcao);
+                return (
+                  <div key={opcao} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`categoria-${opcao}`}
+                      checked={isChecked}
+                      onCheckedChange={(checked) => {
+                        const current = clienteForm.getValues("categoria") || [];
+                        if (checked) {
+                          clienteForm.setValue("categoria", [...current, opcao]);
+                        } else {
+                          clienteForm.setValue("categoria", current.filter((c: string) => c !== opcao));
+                        }
+                      }}
+                    />
+                    <Label htmlFor={`categoria-${opcao}`} className="text-sm font-normal cursor-pointer">
+                      {opcao}
+                    </Label>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -663,12 +725,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <Input {...propriedadeForm.register("cidade")} placeholder="Cidade" />
           </div>
           
-          <div className="space-y-2">
-            <Label>Município</Label>
-            <Input {...propriedadeForm.register("municipio")} placeholder="Município" />
-          </div>
-          
-          <div className="space-y-2">
+          <div className="col-span-2 space-y-2">
             <Label>Observações</Label>
             <Input {...propriedadeForm.register("observacoes")} placeholder="Observações" />
           </div>
@@ -692,50 +749,60 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           <Label className="text-base font-semibold">Serviços</Label>
         </div>
         
-        {fields.map((field, index) => (
-          <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-3 border rounded-lg bg-muted/20">
-            <div className="col-span-4 space-y-1">
-              <Label className="text-xs">Serviço</Label>
-              <Select
-                value={watchedItens[index]?.id_servico || "_none"}
-                onValueChange={(v) => {
-                  setValue(`itens.${index}.id_servico`, v === "_none" ? "" : v);
-                  const srv = servicos.find(s => s.id_tiposervico === v);
-                  if (srv?.valor_sugerido) setValue(`itens.${index}.valor_unitario`, srv.valor_sugerido);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Selecione...</SelectItem>
-                  {servicos.map((s) => (
-                    <SelectItem key={s.id_tiposervico} value={s.id_tiposervico}>{s.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {fields.map((field, index) => {
+          const servicoSelecionado = servicos.find(s => s.id_tiposervico === watchedItens[index]?.id_servico);
+          const tituloServico = servicoSelecionado 
+            ? `#${index + 1} - ${servicoSelecionado.nome}`
+            : `Serviço #${index + 1}`;
+          
+          return (
+            <div key={field.id} className="p-3 border rounded-lg bg-muted/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm text-primary">{tituloServico}</span>
+                {fields.length > 1 && (
+                  <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-5 space-y-1">
+                  <Label className="text-xs">Serviço</Label>
+                  <Select
+                    value={watchedItens[index]?.id_servico || "_none"}
+                    onValueChange={(v) => {
+                      setValue(`itens.${index}.id_servico`, v === "_none" ? "" : v);
+                      const srv = servicos.find(s => s.id_tiposervico === v);
+                      if (srv?.valor_sugerido) setValue(`itens.${index}.valor_unitario`, srv.valor_sugerido);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Selecione...</SelectItem>
+                      {servicos.map((s) => (
+                        <SelectItem key={s.id_tiposervico} value={s.id_tiposervico}>{s.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs">Qtd</Label>
+                  <Input type="number" min="1" {...register(`itens.${index}.quantidade`, { valueAsNumber: true })} />
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <Label className="text-xs">Valor Unit.</Label>
+                  <Input type="number" step="0.01" {...register(`itens.${index}.valor_unitario`, { valueAsNumber: true })} />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs">Desc. %</Label>
+                  <Input type="number" min="0" max="100" {...register(`itens.${index}.desconto`, { valueAsNumber: true })} />
+                </div>
+              </div>
             </div>
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Qtd</Label>
-              <Input type="number" min="1" {...register(`itens.${index}.quantidade`)} />
-            </div>
-            <div className="col-span-3 space-y-1">
-              <Label className="text-xs">Valor Unit.</Label>
-              <Input type="number" step="0.01" {...register(`itens.${index}.valor_unitario`)} />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Desc. %</Label>
-              <Input type="number" min="0" max="100" {...register(`itens.${index}.desconto`)} />
-            </div>
-            <div className="col-span-1">
-              {fields.length > 1 && (
-                <Button type="button" variant="ghost" size="icon" onClick={() => remove(index)}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
         
         <Button type="button" variant="outline" size="sm" onClick={() => append({ id_servico: "", quantidade: 1, valor_unitario: 0, desconto: 0 })}>
           <Plus className="h-4 w-4 mr-1" /> Adicionar Serviço
@@ -790,42 +857,56 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           <Label className="text-base font-semibold">Despesas</Label>
         </div>
         
-        {despesaFields.map((field, index) => (
-          <div key={field.id} className="grid grid-cols-12 gap-2 items-end p-3 border rounded-lg bg-muted/20">
-            <div className="col-span-4 space-y-1">
-              <Label className="text-xs">Tipo</Label>
-              <Select
-                value={watchedDespesas[index]?.id_tipodespesa || "_none"}
-                onValueChange={(v) => setValue(`despesas.${index}.id_tipodespesa`, v === "_none" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="_none">Selecione...</SelectItem>
-                  {tiposDespesa.map((t) => (
-                    <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>
-                      {t.subcategoria || t.categoria}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {despesaFields.map((field, index) => {
+          const tituloDespesa = watchedDespesas[index]?.descricao 
+            ? `#${index + 1} - ${watchedDespesas[index].descricao}`
+            : `Despesa #${index + 1}`;
+          
+          return (
+            <div key={field.id} className="p-3 border rounded-lg bg-muted/20 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm text-destructive">{tituloDespesa}</span>
+                <Button type="button" variant="ghost" size="icon" onClick={() => removeDespesa(index)}>
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+              <div className="grid grid-cols-12 gap-2 items-end">
+                <div className="col-span-4 space-y-1">
+                  <Label className="text-xs">Tipo</Label>
+                  <Select
+                    value={watchedDespesas[index]?.id_tipodespesa || "_none"}
+                    onValueChange={(v) => setValue(`despesas.${index}.id_tipodespesa`, v === "_none" ? "" : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Selecione...</SelectItem>
+                      {tiposDespesa.map((t) => (
+                        <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>
+                          {t.subcategoria || t.categoria}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="col-span-5 space-y-1">
+                  <Label className="text-xs">Descrição</Label>
+                  <Input {...register(`despesas.${index}.descricao`)} placeholder="Descrição" />
+                </div>
+                <div className="col-span-3 space-y-1">
+                  <Label className="text-xs">Valor (R$)</Label>
+                  <Input 
+                    type="number" 
+                    step="0.01" 
+                    min="0"
+                    {...register(`despesas.${index}.valor`, { valueAsNumber: true })} 
+                  />
+                </div>
+              </div>
             </div>
-            <div className="col-span-5 space-y-1">
-              <Label className="text-xs">Descrição</Label>
-              <Input {...register(`despesas.${index}.descricao`)} placeholder="Descrição" />
-            </div>
-            <div className="col-span-2 space-y-1">
-              <Label className="text-xs">Valor</Label>
-              <Input type="number" step="0.01" {...register(`despesas.${index}.valor`)} />
-            </div>
-            <div className="col-span-1">
-              <Button type="button" variant="ghost" size="icon" onClick={() => removeDespesa(index)}>
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
         
         <Button type="button" variant="outline" size="sm" onClick={() => appendDespesa({ id_tipodespesa: "", descricao: "", valor: 0 })}>
           <Plus className="h-4 w-4 mr-1" /> Adicionar Despesa

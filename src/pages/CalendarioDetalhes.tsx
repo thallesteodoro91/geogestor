@@ -19,6 +19,8 @@ import {
   Clock,
   CheckCircle2,
 } from "lucide-react";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, PAYMENT_STATUS } from "@/constants/budgetStatus";
 
 const CalendarioDetalhes = () => {
   const { tipo, id } = useParams<{ tipo: string; id: string }>();
@@ -79,7 +81,14 @@ const CalendarioDetalhes = () => {
   const status = isOrcamento 
     ? (detalhes as any).situacao 
     : (detalhes as any).situacao_do_servico;
-  const isCancelado = status?.toLowerCase().includes("cancelado");
+  const isCancelado = status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO;
+
+  const getStatusBadgeClass = () => {
+    if (isCancelado) return "bg-red-500";
+    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) return "bg-green-500";
+    if (status === SERVICE_STATUS.EM_ANDAMENTO) return "bg-blue-500";
+    return "bg-yellow-500";
+  };
 
   return (
     <AppLayout>
@@ -90,8 +99,8 @@ const CalendarioDetalhes = () => {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar ao Calendário
           </Button>
-          <Badge className={isCancelado ? "bg-red-500" : "bg-green-500"}>
-            {status || "Pendente"}
+          <Badge className={getStatusBadgeClass()}>
+            {status || BUDGET_SITUATION.PENDENTE}
           </Badge>
         </div>
 

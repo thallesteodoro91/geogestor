@@ -15,6 +15,8 @@ import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
 import { DespesasPendentes } from "@/components/despesas/DespesasPendentes";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -260,6 +262,9 @@ export default function ServicosOrcamentos() {
     o.itens?.some((item: any) => item.dim_tiposervico?.nome?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Pagination for orcamentos
+  const pagination = usePagination(filteredOrcamentos, { initialPageSize: 10 });
+
   // Calcular KPIs usando orçamentos filtrados por período
   const filtroAtivo = dataInicio || dataFim;
   const orcamentosParaKPI = orcamentosFiltradosPorData;
@@ -449,7 +454,7 @@ export default function ServicosOrcamentos() {
                       <TableCell colSpan={9} className="text-center">Nenhum orçamento encontrado</TableCell>
                     </TableRow>
                   ) : (
-                    filteredOrcamentos.map((orcamento) => (
+                    pagination.paginatedData.map((orcamento) => (
                       <TableRow key={orcamento.id_orcamento}>
                         <TableCell className="font-mono text-sm font-semibold text-primary">{orcamento.codigo_orcamento || '-'}</TableCell>
                         <TableCell className="font-medium">{orcamento.dim_cliente?.nome || '-'}</TableCell>
@@ -523,6 +528,23 @@ export default function ServicosOrcamentos() {
                   )}
                 </TableBody>
               </Table>
+              
+              <TablePagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                totalItems={pagination.totalItems}
+                pageSize={pagination.pageSize}
+                startIndex={pagination.startIndex}
+                endIndex={pagination.endIndex}
+                canGoNext={pagination.canGoNext}
+                canGoPrevious={pagination.canGoPrevious}
+                onPageChange={pagination.goToPage}
+                onPageSizeChange={pagination.setPageSize}
+                onFirstPage={pagination.goToFirstPage}
+                onLastPage={pagination.goToLastPage}
+                onNextPage={pagination.goToNextPage}
+                onPreviousPage={pagination.goToPreviousPage}
+              />
             </div>
         </div>
 

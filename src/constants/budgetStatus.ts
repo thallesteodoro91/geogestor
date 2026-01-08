@@ -57,6 +57,24 @@ export const BUDGET_SITUATION_OPTIONS = [
   { value: BUDGET_SITUATION.CANCELADO, label: 'Cancelado' },
 ] as const;
 
+// Status de despesa (para workflow de confirmação)
+export const EXPENSE_STATUS = {
+  PENDENTE: 'pendente',
+  CONFIRMADA: 'confirmada',
+} as const;
+
+export type ExpenseStatus = typeof EXPENSE_STATUS[keyof typeof EXPENSE_STATUS];
+
+// Helper para verificar se despesa está pendente
+export const isExpensePending = (status: string | null | undefined): boolean => {
+  return status === EXPENSE_STATUS.PENDENTE;
+};
+
+// Helper para verificar se despesa está confirmada
+export const isExpenseConfirmed = (status: string | null | undefined): boolean => {
+  return status === EXPENSE_STATUS.CONFIRMADA || status === null || status === undefined;
+};
+
 // Helper para obter classe de cor do badge de status de pagamento
 export const getPaymentStatusBadgeClass = (status: string | null | undefined): string => {
   switch (status) {

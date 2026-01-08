@@ -250,6 +250,27 @@ export async function registrarOrcamentoEmitido(
   });
 }
 
+export async function registrarOrcamentoConvertido(
+  clienteId: string,
+  codigoOrcamento: string,
+  nomeServico?: string,
+  servicoId?: string
+): Promise<ClienteEvento> {
+  const descricao = nomeServico 
+    ? `Orçamento ${codigoOrcamento} convertido em serviço "${nomeServico}"`
+    : `Orçamento ${codigoOrcamento} foi convertido em serviço`;
+  
+  return createEvento({
+    id_cliente: clienteId,
+    id_servico: servicoId || null,
+    tipo: 'conversao',
+    categoria: 'servicos',
+    titulo: 'Orçamento convertido',
+    descricao,
+    manual: false,
+  });
+}
+
 export async function registrarNotaManual(
   clienteId: string,
   titulo: string,

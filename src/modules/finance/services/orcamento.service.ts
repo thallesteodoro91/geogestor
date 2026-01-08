@@ -4,7 +4,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
-import { registrarOrcamentoEmitido } from '@/modules/crm/services/cliente-eventos.service';
+import { registrarOrcamentoEmitido, registrarOrcamentoConvertido } from '@/modules/crm/services/cliente-eventos.service';
 
 export interface Orcamento {
   id_orcamento: string;
@@ -93,9 +93,38 @@ export async function createOrcamento(data: Omit<Orcamento, 'id_orcamento' | 'cr
 
 export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
   const tenantId = await getCurrentTenantId();
+  
+  // Buscar o orçamento atual para verificar se está sendo convertido
+  const { data: orcamentoAtual } = await supabase
+    .from('fato_orcamento')
+    .select('*, dim_cliente(nome), fato_servico(nome_do_servico)')
+    .eq('id_orcamento', id)
+    .single();
+  
   let query = supabase.from('fato_orcamento').update(data).eq('id_orcamento', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
-  return query.select().single();
+  const result = await query.select().single();
+  
+  // Se o orçamento está sendo convertido, registrar evento na timeline
+  if (result.data && !result.error && data.orcamento_convertido === true && orcamentoAtual && !orcamentoAtual.orcamento_convertido) {
+    const clienteId = orcamentoAtual.id_cliente;
+    if (clienteId) {
+      try {
+        const codigo = orcamentoAtual.codigo_orcamento || id.slice(0, 8);
+        const nomeServico = orcamentoAtual.fato_servico?.nome_do_servico;
+        await registrarOrcamentoConvertido(
+          clienteId,
+          codigo,
+          nomeServico,
+          orcamentoAtual.id_servico || undefined
+        );
+      } catch (e) {
+        console.error('Erro ao registrar evento de conversão:', e);
+      }
+    }
+  }
+  
+  return result;
 }
 
 export async function deleteOrcamento(id: string) {

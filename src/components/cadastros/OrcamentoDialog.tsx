@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, MapPin, Info, Receipt, User, Calculator, DollarSign, StickyNote, Percent, CreditCard, Banknote, Smartphone, ArrowLeftRight, FileText } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
-import { PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS } from "@/constants/budgetStatus";
+import { PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, EXPENSE_STATUS } from "@/constants/budgetStatus";
 
 interface OrcamentoDialogProps {
   open: boolean;
@@ -441,7 +441,7 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           data_da_despesa: data.data_orcamento,
           observacoes: d.descricao || null,
           tenant_id: tenantId,
-          status: 'pendente' // Despesas de orçamento ficam pendentes até confirmação
+          status: EXPENSE_STATUS.PENDENTE // Despesas de orçamento ficam pendentes até confirmação
         }));
 
         const { error: despesasError } = await supabase

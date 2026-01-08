@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { NovoServicoDialog } from "@/components/servicos";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { usePagination } from "@/hooks/usePagination";
 import { fetchServicos, deleteServico } from "@/modules/operations";
 import { format, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -131,6 +133,9 @@ export default function Servicos() {
 
     return matchesSearch && matchesStatus && matchesDateRange;
   });
+
+  // Pagination
+  const pagination = usePagination(filteredServicos, { initialPageSize: 10 });
 
   // KPIs
   const totalServicos = servicos.length;
@@ -307,7 +312,7 @@ export default function Servicos() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredServicos.map((servico: any) => (
+                    {pagination.paginatedData.map((servico: any) => (
                       <TableRow 
                         key={servico.id_servico} 
                         className="cursor-pointer hover:bg-muted/50"
@@ -360,6 +365,23 @@ export default function Servicos() {
                     ))}
                   </TableBody>
                 </Table>
+                
+                <TablePagination
+                  currentPage={pagination.currentPage}
+                  totalPages={pagination.totalPages}
+                  totalItems={pagination.totalItems}
+                  pageSize={pagination.pageSize}
+                  startIndex={pagination.startIndex}
+                  endIndex={pagination.endIndex}
+                  canGoNext={pagination.canGoNext}
+                  canGoPrevious={pagination.canGoPrevious}
+                  onPageChange={pagination.goToPage}
+                  onPageSizeChange={pagination.setPageSize}
+                  onFirstPage={pagination.goToFirstPage}
+                  onLastPage={pagination.goToLastPage}
+                  onNextPage={pagination.goToNextPage}
+                  onPreviousPage={pagination.goToPreviousPage}
+                />
               </div>
             )}
           </CardContent>

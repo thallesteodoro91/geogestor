@@ -23,7 +23,7 @@ import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -41,6 +41,7 @@ export default function ClienteDetalhes() {
   const [propriedadeDialogOpen, setPropriedadeDialogOpen] = useState(false);
   const [servicoDialogOpen, setServicoDialogOpen] = useState(false);
   const [orcamentoDialogOpen, setOrcamentoDialogOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("propriedades");
 
   const { data: cliente, isLoading: loadingCliente, refetch: refetchCliente } = useClienteDetalhes(id!);
   const { data: propriedades = [], isLoading: loadingPropriedades, refetch: refetchPropriedades } = useClientePropriedades(id!);
@@ -137,8 +138,11 @@ export default function ClienteDetalhes() {
           </div>
 
           {/* Info do Cliente + KPIs - 1/3 da tela */}
-          <div className="space-y-4">
-            <ClienteInfoCompact cliente={cliente} />
+          <div className="flex flex-col gap-4">
+            <ClienteInfoCompact 
+              cliente={cliente} 
+              onOpenCentralControle={() => setActiveTab("central")}
+            />
             <ClienteKPIsCompact 
               kpis={kpis || { totalPropriedades: 0, servicosRealizados: 0, totalServicos: 0, orcamentosEmitidos: 0, receitaTotal: 0 }} 
               isLoading={loadingKPIs} 
@@ -147,7 +151,7 @@ export default function ClienteDetalhes() {
         </div>
 
         {/* Tabs com detalhes */}
-        <Tabs defaultValue="propriedades" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="propriedades">
               Propriedades ({propriedades.length})

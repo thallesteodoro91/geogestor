@@ -9,6 +9,8 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, User, Briefcase, DollarSign, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION } from "@/constants/budgetStatus";
 
 export const CalendarioDiario = () => {
   const navigate = useNavigate();
@@ -51,13 +53,13 @@ export const CalendarioDiario = () => {
           clienteContato: orc.cliente?.celular || orc.cliente?.email || "-",
           propriedade: orc.propriedade?.nome_da_propriedade || "-",
           municipio: orc.propriedade?.municipio || "-",
-          status: orc.situacao || "Pendente",
+          status: orc.situacao || BUDGET_SITUATION.PENDENTE,
           categoria: orc.servico?.categoria || "Geral",
           valor: orc.valor_unitario || 0,
           descricao: `Orçamento para ${orc.servico?.nome_do_servico || "serviço"}`,
         })),
         ...(servicos || []).map((srv) => {
-          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          const status = srv.situacao_do_servico === SERVICE_STATUS.PLANEJADO ? "Agendado" : (srv.situacao_do_servico || "Agendado");
           return {
             id: `srv-${srv.id_servico}`,
             tipo: "servico" as const,
@@ -80,14 +82,13 @@ export const CalendarioDiario = () => {
   });
 
   const getStatusConfig = (status: string) => {
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes("concluído") || statusLower.includes("aprovado")) {
+    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
       return { color: "bg-emerald-500 text-white", icon: "✓" };
     }
-    if (statusLower.includes("cancelado")) {
+    if (status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO) {
       return { color: "bg-red-500 text-white", icon: "✕" };
     }
-    if (statusLower.includes("andamento")) {
+    if (status === SERVICE_STATUS.EM_ANDAMENTO) {
       return { color: "bg-blue-500 text-white", icon: "⟳" };
     }
     return { color: "bg-amber-500 text-white", icon: "⏱" };

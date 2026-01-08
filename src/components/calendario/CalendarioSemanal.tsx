@@ -11,6 +11,8 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, MapPin, User, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION } from "@/constants/budgetStatus";
 
 export const CalendarioSemanal = () => {
   const navigate = useNavigate();
@@ -55,11 +57,11 @@ export const CalendarioSemanal = () => {
           cliente: orc.cliente?.nome || "Cliente",
           propriedade: orc.propriedade?.nome_da_propriedade || "-",
           municipio: orc.propriedade?.municipio || "-",
-          status: orc.situacao || "Pendente",
+          status: orc.situacao || BUDGET_SITUATION.PENDENTE,
           categoria: orc.servico?.categoria || "Geral",
         })),
         ...(servicos || []).map((srv) => {
-          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          const status = srv.situacao_do_servico === SERVICE_STATUS.PLANEJADO ? "Agendado" : (srv.situacao_do_servico || "Agendado");
           return {
             id: `srv-${srv.id_servico}`,
             tipo: "servico" as const,
@@ -89,10 +91,9 @@ export const CalendarioSemanal = () => {
   const statusOptions = [...new Set(eventos.map((e) => e.status))];
 
   const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes("concluído") || statusLower.includes("aprovado")) return "bg-emerald-500 text-white";
-    if (statusLower.includes("cancelado")) return "bg-red-500 text-white";
-    if (statusLower.includes("andamento")) return "bg-blue-500 text-white";
+    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) return "bg-emerald-500 text-white";
+    if (status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO) return "bg-red-500 text-white";
+    if (status === SERVICE_STATUS.EM_ANDAMENTO) return "bg-blue-500 text-white";
     return "bg-amber-500 text-white";
   };
 

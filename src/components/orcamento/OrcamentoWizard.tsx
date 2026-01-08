@@ -23,6 +23,7 @@ import {
   registrarPropriedadeAdicionada,
   registrarOrcamentoEmitido
 } from '@/modules/crm/services/cliente-eventos.service';
+import { PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, EXPENSE_STATUS } from "@/constants/budgetStatus";
 
 interface OrcamentoWizardProps {
   open: boolean;
@@ -502,7 +503,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           data_da_despesa: data.data_orcamento,
           observacoes: d.descricao || null,
           tenant_id: tenantId,
-          status: 'pendente'
+          status: EXPENSE_STATUS.PENDENTE
         }));
         const { error: despesasError } = await supabase.from('fato_despesas').insert(despesasData);
         if (despesasError) throw despesasError;
@@ -1118,30 +1119,14 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">Selecione a situação</SelectItem>
-                <SelectItem value="Pendente">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[hsl(48,96%,53%)]" />
-                    Pendente
-                  </span>
-                </SelectItem>
-                <SelectItem value="Pago">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[hsl(142,76%,36%)]" />
-                    Pago
-                  </span>
-                </SelectItem>
-                <SelectItem value="Parcial">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[hsl(217,91%,60%)]" />
-                    Parcial
-                  </span>
-                </SelectItem>
-                <SelectItem value="Cancelado">
-                  <span className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[hsl(0,100%,50%)]" />
-                    Cancelado
-                  </span>
-                </SelectItem>
+                {PAYMENT_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: opt.color }} />
+                      {opt.label}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1157,36 +1142,18 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_none">Selecione a forma</SelectItem>
-                <SelectItem value="PIX">
-                  <span className="flex items-center gap-2">
-                    <Smartphone className="h-4 w-4 text-[hsl(48,96%,53%)]" />
-                    PIX
-                  </span>
-                </SelectItem>
-                <SelectItem value="Dinheiro">
-                  <span className="flex items-center gap-2">
-                    <Banknote className="h-4 w-4 text-[hsl(142,76%,36%)]" />
-                    Dinheiro
-                  </span>
-                </SelectItem>
-                <SelectItem value="Cartão">
-                  <span className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4 text-[hsl(217,91%,60%)]" />
-                    Cartão
-                  </span>
-                </SelectItem>
-                <SelectItem value="Transferência">
-                  <span className="flex items-center gap-2">
-                    <ArrowLeftRight className="h-4 w-4 text-[hsl(280,70%,50%)]" />
-                    Transferência
-                  </span>
-                </SelectItem>
-                <SelectItem value="Boleto">
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-[hsl(25,95%,53%)]" />
-                    Boleto
-                  </span>
-                </SelectItem>
+                {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <span className="flex items-center gap-2">
+                      {opt.icon === 'Smartphone' && <Smartphone className="h-4 w-4" style={{ color: opt.color }} />}
+                      {opt.icon === 'Banknote' && <Banknote className="h-4 w-4" style={{ color: opt.color }} />}
+                      {opt.icon === 'CreditCard' && <CreditCard className="h-4 w-4" style={{ color: opt.color }} />}
+                      {opt.icon === 'ArrowLeftRight' && <ArrowLeftRight className="h-4 w-4" style={{ color: opt.color }} />}
+                      {opt.icon === 'FileText' && <FileText className="h-4 w-4" style={{ color: opt.color }} />}
+                      {opt.label}
+                    </span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

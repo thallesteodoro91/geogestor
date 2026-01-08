@@ -2,9 +2,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
-  Mail, Phone, MapPin, FileText, User, Building, StickyNote, SlidersHorizontal, ChevronRight,
+  Mail, Phone, MapPin, FileText, User, StickyNote, SlidersHorizontal, ChevronRight,
   UserCircle, Users, Briefcase, Tractor, Building2, Factory, Landmark, Heart,
-  Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star
+  Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star,
+  Target, UserCog, Activity, PhoneCall, HelpCircle, RefreshCw
 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 
@@ -24,7 +25,7 @@ const categoriaConfig: Record<string, { icon: React.ElementType; color: string; 
   'ONG': { icon: Heart, color: 'text-pink-600', bg: 'bg-pink-500/15', border: 'border-pink-500/30' },
 };
 
-// Mapeamento de origens com ícones e cores
+// Mapeamento de origens/prospecção com ícones e cores
 const origemConfig: Record<string, { icon: React.ElementType; color: string; bg: string; border: string }> = {
   'Indicação': { icon: UserPlus, color: 'text-emerald-600', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
   'Site': { icon: Globe, color: 'text-blue-600', bg: 'bg-blue-500/15', border: 'border-blue-500/30' },
@@ -34,7 +35,10 @@ const origemConfig: Record<string, { icon: React.ElementType; color: string; bg:
   'Marketing': { icon: Megaphone, color: 'text-orange-600', bg: 'bg-orange-500/15', border: 'border-orange-500/30' },
   'WhatsApp': { icon: MessageCircle, color: 'text-green-600', bg: 'bg-green-500/15', border: 'border-green-500/30' },
   'Parceria': { icon: Briefcase, color: 'text-indigo-600', bg: 'bg-indigo-500/15', border: 'border-indigo-500/30' },
-  'Recorrente': { icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30' },
+  'Recorrente': { icon: RefreshCw, color: 'text-cyan-600', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30' },
+  'Cliente antigo': { icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30' },
+  'Ligação': { icon: PhoneCall, color: 'text-yellow-600', bg: 'bg-yellow-500/15', border: 'border-yellow-500/30' },
+  'Outro': { icon: HelpCircle, color: 'text-gray-600', bg: 'bg-gray-500/15', border: 'border-gray-500/30' },
 };
 
 const defaultConfig = { icon: User, color: 'text-muted-foreground', bg: 'bg-muted', border: 'border-muted' };
@@ -45,9 +49,9 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
       case 'Ativo':
         return 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30';
       case 'Inativo':
-        return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
+        return 'bg-red-500/15 text-red-600 border-red-500/30';
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
     }
   };
 
@@ -64,7 +68,7 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
   return (
     <Card className="h-full flex flex-col overflow-hidden">
       <CardContent className="p-0 flex flex-col flex-1">
-        {/* Header com nome e status - fundo com gradiente sutil */}
+        {/* Header com nome e status */}
         <div className="bg-gradient-to-r from-primary/5 to-primary/10 px-4 py-3 border-b">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -86,7 +90,7 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
           {(cliente.email || cliente.telefone || cliente.celular) && (
             <div className="space-y-2">
               <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-blue-500" />
+                <Phone className="h-3 w-3 text-blue-500" />
                 Contato
               </h4>
               <div className="grid gap-1.5">
@@ -112,25 +116,39 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
             </div>
           )}
 
-          {/* SEÇÃO: Perfil */}
-          {(cliente.categoria || cliente.origem || cliente.cpf || cliente.cnpj) && (
+          {/* SEÇÃO: Situação do Serviço */}
+          <div className="space-y-2">
+            <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Activity className="h-3 w-3 text-emerald-500" />
+              Situação do Serviço
+            </h4>
+            <Badge variant="outline" className={`${getSituacaoBadgeClass()} text-xs`}>
+              {cliente.situacao || 'Não definido'}
+            </Badge>
+          </div>
+
+          {/* SEÇÃO: Endereço */}
+          {cliente.endereco && (
             <div className="space-y-2">
               <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-purple-500" />
-                Perfil
+                <MapPin className="h-3 w-3 text-red-500" />
+                Endereço
+              </h4>
+              <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                <span className="line-clamp-2">{cliente.endereco}</span>
+              </div>
+            </div>
+          )}
+
+          {/* SEÇÃO: Prospecção */}
+          {cliente.origem && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Target className="h-3 w-3 text-purple-500" />
+                Prospecção
               </h4>
               <div className="flex flex-wrap gap-2">
-                {cliente.categoria && cliente.categoria.split(', ').map((cat, index) => {
-                  const config = getCategoriaConfig(cat.trim());
-                  const IconComponent = config.icon;
-                  return (
-                    <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
-                      <IconComponent className="h-3 w-3" />
-                      {cat.trim()}
-                    </Badge>
-                  );
-                })}
-                {cliente.origem && (() => {
+                {(() => {
                   const config = getOrigemConfig(cliente.origem);
                   const IconComponent = config.icon;
                   return (
@@ -141,37 +159,51 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
                   );
                 })()}
               </div>
-              {(cliente.cpf || cliente.cnpj) && (
-                <div className="flex flex-wrap gap-3 mt-2">
-                  {cliente.cpf && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <FileText className="h-3 w-3 text-orange-500" />
-                      <span>CPF:</span>
-                      <span className="font-mono">{cliente.cpf}</span>
-                    </div>
-                  )}
-                  {cliente.cnpj && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <FileText className="h-3 w-3 text-orange-500" />
-                      <span>CNPJ:</span>
-                      <span className="font-mono">{cliente.cnpj}</span>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 
-          {/* SEÇÃO: Localização */}
-          {cliente.endereco && (
+          {/* SEÇÃO: Categoria do Cliente */}
+          {cliente.categoria && (
             <div className="space-y-2">
               <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-red-500" />
-                Localização
+                <UserCog className="h-3 w-3 text-indigo-500" />
+                Categoria do Cliente
               </h4>
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-3.5 w-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                <span className="line-clamp-2">{cliente.endereco}</span>
+              <div className="flex flex-wrap gap-2">
+                {cliente.categoria.split(', ').map((cat, index) => {
+                  const config = getCategoriaConfig(cat.trim());
+                  const IconComponent = config.icon;
+                  return (
+                    <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+                      <IconComponent className="h-3 w-3" />
+                      {cat.trim()}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* SEÇÃO: Documentos */}
+          {(cliente.cpf || cliente.cnpj) && (
+            <div className="space-y-2">
+              <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="h-3 w-3 text-orange-500" />
+                Documentos
+              </h4>
+              <div className="flex flex-wrap gap-3">
+                {cliente.cpf && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="font-medium">CPF:</span>
+                    <span className="font-mono">{cliente.cpf}</span>
+                  </div>
+                )}
+                {cliente.cnpj && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span className="font-medium">CNPJ:</span>
+                    <span className="font-mono">{cliente.cnpj}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -180,7 +212,7 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
           {cliente.anotacoes && (
             <div className="space-y-2">
               <h4 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <div className="h-1 w-1 rounded-full bg-yellow-500" />
+                <StickyNote className="h-3 w-3 text-yellow-500" />
                 Observações
               </h4>
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md px-3 py-2">
@@ -190,7 +222,7 @@ export function ClienteInfoCompact({ cliente, onOpenCentralControle }: ClienteIn
           )}
         </div>
 
-        {/* Botão Central de Controle - Destaque */}
+        {/* Botão Central de Controle */}
         {onOpenCentralControle && (
           <div className="p-3 border-t bg-muted/30">
             <Button 

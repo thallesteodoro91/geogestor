@@ -60,7 +60,7 @@ export default function Onboarding() {
             <CardDescription>
               Sua empresa <strong>{companyName}</strong> foi criada com sucesso.
               <br />
-              Você está no período de trial de 14 dias.
+              Você está no período de trial de 7 dias.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -117,7 +117,7 @@ export default function Onboarding() {
             </Button>
           </form>
           <p className="text-xs text-muted-foreground text-center mt-4">
-            Você terá 14 dias de trial gratuito para explorar todas as funcionalidades.
+            Você terá 7 dias de trial gratuito para explorar todas as funcionalidades.
           </p>
         </CardContent>
       </Card>

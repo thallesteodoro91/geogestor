@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { NovoServicoDialog } from "@/components/servicos";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { fetchServicos, deleteServico } from "@/modules/operations";
 import { format, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -51,6 +52,8 @@ export default function Servicos() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const { data: servicos = [], isLoading } = useQuery({
     queryKey: ['servicos'],
@@ -81,9 +84,16 @@ export default function Servicos() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este serviço?")) {
-      deleteMutation.mutate(id);
+    setDeleteTargetId(id);
+    setDeleteConfirmOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (deleteTargetId) {
+      deleteMutation.mutate(deleteTargetId);
     }
+    setDeleteConfirmOpen(false);
+    setDeleteTargetId(null);
   };
 
   const handleCloseDialog = () => {
@@ -359,6 +369,15 @@ export default function Servicos() {
           open={isDialogOpen}
           onOpenChange={handleCloseDialog}
           editingServico={editingServico}
+        />
+
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Excluir serviço"
+          description="Tem certeza que deseja excluir este serviço? Esta ação não pode ser desfeita."
+          confirmLabel="Excluir"
+          onConfirm={confirmDelete}
         />
       </div>
     </AppLayout>

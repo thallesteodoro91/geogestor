@@ -18,6 +18,14 @@ import {
  * Busca KPIs do banco e calcula métricas adicionais
  */
 export async function fetchKPIs(): Promise<KPIData> {
+  // Garantir que há sessão ativa antes de buscar KPIs
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (!session) {
+    console.warn('fetchKPIs: No active session, returning defaults');
+    return getDefaultKPIs();
+  }
+
   const { data, error } = await supabase.rpc('calcular_kpis_v2');
 
   if (error) {
@@ -26,8 +34,12 @@ export async function fetchKPIs(): Promise<KPIData> {
   }
 
   if (!data || data.length === 0) {
+    console.warn('fetchKPIs: No data returned from RPC');
     return getDefaultKPIs();
   }
+
+  // Log para debug - verificar se os dados estão chegando
+  console.log('fetchKPIs: Data received', data[0]);
 
   return data[0];
 }

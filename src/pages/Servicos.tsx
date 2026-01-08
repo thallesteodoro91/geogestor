@@ -22,28 +22,12 @@ import { fetchServicos, deleteServico } from "@/modules/operations";
 import { format, isAfter, isBefore, isEqual, startOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-
-const statusOptions = [
-  { value: "all", label: "Todos os Status" },
-  { value: "Pendente", label: "Pendente" },
-  { value: "Em Andamento", label: "Em Andamento" },
-  { value: "Em Revisão", label: "Em Revisão" },
-  { value: "Concluído", label: "Concluído" },
-];
-
-const getStatusBadgeVariant = (status: string) => {
-  switch (status) {
-    case "Concluído":
-      return "default";
-    case "Em Andamento":
-      return "secondary";
-    case "Em Revisão":
-      return "outline";
-    case "Pendente":
-    default:
-      return "destructive";
-  }
-};
+import { 
+  SERVICE_STATUS, 
+  SERVICE_STATUS_FILTER_OPTIONS, 
+  getStatusBadgeVariant,
+  isServiceInProgress 
+} from "@/constants/serviceStatus";
 
 export default function Servicos() {
   const queryClient = useQueryClient();
@@ -139,11 +123,9 @@ export default function Servicos() {
 
   // KPIs
   const totalServicos = servicos.length;
-  const servicosConcluidos = servicos.filter((s: any) => s.situacao_do_servico === "Concluído").length;
-  const servicosPendentes = servicos.filter((s: any) => s.situacao_do_servico === "Pendente").length;
-  const servicosEmAndamento = servicos.filter((s: any) => 
-    s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Em Revisão"
-  ).length;
+  const servicosConcluidos = servicos.filter((s: any) => s.situacao_do_servico === SERVICE_STATUS.CONCLUIDO).length;
+  const servicosPendentes = servicos.filter((s: any) => s.situacao_do_servico === SERVICE_STATUS.PENDENTE).length;
+  const servicosEmAndamento = servicos.filter((s: any) => isServiceInProgress(s.situacao_do_servico)).length;
   const mediaProgresso = totalServicos > 0 
     ? Math.round(servicos.reduce((acc: number, s: any) => acc + (s.progresso || 0), 0) / totalServicos) 
     : 0;
@@ -213,7 +195,7 @@ export default function Servicos() {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  {statusOptions.map((option) => (
+                  {SERVICE_STATUS_FILTER_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
                     </SelectItem>

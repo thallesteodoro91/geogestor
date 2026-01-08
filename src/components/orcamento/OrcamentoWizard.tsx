@@ -16,6 +16,8 @@ import { getCurrentTenantId } from "@/services/supabase.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
 import { cn } from "@/lib/utils";
+import { despesaOrcamentoSchema } from "@/lib/validations";
+import { z } from "zod";
 
 interface OrcamentoWizardProps {
   open: boolean;
@@ -419,8 +421,29 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         if (itensError) throw itensError;
       }
 
-      // Handle expenses
+      // Handle expenses with validation
       const despesasValidas = (data.despesas || []).filter((d: any) => d.valor > 0);
+      
+      // Validate each expense
+      for (let i = 0; i < despesasValidas.length; i++) {
+        const despesa = despesasValidas[i];
+        try {
+          despesaOrcamentoSchema.parse(despesa);
+        } catch (validationError) {
+          if (validationError instanceof z.ZodError) {
+            const errorMessage = validationError.errors.map(e => e.message).join(', ');
+            toast.error(`Despesa #${i + 1}: ${errorMessage}`);
+            return;
+          }
+        }
+        
+        // Check for negative values explicitly
+        if (despesa.valor < 0) {
+          toast.error(`Despesa #${i + 1}: Valor não pode ser negativo`);
+          return;
+        }
+      }
+      
       if (despesasValidas.length > 0) {
         const despesasData = despesasValidas.map((d: any) => ({
           id_orcamento: orcamentoId,

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Check, X, Clock, Receipt, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { EXPENSE_STATUS } from "@/constants/budgetStatus";
 
 interface DespesaPendente {
   id_despesas: string;
@@ -51,7 +52,7 @@ export function DespesasPendentes() {
             dim_propriedade(nome_da_propriedade)
           )
         `)
-        .eq('status', 'pendente')
+        .eq('status', EXPENSE_STATUS.PENDENTE)
         .not('id_orcamento', 'is', null)
         .order('data_da_despesa', { ascending: false });
       
@@ -64,7 +65,7 @@ export function DespesasPendentes() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('fato_despesas')
-        .update({ status: 'confirmada' })
+        .update({ status: EXPENSE_STATUS.CONFIRMADA })
         .eq('id_despesas', id);
       if (error) throw error;
     },
@@ -99,9 +100,9 @@ export function DespesasPendentes() {
     mutationFn: async (orcamentoId: string) => {
       const { error } = await supabase
         .from('fato_despesas')
-        .update({ status: 'confirmada' })
+        .update({ status: EXPENSE_STATUS.CONFIRMADA })
         .eq('id_orcamento', orcamentoId)
-        .eq('status', 'pendente');
+        .eq('status', EXPENSE_STATUS.PENDENTE);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -120,7 +121,7 @@ export function DespesasPendentes() {
         .from('fato_despesas')
         .delete()
         .eq('id_orcamento', orcamentoId)
-        .eq('status', 'pendente');
+        .eq('status', EXPENSE_STATUS.PENDENTE);
       if (error) throw error;
     },
     onSuccess: () => {

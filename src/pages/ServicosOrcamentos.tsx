@@ -22,6 +22,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { getPaymentStatusBadgeClass, getPaymentMethodBadgeClass } from "@/constants/budgetStatus";
 
 export default function ServicosOrcamentos() {
   const [isServicoDialogOpen, setIsServicoDialogOpen] = useState(false);
@@ -269,7 +271,7 @@ export default function ServicosOrcamentos() {
   const filtroAtivo = dataInicio || dataFim;
   const orcamentosParaKPI = orcamentosFiltradosPorData;
   const totalServicos = servicos.length;
-  const servicosConcluidos = servicos.filter(s => s.situacao_do_servico === 'Concluído').length;
+  const servicosConcluidos = servicos.filter(s => s.situacao_do_servico === SERVICE_STATUS.CONCLUIDO).length;
   const receitaServicos = servicos.reduce((acc, s) => acc + (s.receita_servico || 0), 0);
   const totalOrcamentos = orcamentosParaKPI.length;
   const orcamentosAprovados = orcamentosParaKPI.filter(o => o.orcamento_convertido).length;
@@ -466,29 +468,12 @@ export default function ServicosOrcamentos() {
                         <TableCell>{new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
                         <TableCell>R$ {((orcamento.receita_esperada || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                         <TableCell>
-                          <Badge 
-                            className={
-                              orcamento.situacao_do_pagamento === "Pago" ? "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]" :
-                              orcamento.situacao_do_pagamento === "Cancelado" ? "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]" :
-                              orcamento.situacao_do_pagamento === "Pendente" ? "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]" :
-                              orcamento.situacao_do_pagamento === "Parcial" ? "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]" :
-                              "bg-muted text-muted-foreground"
-                            }
-                          >
+                          <Badge className={getPaymentStatusBadgeClass(orcamento.situacao_do_pagamento)}>
                             {orcamento.situacao_do_pagamento || 'Não definido'}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge 
-                            className={
-                              orcamento.forma_de_pagamento === "PIX" ? "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]" :
-                              orcamento.forma_de_pagamento === "Dinheiro" ? "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]" :
-                              orcamento.forma_de_pagamento === "Cartão" ? "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]" :
-                              orcamento.forma_de_pagamento === "Transferência" ? "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]" :
-                              orcamento.forma_de_pagamento === "Boleto" ? "bg-[hsl(25,95%,53%)] text-white hover:bg-[hsl(25,95%,45%)]" :
-                              "bg-muted text-muted-foreground"
-                            }
-                          >
+                          <Badge className={getPaymentMethodBadgeClass(orcamento.forma_de_pagamento)}>
                             {orcamento.forma_de_pagamento || 'Não definido'}
                           </Badge>
                         </TableCell>

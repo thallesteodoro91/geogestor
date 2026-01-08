@@ -231,13 +231,13 @@ export function ClienteInfoCompact({
               </h4>
               <div className="flex flex-wrap gap-2">
                 {cliente.origem.split(', ').map((origem, index) => {
-                  const config = getOrigemConfig(origem.trim());
-                  const IconComponent = config.icon;
-                  return <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
+              const config = getOrigemConfig(origem.trim());
+              const IconComponent = config.icon;
+              return <Badge key={index} variant="outline" className={`text-xs font-medium gap-1.5 ${config.bg} ${config.color} ${config.border}`}>
                     <IconComponent className="h-3 w-3" />
                     {origem.trim()}
                   </Badge>;
-                })}
+            })}
               </div>
             </div>}
 
@@ -291,7 +291,7 @@ export function ClienteInfoCompact({
 
         {/* Botão Central de Controle */}
         {onOpenCentralControle && <div className="p-2 border-t bg-muted/30 flex justify-center">
-            <Button onClick={onOpenCentralControle} className="w-1/2 gap-1.5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-sm text-xs h-10 justify-center" size="sm">
+            <Button onClick={onOpenCentralControle} size="sm" className="w-1/2 gap-1.5 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-sm text-xs h-10 justify-center py-[10px] mx-[10px] text-center">
               <SlidersHorizontal className="h-3 w-3" />
               Central de Controle
             </Button>

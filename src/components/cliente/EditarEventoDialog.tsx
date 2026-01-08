@@ -41,6 +41,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { useUpdateEvento } from '@/hooks/useClienteEventos';
 import { useCategoriaEventos, useCreateCategoria } from '@/hooks/useCategoriaEventos';
 import { ClienteEvento } from '@/modules/crm/services/cliente-eventos.service';
+import { getIconComponent } from '@/lib/iconMap';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -141,8 +142,32 @@ export function EditarEventoDialog({
   }, [evento, form]);
 
   const categorias = categoriasDinamicas?.length
-    ? categoriasDinamicas.map((c) => ({ value: c.nome, label: c.nome }))
-    : categoriasPadrao;
+    ? categoriasDinamicas.map((c) => ({ value: c.nome, label: c.nome, icone: c.icone, cor: c.cor }))
+    : categoriasPadrao.map((c) => ({ ...c, icone: null, cor: null }));
+
+  // Obter ícone e cor da categoria selecionada
+  const categoriaSelecionada = form.watch('categoria');
+  const categoriaAtual = categoriasDinamicas?.find((c) => c.nome === categoriaSelecionada);
+  const IconeAtual = categoriaAtual?.icone ? getIconComponent(categoriaAtual.icone) : null;
+
+  // Mapa de cores para classes
+  const colorClasses: Record<string, string> = {
+    green: 'text-green-500 bg-green-500/10',
+    emerald: 'text-emerald-500 bg-emerald-500/10',
+    blue: 'text-blue-500 bg-blue-500/10',
+    purple: 'text-purple-500 bg-purple-500/10',
+    cyan: 'text-cyan-500 bg-cyan-500/10',
+    orange: 'text-orange-500 bg-orange-500/10',
+    indigo: 'text-indigo-500 bg-indigo-500/10',
+    amber: 'text-amber-500 bg-amber-500/10',
+    slate: 'text-slate-500 bg-slate-500/10',
+    yellow: 'text-yellow-500 bg-yellow-500/10',
+    red: 'text-red-500 bg-red-500/10',
+    pink: 'text-pink-500 bg-pink-500/10',
+    rose: 'text-rose-500 bg-rose-500/10',
+    teal: 'text-teal-500 bg-teal-500/10',
+  };
+  const corAtual = categoriaAtual?.cor ? colorClasses[categoriaAtual.cor] || colorClasses.blue : null;
 
   const onSubmit = async (data: FormData) => {
     if (!evento) return;
@@ -252,7 +277,13 @@ export function EditarEventoDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Categoria *</FormLabel>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    {/* Preview do ícone atual */}
+                    {IconeAtual && corAtual && (
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${corAtual}`}>
+                        <IconeAtual className="h-4 w-4" />
+                      </div>
+                    )}
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="flex-1">
@@ -260,11 +291,22 @@ export function EditarEventoDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {categorias.map((cat) => (
-                          <SelectItem key={cat.value} value={cat.value}>
-                            {cat.label}
-                          </SelectItem>
-                        ))}
+                        {categorias.map((cat) => {
+                          const CatIcon = cat.icone ? getIconComponent(cat.icone) : null;
+                          const catColor = cat.cor ? colorClasses[cat.cor] : null;
+                          return (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              <div className="flex items-center gap-2">
+                                {CatIcon && catColor && (
+                                  <div className={`w-5 h-5 rounded-full flex items-center justify-center ${catColor}`}>
+                                    <CatIcon className="h-3 w-3" />
+                                  </div>
+                                )}
+                                {cat.label}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                     <Button

@@ -40,6 +40,7 @@ export async function fetchEventosByCliente(
 ): Promise<ClienteEvento[]> {
   const tenantId = await getCurrentTenantId();
   
+  // Buscar eventos
   let query = supabase
     .from('cliente_eventos')
     .select('*')
@@ -57,10 +58,33 @@ export async function fetchEventosByCliente(
     query = query.eq('id_propriedade', filtros.id_propriedade);
   }
 
-  const { data, error } = await query;
+  const { data: eventos, error } = await query;
 
   if (error) throw error;
-  return data as ClienteEvento[];
+  if (!eventos?.length) return [];
+
+  // Buscar categorias para obter ícones e cores
+  const { data: categorias } = await supabase
+    .from('dim_categoria_evento')
+    .select('nome, icone, cor')
+    .eq('tenant_id', tenantId)
+    .eq('ativo', true);
+
+  // Mapear categorias por nome
+  const categoriaMap = new Map<string, { icone: string | null; cor: string | null }>();
+  categorias?.forEach((cat) => {
+    categoriaMap.set(cat.nome, { icone: cat.icone, cor: cat.cor });
+  });
+
+  // Enriquecer eventos com dados da categoria
+  return eventos.map((evento) => {
+    const catData = categoriaMap.get(evento.categoria);
+    return {
+      ...evento,
+      categoria_icone: catData?.icone || null,
+      categoria_cor: catData?.cor || null,
+    } as ClienteEvento;
+  });
 }
 
 export async function createEvento(

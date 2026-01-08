@@ -206,7 +206,7 @@ export function ClienteTimeline({
             <h4 className="text-base font-semibold text-muted-foreground mb-4">
               {group.label}
             </h4>
-            <div className="relative pl-12 ml-4 border-l-2 border-border space-y-4">
+            <div className="relative pl-14 ml-3 border-l-2 border-border space-y-4">
               {group.eventos.map((evento) => {
                 const { Icon, color } = getEventoStyle(evento);
 
@@ -217,7 +217,7 @@ export function ClienteTimeline({
                   >
                     {/* Timeline dot */}
                     <div
-                      className={`absolute -left-[33px] w-8 h-8 rounded-full flex items-center justify-center ${color} shadow-sm`}
+                      className={`absolute -left-[37px] w-8 h-8 rounded-full flex items-center justify-center ${color} shadow-sm`}
                     >
                       <Icon className="h-4 w-4" />
                     </div>

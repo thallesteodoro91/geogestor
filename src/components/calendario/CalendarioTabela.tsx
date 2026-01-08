@@ -18,6 +18,7 @@ import { ptBR } from "date-fns/locale";
 import { Eye, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
 
 export const CalendarioTabela = () => {
   const navigate = useNavigate();
@@ -54,12 +55,12 @@ export const CalendarioTabela = () => {
           servico: orc.servico?.nome_do_servico || "Orçamento",
           propriedade: orc.propriedade?.nome_da_propriedade || "-",
           municipio: orc.propriedade?.municipio || "-",
-          status: orc.situacao || "Pendente",
+          status: orc.situacao || SERVICE_STATUS.PENDENTE,
           pagamento: orc.forma_de_pagamento || "-",
           valor: orc.valor_unitario || 0,
         })),
         ...(servicos || []).map((srv) => {
-          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          const status = srv.situacao_do_servico === SERVICE_STATUS.PLANEJADO ? "Agendado" : (srv.situacao_do_servico || "Agendado");
           return {
             id: `srv-${srv.id_servico}`,
             tipo: "servico" as const,
@@ -88,11 +89,12 @@ export const CalendarioTabela = () => {
   );
 
   const getStatusColor = (status: string) => {
-    const statusLower = status.toLowerCase();
-    if (statusLower.includes("concluído") || statusLower.includes("aprovado"))
+    if (status === SERVICE_STATUS.CONCLUIDO || status.toLowerCase().includes("aprovado"))
       return "bg-emerald-500 text-white";
-    if (statusLower.includes("cancelado")) return "bg-red-500 text-white";
-    if (statusLower.includes("andamento")) return "bg-blue-500 text-white";
+    if (status === SERVICE_STATUS.CANCELADO || status.toLowerCase().includes("cancelado")) 
+      return "bg-red-500 text-white";
+    if (status === SERVICE_STATUS.EM_ANDAMENTO || status.toLowerCase().includes("andamento")) 
+      return "bg-blue-500 text-white";
     return "bg-amber-500 text-white";
   };
 

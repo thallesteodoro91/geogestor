@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { SERVICE_STATUS, getStatusBadgeVariant } from "@/constants/serviceStatus";
 
 interface ClienteServicosProps {
   servicos: any[];
@@ -18,19 +19,6 @@ export function ClienteServicos({ servicos }: ClienteServicosProps) {
       </div>
     );
   }
-
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'Concluído':
-        return 'default';
-      case 'Em Andamento':
-        return 'secondary';
-      case 'Pendente':
-        return 'outline';
-      default:
-        return 'secondary';
-    }
-  };
 
   return (
     <Table>
@@ -64,8 +52,8 @@ export function ClienteServicos({ servicos }: ClienteServicosProps) {
                 : '-'}
             </TableCell>
             <TableCell>
-              <Badge variant={getStatusVariant(servico.situacao_do_servico)}>
-                {servico.situacao_do_servico || 'Pendente'}
+              <Badge variant={getStatusBadgeVariant(servico.situacao_do_servico)}>
+                {servico.situacao_do_servico || SERVICE_STATUS.PENDENTE}
               </Badge>
             </TableCell>
             <TableCell className="text-right font-medium">

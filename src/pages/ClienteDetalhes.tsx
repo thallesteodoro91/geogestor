@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, Edit, Plus, FileText, Wrench, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Edit, Plus, FileText, Wrench } from "lucide-react";
 import {
   useClienteDetalhes,
   useClientePropriedades,
@@ -108,14 +108,6 @@ export default function ClienteDetalhes() {
             Voltar
           </Button>
           <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              className="bg-primary hover:bg-primary/90 shadow-md"
-              onClick={() => setActiveTab("central")}
-            >
-              <LayoutGrid className="h-4 w-4 mr-2" />
-              Visão geral
-            </Button>
             <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
               <Edit className="h-4 w-4 mr-2" />
               Editar

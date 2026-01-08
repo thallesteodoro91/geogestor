@@ -26,8 +26,8 @@ import { cn } from "@/lib/utils";
 const statusOptions = [
   { value: "all", label: "Todos os Status" },
   { value: "Pendente", label: "Pendente" },
-  { value: "Em andamento", label: "Em andamento" },
-  { value: "Em revisão", label: "Em revisão" },
+  { value: "Em Andamento", label: "Em Andamento" },
+  { value: "Em Revisão", label: "Em Revisão" },
   { value: "Concluído", label: "Concluído" },
 ];
 
@@ -35,9 +35,9 @@ const getStatusBadgeVariant = (status: string) => {
   switch (status) {
     case "Concluído":
       return "default";
-    case "Em andamento":
+    case "Em Andamento":
       return "secondary";
-    case "Em revisão":
+    case "Em Revisão":
       return "outline";
     case "Pendente":
     default:
@@ -142,7 +142,7 @@ export default function Servicos() {
   const servicosConcluidos = servicos.filter((s: any) => s.situacao_do_servico === "Concluído").length;
   const servicosPendentes = servicos.filter((s: any) => s.situacao_do_servico === "Pendente").length;
   const servicosEmAndamento = servicos.filter((s: any) => 
-    s.situacao_do_servico === "Em andamento" || s.situacao_do_servico === "Em revisão"
+    s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Em Revisão"
   ).length;
   const mediaProgresso = totalServicos > 0 
     ? Math.round(servicos.reduce((acc: number, s: any) => acc + (s.progresso || 0), 0) / totalServicos) 

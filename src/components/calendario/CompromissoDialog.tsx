@@ -377,7 +377,7 @@ export const CompromissoDialog = ({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Planejado">Planejado</SelectItem>
-                      <SelectItem value="Em andamento">Em andamento</SelectItem>
+                      <SelectItem value="Em Andamento">Em Andamento</SelectItem>
                       <SelectItem value="Concluído">Concluído</SelectItem>
                       <SelectItem value="Cancelado">Cancelado</SelectItem>
                     </SelectContent>

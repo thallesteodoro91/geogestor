@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { CalendarIcon, Filter, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-
+import { SERVICE_STATUS_FILTER_OPTIONS } from "@/constants/serviceStatus";
 interface GlobalFiltersProps {
   clientes?: Array<{ id: string; nome: string }>;
   empresas?: Array<{ id: string; nome: string }>;
@@ -158,11 +158,11 @@ export const GlobalFilters = ({
                     <SelectValue placeholder="Todas as situações" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="Concluído">Concluído</SelectItem>
-                    <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                    <SelectItem value="Cancelado">Cancelado</SelectItem>
-                    <SelectItem value="Pendente">Pendente</SelectItem>
+                    {SERVICE_STATUS_FILTER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

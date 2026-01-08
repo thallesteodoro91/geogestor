@@ -33,8 +33,8 @@ const getStatusIcon = (status: string) => {
   switch (status) {
     case "Concluído":
       return <CheckCircle2 className="h-5 w-5 text-green-500" />;
-    case "Em andamento":
-    case "Em revisão":
+    case "Em Andamento":
+    case "Em Revisão":
       return <Clock className="h-5 w-5 text-amber-500" />;
     case "Pendente":
     default:
@@ -46,9 +46,9 @@ const getStatusBadgeVariant = (status: string) => {
   switch (status) {
     case "Concluído":
       return "default";
-    case "Em andamento":
+    case "Em Andamento":
       return "secondary";
-    case "Em revisão":
+    case "Em Revisão":
       return "outline";
     case "Pendente":
     default:

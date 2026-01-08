@@ -31,8 +31,8 @@ interface NovoServicoDialogProps {
 
 const STATUS_OPTIONS = [
   { value: 'Pendente', label: 'Pendente' },
-  { value: 'Em andamento', label: 'Em andamento' },
-  { value: 'Em revisão', label: 'Em revisão' },
+  { value: 'Em Andamento', label: 'Em Andamento' },
+  { value: 'Em Revisão', label: 'Em Revisão' },
   { value: 'Concluído', label: 'Concluído' }
 ];
 

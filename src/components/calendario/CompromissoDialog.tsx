@@ -21,6 +21,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Calendar, Loader2, FileText, Briefcase } from "lucide-react";
+import { SERVICE_STATUS, CALENDAR_STATUS_OPTIONS } from "@/constants/serviceStatus";
 
 interface CompromissoDialogProps {
   open: boolean;
@@ -44,8 +45,8 @@ export const CompromissoDialog = ({
     data_inicio: new Date().toISOString().split("T")[0],
     data_termino: "",
     valor_unitario: "",
-    situacao: "Pendente",
-    situacao_servico: "Planejado",
+    situacao: SERVICE_STATUS.PENDENTE as string,
+    situacao_servico: SERVICE_STATUS.PLANEJADO as string,
   });
 
   // Buscar clientes
@@ -158,8 +159,8 @@ export const CompromissoDialog = ({
       data_inicio: new Date().toISOString().split("T")[0],
       data_termino: "",
       valor_unitario: "",
-      situacao: "Pendente",
-      situacao_servico: "Planejado",
+      situacao: SERVICE_STATUS.PENDENTE,
+      situacao_servico: SERVICE_STATUS.PLANEJADO,
     });
   };
 
@@ -376,10 +377,11 @@ export const CompromissoDialog = ({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Planejado">Planejado</SelectItem>
-                      <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                      <SelectItem value="Concluído">Concluído</SelectItem>
-                      <SelectItem value="Cancelado">Cancelado</SelectItem>
+                      {CALENDAR_STATUS_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

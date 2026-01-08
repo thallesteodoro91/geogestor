@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
 
 interface ServicoDialogProps {
   open: boolean;
@@ -182,9 +183,9 @@ export function ServicoDialog({ open, onOpenChange, servico, clienteId, onSucces
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                  <SelectItem value="Concluído">Concluído</SelectItem>
-                  <SelectItem value="Cancelado">Cancelado</SelectItem>
+                  <SelectItem value={SERVICE_STATUS.EM_ANDAMENTO}>{SERVICE_STATUS.EM_ANDAMENTO}</SelectItem>
+                  <SelectItem value={SERVICE_STATUS.CONCLUIDO}>{SERVICE_STATUS.CONCLUIDO}</SelectItem>
+                  <SelectItem value={SERVICE_STATUS.CANCELADO}>{SERVICE_STATUS.CANCELADO}</SelectItem>
                 </SelectContent>
               </Select>
             </div>

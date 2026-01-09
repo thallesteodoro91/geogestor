@@ -7,6 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION } from "@/constants/budgetStatus";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendario-custom.css";
 
@@ -74,7 +76,7 @@ export const CalendarioMensal = () => {
             end: orc.data_termino ? new Date(orc.data_termino) : new Date(orc.data_inicio),
             resource: {
               tipo: "orcamento",
-              status: orc.situacao || "Pendente",
+              status: orc.situacao || BUDGET_SITUATION.PENDENTE,
               cliente: orc.cliente?.nome || "Cliente",
               categoria: orc.servico?.categoria || "Geral",
             },
@@ -85,7 +87,7 @@ export const CalendarioMensal = () => {
       // Adicionar serviços ao calendário
       servicos?.forEach((srv) => {
         if (srv.data_do_servico_inicio) {
-          const status = srv.situacao_do_servico === "Planejado" ? "Agendado" : (srv.situacao_do_servico || "Agendado");
+          const status = srv.situacao_do_servico === SERVICE_STATUS.PLANEJADO ? "Agendado" : (srv.situacao_do_servico || "Agendado");
           events.push({
             id: `srv-${srv.id_servico}`,
             title: `🛠️ ${srv.nome_do_servico}`,
@@ -142,12 +144,14 @@ export const CalendarioMensal = () => {
     }
 
     // Cores por status para orçamentos
-    if (status?.toLowerCase().includes("cancelado")) {
-      backgroundColor = "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)";
-    } else if (status?.toLowerCase().includes("concluído") || status?.toLowerCase().includes("aprovado")) {
-      backgroundColor = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
-    } else if (status?.toLowerCase().includes("andamento")) {
-      backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)";
+    if (status === BUDGET_SITUATION.CANCELADO || status === SERVICE_STATUS.CANCELADO) {
+      backgroundColor = "linear-gradient(135deg, hsl(0,100%,50%) 0%, hsl(0,100%,40%) 100%)";
+    } else if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
+      backgroundColor = "linear-gradient(135deg, hsl(142,76%,36%) 0%, hsl(142,76%,28%) 100%)";
+    } else if (status === SERVICE_STATUS.EM_ANDAMENTO) {
+      backgroundColor = "linear-gradient(135deg, hsl(217,91%,60%) 0%, hsl(217,91%,50%) 100%)";
+    } else if (status === SERVICE_STATUS.EM_REVISAO) {
+      backgroundColor = "linear-gradient(135deg, hsl(280,70%,50%) 0%, hsl(280,70%,40%) 100%)";
     }
 
     borderLeft = "4px solid #fbbf24";

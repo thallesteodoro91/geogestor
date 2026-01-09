@@ -83,15 +83,18 @@ export const CalendarioDiario = () => {
 
   const getStatusConfig = (status: string) => {
     if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
-      return { color: "bg-emerald-500 text-white", icon: "✓" };
+      return { color: "bg-[hsl(142,76%,36%)] text-white", icon: "✓" };
     }
     if (status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO) {
-      return { color: "bg-red-500 text-white", icon: "✕" };
+      return { color: "bg-[hsl(0,100%,50%)] text-white", icon: "✕" };
     }
     if (status === SERVICE_STATUS.EM_ANDAMENTO) {
-      return { color: "bg-blue-500 text-white", icon: "⟳" };
+      return { color: "bg-[hsl(217,91%,60%)] text-white", icon: "⟳" };
     }
-    return { color: "bg-amber-500 text-white", icon: "⏱" };
+    if (status === SERVICE_STATUS.EM_REVISAO) {
+      return { color: "bg-[hsl(280,70%,50%)] text-white", icon: "⟳" };
+    }
+    return { color: "bg-[hsl(48,96%,53%)] text-black", icon: "⏱" };
   };
 
   const getCategoriaColor = (categoria: string, tipo: string) => {

@@ -3,30 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { FileText } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getPaymentStatusBadgeClass, getPaymentMethodBadgeClass } from "@/constants/budgetStatus";
 
 interface ClienteOrcamentosProps {
   orcamentos: any[];
 }
 
 export function ClienteOrcamentos({ orcamentos }: ClienteOrcamentosProps) {
-  const getSituacaoPagamentoColor = (situacao: string) => {
-    switch(situacao) {
-      case "Faturado": return "bg-green-500 hover:bg-green-600 text-white";
-      case "Pendente": return "bg-yellow-500 hover:bg-yellow-600 text-white";
-      case "Cancelado": return "bg-pink-500 hover:bg-pink-600 text-white";
-      default: return "bg-muted";
-    }
-  };
-
-  const getFormaPagamentoColor = (forma: string) => {
-    switch(forma) {
-      case "Dinheiro": return "bg-green-500 hover:bg-green-600 text-white";
-      case "Pix": return "bg-blue-500 hover:bg-blue-600 text-white";
-      case "Cartão": return "bg-yellow-500 hover:bg-yellow-600 text-white";
-      case "Transferência Bancária": return "bg-gray-500 hover:bg-gray-600 text-white";
-      default: return "bg-muted";
-    }
-  };
 
   if (orcamentos.length === 0) {
     return (
@@ -69,14 +52,14 @@ export function ClienteOrcamentos({ orcamentos }: ClienteOrcamentosProps) {
             </TableCell>
             <TableCell>
               {orc.situacao_do_pagamento && (
-                <Badge className={getSituacaoPagamentoColor(orc.situacao_do_pagamento)}>
+                <Badge className={getPaymentStatusBadgeClass(orc.situacao_do_pagamento)}>
                   {orc.situacao_do_pagamento}
                 </Badge>
               )}
             </TableCell>
             <TableCell>
               {orc.forma_de_pagamento && (
-                <Badge className={getFormaPagamentoColor(orc.forma_de_pagamento)}>
+                <Badge className={getPaymentMethodBadgeClass(orc.forma_de_pagamento)}>
                   {orc.forma_de_pagamento}
                 </Badge>
               )}

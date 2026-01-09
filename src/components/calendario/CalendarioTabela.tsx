@@ -18,7 +18,8 @@ import { ptBR } from "date-fns/locale";
 import { Eye, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { SERVICE_STATUS, getStatusBadgeVariant } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, getPaymentStatusBadgeClass } from "@/constants/budgetStatus";
 
 export const CalendarioTabela = () => {
   const navigate = useNavigate();
@@ -89,13 +90,19 @@ export const CalendarioTabela = () => {
   );
 
   const getStatusColor = (status: string) => {
-    if (status === SERVICE_STATUS.CONCLUIDO || status.toLowerCase().includes("aprovado"))
-      return "bg-emerald-500 text-white";
-    if (status === SERVICE_STATUS.CANCELADO || status.toLowerCase().includes("cancelado")) 
-      return "bg-red-500 text-white";
-    if (status === SERVICE_STATUS.EM_ANDAMENTO || status.toLowerCase().includes("andamento")) 
-      return "bg-blue-500 text-white";
-    return "bg-amber-500 text-white";
+    // Check for budget situations first
+    if (status === BUDGET_SITUATION.APROVADO || status.toLowerCase().includes("aprovado"))
+      return "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]";
+    if (status === BUDGET_SITUATION.CANCELADO || status === SERVICE_STATUS.CANCELADO)
+      return "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]";
+    if (status === SERVICE_STATUS.CONCLUIDO)
+      return "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]";
+    if (status === SERVICE_STATUS.EM_ANDAMENTO)
+      return "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]";
+    if (status === SERVICE_STATUS.EM_REVISAO)
+      return "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]";
+    // Default for Pendente/Planejado
+    return "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]";
   };
 
   const getTipoIcon = (tipo: string) => {

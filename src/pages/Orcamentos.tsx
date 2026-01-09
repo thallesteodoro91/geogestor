@@ -16,20 +16,30 @@ import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    id_cliente: string;
+    id_servico: string;
+    data_orcamento: string;
+    valor_unitario: string;
+    quantidade: string;
+    desconto: string;
+    situacao_do_pagamento: string;
+    forma_de_pagamento: string;
+  }>({
     id_cliente: "",
     id_servico: "",
     data_orcamento: new Date().toISOString().split('T')[0],
     valor_unitario: "",
     quantidade: "1",
     desconto: "0",
-    situacao_do_pagamento: "Pendente",
+    situacao_do_pagamento: PAYMENT_STATUS.PENDENTE,
     forma_de_pagamento: "",
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -149,7 +159,7 @@ export default function Orcamentos() {
       valor_unitario: "",
       quantidade: "1",
       desconto: "0",
-      situacao_do_pagamento: "Pendente",
+      situacao_do_pagamento: PAYMENT_STATUS.PENDENTE,
       forma_de_pagamento: "",
     });
     setEditingId(null);
@@ -163,7 +173,7 @@ export default function Orcamentos() {
       valor_unitario: orc.valor_unitario.toString(),
       quantidade: orc.quantidade.toString(),
       desconto: orc.desconto?.toString() || "0",
-      situacao_do_pagamento: orc.situacao_do_pagamento || "Pendente",
+      situacao_do_pagamento: orc.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE,
       forma_de_pagamento: orc.forma_de_pagamento || "",
     });
     setEditingId(orc.id_orcamento);
@@ -191,7 +201,7 @@ export default function Orcamentos() {
         valor_unitario: validatedData.valor_unitario.toString(),
         quantidade: validatedData.quantidade.toString(),
         desconto: formData.desconto || "0",
-        situacao_do_pagamento: validatedData.situacao_do_pagamento || "Pendente",
+        situacao_do_pagamento: validatedData.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE,
         forma_de_pagamento: validatedData.forma_de_pagamento || "",
       };
       
@@ -357,10 +367,11 @@ export default function Orcamentos() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="Pendente">Pendente</SelectItem>
-                          <SelectItem value="Pago">Pago</SelectItem>
-                          <SelectItem value="Atrasado">Atrasado</SelectItem>
-                          <SelectItem value="Cancelado">Cancelado</SelectItem>
+                          {PAYMENT_STATUS_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

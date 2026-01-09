@@ -62,7 +62,7 @@ export function NovoServicoDialog({
         id_orcamento: editingServico.id_orcamento || '',
         data_do_servico_inicio: editingServico.data_do_servico_inicio || '',
         data_do_servico_fim: editingServico.data_do_servico_fim || '',
-        situacao_do_servico: editingServico.situacao_do_servico || 'Pendente'
+        situacao_do_servico: editingServico.situacao_do_servico || SERVICE_STATUS.PENDENTE
       });
     } else if (!open) {
       setFormData(initialFormData);
@@ -130,7 +130,7 @@ export function NovoServicoDialog({
 
         // Registrar evento de mudança de status
         if (oldStatus !== data.situacao_do_servico) {
-          await registrarMudancaStatus(editingServico.id_servico, oldStatus || 'Pendente', data.situacao_do_servico);
+          await registrarMudancaStatus(editingServico.id_servico, oldStatus || SERVICE_STATUS.PENDENTE, data.situacao_do_servico);
         }
       } else {
         const { data: newServico, error } = await createServico({

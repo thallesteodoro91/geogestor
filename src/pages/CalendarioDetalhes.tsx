@@ -84,10 +84,14 @@ const CalendarioDetalhes = () => {
   const isCancelado = status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO;
 
   const getStatusBadgeClass = () => {
-    if (isCancelado) return "bg-red-500";
-    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) return "bg-green-500";
-    if (status === SERVICE_STATUS.EM_ANDAMENTO) return "bg-blue-500";
-    return "bg-yellow-500";
+    if (isCancelado) return "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]";
+    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) 
+      return "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]";
+    if (status === SERVICE_STATUS.EM_ANDAMENTO) 
+      return "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]";
+    if (status === SERVICE_STATUS.EM_REVISAO)
+      return "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]";
+    return "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]";
   };
 
   return (

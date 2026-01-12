@@ -65,6 +65,83 @@ export const EXPENSE_STATUS = {
 
 export type ExpenseStatus = typeof EXPENSE_STATUS[keyof typeof EXPENSE_STATUS];
 
+// ============================================
+// CORES HSL CENTRALIZADAS PARA STATUS
+// ============================================
+
+export const PAYMENT_STATUS_COLORS = {
+  PAGO: {
+    bg: 'hsl(142,76%,36%)',
+    bgHover: 'hsl(142,76%,30%)',
+    text: 'white',
+  },
+  PENDENTE: {
+    bg: 'hsl(48,96%,53%)',
+    bgHover: 'hsl(48,96%,45%)',
+    text: 'black',
+  },
+  PARCIAL: {
+    bg: 'hsl(217,91%,60%)',
+    bgHover: 'hsl(217,91%,55%)',
+    text: 'white',
+  },
+  CANCELADO: {
+    bg: 'hsl(0,100%,50%)',
+    bgHover: 'hsl(0,100%,45%)',
+    text: 'white',
+  },
+} as const;
+
+export const PAYMENT_METHOD_COLORS = {
+  PIX: {
+    bg: 'hsl(48,96%,53%)',
+    bgHover: 'hsl(48,96%,45%)',
+    text: 'black',
+  },
+  DINHEIRO: {
+    bg: 'hsl(142,76%,36%)',
+    bgHover: 'hsl(142,76%,30%)',
+    text: 'white',
+  },
+  CARTAO: {
+    bg: 'hsl(217,91%,60%)',
+    bgHover: 'hsl(217,91%,55%)',
+    text: 'white',
+  },
+  TRANSFERENCIA: {
+    bg: 'hsl(280,70%,50%)',
+    bgHover: 'hsl(280,70%,45%)',
+    text: 'white',
+  },
+  BOLETO: {
+    bg: 'hsl(25,95%,53%)',
+    bgHover: 'hsl(25,95%,45%)',
+    text: 'white',
+  },
+} as const;
+
+export const BUDGET_SITUATION_COLORS = {
+  APROVADO: {
+    bg: 'hsl(142,76%,36%)',
+    bgHover: 'hsl(142,76%,30%)',
+    text: 'white',
+  },
+  PENDENTE: {
+    bg: 'hsl(48,96%,53%)',
+    bgHover: 'hsl(48,96%,45%)',
+    text: 'black',
+  },
+  CANCELADO: {
+    bg: 'hsl(0,100%,50%)',
+    bgHover: 'hsl(0,100%,45%)',
+    text: 'white',
+  },
+} as const;
+
+// ============================================
+// HELPERS PARA CLASSES DE BADGE
+// ============================================
+
 // Helper para verificar se despesa está pendente
 export const isExpensePending = (status: string | null | undefined): boolean => {
   return status === EXPENSE_STATUS.PENDENTE;
@@ -75,36 +152,138 @@ export const isExpenseConfirmed = (status: string | null | undefined): boolean =
   return status === EXPENSE_STATUS.CONFIRMADA || status === null || status === undefined;
 };
 
-// Helper para obter classe de cor do badge de status de pagamento
+/**
+ * Retorna classes Tailwind HSL para estilização de badges de status de pagamento
+ * @param status - O status do pagamento
+ * @returns String com classes Tailwind para background, hover e texto
+ */
 export const getPaymentStatusBadgeClass = (status: string | null | undefined): string => {
   switch (status) {
     case PAYMENT_STATUS.PAGO:
-      return 'bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]';
+      return `bg-[${PAYMENT_STATUS_COLORS.PAGO.bg}] text-${PAYMENT_STATUS_COLORS.PAGO.text} hover:bg-[${PAYMENT_STATUS_COLORS.PAGO.bgHover}]`;
     case PAYMENT_STATUS.CANCELADO:
-      return 'bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]';
-    case PAYMENT_STATUS.PENDENTE:
-      return 'bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]';
+      return `bg-[${PAYMENT_STATUS_COLORS.CANCELADO.bg}] text-${PAYMENT_STATUS_COLORS.CANCELADO.text} hover:bg-[${PAYMENT_STATUS_COLORS.CANCELADO.bgHover}]`;
     case PAYMENT_STATUS.PARCIAL:
-      return 'bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]';
+      return `bg-[${PAYMENT_STATUS_COLORS.PARCIAL.bg}] text-${PAYMENT_STATUS_COLORS.PARCIAL.text} hover:bg-[${PAYMENT_STATUS_COLORS.PARCIAL.bgHover}]`;
+    case PAYMENT_STATUS.PENDENTE:
+    default:
+      return `bg-[${PAYMENT_STATUS_COLORS.PENDENTE.bg}] text-${PAYMENT_STATUS_COLORS.PENDENTE.text} hover:bg-[${PAYMENT_STATUS_COLORS.PENDENTE.bgHover}]`;
+  }
+};
+
+/**
+ * Retorna a cor HSL de fundo para um status de pagamento
+ * @param status - O status do pagamento
+ * @returns String HSL da cor de fundo
+ */
+export const getPaymentStatusColor = (status: string | null | undefined): string => {
+  switch (status) {
+    case PAYMENT_STATUS.PAGO:
+      return PAYMENT_STATUS_COLORS.PAGO.bg;
+    case PAYMENT_STATUS.CANCELADO:
+      return PAYMENT_STATUS_COLORS.CANCELADO.bg;
+    case PAYMENT_STATUS.PARCIAL:
+      return PAYMENT_STATUS_COLORS.PARCIAL.bg;
+    case PAYMENT_STATUS.PENDENTE:
+    default:
+      return PAYMENT_STATUS_COLORS.PENDENTE.bg;
+  }
+};
+
+/**
+ * Retorna classes Tailwind HSL para estilização de badges de forma de pagamento
+ * @param method - A forma de pagamento
+ * @returns String com classes Tailwind para background, hover e texto
+ */
+export const getPaymentMethodBadgeClass = (method: string | null | undefined): string => {
+  switch (method) {
+    case PAYMENT_METHOD.PIX:
+      return `bg-[${PAYMENT_METHOD_COLORS.PIX.bg}] text-${PAYMENT_METHOD_COLORS.PIX.text} hover:bg-[${PAYMENT_METHOD_COLORS.PIX.bgHover}]`;
+    case PAYMENT_METHOD.DINHEIRO:
+      return `bg-[${PAYMENT_METHOD_COLORS.DINHEIRO.bg}] text-${PAYMENT_METHOD_COLORS.DINHEIRO.text} hover:bg-[${PAYMENT_METHOD_COLORS.DINHEIRO.bgHover}]`;
+    case PAYMENT_METHOD.CARTAO:
+      return `bg-[${PAYMENT_METHOD_COLORS.CARTAO.bg}] text-${PAYMENT_METHOD_COLORS.CARTAO.text} hover:bg-[${PAYMENT_METHOD_COLORS.CARTAO.bgHover}]`;
+    case PAYMENT_METHOD.TRANSFERENCIA:
+      return `bg-[${PAYMENT_METHOD_COLORS.TRANSFERENCIA.bg}] text-${PAYMENT_METHOD_COLORS.TRANSFERENCIA.text} hover:bg-[${PAYMENT_METHOD_COLORS.TRANSFERENCIA.bgHover}]`;
+    case PAYMENT_METHOD.BOLETO:
+      return `bg-[${PAYMENT_METHOD_COLORS.BOLETO.bg}] text-${PAYMENT_METHOD_COLORS.BOLETO.text} hover:bg-[${PAYMENT_METHOD_COLORS.BOLETO.bgHover}]`;
     default:
       return 'bg-muted text-muted-foreground';
   }
 };
 
-// Helper para obter classe de cor do badge de forma de pagamento
-export const getPaymentMethodBadgeClass = (method: string | null | undefined): string => {
+/**
+ * Retorna a cor HSL de fundo para uma forma de pagamento
+ * @param method - A forma de pagamento
+ * @returns String HSL da cor de fundo
+ */
+export const getPaymentMethodColor = (method: string | null | undefined): string => {
   switch (method) {
     case PAYMENT_METHOD.PIX:
-      return 'bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]';
+      return PAYMENT_METHOD_COLORS.PIX.bg;
     case PAYMENT_METHOD.DINHEIRO:
-      return 'bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]';
+      return PAYMENT_METHOD_COLORS.DINHEIRO.bg;
     case PAYMENT_METHOD.CARTAO:
-      return 'bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]';
+      return PAYMENT_METHOD_COLORS.CARTAO.bg;
     case PAYMENT_METHOD.TRANSFERENCIA:
-      return 'bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]';
+      return PAYMENT_METHOD_COLORS.TRANSFERENCIA.bg;
     case PAYMENT_METHOD.BOLETO:
-      return 'bg-[hsl(25,95%,53%)] text-white hover:bg-[hsl(25,95%,45%)]';
+      return PAYMENT_METHOD_COLORS.BOLETO.bg;
     default:
-      return 'bg-muted text-muted-foreground';
+      return 'hsl(var(--muted))';
   }
+};
+
+/**
+ * Retorna classes Tailwind HSL para estilização de badges de situação de orçamento
+ * @param situation - A situação do orçamento
+ * @returns String com classes Tailwind para background, hover e texto
+ */
+export const getBudgetSituationBadgeClass = (situation: string | null | undefined): string => {
+  switch (situation) {
+    case BUDGET_SITUATION.APROVADO:
+      return `bg-[${BUDGET_SITUATION_COLORS.APROVADO.bg}] text-${BUDGET_SITUATION_COLORS.APROVADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.APROVADO.bgHover}]`;
+    case BUDGET_SITUATION.CANCELADO:
+      return `bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bg}] text-${BUDGET_SITUATION_COLORS.CANCELADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bgHover}]`;
+    case BUDGET_SITUATION.PENDENTE:
+    default:
+      return `bg-[${BUDGET_SITUATION_COLORS.PENDENTE.bg}] text-${BUDGET_SITUATION_COLORS.PENDENTE.text} hover:bg-[${BUDGET_SITUATION_COLORS.PENDENTE.bgHover}]`;
+  }
+};
+
+/**
+ * Retorna a cor HSL de fundo para uma situação de orçamento
+ * @param situation - A situação do orçamento
+ * @returns String HSL da cor de fundo
+ */
+export const getBudgetSituationColor = (situation: string | null | undefined): string => {
+  switch (situation) {
+    case BUDGET_SITUATION.APROVADO:
+      return BUDGET_SITUATION_COLORS.APROVADO.bg;
+    case BUDGET_SITUATION.CANCELADO:
+      return BUDGET_SITUATION_COLORS.CANCELADO.bg;
+    case BUDGET_SITUATION.PENDENTE:
+    default:
+      return BUDGET_SITUATION_COLORS.PENDENTE.bg;
+  }
+};
+
+// Helper para verificar se orçamento está aprovado
+export const isBudgetApproved = (situation: string | null | undefined): boolean => {
+  return situation === BUDGET_SITUATION.APROVADO;
+};
+
+// Helper para verificar se orçamento está cancelado
+export const isBudgetCanceled = (situation: string | null | undefined): boolean => {
+  return situation === BUDGET_SITUATION.CANCELADO;
+};
+
+// Helper para verificar se pagamento está pendente
+export const isPaymentPending = (status: string | null | undefined): boolean => {
+  return status === PAYMENT_STATUS.PENDENTE;
+};
+
+// Helper para verificar se pagamento está pago
+export const isPaymentPaid = (status: string | null | undefined): boolean => {
+  return status === PAYMENT_STATUS.PAGO;
 };

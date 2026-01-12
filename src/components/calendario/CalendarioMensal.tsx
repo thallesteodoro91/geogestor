@@ -7,8 +7,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SERVICE_STATUS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { SERVICE_STATUS, getServiceStatusColor, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, getBudgetSituationColor, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendario-custom.css";
 
@@ -143,15 +143,19 @@ export const CalendarioMensal = () => {
       backgroundColor = "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)";
     }
 
-    // Cores por status para orçamentos
+    // Cores por status usando helpers centralizados
     if (status === BUDGET_SITUATION.CANCELADO || status === SERVICE_STATUS.CANCELADO) {
-      backgroundColor = "linear-gradient(135deg, hsl(0,100%,50%) 0%, hsl(0,100%,40%) 100%)";
+      const color = SERVICE_STATUS_COLORS.CANCELADO.bg;
+      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.CANCELADO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
-      backgroundColor = "linear-gradient(135deg, hsl(142,76%,36%) 0%, hsl(142,76%,28%) 100%)";
+      const color = BUDGET_SITUATION_COLORS.APROVADO.bg;
+      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${BUDGET_SITUATION_COLORS.APROVADO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.EM_ANDAMENTO) {
-      backgroundColor = "linear-gradient(135deg, hsl(217,91%,60%) 0%, hsl(217,91%,50%) 100%)";
+      const color = SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg;
+      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.EM_ANDAMENTO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.EM_REVISAO) {
-      backgroundColor = "linear-gradient(135deg, hsl(280,70%,50%) 0%, hsl(280,70%,40%) 100%)";
+      const color = SERVICE_STATUS_COLORS.EM_REVISAO.bg;
+      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.EM_REVISAO.bgHover} 100%)`;
     }
 
     borderLeft = "4px solid #fbbf24";

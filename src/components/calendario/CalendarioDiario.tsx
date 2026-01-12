@@ -9,8 +9,8 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, User, Briefcase, DollarSign, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { SERVICE_STATUS, getServiceStatusBadgeClasses, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, getBudgetSituationBadgeClass, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
 
 export const CalendarioDiario = () => {
   const navigate = useNavigate();
@@ -81,20 +81,18 @@ export const CalendarioDiario = () => {
     },
   });
 
-  const getStatusConfig = (status: string) => {
-    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
-      return { color: "bg-[hsl(142,76%,36%)] text-white", icon: "✓" };
-    }
-    if (status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO) {
-      return { color: "bg-[hsl(0,100%,50%)] text-white", icon: "✕" };
-    }
-    if (status === SERVICE_STATUS.EM_ANDAMENTO) {
-      return { color: "bg-[hsl(217,91%,60%)] text-white", icon: "⟳" };
-    }
-    if (status === SERVICE_STATUS.EM_REVISAO) {
-      return { color: "bg-[hsl(280,70%,50%)] text-white", icon: "⟳" };
-    }
-    return { color: "bg-[hsl(48,96%,53%)] text-black", icon: "⏱" };
+  // Helper centralizado para configuração de status com ícones
+  const getStatusConfig = (status: string, tipo: string) => {
+    const icon = 
+      status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO ? "✓" :
+      status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO ? "✕" :
+      status === SERVICE_STATUS.EM_ANDAMENTO || status === SERVICE_STATUS.EM_REVISAO ? "⟳" : "⏱";
+    
+    const color = tipo === "orcamento" 
+      ? getBudgetSituationBadgeClass(status)
+      : getServiceStatusBadgeClasses(status);
+    
+    return { color, icon };
   };
 
   const getCategoriaColor = (categoria: string, tipo: string) => {
@@ -160,7 +158,7 @@ export const CalendarioDiario = () => {
           </Card>
         ) : (
           eventos.map((evento) => {
-            const statusConfig = getStatusConfig(evento.status);
+            const statusConfig = getStatusConfig(evento.status, evento.tipo);
             return (
               <Card
                 key={evento.id}

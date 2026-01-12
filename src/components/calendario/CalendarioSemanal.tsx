@@ -11,8 +11,8 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, MapPin, User, Briefcase } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { SERVICE_STATUS, getServiceStatusBadgeClasses } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, getBudgetSituationBadgeClass } from "@/constants/budgetStatus";
 
 export const CalendarioSemanal = () => {
   const navigate = useNavigate();
@@ -90,16 +90,12 @@ export const CalendarioSemanal = () => {
   const municipios = [...new Set(eventos.map((e) => e.municipio))].filter(Boolean);
   const statusOptions = [...new Set(eventos.map((e) => e.status))];
 
-  const getStatusColor = (status: string) => {
-    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) 
-      return "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]";
-    if (status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO) 
-      return "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]";
-    if (status === SERVICE_STATUS.EM_ANDAMENTO) 
-      return "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]";
-    if (status === SERVICE_STATUS.EM_REVISAO)
-      return "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]";
-    return "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]";
+  // Helper centralizado para cores de status
+  const getStatusColor = (status: string, tipo: string) => {
+    if (tipo === "orcamento") {
+      return getBudgetSituationBadgeClass(status);
+    }
+    return getServiceStatusBadgeClasses(status);
   };
 
   const getTipoIcon = (tipo: string) => {
@@ -176,7 +172,7 @@ export const CalendarioSemanal = () => {
             <div className="flex items-start justify-between">
               <div className="space-y-3 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : getStatusColor(evento.status)}>
+                  <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : getStatusColor(evento.status, evento.tipo)}>
                     {evento.status}
                   </Badge>
                   <Badge variant="outline" className={cn("gap-1", getTipoColor(evento.tipo))}>

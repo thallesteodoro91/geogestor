@@ -19,8 +19,12 @@ import {
   Clock,
   CheckCircle2,
 } from "lucide-react";
-import { SERVICE_STATUS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION, PAYMENT_STATUS } from "@/constants/budgetStatus";
+import { SERVICE_STATUS, getServiceStatusBadgeClasses } from "@/constants/serviceStatus";
+import { 
+  BUDGET_SITUATION, 
+  getBudgetSituationBadgeClass,
+  getPaymentStatusBadgeClass 
+} from "@/constants/budgetStatus";
 
 const CalendarioDetalhes = () => {
   const { tipo, id } = useParams<{ tipo: string; id: string }>();
@@ -81,17 +85,13 @@ const CalendarioDetalhes = () => {
   const status = isOrcamento 
     ? (detalhes as any).situacao 
     : (detalhes as any).situacao_do_servico;
-  const isCancelado = status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO;
 
+  // Use helpers centralizados para obter classes de badge
   const getStatusBadgeClass = () => {
-    if (isCancelado) return "bg-[hsl(0,100%,50%)] text-white hover:bg-[hsl(0,100%,45%)]";
-    if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) 
-      return "bg-[hsl(142,76%,36%)] text-white hover:bg-[hsl(142,76%,30%)]";
-    if (status === SERVICE_STATUS.EM_ANDAMENTO) 
-      return "bg-[hsl(217,91%,60%)] text-white hover:bg-[hsl(217,91%,55%)]";
-    if (status === SERVICE_STATUS.EM_REVISAO)
-      return "bg-[hsl(280,70%,50%)] text-white hover:bg-[hsl(280,70%,45%)]";
-    return "bg-[hsl(48,96%,53%)] text-black hover:bg-[hsl(48,96%,45%)]";
+    if (isOrcamento) {
+      return getBudgetSituationBadgeClass(status);
+    }
+    return getServiceStatusBadgeClasses(status);
   };
 
   return (

@@ -275,6 +275,145 @@ const data = await fetchKPIs();
 
 ---
 
+## 🎨 Constantes de Status Centralizadas
+
+### 8. **Constantes de Status de Serviço** (`/constants/serviceStatus.ts`)
+
+✅ **Constantes de Status**
+- `SERVICE_STATUS` - Objeto com todos os status possíveis
+  - `PENDENTE`, `PLANEJADO`, `EM_ANDAMENTO`, `EM_REVISAO`, `CONCLUIDO`, `CANCELADO`
+
+✅ **Opções para Dropdowns**
+- `SERVICE_STATUS_OPTIONS` - Array para selects de serviços
+- `CALENDAR_STATUS_OPTIONS` - Array para calendário (inclui Planejado/Cancelado)
+- `SERVICE_STATUS_FILTER_OPTIONS` - Array para filtros (inclui "Todos")
+
+✅ **Cores HSL Centralizadas**
+```typescript
+SERVICE_STATUS_COLORS = {
+  CONCLUIDO:    { bg: 'hsl(142,76%,36%)', text: 'white' },  // Verde
+  EM_ANDAMENTO: { bg: 'hsl(217,91%,60%)', text: 'white' },  // Azul
+  EM_REVISAO:   { bg: 'hsl(280,70%,50%)', text: 'white' },  // Roxo
+  PENDENTE:     { bg: 'hsl(48,96%,53%)',  text: 'black' },  // Amarelo
+  PLANEJADO:    { bg: 'hsl(48,96%,53%)',  text: 'black' },  // Amarelo
+  CANCELADO:    { bg: 'hsl(0,100%,50%)',  text: 'white' },  // Vermelho
+}
+```
+
+✅ **Helpers de Estilização**
+- `getServiceStatusBadgeClasses(status)` - Retorna classes Tailwind completas
+- `getServiceStatusColor(status)` - Retorna cor HSL de fundo
+- `getStatusBadgeVariant(status)` - Retorna variante do shadcn Badge
+
+✅ **Helpers de Verificação**
+- `isServiceInProgress(status)` - Verifica se está em andamento/revisão
+- `isServiceCompleted(status)` - Verifica se está concluído
+- `isServiceCanceled(status)` - Verifica se foi cancelado
+
+### 9. **Constantes de Status de Orçamento** (`/constants/budgetStatus.ts`)
+
+✅ **Constantes de Status de Pagamento**
+```typescript
+PAYMENT_STATUS = {
+  PENDENTE: 'Pendente',
+  PARCIALMENTE_PAGO: 'Parcialmente Pago',
+  PAGO: 'Pago',
+  ATRASADO: 'Atrasado',
+}
+```
+
+✅ **Constantes de Método de Pagamento**
+```typescript
+PAYMENT_METHOD = {
+  PIX: 'PIX',
+  DINHEIRO: 'Dinheiro',
+  CARTAO_CREDITO: 'Cartão de Crédito',
+  CARTAO_DEBITO: 'Cartão de Débito',
+  BOLETO: 'Boleto',
+  TRANSFERENCIA: 'Transferência',
+}
+```
+
+✅ **Constantes de Situação de Orçamento**
+```typescript
+BUDGET_SITUATION = {
+  EM_ANALISE: 'Em Análise',
+  APROVADO: 'Aprovado',
+  REPROVADO: 'Reprovado',
+  CANCELADO: 'Cancelado',
+}
+```
+
+✅ **Cores HSL Centralizadas**
+```typescript
+PAYMENT_STATUS_COLORS = {
+  PENDENTE:          { bg: 'hsl(48,96%,53%)',  text: 'black' },   // Amarelo
+  PARCIALMENTE_PAGO: { bg: 'hsl(217,91%,60%)', text: 'white' },   // Azul
+  PAGO:              { bg: 'hsl(142,76%,36%)', text: 'white' },   // Verde
+  ATRASADO:          { bg: 'hsl(0,84%,60%)',   text: 'white' },   // Vermelho
+}
+
+BUDGET_SITUATION_COLORS = {
+  EM_ANALISE: { bg: 'hsl(48,96%,53%)',  text: 'black' },   // Amarelo
+  APROVADO:   { bg: 'hsl(142,76%,36%)', text: 'white' },   // Verde
+  REPROVADO:  { bg: 'hsl(0,84%,60%)',   text: 'white' },   // Vermelho
+  CANCELADO:  { bg: 'hsl(0,0%,45%)',    text: 'white' },   // Cinza
+}
+```
+
+✅ **Helpers de Estilização**
+- `getPaymentStatusBadgeClass(status)` - Classes para badge de status de pagamento
+- `getPaymentStatusColor(status)` - Cor HSL do status de pagamento
+- `getPaymentMethodBadgeClass(method)` - Classes para badge de método
+- `getPaymentMethodColor(method)` - Cor HSL do método de pagamento
+- `getBudgetSituationBadgeClass(situation)` - Classes para badge de situação
+- `getBudgetSituationColor(situation)` - Cor HSL da situação
+
+✅ **Helpers de Verificação**
+- `isPaymentPending(status)` - Verifica se pagamento está pendente
+- `isPaymentPaid(status)` - Verifica se foi pago
+- `isBudgetApproved(situation)` - Verifica se orçamento foi aprovado
+- `isBudgetCanceled(situation)` - Verifica se foi cancelado
+- `isExpensePending(status)` - Verifica se despesa está pendente
+- `isExpenseConfirmed(status)` - Verifica se despesa está confirmada
+
+### Uso nos Componentes
+
+**Exemplo de uso em badges:**
+```typescript
+import { getServiceStatusBadgeClasses } from '@/constants/serviceStatus';
+import { getBudgetSituationBadgeClass } from '@/constants/budgetStatus';
+
+// Em componentes
+<Badge className={getServiceStatusBadgeClasses(servico.situacao_do_servico)}>
+  {servico.situacao_do_servico}
+</Badge>
+
+<Badge className={getBudgetSituationBadgeClass(orcamento.situacao)}>
+  {orcamento.situacao}
+</Badge>
+```
+
+**Exemplo de uso em estilos inline:**
+```typescript
+import { getServiceStatusColor } from '@/constants/serviceStatus';
+
+<div style={{ backgroundColor: getServiceStatusColor(status) }}>
+  {title}
+</div>
+```
+
+**Componentes que utilizam os helpers:**
+- `CalendarioMensal.tsx` - Eventos coloridos por status
+- `CalendarioSemanal.tsx` - Cards de eventos
+- `CalendarioDiario.tsx` - Lista de eventos
+- `CalendarioTabela.tsx` - Badges na tabela
+- `CalendarioDetalhes.tsx` - Badge do header
+- `ClienteOrcamentos.tsx` - Status de orçamentos
+- `OrcamentoWizard.tsx` - Formulário de orçamento
+
+---
+
 ## 🚀 Próximos Passos
 
 ### Curto Prazo

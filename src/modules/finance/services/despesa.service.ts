@@ -23,8 +23,8 @@ export async function fetchDespesas() {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_despesas').select(`
     *,
-    dim_tipodespesa(categoria, subcategoria),
-    fato_servico(nome_do_servico)
+    dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria),
+    fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)
   `);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_da_despesa', { ascending: false });
@@ -34,8 +34,8 @@ export async function fetchDespesaById(id: string) {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_despesas').select(`
     *,
-    dim_tipodespesa(categoria, subcategoria),
-    fato_servico(nome_do_servico)
+    dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria),
+    fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)
   `).eq('id_despesas', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.single();
@@ -43,7 +43,7 @@ export async function fetchDespesaById(id: string) {
 
 export async function fetchDespesasByPeriodo(dataInicio: string, dataFim: string) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_despesas').select(`*, dim_tipodespesa(categoria, subcategoria)`)
+  let query = supabase.from('fato_despesas').select(`*, dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria)`)
     .gte('data_da_despesa', dataInicio)
     .lte('data_da_despesa', dataFim);
   if (tenantId) query = query.eq('tenant_id', tenantId);
@@ -108,7 +108,7 @@ export async function deleteDespesa(id: string) {
 
 export async function fetchDespesasPorCategoria() {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_despesas').select(`valor_da_despesa, dim_tipodespesa!inner(categoria)`);
+  let query = supabase.from('fato_despesas').select(`valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria)`).not('id_tipodespesa', 'is', null);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;
 }
@@ -117,7 +117,7 @@ export async function fetchDespesasByOrcamento(orcamentoId: string) {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_despesas').select(`
     *,
-    dim_tipodespesa(categoria, subcategoria)
+    dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria)
   `).eq('id_orcamento', orcamentoId);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_da_despesa', { ascending: false });

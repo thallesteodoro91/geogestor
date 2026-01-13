@@ -52,8 +52,8 @@ export default function Orcamentos() {
         .from('fato_orcamento')
         .select(`
           *,
-          dim_cliente(nome, email, telefone),
-          fato_servico(nome_do_servico)
+          dim_cliente:dim_cliente!fk_orcamento_cliente(nome, email, telefone),
+          fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)
         `)
         .order('data_orcamento', { ascending: false });
       if (error) throw error;

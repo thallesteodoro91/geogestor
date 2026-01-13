@@ -89,6 +89,27 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_cliente_eventos_cliente"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fk_cliente_eventos_propriedade"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "fk_cliente_eventos_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
         ]
       }
       cliente_tarefas: {
@@ -174,6 +195,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_cliente_tarefas_cliente"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fk_cliente_tarefas_propriedade"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "fk_cliente_tarefas_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
           },
         ]
       }
@@ -554,6 +596,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_propriedade_cliente"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
         ]
       }
       dim_tipodespesa: {
@@ -601,6 +650,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_tipodespesa_categoria"
+            columns: ["id_categoria_despesa"]
+            isOneToOne: false
+            referencedRelation: "dim_categoria_despesa"
+            referencedColumns: ["id_categoria_despesa"]
           },
         ]
       }
@@ -655,6 +711,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_tiposervico_categoria"
+            columns: ["id_categoria"]
+            isOneToOne: false
+            referencedRelation: "dim_categoria_servico"
+            referencedColumns: ["id_categoria"]
           },
         ]
       }
@@ -736,6 +799,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_despesas_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fk_despesas_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
+            foreignKeyName: "fk_despesas_tipodespesa"
+            columns: ["id_tipodespesa"]
+            isOneToOne: false
+            referencedRelation: "dim_tipodespesa"
+            referencedColumns: ["id_tipodespesa"]
           },
         ]
       }
@@ -887,6 +971,27 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fk_orcamento_cliente"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fk_orcamento_propriedade"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
+            foreignKeyName: "fk_orcamento_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
         ]
       }
       fato_orcamento_itens: {
@@ -940,6 +1045,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "dim_tiposervico"
             referencedColumns: ["id_tiposervico"]
+          },
+          {
+            foreignKeyName: "fk_orcamento_itens_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fk_orcamento_itens_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
           },
         ]
       }
@@ -1042,6 +1161,27 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_servico_cliente"
+            columns: ["id_cliente"]
+            isOneToOne: false
+            referencedRelation: "dim_cliente"
+            referencedColumns: ["id_cliente"]
+          },
+          {
+            foreignKeyName: "fk_servico_empresa"
+            columns: ["id_empresa"]
+            isOneToOne: false
+            referencedRelation: "dim_empresa"
+            referencedColumns: ["id_empresa"]
+          },
+          {
+            foreignKeyName: "fk_servico_propriedade"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
           },
         ]
       }
@@ -1164,6 +1304,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_geometria_propriedade"
+            columns: ["id_propriedade"]
+            isOneToOne: false
+            referencedRelation: "dim_propriedade"
+            referencedColumns: ["id_propriedade"]
+          },
+          {
             foreignKeyName: "propriedade_geometria_id_propriedade_fkey"
             columns: ["id_propriedade"]
             isOneToOne: false
@@ -1212,6 +1359,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_servico_anexos_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
             foreignKeyName: "servico_anexos_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
@@ -1246,6 +1400,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_servico_equipes_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
           {
             foreignKeyName: "servico_equipes_id_servico_fkey"
             columns: ["id_servico"]
@@ -1289,6 +1450,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "fk_servico_eventos_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
+          {
             foreignKeyName: "servico_eventos_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
@@ -1329,6 +1497,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_servico_tarefas_servico"
+            columns: ["id_servico"]
+            isOneToOne: false
+            referencedRelation: "fato_servico"
+            referencedColumns: ["id_servico"]
+          },
           {
             foreignKeyName: "servico_tarefas_id_servico_fkey"
             columns: ["id_servico"]

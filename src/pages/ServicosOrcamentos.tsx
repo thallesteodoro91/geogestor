@@ -45,8 +45,8 @@ export default function ServicosOrcamentos() {
         .from('fato_servico')
         .select(`
           *,
-          dim_cliente(nome),
-          dim_propriedade(nome_da_propriedade)
+          dim_cliente:dim_cliente!fk_servico_cliente(nome),
+          dim_propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade)
         `)
         .order('data_do_servico_inicio', { ascending: false });
       if (error) throw error;
@@ -62,8 +62,8 @@ export default function ServicosOrcamentos() {
         .from('fato_orcamento')
         .select(`
           *,
-          dim_cliente(nome),
-          dim_propriedade(nome_da_propriedade)
+          dim_cliente:dim_cliente!fk_orcamento_cliente(nome),
+          dim_propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade)
         `)
         .order('data_orcamento', { ascending: false });
       if (error) throw error;

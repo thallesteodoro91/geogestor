@@ -38,9 +38,9 @@ const CalendarioDetalhes = () => {
           .from("fato_orcamento")
           .select(`
             *,
-            cliente:dim_cliente(*),
-            servico:fato_servico(*),
-            propriedade:dim_propriedade(*)
+            cliente:dim_cliente!fk_orcamento_cliente(*),
+            servico:fato_servico!fk_orcamento_servico(*),
+            propriedade:dim_propriedade!fk_orcamento_propriedade(*)
           `)
           .eq("id_orcamento", id!)
           .single();
@@ -50,8 +50,8 @@ const CalendarioDetalhes = () => {
           .from("fato_servico")
           .select(`
             *,
-            cliente:dim_cliente(*),
-            propriedade:dim_propriedade(*)
+            cliente:dim_cliente!fk_servico_cliente(*),
+            propriedade:dim_propriedade!fk_servico_propriedade(*)
           `)
           .eq("id_servico", id!)
           .single();

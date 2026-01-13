@@ -44,12 +44,12 @@ export function DespesasPendentes() {
         .from('fato_despesas')
         .select(`
           *,
-          dim_tipodespesa(categoria, subcategoria),
-          fato_orcamento(
+          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria),
+          fato_orcamento:fato_orcamento!fk_despesas_orcamento(
             id_orcamento,
             data_orcamento,
-            dim_cliente(nome),
-            dim_propriedade(nome_da_propriedade)
+            dim_cliente:dim_cliente!fk_orcamento_cliente(nome),
+            dim_propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade)
           )
         `)
         .eq('status', EXPENSE_STATUS.PENDENTE)

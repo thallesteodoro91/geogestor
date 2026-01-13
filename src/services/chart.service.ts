@@ -77,14 +77,14 @@ export async function fetchReceitaDespesaMensal(
 export async function fetchCustosPorCategoria(): Promise<CustoCategoria[]> {
   const { data, error } = await supabase.from('fato_despesas').select(`
       valor_da_despesa,
-      dim_tipodespesa!inner(categoria)
-    `);
+      dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria)
+    `).not('id_tipodespesa', 'is', null);
 
   if (error) throw error;
 
   // Agrupar por categoria
   const grouped = data.reduce((acc: any[], curr) => {
-    const categoria = curr.dim_tipodespesa.categoria;
+    const categoria = curr.dim_tipodespesa?.categoria || 'Sem categoria';
     const existing = acc.find((item) => item.categoria === categoria);
     if (existing) {
       existing.valor += curr.valor_da_despesa;
@@ -119,7 +119,7 @@ export async function fetchLucroPorCliente(limit: number = 10) {
       `
       id_cliente,
       lucro_esperado,
-      dim_cliente!inner(nome)
+      dim_cliente:dim_cliente!fk_orcamento_cliente(nome)
     `
     )
     .order('lucro_esperado', { ascending: false })
@@ -129,7 +129,7 @@ export async function fetchLucroPorCliente(limit: number = 10) {
 
   // Agrupar por cliente
   const grouped = data.reduce((acc: any[], curr) => {
-    const cliente = curr.dim_cliente.nome;
+    const cliente = curr.dim_cliente?.nome || 'Sem nome';
     const existing = acc.find((item) => item.cliente === cliente);
     if (existing) {
       existing.lucro += curr.lucro_esperado || 0;

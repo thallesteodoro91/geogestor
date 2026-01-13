@@ -30,9 +30,9 @@ export async function fetchServicos() {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_servico').select(`
     *,
-    dim_cliente(nome),
-    dim_propriedade(nome_da_propriedade, municipio),
-    dim_empresa(nome)
+    dim_cliente:dim_cliente!fk_servico_cliente(nome),
+    dim_propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio),
+    dim_empresa:dim_empresa!fk_servico_empresa(nome)
   `);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('created_at', { ascending: false });
@@ -42,9 +42,9 @@ export async function fetchServicoById(id: string) {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_servico').select(`
     *,
-    dim_cliente(nome),
-    dim_propriedade(nome_da_propriedade, municipio),
-    dim_empresa(nome)
+    dim_cliente:dim_cliente!fk_servico_cliente(nome),
+    dim_propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio),
+    dim_empresa:dim_empresa!fk_servico_empresa(nome)
   `).eq('id_servico', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.single();
@@ -52,7 +52,7 @@ export async function fetchServicoById(id: string) {
 
 export async function fetchServicosByCliente(clienteId: string) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_servico').select(`*, dim_propriedade(nome_da_propriedade), dim_empresa(nome)`)
+  let query = supabase.from('fato_servico').select(`*, dim_propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade), dim_empresa:dim_empresa!fk_servico_empresa(nome)`)
     .eq('id_cliente', clienteId);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_do_servico_inicio', { ascending: false });
@@ -60,7 +60,7 @@ export async function fetchServicosByCliente(clienteId: string) {
 
 export async function fetchServicosByPropriedade(propriedadeId: string) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_servico').select(`*, dim_cliente(nome), dim_empresa(nome)`)
+  let query = supabase.from('fato_servico').select(`*, dim_cliente:dim_cliente!fk_servico_cliente(nome), dim_empresa:dim_empresa!fk_servico_empresa(nome)`)
     .eq('id_propriedade', propriedadeId);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_do_servico_inicio', { ascending: false });

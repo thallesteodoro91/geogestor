@@ -51,8 +51,8 @@ export const CalendarioMensal = () => {
         .from("fato_orcamento")
         .select(`
           *,
-          cliente:dim_cliente(nome),
-          servico:fato_servico(nome_do_servico, categoria)
+          cliente:dim_cliente!fk_orcamento_cliente(nome),
+          servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria)
         `);
 
       // Buscar serviços
@@ -60,8 +60,8 @@ export const CalendarioMensal = () => {
         .from("fato_servico")
         .select(`
           *,
-          cliente:dim_cliente(nome),
-          propriedade:dim_propriedade(nome_da_propriedade, municipio)
+          cliente:dim_cliente!fk_servico_cliente(nome),
+          propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)
         `);
 
       const events: CalendarEvent[] = [];

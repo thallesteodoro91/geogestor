@@ -43,9 +43,9 @@ export async function fetchOrcamentos() {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_orcamento').select(`
     *,
-    dim_cliente(nome),
-    dim_propriedade(nome_da_propriedade),
-    fato_servico(nome_do_servico)
+    dim_cliente:dim_cliente!fk_orcamento_cliente(nome),
+    dim_propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade),
+    fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)
   `);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_orcamento', { ascending: false });
@@ -55,9 +55,9 @@ export async function fetchOrcamentoById(id: string) {
   const tenantId = await getCurrentTenantId();
   let query = supabase.from('fato_orcamento').select(`
     *,
-    dim_cliente(nome, telefone, celular, endereco),
-    dim_propriedade(nome_da_propriedade, municipio),
-    fato_servico(nome_do_servico)
+    dim_cliente:dim_cliente!fk_orcamento_cliente(nome, telefone, celular, endereco),
+    dim_propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio),
+    fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)
   `).eq('id_orcamento', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.single();
@@ -65,7 +65,7 @@ export async function fetchOrcamentoById(id: string) {
 
 export async function fetchOrcamentosByCliente(clienteId: string) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_orcamento').select(`*, fato_servico(nome_do_servico)`).eq('id_cliente', clienteId);
+  let query = supabase.from('fato_orcamento').select(`*, fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)`).eq('id_cliente', clienteId);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_orcamento', { ascending: false });
 }
@@ -97,7 +97,7 @@ export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
   // Buscar o orçamento atual para verificar se está sendo convertido
   const { data: orcamentoAtual } = await supabase
     .from('fato_orcamento')
-    .select('*, dim_cliente(nome), fato_servico(nome_do_servico)')
+    .select('*, dim_cliente:dim_cliente!fk_orcamento_cliente(nome), fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)')
     .eq('id_orcamento', id)
     .single();
   
@@ -136,7 +136,7 @@ export async function deleteOrcamento(id: string) {
 
 export async function fetchOrcamentosPendentes() {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_orcamento').select(`*, dim_cliente(nome)`)
+  let query = supabase.from('fato_orcamento').select(`*, dim_cliente:dim_cliente!fk_orcamento_cliente(nome)`)
     .eq('situacao_do_pagamento', 'Pendente')
     .not('data_do_faturamento', 'is', null);
   if (tenantId) query = query.eq('tenant_id', tenantId);

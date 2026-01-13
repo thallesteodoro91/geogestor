@@ -44,8 +44,9 @@ const DashboardFinanceiro = () => {
         .select(`
           id_cliente,
           lucro_esperado,
-          dim_cliente!inner(nome)
+          dim_cliente:dim_cliente!fk_orcamento_cliente(nome)
         `)
+        .not('id_cliente', 'is', null)
         .order("lucro_esperado", { ascending: false })
         .limit(10);
 
@@ -101,13 +102,14 @@ const DashboardFinanceiro = () => {
         .from("fato_despesas")
         .select(`
           valor_da_despesa,
-          dim_tipodespesa!inner(categoria)
-        `);
+          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria)
+        `)
+        .not('id_tipodespesa', 'is', null);
 
       if (error) throw error;
 
       const grouped = data.reduce((acc: { name: string; value: number }[], curr) => {
-        const categoria = curr.dim_tipodespesa.categoria;
+        const categoria = curr.dim_tipodespesa?.categoria || 'Sem categoria';
         const existing = acc.find((item) => item.name === categoria);
         if (existing) {
           existing.value += curr.valor_da_despesa;

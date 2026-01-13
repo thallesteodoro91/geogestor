@@ -98,8 +98,8 @@ export default function Despesas() {
         .from('fato_despesas')
         .select(`
           *,
-          dim_tipodespesa(categoria, subcategoria, descricao),
-          fato_servico(nome_do_servico)
+          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao),
+          fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)
         `)
         .or('status.eq.confirmada,status.is.null')
         .order('data_da_despesa', { ascending: false });

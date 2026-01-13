@@ -32,9 +32,9 @@ export const CalendarioTabela = () => {
         .from("fato_orcamento")
         .select(`
           *,
-          cliente:dim_cliente(nome),
-          servico:fato_servico(nome_do_servico),
-          propriedade:dim_propriedade(nome_da_propriedade, municipio)
+          cliente:dim_cliente!fk_orcamento_cliente(nome),
+          servico:fato_servico!fk_orcamento_servico(nome_do_servico),
+          propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio)
         `)
         .order("data_inicio", { ascending: false });
 
@@ -42,8 +42,8 @@ export const CalendarioTabela = () => {
         .from("fato_servico")
         .select(`
           *,
-          cliente:dim_cliente(nome),
-          propriedade:dim_propriedade(nome_da_propriedade, municipio)
+          cliente:dim_cliente!fk_servico_cliente(nome),
+          propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)
         `)
         .order("data_do_servico_inicio", { ascending: false });
 

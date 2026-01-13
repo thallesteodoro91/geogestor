@@ -26,9 +26,9 @@ export const CalendarioDiario = () => {
         .from("fato_orcamento")
         .select(`
           *,
-          cliente:dim_cliente(nome, celular, email),
-          servico:fato_servico(nome_do_servico, categoria),
-          propriedade:dim_propriedade(nome_da_propriedade, municipio)
+          cliente:dim_cliente!fk_orcamento_cliente(nome, celular, email),
+          servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria),
+          propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio)
         `)
         .gte("data_inicio", inicioDia.toISOString())
         .lte("data_inicio", fimDia.toISOString());
@@ -37,8 +37,8 @@ export const CalendarioDiario = () => {
         .from("fato_servico")
         .select(`
           *,
-          cliente:dim_cliente(nome, celular, email),
-          propriedade:dim_propriedade(nome_da_propriedade, municipio)
+          cliente:dim_cliente!fk_servico_cliente(nome, celular, email),
+          propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)
         `)
         .gte("data_do_servico_inicio", inicioDia.toISOString())
         .lte("data_do_servico_inicio", fimDia.toISOString());

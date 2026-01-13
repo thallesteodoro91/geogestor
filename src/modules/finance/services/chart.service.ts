@@ -53,7 +53,7 @@ export async function fetchReceitaDespesaMensal(
  */
 export async function fetchCustosPorCategoria(): Promise<CustoCategoria[]> {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_despesas').select(`valor_da_despesa, dim_tipodespesa!inner(categoria)`);
+  let query = supabase.from('fato_despesas').select(`valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria)`).not('id_tipodespesa', 'is', null);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   const { data, error } = await query;
 
@@ -83,8 +83,8 @@ export async function fetchCustosPorCategoria(): Promise<CustoCategoria[]> {
  */
 export async function fetchLucroPorCliente(limit: number = 10) {
   const tenantId = await getCurrentTenantId();
-  let query = supabase.from('fato_orcamento').select(`id_cliente, lucro_esperado, dim_cliente!inner(nome)`)
-    .order('lucro_esperado', { ascending: false }).limit(limit);
+  let query = supabase.from('fato_orcamento').select(`id_cliente, lucro_esperado, dim_cliente:dim_cliente!fk_orcamento_cliente(nome)`)
+    .not('id_cliente', 'is', null).order('lucro_esperado', { ascending: false }).limit(limit);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   const { data, error } = await query;
 

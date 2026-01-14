@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useForm } from "react-hook-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useForm, Controller } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -15,15 +16,29 @@ interface TipoDespesaDialogProps {
   onSuccess: () => void;
 }
 
+type FormData = {
+  categoria: string;
+  descricao?: string;
+  classificacao: 'FIXA' | 'VARIAVEL';
+};
+
 export function TipoDespesaDialog({ open, onOpenChange, tipoDespesa, onSuccess }: TipoDespesaDialogProps) {
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const { register, handleSubmit, reset } = useForm({
-    defaultValues: tipoDespesa || {}
+  const { register, handleSubmit, reset, control } = useForm<FormData>({
+    defaultValues: {
+      categoria: tipoDespesa?.categoria || '',
+      descricao: tipoDespesa?.descricao || '',
+      classificacao: tipoDespesa?.classificacao || 'FIXA',
+    }
   });
 
   useEffect(() => {
     if (open) {
-      reset(tipoDespesa || {});
+      reset({
+        categoria: tipoDespesa?.categoria || '',
+        descricao: tipoDespesa?.descricao || '',
+        classificacao: tipoDespesa?.classificacao || 'FIXA',
+      });
       fetchTenantId();
     }
   }, [open, tipoDespesa, reset]);
@@ -34,11 +49,12 @@ export function TipoDespesaDialog({ open, onOpenChange, tipoDespesa, onSuccess }
     setTenantId(tid);
   };
 
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: FormData) => {
     try {
       const payload = {
         categoria: data.categoria,
         descricao: data.descricao,
+        classificacao: data.classificacao,
       };
 
       if (tipoDespesa) {
@@ -81,6 +97,39 @@ export function TipoDespesaDialog({ open, onOpenChange, tipoDespesa, onSuccess }
               {...register("categoria", { required: true })} 
               placeholder="Ex: Combustível, Material, Manutenção..." 
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="classificacao">Classificação Contábil *</Label>
+            <Controller
+              name="classificacao"
+              control={control}
+              rules={{ required: true }}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a classificação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="FIXA">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Despesa Fixa</span>
+                        <span className="text-xs text-muted-foreground">Não varia com produção (ex: aluguel, salários)</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="VARIAVEL">
+                      <div className="flex flex-col">
+                        <span className="font-medium">Custo Variável</span>
+                        <span className="text-xs text-muted-foreground">Varia com produção (ex: combustível, materiais)</span>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Esta classificação afeta o cálculo da Margem de Contribuição e Ponto de Equilíbrio.
+            </p>
           </div>
           
           <div className="space-y-2">

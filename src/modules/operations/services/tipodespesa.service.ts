@@ -5,11 +5,14 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 
+export type ClassificacaoDespesa = 'FIXA' | 'VARIAVEL';
+
 export interface TipoDespesa {
   id_tipodespesa: string;
   categoria: string;
   subcategoria?: string | null;
   descricao?: string | null;
+  classificacao?: ClassificacaoDespesa | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

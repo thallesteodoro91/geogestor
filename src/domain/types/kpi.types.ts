@@ -16,6 +16,10 @@ export interface KPIData {
   ponto_equilibrio_receita: number;
   total_despesas: number;
   custo_total: number;
+  /** Custos que variam com produção/vendas (ex: combustível, materiais) */
+  custos_variaveis_reais: number;
+  /** Despesas fixas independente do volume (ex: aluguel, salários) */
+  despesas_fixas_reais: number;
   total_servicos: number;
   servicos_concluidos: number;
   total_clientes: number;

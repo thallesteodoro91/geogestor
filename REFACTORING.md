@@ -140,6 +140,94 @@ scripts/                     # 🔥 NOVO - Scripts utilitários
 - Triggers para refresh automático
 - Melhor performance em verificações de permissão
 
+✅ **Foreign Keys adicionadas** (migration `20260113005408_foreign_keys.sql`)
+
+Adição de foreign keys para habilitar JOINs automáticos via Supabase e garantir integridade referencial.
+
+**Tabela `fato_servico`:**
+- `fk_servico_cliente` → `dim_cliente(id_cliente)` - ON DELETE SET NULL
+- `fk_servico_propriedade` → `dim_propriedade(id_propriedade)` - ON DELETE SET NULL
+- `fk_servico_empresa` → `dim_empresa(id_empresa)` - ON DELETE SET NULL
+
+**Tabela `fato_orcamento`:**
+- `fk_orcamento_cliente` → `dim_cliente(id_cliente)` - ON DELETE SET NULL
+- `fk_orcamento_propriedade` → `dim_propriedade(id_propriedade)` - ON DELETE SET NULL
+- `fk_orcamento_servico` → `fato_servico(id_servico)` - ON DELETE SET NULL
+
+**Tabela `fato_despesas`:**
+- `fk_despesas_servico` → `fato_servico(id_servico)` - ON DELETE SET NULL
+- `fk_despesas_orcamento` → `fato_orcamento(id_orcamento)` - ON DELETE SET NULL
+- `fk_despesas_tipodespesa` → `dim_tipodespesa(id_tipodespesa)` - ON DELETE SET NULL
+
+**Tabela `fato_orcamento_itens`:**
+- `fk_orcamento_itens_orcamento` → `fato_orcamento(id_orcamento)` - ON DELETE CASCADE
+- `fk_orcamento_itens_servico` → `fato_servico(id_servico)` - ON DELETE SET NULL
+
+**Tabela `dim_propriedade`:**
+- `fk_propriedade_cliente` → `dim_cliente(id_cliente)` - ON DELETE SET NULL
+
+**Tabela `dim_tipodespesa`:**
+- `fk_tipodespesa_categoria` → `dim_categoria_despesa(id_categoria_despesa)` - ON DELETE SET NULL
+
+**Tabela `dim_tiposervico`:**
+- `fk_tiposervico_categoria` → `dim_categoria_servico(id_categoria)` - ON DELETE SET NULL
+
+**Tabela `propriedade_geometria`:**
+- `fk_geometria_propriedade` → `dim_propriedade(id_propriedade)` - ON DELETE CASCADE
+
+**Tabela `cliente_eventos`:**
+- `fk_cliente_eventos_cliente` → `dim_cliente(id_cliente)` - ON DELETE CASCADE
+- `fk_cliente_eventos_servico` → `fato_servico(id_servico)` - ON DELETE SET NULL
+- `fk_cliente_eventos_propriedade` → `dim_propriedade(id_propriedade)` - ON DELETE SET NULL
+
+**Tabela `cliente_tarefas`:**
+- `fk_cliente_tarefas_cliente` → `dim_cliente(id_cliente)` - ON DELETE CASCADE
+- `fk_cliente_tarefas_servico` → `fato_servico(id_servico)` - ON DELETE SET NULL
+- `fk_cliente_tarefas_propriedade` → `dim_propriedade(id_propriedade)` - ON DELETE SET NULL
+
+**Tabela `servico_tarefas`:**
+- `fk_servico_tarefas_servico` → `fato_servico(id_servico)` - ON DELETE CASCADE
+
+**Tabela `servico_anexos`:**
+- `fk_servico_anexos_servico` → `fato_servico(id_servico)` - ON DELETE CASCADE
+
+**Tabela `servico_equipes`:**
+- `fk_servico_equipes_servico` → `fato_servico(id_servico)` - ON DELETE CASCADE
+
+**Tabela `servico_eventos`:**
+- `fk_servico_eventos_servico` → `fato_servico(id_servico)` - ON DELETE CASCADE
+
+**Uso das Foreign Keys nas Queries:**
+
+Com as FKs definidas, o Supabase permite JOINs automáticos usando a sintaxe de hint:
+
+```typescript
+// Exemplo: buscar orçamentos com cliente e propriedade
+const { data } = await supabase
+  .from('fato_orcamento')
+  .select(`
+    *,
+    cliente:dim_cliente!fk_orcamento_cliente(nome, email),
+    propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio),
+    servico:fato_servico!fk_orcamento_servico(nome_do_servico)
+  `);
+
+// Exemplo: buscar serviços com cliente e propriedade
+const { data } = await supabase
+  .from('fato_servico')
+  .select(`
+    *,
+    cliente:dim_cliente!fk_servico_cliente(nome),
+    propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade)
+  `);
+```
+
+**Benefícios:**
+- ✅ JOINs automáticos funcionando em todas as queries
+- ✅ Integridade referencial garantida pelo banco
+- ✅ Cascade deletes para dados dependentes
+- ✅ Performance otimizada com hints explícitos
+
 ### 5. **Edge Functions Melhoradas**
 
 ✅ **geobot-chat/index.ts** - Validação e logs estruturados

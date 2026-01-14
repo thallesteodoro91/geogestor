@@ -47,6 +47,8 @@ export function getDefaultKPIs(): KPIData {
     ponto_equilibrio_receita: 0,
     total_despesas: 0,
     custo_total: 0,
+    custos_variaveis_reais: 0,
+    despesas_fixas_reais: 0,
     total_servicos: 0,
     servicos_concluidos: 0,
     total_clientes: 0,
@@ -102,17 +104,23 @@ export async function fetchClienteKPIs(clienteId: string) {
 
 /**
  * Processa dados brutos para calcular métricas derivadas
+ * Nota: A view vw_kpis_financeiros já calcula essas métricas corretamente
+ * Esta função é mantida para cálculos adicionais no frontend se necessário
  */
 export function processarMetricasDerivadas(kpis: KPIData): KPIData {
-  const margemBruta = calcularMargemBruta(kpis.receita_total, kpis.custo_total);
+  // Se já temos custos_variaveis_reais, usamos para calcular margem de contribuição correta
+  const custosVariaveis = kpis.custos_variaveis_reais || 0;
+  const despesasFixas = kpis.despesas_fixas_reais || 0;
+  
+  const margemBruta = calcularMargemBruta(kpis.receita_liquida, custosVariaveis);
   const margemLiquida = calcularMargemLiquida(
-    kpis.receita_total,
-    kpis.custo_total,
-    kpis.total_despesas
+    kpis.receita_liquida,
+    custosVariaveis,
+    despesasFixas
   );
   const margemContribuicao = calcularMargemContribuicao(
-    kpis.receita_total,
-    kpis.custo_total
+    kpis.receita_liquida,
+    custosVariaveis
   );
 
   return {

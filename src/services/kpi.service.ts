@@ -62,6 +62,8 @@ export function getDefaultKPIs(): KPIData {
     ponto_equilibrio_receita: 0,
     total_despesas: 0,
     custo_total: 0,
+    custos_variaveis_reais: 0,
+    despesas_fixas_reais: 0,
     total_servicos: 0,
     servicos_concluidos: 0,
     total_clientes: 0,

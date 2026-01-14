@@ -608,6 +608,7 @@ export type Database = {
       dim_tipodespesa: {
         Row: {
           categoria: string
+          classificacao: string | null
           created_at: string | null
           descricao: string | null
           id_categoria_despesa: string | null
@@ -618,6 +619,7 @@ export type Database = {
         }
         Insert: {
           categoria: string
+          classificacao?: string | null
           created_at?: string | null
           descricao?: string | null
           id_categoria_despesa?: string | null
@@ -628,6 +630,7 @@ export type Database = {
         }
         Update: {
           categoria?: string
+          classificacao?: string | null
           created_at?: string | null
           descricao?: string | null
           id_categoria_despesa?: string | null
@@ -1750,8 +1753,8 @@ export type Database = {
       vw_kpis_financeiros: {
         Row: {
           custo_total: number | null
-          custos_variaveis_total: number | null
-          despesas_fixas_total: number | null
+          custos_variaveis_reais: number | null
+          despesas_fixas_reais: number | null
           desvio_orcamentario_percent: number | null
           lucro_bruto: number | null
           lucro_liquido: number | null
@@ -1795,6 +1798,8 @@ export type Database = {
         Args: never
         Returns: {
           custo_total: number
+          custos_variaveis_reais: number
+          despesas_fixas_reais: number
           desvio_orcamentario_percent: number
           lucro_bruto: number
           lucro_liquido: number

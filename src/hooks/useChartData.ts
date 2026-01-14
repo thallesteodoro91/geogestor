@@ -66,58 +66,85 @@ export function useProfitMarginChartData(year?: number) {
   return useQuery({
     queryKey: ['profit-margin-chart-data', targetYear],
     queryFn: async (): Promise<MarginData[]> => {
-      // Fetch budgets for the year
+      // Fetch budgets for the year - usar valor_imposto persistido
       const { data: orcamentos } = await supabase
         .from('fato_orcamento')
-        .select('data_orcamento, receita_esperada, lucro_esperado, percentual_imposto')
+        .select('data_orcamento, receita_esperada, incluir_imposto, valor_imposto')
         .gte('data_orcamento', `${targetYear}-01-01`)
         .lte('data_orcamento', `${targetYear}-12-31`);
       
-      // Fetch expenses for the year
+      // Fetch expenses with classification to separate variable costs from fixed expenses
       const { data: despesas } = await supabase
         .from('fato_despesas')
-        .select('data_da_despesa, valor_da_despesa')
+        .select(`
+          data_da_despesa, 
+          valor_da_despesa,
+          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(classificacao)
+        `)
         .gte('data_da_despesa', `${targetYear}-01-01`)
         .lte('data_da_despesa', `${targetYear}-12-31`);
       
-      // Group by month
-      const monthlyData: Record<number, { receita: number; impostos: number; despesas: number }> = {};
+      // Group by month with proper cost classification
+      const monthlyData: Record<number, { 
+        receita: number; 
+        impostos: number; 
+        custosVariaveis: number; 
+        despesasFixas: number 
+      }> = {};
       
       (orcamentos || []).forEach(o => {
         const month = new Date(o.data_orcamento).getMonth();
         const receita = o.receita_esperada || 0;
-        const imposto = receita * (o.percentual_imposto || 0) / 100;
+        // Usar valor_imposto persistido ao invés de recalcular com percentual
+        const imposto = o.incluir_imposto ? (o.valor_imposto || 0) : 0;
         
         if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, despesas: 0 };
+          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
         }
         monthlyData[month].receita += receita;
         monthlyData[month].impostos += imposto;
       });
       
-      (despesas || []).forEach(d => {
+      (despesas || []).forEach((d: any) => {
         const month = new Date(d.data_da_despesa).getMonth();
         if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, despesas: 0 };
+          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
         }
-        monthlyData[month].despesas += d.valor_da_despesa || 0;
+        
+        const valor = d.valor_da_despesa || 0;
+        const classificacao = d.dim_tipodespesa?.classificacao || 'FIXA';
+        
+        // Separar custos variáveis de despesas fixas baseado na classificação real
+        if (classificacao === 'VARIAVEL') {
+          monthlyData[month].custosVariaveis += valor;
+        } else {
+          monthlyData[month].despesasFixas += valor;
+        }
       });
       
-      // Calculate margins for each month
+      // Calculate margins for each month using correct formulas
       return monthNames.map((name, index) => {
-        const data = monthlyData[index] || { receita: 0, impostos: 0, despesas: 0 };
-        const receitaLiquida = data.receita - data.impostos;
-        const custosDiretos = data.despesas * 0.6; // 60% are direct costs
-        const lucroBruto = receitaLiquida - custosDiretos;
-        const lucroLiquido = receitaLiquida - data.despesas;
+        const data = monthlyData[index] || { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
         
-        const margemBruta = data.receita > 0 ? (lucroBruto / data.receita) * 100 : 0;
-        const margemLiquida = data.receita > 0 ? (lucroLiquido / data.receita) * 100 : 0;
+        // Receita Líquida = Receita - Impostos
+        const receitaLiquida = data.receita - data.impostos;
+        
+        // Lucro Bruto = Receita Líquida - Custos Variáveis (dados reais)
+        const lucroBruto = receitaLiquida - data.custosVariaveis;
+        
+        // Lucro Líquido = Lucro Bruto - Despesas Fixas
+        const lucroLiquido = lucroBruto - data.despesasFixas;
+        
+        // Margem Bruta % = (Lucro Bruto / Receita Líquida) * 100
+        const margemBruta = receitaLiquida > 0 ? (lucroBruto / receitaLiquida) * 100 : 0;
+        
+        // Margem Líquida % = (Lucro Líquido / Receita Líquida) * 100
+        const margemLiquida = receitaLiquida > 0 ? (lucroLiquido / receitaLiquida) * 100 : 0;
         
         return {
           month: name,
-          margemBruta: Math.max(0, Math.min(100, margemBruta)), // Clamp between 0-100
-          margemLiquida: Math.max(0, Math.min(100, margemLiquida)),
+          margemBruta: Math.max(-100, Math.min(100, margemBruta)), // Allow negative margins
+          margemLiquida: Math.max(-100, Math.min(100, margemLiquida)),
         };
       });
     },

@@ -1,15 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
-import { SmartCategoryChart } from "@/components/charts/SmartCategoryChart";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
-import { useKPIs } from "@/hooks/useKPIs";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
+import { useDashboardMetrics, calculateDerivedKPIs } from "@/hooks/useDashboardMetrics";
 import { standardChartColors, colorblindSafeColors } from "@/data/financial-mock-data";
 import {
   BarChart,
@@ -23,117 +20,33 @@ import {
   ReferenceLine,
 } from "recharts";
 import {
-  TrendingUp,
   DollarSign,
   Target,
   AlertCircle,
 } from "lucide-react";
 
 const DashboardFinanceiro = () => {
-  const { data: kpis, isLoading: kpisLoading } = useKPIs();
+  // Buscar todas as métricas via RPC (processamento no servidor)
+  const { data: metrics, isLoading } = useDashboardMetrics();
   const { colorblindMode, density } = useChartSettings();
   
   const colors = colorblindMode ? colorblindSafeColors : standardChartColors;
 
-  // Buscar dados de lucro por cliente
-  const { data: lucroPorCliente = [], isLoading: clientesLoading } = useQuery({
-    queryKey: ["lucro-por-cliente"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("fato_orcamento")
-        .select(`
-          id_cliente,
-          lucro_esperado,
-          dim_cliente:dim_cliente!fk_orcamento_cliente(nome)
-        `)
-        .not('id_cliente', 'is', null)
-        .order("lucro_esperado", { ascending: false })
-        .limit(10);
+  // Calcular KPIs derivados a partir das métricas agregadas
+  const derivedKPIs = metrics ? calculateDerivedKPIs(metrics) : null;
 
-      if (error) throw error;
+  // Dados vindos diretamente do servidor (já agregados)
+  const lucroPorCliente = metrics?.lucro_por_cliente || [];
+  const margemPorServico = metrics?.margem_por_servico || [];
 
-      const grouped = data.reduce((acc: { cliente: string; lucro: number }[], curr) => {
-        const cliente = curr.dim_cliente.nome;
-        const existing = acc.find((item) => item.cliente === cliente);
-        if (existing) {
-          existing.lucro += curr.lucro_esperado || 0;
-        } else {
-          acc.push({
-            cliente: cliente.length > 15 ? cliente.substring(0, 12) + "..." : cliente,
-            lucro: curr.lucro_esperado || 0,
-          });
-        }
-        return acc;
-      }, []);
-
-      return grouped.sort((a, b) => b.lucro - a.lucro).slice(0, 6);
-    },
-  });
-
-  // Buscar dados de margem por serviço
-  const { data: margemPorServico = [], isLoading: servicosLoading } = useQuery({
-    queryKey: ["margem-por-servico"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("fato_servico")
-        .select(`
-          nome_do_servico,
-          categoria,
-          receita_servico,
-          custo_servico
-        `)
-        .order("receita_servico", { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
-
-      return data.map((s) => ({
-        servico: s.nome_do_servico.length > 18 ? s.nome_do_servico.substring(0, 15) + "..." : s.nome_do_servico,
-        margem: s.receita_servico > 0 ? ((s.receita_servico - s.custo_servico) / s.receita_servico * 100) : 0,
-      })).slice(0, 6);
-    },
-  });
-
-  // Buscar dados de custos por categoria
-  const { data: custosPorCategoria = [], isLoading: custosLoading } = useQuery({
-    queryKey: ["custos-por-categoria"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("fato_despesas")
-        .select(`
-          valor_da_despesa,
-          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria)
-        `)
-        .not('id_tipodespesa', 'is', null);
-
-      if (error) throw error;
-
-      const grouped = data.reduce((acc: { name: string; value: number }[], curr) => {
-        const categoria = curr.dim_tipodespesa?.categoria || 'Sem categoria';
-        const existing = acc.find((item) => item.name === categoria);
-        if (existing) {
-          existing.value += curr.valor_da_despesa;
-        } else {
-          acc.push({
-            name: categoria,
-            value: curr.valor_da_despesa,
-          });
-        }
-        return acc;
-      }, []);
-
-      return grouped.sort((a, b) => b.value - a.value);
-    },
-  });
-
-  // Dados do Waterfall Chart - Fluxo Financeiro (inclui impostos)
-  const waterfallData = [
-    { name: "Receita Bruta", valor: kpis?.receita_total || 0, fill: "hsl(var(--chart-primary))" },
-    { name: "Impostos", valor: -(kpis?.total_impostos || 0), fill: "hsl(var(--chart-secondary))" },
-    { name: "Custos", valor: -(kpis?.custo_total || 0), fill: "hsl(var(--chart-negative))" },
-    { name: "Despesas", valor: -(kpis?.total_despesas || 0), fill: "hsl(var(--chart-warning))" },
-    { name: "Lucro Líquido", valor: kpis?.lucro_liquido || 0, fill: "hsl(var(--chart-positive))" },
-  ];
+  // Dados do Waterfall Chart - Fluxo Financeiro
+  const waterfallData = metrics ? [
+    { name: "Receita Bruta", valor: metrics.receita_total, fill: "hsl(var(--chart-primary))" },
+    { name: "Impostos", valor: -metrics.total_impostos, fill: "hsl(var(--chart-secondary))" },
+    { name: "Custos Var.", valor: -metrics.custos_variaveis, fill: "hsl(var(--chart-negative))" },
+    { name: "Desp. Fixas", valor: -metrics.despesas_fixas, fill: "hsl(var(--chart-warning))" },
+    { name: "Lucro Líquido", valor: derivedKPIs?.lucro_liquido || 0, fill: "hsl(var(--chart-positive))" },
+  ] : [];
 
   const formatCurrency = (value: number) => `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   const formatPercent = (value: number) => `${value.toFixed(1)}%`;
@@ -168,7 +81,7 @@ const DashboardFinanceiro = () => {
         <section aria-labelledby="kpis-heading" role="region">
           <h2 id="kpis-heading" className="sr-only">Indicadores Principais</h2>
           <div className={`grid md:grid-cols-2 lg:grid-cols-4 ${gridGap}`}>
-            {kpisLoading ? (
+            {isLoading ? (
               <>
                 <SkeletonKPI />
                 <SkeletonKPI />
@@ -179,9 +92,9 @@ const DashboardFinanceiro = () => {
               <>
                 <KPICard
                   title="Receita Bruta"
-                  value={formatCurrency(kpis?.receita_total || 0)}
+                  value={formatCurrency(metrics?.receita_total || 0)}
                   icon={DollarSign}
-                  subtitle={`${kpis?.total_orcamentos || 0} orçamentos emitidos`}
+                  subtitle={`${metrics?.total_orcamentos || 0} orçamentos emitidos`}
                   changeType="neutral"
                   description="Soma total de todas as receitas esperadas dos orçamentos (antes de impostos)"
                   calculation="Σ (Receita Esperada de todos os Orçamentos)"
@@ -189,9 +102,9 @@ const DashboardFinanceiro = () => {
 
                 <KPICard
                   title="Receita Líquida"
-                  value={formatCurrency(kpis?.receita_liquida || 0)}
+                  value={formatCurrency(derivedKPIs?.receita_liquida || 0)}
                   icon={DollarSign}
-                  subtitle={`Impostos: ${formatCurrency(kpis?.total_impostos || 0)}`}
+                  subtitle={`Impostos: ${formatCurrency(metrics?.total_impostos || 0)}`}
                   changeType="neutral"
                   description="Receita após dedução dos impostos"
                   calculation="Receita Bruta - Impostos"
@@ -199,7 +112,7 @@ const DashboardFinanceiro = () => {
 
                 <KPICard
                   title="Margem Contribuição"
-                  value={formatPercent(kpis?.margem_contribuicao_percent || 0)}
+                  value={formatPercent(derivedKPIs?.margem_contribuicao_percent || 0)}
                   icon={Target}
                   subtitle="Receita - Custos Variáveis"
                   changeType="positive"
@@ -209,7 +122,7 @@ const DashboardFinanceiro = () => {
 
                 <KPICard
                   title="Ponto de Equilíbrio"
-                  value={formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
+                  value={formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}
                   icon={AlertCircle}
                   subtitle="Receita mínima necessária"
                   changeType="neutral"
@@ -232,24 +145,24 @@ const DashboardFinanceiro = () => {
               <p className="text-foreground leading-relaxed">
                 A margem média da empresa neste período foi de{" "}
                 <span className="font-bold text-accent">
-                  {formatPercent(kpis?.margem_contribuicao_percent || 0)}
+                  {formatPercent(derivedKPIs?.margem_contribuicao_percent || 0)}
                 </span>
                 , com lucro líquido de{" "}
                 <span className="font-bold text-success">
-                  {formatCurrency(kpis?.lucro_liquido || 0)}
+                  {formatCurrency(derivedKPIs?.lucro_liquido || 0)}
                 </span>
                 . O ponto de equilíbrio está em{" "}
                 <span className="font-bold text-warning">
-                  {formatCurrency(kpis?.ponto_equilibrio_receita || 0)}
+                  {formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}
                 </span>{" "}
                 reais. A receita total do período{" "}
-                {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0) ? (
+                {(metrics?.receita_total || 0) >= (derivedKPIs?.ponto_equilibrio_receita || 0) ? (
                   <span className="font-bold text-success">superou o ponto de equilíbrio</span>
                 ) : (
                   <span className="font-bold text-destructive">está abaixo do ponto de equilíbrio</span>
                 )}
                 , demonstrando{" "}
-                {(kpis?.receita_total || 0) >= (kpis?.ponto_equilibrio_receita || 0)
+                {(metrics?.receita_total || 0) >= (derivedKPIs?.ponto_equilibrio_receita || 0)
                   ? "uma operação saudável e sustentável"
                   : "necessidade de atenção aos custos ou aumento de receita"}.
               </p>
@@ -298,10 +211,10 @@ const DashboardFinanceiro = () => {
 
           {/* Gauge Chart - Ponto de Equilíbrio */}
           <GaugeChart
-            value={kpis?.receita_total || 0}
-            max={Math.max((kpis?.ponto_equilibrio_receita || 0) * 1.5, kpis?.receita_total || 1)}
+            value={metrics?.receita_total || 0}
+            max={Math.max((derivedKPIs?.ponto_equilibrio_receita || 0) * 1.5, metrics?.receita_total || 1)}
             title="Ponto de Equilíbrio"
-            subtitle={`Meta: ${formatCurrency(kpis?.ponto_equilibrio_receita || 0)}`}
+            subtitle={`Meta: ${formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}`}
           />
         </section>
 
@@ -314,7 +227,7 @@ const DashboardFinanceiro = () => {
               <CardDescription>Top clientes por lucratividade esperada</CardDescription>
             </CardHeader>
             <CardContent className={cardPadding}>
-              {clientesLoading ? (
+              {isLoading ? (
                 <div className="h-[300px] flex items-center justify-center">
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>
@@ -353,7 +266,7 @@ const DashboardFinanceiro = () => {
               <CardDescription>Rentabilidade dos principais serviços (meta: 30%)</CardDescription>
             </CardHeader>
             <CardContent className={cardPadding}>
-              {servicosLoading ? (
+              {isLoading ? (
                 <div className="h-[300px] flex items-center justify-center">
                   <p className="text-muted-foreground">Carregando...</p>
                 </div>

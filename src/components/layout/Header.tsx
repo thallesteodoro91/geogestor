@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { NotificationsMenu } from "./NotificationsMenu";
 import { UserMenu } from "./UserMenu";
+import { ThemeToggle } from "./ThemeToggle";
 
 export const Header = () => {
   return (
@@ -16,6 +17,7 @@ export const Header = () => {
             />
           </div>
         </div>
+        <ThemeToggle />
         <NotificationsMenu />
         <UserMenu />
       </div>

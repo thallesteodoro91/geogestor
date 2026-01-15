@@ -8,61 +8,61 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* TopoVision Design System - Modern Dark Dashboard */
-    --background: 0 0% 0.4%;
-    --foreground: 0 0% 98%;
+    /* TopoVision Design System - Light Mode */
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
 
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
     /* Primary: Vibrant Purple */
-    --primary: 262 83% 65%;
-    --primary-foreground: 0 0% 98%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
 
-    /* Secondary: Deep Purple */
-    --secondary: 262 83% 58%;
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary: Light Purple */
+    --secondary: 262 30% 96%;
+    --secondary-foreground: 262 83% 40%;
 
-    /* Muted: Dark subtle backgrounds */
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    /* Muted: Light subtle backgrounds */
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
 
     /* Accent: Bright Cyan */
     --accent: 189 94% 43%;
-    --accent-foreground: 0 0% 98%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 262 83% 65%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 262 83% 58%;
 
     --radius: 1rem;
     
     /* Custom tokens for analytics */
-    --success: 142 76% 56%;
-    --success-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
     
     --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 98%;
+    --warning-foreground: 0 0% 100%;
     
     /* Semantic Chart Tokens */
-    --chart-primary: 262 83% 65%;
+    --chart-primary: 262 83% 58%;
     --chart-secondary: 189 94% 43%;
-    --chart-positive: 142 76% 56%;
-    --chart-negative: 0 72% 51%;
+    --chart-positive: 142 76% 36%;
+    --chart-negative: 0 84% 60%;
     --chart-warning: 38 92% 50%;
-    --chart-neutral: 0 0% 63.9%;
+    --chart-neutral: 215 16% 47%;
     
     /* Legacy chart colors (mapped to semantic) */
-    --chart-1: 262 83% 65%;
+    --chart-1: 262 83% 58%;
     --chart-2: 189 94% 43%;
-    --chart-3: 84 81% 67%;
-    --chart-4: 326 78% 64%;
+    --chart-3: 84 81% 44%;
+    --chart-4: 326 78% 52%;
     --chart-5: 29 93% 54%;
     
     /* Colorblind-safe palette (Okabe-Ito) */
@@ -81,35 +81,36 @@ All colors MUST be HSL.
     --space-xl: 3rem;
     
     /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 65%), hsl(262, 83%, 50%));
-    --gradient-card: linear-gradient(135deg, hsl(0, 0%, 3.9%), hsl(0, 0%, 6%));
+    --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 58%), hsl(262, 83%, 45%));
+    --gradient-card: linear-gradient(135deg, hsl(0, 0%, 100%), hsl(210, 40%, 98%));
     
     /* Shadows */
-    --shadow-elegant: 0 4px 20px -4px hsl(262 83% 65% / 0.4);
-    --shadow-glow: 0 0 30px hsl(262 83% 65% / 0.3);
-    --shadow-glow-positive: 0 0 30px hsl(142 76% 56% / 0.4);
-    --shadow-glow-negative: 0 0 30px hsl(0 72% 51% / 0.4);
+    --shadow-elegant: 0 4px 20px -4px hsl(262 83% 58% / 0.2);
+    --shadow-glow: 0 0 30px hsl(262 83% 58% / 0.15);
+    --shadow-glow-positive: 0 0 30px hsl(142 76% 36% / 0.2);
+    --shadow-glow-negative: 0 0 30px hsl(0 84% 60% / 0.2);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     
     /* GeoBot Colors */
     --geobot: 174 100% 33%;
-    --geobot-foreground: 0 0% 98%;
-    --geobot-bg: 0 0% 3.9%;
-    --geobot-border: 0 0% 14.9%;
+    --geobot-foreground: 0 0% 100%;
+    --geobot-bg: 0 0% 98%;
+    --geobot-border: 214 32% 91%;
 
-    --sidebar-background: 0 0% 0.4%;
-    --sidebar-foreground: 0 0% 98%;
-    --sidebar-primary: 262 83% 65%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 0 0% 10%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 14.9%;
-    --sidebar-ring: 262 83% 65%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
+    --sidebar-ring: 262 83% 58%;
   }
 
   .dark {
+    /* TopoVision Design System - Dark Mode */
     --background: 0 0% 0.4%;
     --foreground: 0 0% 98%;
 
@@ -141,11 +142,35 @@ All colors MUST be HSL.
     --success: 142 76% 56%;
     --success-foreground: 0 0% 98%;
     
+    /* Semantic Chart Tokens */
+    --chart-primary: 262 83% 65%;
+    --chart-secondary: 189 94% 43%;
+    --chart-positive: 142 76% 56%;
+    --chart-negative: 0 72% 51%;
+    --chart-warning: 38 92% 50%;
+    --chart-neutral: 0 0% 63.9%;
+    
     --chart-1: 262 83% 65%;
     --chart-2: 189 94% 43%;
     --chart-3: 84 81% 67%;
     --chart-4: 326 78% 64%;
     --chart-5: 29 93% 54%;
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(262, 83%, 65%), hsl(262, 83%, 50%));
+    --gradient-card: linear-gradient(135deg, hsl(0, 0%, 3.9%), hsl(0, 0%, 6%));
+    
+    /* Shadows */
+    --shadow-elegant: 0 4px 20px -4px hsl(262 83% 65% / 0.4);
+    --shadow-glow: 0 0 30px hsl(262 83% 65% / 0.3);
+    --shadow-glow-positive: 0 0 30px hsl(142 76% 56% / 0.4);
+    --shadow-glow-negative: 0 0 30px hsl(0 72% 51% / 0.4);
+    
+    /* GeoBot Colors */
+    --geobot: 174 100% 33%;
+    --geobot-foreground: 0 0% 98%;
+    --geobot-bg: 0 0% 3.9%;
+    --geobot-border: 0 0% 14.9%;
     
     --sidebar-background: 0 0% 0.4%;
     --sidebar-foreground: 0 0% 98%;

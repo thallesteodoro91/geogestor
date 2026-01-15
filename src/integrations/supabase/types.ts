@@ -1833,6 +1833,10 @@ export type Database = {
         Args: { p_cliente_nome: string; p_tenant_id: string }
         Returns: string
       }
+      get_financial_dashboard_metrics: {
+        Args: { p_data_fim?: string; p_data_inicio?: string }
+        Returns: Json
+      }
       get_tenant_members: {
         Args: never
         Returns: {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { createTenant } from "@/services/tenant.service";
@@ -34,12 +34,27 @@ export interface SubscriptionPlan {
   is_active: boolean;
 }
 
+export type ResourceType = 'users' | 'properties' | 'clients';
+
 interface TenantContextType {
   tenant: Tenant | null;
   subscription: TenantSubscription | null;
   isLoading: boolean;
   error: string | null;
   refetchTenant: () => Promise<void>;
+  /**
+   * Verifica se pode adicionar um recurso com base nos limites do plano
+   * @returns true se dentro do limite, false se limite atingido
+   */
+  canAddResource: (type: ResourceType, currentCount: number) => boolean;
+  /**
+   * Obtém o limite máximo para um tipo de recurso
+   */
+  getResourceLimit: (type: ResourceType) => number;
+  /**
+   * Verifica se o plano está ativo (active ou trialing)
+   */
+  isSubscriptionActive: () => boolean;
 }
 
 const TenantContext = createContext<TenantContextType | null>(null);
@@ -193,6 +208,50 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Verifica se a assinatura está ativa
+   */
+  const isSubscriptionActive = useCallback((): boolean => {
+    if (!subscription) return false;
+    return subscription.status === 'active' || subscription.status === 'trialing';
+  }, [subscription]);
+
+  /**
+   * Obtém o limite máximo para um tipo de recurso
+   */
+  const getResourceLimit = useCallback((type: ResourceType): number => {
+    if (!subscription?.plan) {
+      // Limites padrão para plano inexistente
+      const defaults: Record<ResourceType, number> = {
+        users: 1,
+        properties: 5,
+        clients: 10,
+      };
+      return defaults[type];
+    }
+
+    switch (type) {
+      case 'users':
+        return subscription.plan.max_users;
+      case 'properties':
+        return subscription.plan.max_properties;
+      case 'clients':
+        return subscription.plan.max_clients;
+      default:
+        return 0;
+    }
+  }, [subscription]);
+
+  /**
+   * Verifica se pode adicionar um recurso com base nos limites do plano
+   */
+  const canAddResource = useCallback((type: ResourceType, currentCount: number): boolean => {
+    if (!isSubscriptionActive()) return false;
+    
+    const limit = getResourceLimit(type);
+    return currentCount < limit;
+  }, [isSubscriptionActive, getResourceLimit]);
+
   useEffect(() => {
     fetchTenantData();
   }, [user]);
@@ -205,6 +264,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         isLoading,
         error,
         refetchTenant: fetchTenantData,
+        canAddResource,
+        getResourceLimit,
+        isSubscriptionActive,
       }}
     >
       {children}

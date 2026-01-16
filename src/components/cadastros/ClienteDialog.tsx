@@ -77,22 +77,52 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
 
   const onSubmit = async (data: any) => {
     if (!isEditing && !canAddClient) {
-      toast.error("Limite de clientes atingido. Faça upgrade do seu plano.");
+      toast.error("Limite de clientes atingido. Faça upgrade do seu plano.", {
+        description: "Acesse Configurações > Plano para fazer upgrade.",
+        action: {
+          label: "Ver Planos",
+          onClick: () => window.location.href = '/configuracoes',
+        },
+        duration: 6000,
+      });
       return;
     }
     
     try {
+      // Obter tenant_id para garantir isolamento de dados
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      
+      const { data: memberData } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!memberData?.tenant_id) {
+        toast.error("Erro de configuração. Entre em contato com o suporte.");
+        return;
+      }
+      
       const submitData = {
         ...data,
         origem: prospeccaoOptions.join(', '),
-        categoria: categoriaOptions.join(', ')
+        categoria: categoriaOptions.join(', '),
+        tenant_id: memberData.tenant_id, // Garantir tenant_id explícito
       };
 
       if (cliente) {
+        // Remover tenant_id do update (não deve ser alterado)
+        const { tenant_id, ...updateData } = submitData;
+        
         const { error } = await supabase
           .from('dim_cliente')
-          .update(submitData)
-          .eq('id_cliente', cliente.id_cliente);
+          .update(updateData)
+          .eq('id_cliente', cliente.id_cliente)
+          .eq('tenant_id', memberData.tenant_id); // Filtro explícito de segurança
         
         if (error) throw error;
         toast.success("Cliente atualizado com sucesso!");

@@ -1,4 +1,6 @@
-import { useTenant } from "@/contexts/TenantContext";
+import { useTenant, ResourceType } from "@/contexts/TenantContext";
+import { useResourceCounts } from "./useResourceCounts";
+import { toast } from "sonner";
 
 export interface PlanLimits {
   maxUsers: number;
@@ -10,14 +12,21 @@ export interface PlanLimits {
   isTrialing: boolean;
   isActive: boolean;
   canAccess: (feature: string) => boolean;
-  isWithinLimit: (resource: 'users' | 'properties' | 'clients', currentCount: number) => boolean;
+  isWithinLimit: (resource: ResourceType, currentCount: number) => boolean;
+  /**
+   * Verifica limite e mostra toast de erro se atingido
+   * @returns true se pode adicionar, false se limite atingido
+   */
+  checkAndNotify: (resource: ResourceType) => boolean;
 }
 
 export function usePlanLimits(): PlanLimits {
-  const { subscription } = useTenant();
+  const { subscription, canAddResource, getResourceLimit, isSubscriptionActive } = useTenant();
+  const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
 
   const plan = subscription?.plan;
-  const status = subscription?.status || 'inactive';
+  const isActive = isSubscriptionActive();
+  const isTrialing = subscription?.status === 'trialing';
 
   const defaultLimits: PlanLimits = {
     maxUsers: 1,
@@ -30,12 +39,51 @@ export function usePlanLimits(): PlanLimits {
     isActive: false,
     canAccess: () => false,
     isWithinLimit: () => false,
+    checkAndNotify: () => false,
   };
 
   if (!plan) return defaultLimits;
 
-  const isActive = status === 'active' || status === 'trialing';
-  const isTrialing = status === 'trialing';
+  const getCurrentCount = (resource: ResourceType): number => {
+    switch (resource) {
+      case 'users':
+        return usersCount;
+      case 'properties':
+        return propertiesCount;
+      case 'clients':
+        return clientsCount;
+      default:
+        return 0;
+    }
+  };
+
+  const resourceNames: Record<ResourceType, string> = {
+    users: 'usuários',
+    properties: 'propriedades',
+    clients: 'clientes',
+  };
+
+  const checkAndNotify = (resource: ResourceType): boolean => {
+    const currentCount = getCurrentCount(resource);
+    const maxAllowed = getResourceLimit(resource);
+    const canAdd = canAddResource(resource, currentCount);
+
+    if (!canAdd) {
+      toast.error(
+        `Limite de ${resourceNames[resource]} atingido (${currentCount}/${maxAllowed})`,
+        {
+          description: 'Faça upgrade do seu plano para adicionar mais.',
+          action: {
+            label: 'Ver Planos',
+            onClick: () => window.location.href = '/configuracoes',
+          },
+          duration: 6000,
+        }
+      );
+    }
+
+    return canAdd;
+  };
 
   return {
     maxUsers: plan.max_users,
@@ -50,18 +98,9 @@ export function usePlanLimits(): PlanLimits {
       if (!isActive) return false;
       return plan.features[feature] === true;
     },
-    isWithinLimit: (resource: 'users' | 'properties' | 'clients', currentCount: number) => {
-      if (!isActive) return false;
-      switch (resource) {
-        case 'users':
-          return currentCount < plan.max_users;
-        case 'properties':
-          return currentCount < plan.max_properties;
-        case 'clients':
-          return currentCount < plan.max_clients;
-        default:
-          return false;
-      }
+    isWithinLimit: (resource: ResourceType, currentCount: number) => {
+      return canAddResource(resource, currentCount);
     },
+    checkAndNotify,
   };
 }

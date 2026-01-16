@@ -65,24 +65,54 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClie
 
   const onSubmit = async (data: any) => {
     if (!isEditing && !canAddProperty) {
-      toast.error("Limite de propriedades atingido. Faça upgrade do seu plano.");
+      toast.error("Limite de propriedades atingido. Faça upgrade do seu plano.", {
+        description: "Acesse Configurações > Plano para fazer upgrade.",
+        action: {
+          label: "Ver Planos",
+          onClick: () => window.location.href = '/configuracoes',
+        },
+        duration: 6000,
+      });
       return;
     }
     
     try {
+      // Obter tenant_id para garantir isolamento de dados
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        toast.error("Sessão expirada. Faça login novamente.");
+        return;
+      }
+      
+      const { data: memberData } = await supabase
+        .from('tenant_members')
+        .select('tenant_id')
+        .eq('user_id', user.id)
+        .single();
+      
+      if (!memberData?.tenant_id) {
+        toast.error("Erro de configuração. Entre em contato com o suporte.");
+        return;
+      }
+      
       // Converter strings vazias em null para campos numéricos
       const sanitizedData = {
         ...data,
         area_ha: data.area_ha === '' || data.area_ha === null || data.area_ha === undefined ? null : Number(data.area_ha),
         latitude: data.latitude === '' || data.latitude === null || data.latitude === undefined ? null : Number(data.latitude),
         longitude: data.longitude === '' || data.longitude === null || data.longitude === undefined ? null : Number(data.longitude),
+        tenant_id: memberData.tenant_id, // Garantir tenant_id explícito
       };
 
       if (propriedade) {
+        // Remover tenant_id do update (não deve ser alterado)
+        const { tenant_id, ...updateData } = sanitizedData;
+        
         const { error } = await supabase
           .from('dim_propriedade')
-          .update(sanitizedData)
-          .eq('id_propriedade', propriedade.id_propriedade);
+          .update(updateData)
+          .eq('id_propriedade', propriedade.id_propriedade)
+          .eq('tenant_id', memberData.tenant_id); // Filtro explícito de segurança
         
         if (error) throw error;
         toast.success("Propriedade atualizada com sucesso!");

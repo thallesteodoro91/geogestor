@@ -101,8 +101,6 @@ const Dashboard = () => {
               subtitle={`${kpis?.total_servicos || 0} serviços`}
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
-              description="Soma de toda a receita gerada pelos serviços prestados no período"
-              calculation="Σ (Receita de Serviços + Receita Realizada)"
             />
             <KPICard
               title="Lucro Bruto"
@@ -111,8 +109,6 @@ const Dashboard = () => {
               subtitle={`margem de ${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
-              description="Lucro após dedução dos custos diretos dos serviços"
-              calculation="Receita Total - Custos Diretos"
             />
             <KPICard
               title="Lucro Líquido"
@@ -121,8 +117,6 @@ const Dashboard = () => {
               subtitle={`margem de ${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
-              description="Lucro final após todas as deduções (custos e despesas operacionais)"
-              calculation="Receita Total - Custos Totais - Despesas"
             />
             <KPICard
               title="Total de Despesas"
@@ -131,8 +125,6 @@ const Dashboard = () => {
               subtitle="custos operacionais"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
               changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
-              description="Soma de todas as despesas operacionais e administrativas"
-              calculation="Σ (Despesas Fixas + Despesas Variáveis)"
             />
               </>
             )}
@@ -162,8 +154,6 @@ const Dashboard = () => {
               subtitle="Lucro Bruto / Receita"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
-              description="Percentual de receita que resta após dedução dos custos diretos"
-              calculation="(Lucro Bruto / Receita Total) × 100"
             />
             <KPICard
               title="Margem Líquida"
@@ -172,8 +162,6 @@ const Dashboard = () => {
               subtitle="Lucro Líquido / Receita"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
               changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
-              description="Percentual de receita que vira lucro efetivo após todas as deduções"
-              calculation="(Lucro Líquido / Receita Total) × 100"
             />
             <KPICard
               title="Taxa de Conversão"
@@ -182,8 +170,6 @@ const Dashboard = () => {
               subtitle="orçamentos convertidos"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
-              description="Percentual de orçamentos que foram convertidos em serviços efetivos"
-              calculation="(Orçamentos Convertidos / Total de Orçamentos) × 100"
             />
             <KPICard
               title="Ticket Médio"
@@ -192,8 +178,6 @@ const Dashboard = () => {
               subtitle="por serviço"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
-              description="Valor médio de receita gerada por cada serviço executado"
-              calculation="Receita Total / Quantidade de Serviços"
             />
               </>
             )}
@@ -221,8 +205,6 @@ const Dashboard = () => {
               subtitle="serviços registrados"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
-              description="Número total de serviços cadastrados no sistema"
-              calculation="COUNT(Serviços)"
             />
             <KPICard
               title="Serviços Concluídos"
@@ -231,8 +213,6 @@ const Dashboard = () => {
               subtitle={`${kpis?.total_servicos ? ((kpis.servicos_concluidos / kpis.total_servicos) * 100).toFixed(1) : 0}% do total`}
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
-              description="Quantidade de serviços finalizados e entregues aos clientes"
-              calculation="COUNT(Serviços WHERE situação = 'Concluído')"
             />
               </>
             )}

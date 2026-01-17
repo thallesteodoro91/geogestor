@@ -167,7 +167,9 @@ export const CalendarioDiario = () => {
                   getCategoriaColor(evento.categoria, evento.tipo)
                 )}
                 onClick={() => {
-                  const [tipo, id] = evento.id.split("-");
+                  const separatorIndex = evento.id.indexOf("-");
+                  const tipo = evento.id.substring(0, separatorIndex);
+                  const id = evento.id.substring(separatorIndex + 1);
                   navigate(`/calendario/${tipo}/${id}`);
                 }}
                 title={`${evento.cliente} • ${evento.propriedade} • ${evento.municipio}`}

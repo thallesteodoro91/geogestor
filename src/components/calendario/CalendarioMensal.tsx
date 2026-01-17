@@ -178,7 +178,10 @@ export const CalendarioMensal = () => {
   };
 
   const handleSelectEvent = (event: CalendarEvent) => {
-    const [tipo, id] = event.id.split("-");
+    // O ID é no formato "tipo-uuid", precisamos separar apenas no primeiro hífen
+    const separatorIndex = event.id.indexOf("-");
+    const tipo = event.id.substring(0, separatorIndex);
+    const id = event.id.substring(separatorIndex + 1);
     navigate(`/calendario/${tipo}/${id}`);
   };
 

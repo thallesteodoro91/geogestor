@@ -454,7 +454,6 @@ export default function Despesas() {
             title={hasDateFilter ? "Total no Período" : "Total de Despesas"}
             value={`R$ ${totalDespesasFiltradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
-            subtitle={`${filteredDespesas.length} lançamentos`}
           />
           <KPICard
             title={hasDateFilter ? "Despesas Filtradas" : "Despesas do Mês"}

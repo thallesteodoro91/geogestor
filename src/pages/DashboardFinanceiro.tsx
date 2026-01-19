@@ -94,40 +94,28 @@ const DashboardFinanceiro = () => {
                   title="Receita Bruta"
                   value={formatCurrency(metrics?.receita_total || 0)}
                   icon={DollarSign}
-                  subtitle={`${metrics?.total_orcamentos || 0} orçamentos emitidos`}
                   changeType="neutral"
-                  description="Soma total de todas as receitas esperadas dos orçamentos (antes de impostos)"
-                  calculation="Σ (Receita Esperada de todos os Orçamentos)"
                 />
 
                 <KPICard
                   title="Receita Líquida"
                   value={formatCurrency(derivedKPIs?.receita_liquida || 0)}
                   icon={DollarSign}
-                  subtitle={`Impostos: ${formatCurrency(metrics?.total_impostos || 0)}`}
                   changeType="neutral"
-                  description="Receita após dedução dos impostos"
-                  calculation="Receita Bruta - Impostos"
                 />
 
                 <KPICard
                   title="Margem Contribuição"
                   value={formatPercent(derivedKPIs?.margem_contribuicao_percent || 0)}
                   icon={Target}
-                  subtitle="Receita - Custos Variáveis"
                   changeType="positive"
-                  description="Percentual da receita disponível para cobrir custos fixos e gerar lucro"
-                  calculation="((Receita - Custos Variáveis) / Receita) × 100"
                 />
 
                 <KPICard
                   title="Ponto de Equilíbrio"
                   value={formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}
                   icon={AlertCircle}
-                  subtitle="Receita mínima necessária"
                   changeType="neutral"
-                  description="Receita necessária para cobrir todos os custos sem gerar lucro nem prejuízo"
-                  calculation="Custos Fixos / Margem de Contribuição (%)"
                 />
               </>
             )}

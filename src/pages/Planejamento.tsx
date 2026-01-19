@@ -60,7 +60,6 @@ export default function Planejamento() {
             change="+0.3%"
             changeType="neutral"
             icon={Target}
-            subtitle="dentro da meta"
           />
           <KPICard
             title="Margem Contribuição"
@@ -68,7 +67,6 @@ export default function Planejamento() {
             change="+2.1%"
             changeType="positive"
             icon={TrendingUp}
-            subtitle="vs mês anterior"
           />
           <KPICard
             title="Taxa de Conversão"
@@ -76,7 +74,6 @@ export default function Planejamento() {
             change="+3.5%"
             changeType="positive"
             icon={Users}
-            subtitle="leads → clientes"
           />
           <KPICard
             title="Pipeline Total"
@@ -84,7 +81,6 @@ export default function Planejamento() {
             change="+8%"
             changeType="positive"
             icon={DollarSign}
-            subtitle="em negociação"
           />
         </div>
 

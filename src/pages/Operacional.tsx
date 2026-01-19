@@ -97,7 +97,6 @@ export default function Operacional() {
             change="-8%"
             changeType="positive"
             icon={Clock}
-            subtitle="vs mês anterior"
           />
           <KPICard
             title="Produtividade"
@@ -105,7 +104,6 @@ export default function Operacional() {
             change="+5%"
             changeType="positive"
             icon={TrendingUp}
-            subtitle="eficiência geral"
           />
           <KPICard
             title="Ticket Médio"
@@ -113,7 +111,6 @@ export default function Operacional() {
             change="+15%"
             changeType="positive"
             icon={DollarSign}
-            subtitle="por serviço"
           />
         </div>
 

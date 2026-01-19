@@ -1,7 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { LucideIcon, TrendingUp, TrendingDown, Info } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
 
 interface KPICardProps {
   title: string;
@@ -9,9 +8,6 @@ interface KPICardProps {
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   icon: LucideIcon;
-  subtitle?: string;
-  description?: string;
-  calculation?: string;
 }
 
 const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) => {
@@ -37,7 +33,7 @@ const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) 
  * - "How to Apply Contrast": Color-coded change indicators with background
  * - "Benefits of Anticipation": Smooth transitions create predictable interactions
  */
-export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, subtitle, description, calculation }: KPICardProps) => {
+export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon }: KPICardProps) => {
   // Remove operation signs from change value
   const cleanChange = change?.replace(/^[+-]\s*/, '');
   
@@ -63,30 +59,9 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
           
           {/* Content with improved typography - Chapter 4: Typography */}
           <div className="space-y-1.5 flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground leading-relaxed">
-                {title}
-              </p>
-              {description && (
-                <TooltipProvider>
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help hover:text-primary transition-colors flex-shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent side="right" className="max-w-xs">
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">{description}</p>
-                        {calculation && (
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-semibold">Cálculo:</span> {calculation}
-                          </p>
-                        )}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
+            <p className="text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground leading-relaxed">
+              {title}
+            </p>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-3xl font-heading font-bold text-foreground leading-tight tracking-tight">
                 {value}
@@ -105,11 +80,6 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
                 </div>
               )}
             </div>
-            {subtitle && (
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {subtitle}
-              </p>
-            )}
           </div>
         </div>
         <MiniSparkline trend={changeType === "positive" ? "up" : changeType === "negative" ? "down" : "neutral"} />

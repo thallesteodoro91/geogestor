@@ -292,7 +292,6 @@ export default function ServicosOrcamentos() {
             title="Total de Orçamentos"
             value={totalOrcamentos.toString()}
             icon={FileText}
-            subtitle={`${orcamentosAprovados} aprovados`}
             change={`${Math.round(taxaConversao)}%`}
             changeType="positive"
           />
@@ -300,7 +299,6 @@ export default function ServicosOrcamentos() {
             title="Taxa de Conversão"
             value={`${Math.round(taxaConversao)}%`}
             icon={TrendingUp}
-            subtitle="orçamentos convertidos"
             change="+8%"
             changeType="positive"
           />
@@ -308,7 +306,6 @@ export default function ServicosOrcamentos() {
             title="Receita Orçada"
             value={`R$ ${receitaOrcada.toLocaleString('pt-BR')}`}
             icon={DollarSign}
-            subtitle="pipeline total"
             change="+15%"
             changeType="positive"
           />
@@ -316,7 +313,6 @@ export default function ServicosOrcamentos() {
             title="Ticket Médio"
             value={`R$ ${totalOrcamentos > 0 ? Math.round(receitaOrcada / totalOrcamentos).toLocaleString('pt-BR') : '0'}`}
             icon={Calculator}
-            subtitle="valor médio por orçamento"
             change="+5%"
             changeType="positive"
           />

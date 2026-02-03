@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2 } from "lucide-react";
+import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2, AlertTriangle } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,6 +18,8 @@ import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { CsvImportDialog } from "@/components/import/CsvImportDialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -25,6 +27,7 @@ export default function Configuracoes() {
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
+  const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
 
   // Fetch current user data
@@ -140,6 +143,39 @@ export default function Configuracoes() {
     },
     onError: (error: any) => {
       toast.error(`Erro: ${error.message}`);
+    },
+  });
+
+  // Mutation para excluir todos os dados da empresa
+  const deleteAllDataMutation = useMutation({
+    mutationFn: async () => {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error('Tenant não identificado');
+      }
+      return deleteAllCompanyData(tenantId);
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        // Invalidar todas as queries relevantes
+        queryClient.invalidateQueries({ queryKey: ['clientes'] });
+        queryClient.invalidateQueries({ queryKey: ['propriedades'] });
+        queryClient.invalidateQueries({ queryKey: ['servicos'] });
+        queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+        queryClient.invalidateQueries({ queryKey: ['despesas'] });
+        queryClient.invalidateQueries({ queryKey: ['notificacoes'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['eventos'] });
+        queryClient.invalidateQueries({ queryKey: ['tarefas'] });
+        
+        toast.success(`Dados excluídos com sucesso! ${result.totalExcluido} registros removidos.`);
+      } else {
+        throw new Error(result.error || 'Erro ao excluir dados');
+      }
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao excluir dados: ${error.message}`);
     },
   });
 
@@ -483,6 +519,24 @@ export default function Configuracoes() {
                 <p className="text-sm font-medium">Último Backup</p>
                 <p className="text-sm text-muted-foreground">15 de Maio de 2025 às 14:30</p>
               </div>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <p className="text-sm font-medium">Zona de Perigo</p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
+                </p>
+                <Button 
+                  variant="destructive" 
+                  onClick={() => setDeleteAllDataDialogOpen(true)}
+                  disabled={deleteAllDataMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {deleteAllDataMutation.isPending ? 'Excluindo...' : 'Excluir Todos os Dados'}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -522,6 +576,29 @@ export default function Configuracoes() {
           queryClient.invalidateQueries({ queryKey: ['propriedades'] });
           queryClient.invalidateQueries({ queryKey: ['tipos-servico'] });
           queryClient.invalidateQueries({ queryKey: ['tipos-despesa'] });
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteAllDataDialogOpen}
+        onOpenChange={setDeleteAllDataDialogOpen}
+        title="⚠️ Excluir Todos os Dados"
+        description="ATENÇÃO: Esta ação é irreversível!
+
+Serão excluídos permanentemente:
+• Todos os clientes
+• Todas as propriedades  
+• Todos os serviços e orçamentos
+• Todas as despesas
+• Todos os eventos e tarefas
+
+Os tipos de serviço, tipos de despesa e configurações da empresa serão mantidos."
+        confirmLabel="Excluir Tudo"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          deleteAllDataMutation.mutate();
+          setDeleteAllDataDialogOpen(false);
         }}
       />
     </AppLayout>

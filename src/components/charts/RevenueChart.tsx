@@ -1,14 +1,19 @@
+import { useState } from "react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { RichTooltip } from "./RichTooltip";
 import { useRevenueChartData } from "@/hooks/useChartData";
+import { useAvailableYears } from "@/hooks/useAvailableYears";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const RevenueChart = () => {
   const currentYear = new Date().getFullYear();
-  const { data, isLoading } = useRevenueChartData(currentYear);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const { data: availableYears, isLoading: yearsLoading } = useAvailableYears();
+  const { data, isLoading } = useRevenueChartData(selectedYear);
 
-  if (isLoading) {
+  if (isLoading || yearsLoading) {
     return (
       <Card className="interactive-lift">
         <CardHeader>
@@ -21,22 +26,36 @@ export const RevenueChart = () => {
     );
   }
 
-  // Filter to only show months with data or up to current month
+  // Filter to only show months with data or up to current month (only for current year)
   const currentMonth = new Date().getMonth();
-  const filteredData = (data || []).slice(0, currentMonth + 1);
+  const filteredData = selectedYear === currentYear 
+    ? (data || []).slice(0, currentMonth + 1)
+    : (data || []);
   
   // If no data, show placeholder
   const hasData = filteredData.some(d => d.receita > 0 || d.despesa > 0);
 
   return (
     <Card className="interactive-lift">
-      <CardHeader>
-        <CardTitle className="text-lg">Receita vs Despesa ({currentYear})</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-lg">Receita vs Despesa</CardTitle>
+        <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(Number(v))}>
+          <SelectTrigger className="w-[100px] h-8">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(availableYears || [currentYear]).map((year) => (
+              <SelectItem key={year} value={year.toString()}>
+                {year}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </CardHeader>
       <CardContent>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            <p>Sem dados financeiros para exibir neste período</p>
+            <p>Sem dados financeiros para exibir em {selectedYear}</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>

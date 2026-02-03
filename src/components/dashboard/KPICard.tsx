@@ -10,21 +10,6 @@ interface KPICardProps {
   icon: LucideIcon;
 }
 
-const MiniSparkline = ({ trend = "up" }: { trend?: "up" | "down" | "neutral" }) => {
-  const pathUp = "M2,20 Q10,15 20,12 T40,8 T60,10 T80,6 T98,4";
-  const pathDown = "M2,4 Q10,8 20,12 T40,16 T60,14 T80,18 T98,20";
-  const pathNeutral = "M2,12 Q20,10 40,12 T80,12 T98,12";
-  
-  const path = trend === "up" ? pathUp : trend === "down" ? pathDown : pathNeutral;
-  const color = trend === "up" ? "hsl(189, 94%, 43%)" : trend === "down" ? "hsl(0, 72%, 51%)" : "hsl(262, 83%, 65%)";
-  
-  return (
-    <svg width="100" height="24" viewBox="0 0 100 24" className="absolute bottom-2 right-2 opacity-20">
-      <path d={path} fill="none" stroke={color} strokeWidth="1.5" />
-    </svg>
-  );
-};
-
 /**
  * KPI Card Component
  * UX/UI Principles Applied:
@@ -82,7 +67,6 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
             </div>
           </div>
         </div>
-        <MiniSparkline trend={changeType === "positive" ? "up" : changeType === "negative" ? "down" : "neutral"} />
       </CardContent>
     </Card>
   );

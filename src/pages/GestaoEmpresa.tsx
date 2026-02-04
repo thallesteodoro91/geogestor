@@ -81,9 +81,6 @@ const GestaoEmpresa = () => {
     situacao: "",
   });
 
-  const [anoBase, setAnoBase] = useState<string>("2024");
-  const [anoComparacao, setAnoComparacao] = useState<string>("2023");
-
   const { data: kpis, isLoading } = useKPIs();
 
   const { data: clientes = [] } = useQuery({
@@ -249,83 +246,8 @@ const GestaoEmpresa = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift border-0">
-                <CardHeader>
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <h3 className="text-lg font-heading font-semibold text-foreground">Evolução da Receita</h3>
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Ano:</span>
-                        <Select value={anoBase} onValueChange={setAnoBase}>
-                          <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Comparar com</span>
-                        <Select value={anoComparacao} onValueChange={setAnoComparacao}>
-                          <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                            <SelectItem value="2021">2021</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <RevenueChart />
-                </CardContent>
-              </Card>
-
-              <Card className="interactive-lift border-0">
-                <CardHeader>
-                  <div className="flex items-center justify-between flex-wrap gap-4">
-                    <h3 className="text-lg font-heading font-semibold text-foreground">Margem de Lucro</h3>
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Ano:</span>
-                        <Select value={anoBase} onValueChange={setAnoBase}>
-                          <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2024">2024</SelectItem>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">Comparar com</span>
-                        <Select value={anoComparacao} onValueChange={setAnoComparacao}>
-                          <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="2023">2023</SelectItem>
-                            <SelectItem value="2022">2022</SelectItem>
-                            <SelectItem value="2021">2021</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <ProfitMarginChart />
-                </CardContent>
-              </Card>
+              <RevenueChart />
+              <ProfitMarginChart />
             </div>
           </TabsContent>
 

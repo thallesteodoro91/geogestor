@@ -47,8 +47,10 @@ const RUAS = [
 ];
 
 const ORIGENS = ["Indicação", "Site", "Evento", "Rede Social", "Visita", "Cold Call", "Parceria"];
-const CATEGORIAS_CLIENTE = ["Produtor Rural", "Governo", "Empresa Privada", "Pessoa Física"];
-const SITUACOES_CLIENTE = ["Ativo", "Inativo", "Pendente", "Prospecto"];
+// Valores válidos conforme constraint dim_cliente_categoria_check
+const CATEGORIAS_CLIENTE = ["Produtor Rural", "Empresa", "Pessoa Física", "Pessoa Jurídica", "Governo", "ONG", "Parceiro"];
+// Valores válidos conforme constraint dim_cliente_situacao_check
+const SITUACOES_CLIENTE = ["Ativo", "Inativo", "Pendente"];
 
 const NOMES_FAZENDA = [
   "Fazenda São José", "Sítio Boa Vista", "Fazenda Santa Maria", "Chácara Recanto",

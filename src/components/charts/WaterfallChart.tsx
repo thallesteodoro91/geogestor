@@ -50,11 +50,11 @@ export const WaterfallChart = ({ data, title }: WaterfallChartProps) => {
               cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
             />
             <Legend />
-            <Bar dataKey="value" fill="hsl(262, 83%, 65%)" name="Valor">
+            <Bar dataKey="value" fill="hsl(var(--chart-primary))" name="Valor">
               {processedData.map((entry, index) => (
                 <Cell 
                   key={`cell-${index}`} 
-                  fill={entry.isTotal ? "hsl(262, 83%, 65%)" : entry.value > 0 ? "hsl(142, 76%, 56%)" : "hsl(0, 72%, 51%)"} 
+                  fill={entry.isTotal ? "hsl(var(--chart-primary))" : entry.value > 0 ? "hsl(var(--chart-positive))" : "hsl(var(--chart-negative))"} 
                 />
               ))}
             </Bar>

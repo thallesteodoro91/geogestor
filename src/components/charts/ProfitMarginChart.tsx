@@ -114,17 +114,17 @@ export const ProfitMarginChart = () => {
               <Line
                 type="monotone"
                 dataKey="margemBruta"
-                stroke="hsl(142, 76%, 36%)"
+                stroke="hsl(var(--chart-positive))"
                 strokeWidth={3}
-                dot={{ fill: "hsl(142, 76%, 36%)", r: 5 }}
+                dot={{ fill: "hsl(var(--chart-positive))", r: 5 }}
                 name={`Margem Bruta ${selectedYear}`}
               />
               <Line
                 type="monotone"
                 dataKey="margemLiquida"
-                stroke="hsl(217, 91%, 60%)"
+                stroke="hsl(var(--chart-primary))"
                 strokeWidth={3}
-                dot={{ fill: "hsl(217, 91%, 60%)", r: 5 }}
+                dot={{ fill: "hsl(var(--chart-primary))", r: 5 }}
                 name={`Margem Líquida ${selectedYear}`}
               />
               {/* Comparison year lines - dashed */}

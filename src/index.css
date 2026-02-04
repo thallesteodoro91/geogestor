@@ -50,13 +50,13 @@ All colors MUST be HSL.
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
     
-    /* Semantic Chart Tokens */
-    --chart-primary: 262 83% 58%;
-    --chart-secondary: 189 94% 43%;
-    --chart-positive: 142 76% 36%;
-    --chart-negative: 0 84% 60%;
-    --chart-warning: 38 92% 50%;
-    --chart-neutral: 215 16% 47%;
+    /* Semantic Chart Tokens - Refined Palette */
+    --chart-primary: 239 84% 67%;      /* Indigo-500 */
+    --chart-secondary: 189 94% 43%;    /* Cyan (mantém) */
+    --chart-positive: 160 84% 39%;     /* Emerald-500 */
+    --chart-negative: 350 89% 60%;     /* Rose-500 */
+    --chart-warning: 38 92% 50%;       /* Mantém */
+    --chart-neutral: 215 16% 47%;      /* Mantém */
     
     /* Legacy chart colors (mapped to semantic) */
     --chart-1: 262 83% 58%;
@@ -85,10 +85,10 @@ All colors MUST be HSL.
     --gradient-card: linear-gradient(135deg, hsl(0, 0%, 100%), hsl(210, 40%, 98%));
     
     /* Shadows */
-    --shadow-elegant: 0 4px 20px -4px hsl(262 83% 58% / 0.2);
-    --shadow-glow: 0 0 30px hsl(262 83% 58% / 0.15);
-    --shadow-glow-positive: 0 0 30px hsl(142 76% 36% / 0.2);
-    --shadow-glow-negative: 0 0 30px hsl(0 84% 60% / 0.2);
+    --shadow-elegant: 0 4px 20px -4px hsl(239 84% 67% / 0.2);
+    --shadow-glow: 0 0 30px hsl(239 84% 67% / 0.15);
+    --shadow-glow-positive: 0 0 30px hsl(160 84% 39% / 0.2);
+    --shadow-glow-negative: 0 0 30px hsl(350 89% 60% / 0.2);
     
     /* Transitions */
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -142,13 +142,13 @@ All colors MUST be HSL.
     --success: 142 76% 56%;
     --success-foreground: 0 0% 98%;
     
-    /* Semantic Chart Tokens */
-    --chart-primary: 262 83% 65%;
-    --chart-secondary: 189 94% 43%;
-    --chart-positive: 142 76% 56%;
-    --chart-negative: 0 72% 51%;
-    --chart-warning: 38 92% 50%;
-    --chart-neutral: 0 0% 63.9%;
+    /* Semantic Chart Tokens - Refined Palette */
+    --chart-primary: 239 84% 72%;      /* Indigo-400 (mais claro) */
+    --chart-secondary: 189 94% 43%;    /* Cyan (mantém) */
+    --chart-positive: 160 84% 45%;     /* Emerald-400 */
+    --chart-negative: 350 89% 65%;     /* Rose-400 */
+    --chart-warning: 38 92% 50%;       /* Mantém */
+    --chart-neutral: 0 0% 63.9%;       /* Mantém */
     
     --chart-1: 262 83% 65%;
     --chart-2: 189 94% 43%;
@@ -161,10 +161,10 @@ All colors MUST be HSL.
     --gradient-card: linear-gradient(135deg, hsl(0, 0%, 3.9%), hsl(0, 0%, 6%));
     
     /* Shadows */
-    --shadow-elegant: 0 4px 20px -4px hsl(262 83% 65% / 0.4);
-    --shadow-glow: 0 0 30px hsl(262 83% 65% / 0.3);
-    --shadow-glow-positive: 0 0 30px hsl(142 76% 56% / 0.4);
-    --shadow-glow-negative: 0 0 30px hsl(0 72% 51% / 0.4);
+    --shadow-elegant: 0 4px 20px -4px hsl(239 84% 72% / 0.4);
+    --shadow-glow: 0 0 30px hsl(239 84% 72% / 0.3);
+    --shadow-glow-positive: 0 0 30px hsl(160 84% 45% / 0.4);
+    --shadow-glow-negative: 0 0 30px hsl(350 89% 65% / 0.4);
     
     /* GeoBot Colors */
     --geobot: 174 100% 33%;

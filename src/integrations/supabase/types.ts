@@ -783,6 +783,13 @@ export type Database = {
             referencedColumns: ["id_orcamento"]
           },
           {
+            foreignKeyName: "fato_despesas_id_orcamento_fkey"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "vw_alertas_financeiros"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
             foreignKeyName: "fato_despesas_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
@@ -808,6 +815,13 @@ export type Database = {
             columns: ["id_orcamento"]
             isOneToOne: false
             referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fk_despesas_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "vw_alertas_financeiros"
             referencedColumns: ["id_orcamento"]
           },
           {
@@ -1043,6 +1057,13 @@ export type Database = {
             referencedColumns: ["id_orcamento"]
           },
           {
+            foreignKeyName: "fato_orcamento_itens_id_orcamento_fkey"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "vw_alertas_financeiros"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
             foreignKeyName: "fato_orcamento_itens_id_servico_fkey"
             columns: ["id_servico"]
             isOneToOne: false
@@ -1054,6 +1075,13 @@ export type Database = {
             columns: ["id_orcamento"]
             isOneToOne: false
             referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fk_orcamento_itens_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "vw_alertas_financeiros"
             referencedColumns: ["id_orcamento"]
           },
           {
@@ -1743,12 +1771,25 @@ export type Database = {
     Views: {
       vw_alertas_financeiros: {
         Row: {
-          alerta_conversao: Json | null
-          alerta_custos: Json | null
-          alerta_equilibrio: Json | null
-          alerta_margem: Json | null
+          cliente_nome: string | null
+          codigo_orcamento: string | null
+          data_do_faturamento: string | null
+          id_orcamento: string | null
+          propriedade_nome: string | null
+          receita_esperada: number | null
+          situacao_do_pagamento: string | null
+          status_alerta: string | null
+          tenant_id: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fato_orcamento_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       vw_kpis_financeiros: {
         Row: {

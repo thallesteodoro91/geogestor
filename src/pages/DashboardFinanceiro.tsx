@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
 import { RichTooltip } from "@/components/charts/RichTooltip";
+import { RevenueTrendChart } from "@/components/charts/RevenueTrendChart";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
@@ -120,6 +121,11 @@ const DashboardFinanceiro = () => {
               </>
             )}
           </div>
+        </section>
+
+        {/* Gráfico Evolução Receita e Lucro - Full Width */}
+        <section aria-label="Evolução receita e lucro">
+          <RevenueTrendChart />
         </section>
 
         {/* Análise Textual */}

@@ -26,10 +26,24 @@ export function AlertasFinanceiros() {
         .from('vw_alertas_financeiros')
         .select('*')
         .order('data_do_faturamento', { ascending: true })
-        .limit(10);
+        .limit(20);
       
       if (error) throw error;
-      return data as AlertaFinanceiro[];
+      
+      // Filtrar alertas: mostrar todos os vencidos e apenas "próximo" com <= 30 dias
+      const alertasFiltrados = (data as AlertaFinanceiro[]).filter(alerta => {
+        if (alerta.status_alerta === 'vencido') return true;
+        
+        if (alerta.status_alerta === 'proximo') {
+          const dataVencimento = new Date(alerta.data_do_faturamento);
+          const diasAteVencimento = differenceInDays(dataVencimento, new Date());
+          return diasAteVencimento <= 30;
+        }
+        
+        return false;
+      });
+      
+      return alertasFiltrados.slice(0, 10);
     },
     refetchInterval: 60000,
   });

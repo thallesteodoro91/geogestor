@@ -11,7 +11,7 @@ export interface DashboardMetrics {
   total_orcamentos: number;
   lucro_por_cliente: { cliente: string; lucro: number }[];
   margem_por_servico: { servico: string; margem: number; receita: number }[];
-  custos_por_categoria: { name: string; value: number }[];
+  custos_por_categoria: { name: string; value: number; tipo: "FIXA" | "VARIAVEL" }[];
   periodo: { data_inicio: string; data_fim: string };
 }
 

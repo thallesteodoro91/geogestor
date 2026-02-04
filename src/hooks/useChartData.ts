@@ -151,3 +151,94 @@ export function useProfitMarginChartData(year?: number) {
     refetchInterval: 60000,
   });
 }
+
+interface RevenueTrendData {
+  month: string;
+  receitaBruta: number;
+  lucroLiquido: number;
+  margemPercent: number;
+}
+
+export function useRevenueTrendChartData(year?: number) {
+  const targetYear = year || new Date().getFullYear();
+  
+  return useQuery({
+    queryKey: ['revenue-trend-chart-data', targetYear],
+    queryFn: async (): Promise<RevenueTrendData[]> => {
+      // Fetch budgets for the year
+      const { data: orcamentos } = await supabase
+        .from('fato_orcamento')
+        .select('data_orcamento, receita_esperada, incluir_imposto, valor_imposto')
+        .gte('data_orcamento', `${targetYear}-01-01`)
+        .lte('data_orcamento', `${targetYear}-12-31`);
+      
+      // Fetch expenses with classification
+      const { data: despesas } = await supabase
+        .from('fato_despesas')
+        .select(`
+          data_da_despesa, 
+          valor_da_despesa,
+          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(classificacao)
+        `)
+        .gte('data_da_despesa', `${targetYear}-01-01`)
+        .lte('data_da_despesa', `${targetYear}-12-31`);
+      
+      // Group by month
+      const monthlyData: Record<number, { 
+        receita: number; 
+        impostos: number; 
+        custosVariaveis: number; 
+        despesasFixas: number 
+      }> = {};
+      
+      (orcamentos || []).forEach(o => {
+        const month = new Date(o.data_orcamento).getMonth();
+        const receita = o.receita_esperada || 0;
+        const imposto = o.incluir_imposto ? (o.valor_imposto || 0) : 0;
+        
+        if (!monthlyData[month]) {
+          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
+        }
+        monthlyData[month].receita += receita;
+        monthlyData[month].impostos += imposto;
+      });
+      
+      (despesas || []).forEach((d: any) => {
+        const month = new Date(d.data_da_despesa).getMonth();
+        if (!monthlyData[month]) {
+          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
+        }
+        
+        const valor = d.valor_da_despesa || 0;
+        const classificacao = d.dim_tipodespesa?.classificacao || 'FIXA';
+        
+        if (classificacao === 'VARIAVEL') {
+          monthlyData[month].custosVariaveis += valor;
+        } else {
+          monthlyData[month].despesasFixas += valor;
+        }
+      });
+      
+      // Build array for all 12 months
+      return monthNames.map((name, index) => {
+        const data = monthlyData[index] || { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
+        
+        const receitaBruta = data.receita;
+        const receitaLiquida = receitaBruta - data.impostos;
+        const lucroBruto = receitaLiquida - data.custosVariaveis;
+        const lucroLiquido = lucroBruto - data.despesasFixas;
+        
+        // Margem % = (Lucro Líquido / Receita Bruta) * 100
+        const margemPercent = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0;
+        
+        return {
+          month: name,
+          receitaBruta,
+          lucroLiquido,
+          margemPercent: Math.round(margemPercent * 10) / 10,
+        };
+      });
+    },
+    refetchInterval: 60000,
+  });
+}

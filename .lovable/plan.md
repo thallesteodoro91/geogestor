@@ -1,119 +1,185 @@
 
+# Plano: Simular 50 Clientes com Dados Completos
 
-# Plano: Corrigir Importação CSV e Adicionar Colunas
+## Objetivo
+Criar uma funcionalidade na página de Configurações que permite gerar 50 clientes fictícios com todos os campos preenchidos aleatoriamente, incluindo propriedades e orçamentos associados para popular os gráficos do sistema.
 
-## Problemas Identificados
+## Arquitetura da Solução
 
-### 1. Tela Preta ao Abrir CSV Import
-O `CsvImportDialog` usa `z-[1000]` no `DialogContent`, mas o componente `DialogOverlay` padrão usa `z-[2000]` com fundo `bg-black/80`. Isso causa um conflito onde o overlay escuro fica sobre o conteúdo do dialog, resultando em uma "tela preta".
+### 1. Novo Serviço: `src/services/demo-data-generator.service.ts`
 
-**Solução**: Remover o z-index customizado do CsvImportDialog, pois o componente Dialog já tem os z-indexes corretos configurados globalmente.
+Criar um serviço dedicado para geração de dados demo que inclui:
 
-### 2. Colunas Faltantes para Clientes
-Comparando a tabela `dim_cliente` no banco com as colunas disponíveis no CSV Import:
-
-| Campo BD | Disponível no CSV Import | Ação |
-|----------|-------------------------|------|
-| nome | Sim | - |
-| cpf | Sim | - |
-| cnpj | Sim | - |
-| endereco | Sim | - |
-| telefone | Sim | - |
-| celular | Sim | - |
-| email | Sim | - |
-| categoria | Sim | - |
-| origem | Sim | - |
-| situacao | Sim | - |
-| **anotacoes** | **NÃO** | Adicionar |
-| **data_cadastro** | **NÃO** | Adicionar |
-| **idade** | **NÃO** | Adicionar |
-
-### 3. Explicação das Colunas de Métricas
-Adicionar descrições nas colunas para facilitar o entendimento do usuário. As colunas com métricas que precisam de explicação são aquelas relacionadas a valores financeiros e datas.
-
----
-
-## Implementação
-
-### Arquivo: `src/components/import/CsvImportDialog.tsx`
-
-**Mudança 1**: Remover `z-[1000]` do DialogContent (linha 288)
-```tsx
-// DE:
-<DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col z-[1000]">
-
-// PARA:
-<DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-```
-
-**Mudança 2**: Adicionar novas colunas para clientes com descrições
 ```typescript
-clientes: {
-  tableName: "dim_cliente",
-  displayName: "Clientes",
-  columns: [
-    { name: "nome", required: true, label: "Nome *", description: "Nome completo do cliente" },
-    { name: "cpf", required: false, label: "CPF", description: "Cadastro de Pessoa Física (formato: 000.000.000-00)" },
-    { name: "cnpj", required: false, label: "CNPJ", description: "Cadastro de Pessoa Jurídica (formato: 00.000.000/0000-00)" },
-    { name: "endereco", required: false, label: "Endereço", description: "Endereço completo do cliente" },
-    { name: "telefone", required: false, label: "Telefone", description: "Telefone fixo (formato: (00) 0000-0000)" },
-    { name: "celular", required: false, label: "Celular", description: "Celular/WhatsApp (formato: (00) 00000-0000)" },
-    { name: "email", required: false, label: "Email", description: "Email para contato" },
-    { name: "categoria", required: false, label: "Categoria", description: "Tipo de cliente (Governo, Pessoa Física, Pessoa Jurídica)" },
-    { name: "origem", required: false, label: "Origem", description: "Canal de prospecção (Indicação, Site, Evento, Rede Social)" },
-    { name: "situacao", required: false, label: "Situação", description: "Status do relacionamento (Ativo, Inativo, Pendente)" },
-    // NOVAS COLUNAS:
-    { name: "anotacoes", required: false, label: "Observações", description: "Notas e anotações sobre o cliente" },
-    { name: "data_cadastro", required: false, label: "Data de Cadastro", description: "Data de entrada do cliente (formato: AAAA-MM-DD)" },
-    { name: "idade", required: false, label: "Idade", description: "Idade do cliente em anos" },
-  ],
-},
+// Dados aleatórios para cada campo
+const NOMES = ["João Silva", "Maria Santos", "Pedro Oliveira", ...]; // 100+ nomes
+const SOBRENOMES = ["Ferreira", "Almeida", "Costa", ...];
+const CIDADES = ["São Paulo", "Curitiba", "Porto Alegre", ...];
+const ORIGENS = ["Indicação", "Site", "Evento", "Rede Social", "Visita", "Cold Call"];
+const CATEGORIAS = ["Produtor Rural", "Governo", "Empresa Privada", "Pessoa Física"];
+const SITUACOES = ["Ativo", "Inativo", "Pendente", "Prospecto"];
 ```
 
-**Mudança 3**: Atualizar interface e UI para mostrar descrições
-- Adicionar campo `description` na interface de colunas
-- Mostrar ícone de informação com tooltip nas colunas que têm descrição
-- Adicionar tratamento para campo `data_cadastro` (parse de data) e `idade` (número)
+**Funções principais:**
+- `generateRandomCPF()` - Gera CPF formatado válido
+- `generateRandomCNPJ()` - Gera CNPJ formatado válido  
+- `generateRandomPhone()` - Gera telefone no formato (XX) XXXXX-XXXX
+- `generateRandomDate(startYear, endYear)` - Gera data aleatória
+- `generateRandomCliente()` - Monta objeto cliente completo
+- `generateDemoClientes(quantidade: number)` - Gera N clientes
+- `insertDemoData(tenantId: string)` - Insere todos os dados de demo
+
+### 2. Estrutura de Dados Gerados
+
+Para cada cliente:
+```typescript
+{
+  nome: "João da Silva Pereira",
+  email: "joao.pereira@email.com",
+  telefone: "(11) 3456-7890",
+  celular: "(11) 98765-4321",
+  cpf: "123.456.789-00" | null,
+  cnpj: "12.345.678/0001-90" | null,
+  endereco: "Rua das Flores, 123 - Centro",
+  categoria: "Produtor Rural",
+  situacao: "Ativo",
+  origem: "Indicação",
+  anotacoes: "Cliente demonstração - gerado automaticamente",
+  data_cadastro: "2025-03-15",
+  idade: 45
+}
+```
+
+### 3. Dados Relacionados (para gráficos)
+
+Para cada cliente, gerar também:
+
+| Entidade | Quantidade | Propósito |
+|----------|------------|-----------|
+| Propriedade | 1-3 por cliente | Popular mapa e análises |
+| Orçamento | 1-5 por cliente | Alimentar gráficos financeiros |
+| Despesas | 2-8 por orçamento | Mostrar custos e margens |
+
+**Propriedades:**
+```typescript
+{
+  nome_da_propriedade: "Fazenda São José",
+  area_ha: 150.5,
+  cidade: "Londrina",
+  municipio: "Londrina",
+  situacao: "Ativo",
+  latitude: -23.310453,
+  longitude: -51.169449
+}
+```
+
+**Orçamentos:**
+```typescript
+{
+  data_orcamento: "2026-01-15",
+  quantidade: 100,
+  valor_unitario: 150.00,
+  receita_esperada: 15000.00,
+  percentual_imposto: 12,
+  valor_imposto: 1800.00,
+  situacao: "Aprovado" | "Em Análise" | "Fechado",
+  faturamento: true | false
+}
+```
+
+**Despesas:**
+```typescript
+{
+  data_da_despesa: "2026-01-20",
+  valor_da_despesa: 2500.00,
+  status: "Pago" | "Pendente"
+}
+```
+
+### 4. Atualização da Página de Configurações
+
+Adicionar novo Card na página `/configuracoes`:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│ 🧪 Dados de Demonstração                                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Gerar dados fictícios para testar o sistema e             │
+│  visualizar os gráficos com informações realistas.         │
+│                                                             │
+│  ⚠️ Os dados gerados serão marcados como "demo" e podem    │
+│     ser removidos posteriormente.                           │
+│                                                             │
+│  [Gerar 50 Clientes Demo]  [Remover Dados Demo]            │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 5. Identificação de Dados Demo
+
+Todos os dados demo terão:
+- Campo `anotacoes` contendo "[DEMO]" no início
+- Permite fácil identificação e remoção posterior
 
 ---
 
-## Arquivos a Modificar
+## Arquivos a Criar/Modificar
 
 | Arquivo | Ação |
 |---------|------|
-| `src/components/import/CsvImportDialog.tsx` | Corrigir z-index, adicionar colunas e descrições |
+| `src/services/demo-data-generator.service.ts` | **Criar** - Lógica de geração |
+| `src/pages/Configuracoes.tsx` | **Modificar** - Adicionar Card e botões |
 
-## Fluxo Visual
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│  ANTES: Dialog com z-[1000] → Overlay z-[2000] sobrepõe     │
-│                                                              │
-│  ████████████████████  ← Overlay escuro (z-2000)            │
-│  ┌─────────────────┐                                        │
-│  │   Conteúdo     │  ← Dialog (z-1000) - ATRÁS do overlay  │
-│  └─────────────────┘                                        │
-├──────────────────────────────────────────────────────────────┤
-│  DEPOIS: Dialog sem z-index customizado → Usa padrão        │
-│                                                              │
-│  ████████████████████  ← Overlay escuro (z-2000)            │
-│  ┌─────────────────┐                                        │
-│  │   Conteúdo     │  ← Dialog (z-2001) - NA FRENTE         │
-│  └─────────────────┘                                        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## Novas Colunas com Descrições
+## Fluxo de Execução
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│  Colunas esperadas para Clientes                                │
-│                                                                 │
-│  [Nome *] [CPF ℹ️] [CNPJ ℹ️] [Endereço] [Telefone ℹ️]          │
-│  [Celular ℹ️] [Email] [Categoria ℹ️] [Origem ℹ️] [Situação ℹ️] │
-│  [Observações ℹ️] [Data de Cadastro ℹ️] [Idade ℹ️]  ← NOVAS    │
-│                                                                 │
-│  ℹ️ = Tooltip com descrição do campo                           │
-└─────────────────────────────────────────────────────────────────┘
+1. Usuário clica "Gerar 50 Clientes Demo"
+           │
+           ▼
+2. ConfirmDialog: "Isso criará 50 clientes fictícios..."
+           │
+           ▼
+3. generateDemoData(tenantId) executa:
+   a) Gera 50 clientes com dados aleatórios
+   b) Para cada cliente, gera 1-3 propriedades
+   c) Para cada cliente, gera 1-5 orçamentos (datas em 2025-2026)
+   d) Para cada orçamento, gera 2-8 despesas
+           │
+           ▼
+4. Insere tudo no banco em lotes (batch insert)
+           │
+           ▼
+5. Invalida queries do React Query
+           │
+           ▼
+6. Toast: "50 clientes demo criados com sucesso!"
 ```
 
+## Detalhes Técnicos
+
+### Distribuição de Datas
+- Orçamentos distribuídos entre Jan/2025 e Fev/2026
+- Maior concentração em 2026 para testar seletor de ano
+- Despesas com datas próximas aos orçamentos
+
+### Valores Financeiros
+```text
+Receita por orçamento: R$ 5.000 a R$ 50.000
+Imposto: 8% a 15% da receita
+Despesas: 30% a 60% da receita (para margem realista)
+```
+
+### Performance
+- Inserção em lotes de 20 registros
+- Progress indicator durante geração
+- Estimativa: ~5 segundos para 50 clientes completos
+
+---
+
+## Benefícios
+
+1. **Testes visuais**: Gráficos mostrarão dados realistas
+2. **Demonstração**: Fácil apresentação do sistema
+3. **Desenvolvimento**: Depuração de features com dados reais
+4. **Reversível**: Dados podem ser removidos a qualquer momento

@@ -5,6 +5,7 @@ import { GaugeChart } from "@/components/charts/GaugeChart";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { RevenueTrendChart } from "@/components/charts/RevenueTrendChart";
 import { ServiceEfficiencyMatrix } from "@/components/charts/ServiceEfficiencyMatrix";
+import { ExpenseTreemap } from "@/components/charts/ExpenseTreemap";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
@@ -251,11 +252,20 @@ const DashboardFinanceiro = () => {
               )}
             </CardContent>
           </Card>
+        </section>
 
-          {/* Matriz de Eficiência de Serviços - ScatterChart */}
-          <ServiceEfficiencyMatrix 
-            data={metrics?.margem_por_servico || []} 
-            isLoading={isLoading} 
+        {/* Terceira Linha - Treemap de Custos */}
+        <section className={`grid lg:grid-cols-2 ${gridGap}`} aria-label="Análise de custos e eficiência">
+          {/* ExpenseTreemap - Custos por Categoria */}
+          <ExpenseTreemap
+            data={metrics?.custos_por_categoria || []}
+            isLoading={isLoading}
+          />
+
+          {/* Matriz de Eficiência de Serviços */}
+          <ServiceEfficiencyMatrix
+            data={metrics?.margem_por_servico || []}
+            isLoading={isLoading}
           />
         </section>
 

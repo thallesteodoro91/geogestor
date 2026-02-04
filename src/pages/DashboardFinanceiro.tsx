@@ -246,7 +246,23 @@ const DashboardFinanceiro = () => {
                       content={<RichTooltip format="currency" showVariation={false} />}
                       cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                     />
-                    <Bar dataKey="lucro" fill={colors[0]} radius={[0, 8, 8, 0]} />
+                    <Bar dataKey="lucro" radius={[0, 8, 8, 0]}>
+                      {lucroPorCliente.map((_, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={[
+                            "hsl(142, 76%, 36%)",   // Verde
+                            "hsl(217, 91%, 60%)",   // Azul
+                            "hsl(280, 70%, 50%)",   // Roxo
+                            "hsl(48, 96%, 53%)",    // Amarelo
+                            "hsl(0, 72%, 51%)",     // Vermelho
+                            "hsl(173, 80%, 40%)",   // Teal
+                            "hsl(340, 75%, 55%)",   // Rosa
+                            "hsl(25, 95%, 53%)",    // Laranja
+                          ][index % 8]} 
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               )}

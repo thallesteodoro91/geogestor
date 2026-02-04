@@ -63,6 +63,11 @@ const formatValueFull = (value: number): string => {
 const CustomTreemapContent = (props: any) => {
   const { x, y, width, height, name, fill, value } = props;
 
+  // Validar props antes de renderizar (evita erro com células vazias do Treemap)
+  if (!name || typeof width !== 'number' || typeof height !== 'number') {
+    return null;
+  }
+
   // Ocultar texto em retângulos pequenos para manter visual limpo
   const showName = width > 60 && height > 35;
   const showValue = width > 75 && height > 50;

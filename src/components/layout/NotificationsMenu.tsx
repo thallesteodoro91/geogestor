@@ -50,14 +50,23 @@ export const NotificationsMenu = () => {
   const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, checkPendingPayments } = useNotifications();
   const navigate = useNavigate();
 
-  // Verificar pagamentos pendentes ao montar o componente
+  // Verificar pagamentos pendentes apenas uma vez por sessão (não a cada navegação)
   useEffect(() => {
-    checkPendingPayments();
+    const lastCheck = sessionStorage.getItem('lastPaymentCheck');
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000;
     
-    // Verificar a cada 1 hora
+    // Só verificar se não foi verificado na última hora
+    if (!lastCheck || now - parseInt(lastCheck) > oneHour) {
+      checkPendingPayments();
+      sessionStorage.setItem('lastPaymentCheck', now.toString());
+    }
+    
+    // Verificar a cada 1 hora enquanto o componente está montado
     const interval = setInterval(() => {
       checkPendingPayments();
-    }, 60 * 60 * 1000);
+      sessionStorage.setItem('lastPaymentCheck', Date.now().toString());
+    }, oneHour);
 
     return () => clearInterval(interval);
   }, []);

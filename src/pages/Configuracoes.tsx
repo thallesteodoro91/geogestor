@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2, AlertTriangle } from "lucide-react";
+import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2 } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import { getCurrentTenantId } from "@/services/supabase.service";
 import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
+import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-generator.service";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -29,6 +30,9 @@ export default function Configuracoes() {
   const [userEmail, setUserEmail] = useState("");
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [generateDemoDialogOpen, setGenerateDemoDialogOpen] = useState(false);
+  const [removeDemoDialogOpen, setRemoveDemoDialogOpen] = useState(false);
+  const [demoProgress, setDemoProgress] = useState<string | null>(null);
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -176,6 +180,70 @@ export default function Configuracoes() {
     },
     onError: (error: any) => {
       toast.error(`Erro ao excluir dados: ${error.message}`);
+    },
+  });
+
+  // Mutation para gerar dados demo
+  const generateDemoMutation = useMutation({
+    mutationFn: async () => {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error('Tenant não identificado');
+      }
+      return generateAndInsertDemoData(tenantId, 50, (msg) => setDemoProgress(msg));
+    },
+    onSuccess: (result) => {
+      setDemoProgress(null);
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientes'] });
+        queryClient.invalidateQueries({ queryKey: ['propriedades'] });
+        queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+        queryClient.invalidateQueries({ queryKey: ['despesas'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        
+        toast.success(
+          `Dados demo criados! ${result.clientesInseridos} clientes, ${result.propriedadesInseridas} propriedades, ${result.orcamentosInseridos} orçamentos, ${result.despesasInseridas} despesas.`
+        );
+      } else {
+        throw new Error(result.error || 'Erro ao gerar dados');
+      }
+    },
+    onError: (error: any) => {
+      setDemoProgress(null);
+      toast.error(`Erro ao gerar dados demo: ${error.message}`);
+    },
+  });
+
+  // Mutation para remover dados demo
+  const removeDemoMutation = useMutation({
+    mutationFn: async () => {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) {
+        throw new Error('Tenant não identificado');
+      }
+      return removeDemoData(tenantId);
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        queryClient.invalidateQueries({ queryKey: ['clientes'] });
+        queryClient.invalidateQueries({ queryKey: ['propriedades'] });
+        queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+        queryClient.invalidateQueries({ queryKey: ['despesas'] });
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+        queryClient.invalidateQueries({ queryKey: ['kpis'] });
+        
+        if (result.clientesRemovidos > 0) {
+          toast.success(`${result.clientesRemovidos} clientes demo removidos com sucesso!`);
+        } else {
+          toast.info('Nenhum dado demo encontrado para remover.');
+        }
+      } else {
+        throw new Error(result.error || 'Erro ao remover dados');
+      }
+    },
+    onError: (error: any) => {
+      toast.error(`Erro ao remover dados demo: ${error.message}`);
     },
   });
 
@@ -500,6 +568,52 @@ export default function Configuracoes() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-primary" />
+                <CardTitle>Dados de Demonstração</CardTitle>
+              </div>
+              <CardDescription>Gerar dados fictícios para testar o sistema e visualizar os gráficos</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                <p className="text-sm">
+                  Gere <strong>50 clientes fictícios</strong> com propriedades, orçamentos e despesas para testar 
+                  todas as funcionalidades e visualizar os gráficos com dados realistas.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  ⚠️ Os dados gerados serão marcados como "[DEMO]" e podem ser removidos posteriormente.
+                </p>
+              </div>
+              
+              {demoProgress && (
+                <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm text-primary">{demoProgress}</span>
+                </div>
+              )}
+              
+              <div className="flex gap-3">
+                <Button 
+                  onClick={() => setGenerateDemoDialogOpen(true)}
+                  disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
+                >
+                  <FlaskConical className="h-4 w-4 mr-2" />
+                  {generateDemoMutation.isPending ? 'Gerando...' : 'Gerar 50 Clientes Demo'}
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => setRemoveDemoDialogOpen(true)}
+                  disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {removeDemoMutation.isPending ? 'Removendo...' : 'Remover Dados Demo'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
                 <Database className="h-5 w-5 text-primary" />
                 <CardTitle>Dados e Backup</CardTitle>
               </div>
@@ -599,6 +713,41 @@ Os tipos de serviço, tipos de despesa e configurações da empresa serão manti
         onConfirm={() => {
           deleteAllDataMutation.mutate();
           setDeleteAllDataDialogOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={generateDemoDialogOpen}
+        onOpenChange={setGenerateDemoDialogOpen}
+        title="🧪 Gerar Dados de Demonstração"
+        description="Isso criará 50 clientes fictícios com:
+
+• 1-3 propriedades por cliente
+• 1-5 orçamentos por cliente (datas entre 2025-2026)
+• 2-8 despesas por orçamento
+
+Os dados serão marcados como [DEMO] para fácil identificação e remoção."
+        confirmLabel="Gerar Dados"
+        cancelLabel="Cancelar"
+        onConfirm={() => {
+          generateDemoMutation.mutate();
+          setGenerateDemoDialogOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        open={removeDemoDialogOpen}
+        onOpenChange={setRemoveDemoDialogOpen}
+        title="🗑️ Remover Dados Demo"
+        description="Isso removerá todos os clientes marcados como [DEMO] e seus dados relacionados (propriedades, orçamentos e despesas).
+
+Os demais dados do sistema serão mantidos."
+        confirmLabel="Remover Demo"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          removeDemoMutation.mutate();
+          setRemoveDemoDialogOpen(false);
         }}
       />
     </AppLayout>

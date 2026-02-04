@@ -1,86 +1,79 @@
 
-# Plano: Criar RevenueTrendChart.tsx
 
-## Objetivo
-Criar um novo componente de gráfico combinado que mostra a evolução da Receita Bruta (barras) e Lucro Líquido (linha) ao longo dos últimos 12 meses, com seletor de ano dinâmico.
+# Plano: Corrigir Importação CSV e Adicionar Colunas
 
-## Arquitetura
+## Problemas Identificados
 
-### 1. Hook de Dados: Atualizar `useChartData.ts`
+### 1. Tela Preta ao Abrir CSV Import
+O `CsvImportDialog` usa `z-[1000]` no `DialogContent`, mas o componente `DialogOverlay` padrão usa `z-[2000]` com fundo `bg-black/80`. Isso causa um conflito onde o overlay escuro fica sobre o conteúdo do dialog, resultando em uma "tela preta".
 
-Adicionar nova função `useRevenueTrendChartData(year)` que retorna:
-```typescript
-interface RevenueTrendData {
-  month: string;
-  receitaBruta: number;
-  lucroLiquido: number;
-  variacaoPercent: number; // (lucroLiquido / receitaBruta) * 100
-}
-```
+**Solução**: Remover o z-index customizado do CsvImportDialog, pois o componente Dialog já tem os z-indexes corretos configurados globalmente.
 
-A lógica será similar ao `useProfitMarginChartData`, calculando:
-- Receita Bruta = soma de `receita_esperada` por mês
-- Lucro Líquido = Receita - Impostos - Custos Variáveis - Despesas Fixas
+### 2. Colunas Faltantes para Clientes
+Comparando a tabela `dim_cliente` no banco com as colunas disponíveis no CSV Import:
 
-### 2. Componente: `RevenueTrendChart.tsx`
+| Campo BD | Disponível no CSV Import | Ação |
+|----------|-------------------------|------|
+| nome | Sim | - |
+| cpf | Sim | - |
+| cnpj | Sim | - |
+| endereco | Sim | - |
+| telefone | Sim | - |
+| celular | Sim | - |
+| email | Sim | - |
+| categoria | Sim | - |
+| origem | Sim | - |
+| situacao | Sim | - |
+| **anotacoes** | **NÃO** | Adicionar |
+| **data_cadastro** | **NÃO** | Adicionar |
+| **idade** | **NÃO** | Adicionar |
 
-Estrutura do componente:
-- Card com título "Evolução Receita e Lucro"
-- Seletor de ano (usando `useAvailableYears`)
-- `ComposedChart` do Recharts com:
-  - `Bar` para Receita Bruta (cor primária com gradiente)
-  - `Line` tipo `monotone` para Lucro Líquido (cor verde/dourada)
-  - `CartesianGrid`, `XAxis`, `YAxis`, `Legend`
-  - `RichTooltip` customizado mostrando ambos valores e variação %
-
-### 3. Integração: `DashboardFinanceiro.tsx`
-
-Inserir o gráfico logo abaixo da seção de KPIs com largura total (`col-span-4` ou seção dedicada).
+### 3. Explicação das Colunas de Métricas
+Adicionar descrições nas colunas para facilitar o entendimento do usuário. As colunas com métricas que precisam de explicação são aquelas relacionadas a valores financeiros e datas.
 
 ---
 
-## Detalhes Técnicos
+## Implementação
 
-### Hook: `useRevenueTrendChartData`
+### Arquivo: `src/components/import/CsvImportDialog.tsx`
 
+**Mudança 1**: Remover `z-[1000]` do DialogContent (linha 288)
+```tsx
+// DE:
+<DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col z-[1000]">
+
+// PARA:
+<DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+```
+
+**Mudança 2**: Adicionar novas colunas para clientes com descrições
 ```typescript
-// Buscar dados de fato_orcamento e fato_despesas
-// Agrupar por mês
-// Calcular:
-//   receitaBruta = soma receita_esperada
-//   lucroLiquido = receitaBruta - impostos - custosVariaveis - despesasFixas
-//   variacaoPercent = (lucroLiquido / receitaBruta) * 100
+clientes: {
+  tableName: "dim_cliente",
+  displayName: "Clientes",
+  columns: [
+    { name: "nome", required: true, label: "Nome *", description: "Nome completo do cliente" },
+    { name: "cpf", required: false, label: "CPF", description: "Cadastro de Pessoa Física (formato: 000.000.000-00)" },
+    { name: "cnpj", required: false, label: "CNPJ", description: "Cadastro de Pessoa Jurídica (formato: 00.000.000/0000-00)" },
+    { name: "endereco", required: false, label: "Endereço", description: "Endereço completo do cliente" },
+    { name: "telefone", required: false, label: "Telefone", description: "Telefone fixo (formato: (00) 0000-0000)" },
+    { name: "celular", required: false, label: "Celular", description: "Celular/WhatsApp (formato: (00) 00000-0000)" },
+    { name: "email", required: false, label: "Email", description: "Email para contato" },
+    { name: "categoria", required: false, label: "Categoria", description: "Tipo de cliente (Governo, Pessoa Física, Pessoa Jurídica)" },
+    { name: "origem", required: false, label: "Origem", description: "Canal de prospecção (Indicação, Site, Evento, Rede Social)" },
+    { name: "situacao", required: false, label: "Situação", description: "Status do relacionamento (Ativo, Inativo, Pendente)" },
+    // NOVAS COLUNAS:
+    { name: "anotacoes", required: false, label: "Observações", description: "Notas e anotações sobre o cliente" },
+    { name: "data_cadastro", required: false, label: "Data de Cadastro", description: "Data de entrada do cliente (formato: AAAA-MM-DD)" },
+    { name: "idade", required: false, label: "Idade", description: "Idade do cliente em anos" },
+  ],
+},
 ```
 
-### Componente Visual
-
-| Elemento | Configuração |
-|----------|-------------|
-| Bar (Receita Bruta) | `fill="hsl(var(--chart-primary))"`, radius superior |
-| Line (Lucro Líquido) | `stroke="hsl(var(--chart-positive))"`, strokeWidth=3, dot com r=5 |
-| Tooltip | RichTooltip com `showDifference`, `differenceLabel="Margem"` |
-| Eixo Y | Formatação `R$ Xk` |
-| Eixo X | Meses (Jan, Fev, Mar...) |
-
-### Layout no Dashboard
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  [KPIs - 4 cards em grid]                                   │
-├─────────────────────────────────────────────────────────────┤
-│  [RevenueTrendChart - LARGURA TOTAL]                        │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │ Evolução Receita e Lucro              [Seletor Ano ▼]  ││
-│  │                                                         ││
-│  │  █ █ █ █ █ █ █ █ █ █ █ █   ← Barras Receita Bruta     ││
-│  │  ─────────────────────────  ← Linha Lucro Líquido      ││
-│  │                                                         ││
-│  │  Jan Fev Mar Abr Mai Jun Jul Ago Set Out Nov Dez       ││
-│  └─────────────────────────────────────────────────────────┘│
-├─────────────────────────────────────────────────────────────┤
-│  [Resumo Executivo]                                         │
-└─────────────────────────────────────────────────────────────┘
-```
+**Mudança 3**: Atualizar interface e UI para mostrar descrições
+- Adicionar campo `description` na interface de colunas
+- Mostrar ícone de informação com tooltip nas colunas que têm descrição
+- Adicionar tratamento para campo `data_cadastro` (parse de data) e `idade` (número)
 
 ---
 
@@ -88,42 +81,39 @@ Inserir o gráfico logo abaixo da seção de KPIs com largura total (`col-span-4
 
 | Arquivo | Ação |
 |---------|------|
-| `src/hooks/useChartData.ts` | Adicionar `useRevenueTrendChartData` |
-| `src/components/charts/RevenueTrendChart.tsx` | Criar componente |
-| `src/pages/DashboardFinanceiro.tsx` | Importar e posicionar o gráfico |
+| `src/components/import/CsvImportDialog.tsx` | Corrigir z-index, adicionar colunas e descrições |
 
-## Fluxo de Execução
+## Fluxo Visual
 
 ```text
-1. Usuário acessa Dashboard Financeiro
-           │
-           ▼
-2. useRevenueTrendChartData(ano) busca dados
-   - fato_orcamento: receita_esperada, impostos
-   - fato_despesas: classificação VARIAVEL/FIXA
-           │
-           ▼
-3. Processa dados por mês:
-   - receitaBruta = Σ receita_esperada
-   - lucroLiquido = receitaBruta - impostos - custos - despesas
-   - variacaoPercent = (lucroLiquido / receitaBruta) × 100
-           │
-           ▼
-4. Renderiza ComposedChart com:
-   - Barras para Receita Bruta
-   - Linha para Lucro Líquido
-   - Tooltip mostrando ambos + variação %
-           │
-           ▼
-5. Usuário pode mudar ano via Select
-   → Hook recarrega dados automaticamente
+┌──────────────────────────────────────────────────────────────┐
+│  ANTES: Dialog com z-[1000] → Overlay z-[2000] sobrepõe     │
+│                                                              │
+│  ████████████████████  ← Overlay escuro (z-2000)            │
+│  ┌─────────────────┐                                        │
+│  │   Conteúdo     │  ← Dialog (z-1000) - ATRÁS do overlay  │
+│  └─────────────────┘                                        │
+├──────────────────────────────────────────────────────────────┤
+│  DEPOIS: Dialog sem z-index customizado → Usa padrão        │
+│                                                              │
+│  ████████████████████  ← Overlay escuro (z-2000)            │
+│  ┌─────────────────┐                                        │
+│  │   Conteúdo     │  ← Dialog (z-2001) - NA FRENTE         │
+│  └─────────────────┘                                        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-## Tooltip Customizado
+## Novas Colunas com Descrições
 
-O `RichTooltip` existente já suporta múltiplas séries. Será usado com:
-- `format="currency"` para valores em R$
-- `showDifference={true}` para calcular e mostrar a diferença
-- `differenceLabel="Margem"` para indicar o percentual de lucro
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│  Colunas esperadas para Clientes                                │
+│                                                                 │
+│  [Nome *] [CPF ℹ️] [CNPJ ℹ️] [Endereço] [Telefone ℹ️]          │
+│  [Celular ℹ️] [Email] [Categoria ℹ️] [Origem ℹ️] [Situação ℹ️] │
+│  [Observações ℹ️] [Data de Cadastro ℹ️] [Idade ℹ️]  ← NOVAS    │
+│                                                                 │
+│  ℹ️ = Tooltip com descrição do campo                           │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-A variação percentual será calculada nos dados e exibida no tooltip como contexto adicional.

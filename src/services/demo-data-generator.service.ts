@@ -61,7 +61,8 @@ const NOMES_FAZENDA = [
 ];
 
 const SITUACOES_ORCAMENTO = ["Em Análise", "Aprovado", "Recusado", "Em Negociação"];
-const STATUS_PAGAMENTO = ["Pendente", "Pago", "Parcial"];
+// Valores válidos conforme constraint fato_orcamento_situacao_do_pagamento_check
+const STATUS_PAGAMENTO = ["Pendente", "Pago", "Atrasado", "Cancelado"];
 const STATUS_DESPESA = ["Pago", "Pendente"];
 
 const DEMO_TAG = "[DEMO]";

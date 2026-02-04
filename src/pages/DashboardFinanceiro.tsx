@@ -4,6 +4,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { RevenueTrendChart } from "@/components/charts/RevenueTrendChart";
+import { ServiceEfficiencyMatrix } from "@/components/charts/ServiceEfficiencyMatrix";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
@@ -18,7 +19,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  ReferenceLine,
 } from "recharts";
 import {
   DollarSign,
@@ -38,7 +38,6 @@ const DashboardFinanceiro = () => {
 
   // Dados vindos diretamente do servidor (já agregados)
   const lucroPorCliente = metrics?.lucro_por_cliente || [];
-  const margemPorServico = metrics?.margem_por_servico || [];
 
   // Dados do Waterfall Chart - Fluxo Financeiro
   const waterfallData = metrics ? [
@@ -253,58 +252,11 @@ const DashboardFinanceiro = () => {
             </CardContent>
           </Card>
 
-          {/* Margem por Serviço - Horizontal Bar com Linha de Referência */}
-          <Card className="interactive-lift" role="region" aria-labelledby="margin-service-title">
-            <CardHeader>
-              <CardTitle id="margin-service-title">Margem por Serviço</CardTitle>
-              <CardDescription>Rentabilidade dos principais serviços (meta: 30%)</CardDescription>
-            </CardHeader>
-            <CardContent className={cardPadding}>
-              {isLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
-                  <p className="text-muted-foreground">Carregando...</p>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={density === 'compact' ? 250 : 300}>
-                  <BarChart data={margemPorServico} layout="vertical">
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
-                    <XAxis
-                      type="number"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={12}
-                      tickFormatter={(value) => `${value}%`}
-                      domain={[0, 100]}
-                    />
-                    <YAxis
-                      type="category"
-                      dataKey="servico"
-                      stroke="hsl(var(--muted-foreground))"
-                      fontSize={11}
-                      width={120}
-                    />
-                    <Tooltip
-                      content={<RichTooltip format="percent" showVariation={false} />}
-                      cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
-                    />
-                    <ReferenceLine 
-                      x={30} 
-                      stroke="hsl(var(--chart-warning))" 
-                      strokeDasharray="5 5" 
-                      label={{ value: "Meta", fill: "hsl(var(--chart-warning))", fontSize: 10 }} 
-                    />
-                    <Bar dataKey="margem" radius={[0, 8, 8, 0]}>
-                      {margemPorServico.map((entry, index) => (
-                        <Cell 
-                          key={`cell-${index}`} 
-                          fill={entry.margem >= 30 ? "hsl(var(--chart-positive))" : "hsl(var(--chart-negative))"} 
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+          {/* Matriz de Eficiência de Serviços - ScatterChart */}
+          <ServiceEfficiencyMatrix 
+            data={metrics?.margem_por_servico || []} 
+            isLoading={isLoading} 
+          />
         </section>
 
       </div>

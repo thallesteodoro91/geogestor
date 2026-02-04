@@ -1,147 +1,129 @@
 
-# Plano: Botão para Excluir Todos os Dados da Empresa
+# Plano: Criar RevenueTrendChart.tsx
 
 ## Objetivo
-Adicionar um botão na página de Configurações que permite ao usuário excluir todos os dados operacionais da empresa, zerando o sistema para permitir uma nova importação de informações.
+Criar um novo componente de gráfico combinado que mostra a evolução da Receita Bruta (barras) e Lucro Líquido (linha) ao longo dos últimos 12 meses, com seletor de ano dinâmico.
 
-## Localização do Botão
-O botão será adicionado no card "Dados e Backup" da página de Configurações (`src/pages/Configuracoes.tsx`), junto com os botões existentes de Importar CSV, Exportar Dados e Fazer Backup.
+## Arquitetura
 
-## Comportamento
-1. **Botão vermelho com ícone de alerta** - Claramente identificado como ação destrutiva
-2. **Confirmação em duas etapas** - Usando o padrão `ConfirmDialog` já existente no projeto
-3. **Texto de confirmação claro** - Explicando exatamente o que será excluído
-4. **Exclusão respeitando tenant_id** - Apenas dados do tenant atual serão removidos
+### 1. Hook de Dados: Atualizar `useChartData.ts`
 
-## Dados que Serão Excluídos
+Adicionar nova função `useRevenueTrendChartData(year)` que retorna:
+```typescript
+interface RevenueTrendData {
+  month: string;
+  receitaBruta: number;
+  lucroLiquido: number;
+  variacaoPercent: number; // (lucroLiquido / receitaBruta) * 100
+}
+```
 
-A exclusão seguirá a ordem correta devido às Foreign Keys (tabelas dependentes primeiro):
+A lógica será similar ao `useProfitMarginChartData`, calculando:
+- Receita Bruta = soma de `receita_esperada` por mês
+- Lucro Líquido = Receita - Impostos - Custos Variáveis - Despesas Fixas
 
-1. **Tabelas de relacionamento (primeiro)**
-   - `servico_anexos` - Anexos de serviços
-   - `servico_eventos` - Eventos de serviços
-   - `servico_tarefas` - Tarefas de serviços
-   - `servico_equipes` - Equipes de serviços
-   - `cliente_eventos` - Eventos de clientes
-   - `cliente_tarefas` - Tarefas de clientes
-   - `propriedade_geometrias` - Geometrias de propriedades
-   - `fato_orcamento_itens` - Itens de orçamentos
+### 2. Componente: `RevenueTrendChart.tsx`
 
-2. **Tabelas de fatos (segundo)**
-   - `fato_despesas` - Despesas
-   - `fato_orcamento` - Orçamentos
-   - `fato_servico` - Serviços
+Estrutura do componente:
+- Card com título "Evolução Receita e Lucro"
+- Seletor de ano (usando `useAvailableYears`)
+- `ComposedChart` do Recharts com:
+  - `Bar` para Receita Bruta (cor primária com gradiente)
+  - `Line` tipo `monotone` para Lucro Líquido (cor verde/dourada)
+  - `CartesianGrid`, `XAxis`, `YAxis`, `Legend`
+  - `RichTooltip` customizado mostrando ambos valores e variação %
 
-3. **Tabelas de dimensões (terceiro)**
-   - `dim_propriedade` - Propriedades
-   - `dim_cliente` - Clientes
+### 3. Integração: `DashboardFinanceiro.tsx`
 
-4. **Notificações**
-   - `notificacoes` - Notificações do sistema
-
-## O que NÃO será excluído
-- `dim_empresa` - Registro da empresa (mantido)
-- `dim_tiposervico` - Tipos de serviço (mantido para reutilização)
-- `dim_tipodespesa` - Tipos de despesa (mantido)
-- `dim_categoria_*` - Categorias (mantidas)
-- `tenants` - Dados do tenant
-- `tenant_members` - Membros da equipe
-- `tenant_subscriptions` - Assinatura/plano
-- `profiles` - Perfis de usuários
-- Template de orçamento da empresa
+Inserir o gráfico logo abaixo da seção de KPIs com largura total (`col-span-4` ou seção dedicada).
 
 ---
 
 ## Detalhes Técnicos
 
-### 1. Componente de Confirmação
-Usar o `ConfirmDialog` existente com confirmação extra para operações destrutivas:
+### Hook: `useRevenueTrendChartData`
 
-```text
-┌──────────────────────────────────────────────────┐
-│  ⚠️ Excluir Todos os Dados                       │
-├──────────────────────────────────────────────────┤
-│  ATENÇÃO: Esta ação é irreversível!              │
-│                                                  │
-│  Serão excluídos permanentemente:                │
-│  • Todos os clientes                             │
-│  • Todas as propriedades                         │
-│  • Todos os serviços e orçamentos                │
-│  • Todas as despesas                             │
-│  • Todos os eventos e tarefas                    │
-│                                                  │
-│  Os tipos de serviço, tipos de despesa e         │
-│  configurações da empresa serão mantidos.        │
-│                                                  │
-│  [Cancelar]           [Excluir Tudo]             │
-└──────────────────────────────────────────────────┘
+```typescript
+// Buscar dados de fato_orcamento e fato_despesas
+// Agrupar por mês
+// Calcular:
+//   receitaBruta = soma receita_esperada
+//   lucroLiquido = receitaBruta - impostos - custosVariaveis - despesasFixas
+//   variacaoPercent = (lucroLiquido / receitaBruta) * 100
 ```
 
-### 2. Serviço de Exclusão
-Criar `src/services/reset-company-data.service.ts`:
-- Função `deleteAllCompanyData(tenantId: string)`
-- Executa exclusões na ordem correta respeitando FKs
-- Retorna contagem de registros removidos
+### Componente Visual
 
-### 3. Mutation React Query
-Implementar mutation com:
-- Estado de loading durante exclusão
-- Toast de sucesso com resumo
-- Invalidação de todas as queries relevantes
-- Tratamento de erros
+| Elemento | Configuração |
+|----------|-------------|
+| Bar (Receita Bruta) | `fill="hsl(var(--chart-primary))"`, radius superior |
+| Line (Lucro Líquido) | `stroke="hsl(var(--chart-positive))"`, strokeWidth=3, dot com r=5 |
+| Tooltip | RichTooltip com `showDifference`, `differenceLabel="Margem"` |
+| Eixo Y | Formatação `R$ Xk` |
+| Eixo X | Meses (Jan, Fev, Mar...) |
 
-### 4. UI no Card "Dados e Backup"
-Adicionar novo botão com separador visual:
-- Cor destrutiva (vermelho)
-- Ícone `Trash2`
-- Texto "Excluir Todos os Dados"
+### Layout no Dashboard
 
-## Arquivos a Serem Criados/Modificados
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  [KPIs - 4 cards em grid]                                   │
+├─────────────────────────────────────────────────────────────┤
+│  [RevenueTrendChart - LARGURA TOTAL]                        │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Evolução Receita e Lucro              [Seletor Ano ▼]  ││
+│  │                                                         ││
+│  │  █ █ █ █ █ █ █ █ █ █ █ █   ← Barras Receita Bruta     ││
+│  │  ─────────────────────────  ← Linha Lucro Líquido      ││
+│  │                                                         ││
+│  │  Jan Fev Mar Abr Mai Jun Jul Ago Set Out Nov Dez       ││
+│  └─────────────────────────────────────────────────────────┘│
+├─────────────────────────────────────────────────────────────┤
+│  [Resumo Executivo]                                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Arquivos a Modificar
 
 | Arquivo | Ação |
 |---------|------|
-| `src/services/reset-company-data.service.ts` | Criar - Lógica de exclusão |
-| `src/pages/Configuracoes.tsx` | Modificar - Adicionar botão e dialog |
+| `src/hooks/useChartData.ts` | Adicionar `useRevenueTrendChartData` |
+| `src/components/charts/RevenueTrendChart.tsx` | Criar componente |
+| `src/pages/DashboardFinanceiro.tsx` | Importar e posicionar o gráfico |
 
 ## Fluxo de Execução
 
 ```text
-Usuário clica "Excluir Todos os Dados"
+1. Usuário acessa Dashboard Financeiro
            │
            ▼
-    Dialog de confirmação
+2. useRevenueTrendChartData(ano) busca dados
+   - fato_orcamento: receita_esperada, impostos
+   - fato_despesas: classificação VARIAVEL/FIXA
            │
            ▼
-  Usuário confirma exclusão
+3. Processa dados por mês:
+   - receitaBruta = Σ receita_esperada
+   - lucroLiquido = receitaBruta - impostos - custos - despesas
+   - variacaoPercent = (lucroLiquido / receitaBruta) × 100
            │
            ▼
-   Obter tenant_id atual
+4. Renderiza ComposedChart com:
+   - Barras para Receita Bruta
+   - Linha para Lucro Líquido
+   - Tooltip mostrando ambos + variação %
            │
            ▼
-  Executar exclusões em ordem:
-  1. servico_anexos
-  2. servico_eventos
-  3. servico_tarefas
-  4. servico_equipes
-  5. cliente_eventos
-  6. cliente_tarefas
-  7. propriedade_geometrias
-  8. fato_orcamento_itens
-  9. fato_despesas
-  10. fato_orcamento
-  11. fato_servico
-  12. dim_propriedade
-  13. dim_cliente
-  14. notificacoes
-           │
-           ▼
-  Invalidar queries do React Query
-           │
-           ▼
-  Toast de sucesso com resumo
+5. Usuário pode mudar ano via Select
+   → Hook recarrega dados automaticamente
 ```
 
-## Segurança
-- Todas as exclusões filtradas por `tenant_id`
-- Sem acesso a dados de outros tenants
-- RLS do banco como segunda camada de proteção
+## Tooltip Customizado
+
+O `RichTooltip` existente já suporta múltiplas séries. Será usado com:
+- `format="currency"` para valores em R$
+- `showDifference={true}` para calcular e mostrar a diferença
+- `differenceLabel="Margem"` para indicar o percentual de lucro
+
+A variação percentual será calculada nos dados e exibida no tooltip como contexto adicional.

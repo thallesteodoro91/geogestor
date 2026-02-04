@@ -271,16 +271,16 @@ export default function Despesas() {
     return acc;
   }, {});
 
-  // Cores para o Treemap
+  // Cores para o Treemap - Refined Palette
   const TREEMAP_COLORS = [
-    "hsl(217, 91%, 60%)",  // blue
-    "hsl(142, 76%, 36%)",  // green
-    "hsl(48, 96%, 53%)",   // yellow
-    "hsl(0, 84%, 60%)",    // red
-    "hsl(280, 68%, 60%)",  // purple
-    "hsl(25, 95%, 53%)",   // orange
-    "hsl(189, 94%, 43%)",  // cyan
-    "hsl(330, 81%, 60%)",  // pink
+    "hsl(239, 84%, 67%)",  // Indigo
+    "hsl(160, 84%, 39%)",  // Emerald
+    "hsl(48, 96%, 53%)",   // Yellow
+    "hsl(350, 89%, 60%)",  // Rose
+    "hsl(280, 68%, 60%)",  // Purple
+    "hsl(25, 95%, 53%)",   // Orange
+    "hsl(189, 94%, 43%)",  // Cyan
+    "hsl(330, 81%, 60%)",  // Pink
   ];
 
   const treemapData = Object.entries(despesasPorSubcategoria).map(([name, value], index) => ({

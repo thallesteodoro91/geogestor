@@ -95,16 +95,16 @@ export const RevenueChart = () => {
             <AreaChart data={mergedData}>
               <defs>
                 <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="hsl(142, 76%, 36%)" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="hsl(var(--chart-positive))" stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor="hsl(var(--chart-positive))" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(0, 72%, 51%)" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="hsl(var(--chart-negative))" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="hsl(var(--chart-negative))" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorReceitaCompare" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(217, 91%, 60%)" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="hsl(var(--chart-primary))" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="hsl(var(--chart-primary))" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorDespesaCompare" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(280, 70%, 50%)" stopOpacity={0.3}/>
@@ -133,7 +133,7 @@ export const RevenueChart = () => {
               <Area
                 type="monotone"
                 dataKey="receita"
-                stroke="hsl(142, 76%, 36%)"
+                stroke="hsl(var(--chart-positive))"
                 fill="url(#colorReceita)"
                 strokeWidth={2.5}
                 name={`Receita ${selectedYear}`}
@@ -141,7 +141,7 @@ export const RevenueChart = () => {
               <Area
                 type="monotone"
                 dataKey="despesa"
-                stroke="hsl(0, 72%, 51%)"
+                stroke="hsl(var(--chart-negative))"
                 fill="url(#colorDespesa)"
                 strokeWidth={2.5}
                 name={`Despesa ${selectedYear}`}
@@ -151,7 +151,7 @@ export const RevenueChart = () => {
                   <Area
                     type="monotone"
                     dataKey="receitaCompare"
-                    stroke="hsl(217, 91%, 60%)"
+                    stroke="hsl(var(--chart-primary))"
                     fill="url(#colorReceitaCompare)"
                     strokeWidth={2}
                     strokeDasharray="5 5"

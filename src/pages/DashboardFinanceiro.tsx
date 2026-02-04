@@ -251,11 +251,11 @@ const DashboardFinanceiro = () => {
                         <Cell 
                           key={`cell-${index}`} 
                           fill={[
-                            "hsl(142, 76%, 36%)",   // Verde
-                            "hsl(217, 91%, 60%)",   // Azul
+                            "hsl(160, 84%, 39%)",   // Emerald
+                            "hsl(239, 84%, 67%)",   // Indigo
                             "hsl(280, 70%, 50%)",   // Roxo
                             "hsl(48, 96%, 53%)",    // Amarelo
-                            "hsl(0, 72%, 51%)",     // Vermelho
+                            "hsl(350, 89%, 60%)",   // Rose
                             "hsl(173, 80%, 40%)",   // Teal
                             "hsl(340, 75%, 55%)",   // Rosa
                             "hsl(25, 95%, 53%)",    // Laranja

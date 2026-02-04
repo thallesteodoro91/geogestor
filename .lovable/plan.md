@@ -1,287 +1,221 @@
 
 
-# Plano: Criar ExpenseTreemap.tsx
+# Plano: Sistema de Proteção contra Falhas (Error Boundary)
 
 ## Objetivo
-Criar uma visualização hierárquica de custos usando `<Treemap>` do Recharts, com dois níveis de hierarquia (Tipo → Categoria) e cores diferenciadas para custos Fixos (tons de azul) e Variáveis (tons de laranja).
+Implementar um sistema robusto de captura de erros para a aplicação React, incluindo:
+1. Error Boundary para erros de renderização
+2. Global Error Handler para Promises não tratadas (falhas de rede, etc.)
 
-## Estrutura de Dados Hierárquica
+## Arquitetura da Solução
+
+### 1. Componente ErrorBoundary: `src/components/ui/error-boundary.tsx`
+
+Componente React Class que implementa `componentDidCatch` e `getDerivedStateFromError`:
+
+```typescript
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<Props, ErrorBoundaryState> {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+  
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[ErrorBoundary]', error, errorInfo);
+  }
+  
+  handleReload = () => {
+    window.location.reload();
+  }
+  
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback onReload={this.handleReload} />;
+    }
+    return this.props.children;
+  }
+}
+```
+
+### 2. Design da Tela de Erro
+
+Layout visual amigável e profissional:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                    CUSTOS TOTAIS                            │
-├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  ┌─────────── FIXOS (Azul) ───────────┐ ┌── VARIÁVEIS ──┐   │
-│  │                                    │ │   (Laranja)   │   │
-│  │  ┌────────┐ ┌────────┐ ┌────────┐ │ │ ┌──────────┐  │   │
-│  │  │Pessoal │ │Administ│ │Tecnol. │ │ │ │Operacion.│  │   │
-│  │  │R$ 25k  │ │R$ 15k  │ │R$ 8k   │ │ │ │R$ 18k    │  │   │
-│  │  └────────┘ └────────┘ └────────┘ │ │ └──────────┘  │   │
-│  │  ┌────────┐ ┌────────┐            │ │ ┌──────────┐  │   │
-│  │  │Market. │ │Finance.│            │ │ │Viagens   │  │   │
-│  │  │R$ 5k   │ │R$ 3k   │            │ │ │R$ 4k     │  │   │
-│  │  └────────┘ └────────┘            │ │ └──────────┘  │   │
-│  └────────────────────────────────────┘ └──────────────┘   │
+│                                                             │
+│                    ⚠️ (AlertTriangle)                       │
+│                                                             │
+│                   Algo deu errado                           │
+│                                                             │
+│     Ocorreu um erro inesperado. Por favor, tente           │
+│     recarregar a página. Se o problema persistir,          │
+│     entre em contato com o suporte.                         │
+│                                                             │
+│                  [  Tentar novamente  ]                     │
+│                                                             │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Arquitetura
+**Elementos visuais:**
+- Ícone `AlertTriangle` do Lucide React em cor destrutiva
+- Título grande e claro
+- Texto explicativo breve
+- Botão primário "Tentar novamente" que recarrega a página
+- Centralizado vertical e horizontalmente
+- Suporta tema claro/escuro automaticamente
 
-### 1. Atualizar RPC: `get_financial_dashboard_metrics`
+### 3. Global Error Handler: `src/lib/global-error-handler.ts`
 
-Modificar `custos_por_categoria` para incluir classificação:
-
-```sql
--- ANTES:
-'custos_por_categoria', COALESCE((
-  SELECT json_agg(row_to_json(cpc))
-  FROM (
-    SELECT 
-      COALESCE(t.categoria, 'Sem categoria') AS name,
-      SUM(d.valor_da_despesa) AS value
-    FROM fato_despesas d
-    LEFT JOIN dim_tipodespesa t ON d.id_tipodespesa = t.id_tipodespesa
-    ...
-  ) cpc
-), '[]'::json)
-
--- DEPOIS:
-'custos_por_categoria', COALESCE((
-  SELECT json_agg(row_to_json(cpc))
-  FROM (
-    SELECT 
-      COALESCE(t.categoria, 'Sem categoria') AS name,
-      SUM(d.valor_da_despesa) AS value,
-      COALESCE(t.classificacao, 'FIXA') AS tipo  -- NOVO
-    FROM fato_despesas d
-    LEFT JOIN dim_tipodespesa t ON d.id_tipodespesa = t.id_tipodespesa
-    ...
-    GROUP BY t.categoria, t.classificacao  -- Alterado
-    ...
-  ) cpc
-), '[]'::json)
-```
-
-### 2. Atualizar Hook: `useDashboardMetrics.ts`
+Utilitário para capturar erros não tratados:
 
 ```typescript
-// ANTES:
-custos_por_categoria: { name: string; value: number }[];
+import { toast } from "sonner";
 
-// DEPOIS:
-custos_por_categoria: { 
-  name: string; 
-  value: number; 
-  tipo: 'FIXA' | 'VARIAVEL';  // NOVO
-}[];
+export function setupGlobalErrorHandler() {
+  // Capturar rejeições de Promise não tratadas
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[GlobalErrorHandler] Unhandled Promise rejection:', event.reason);
+    
+    // Mensagem genérica para o usuário
+    toast.error("Erro de conexão", {
+      description: "Não foi possível completar a operação. Verifique sua conexão e tente novamente.",
+    });
+    
+    // Prevenir que o erro apareça no console duplicado
+    event.preventDefault();
+  });
+  
+  // Capturar erros JavaScript não tratados
+  window.addEventListener('error', (event) => {
+    // Ignorar erros de scripts externos (CORS)
+    if (event.filename && !event.filename.includes(window.location.origin)) {
+      return;
+    }
+    
+    console.error('[GlobalErrorHandler] Uncaught error:', event.error);
+    
+    toast.error("Erro inesperado", {
+      description: "Algo deu errado. Por favor, recarregue a página.",
+    });
+  });
+}
 ```
 
-### 3. Novo Componente: `src/components/charts/ExpenseTreemap.tsx`
+### 4. Integração no main.tsx
 
-**Estrutura do componente:**
-- Card com título "Custos por Categoria"
-- `<Treemap>` do Recharts com dados hierárquicos
-- Tooltip customizado mostrando: Categoria, Valor, Tipo e % do total
-- Legenda: "Custos Fixos" (azul) e "Custos Variáveis" (laranja)
+Estrutura atualizada:
 
-**Cores por tipo:**
 ```typescript
-const FIXED_COLORS = [
-  "hsl(217, 91%, 60%)",  // blue-500
-  "hsl(217, 91%, 50%)",  // blue-600
-  "hsl(217, 91%, 40%)",  // blue-700
-  "hsl(217, 91%, 70%)",  // blue-400
-];
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { setupGlobalErrorHandler } from "@/lib/global-error-handler";
+import App from "./App.tsx";
+import "./index.css";
 
-const VARIABLE_COLORS = [
-  "hsl(25, 95%, 53%)",   // orange-500
-  "hsl(25, 95%, 43%)",   // orange-600
-  "hsl(25, 95%, 63%)",   // orange-400
-  "hsl(33, 95%, 53%)",   // amber-500
-];
+// Inicializar handler global de erros
+setupGlobalErrorHandler();
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  </StrictMode>
+);
 ```
 
-**Lógica de ocultação de texto:**
-```typescript
-// Ocultar texto se retângulo for pequeno demais
-const showText = width > 60 && height > 40;
-const showValue = width > 80 && height > 50;
-```
+## Arquivos a Criar/Modificar
 
-**Transformação de dados:**
-```typescript
-// Entrada: [{ name: "Pessoal", value: 25000, tipo: "FIXA" }, ...]
-// Saída para Treemap: estrutura plana com cores por tipo
-const treemapData = data.map((item, index) => ({
-  name: item.name,
-  size: item.value,
-  fill: item.tipo === 'FIXA' 
-    ? FIXED_COLORS[index % FIXED_COLORS.length]
-    : VARIABLE_COLORS[index % VARIABLE_COLORS.length],
-  tipo: item.tipo,
-  percentage: total > 0 ? ((item.value / total) * 100).toFixed(1) : "0",
-}));
-```
-
-### 4. Integração: `DashboardFinanceiro.tsx`
-
-O componente será adicionado como um novo Card na seção de gráficos, possivelmente substituindo ou complementando uma visualização existente.
-
-**Import:**
-```typescript
-import { ExpenseTreemap } from "@/components/charts/ExpenseTreemap";
-```
-
-**Uso:**
-```typescript
-<ExpenseTreemap 
-  data={metrics?.custos_por_categoria || []} 
-  isLoading={isLoading} 
-/>
-```
-
----
-
-## Arquivos a Modificar/Criar
-
-| Arquivo | Ação |
+| Arquivo | Acao |
 |---------|------|
-| `supabase/migrations/` | Atualizar RPC para incluir `tipo` |
-| `src/hooks/useDashboardMetrics.ts` | Expandir tipo de `custos_por_categoria` |
-| `src/components/charts/ExpenseTreemap.tsx` | **Criar** componente |
-| `src/pages/DashboardFinanceiro.tsx` | Adicionar ExpenseTreemap na grid |
+| `src/components/ui/error-boundary.tsx` | **Criar** - Componente Error Boundary |
+| `src/lib/global-error-handler.ts` | **Criar** - Handler global de erros |
+| `src/main.tsx` | **Modificar** - Adicionar StrictMode e ErrorBoundary |
 
----
+## Detalhes Tecnicos
 
-## Detalhes do Componente ExpenseTreemap
+### ErrorBoundary Props
 
-### Props Interface
 ```typescript
-interface ExpenseCategory {
-  name: string;
-  value: number;
-  tipo: 'FIXA' | 'VARIAVEL';
-}
-
-interface ExpenseTreemapProps {
-  data: ExpenseCategory[];
-  isLoading?: boolean;
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback?: React.ReactNode; // Opcional: componente customizado de fallback
 }
 ```
 
-### Tooltip Customizado
-```text
-┌────────────────────────────────────┐
-│  ■ Pessoal                         │
-├────────────────────────────────────┤
-│  Valor:     R$ 25.000,00           │
-│  Tipo:      Custo Fixo             │
-│  Proporção: 35.2%                  │
-└────────────────────────────────────┘
-```
+### Estilizacao do Fallback
 
-### CustomTreemapContent
+Usando Tailwind CSS seguindo o design system:
+
 ```typescript
-const CustomTreemapContent = (props) => {
-  const { x, y, width, height, name, fill, tipo, size } = props;
-  
-  // Ocultar texto em retângulos pequenos
-  const showName = width > 60 && height > 40;
-  const showValue = width > 80 && height > 50;
-  
-  return (
-    <g>
-      <rect x={x} y={y} width={width} height={height} fill={fill} rx={4} />
-      {showName && (
-        <text x={x + width/2} y={y + height/2 - 8} textAnchor="middle" fill="white">
-          {name}
-        </text>
-      )}
-      {showValue && (
-        <text x={x + width/2} y={y + height/2 + 10} textAnchor="middle" fill="white">
-          R$ {formatValue(size)}
-        </text>
-      )}
-    </g>
-  );
-};
+<div className="min-h-screen flex items-center justify-center bg-background">
+  <div className="text-center space-y-6 p-8 max-w-md">
+    <div className="flex justify-center">
+      <AlertTriangle className="h-16 w-16 text-destructive" />
+    </div>
+    <h1 className="text-2xl font-heading font-bold text-foreground">
+      Algo deu errado
+    </h1>
+    <p className="text-muted-foreground">
+      Ocorreu um erro inesperado. Por favor, tente recarregar a pagina.
+      Se o problema persistir, entre em contato com o suporte.
+    </p>
+    <Button onClick={handleReload} size="lg">
+      Tentar novamente
+    </Button>
+  </div>
+</div>
 ```
 
-### Legenda
-```typescript
-const legend = [
-  { label: "Custos Fixos", color: "hsl(217, 91%, 60%)" },
-  { label: "Custos Variáveis", color: "hsl(25, 95%, 53%)" },
-];
-```
+### Tipos de Erros Capturados
 
----
+| Tipo | Handler | Acao |
+|------|---------|------|
+| Erro de renderizacao React | ErrorBoundary | Tela de erro com reload |
+| Promise nao tratada | `unhandledrejection` | Toast de erro |
+| Erro JavaScript global | `error` event | Toast de erro |
+| Erro de rede (Supabase) | `unhandledrejection` | Toast de erro |
 
-## Fluxo de Execução
+### Fluxo de Execucao
 
 ```text
-1. Dashboard carrega → useDashboardMetrics()
+1. Aplicacao inicia
            │
            ▼
-2. RPC retorna custos_por_categoria com tipo:
-   [{ name: "Pessoal", value: 25000, tipo: "FIXA" }, 
-    { name: "Operacional", value: 18000, tipo: "VARIAVEL" }, ...]
+2. setupGlobalErrorHandler() registra listeners
            │
            ▼
-3. ExpenseTreemap recebe dados e processa:
-   a) Calcula total para percentuais
-   b) Atribui cores baseado no tipo
-   c) Formata dados para Recharts Treemap
+3. ErrorBoundary envolve <App />
            │
-           ▼
-4. Renderizar Treemap:
-   - Retângulos proporcionais ao valor
-   - Cores: Fixo = Azul, Variável = Laranja
-   - Texto visível apenas em áreas grandes
-           │
-           ▼
-5. Tooltip mostra detalhes ao hover
+           ├─────────────────────────────────────────┐
+           │                                         │
+           ▼                                         ▼
+4a. Erro de renderizacao                     4b. Erro de Promise/JS
+    (React lifecycle)                            (async/await, fetch)
+           │                                         │
+           ▼                                         ▼
+5a. getDerivedStateFromError()              5b. window event listener
+    captura o erro                               captura o erro
+           │                                         │
+           ▼                                         ▼
+6a. Renderiza ErrorFallback                 6b. Exibe Toast de erro
+    com botao "Tentar novamente"                 via Sonner
 ```
 
----
+## Beneficios
 
-## Comparação Visual
-
-```text
-ANTES (Conceitual - não existia no Dashboard)
-┌───────────────────────────────┐
-│  Custos por Categoria         │
-│  (Não implementado)           │
-└───────────────────────────────┘
-
-DEPOIS
-┌───────────────────────────────────────────────────────────┐
-│  Custos por Categoria                                     │
-│  Hierarquia: Fixos vs Variáveis por categoria             │
-├───────────────────────────────────────────────────────────┤
-│                                                           │
-│  ┌───────────────────────────┬───────────────────────┐   │
-│  │       Pessoal             │    Operacional        │   │
-│  │       R$ 25.000           │    R$ 18.000          │   │
-│  │       (Fixo - Azul)       │    (Variável - Laran) │   │
-│  ├──────────────┬────────────┼───────────────────────┤   │
-│  │  Administrat │  Tecnol.   │     Viagens           │   │
-│  │  R$ 15.000   │  R$ 8.000  │     R$ 4.000          │   │
-│  └──────────────┴────────────┴───────────────────────┘   │
-│                                                           │
-│  ● Custos Fixos    ● Custos Variáveis                    │
-└───────────────────────────────────────────────────────────┘
-```
-
----
-
-## Benefícios
-
-1. **Hierarquia Visual**: Mostra claramente a proporção de cada categoria
-2. **Distinção Tipo**: Cores diferentes facilitam identificar custos fixos vs variáveis
-3. **Clean Design**: Texto oculto em áreas pequenas evita poluição visual
-4. **Interatividade**: Tooltip rico com detalhes completos
-5. **Consistência**: Segue padrões de componentes existentes (ServiceEfficiencyMatrix)
+1. **UX Amigavel**: Usuario nao ve tela branca - sempre tem feedback visual
+2. **Acao Clara**: Botao "Tentar novamente" oferece caminho de recuperacao
+3. **Cobertura Completa**: Captura erros sincronos e assincronos
+4. **Design Consistente**: Segue o design system da aplicacao
+5. **Logging**: Erros sao logados no console para debug
+6. **Nao Intrusivo**: Toasts para erros menores, tela completa so para falhas criticas
 

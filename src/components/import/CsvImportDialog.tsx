@@ -8,9 +8,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2, Info } from "lucide-react";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface CsvImportDialogProps {
   open: boolean;
@@ -27,60 +28,63 @@ interface ColumnMapping {
 
 const TABLE_CONFIG: Record<TableType, { 
   tableName: string; 
-  columns: { name: string; required: boolean; label: string }[];
+  columns: { name: string; required: boolean; label: string; description?: string }[];
   displayName: string;
 }> = {
   clientes: {
     tableName: "dim_cliente",
     displayName: "Clientes",
     columns: [
-      { name: "nome", required: true, label: "Nome *" },
-      { name: "cpf", required: false, label: "CPF" },
-      { name: "cnpj", required: false, label: "CNPJ" },
-      { name: "endereco", required: false, label: "Endereço" },
-      { name: "telefone", required: false, label: "Telefone" },
-      { name: "celular", required: false, label: "Celular" },
-      { name: "email", required: false, label: "Email" },
-      { name: "categoria", required: false, label: "Categoria" },
-      { name: "origem", required: false, label: "Origem" },
-      { name: "situacao", required: false, label: "Situação" },
+      { name: "nome", required: true, label: "Nome *", description: "Nome completo do cliente" },
+      { name: "cpf", required: false, label: "CPF", description: "Cadastro de Pessoa Física (formato: 000.000.000-00)" },
+      { name: "cnpj", required: false, label: "CNPJ", description: "Cadastro de Pessoa Jurídica (formato: 00.000.000/0000-00)" },
+      { name: "endereco", required: false, label: "Endereço", description: "Endereço completo do cliente" },
+      { name: "telefone", required: false, label: "Telefone", description: "Telefone fixo (formato: (00) 0000-0000)" },
+      { name: "celular", required: false, label: "Celular", description: "Celular/WhatsApp (formato: (00) 00000-0000)" },
+      { name: "email", required: false, label: "Email", description: "Email para contato" },
+      { name: "categoria", required: false, label: "Categoria", description: "Tipo de cliente: Governo, Pessoa Física, Pessoa Jurídica, Produtor Rural" },
+      { name: "origem", required: false, label: "Origem", description: "Canal de prospecção: Indicação, Site, Evento, Rede Social, Parceria" },
+      { name: "situacao", required: false, label: "Situação", description: "Status do relacionamento: Ativo, Inativo, Pendente, Lead" },
+      { name: "anotacoes", required: false, label: "Observações", description: "Notas e anotações gerais sobre o cliente" },
+      { name: "data_cadastro", required: false, label: "Data de Cadastro", description: "Data de entrada do cliente no sistema (formato: AAAA-MM-DD)" },
+      { name: "idade", required: false, label: "Idade", description: "Idade do cliente em anos (número inteiro)" },
     ],
   },
   propriedades: {
     tableName: "dim_propriedade",
     displayName: "Propriedades",
     columns: [
-      { name: "nome_da_propriedade", required: true, label: "Nome da Propriedade *" },
-      { name: "nome_cliente", required: true, label: "Nome do Cliente * (para vincular)" },
-      { name: "cidade", required: false, label: "Cidade" },
-      { name: "municipio", required: false, label: "Município" },
-      { name: "area_ha", required: false, label: "Área (ha)" },
-      { name: "latitude", required: false, label: "Latitude" },
-      { name: "longitude", required: false, label: "Longitude" },
-      { name: "tipo", required: false, label: "Tipo" },
-      { name: "situacao_imovel", required: false, label: "Situação do Imóvel" },
-      { name: "tipo_de_documento", required: false, label: "Tipo de Documento" },
-      { name: "car", required: false, label: "CAR" },
-      { name: "matricula", required: false, label: "Matrícula" },
+      { name: "nome_da_propriedade", required: true, label: "Nome da Propriedade *", description: "Nome identificador da propriedade" },
+      { name: "nome_cliente", required: true, label: "Nome do Cliente *", description: "Nome exato do cliente para vincular (deve existir no sistema)" },
+      { name: "cidade", required: false, label: "Cidade", description: "Cidade onde a propriedade está localizada" },
+      { name: "municipio", required: false, label: "Município", description: "Município da propriedade" },
+      { name: "area_ha", required: false, label: "Área (ha)", description: "Área total em hectares (número decimal, ex: 150.5)" },
+      { name: "latitude", required: false, label: "Latitude", description: "Coordenada de latitude (formato decimal, ex: -15.7801)" },
+      { name: "longitude", required: false, label: "Longitude", description: "Coordenada de longitude (formato decimal, ex: -47.9292)" },
+      { name: "tipo", required: false, label: "Tipo", description: "Tipo de propriedade: Fazenda, Sítio, Chácara, Lote" },
+      { name: "situacao_imovel", required: false, label: "Situação do Imóvel", description: "Status da documentação: Regular, Pendente, Irregular" },
+      { name: "tipo_de_documento", required: false, label: "Tipo de Documento", description: "Tipo de documento de posse: Escritura, Contrato, Posse" },
+      { name: "car", required: false, label: "CAR", description: "Código do Cadastro Ambiental Rural" },
+      { name: "matricula", required: false, label: "Matrícula", description: "Número da matrícula do imóvel no cartório" },
     ],
   },
   tiposervico: {
     tableName: "dim_tiposervico",
     displayName: "Tipos de Serviço",
     columns: [
-      { name: "nome", required: true, label: "Nome *" },
-      { name: "categoria", required: false, label: "Categoria" },
-      { name: "valor_sugerido", required: false, label: "Valor Sugerido" },
-      { name: "descricao", required: false, label: "Descrição" },
+      { name: "nome", required: true, label: "Nome *", description: "Nome do tipo de serviço" },
+      { name: "categoria", required: false, label: "Categoria", description: "Categoria do serviço: Topografia, Georreferenciamento, Ambiental" },
+      { name: "valor_sugerido", required: false, label: "Valor Sugerido", description: "Valor base sugerido em R$ (número decimal, ex: 1500.00)" },
+      { name: "descricao", required: false, label: "Descrição", description: "Descrição detalhada do serviço" },
     ],
   },
   tipodespesa: {
     tableName: "dim_tipodespesa",
     displayName: "Tipos de Despesa",
     columns: [
-      { name: "categoria", required: true, label: "Categoria *" },
-      { name: "subcategoria", required: false, label: "Subcategoria" },
-      { name: "descricao", required: false, label: "Descrição" },
+      { name: "categoria", required: true, label: "Categoria *", description: "Categoria principal da despesa: Operacional, Administrativa, Pessoal" },
+      { name: "subcategoria", required: false, label: "Subcategoria", description: "Subcategoria para classificação mais específica" },
+      { name: "descricao", required: false, label: "Descrição", description: "Descrição detalhada do tipo de despesa" },
     ],
   },
 };
@@ -240,8 +244,25 @@ export function CsvImportDialog({ open, onOpenChange, onSuccess }: CsvImportDial
               record["id_cliente"] = clienteId;
             } else {
               // Convert numeric fields
-              if (["area_ha", "latitude", "longitude", "valor_sugerido"].includes(mapping.dbColumn)) {
+              if (["area_ha", "latitude", "longitude", "valor_sugerido", "idade"].includes(mapping.dbColumn)) {
                 value = value ? parseFloat(value.replace(",", ".")) : null;
+              }
+              // Convert date fields
+              if (mapping.dbColumn === "data_cadastro" && value) {
+                // Try to parse date in various formats
+                const dateValue = value.trim();
+                if (dateValue) {
+                  // Check if already in YYYY-MM-DD format
+                  if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+                    value = dateValue;
+                  } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateValue)) {
+                    // DD/MM/YYYY format
+                    const [day, month, year] = dateValue.split('/');
+                    value = `${year}-${month}-${day}`;
+                  } else {
+                    value = null;
+                  }
+                }
               }
               record[mapping.dbColumn] = value || null;
             }
@@ -285,7 +306,7 @@ export function CsvImportDialog({ open, onOpenChange, onSuccess }: CsvImportDial
       if (!isOpen) resetState();
       onOpenChange(isOpen);
     }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col z-[1000]">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5" />
@@ -322,20 +343,31 @@ export function CsvImportDialog({ open, onOpenChange, onSuccess }: CsvImportDial
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Colunas esperadas para {config.displayName}</AlertTitle>
                   <AlertDescription className="mt-2">
-                    <div className="flex flex-wrap gap-2">
-                      {config.columns.map((col) => (
-                        <span
-                          key={col.name}
-                          className={`px-2 py-1 rounded text-xs ${
-                            col.required
-                              ? "bg-destructive/10 text-destructive font-medium"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {col.label}
-                        </span>
-                      ))}
-                    </div>
+                    <TooltipProvider>
+                      <div className="flex flex-wrap gap-2">
+                        {config.columns.map((col) => (
+                          <Tooltip key={col.name}>
+                            <TooltipTrigger asChild>
+                              <span
+                                className={`px-2 py-1 rounded text-xs inline-flex items-center gap-1 cursor-help ${
+                                  col.required
+                                    ? "bg-destructive/10 text-destructive font-medium"
+                                    : "bg-muted text-muted-foreground"
+                                }`}
+                              >
+                                {col.label}
+                                {col.description && <Info className="h-3 w-3 opacity-60" />}
+                              </span>
+                            </TooltipTrigger>
+                            {col.description && (
+                              <TooltipContent side="top" className="max-w-xs">
+                                <p className="text-xs">{col.description}</p>
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        ))}
+                      </div>
+                    </TooltipProvider>
                   </AlertDescription>
                 </Alert>
 

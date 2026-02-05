@@ -1216,6 +1216,38 @@ export type Database = {
           },
         ]
       }
+      notificacao_dismissals: {
+        Row: {
+          dismissed_at: string
+          id: string
+          id_referencia: string
+          tenant_id: string | null
+          tipo: string
+        }
+        Insert: {
+          dismissed_at?: string
+          id?: string
+          id_referencia: string
+          tenant_id?: string | null
+          tipo: string
+        }
+        Update: {
+          dismissed_at?: string
+          id?: string
+          id_referencia?: string
+          tenant_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacao_dismissals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacoes: {
         Row: {
           created_at: string | null

@@ -26,10 +26,12 @@ interface ClientesKPIs {
   cidadesAtivas: number;
 }
 
-export function useClientesAnalytics() {
+export function useClientesAnalytics(selectedYear?: number) {
+  const year = selectedYear || new Date().getFullYear();
+
   // Fetch all clients with their budgets and services for analytics
   const { data, isLoading, error } = useQuery({
-    queryKey: ["clientes-analytics"],
+    queryKey: ["clientes-analytics", year],
     queryFn: async () => {
       // Fetch clients
       const { data: clientes, error: clientesError } = await supabase
@@ -41,7 +43,9 @@ export function useClientesAnalytics() {
       // Fetch budgets with receita_realizada
       const { data: orcamentos, error: orcamentosError } = await supabase
         .from("fato_orcamento")
-        .select("id_cliente, receita_realizada, receita_esperada, data_orcamento");
+        .select("id_cliente, receita_realizada, receita_esperada, data_orcamento")
+        .gte("data_orcamento", `${year}-01-01`)
+        .lte("data_orcamento", `${year}-12-31`);
 
       if (orcamentosError) throw orcamentosError;
 
@@ -59,7 +63,7 @@ export function useClientesAnalytics() {
 
       if (propriedadesError) throw propriedadesError;
 
-      return { clientes, orcamentos, servicos, propriedades };
+      return { clientes, orcamentos, servicos, propriedades, year };
     },
   });
 
@@ -118,13 +122,18 @@ export function useClientesAnalytics() {
         });
       }
 
-      // LTV by month (last 6 months)
-      const now = new Date();
+      // LTV by month for selected year
+      const targetYear = data.year;
       const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
       const ltvData: LTVData[] = [];
+      
+      // Determine month range: full year or up to current month if current year
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const maxMonth = targetYear === currentYear ? now.getMonth() : 11;
 
-      for (let i = 5; i >= 0; i--) {
-        const targetDate = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      for (let month = 0; month <= maxMonth; month++) {
+        const targetDate = new Date(targetYear, month, 1);
         const monthStart = targetDate.toISOString().split("T")[0];
         const nextMonth = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 1);
         const monthEnd = nextMonth.toISOString().split("T")[0];

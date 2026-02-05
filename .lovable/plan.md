@@ -1,99 +1,56 @@
 
-# Plano: Funil de Vendas no Dashboard Financeiro
+# Plano: Corrigir Cores dos Tooltips para Corresponder às Barras
 
-## Objetivo
-Criar um gráfico de Funil de Vendas que visualize a conversão de orçamentos, desde o total emitido até os aprovados/concluídos, com taxas de conversão entre etapas.
+## Problema
+O tooltip exibe um indicador de cor lateral (`bg-primary`) fixo em roxo, independentemente da cor real da barra/série do gráfico.
 
----
+## Solução
 
-## Componente a Criar
+### 1. Modificar `src/components/charts/RichTooltip.tsx`
+Alterar a barra lateral para usar a cor da primeira série do payload:
 
-### `src/components/charts/SalesFunnelChart.tsx`
-
-Um novo componente que:
-- Busca dados da tabela `fato_orcamento` agrupados pela coluna `situacao`
-- Exibe 3 etapas do funil:
-  - **Topo**: Total de Orçamentos (todos)
-  - **Meio**: Em Negociação/Pendentes
-  - **Fundo**: Aprovados
-- Mostra taxa de conversão (%) entre cada etapa no Tooltip
-- Usa gradiente de cores do azul (topo) ao verde (fundo)
-
----
-
-## Detalhes Técnicos
-
-### Estrutura de Dados
-A tabela `fato_orcamento` possui a coluna `situacao` com valores:
-- `Pendente` (em negociação)
-- `Aprovado` (convertido)
-- `Cancelado`
-
-### Lógica do Funil
-```text
-Total de Orçamentos → Pendentes + Aprovados → Aprovados
-       100%              Taxa 1                Taxa 2
+**Linha 79-83 - Alterar de:**
+```tsx
+<div 
+  className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-primary"
+  aria-hidden="true"
+/>
 ```
 
-### Componente Recharts
-Utilizará `FunnelChart` e `Funnel` do Recharts com:
-- `LabelList` para exibir valores
-- `Tooltip` customizado mostrando:
-  - Quantidade da etapa
-  - Percentual em relação ao total
-  - Taxa de conversão para próxima etapa
-- Células com cores em gradiente (azul → verde)
+**Para:**
+```tsx
+<div 
+  className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
+  style={{ backgroundColor: getSeriesColor(payload[0]) }}
+  aria-hidden="true"
+/>
+```
 
-### Cores do Gradiente
-- Topo: `hsl(217, 91%, 60%)` (azul)
-- Meio: `hsl(173, 80%, 45%)` (teal)
-- Fundo: `hsl(142, 76%, 36%)` (verde)
+### 2. Modificar `src/components/charts/SalesFunnelChart.tsx`
+Atualizar o `CustomTooltip` para incluir um indicador de cor que corresponda à cor da etapa do funil:
 
-### Hook de Dados
-Criará um hook `useSalesFunnel` que:
-1. Busca todos os registros de `fato_orcamento` agrupados por `situacao`
-2. Calcula contagens: Total, Pendentes, Aprovados
-3. Calcula taxas de conversão entre etapas
-
----
-
-## Integração no Dashboard
-
-### Modificação em `src/pages/DashboardFinanceiro.tsx`
-O espaço vazio na seção "Segunda Linha" (grid lg:grid-cols-2) será preenchido com o novo componente:
-
-```text
-┌─────────────────────┐  ┌─────────────────────┐
-│ Lucro por Cliente   │  │ Funil de Vendas     │  ← NOVO
-│   (já existe)       │  │   (será adicionado) │
-└─────────────────────┘  └─────────────────────┘
+**Adicionar indicador colorido ao tooltip:**
+```tsx
+<div className="flex items-center gap-2 mb-2">
+  <span 
+    className="w-3 h-3 rounded-full shrink-0"
+    style={{ backgroundColor: data.fill }}
+  />
+  <p className="font-semibold text-foreground">{data.name}</p>
+</div>
 ```
 
 ---
 
-## Arquivos Afetados
+## Arquivos a Modificar
 
-| Arquivo | Ação |
-|---------|------|
-| `src/components/charts/SalesFunnelChart.tsx` | Criar |
-| `src/hooks/useSalesFunnel.ts` | Criar |
-| `src/pages/DashboardFinanceiro.tsx` | Modificar |
-
----
-
-## Tooltip Customizado
-
-Exibirá para cada etapa:
-- **Nome da etapa**
-- **Quantidade**: Número absoluto de orçamentos
-- **% do Total**: Percentual em relação ao total de orçamentos
-- **Taxa de Conversão**: Percentual que avançou para a próxima etapa (quando aplicável)
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/components/charts/RichTooltip.tsx` | Barra lateral dinâmica |
+| `src/components/charts/SalesFunnelChart.tsx` | Indicador de cor no tooltip do funil |
 
 ---
 
-## Estilos e Consistência
-
-- Seguirá o padrão visual dos outros gráficos do dashboard
-- Usará `Card` com classe `interactive-lift`
-- Suportará o modo `density` (compact/normal) do contexto de configurações
-- Incluirá estado de loading e tratamento para dados vazios
+## Resultado Esperado
+- **RichTooltip**: A barra lateral esquerda terá a cor da primeira série (azul para receita, verde para lucro, etc.)
+- **SalesFunnelChart**: O tooltip exibirá um círculo colorido ao lado do nome da etapa, com a cor correspondente (azul, teal ou verde)

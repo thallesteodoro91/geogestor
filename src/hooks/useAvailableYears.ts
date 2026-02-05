@@ -52,7 +52,10 @@ export function useAvailableYears() {
       });
       
       // Sort years descending (most recent first)
-      return Array.from(yearsSet).sort((a, b) => b - a);
+      // Filter out future years and sort descending (most recent first)
+      return Array.from(yearsSet)
+        .filter(year => year <= currentYear)
+        .sort((a, b) => b - a);
     },
     staleTime: 60000,
   });

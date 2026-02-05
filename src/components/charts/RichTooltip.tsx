@@ -43,9 +43,13 @@ const formatValue = (value: number, format: 'currency' | 'percent' | 'number'): 
 
 const getSeriesColor = (item: RichTooltipProps['payload'][0]): string => {
   // Check multiple possible color sources - Recharts places colors in different places depending on chart type
+  // For Cell components, the fill is passed in item.payload.fill
+  // For regular bars/lines, it's in item.color, item.stroke, or item.fill
   const payloadFill = item.payload?.fill as string | undefined;
   const payloadColor = item.payload?.color as string | undefined;
-  return item.color || item.stroke || item.fill || payloadFill || payloadColor || 'hsl(var(--primary))';
+  
+  // Prioritize payload.fill for Cell-based coloring (most common for bar charts with individual colors)
+  return payloadFill || item.color || item.stroke || item.fill || payloadColor || 'hsl(var(--primary))';
 };
 
 export const RichTooltip = ({

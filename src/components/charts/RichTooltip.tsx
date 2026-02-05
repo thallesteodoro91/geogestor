@@ -42,7 +42,10 @@ const formatValue = (value: number, format: 'currency' | 'percent' | 'number'): 
 };
 
 const getSeriesColor = (item: RichTooltipProps['payload'][0]): string => {
-  return item.color || item.stroke || item.fill || 'hsl(var(--primary))';
+  // Check multiple possible color sources - Recharts places colors in different places depending on chart type
+  const payloadFill = item.payload?.fill as string | undefined;
+  const payloadColor = item.payload?.color as string | undefined;
+  return item.color || item.stroke || item.fill || payloadFill || payloadColor || 'hsl(var(--primary))';
 };
 
 export const RichTooltip = ({

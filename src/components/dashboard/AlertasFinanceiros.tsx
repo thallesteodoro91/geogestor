@@ -6,6 +6,7 @@ import { AlertTriangle, Info, Clock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface AlertaFinanceiro {
   id_orcamento: string;
@@ -19,8 +20,11 @@ interface AlertaFinanceiro {
 }
 
 export function AlertasFinanceiros() {
+  const { tenant } = useTenant();
+  const alertDaysThreshold = (tenant?.settings?.alert_days_threshold as number) || 30;
+
   const { data: alertas, isLoading } = useQuery({
-    queryKey: ['alertas-financeiros'],
+    queryKey: ['alertas-financeiros', alertDaysThreshold],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vw_alertas_financeiros')
@@ -30,14 +34,14 @@ export function AlertasFinanceiros() {
       
       if (error) throw error;
       
-      // Filtrar alertas: mostrar todos os vencidos e apenas "próximo" com <= 30 dias
+      // Filtrar alertas: mostrar todos os vencidos e apenas "próximo" dentro do limite configurado
       const alertasFiltrados = (data as AlertaFinanceiro[]).filter(alerta => {
         if (alerta.status_alerta === 'vencido') return true;
         
         if (alerta.status_alerta === 'proximo') {
           const dataVencimento = new Date(alerta.data_do_faturamento);
           const diasAteVencimento = differenceInDays(dataVencimento, new Date());
-          return diasAteVencimento <= 30;
+          return diasAteVencimento <= alertDaysThreshold;
         }
         
         return false;

@@ -5,6 +5,7 @@ import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ChartTitle } from "@/components/charts/ChartTitle";
+import { DynamicTooltip } from "@/components/charts/DynamicTooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimeGranularityControl } from "@/components/controls/TimeGranularityControl";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
@@ -231,16 +232,8 @@ export default function Operacional() {
                     <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--primary))",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                      }}
-                      labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-                      itemStyle={{ color: "hsl(var(--popover-foreground))" }}
+                      content={<DynamicTooltip formatter={(v) => `${v} dias`} />}
                       cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                      formatter={(value: number) => [`${value} dias`, 'Tempo Médio']}
                     />
                     <Bar dataKey="tempo" radius={[8, 8, 0, 0]}>
                       {tempoMedioFiltrado.map((entry, index) => (
@@ -289,15 +282,7 @@ export default function Operacional() {
                       ))}
                     </Pie>
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--primary))",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                      }}
-                      labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-                      itemStyle={{ color: "hsl(var(--popover-foreground))" }}
-                      formatter={(value: number, name: string) => [`${value} serviços`, name]}
+                      content={<DynamicTooltip formatter={(v) => `${v} serviços`} />}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -349,16 +334,8 @@ export default function Operacional() {
                     />
                     <YAxis dataKey="servico" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={150} />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--primary))",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                      }}
-                      labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-                      itemStyle={{ color: "hsl(var(--popover-foreground))" }}
+                      content={<DynamicTooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />}
                       cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                      formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, 'Ticket Médio']}
                     />
                     <Bar dataKey="valor" radius={[0, 8, 8, 0]}>
                       {ticketMedioFiltrado.map((entry, index) => (
@@ -408,21 +385,8 @@ export default function Operacional() {
                     <XAxis dataKey="servico" stroke="hsl(var(--muted-foreground))" fontSize={12} />
                     <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`} />
                     <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--primary))",
-                        borderRadius: "0.5rem",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
-                      }}
-                      labelStyle={{ color: "hsl(var(--popover-foreground))" }}
-                      itemStyle={{ color: "hsl(var(--popover-foreground))" }}
+                      content={<DynamicTooltip formatter={(v) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`} />}
                       cursor={{ fill: "hsl(var(--accent))", opacity: 0.1 }}
-                      formatter={(value: number, name: string) => {
-                        const margemBruta = name === "Lucro Bruto" && custoReceitaFiltrado.length > 0 
-                          ? ` (${((value / custoReceitaFiltrado[0].receita) * 100).toFixed(1)}%)`
-                          : '';
-                        return [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${margemBruta}`, name];
-                      }}
                     />
                     <Legend />
                     <Bar dataKey="custo" fill="hsl(var(--destructive))" radius={[8, 8, 0, 0]} name="Custo Direto" />

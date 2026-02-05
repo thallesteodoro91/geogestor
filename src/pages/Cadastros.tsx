@@ -289,7 +289,13 @@ export default function Cadastros() {
                                     {cliente.situacao && (
                                       <Badge 
                                         variant={cliente.situacao === 'Ativo' ? 'default' : 'secondary'}
-                                        className={cliente.situacao === 'Ativo' ? 'bg-green-500/20 text-green-700 hover:bg-green-500/30' : ''}
+                                       className={
+                                         cliente.situacao === 'Ativo' 
+                                           ? 'bg-green-500/20 text-green-700 hover:bg-green-500/30' 
+                                           : cliente.situacao === 'Inativo'
+                                             ? 'bg-red-500/20 text-red-700 hover:bg-red-500/30'
+                                             : ''
+                                       }
                                       >
                                         {cliente.situacao}
                                       </Badge>

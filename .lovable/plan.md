@@ -1,56 +1,84 @@
 
-# Plano: Corrigir Cores dos Tooltips para Corresponder às Barras
+# Plano: Adicionar Login com Google
 
-## Problema
-O tooltip exibe um indicador de cor lateral (`bg-primary`) fixo em roxo, independentemente da cor real da barra/série do gráfico.
+## Visão Geral
+Implementar autenticação via Google OAuth na página de login, permitindo que usuários façam login/cadastro com um clique usando suas contas Google.
 
-## Solução
+## Etapas de Implementação
 
-### 1. Modificar `src/components/charts/RichTooltip.tsx`
-Alterar a barra lateral para usar a cor da primeira série do payload:
+### 1. Configurar OAuth do Google
+Usar a ferramenta `configure-social-auth` para:
+- Gerar o módulo Lovable em `src/integrations/lovable/`
+- Instalar o pacote `@lovable.dev/cloud-auth-js`
+- Configurar o provedor Google OAuth
 
-**Linha 79-83 - Alterar de:**
+### 2. Modificar `src/pages/Auth.tsx`
+Adicionar botão de login com Google:
+
 ```tsx
-<div 
-  className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-primary"
-  aria-hidden="true"
-/>
+import { lovable } from "@/integrations/lovable/index";
+
+// Função para login com Google
+const handleGoogleSignIn = async () => {
+  setLoading(true);
+  try {
+    const { error } = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin,
+    });
+    
+    if (error) {
+      toast.error("Erro ao fazer login com Google");
+    }
+  } catch {
+    toast.error("Erro ao conectar com Google");
+  } finally {
+    setLoading(false);
+  }
+};
 ```
 
-**Para:**
-```tsx
-<div 
-  className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl"
-  style={{ backgroundColor: getSeriesColor(payload[0]) }}
-  aria-hidden="true"
-/>
-```
+### 3. Interface do Usuário
+Adicionar botão de login com Google abaixo dos formulários de login/signup:
 
-### 2. Modificar `src/components/charts/SalesFunnelChart.tsx`
-Atualizar o `CustomTooltip` para incluir um indicador de cor que corresponda à cor da etapa do funil:
-
-**Adicionar indicador colorido ao tooltip:**
 ```tsx
-<div className="flex items-center gap-2 mb-2">
-  <span 
-    className="w-3 h-3 rounded-full shrink-0"
-    style={{ backgroundColor: data.fill }}
-  />
-  <p className="font-semibold text-foreground">{data.name}</p>
+<div className="relative my-4">
+  <div className="absolute inset-0 flex items-center">
+    <span className="w-full border-t" />
+  </div>
+  <div className="relative flex justify-center text-xs uppercase">
+    <span className="bg-background px-2 text-muted-foreground">
+      ou continue com
+    </span>
+  </div>
 </div>
+
+<Button 
+  type="button" 
+  variant="outline" 
+  className="w-full"
+  onClick={handleGoogleSignIn}
+  disabled={loading}
+>
+  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+    {/* Google icon SVG */}
+  </svg>
+  Continuar com Google
+</Button>
 ```
 
 ---
 
-## Arquivos a Modificar
+## Arquivos a Modificar/Criar
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/components/charts/RichTooltip.tsx` | Barra lateral dinâmica |
-| `src/components/charts/SalesFunnelChart.tsx` | Indicador de cor no tooltip do funil |
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `src/integrations/lovable/` | Criar (automático) | Módulo gerado pela ferramenta configure-social-auth |
+| `src/pages/Auth.tsx` | Modificar | Adicionar botão e função de login com Google |
 
 ---
 
 ## Resultado Esperado
-- **RichTooltip**: A barra lateral esquerda terá a cor da primeira série (azul para receita, verde para lucro, etc.)
-- **SalesFunnelChart**: O tooltip exibirá um círculo colorido ao lado do nome da etapa, com a cor correspondente (azul, teal ou verde)
+- Botão "Continuar com Google" visível nas abas de Login e Criar Conta
+- Usuários podem fazer login/cadastro com um clique usando conta Google
+- Fluxo de redirecionamento OAuth funcional
+- Integração com o sistema de autenticação existente

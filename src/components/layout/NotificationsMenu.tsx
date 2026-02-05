@@ -1,4 +1,4 @@
-import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2 } from "lucide-react";
+import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,7 +47,7 @@ const getPriorityColor = (prioridade: string) => {
 };
 
 export const NotificationsMenu = () => {
-  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, checkPendingPayments } = useNotifications();
+  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, dismissNotification, checkPendingPayments } = useNotifications();
   const navigate = useNavigate();
 
   // Verificar pagamentos pendentes apenas uma vez por sessão (não a cada navegação)
@@ -70,6 +70,11 @@ export const NotificationsMenu = () => {
 
     return () => clearInterval(interval);
   }, []);
+
+  const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
+    e.stopPropagation();
+    await dismissNotification(notificationId);
+  };
 
   const handleNotificationClick = async (notification: any) => {
     // Marcar como lida
@@ -136,7 +141,7 @@ export const NotificationsMenu = () => {
             notifications.map((notification) => (
               <DropdownMenuItem
                 key={notification.id_notificacao}
-                className="flex gap-3 p-3 cursor-pointer hover:bg-accent"
+                className="flex gap-3 p-3 cursor-pointer hover:bg-accent group"
                 onClick={() => handleNotificationClick(notification)}
               >
                 <div className="mt-1">{getIcon(notification.tipo)}</div>
@@ -159,6 +164,15 @@ export const NotificationsMenu = () => {
                     })}
                   </p>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                  onClick={(e) => handleDismiss(e, notification.id_notificacao)}
+                  title="Descartar notificação"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
               </DropdownMenuItem>
             ))
           ) : (

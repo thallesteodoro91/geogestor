@@ -12,6 +12,7 @@ export interface Notification {
   lida: boolean;
   created_at: string;
   prioridade: string;
+  id_referencia?: string | null;
 }
 
 export const useNotifications = () => {
@@ -74,6 +75,27 @@ export const useNotifications = () => {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
       
+      // Registrar dismissal para notificações de vencimento antes de deletar
+      // Isso garante que não apareçam novamente por 3 dias
+      const overdueNotifications = notifications.filter(n => n.tipo === 'vencido' && n.id_referencia);
+      
+      if (overdueNotifications.length > 0) {
+        const dismissals = overdueNotifications.map(n => ({
+          tenant_id: tenantId,
+          id_referencia: n.id_referencia,
+          tipo: 'vencido',
+          dismissed_at: new Date().toISOString()
+        }));
+        
+        // Upsert para atualizar data de dismissal se já existir
+        await supabase
+          .from('notificacao_dismissals')
+          .upsert(dismissals, { 
+            onConflict: 'tenant_id,id_referencia,tipo',
+            ignoreDuplicates: false 
+          });
+      }
+      
       const { error } = await supabase
         .from('notificacoes')
         .delete()
@@ -86,6 +108,42 @@ export const useNotifications = () => {
     } catch (error: any) {
       console.error('Erro ao limpar notificações:', error);
       toast.error("Erro ao limpar notificações");
+    }
+  };
+
+  const dismissNotification = async (id: string) => {
+    try {
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) return;
+      
+      const notification = notifications.find(n => n.id_notificacao === id);
+      
+      // Se for notificação de vencimento, registrar dismissal
+      if (notification?.tipo === 'vencido' && notification?.id_referencia) {
+        await supabase
+          .from('notificacao_dismissals')
+          .upsert({
+            tenant_id: tenantId,
+            id_referencia: notification.id_referencia,
+            tipo: 'vencido',
+            dismissed_at: new Date().toISOString()
+          }, { 
+            onConflict: 'tenant_id,id_referencia,tipo',
+            ignoreDuplicates: false 
+          });
+      }
+      
+      // Deletar a notificação
+      const { error } = await supabase
+        .from('notificacoes')
+        .delete()
+        .eq('id_notificacao', id);
+
+      if (error) throw error;
+      
+      setNotifications(prev => prev.filter(n => n.id_notificacao !== id));
+    } catch (error: any) {
+      console.error('Erro ao descartar notificação:', error);
     }
   };
 
@@ -176,6 +234,7 @@ export const useNotifications = () => {
     markAsRead,
     markAllAsRead,
     clearAllNotifications,
+    dismissNotification,
     createNotification,
     checkPendingPayments,
     refetch: fetchNotifications

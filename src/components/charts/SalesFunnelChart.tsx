@@ -27,7 +27,13 @@ const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
 
   return (
     <div className="rounded-lg border bg-background p-3 shadow-lg">
-      <p className="font-semibold text-foreground mb-2">{data.name}</p>
+      <div className="flex items-center gap-2 mb-2">
+        <span 
+          className="w-3 h-3 rounded-full shrink-0"
+          style={{ backgroundColor: data.fill }}
+        />
+        <p className="font-semibold text-foreground">{data.name}</p>
+      </div>
       <div className="space-y-1 text-sm">
         <p className="text-muted-foreground">
           <span className="font-medium text-foreground">{data.value}</span> orçamentos

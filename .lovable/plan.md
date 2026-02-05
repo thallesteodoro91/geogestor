@@ -1,128 +1,190 @@
 
-# Plano: Corrigir Erro de RLS na Criação de Novo Tenant
+# Plano: Integração do Calendário com Google Agenda
 
-## Problema Identificado
+## Visão Geral
 
-O erro `"new row violates row-level security policy for table 'tenants'"` ocorre quando um novo usuário (especialmente via Google OAuth) tenta criar um tenant automaticamente. 
+Implementar sincronização bidirecional entre o calendário do dashboard (orçamentos e serviços) e o Google Calendar, permitindo que:
+1. Eventos criados/modificados no dashboard sejam refletidos no Google Calendar
+2. Modificações feitas no Google Calendar sejam sincronizadas de volta para o dashboard
 
-**Causa Raiz:**
-A política de INSERT na tabela `tenants` verifica se o usuário NÃO existe em `tenant_members`. Porém, há um problema de **avaliação circular das políticas RLS**:
-- Para inserir em `tenants`, precisa consultar `tenant_members`
-- A tabela `tenant_members` também tem RLS ativada
-- Isso pode causar comportamento inesperado dependendo da ordem de avaliação
+## Arquitetura da Solução
 
-## Solução
-
-Criar uma **função SECURITY DEFINER** que executa toda a criação do tenant de forma atômica, contornando as limitações de RLS durante o onboarding.
-
-### Etapa 1: Criar função `create_tenant_for_user`
-
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_for_user(
-  p_user_id UUID,
-  p_company_name TEXT
-)
-RETURNS JSONB
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_tenant_id UUID;
-  v_slug TEXT;
-  v_trial_plan_id UUID;
-  v_trial_end TIMESTAMPTZ;
-BEGIN
-  -- Verificar se usuário já tem tenant
-  IF EXISTS (SELECT 1 FROM tenant_members WHERE user_id = p_user_id) THEN
-    RAISE EXCEPTION 'User already belongs to a tenant';
-  END IF;
-
-  -- Gerar slug único
-  v_slug := lower(regexp_replace(p_company_name, '[^a-zA-Z0-9]+', '-', 'g'));
-  v_slug := v_slug || '-' || substring(gen_random_uuid()::text, 1, 8);
-
-  -- Criar tenant
-  INSERT INTO tenants (name, slug)
-  VALUES (p_company_name, v_slug)
-  RETURNING id INTO v_tenant_id;
-
-  -- Adicionar usuário como admin
-  INSERT INTO tenant_members (tenant_id, user_id, role)
-  VALUES (v_tenant_id, p_user_id, 'admin');
-
-  -- Buscar plano trial
-  SELECT id INTO v_trial_plan_id
-  FROM subscription_plans
-  WHERE slug = 'trial'
-  LIMIT 1;
-
-  IF v_trial_plan_id IS NOT NULL THEN
-    v_trial_end := NOW() + INTERVAL '7 days';
-    
-    INSERT INTO tenant_subscriptions (tenant_id, plan_id, status, current_period_start, current_period_end)
-    VALUES (v_tenant_id, v_trial_plan_id, 'trialing', NOW(), v_trial_end);
-  END IF;
-
-  -- Criar empresa
-  INSERT INTO dim_empresa (nome, tenant_id)
-  VALUES (p_company_name, v_tenant_id);
-
-  RETURN jsonb_build_object(
-    'id', v_tenant_id,
-    'name', p_company_name,
-    'slug', v_slug
-  );
-END;
-$$;
+```text
+┌─────────────────┐       ┌───────────────────┐       ┌─────────────────┐
+│   Dashboard     │◄─────►│  Edge Function    │◄─────►│ Google Calendar │
+│   (Frontend)    │       │  (Backend)        │       │     API         │
+└─────────────────┘       └───────────────────┘       └─────────────────┘
+        │                         │
+        │                         ▼
+        │                 ┌───────────────────┐
+        └────────────────►│   Supabase DB     │
+                          │ (calendar_sync)   │
+                          └───────────────────┘
 ```
 
-### Etapa 2: Atualizar `tenant.service.ts`
+## Etapas de Implementação
 
-```typescript
-export async function createTenant(userId: string, companyName: string) {
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-  
-  if (sessionError || !session) {
-    throw new Error('Sessão não encontrada.');
-  }
+### 1. Configurar Conector Google Calendar
 
-  // Usar função RPC ao invés de INSERT direto
-  const { data, error } = await supabase.rpc('create_tenant_for_user', {
-    p_user_id: userId,
-    p_company_name: companyName.trim()
-  });
+Utilizar o conector `google_calendar` disponível no Lovable Cloud para autenticação OAuth com a conta Google do usuário.
 
-  if (error) throw error;
+### 2. Criar Tabela de Sincronização
 
-  return {
-    id: data.id,
-    name: data.name,
-    slug: data.slug,
-    logo_url: null,
-    settings: {}
-  };
-}
-```
+Nova tabela `calendar_sync_settings` para armazenar configurações por usuário:
 
-### Etapa 3: Atualizar `TenantContext.tsx`
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID | Chave primária |
+| user_id | UUID | Referência ao usuário |
+| tenant_id | UUID | Referência ao tenant |
+| google_calendar_id | TEXT | ID do calendário Google selecionado |
+| sync_enabled | BOOLEAN | Sincronização ativa |
+| last_sync_at | TIMESTAMPTZ | Última sincronização |
+| sync_token | TEXT | Token para sincronização incremental |
 
-O contexto já chama `createTenant()`, então a mudança será transparente após a atualização do service.
+Nova tabela `calendar_event_mappings` para mapear eventos locais com Google:
+
+| Coluna | Tipo | Descrição |
+|--------|------|-----------|
+| id | UUID | Chave primária |
+| tenant_id | UUID | Referência ao tenant |
+| local_event_type | TEXT | "orcamento" ou "servico" |
+| local_event_id | UUID | ID do evento local |
+| google_event_id | TEXT | ID do evento no Google |
+| last_synced_at | TIMESTAMPTZ | Última sincronização |
+
+### 3. Criar Edge Functions
+
+**`google-calendar-sync`** - Função principal para sincronização:
+- Listar calendários disponíveis do usuário
+- Criar/atualizar/excluir eventos no Google Calendar
+- Buscar alterações do Google Calendar
+- Sincronização incremental usando sync tokens
+
+**`google-calendar-webhook`** - Webhook para receber notificações:
+- Receber push notifications do Google Calendar
+- Processar alterações e atualizar banco de dados local
+
+### 4. Modificar Página de Configurações
+
+Adicionar nova seção "Integrações" em `Configuracoes.tsx`:
+- Botão para conectar Google Calendar
+- Seleção do calendário a sincronizar
+- Toggle para ativar/desativar sincronização
+- Botão para sincronização manual
+- Status da última sincronização
+
+### 5. Modificar Componentes do Calendário
+
+**`CalendarioMensal.tsx`**, **`CalendarioSemanal.tsx`**, etc.:
+- Exibir badge indicando eventos sincronizados com Google
+- Adicionar indicador visual de status de sincronização
+
+**`CompromissoDialog.tsx`**:
+- Adicionar checkbox "Sincronizar com Google Agenda"
+- Disparar sincronização ao criar/editar evento
+
+### 6. Criar Hook de Sincronização
+
+`useGoogleCalendarSync.ts`:
+- Gerenciar estado de conexão
+- Disparar sincronização
+- Atualizar status de sincronização
+
+### 7. Implementar Sincronização Automática
+
+Quando orçamentos/serviços são criados ou modificados:
+1. Serviço detecta mudança
+2. Edge function envia para Google Calendar
+3. Mapping é atualizado no banco
+
+Quando alterações vêm do Google:
+1. Webhook recebe notificação
+2. Edge function busca detalhes da alteração
+3. Atualiza tabela correspondente (fato_orcamento ou fato_servico)
 
 ---
 
-## Arquivos a Modificar
+## Arquivos a Criar/Modificar
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| Migração SQL | Criar | Função `create_tenant_for_user` SECURITY DEFINER |
-| `src/services/tenant.service.ts` | Modificar | Usar `supabase.rpc()` em vez de INSERT direto |
+| Migração SQL | Criar | Tabelas calendar_sync_settings e calendar_event_mappings |
+| `supabase/functions/google-calendar-sync/index.ts` | Criar | Edge function principal de sincronização |
+| `supabase/functions/google-calendar-webhook/index.ts` | Criar | Webhook para receber notificações do Google |
+| `src/hooks/useGoogleCalendarSync.ts` | Criar | Hook para gerenciar sincronização |
+| `src/components/settings/GoogleCalendarSettings.tsx` | Criar | Componente de configuração do Google Calendar |
+| `src/pages/Configuracoes.tsx` | Modificar | Adicionar seção de integrações |
+| `src/pages/Calendario.tsx` | Modificar | Adicionar indicador de sincronização |
+| `src/components/calendario/CompromissoDialog.tsx` | Modificar | Adicionar opção de sincronização |
 
 ---
 
-## Benefícios
+## Fluxo de Usuário
 
-1. **Atômico**: Toda a criação acontece em uma transação
-2. **Seguro**: SECURITY DEFINER contorna RLS apenas para esta operação específica
-3. **Robusto**: Elimina problemas de timing/race conditions
-4. **Compatível**: Funciona com qualquer método de autenticação (email, Google, etc.)
+1. Usuário acessa **Configurações** → **Integrações**
+2. Clica em **"Conectar Google Agenda"**
+3. Autoriza acesso via OAuth do Google
+4. Seleciona qual calendário Google deseja sincronizar
+5. Ativa sincronização automática
+6. A partir desse momento:
+   - Novos orçamentos/serviços com data são enviados ao Google
+   - Alterações no Google são refletidas no dashboard
+
+---
+
+## Detalhes Técnicos
+
+### Gateway do Google Calendar
+
+Todas as chamadas à API do Google passam pelo gateway do Lovable:
+
+```typescript
+const GATEWAY_URL = 'https://gateway.lovable.dev/google_calendar/calendar/v3';
+
+// Exemplo: Listar calendários
+const response = await fetch(`${GATEWAY_URL}/users/me/calendarList`, {
+  headers: {
+    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+    'X-Connection-Api-Key': GOOGLE_CALENDAR_API_KEY,
+  }
+});
+```
+
+### Formato de Evento Google
+
+```typescript
+{
+  summary: "🛠️ Nome do Serviço - Cliente",
+  description: "Serviço de topografia",
+  start: { date: "2026-02-10" },  // Evento de dia inteiro
+  end: { date: "2026-02-12" },
+  extendedProperties: {
+    private: {
+      geogestor_type: "servico",
+      geogestor_id: "uuid-do-servico"
+    }
+  }
+}
+```
+
+### RLS Policies
+
+As novas tabelas terão políticas RLS para garantir isolamento por tenant:
+
+```sql
+CREATE POLICY "Users can manage own sync settings"
+ON calendar_sync_settings
+FOR ALL
+USING (user_id = auth.uid());
+```
+
+---
+
+## Resultado Esperado
+
+- Botão "Conectar Google Agenda" nas configurações
+- Sincronização automática de novos orçamentos/serviços
+- Alterações no Google refletidas no dashboard (polling ou webhook)
+- Indicador visual de eventos sincronizados no calendário
+- Suporte a sincronização manual sob demanda

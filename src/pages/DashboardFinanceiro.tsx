@@ -6,6 +6,7 @@ import { RichTooltip } from "@/components/charts/RichTooltip";
 import { RevenueTrendChart } from "@/components/charts/RevenueTrendChart";
 import { ServiceEfficiencyMatrix } from "@/components/charts/ServiceEfficiencyMatrix";
 import { ExpenseTreemap } from "@/components/charts/ExpenseTreemap";
+import { SalesFunnelChart } from "@/components/charts/SalesFunnelChart";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
@@ -268,6 +269,9 @@ const DashboardFinanceiro = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Funil de Vendas */}
+          <SalesFunnelChart />
         </section>
 
         {/* Terceira Linha - Treemap de Custos */}

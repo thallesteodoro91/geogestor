@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
@@ -6,10 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Users, TrendingUp, MapPin, Award, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, ComposedChart, Cell } from "recharts";
 import { useClientesAnalytics } from "@/hooks/useClientesAnalytics";
+import { useAvailableYears } from "@/hooks/useAvailableYears";
 import { formatCurrency } from "@/ui/formatters/currency.formatter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Clientes() {
-  const { isLoading, paretoData, ltvData, rentabilidadeData, kpis } = useClientesAnalytics();
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const { data: availableYears = [] } = useAvailableYears();
+  const { isLoading, paretoData, ltvData, rentabilidadeData, kpis } = useClientesAnalytics(selectedYear);
 
   const formatLTV = (value: number) => {
     if (value >= 1000) {
@@ -157,7 +162,24 @@ export default function Clientes() {
                 {ltvData.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Evolução do LTV Médio</CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle>Evolução do LTV Médio</CardTitle>
+                        <Select
+                          value={selectedYear.toString()}
+                          onValueChange={(value) => setSelectedYear(Number(value))}
+                        >
+                          <SelectTrigger className="w-[100px] h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableYears.map((year) => (
+                              <SelectItem key={year} value={year.toString()}>
+                                {year}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </CardHeader>
                     <CardContent>
                       <ResponsiveContainer width="100%" height={300}>

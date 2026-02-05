@@ -38,8 +38,23 @@ const DashboardFinanceiro = () => {
   // Calcular KPIs derivados a partir das métricas agregadas
   const derivedKPIs = metrics ? calculateDerivedKPIs(metrics) : null;
 
-  // Dados vindos diretamente do servidor (já agregados)
-  const lucroPorCliente = metrics?.lucro_por_cliente || [];
+  // Cores para o gráfico de lucro por cliente
+  const clienteColors = [
+    "hsl(160, 84%, 39%)",   // Emerald
+    "hsl(239, 84%, 67%)",   // Indigo
+    "hsl(280, 70%, 50%)",   // Roxo
+    "hsl(48, 96%, 53%)",    // Amarelo
+    "hsl(350, 89%, 60%)",   // Rose
+    "hsl(173, 80%, 40%)",   // Teal
+    "hsl(340, 75%, 55%)",   // Rosa
+    "hsl(25, 95%, 53%)",    // Laranja
+  ];
+
+  // Dados vindos diretamente do servidor (já agregados) com cores incluídas
+  const lucroPorCliente = (metrics?.lucro_por_cliente || []).map((item, index) => ({
+    ...item,
+    fill: clienteColors[index % clienteColors.length],
+  }));
 
   // Dados do Waterfall Chart - Fluxo Financeiro
   const waterfallData = metrics ? [
@@ -248,19 +263,10 @@ const DashboardFinanceiro = () => {
                       cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
                     />
                     <Bar dataKey="lucro" radius={[0, 8, 8, 0]}>
-                      {lucroPorCliente.map((_, index) => (
+                      {lucroPorCliente.map((entry, index) => (
                         <Cell 
                           key={`cell-${index}`} 
-                          fill={[
-                            "hsl(160, 84%, 39%)",   // Emerald
-                            "hsl(239, 84%, 67%)",   // Indigo
-                            "hsl(280, 70%, 50%)",   // Roxo
-                            "hsl(48, 96%, 53%)",    // Amarelo
-                            "hsl(350, 89%, 60%)",   // Rose
-                            "hsl(173, 80%, 40%)",   // Teal
-                            "hsl(340, 75%, 55%)",   // Rosa
-                            "hsl(25, 95%, 53%)",    // Laranja
-                          ][index % 8]} 
+                          fill={entry.fill} 
                         />
                       ))}
                     </Bar>

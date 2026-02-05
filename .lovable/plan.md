@@ -1,84 +1,128 @@
 
-# Plano: Adicionar Login com Google
+# Plano: Corrigir Erro de RLS na Criação de Novo Tenant
 
-## Visão Geral
-Implementar autenticação via Google OAuth na página de login, permitindo que usuários façam login/cadastro com um clique usando suas contas Google.
+## Problema Identificado
 
-## Etapas de Implementação
+O erro `"new row violates row-level security policy for table 'tenants'"` ocorre quando um novo usuário (especialmente via Google OAuth) tenta criar um tenant automaticamente. 
 
-### 1. Configurar OAuth do Google
-Usar a ferramenta `configure-social-auth` para:
-- Gerar o módulo Lovable em `src/integrations/lovable/`
-- Instalar o pacote `@lovable.dev/cloud-auth-js`
-- Configurar o provedor Google OAuth
+**Causa Raiz:**
+A política de INSERT na tabela `tenants` verifica se o usuário NÃO existe em `tenant_members`. Porém, há um problema de **avaliação circular das políticas RLS**:
+- Para inserir em `tenants`, precisa consultar `tenant_members`
+- A tabela `tenant_members` também tem RLS ativada
+- Isso pode causar comportamento inesperado dependendo da ordem de avaliação
 
-### 2. Modificar `src/pages/Auth.tsx`
-Adicionar botão de login com Google:
+## Solução
 
-```tsx
-import { lovable } from "@/integrations/lovable/index";
+Criar uma **função SECURITY DEFINER** que executa toda a criação do tenant de forma atômica, contornando as limitações de RLS durante o onboarding.
 
-// Função para login com Google
-const handleGoogleSignIn = async () => {
-  setLoading(true);
-  try {
-    const { error } = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
+### Etapa 1: Criar função `create_tenant_for_user`
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(
+  p_user_id UUID,
+  p_company_name TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_slug TEXT;
+  v_trial_plan_id UUID;
+  v_trial_end TIMESTAMPTZ;
+BEGIN
+  -- Verificar se usuário já tem tenant
+  IF EXISTS (SELECT 1 FROM tenant_members WHERE user_id = p_user_id) THEN
+    RAISE EXCEPTION 'User already belongs to a tenant';
+  END IF;
+
+  -- Gerar slug único
+  v_slug := lower(regexp_replace(p_company_name, '[^a-zA-Z0-9]+', '-', 'g'));
+  v_slug := v_slug || '-' || substring(gen_random_uuid()::text, 1, 8);
+
+  -- Criar tenant
+  INSERT INTO tenants (name, slug)
+  VALUES (p_company_name, v_slug)
+  RETURNING id INTO v_tenant_id;
+
+  -- Adicionar usuário como admin
+  INSERT INTO tenant_members (tenant_id, user_id, role)
+  VALUES (v_tenant_id, p_user_id, 'admin');
+
+  -- Buscar plano trial
+  SELECT id INTO v_trial_plan_id
+  FROM subscription_plans
+  WHERE slug = 'trial'
+  LIMIT 1;
+
+  IF v_trial_plan_id IS NOT NULL THEN
+    v_trial_end := NOW() + INTERVAL '7 days';
     
-    if (error) {
-      toast.error("Erro ao fazer login com Google");
-    }
-  } catch {
-    toast.error("Erro ao conectar com Google");
-  } finally {
-    setLoading(false);
+    INSERT INTO tenant_subscriptions (tenant_id, plan_id, status, current_period_start, current_period_end)
+    VALUES (v_tenant_id, v_trial_plan_id, 'trialing', NOW(), v_trial_end);
+  END IF;
+
+  -- Criar empresa
+  INSERT INTO dim_empresa (nome, tenant_id)
+  VALUES (p_company_name, v_tenant_id);
+
+  RETURN jsonb_build_object(
+    'id', v_tenant_id,
+    'name', p_company_name,
+    'slug', v_slug
+  );
+END;
+$$;
+```
+
+### Etapa 2: Atualizar `tenant.service.ts`
+
+```typescript
+export async function createTenant(userId: string, companyName: string) {
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  
+  if (sessionError || !session) {
+    throw new Error('Sessão não encontrada.');
   }
-};
+
+  // Usar função RPC ao invés de INSERT direto
+  const { data, error } = await supabase.rpc('create_tenant_for_user', {
+    p_user_id: userId,
+    p_company_name: companyName.trim()
+  });
+
+  if (error) throw error;
+
+  return {
+    id: data.id,
+    name: data.name,
+    slug: data.slug,
+    logo_url: null,
+    settings: {}
+  };
+}
 ```
 
-### 3. Interface do Usuário
-Adicionar botão de login com Google abaixo dos formulários de login/signup:
+### Etapa 3: Atualizar `TenantContext.tsx`
 
-```tsx
-<div className="relative my-4">
-  <div className="absolute inset-0 flex items-center">
-    <span className="w-full border-t" />
-  </div>
-  <div className="relative flex justify-center text-xs uppercase">
-    <span className="bg-background px-2 text-muted-foreground">
-      ou continue com
-    </span>
-  </div>
-</div>
-
-<Button 
-  type="button" 
-  variant="outline" 
-  className="w-full"
-  onClick={handleGoogleSignIn}
-  disabled={loading}
->
-  <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-    {/* Google icon SVG */}
-  </svg>
-  Continuar com Google
-</Button>
-```
+O contexto já chama `createTenant()`, então a mudança será transparente após a atualização do service.
 
 ---
 
-## Arquivos a Modificar/Criar
+## Arquivos a Modificar
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| `src/integrations/lovable/` | Criar (automático) | Módulo gerado pela ferramenta configure-social-auth |
-| `src/pages/Auth.tsx` | Modificar | Adicionar botão e função de login com Google |
+| Migração SQL | Criar | Função `create_tenant_for_user` SECURITY DEFINER |
+| `src/services/tenant.service.ts` | Modificar | Usar `supabase.rpc()` em vez de INSERT direto |
 
 ---
 
-## Resultado Esperado
-- Botão "Continuar com Google" visível nas abas de Login e Criar Conta
-- Usuários podem fazer login/cadastro com um clique usando conta Google
-- Fluxo de redirecionamento OAuth funcional
-- Integração com o sistema de autenticação existente
+## Benefícios
+
+1. **Atômico**: Toda a criação acontece em uma transação
+2. **Seguro**: SECURITY DEFINER contorna RLS apenas para esta operação específica
+3. **Robusto**: Elimina problemas de timing/race conditions
+4. **Compatível**: Funciona com qualquer método de autenticação (email, Google, etc.)

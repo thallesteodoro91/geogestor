@@ -68,11 +68,17 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
                         <span>{cleanChange}</span>
                       </div>
                     </TooltipTrigger>
-                    <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                    <TooltipContent side="bottom" className="max-w-[260px] text-center">
                       <p className="text-xs">
-                        Variação em relação ao período anterior
-                        {changeType === "positive" && " — crescimento"}
-                        {changeType === "negative" && " — queda"}
+                        {changeType === "positive" 
+                          ? "📈 Crescimento" 
+                          : changeType === "negative" 
+                            ? "📉 Queda" 
+                            : "Variação"
+                        }
+                        {" de "}
+                        <span className="font-semibold">{cleanChange}</span>
+                        {" comparando os últimos 6 meses com os 6 meses anteriores."}
                       </p>
                     </TooltipContent>
                   </Tooltip>

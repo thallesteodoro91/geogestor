@@ -1,82 +1,53 @@
 
-# Plano: Sistema de Logs de Auditoria
+# Plano: Configurar GeoGestor como PWA Instalavel
 
 ## Visao Geral
 
-Criar um sistema completo de rastreabilidade que registra acoes criticas (INSERT, UPDATE, DELETE) realizadas pelos usuarios, permitindo que administradores saibam exatamente "quem fez o que e quando".
+Transformar o GeoGestor em um Progressive Web App (PWA) instalavel, permitindo que usuarios em campo instalem o app diretamente do navegador no celular, com acesso rapido pela tela inicial, carregamento offline e experiencia nativa.
 
 ## Etapas de Implementacao
 
-### 1. Criar tabela `audit_logs` (Migracao SQL)
+### 1. Instalar dependencia `vite-plugin-pwa`
 
-```sql
-CREATE TABLE public.audit_logs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL,
-  user_id UUID NOT NULL,
-  action TEXT NOT NULL,          -- INSERT, UPDATE, DELETE
-  entity TEXT NOT NULL,          -- Orcamento, Despesa, Servico, Cliente, etc.
-  entity_id UUID,
-  old_data JSONB,
-  new_data JSONB,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+Adicionar o pacote `vite-plugin-pwa` ao projeto.
 
--- Indice para consultas por tenant + data
-CREATE INDEX idx_audit_logs_tenant_created ON audit_logs(tenant_id, created_at DESC);
+### 2. Configurar `vite.config.ts`
 
--- RLS: somente admins do tenant podem ler
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+Adicionar o plugin `VitePWA` com as seguintes configuracoes:
+- **registerType**: `autoUpdate` (atualiza o service worker automaticamente)
+- **manifest**: Nome "GeoGestor", cores baseadas na paleta do design system (primary purple `#7c3aed`), icones PWA
+- **workbox**: Estrategias de cache para assets estaticos e fontes Google
 
-CREATE POLICY "Admins can read audit logs"
-  ON audit_logs FOR SELECT
-  USING (
-    tenant_id = get_user_tenant_id(auth.uid())
-    AND has_role(auth.uid(), 'admin'::app_role)
-  );
+### 3. Criar icones PWA
 
--- Qualquer usuario autenticado do tenant pode inserir logs
-CREATE POLICY "Users can insert audit logs"
-  ON audit_logs FOR INSERT
-  WITH CHECK (tenant_id = get_user_tenant_id(auth.uid()));
-```
+Adicionar na pasta `public/`:
+- `pwa-192x192.png` - Icone 192x192 (gerado via SVG inline)
+- `pwa-512x512.png` - Icone 512x512
+- `apple-touch-icon-180x180.png` - Icone para iOS
 
-### 2. Criar servico `AuditService` no frontend
+Como nao temos icones personalizados, criaremos um SVG simples com as iniciais "GG" (GeoGestor) usando as cores do design system, e o plugin gerara os icones necessarios.
 
-Arquivo: `src/services/audit.service.ts`
+### 4. Atualizar `index.html`
 
-- Funcao `logAuditEvent(action, entity, entityId, oldData?, newData?)` que insere na tabela `audit_logs` com `tenant_id` e `user_id` automaticos.
-- Sera chamado em pontos criticos do sistema:
-  - Aprovacao/edicao/exclusao de orcamentos
-  - Criacao/edicao/exclusao de despesas
-  - Criacao/edicao/exclusao de servicos
-  - Criacao/edicao/exclusao de clientes
+Adicionar meta tags essenciais para PWA:
+- `<meta name="theme-color" content="#7c3aed">`
+- `<link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">`
+- `<meta name="apple-mobile-web-app-capable" content="yes">`
+- `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`
 
-### 3. Criar pagina `AuditLogs.tsx`
+### 5. Criar componente `PWAPrompt.tsx`
 
-Arquivo: `src/pages/AuditLogs.tsx`
+Componente que aparece como banner fixo no rodape em dispositivos moveis:
+- Detecta se o app ja esta instalado (via `display-mode: standalone`)
+- Captura o evento `beforeinstallprompt` do navegador
+- Exibe botao "Adicionar a Tela Inicial" com icone e texto explicativo
+- Botao de fechar/dispensar (salva preferencia no localStorage)
+- Design consistente com o design system (cores primary purple)
+- Automaticamente oculto em desktop e quando ja instalado
 
-- Acessivel apenas para admins (verificacao via `has_role`)
-- Tabela cronologica com colunas: Data/Hora, Usuario, Acao, Entidade, Detalhes
-- Filtros por: periodo, tipo de acao, entidade
-- Badges coloridos para acoes (verde=INSERT, azul=UPDATE, vermelho=DELETE)
-- Paginacao usando o hook `usePagination` existente
-- Usa `ResponsiveTable` para compatibilidade mobile
-- Botao para expandir e ver old_data/new_data em JSON formatado
+### 6. Integrar `PWAPrompt` no `App.tsx`
 
-### 4. Adicionar rota e navegacao
-
-- Rota `/audit-logs` em `App.tsx` (protegida)
-- Link na Sidebar dentro da secao "Base de Dados" com icone `Shield`
-
-### 5. Integrar AuditService nos servicos existentes
-
-Adicionar chamadas ao `logAuditEvent` nos pontos criticos ja existentes:
-- `OrcamentoDialog.tsx` - ao salvar/editar orcamento
-- `DespesasPendentes.tsx` - ao confirmar/excluir despesas
-- Pagina `Despesas.tsx` - ao criar/editar/excluir
-- `NovoServicoDialog.tsx` - ao criar servico
-- `ClienteDialog.tsx` - ao criar/editar cliente
+Adicionar o componente `PWAPrompt` dentro do layout principal para que apareca em todas as paginas.
 
 ---
 
@@ -84,49 +55,91 @@ Adicionar chamadas ao `logAuditEvent` nos pontos criticos ja existentes:
 
 | Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| Migracao SQL | Criar | Tabela audit_logs com RLS |
-| `src/services/audit.service.ts` | Criar | Servico de auditoria |
-| `src/pages/AuditLogs.tsx` | Criar | Pagina de logs (admin only) |
-| `src/App.tsx` | Modificar | Adicionar rota /audit-logs |
-| `src/components/layout/Sidebar.tsx` | Modificar | Link para Logs de Auditoria |
-| `src/components/cadastros/OrcamentoDialog.tsx` | Modificar | Registrar audit log |
-| `src/components/despesas/DespesasPendentes.tsx` | Modificar | Registrar audit log |
-| `src/components/servicos/NovoServicoDialog.tsx` | Modificar | Registrar audit log |
-| `src/components/cadastros/ClienteDialog.tsx` | Modificar | Registrar audit log |
+| `package.json` | Modificar | Adicionar `vite-plugin-pwa` |
+| `vite.config.ts` | Modificar | Configurar plugin VitePWA com manifest |
+| `index.html` | Modificar | Meta tags PWA (theme-color, apple-touch-icon) |
+| `public/pwa-icon.svg` | Criar | Icone SVG base do GeoGestor |
+| `public/pwa-192x192.png` | Criar | Icone PWA 192x192 |
+| `public/pwa-512x512.png` | Criar | Icone PWA 512x512 |
+| `public/apple-touch-icon-180x180.png` | Criar | Icone Apple Touch |
+| `src/components/pwa/PWAPrompt.tsx` | Criar | Banner de instalacao mobile |
+| `src/App.tsx` | Modificar | Incluir PWAPrompt |
 
 ---
 
 ## Detalhes Tecnicos
 
-### AuditService API
+### Configuracao do vite-plugin-pwa
 
 ```typescript
-// src/services/audit.service.ts
-export async function logAuditEvent(params: {
-  action: 'INSERT' | 'UPDATE' | 'DELETE';
-  entity: string;
-  entityId?: string;
-  oldData?: Record<string, unknown>;
-  newData?: Record<string, unknown>;
-}): Promise<void>
+VitePWA({
+  registerType: 'autoUpdate',
+  includeAssets: ['favicon.ico', 'pwa-icon.svg'],
+  manifest: {
+    name: 'GeoGestor - Gestao e Performance',
+    short_name: 'GeoGestor',
+    description: 'Sistema de gestao para topografia',
+    theme_color: '#7c3aed',
+    background_color: '#ffffff',
+    display: 'standalone',
+    orientation: 'portrait',
+    start_url: '/',
+    icons: [
+      { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+      { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+      { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  },
+  workbox: {
+    globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+    runtimeCaching: [
+      {
+        urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+        handler: 'StaleWhileRevalidate',
+        options: { cacheName: 'google-fonts-stylesheets' }
+      },
+      {
+        urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+        handler: 'CacheFirst',
+        options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } }
+      }
+    ]
+  }
+})
 ```
 
-### Verificacao de Admin na Pagina
+### PWAPrompt - Logica Principal
 
-A pagina usara uma query para verificar se o usuario tem role `admin` via `user_roles`. Usuarios sem permissao verao uma mensagem de acesso negado.
+```typescript
+// Captura o evento beforeinstallprompt
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  setDeferredPrompt(e);
+  setShowPrompt(true);
+});
 
-### Filtros da Pagina
+// Verifica se ja esta instalado
+const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
 
-- Seletor de periodo (data inicio / data fim)
-- Dropdown de acao (INSERT, UPDATE, DELETE, Todos)
-- Dropdown de entidade (Orcamento, Despesa, Servico, Cliente, Todos)
-- Busca por nome de usuario
-
-### Exemplo Visual da Tabela
-
-```text
-Data/Hora          | Usuario      | Acao    | Entidade   | Detalhes
-2026-02-07 14:30   | Joao Silva   | UPDATE  | Orcamento  | [Ver detalhes]
-2026-02-07 13:15   | Maria Santos | DELETE  | Despesa    | [Ver detalhes]
-2026-02-07 12:00   | Joao Silva   | INSERT  | Servico    | [Ver detalhes]
+// Verifica se usuario dispensou
+const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
 ```
+
+### Design do Banner
+
+- Posicao fixa no rodape (`fixed bottom-0`)
+- Fundo com gradiente primary
+- Texto branco com icone de download
+- Botao "Instalar" e botao "X" para fechar
+- Animacao de entrada suave (slide-up)
+- Visivel apenas em mobile (hidden em `md:` breakpoint)
+
+---
+
+## Resultado Esperado
+
+- App instalavel diretamente do navegador mobile
+- Icone do GeoGestor na tela inicial do celular
+- Carregamento mais rapido com cache de assets
+- Banner discreto sugerindo instalacao para usuarios mobile
+- Experiencia fullscreen sem barra do navegador apos instalacao

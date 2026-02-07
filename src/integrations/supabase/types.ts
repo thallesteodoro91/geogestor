@@ -1958,6 +1958,7 @@ export type Database = {
         Args: { p_data_fim?: string; p_data_inicio?: string }
         Returns: Json
       }
+      get_monthly_financial_data: { Args: { p_year: number }; Returns: Json }
       get_tenant_members: {
         Args: never
         Returns: {

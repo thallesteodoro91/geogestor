@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo } from "react";
+import { fetchMonthlyFinancialData, type MonthlyFinancialRow } from "@/modules/finance/services/kpi.service";
 
 interface MonthlyData {
   month: string;
@@ -13,145 +14,6 @@ interface MarginData {
   margemLiquida: number;
 }
 
-const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-export function useRevenueChartData(year?: number) {
-  const targetYear = year || new Date().getFullYear();
-  
-  return useQuery({
-    queryKey: ['revenue-chart-data', targetYear],
-    queryFn: async (): Promise<MonthlyData[]> => {
-      // Fetch budgets for the year
-      const { data: orcamentos } = await supabase
-        .from('fato_orcamento')
-        .select('data_orcamento, receita_esperada')
-        .gte('data_orcamento', `${targetYear}-01-01`)
-        .lte('data_orcamento', `${targetYear}-12-31`);
-      
-      // Fetch expenses for the year
-      const { data: despesas } = await supabase
-        .from('fato_despesas')
-        .select('data_da_despesa, valor_da_despesa')
-        .gte('data_da_despesa', `${targetYear}-01-01`)
-        .lte('data_da_despesa', `${targetYear}-12-31`);
-      
-      // Group by month
-      const monthlyRevenue: Record<number, number> = {};
-      const monthlyExpenses: Record<number, number> = {};
-      
-      (orcamentos || []).forEach(o => {
-        const month = new Date(o.data_orcamento).getMonth();
-        monthlyRevenue[month] = (monthlyRevenue[month] || 0) + (o.receita_esperada || 0);
-      });
-      
-      (despesas || []).forEach(d => {
-        const month = new Date(d.data_da_despesa).getMonth();
-        monthlyExpenses[month] = (monthlyExpenses[month] || 0) + (d.valor_da_despesa || 0);
-      });
-      
-      // Build array for all 12 months
-      return monthNames.map((name, index) => ({
-        month: name,
-        receita: monthlyRevenue[index] || 0,
-        despesa: monthlyExpenses[index] || 0,
-      }));
-    },
-    refetchInterval: 60000,
-  });
-}
-
-export function useProfitMarginChartData(year?: number) {
-  const targetYear = year || new Date().getFullYear();
-  
-  return useQuery({
-    queryKey: ['profit-margin-chart-data', targetYear],
-    queryFn: async (): Promise<MarginData[]> => {
-      // Fetch budgets for the year - usar valor_imposto persistido
-      const { data: orcamentos } = await supabase
-        .from('fato_orcamento')
-        .select('data_orcamento, receita_esperada, incluir_imposto, valor_imposto')
-        .gte('data_orcamento', `${targetYear}-01-01`)
-        .lte('data_orcamento', `${targetYear}-12-31`);
-      
-      // Fetch expenses with classification to separate variable costs from fixed expenses
-      const { data: despesas } = await supabase
-        .from('fato_despesas')
-        .select(`
-          data_da_despesa, 
-          valor_da_despesa,
-          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(classificacao)
-        `)
-        .gte('data_da_despesa', `${targetYear}-01-01`)
-        .lte('data_da_despesa', `${targetYear}-12-31`);
-      
-      // Group by month with proper cost classification
-      const monthlyData: Record<number, { 
-        receita: number; 
-        impostos: number; 
-        custosVariaveis: number; 
-        despesasFixas: number 
-      }> = {};
-      
-      (orcamentos || []).forEach(o => {
-        const month = new Date(o.data_orcamento).getMonth();
-        const receita = o.receita_esperada || 0;
-        // Usar valor_imposto persistido ao invés de recalcular com percentual
-        const imposto = o.incluir_imposto ? (o.valor_imposto || 0) : 0;
-        
-        if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        }
-        monthlyData[month].receita += receita;
-        monthlyData[month].impostos += imposto;
-      });
-      
-      (despesas || []).forEach((d: any) => {
-        const month = new Date(d.data_da_despesa).getMonth();
-        if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        }
-        
-        const valor = d.valor_da_despesa || 0;
-        const classificacao = d.dim_tipodespesa?.classificacao || 'FIXA';
-        
-        // Separar custos variáveis de despesas fixas baseado na classificação real
-        if (classificacao === 'VARIAVEL') {
-          monthlyData[month].custosVariaveis += valor;
-        } else {
-          monthlyData[month].despesasFixas += valor;
-        }
-      });
-      
-      // Calculate margins for each month using correct formulas
-      return monthNames.map((name, index) => {
-        const data = monthlyData[index] || { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        
-        // Receita Líquida = Receita - Impostos
-        const receitaLiquida = data.receita - data.impostos;
-        
-        // Lucro Bruto = Receita Líquida - Custos Variáveis (dados reais)
-        const lucroBruto = receitaLiquida - data.custosVariaveis;
-        
-        // Lucro Líquido = Lucro Bruto - Despesas Fixas
-        const lucroLiquido = lucroBruto - data.despesasFixas;
-        
-        // Margem Bruta % = (Lucro Bruto / Receita Líquida) * 100
-        const margemBruta = receitaLiquida > 0 ? (lucroBruto / receitaLiquida) * 100 : 0;
-        
-        // Margem Líquida % = (Lucro Líquido / Receita Líquida) * 100
-        const margemLiquida = receitaLiquida > 0 ? (lucroLiquido / receitaLiquida) * 100 : 0;
-        
-        return {
-          month: name,
-          margemBruta: Math.max(-100, Math.min(100, margemBruta)), // Allow negative margins
-          margemLiquida: Math.max(-100, Math.min(100, margemLiquida)),
-        };
-      });
-    },
-    refetchInterval: 60000,
-  });
-}
-
 interface RevenueTrendData {
   month: string;
   receitaBruta: number;
@@ -159,86 +21,81 @@ interface RevenueTrendData {
   margemPercent: number;
 }
 
-export function useRevenueTrendChartData(year?: number) {
+const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+/**
+ * Hook compartilhado que busca dados mensais agregados via RPC.
+ * Uma única query substitui as 6 queries anteriores (2 por hook x 3 hooks).
+ */
+function useMonthlyFinancialData(year?: number) {
   const targetYear = year || new Date().getFullYear();
-  
+
   return useQuery({
-    queryKey: ['revenue-trend-chart-data', targetYear],
-    queryFn: async (): Promise<RevenueTrendData[]> => {
-      // Fetch budgets for the year
-      const { data: orcamentos } = await supabase
-        .from('fato_orcamento')
-        .select('data_orcamento, receita_esperada, incluir_imposto, valor_imposto')
-        .gte('data_orcamento', `${targetYear}-01-01`)
-        .lte('data_orcamento', `${targetYear}-12-31`);
-      
-      // Fetch expenses with classification
-      const { data: despesas } = await supabase
-        .from('fato_despesas')
-        .select(`
-          data_da_despesa, 
-          valor_da_despesa,
-          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(classificacao)
-        `)
-        .gte('data_da_despesa', `${targetYear}-01-01`)
-        .lte('data_da_despesa', `${targetYear}-12-31`);
-      
-      // Group by month
-      const monthlyData: Record<number, { 
-        receita: number; 
-        impostos: number; 
-        custosVariaveis: number; 
-        despesasFixas: number 
-      }> = {};
-      
-      (orcamentos || []).forEach(o => {
-        const month = new Date(o.data_orcamento).getMonth();
-        const receita = o.receita_esperada || 0;
-        const imposto = o.incluir_imposto ? (o.valor_imposto || 0) : 0;
-        
-        if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        }
-        monthlyData[month].receita += receita;
-        monthlyData[month].impostos += imposto;
-      });
-      
-      (despesas || []).forEach((d: any) => {
-        const month = new Date(d.data_da_despesa).getMonth();
-        if (!monthlyData[month]) {
-          monthlyData[month] = { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        }
-        
-        const valor = d.valor_da_despesa || 0;
-        const classificacao = d.dim_tipodespesa?.classificacao || 'FIXA';
-        
-        if (classificacao === 'VARIAVEL') {
-          monthlyData[month].custosVariaveis += valor;
-        } else {
-          monthlyData[month].despesasFixas += valor;
-        }
-      });
-      
-      // Build array for all 12 months
-      return monthNames.map((name, index) => {
-        const data = monthlyData[index] || { receita: 0, impostos: 0, custosVariaveis: 0, despesasFixas: 0 };
-        
-        const receitaBruta = data.receita;
-        const receitaLiquida = receitaBruta - data.impostos;
-        const lucroBruto = receitaLiquida - data.custosVariaveis;
-        const lucroLiquido = lucroBruto - data.despesasFixas;
-        
-        // Margem % = (Lucro Líquido / Receita Bruta) * 100
-        const margemPercent = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0;
-        
-        return {
-          month: name,
-          receitaBruta,
-          lucroLiquido,
-          margemPercent: Math.round(margemPercent * 10) / 10,
-        };
-      });
-    },
+    queryKey: ['monthly-financial-data', targetYear],
+    queryFn: () => fetchMonthlyFinancialData(targetYear),
     refetchInterval: 60000,
   });
+}
+
+export function useRevenueChartData(year?: number) {
+  const { data: raw, ...rest } = useMonthlyFinancialData(year);
+
+  const data = useMemo((): MonthlyData[] => {
+    if (!raw) return monthNames.map(m => ({ month: m, receita: 0, despesa: 0 }));
+    return raw.map((r: MonthlyFinancialRow) => ({
+      month: monthNames[r.mes - 1],
+      receita: r.receita,
+      despesa: r.total_despesas,
+    }));
+  }, [raw]);
+
+  return { ...rest, data };
+}
+
+export function useProfitMarginChartData(year?: number) {
+  const { data: raw, ...rest } = useMonthlyFinancialData(year);
+
+  const data = useMemo((): MarginData[] => {
+    if (!raw) return monthNames.map(m => ({ month: m, margemBruta: 0, margemLiquida: 0 }));
+    return raw.map((r: MonthlyFinancialRow) => {
+      const receitaLiquida = r.receita - r.impostos;
+      const lucroBruto = receitaLiquida - r.custos_variaveis;
+      const lucroLiquido = lucroBruto - r.despesas_fixas;
+
+      const margemBruta = receitaLiquida > 0 ? (lucroBruto / receitaLiquida) * 100 : 0;
+      const margemLiquida = receitaLiquida > 0 ? (lucroLiquido / receitaLiquida) * 100 : 0;
+
+      return {
+        month: monthNames[r.mes - 1],
+        margemBruta: Math.max(-100, Math.min(100, margemBruta)),
+        margemLiquida: Math.max(-100, Math.min(100, margemLiquida)),
+      };
+    });
+  }, [raw]);
+
+  return { ...rest, data };
+}
+
+export function useRevenueTrendChartData(year?: number) {
+  const { data: raw, ...rest } = useMonthlyFinancialData(year);
+
+  const data = useMemo((): RevenueTrendData[] => {
+    if (!raw) return monthNames.map(m => ({ month: m, receitaBruta: 0, lucroLiquido: 0, margemPercent: 0 }));
+    return raw.map((r: MonthlyFinancialRow) => {
+      const receitaBruta = r.receita;
+      const receitaLiquida = receitaBruta - r.impostos;
+      const lucroBruto = receitaLiquida - r.custos_variaveis;
+      const lucroLiquido = lucroBruto - r.despesas_fixas;
+      const margemPercent = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0;
+
+      return {
+        month: monthNames[r.mes - 1],
+        receitaBruta,
+        lucroLiquido,
+        margemPercent: Math.round(margemPercent * 10) / 10,
+      };
+    });
+  }, [raw]);
+
+  return { ...rest, data };
 }

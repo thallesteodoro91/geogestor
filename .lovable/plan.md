@@ -1,145 +1,101 @@
 
-# Plano: Configurar GeoGestor como PWA Instalavel
 
-## Visao Geral
+# Refatorar Notificacoes para Supabase Realtime
 
-Transformar o GeoGestor em um Progressive Web App (PWA) instalavel, permitindo que usuarios em campo instalem o app diretamente do navegador no celular, com acesso rapido pela tela inicial, carregamento offline e experiencia nativa.
+## Situacao Atual
 
-## Etapas de Implementacao
+O hook `useNotifications.ts` ja possui uma subscription Realtime basica para INSERTs (linhas 208-221), mas o `NotificationsMenu.tsx` ainda usa `setInterval` para verificar pagamentos pendentes a cada hora (linhas 54-72). A subscription existente nao dispara Toast e nao filtra por tenant.
 
-### 1. Instalar dependencia `vite-plugin-pwa`
+## Mudancas Planejadas
 
-Adicionar o pacote `vite-plugin-pwa` ao projeto.
+### 1. `src/hooks/useNotifications.ts`
 
-### 2. Configurar `vite.config.ts`
+**Melhorar a subscription Realtime existente (linhas 204-226):**
+- Adicionar filtro por `tenant_id` na subscription usando `filter: 'tenant_id=eq.{tenantId}'`
+- Disparar `toast.info("Nova notificacao: {titulo}")` quando uma nova notificacao chegar via Realtime
+- Tambem escutar eventos DELETE para manter o estado sincronizado quando notificacoes sao removidas por outros dispositivos/abas
+- Buscar o `tenantId` antes de configurar o channel para aplicar o filtro
 
-Adicionar o plugin `VitePWA` com as seguintes configuracoes:
-- **registerType**: `autoUpdate` (atualiza o service worker automaticamente)
-- **manifest**: Nome "GeoGestor", cores baseadas na paleta do design system (primary purple `#7c3aed`), icones PWA
-- **workbox**: Estrategias de cache para assets estaticos e fontes Google
+**Remover `checkPendingPayments` do retorno do hook:**
+- A funcao `checkPendingPayments` sera movida para ser chamada apenas uma vez no mount (dentro do proprio hook), sem expor para o componente
+- Remover a necessidade do `NotificationsMenu` gerenciar intervalos
 
-### 3. Criar icones PWA
+**Manter a verificacao inicial de pagamentos pendentes dentro do hook:**
+- Chamar `checkPendingPayments` uma unica vez no `useEffect` de inicializacao, usando `sessionStorage` para controlar frequencia (max 1x por hora)
+- Sem `setInterval` -- novas notificacoes geradas pela RPC serao capturadas automaticamente pelo Realtime
 
-Adicionar na pasta `public/`:
-- `pwa-192x192.png` - Icone 192x192 (gerado via SVG inline)
-- `pwa-512x512.png` - Icone 512x512
-- `apple-touch-icon-180x180.png` - Icone para iOS
+### 2. `src/components/layout/NotificationsMenu.tsx`
 
-Como nao temos icones personalizados, criaremos um SVG simples com as iniciais "GG" (GeoGestor) usando as cores do design system, e o plugin gerara os icones necessarios.
-
-### 4. Atualizar `index.html`
-
-Adicionar meta tags essenciais para PWA:
-- `<meta name="theme-color" content="#7c3aed">`
-- `<link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">`
-- `<meta name="apple-mobile-web-app-capable" content="yes">`
-- `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`
-
-### 5. Criar componente `PWAPrompt.tsx`
-
-Componente que aparece como banner fixo no rodape em dispositivos moveis:
-- Detecta se o app ja esta instalado (via `display-mode: standalone`)
-- Captura o evento `beforeinstallprompt` do navegador
-- Exibe botao "Adicionar a Tela Inicial" com icone e texto explicativo
-- Botao de fechar/dispensar (salva preferencia no localStorage)
-- Design consistente com o design system (cores primary purple)
-- Automaticamente oculto em desktop e quando ja instalado
-
-### 6. Integrar `PWAPrompt` no `App.tsx`
-
-Adicionar o componente `PWAPrompt` dentro do layout principal para que apareca em todas as paginas.
-
----
-
-## Arquivos a Criar/Modificar
-
-| Arquivo | Acao | Descricao |
-|---------|------|-----------|
-| `package.json` | Modificar | Adicionar `vite-plugin-pwa` |
-| `vite.config.ts` | Modificar | Configurar plugin VitePWA com manifest |
-| `index.html` | Modificar | Meta tags PWA (theme-color, apple-touch-icon) |
-| `public/pwa-icon.svg` | Criar | Icone SVG base do GeoGestor |
-| `public/pwa-192x192.png` | Criar | Icone PWA 192x192 |
-| `public/pwa-512x512.png` | Criar | Icone PWA 512x512 |
-| `public/apple-touch-icon-180x180.png` | Criar | Icone Apple Touch |
-| `src/components/pwa/PWAPrompt.tsx` | Criar | Banner de instalacao mobile |
-| `src/App.tsx` | Modificar | Incluir PWAPrompt |
-
----
+**Remover todo o `useEffect` com `setInterval` (linhas 53-72):**
+- O componente nao precisa mais gerenciar polling -- o Realtime cuida de tudo
+- Remover `checkPendingPayments` da desestruturacao do hook
 
 ## Detalhes Tecnicos
 
-### Configuracao do vite-plugin-pwa
+### Subscription Realtime com filtro de tenant
 
 ```typescript
-VitePWA({
-  registerType: 'autoUpdate',
-  includeAssets: ['favicon.ico', 'pwa-icon.svg'],
-  manifest: {
-    name: 'GeoGestor - Gestao e Performance',
-    short_name: 'GeoGestor',
-    description: 'Sistema de gestao para topografia',
-    theme_color: '#7c3aed',
-    background_color: '#ffffff',
-    display: 'standalone',
-    orientation: 'portrait',
-    start_url: '/',
-    icons: [
-      { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-      { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-      { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
-    ]
-  },
-  workbox: {
-    globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-    runtimeCaching: [
-      {
-        urlPattern: /^https:\/\/fonts\.googleapis\.com/,
-        handler: 'StaleWhileRevalidate',
-        options: { cacheName: 'google-fonts-stylesheets' }
-      },
-      {
-        urlPattern: /^https:\/\/fonts\.gstatic\.com/,
-        handler: 'CacheFirst',
-        options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } }
-      }
-    ]
+const setupRealtime = async () => {
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) return;
+
+  // Verificar pagamentos 1x por sessao
+  const lastCheck = sessionStorage.getItem('lastPaymentCheck');
+  const now = Date.now();
+  if (!lastCheck || now - parseInt(lastCheck) > 3600000) {
+    checkPendingPayments();
+    sessionStorage.setItem('lastPaymentCheck', now.toString());
   }
-})
+
+  const channel = supabase
+    .channel('notificacoes-realtime')
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'notificacoes',
+        filter: `tenant_id=eq.${tenantId}`
+      },
+      (payload) => {
+        const nova = payload.new as Notification;
+        setNotifications(prev => [nova, ...prev].slice(0, 10));
+        toast.info(`Nova notificação: ${nova.titulo}`);
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'notificacoes',
+        filter: `tenant_id=eq.${tenantId}`
+      },
+      (payload) => {
+        const removed = payload.old as any;
+        setNotifications(prev =>
+          prev.filter(n => n.id_notificacao !== removed.id_notificacao)
+        );
+      }
+    )
+    .subscribe();
+
+  return channel;
+};
 ```
 
-### PWAPrompt - Logica Principal
+### Arquivos Modificados
 
-```typescript
-// Captura o evento beforeinstallprompt
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  setDeferredPrompt(e);
-  setShowPrompt(true);
-});
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/hooks/useNotifications.ts` | Melhorar Realtime com filtro tenant, toast, DELETE; internalizar check de pagamentos; remover `checkPendingPayments` do retorno |
+| `src/components/layout/NotificationsMenu.tsx` | Remover useEffect com setInterval e referencia a checkPendingPayments |
 
-// Verifica se ja esta instalado
-const isInstalled = window.matchMedia('(display-mode: standalone)').matches;
+## Resultado
 
-// Verifica se usuario dispensou
-const isDismissed = localStorage.getItem('pwa-prompt-dismissed');
-```
+- Notificacoes aparecem instantaneamente via Realtime (filtradas por tenant)
+- Toast automatico "Nova notificacao: [titulo]" ao receber INSERT
+- Sem polling/setInterval -- zero chamadas desnecessarias
+- Verificacao de pagamentos pendentes mantida 1x por sessao (dentro do hook)
+- Estado sincronizado entre abas via eventos DELETE
 
-### Design do Banner
-
-- Posicao fixa no rodape (`fixed bottom-0`)
-- Fundo com gradiente primary
-- Texto branco com icone de download
-- Botao "Instalar" e botao "X" para fechar
-- Animacao de entrada suave (slide-up)
-- Visivel apenas em mobile (hidden em `md:` breakpoint)
-
----
-
-## Resultado Esperado
-
-- App instalavel diretamente do navegador mobile
-- Icone do GeoGestor na tela inicial do celular
-- Carregamento mais rapido com cache de assets
-- Banner discreto sugerindo instalacao para usuarios mobile
-- Experiencia fullscreen sem barra do navegador apos instalacao

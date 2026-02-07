@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, MapPin, Info, Receipt, User, Calculator, DollarSign, StickyNote, Percent, CreditCard, Banknote, Smartphone, ArrowLeftRight, FileText } from "lucide-react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { getCurrentTenantId } from "@/services/supabase.service";
+import { logAuditEvent } from "@/services/audit.service";
 import { PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, EXPENSE_STATUS } from "@/constants/budgetStatus";
 
 interface OrcamentoDialogProps {
@@ -477,6 +478,15 @@ export function OrcamentoDialog({ open, onOpenChange, orcamento, clienteId, onSu
           orcamentoId
         );
       }
+
+      // Audit log
+      await logAuditEvent({
+        action: orcamento ? 'UPDATE' : 'INSERT',
+        entity: 'Orçamento',
+        entityId: orcamentoId,
+        oldData: orcamento ? { ...orcamento } : undefined,
+        newData: { ...orcamentoData, codigo_orcamento: codigoOrcamento },
+      });
 
       toast.success(orcamento ? "Orçamento atualizado com sucesso!" : "Orçamento criado com sucesso!");
       onSuccess();

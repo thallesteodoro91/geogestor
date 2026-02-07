@@ -26,6 +26,7 @@ const GeoBotPage = lazy(() => import("./pages/GeoBot"));
 const Calendario = lazy(() => import("./pages/Calendario"));
 const CalendarioDetalhes = lazy(() => import("./pages/CalendarioDetalhes"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
+const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 
@@ -65,6 +66,7 @@ const App = () => {
                     <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
                     <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
                     <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+                    <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

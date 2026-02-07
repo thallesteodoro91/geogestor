@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { createDespesa, updateDespesa, deleteDespesa } from "@/modules/finance/services/despesa.service";
+import { logAuditEvent } from "@/services/audit.service";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,6 +163,8 @@ export default function Despesas() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
+      const action = editingId ? 'UPDATE' : 'INSERT';
+      logAuditEvent({ action, entity: 'Despesa', entityId: editingId || undefined, newData: { ...formData } });
       toast.success(editingId ? "Despesa atualizada!" : "Despesa adicionada!");
       setIsDialogOpen(false);
       resetForm();
@@ -177,8 +180,9 @@ export default function Despesas() {
       const result = await deleteDespesa(id);
       if (result.error) throw result.error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
+      logAuditEvent({ action: 'DELETE', entity: 'Despesa', entityId: id });
       toast.success("Despesa excluída!");
     },
     onError: (error: any) => {

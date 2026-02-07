@@ -11,6 +11,7 @@ import { useTenant } from '@/contexts/TenantContext';
 import { toast } from 'sonner';
 import { createServico, updateServico } from '@/modules/operations';
 import { registrarCriacaoServico, registrarMudancaStatus } from '@/modules/operations/services/servico-eventos.service';
+import { logAuditEvent } from '@/services/audit.service';
 import { SERVICE_STATUS, SERVICE_STATUS_OPTIONS } from '@/constants/serviceStatus';
 
 export interface ServicoFormData {
@@ -128,10 +129,17 @@ export function NovoServicoDialog({
         });
         if (error) throw error;
 
-        // Registrar evento de mudança de status
         if (oldStatus !== data.situacao_do_servico) {
           await registrarMudancaStatus(editingServico.id_servico, oldStatus || SERVICE_STATUS.PENDENTE, data.situacao_do_servico);
         }
+
+        await logAuditEvent({
+          action: 'UPDATE',
+          entity: 'Serviço',
+          entityId: editingServico.id_servico,
+          oldData: { ...editingServico },
+          newData: { ...data },
+        });
       } else {
         const { data: newServico, error } = await createServico({
           nome_do_servico: data.nome_do_servico,
@@ -146,9 +154,14 @@ export function NovoServicoDialog({
         });
         if (error) throw error;
 
-        // Registrar evento de criação
         if (newServico) {
           await registrarCriacaoServico(newServico.id_servico, data.nome_do_servico);
+          await logAuditEvent({
+            action: 'INSERT',
+            entity: 'Serviço',
+            entityId: newServico.id_servico,
+            newData: { ...data },
+          });
         }
       }
     },

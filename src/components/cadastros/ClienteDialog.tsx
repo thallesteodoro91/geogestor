@@ -9,6 +9,7 @@ import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
@@ -115,23 +116,26 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       };
 
       if (cliente) {
-        // Remover tenant_id do update (não deve ser alterado)
         const { tenant_id, ...updateData } = submitData;
         
         const { error } = await supabase
           .from('dim_cliente')
           .update(updateData)
           .eq('id_cliente', cliente.id_cliente)
-          .eq('tenant_id', memberData.tenant_id); // Filtro explícito de segurança
+          .eq('tenant_id', memberData.tenant_id);
         
         if (error) throw error;
+        await logAuditEvent({ action: 'UPDATE', entity: 'Cliente', entityId: cliente.id_cliente, oldData: { ...cliente }, newData: updateData });
         toast.success("Cliente atualizado com sucesso!");
       } else {
-        const { error } = await supabase
+        const { data: newCliente, error } = await supabase
           .from('dim_cliente')
-          .insert([submitData]);
+          .insert([submitData])
+          .select('id_cliente')
+          .single();
         
         if (error) throw error;
+        await logAuditEvent({ action: 'INSERT', entity: 'Cliente', entityId: newCliente?.id_cliente, newData: submitData });
         toast.success("Cliente cadastrado com sucesso!");
       }
       

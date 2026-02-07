@@ -8,6 +8,7 @@ import { Check, X, Clock, Receipt, ChevronDown, ChevronUp } from "lucide-react";
 import { toast } from "sonner";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { EXPENSE_STATUS } from "@/constants/budgetStatus";
+import { logAuditEvent } from "@/services/audit.service";
 
 interface DespesaPendente {
   id_despesas: string;
@@ -68,6 +69,7 @@ export function DespesasPendentes() {
         .update({ status: EXPENSE_STATUS.CONFIRMADA })
         .eq('id_despesas', id);
       if (error) throw error;
+      await logAuditEvent({ action: 'UPDATE', entity: 'Despesa', entityId: id, newData: { status: EXPENSE_STATUS.CONFIRMADA } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['despesas-pendentes'] });
@@ -86,6 +88,7 @@ export function DespesasPendentes() {
         .delete()
         .eq('id_despesas', id);
       if (error) throw error;
+      await logAuditEvent({ action: 'DELETE', entity: 'Despesa', entityId: id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['despesas-pendentes'] });

@@ -1,101 +1,106 @@
 
+# Mover Agregacao de Graficos do Frontend para o Backend
 
-# Refatorar Notificacoes para Supabase Realtime
+## Analise da Situacao Atual
 
-## Situacao Atual
+O `DashboardFinanceiro.tsx` ja usa a RPC `get_financial_dashboard_metrics` para KPIs e dados agregados -- isso ja esta otimizado. O problema real de performance esta no arquivo `src/hooks/useChartData.ts`, que contem 3 hooks que buscam **todas as linhas** de `fato_orcamento` e `fato_despesas` e fazem agregacao mensal no JavaScript:
 
-O hook `useNotifications.ts` ja possui uma subscription Realtime basica para INSERTs (linhas 208-221), mas o `NotificationsMenu.tsx` ainda usa `setInterval` para verificar pagamentos pendentes a cada hora (linhas 54-72). A subscription existente nao dispara Toast e nao filtra por tenant.
+- `useRevenueChartData` -- usado por `RevenueChart.tsx`
+- `useProfitMarginChartData` -- usado por `ProfitMarginChart.tsx`
+- `useRevenueTrendChartData` -- usado por `RevenueTrendChart.tsx` (dentro do DashboardFinanceiro)
 
-## Mudancas Planejadas
+Cada hook faz 2 queries separadas (orcamentos + despesas), baixa potencialmente milhares de linhas, e agrega com `.forEach()` / `.reduce()` no cliente.
 
-### 1. `src/hooks/useNotifications.ts`
+## Plano de Implementacao
 
-**Melhorar a subscription Realtime existente (linhas 204-226):**
-- Adicionar filtro por `tenant_id` na subscription usando `filter: 'tenant_id=eq.{tenantId}'`
-- Disparar `toast.info("Nova notificacao: {titulo}")` quando uma nova notificacao chegar via Realtime
-- Tambem escutar eventos DELETE para manter o estado sincronizado quando notificacoes sao removidas por outros dispositivos/abas
-- Buscar o `tenantId` antes de configurar o channel para aplicar o filtro
+### 1. Migration SQL -- Criar RPC `get_monthly_financial_data`
 
-**Remover `checkPendingPayments` do retorno do hook:**
-- A funcao `checkPendingPayments` sera movida para ser chamada apenas uma vez no mount (dentro do proprio hook), sem expor para o componente
-- Remover a necessidade do `NotificationsMenu` gerenciar intervalos
+Uma unica funcao RPC que retorna dados mensais agregados, substituindo os 3 hooks com uma fonte de dados unificada.
 
-**Manter a verificacao inicial de pagamentos pendentes dentro do hook:**
-- Chamar `checkPendingPayments` uma unica vez no `useEffect` de inicializacao, usando `sessionStorage` para controlar frequencia (max 1x por hora)
-- Sem `setInterval` -- novas notificacoes geradas pela RPC serao capturadas automaticamente pelo Realtime
+```sql
+CREATE OR REPLACE FUNCTION public.get_monthly_financial_data(p_year integer)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_tenant_id UUID;
+  v_result JSON;
+BEGIN
+  v_tenant_id := get_user_tenant_id(auth.uid());
 
-### 2. `src/components/layout/NotificationsMenu.tsx`
+  SELECT json_agg(row_to_json(monthly))
+  INTO v_result
+  FROM (
+    SELECT
+      m.mes,
+      COALESCE(orc.receita, 0) AS receita,
+      COALESCE(orc.impostos, 0) AS impostos,
+      COALESCE(desp.custos_variaveis, 0) AS custos_variaveis,
+      COALESCE(desp.despesas_fixas, 0) AS despesas_fixas,
+      COALESCE(desp.total_despesas, 0) AS total_despesas
+    FROM generate_series(1, 12) AS m(mes)
+    LEFT JOIN (
+      SELECT
+        EXTRACT(MONTH FROM data_orcamento)::int AS mes,
+        SUM(receita_esperada) AS receita,
+        SUM(CASE WHEN incluir_imposto THEN COALESCE(valor_imposto, 0) ELSE 0 END) AS impostos
+      FROM fato_orcamento
+      WHERE tenant_id = v_tenant_id
+        AND EXTRACT(YEAR FROM data_orcamento) = p_year
+      GROUP BY 1
+    ) orc ON orc.mes = m.mes
+    LEFT JOIN (
+      SELECT
+        EXTRACT(MONTH FROM d.data_da_despesa)::int AS mes,
+        SUM(CASE WHEN t.classificacao = 'VARIAVEL' THEN d.valor_da_despesa ELSE 0 END) AS custos_variaveis,
+        SUM(CASE WHEN t.classificacao != 'VARIAVEL' OR t.classificacao IS NULL THEN d.valor_da_despesa ELSE 0 END) AS despesas_fixas,
+        SUM(d.valor_da_despesa) AS total_despesas
+      FROM fato_despesas d
+      LEFT JOIN dim_tipodespesa t ON d.id_tipodespesa = t.id_tipodespesa
+      WHERE d.tenant_id = v_tenant_id
+        AND EXTRACT(YEAR FROM d.data_da_despesa) = p_year
+      GROUP BY 1
+    ) desp ON desp.mes = m.mes
+    ORDER BY m.mes
+  ) monthly;
 
-**Remover todo o `useEffect` com `setInterval` (linhas 53-72):**
-- O componente nao precisa mais gerenciar polling -- o Realtime cuida de tudo
-- Remover `checkPendingPayments` da desestruturacao do hook
-
-## Detalhes Tecnicos
-
-### Subscription Realtime com filtro de tenant
-
-```typescript
-const setupRealtime = async () => {
-  const tenantId = await getCurrentTenantId();
-  if (!tenantId) return;
-
-  // Verificar pagamentos 1x por sessao
-  const lastCheck = sessionStorage.getItem('lastPaymentCheck');
-  const now = Date.now();
-  if (!lastCheck || now - parseInt(lastCheck) > 3600000) {
-    checkPendingPayments();
-    sessionStorage.setItem('lastPaymentCheck', now.toString());
-  }
-
-  const channel = supabase
-    .channel('notificacoes-realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'notificacoes',
-        filter: `tenant_id=eq.${tenantId}`
-      },
-      (payload) => {
-        const nova = payload.new as Notification;
-        setNotifications(prev => [nova, ...prev].slice(0, 10));
-        toast.info(`Nova notificação: ${nova.titulo}`);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'notificacoes',
-        filter: `tenant_id=eq.${tenantId}`
-      },
-      (payload) => {
-        const removed = payload.old as any;
-        setNotifications(prev =>
-          prev.filter(n => n.id_notificacao !== removed.id_notificacao)
-        );
-      }
-    )
-    .subscribe();
-
-  return channel;
-};
+  RETURN COALESCE(v_result, '[]'::json);
+END;
+$$;
 ```
+
+**Por que uma unica RPC em vez de 3:**
+- Os 3 hooks buscam exatamente as mesmas tabelas (`fato_orcamento` + `fato_despesas`) para o mesmo ano
+- Uma unica chamada retorna todos os campos necessarios (receita, impostos, custos variaveis, despesas fixas)
+- O frontend deriva as 3 visualizacoes diferentes a partir dos mesmos dados base
+
+### 2. Frontend -- Refatorar `src/hooks/useChartData.ts`
+
+Substituir as 3 implementacoes que buscam linhas cruas por uma unica query RPC compartilhada:
+
+- Criar um hook interno `useMonthlyFinancialData(year)` que chama `supabase.rpc('get_monthly_financial_data', { p_year })`
+- `useRevenueChartData` -- usa os dados para retornar `{ month, receita, despesa }`
+- `useProfitMarginChartData` -- calcula margens bruta/liquida a partir dos dados agregados
+- `useRevenueTrendChartData` -- calcula receita bruta, lucro liquido e margem %
+
+Cada hook mantem a mesma interface de retorno para nao quebrar os componentes que os consomem (`RevenueChart`, `ProfitMarginChart`, `RevenueTrendChart`).
+
+### 3. Frontend -- Adicionar funcao ao service `src/modules/finance/services/kpi.service.ts`
+
+Adicionar `fetchMonthlyFinancialData(year: number)` que encapsula a chamada RPC.
 
 ### Arquivos Modificados
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `src/hooks/useNotifications.ts` | Melhorar Realtime com filtro tenant, toast, DELETE; internalizar check de pagamentos; remover `checkPendingPayments` do retorno |
-| `src/components/layout/NotificationsMenu.tsx` | Remover useEffect com setInterval e referencia a checkPendingPayments |
+| Migration SQL | Criar RPC `get_monthly_financial_data` |
+| `src/modules/finance/services/kpi.service.ts` | Adicionar `fetchMonthlyFinancialData()` |
+| `src/hooks/useChartData.ts` | Substituir 3 queries cruas por 1 chamada RPC compartilhada |
 
-## Resultado
+### Resultado
 
-- Notificacoes aparecem instantaneamente via Realtime (filtradas por tenant)
-- Toast automatico "Nova notificacao: [titulo]" ao receber INSERT
-- Sem polling/setInterval -- zero chamadas desnecessarias
-- Verificacao de pagamentos pendentes mantida 1x por sessao (dentro do hook)
-- Estado sincronizado entre abas via eventos DELETE
-
+- **Antes:** 6 queries ao banco (2 por hook x 3 hooks) baixando todas as linhas, agregacao no JS
+- **Depois:** 1 query RPC retornando 12 objetos (um por mes), ~1KB de JSON
+- Componentes `RevenueChart`, `ProfitMarginChart`, `RevenueTrendChart` e `DashboardFinanceiro` continuam funcionando sem alteracao

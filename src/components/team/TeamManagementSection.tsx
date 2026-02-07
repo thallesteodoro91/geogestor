@@ -6,6 +6,7 @@ import { PendingInvitesList } from "./PendingInvitesList";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+import { Separator } from "@/components/ui/separator";
 
 export function TeamManagementSection() {
   const { maxUsers, isActive } = usePlanLimits();
@@ -15,34 +16,32 @@ export function TeamManagementSection() {
   const isAtLimit = isActive && usersCount >= maxUsers;
 
   return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              <div>
-                <CardTitle>Gestão de Equipe</CardTitle>
-                <CardDescription>
-                  Gerencie os membros da sua equipe ({usersCount}/{maxUsers} usuários)
-                </CardDescription>
-              </div>
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            <div>
+              <CardTitle>Gestão de Equipe</CardTitle>
+              <CardDescription>
+                Gerencie os membros da sua equipe ({usersCount}/{maxUsers} usuários)
+              </CardDescription>
             </div>
-            <InviteUserDialog />
           </div>
-        </CardHeader>
-        <CardContent>
-          {(isNearLimit || isAtLimit) && (
-            <div className="mb-4">
-              <PlanLimitAlert resource="users" currentCount={usersCount} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <InviteUserDialog />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {(isNearLimit || isAtLimit) && (
+          <PlanLimitAlert resource="users" currentCount={usersCount} />
+        )}
 
-      <PendingInvitesList />
-      
-      <TeamMembersList />
-    </div>
+        <PendingInvitesList inline />
+
+        <Separator />
+
+        <TeamMembersList inline />
+      </CardContent>
+    </Card>
   );
 }

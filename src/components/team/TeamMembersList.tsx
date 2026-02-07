@@ -35,7 +35,11 @@ interface TeamMember {
   profile?: Profile | null;
 }
 
-export function TeamMembersList() {
+interface TeamMembersListProps {
+  inline?: boolean;
+}
+
+export function TeamMembersList({ inline }: TeamMembersListProps) {
   const { tenant } = useTenant();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -44,13 +48,8 @@ export function TeamMembersList() {
     queryKey: ["team-members", tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return [];
-
-      // Usar função RPC SECURITY DEFINER para evitar recursão RLS
       const { data, error } = await supabase.rpc('get_tenant_members');
-
       if (error) throw error;
-
-      // Mapear para o formato esperado pelo componente
       return (data || []).map((m: any) => ({
         id: m.id,
         user_id: m.user_id,
@@ -71,14 +70,11 @@ export function TeamMembersList() {
     queryKey: ["current-member", user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-
-      // Usuário pode ler seu próprio registro diretamente
       const { data, error } = await supabase
         .from("tenant_members")
         .select("role")
         .eq("user_id", user.id)
         .maybeSingle();
-
       if (error) return null;
       return data;
     },
@@ -93,7 +89,6 @@ export function TeamMembersList() {
         .from("tenant_members")
         .delete()
         .eq("id", memberId);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -126,45 +121,24 @@ export function TeamMembersList() {
     });
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5 text-primary" />
-            <CardTitle>Membros da Equipe</CardTitle>
+  const loadingSkeleton = (
+    <div className="space-y-3">
+      {[1, 2].map((i) => (
+        <div key={i} className="flex items-center gap-4 p-4 border rounded-lg animate-pulse">
+          <div className="h-10 w-10 rounded-full bg-muted" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-32 bg-muted rounded" />
+            <div className="h-3 w-24 bg-muted rounded" />
           </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-4 p-4 border rounded-lg animate-pulse">
-                <div className="h-10 w-10 rounded-full bg-muted" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-32 bg-muted rounded" />
-                  <div className="h-3 w-24 bg-muted rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          <CardTitle>Membros da Equipe</CardTitle>
         </div>
-        <CardDescription>
-          {members?.length || 0} membro{(members?.length || 0) !== 1 ? "s" : ""} ativo{(members?.length || 0) !== 1 ? "s" : ""}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+      ))}
+    </div>
+  );
+
+  const content = (
+    <div className="space-y-3">
+      {isLoading ? loadingSkeleton : (
+        <>
           {members?.map((member) => (
             <div
               key={member.id}
@@ -246,8 +220,32 @@ export function TeamMembersList() {
               <p>Nenhum membro encontrado</p>
             </div>
           )}
+        </>
+      )}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div>
+        <h4 className="text-sm font-medium mb-3">Membros da Equipe</h4>
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <CardTitle>Membros da Equipe</CardTitle>
         </div>
-      </CardContent>
+        <CardDescription>
+          {members?.length || 0} membro{(members?.length || 0) !== 1 ? "s" : ""} ativo{(members?.length || 0) !== 1 ? "s" : ""}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

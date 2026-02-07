@@ -17,7 +17,11 @@ interface PendingInvite {
   expires_at: string;
 }
 
-export function PendingInvitesList() {
+interface PendingInvitesListProps {
+  inline?: boolean;
+}
+
+export function PendingInvitesList({ inline }: PendingInvitesListProps) {
   const { tenant } = useTenant();
   const queryClient = useQueryClient();
 
@@ -25,7 +29,6 @@ export function PendingInvitesList() {
     queryKey: ["pending-invites", tenant?.id],
     queryFn: async () => {
       if (!tenant?.id) return [];
-
       const { data, error } = await supabase
         .from("tenant_invites")
         .select("*")
@@ -33,7 +36,6 @@ export function PendingInvitesList() {
         .is("accepted_at", null)
         .gt("expires_at", new Date().toISOString())
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data as PendingInvite[];
     },
@@ -46,7 +48,6 @@ export function PendingInvitesList() {
         .from("tenant_invites")
         .delete()
         .eq("id", inviteId);
-
       if (error) throw error;
     },
     onSuccess: () => {
@@ -60,17 +61,10 @@ export function PendingInvitesList() {
 
   const resendInviteMutation = useMutation({
     mutationFn: async (invite: PendingInvite) => {
-      // Delete old invite
-      await supabase
-        .from("tenant_invites")
-        .delete()
-        .eq("id", invite.id);
-
-      // Create new invite via edge function
+      await supabase.from("tenant_invites").delete().eq("id", invite.id);
       const { data, error } = await supabase.functions.invoke("invite-user", {
         body: { email: invite.email, role: invite.role },
       });
-
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       return data;
@@ -86,44 +80,69 @@ export function PendingInvitesList() {
 
   const formatExpiry = (expiresAt: string) => {
     const expiry = new Date(expiresAt);
-    const now = new Date();
-    
-    if (expiry < now) return "Expirado";
-    
-    return `Expira ${formatDistanceToNow(expiry, { 
-      locale: ptBR, 
-      addSuffix: true 
-    })}`;
+    if (expiry < new Date()) return "Expirado";
+    return `Expira ${formatDistanceToNow(expiry, { locale: ptBR, addSuffix: true })}`;
   };
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Mail className="h-5 w-5 text-primary" />
-            <CardTitle>Convites Pendentes</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {[1, 2].map((i) => (
-              <div key={i} className="flex items-center gap-4 p-4 border rounded-lg animate-pulse">
-                <div className="h-10 w-10 rounded-full bg-muted" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-40 bg-muted rounded" />
-                  <div className="h-3 w-24 bg-muted rounded" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (!invites || invites.length === 0) return null;
 
-  if (!invites || invites.length === 0) {
-    return null;
+  const content = (
+    <div className="space-y-3">
+      {invites.map((invite) => (
+        <div
+          key={invite.id}
+          className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+        >
+          <div className="flex items-center gap-4">
+            <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium">{invite.email}</p>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>{formatExpiry(invite.expires_at)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">
+              {invite.role === "admin" ? "Admin" : "Usuário"}
+            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => resendInviteMutation.mutate(invite)}
+              disabled={resendInviteMutation.isPending}
+              title="Reenviar convite"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={() => cancelInviteMutation.mutate(invite.id)}
+              disabled={cancelInviteMutation.isPending}
+              title="Cancelar convite"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (inline) {
+    return (
+      <div>
+        <h4 className="text-sm font-medium mb-3">Convites Pendentes</h4>
+        {content}
+      </div>
+    );
   }
 
   return (
@@ -137,57 +156,7 @@ export function PendingInvitesList() {
           {invites.length} convite{invites.length !== 1 ? "s" : ""} aguardando resposta
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
-          {invites.map((invite) => (
-            <div
-              key={invite.id}
-              className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                  <Mail className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{invite.email}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatExpiry(invite.expires_at)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">
-                  {invite.role === "admin" ? "Admin" : "Usuário"}
-                </Badge>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => resendInviteMutation.mutate(invite)}
-                  disabled={resendInviteMutation.isPending}
-                  title="Reenviar convite"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => cancelInviteMutation.mutate(invite.id)}
-                  disabled={cancelInviteMutation.isPending}
-                  title="Cancelar convite"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

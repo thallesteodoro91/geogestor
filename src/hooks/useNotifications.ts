@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getCurrentTenantId } from "@/services/supabase.service";
@@ -18,6 +18,7 @@ export interface Notification {
 export const useNotifications = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -75,8 +76,6 @@ export const useNotifications = () => {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return;
       
-      // Registrar dismissal para notificações de vencimento antes de deletar
-      // Isso garante que não apareçam novamente por 3 dias
       const overdueNotifications = notifications.filter(n => n.tipo === 'vencido' && n.id_referencia);
       
       if (overdueNotifications.length > 0) {
@@ -87,7 +86,6 @@ export const useNotifications = () => {
           dismissed_at: new Date().toISOString()
         }));
         
-        // Upsert para atualizar data de dismissal se já existir
         await supabase
           .from('notificacao_dismissals')
           .upsert(dismissals, { 
@@ -118,7 +116,6 @@ export const useNotifications = () => {
       
       const notification = notifications.find(n => n.id_notificacao === id);
       
-      // Se for notificação de vencimento, registrar dismissal
       if (notification?.tipo === 'vencido' && notification?.id_referencia) {
         await supabase
           .from('notificacao_dismissals')
@@ -133,7 +130,6 @@ export const useNotifications = () => {
           });
       }
       
-      // Deletar a notificação
       const { error } = await supabase
         .from('notificacoes')
         .delete()
@@ -156,7 +152,6 @@ export const useNotifications = () => {
     id_referencia: string | null = null
   ) => {
     try {
-      // Obter tenant_id do usuário atual
       const tenantId = await getCurrentTenantId();
       
       if (!tenantId) {
@@ -180,8 +175,7 @@ export const useNotifications = () => {
 
       if (error) throw error;
       
-      // Adicionar na lista local
-      setNotifications(prev => [data, ...prev]);
+      // O Realtime INSERT handler já adiciona na lista local
       return data;
     } catch (error: any) {
       console.error('Erro ao criar notificação:', error);
@@ -194,7 +188,6 @@ export const useNotifications = () => {
       const { error } = await supabase.rpc('verificar_pagamentos_pendentes');
       if (error) throw error;
       
-      // Recarregar notificações após verificar pagamentos
       await fetchNotifications();
     } catch (error: any) {
       console.error('Erro ao verificar pagamentos pendentes:', error);
@@ -202,26 +195,67 @@ export const useNotifications = () => {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    let mounted = true;
 
-    // Realtime subscription
-    const channel = supabase
-      .channel('notificacoes-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notificacoes'
-        },
-        (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev]);
-        }
-      )
-      .subscribe();
+    const setup = async () => {
+      await fetchNotifications();
+
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId || !mounted) return;
+
+      // Verificar pagamentos 1x por sessão (max 1x por hora)
+      const lastCheck = sessionStorage.getItem('lastPaymentCheck');
+      const now = Date.now();
+      const oneHour = 60 * 60 * 1000;
+      if (!lastCheck || now - parseInt(lastCheck) > oneHour) {
+        checkPendingPayments();
+        sessionStorage.setItem('lastPaymentCheck', now.toString());
+      }
+
+      // Realtime com filtro por tenant
+      const channel = supabase
+        .channel('notificacoes-realtime')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notificacoes',
+            filter: `tenant_id=eq.${tenantId}`
+          },
+          (payload) => {
+            const nova = payload.new as Notification;
+            setNotifications(prev => [nova, ...prev].slice(0, 10));
+            toast.info(`Nova notificação: ${nova.titulo}`);
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notificacoes',
+            filter: `tenant_id=eq.${tenantId}`
+          },
+          (payload) => {
+            const removed = payload.old as any;
+            setNotifications(prev =>
+              prev.filter(n => n.id_notificacao !== removed.id_notificacao)
+            );
+          }
+        )
+        .subscribe();
+
+      channelRef.current = channel;
+    };
+
+    setup();
 
     return () => {
-      supabase.removeChannel(channel);
+      mounted = false;
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
     };
   }, []);
 
@@ -236,7 +270,6 @@ export const useNotifications = () => {
     clearAllNotifications,
     dismissNotification,
     createNotification,
-    checkPendingPayments,
     refetch: fetchNotifications
   };
 };

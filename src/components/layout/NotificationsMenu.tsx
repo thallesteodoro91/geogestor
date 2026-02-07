@@ -14,7 +14,6 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useEffect } from "react";
 
 const getIcon = (tipo: string) => {
   switch (tipo) {
@@ -47,29 +46,8 @@ const getPriorityColor = (prioridade: string) => {
 };
 
 export const NotificationsMenu = () => {
-  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, dismissNotification, checkPendingPayments } = useNotifications();
+  const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, dismissNotification } = useNotifications();
   const navigate = useNavigate();
-
-  // Verificar pagamentos pendentes apenas uma vez por sessão (não a cada navegação)
-  useEffect(() => {
-    const lastCheck = sessionStorage.getItem('lastPaymentCheck');
-    const now = Date.now();
-    const oneHour = 60 * 60 * 1000;
-    
-    // Só verificar se não foi verificado na última hora
-    if (!lastCheck || now - parseInt(lastCheck) > oneHour) {
-      checkPendingPayments();
-      sessionStorage.setItem('lastPaymentCheck', now.toString());
-    }
-    
-    // Verificar a cada 1 hora enquanto o componente está montado
-    const interval = setInterval(() => {
-      checkPendingPayments();
-      sessionStorage.setItem('lastPaymentCheck', Date.now().toString());
-    }, oneHour);
-
-    return () => clearInterval(interval);
-  }, []);
 
   const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
     e.stopPropagation();

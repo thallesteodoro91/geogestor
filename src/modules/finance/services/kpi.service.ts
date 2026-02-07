@@ -107,6 +107,29 @@ export async function fetchClienteKPIs(clienteId: string) {
  * Nota: A view vw_kpis_financeiros já calcula essas métricas corretamente
  * Esta função é mantida para cálculos adicionais no frontend se necessário
  */
+/**
+ * Busca dados financeiros mensais agregados via RPC (substitui queries cruas)
+ */
+export interface MonthlyFinancialRow {
+  mes: number;
+  receita: number;
+  impostos: number;
+  custos_variaveis: number;
+  despesas_fixas: number;
+  total_despesas: number;
+}
+
+export async function fetchMonthlyFinancialData(year: number): Promise<MonthlyFinancialRow[]> {
+  const { data, error } = await supabase.rpc('get_monthly_financial_data', { p_year: year });
+
+  if (error) {
+    console.error('Error fetching monthly financial data:', error);
+    throw error;
+  }
+
+  return (data as unknown as MonthlyFinancialRow[]) || [];
+}
+
 export function processarMetricasDerivadas(kpis: KPIData): KPIData {
   // Se já temos custos_variaveis_reais, usamos para calcular margem de contribuição correta
   const custosVariaveis = kpis.custos_variaveis_reais || 0;

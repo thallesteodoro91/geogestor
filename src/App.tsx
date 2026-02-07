@@ -9,6 +9,7 @@ import { ProtectedRoute } from "./components/ProtectedRoute";
 import { TenantProvider } from "./contexts/TenantContext";
 import { ChartSettingsProvider } from "./contexts/ChartSettingsContext";
 import { AppSkeleton } from "./components/layout/AppSkeleton";
+import { PWAPrompt } from "./components/pwa/PWAPrompt";
 
 const GestaoEmpresa = lazy(() => import("./pages/GestaoEmpresa"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
@@ -46,6 +47,7 @@ const App = () => {
             <TooltipProvider>
               <Toaster />
               <Sonner />
+              <PWAPrompt />
               <BrowserRouter>
                 <Suspense fallback={<AppSkeleton />}>
                   <Routes>

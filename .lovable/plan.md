@@ -1,190 +1,132 @@
 
-# Plano: Integração do Calendário com Google Agenda
+# Plano: Sistema de Logs de Auditoria
 
-## Visão Geral
+## Visao Geral
 
-Implementar sincronização bidirecional entre o calendário do dashboard (orçamentos e serviços) e o Google Calendar, permitindo que:
-1. Eventos criados/modificados no dashboard sejam refletidos no Google Calendar
-2. Modificações feitas no Google Calendar sejam sincronizadas de volta para o dashboard
+Criar um sistema completo de rastreabilidade que registra acoes criticas (INSERT, UPDATE, DELETE) realizadas pelos usuarios, permitindo que administradores saibam exatamente "quem fez o que e quando".
 
-## Arquitetura da Solução
+## Etapas de Implementacao
 
-```text
-┌─────────────────┐       ┌───────────────────┐       ┌─────────────────┐
-│   Dashboard     │◄─────►│  Edge Function    │◄─────►│ Google Calendar │
-│   (Frontend)    │       │  (Backend)        │       │     API         │
-└─────────────────┘       └───────────────────┘       └─────────────────┘
-        │                         │
-        │                         ▼
-        │                 ┌───────────────────┐
-        └────────────────►│   Supabase DB     │
-                          │ (calendar_sync)   │
-                          └───────────────────┘
+### 1. Criar tabela `audit_logs` (Migracao SQL)
+
+```sql
+CREATE TABLE public.audit_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id UUID NOT NULL,
+  user_id UUID NOT NULL,
+  action TEXT NOT NULL,          -- INSERT, UPDATE, DELETE
+  entity TEXT NOT NULL,          -- Orcamento, Despesa, Servico, Cliente, etc.
+  entity_id UUID,
+  old_data JSONB,
+  new_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indice para consultas por tenant + data
+CREATE INDEX idx_audit_logs_tenant_created ON audit_logs(tenant_id, created_at DESC);
+
+-- RLS: somente admins do tenant podem ler
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins can read audit logs"
+  ON audit_logs FOR SELECT
+  USING (
+    tenant_id = get_user_tenant_id(auth.uid())
+    AND has_role(auth.uid(), 'admin'::app_role)
+  );
+
+-- Qualquer usuario autenticado do tenant pode inserir logs
+CREATE POLICY "Users can insert audit logs"
+  ON audit_logs FOR INSERT
+  WITH CHECK (tenant_id = get_user_tenant_id(auth.uid()));
 ```
 
-## Etapas de Implementação
+### 2. Criar servico `AuditService` no frontend
 
-### 1. Configurar Conector Google Calendar
+Arquivo: `src/services/audit.service.ts`
 
-Utilizar o conector `google_calendar` disponível no Lovable Cloud para autenticação OAuth com a conta Google do usuário.
+- Funcao `logAuditEvent(action, entity, entityId, oldData?, newData?)` que insere na tabela `audit_logs` com `tenant_id` e `user_id` automaticos.
+- Sera chamado em pontos criticos do sistema:
+  - Aprovacao/edicao/exclusao de orcamentos
+  - Criacao/edicao/exclusao de despesas
+  - Criacao/edicao/exclusao de servicos
+  - Criacao/edicao/exclusao de clientes
 
-### 2. Criar Tabela de Sincronização
+### 3. Criar pagina `AuditLogs.tsx`
 
-Nova tabela `calendar_sync_settings` para armazenar configurações por usuário:
+Arquivo: `src/pages/AuditLogs.tsx`
 
-| Coluna | Tipo | Descrição |
-|--------|------|-----------|
-| id | UUID | Chave primária |
-| user_id | UUID | Referência ao usuário |
-| tenant_id | UUID | Referência ao tenant |
-| google_calendar_id | TEXT | ID do calendário Google selecionado |
-| sync_enabled | BOOLEAN | Sincronização ativa |
-| last_sync_at | TIMESTAMPTZ | Última sincronização |
-| sync_token | TEXT | Token para sincronização incremental |
+- Acessivel apenas para admins (verificacao via `has_role`)
+- Tabela cronologica com colunas: Data/Hora, Usuario, Acao, Entidade, Detalhes
+- Filtros por: periodo, tipo de acao, entidade
+- Badges coloridos para acoes (verde=INSERT, azul=UPDATE, vermelho=DELETE)
+- Paginacao usando o hook `usePagination` existente
+- Usa `ResponsiveTable` para compatibilidade mobile
+- Botao para expandir e ver old_data/new_data em JSON formatado
 
-Nova tabela `calendar_event_mappings` para mapear eventos locais com Google:
+### 4. Adicionar rota e navegacao
 
-| Coluna | Tipo | Descrição |
-|--------|------|-----------|
-| id | UUID | Chave primária |
-| tenant_id | UUID | Referência ao tenant |
-| local_event_type | TEXT | "orcamento" ou "servico" |
-| local_event_id | UUID | ID do evento local |
-| google_event_id | TEXT | ID do evento no Google |
-| last_synced_at | TIMESTAMPTZ | Última sincronização |
+- Rota `/audit-logs` em `App.tsx` (protegida)
+- Link na Sidebar dentro da secao "Base de Dados" com icone `Shield`
 
-### 3. Criar Edge Functions
+### 5. Integrar AuditService nos servicos existentes
 
-**`google-calendar-sync`** - Função principal para sincronização:
-- Listar calendários disponíveis do usuário
-- Criar/atualizar/excluir eventos no Google Calendar
-- Buscar alterações do Google Calendar
-- Sincronização incremental usando sync tokens
-
-**`google-calendar-webhook`** - Webhook para receber notificações:
-- Receber push notifications do Google Calendar
-- Processar alterações e atualizar banco de dados local
-
-### 4. Modificar Página de Configurações
-
-Adicionar nova seção "Integrações" em `Configuracoes.tsx`:
-- Botão para conectar Google Calendar
-- Seleção do calendário a sincronizar
-- Toggle para ativar/desativar sincronização
-- Botão para sincronização manual
-- Status da última sincronização
-
-### 5. Modificar Componentes do Calendário
-
-**`CalendarioMensal.tsx`**, **`CalendarioSemanal.tsx`**, etc.:
-- Exibir badge indicando eventos sincronizados com Google
-- Adicionar indicador visual de status de sincronização
-
-**`CompromissoDialog.tsx`**:
-- Adicionar checkbox "Sincronizar com Google Agenda"
-- Disparar sincronização ao criar/editar evento
-
-### 6. Criar Hook de Sincronização
-
-`useGoogleCalendarSync.ts`:
-- Gerenciar estado de conexão
-- Disparar sincronização
-- Atualizar status de sincronização
-
-### 7. Implementar Sincronização Automática
-
-Quando orçamentos/serviços são criados ou modificados:
-1. Serviço detecta mudança
-2. Edge function envia para Google Calendar
-3. Mapping é atualizado no banco
-
-Quando alterações vêm do Google:
-1. Webhook recebe notificação
-2. Edge function busca detalhes da alteração
-3. Atualiza tabela correspondente (fato_orcamento ou fato_servico)
+Adicionar chamadas ao `logAuditEvent` nos pontos criticos ja existentes:
+- `OrcamentoDialog.tsx` - ao salvar/editar orcamento
+- `DespesasPendentes.tsx` - ao confirmar/excluir despesas
+- Pagina `Despesas.tsx` - ao criar/editar/excluir
+- `NovoServicoDialog.tsx` - ao criar servico
+- `ClienteDialog.tsx` - ao criar/editar cliente
 
 ---
 
 ## Arquivos a Criar/Modificar
 
-| Arquivo | Ação | Descrição |
+| Arquivo | Acao | Descricao |
 |---------|------|-----------|
-| Migração SQL | Criar | Tabelas calendar_sync_settings e calendar_event_mappings |
-| `supabase/functions/google-calendar-sync/index.ts` | Criar | Edge function principal de sincronização |
-| `supabase/functions/google-calendar-webhook/index.ts` | Criar | Webhook para receber notificações do Google |
-| `src/hooks/useGoogleCalendarSync.ts` | Criar | Hook para gerenciar sincronização |
-| `src/components/settings/GoogleCalendarSettings.tsx` | Criar | Componente de configuração do Google Calendar |
-| `src/pages/Configuracoes.tsx` | Modificar | Adicionar seção de integrações |
-| `src/pages/Calendario.tsx` | Modificar | Adicionar indicador de sincronização |
-| `src/components/calendario/CompromissoDialog.tsx` | Modificar | Adicionar opção de sincronização |
+| Migracao SQL | Criar | Tabela audit_logs com RLS |
+| `src/services/audit.service.ts` | Criar | Servico de auditoria |
+| `src/pages/AuditLogs.tsx` | Criar | Pagina de logs (admin only) |
+| `src/App.tsx` | Modificar | Adicionar rota /audit-logs |
+| `src/components/layout/Sidebar.tsx` | Modificar | Link para Logs de Auditoria |
+| `src/components/cadastros/OrcamentoDialog.tsx` | Modificar | Registrar audit log |
+| `src/components/despesas/DespesasPendentes.tsx` | Modificar | Registrar audit log |
+| `src/components/servicos/NovoServicoDialog.tsx` | Modificar | Registrar audit log |
+| `src/components/cadastros/ClienteDialog.tsx` | Modificar | Registrar audit log |
 
 ---
 
-## Fluxo de Usuário
+## Detalhes Tecnicos
 
-1. Usuário acessa **Configurações** → **Integrações**
-2. Clica em **"Conectar Google Agenda"**
-3. Autoriza acesso via OAuth do Google
-4. Seleciona qual calendário Google deseja sincronizar
-5. Ativa sincronização automática
-6. A partir desse momento:
-   - Novos orçamentos/serviços com data são enviados ao Google
-   - Alterações no Google são refletidas no dashboard
-
----
-
-## Detalhes Técnicos
-
-### Gateway do Google Calendar
-
-Todas as chamadas à API do Google passam pelo gateway do Lovable:
+### AuditService API
 
 ```typescript
-const GATEWAY_URL = 'https://gateway.lovable.dev/google_calendar/calendar/v3';
-
-// Exemplo: Listar calendários
-const response = await fetch(`${GATEWAY_URL}/users/me/calendarList`, {
-  headers: {
-    'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-    'X-Connection-Api-Key': GOOGLE_CALENDAR_API_KEY,
-  }
-});
+// src/services/audit.service.ts
+export async function logAuditEvent(params: {
+  action: 'INSERT' | 'UPDATE' | 'DELETE';
+  entity: string;
+  entityId?: string;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
+}): Promise<void>
 ```
 
-### Formato de Evento Google
+### Verificacao de Admin na Pagina
 
-```typescript
-{
-  summary: "🛠️ Nome do Serviço - Cliente",
-  description: "Serviço de topografia",
-  start: { date: "2026-02-10" },  // Evento de dia inteiro
-  end: { date: "2026-02-12" },
-  extendedProperties: {
-    private: {
-      geogestor_type: "servico",
-      geogestor_id: "uuid-do-servico"
-    }
-  }
-}
+A pagina usara uma query para verificar se o usuario tem role `admin` via `user_roles`. Usuarios sem permissao verao uma mensagem de acesso negado.
+
+### Filtros da Pagina
+
+- Seletor de periodo (data inicio / data fim)
+- Dropdown de acao (INSERT, UPDATE, DELETE, Todos)
+- Dropdown de entidade (Orcamento, Despesa, Servico, Cliente, Todos)
+- Busca por nome de usuario
+
+### Exemplo Visual da Tabela
+
+```text
+Data/Hora          | Usuario      | Acao    | Entidade   | Detalhes
+2026-02-07 14:30   | Joao Silva   | UPDATE  | Orcamento  | [Ver detalhes]
+2026-02-07 13:15   | Maria Santos | DELETE  | Despesa    | [Ver detalhes]
+2026-02-07 12:00   | Joao Silva   | INSERT  | Servico    | [Ver detalhes]
 ```
-
-### RLS Policies
-
-As novas tabelas terão políticas RLS para garantir isolamento por tenant:
-
-```sql
-CREATE POLICY "Users can manage own sync settings"
-ON calendar_sync_settings
-FOR ALL
-USING (user_id = auth.uid());
-```
-
----
-
-## Resultado Esperado
-
-- Botão "Conectar Google Agenda" nas configurações
-- Sincronização automática de novos orçamentos/serviços
-- Alterações no Google refletidas no dashboard (polling ou webhook)
-- Indicador visual de eventos sincronizados no calendário
-- Suporte a sincronização manual sob demanda

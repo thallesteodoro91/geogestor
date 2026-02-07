@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface KPICardProps {
   title: string;
@@ -52,17 +53,30 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
                 {value}
               </h3>
               {cleanChange && (
-                <div className={cn(
-                  "flex items-center justify-center gap-1 text-xs font-medium px-2 py-1 rounded-full",
-                  "transition-all hover:scale-105",
-                  changeType === "positive" && "text-accent bg-accent/10 hover:bg-accent/20",
-                  changeType === "negative" && "text-destructive bg-destructive/10 hover:bg-destructive/20",
-                  changeType === "neutral" && "text-muted-foreground bg-muted/10 hover:bg-muted/20"
-                )}>
-                  {changeType === "positive" && <TrendingUp className="h-3 w-3" />}
-                  {changeType === "negative" && <TrendingDown className="h-3 w-3" />}
-                  <span>{cleanChange}</span>
-                </div>
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className={cn(
+                        "flex items-center justify-center gap-1 text-xs font-medium px-2 py-1 rounded-full cursor-help",
+                        "transition-all hover:scale-105",
+                        changeType === "positive" && "text-accent bg-accent/10 hover:bg-accent/20",
+                        changeType === "negative" && "text-destructive bg-destructive/10 hover:bg-destructive/20",
+                        changeType === "neutral" && "text-muted-foreground bg-muted/10 hover:bg-muted/20"
+                      )}>
+                        {changeType === "positive" && <TrendingUp className="h-3 w-3" />}
+                        {changeType === "negative" && <TrendingDown className="h-3 w-3" />}
+                        <span>{cleanChange}</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="max-w-[220px] text-center">
+                      <p className="text-xs">
+                        Variação em relação ao período anterior
+                        {changeType === "positive" && " — crescimento"}
+                        {changeType === "negative" && " — queda"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </div>
           </div>

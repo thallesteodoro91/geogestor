@@ -22,11 +22,13 @@ export const useNotifications = () => {
 
   const fetchNotifications = async () => {
     try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
         .from('notificacoes')
         .select('*')
+        .gte('created_at', thirtyDaysAgo)
         .order('created_at', { ascending: false })
-        .limit(10);
+        .limit(5);
 
       if (error) throw error;
       setNotifications(data || []);
@@ -225,7 +227,7 @@ export const useNotifications = () => {
           },
           (payload) => {
             const nova = payload.new as Notification;
-            setNotifications(prev => [nova, ...prev].slice(0, 10));
+            setNotifications(prev => [nova, ...prev].slice(0, 5));
             toast.info(`Nova notificação: ${nova.titulo}`);
           }
         )

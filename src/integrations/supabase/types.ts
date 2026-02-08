@@ -1989,6 +1989,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      limpar_notificacoes_antigas: { Args: never; Returns: undefined }
       verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {

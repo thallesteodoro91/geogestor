@@ -1,65 +1,52 @@
 
 
-## Rate Limiting nas Edge Functions
+## Correcao de Notificacoes: Filtro de 30 dias e Limite Ideal
 
-### Objetivo
-Adicionar proteção contra ataques de forca bruta em todas as 3 edge functions do sistema: `geobot-chat`, `invite-user` e `accept-invite`.
+### Problema Identificado
 
-### Abordagem
-Implementar um rate limiter **in-memory** usando um `Map` que armazena contadores por IP. Essa abordagem funciona bem para edge functions do Supabase, pois cada instancia mantem seu proprio estado durante o tempo de vida do container.
+Existem dois problemas distintos:
 
-### Limites por Funcao
+1. **Sem filtro de data na busca**: O hook `useNotifications.ts` busca as 10 notificacoes mais recentes sem nenhum filtro de idade. Notificacoes criadas ha mais de 30 dias continuam aparecendo no sino.
+2. **Sem limpeza automatica**: Notificacoes antigas nunca sao removidas do banco de dados, acumulando indefinidamente.
 
-| Funcao | Limite | Janela | Justificativa |
-|--------|--------|--------|---------------|
-| `geobot-chat` | 20 requisicoes | 60 segundos | Previne abuso da API de IA |
-| `invite-user` | 5 requisicoes | 60 segundos | Previne spam de convites |
-| `accept-invite` | 10 requisicoes | 60 segundos | Previne tentativas de brute-force em tokens |
+### Solucao
 
-### Implementacao
+#### 1. Filtrar notificacoes por 30 dias no hook (useNotifications.ts)
 
-Cada edge function recebera um bloco de rate limiting no inicio do seu handler, antes de qualquer logica de negocio:
+Adicionar um filtro na query para buscar apenas notificacoes dos ultimos 30 dias:
 
 ```text
-  Requisicao recebida
-        |
-  [CORS preflight?] -- Sim --> Responde 200
-        |
-       Nao
-        |
-  [Extrair IP do header]
-        |
-  [Verificar contador no Map]
-        |
-  [Limite excedido?] -- Sim --> Responde 429 + Retry-After
-        |
-       Nao
-        |
-  [Incrementar contador]
-        |
-  [Logica normal da funcao]
+.from('notificacoes')
+.select('*')
+.gte('created_at', dataLimite30dias)  // <-- novo filtro
+.order('created_at', { ascending: false })
+.limit(5)
 ```
+
+- Mudar o limite de **10 para 5** notificacoes no menu, que e um numero mais adequado para um dropdown de notificacoes (evita scroll excessivo e foca no que e relevante).
+
+#### 2. Filtrar tambem no Realtime (useNotifications.ts)
+
+No handler de INSERT do Realtime, manter o `.slice(0, 5)` para consistencia com o novo limite.
+
+#### 3. Criar migracao para limpeza automatica (SQL)
+
+Criar uma funcao SQL `limpar_notificacoes_antigas()` que remove notificacoes com mais de 30 dias e seus dismissals associados. Isso evita acumulo no banco.
 
 ### Detalhes Tecnicos
 
-1. **Classe `RateLimiter`** -- Sera definida inline em cada funcao (edge functions nao permitem imports entre pastas):
-   - `Map<string, { count: number, resetAt: number }>` para armazenar estado
-   - Metodo `isRateLimited(ip: string): boolean`
-   - Limpeza automatica de entradas expiradas a cada verificacao
-   - Limite configuravel de `maxRequests` e `windowMs`
+**Arquivo: `src/hooks/useNotifications.ts`**
+- Na funcao `fetchNotifications`: adicionar filtro `.gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())` e mudar `.limit(10)` para `.limit(5)`
+- No handler Realtime de INSERT: mudar `.slice(0, 10)` para `.slice(0, 5)`
 
-2. **Extracao do IP** -- Usa o header `x-forwarded-for` (padrao em proxies/CDN) com fallback para `"unknown"`
+**Migracao SQL:**
+- Criar funcao `limpar_notificacoes_antigas()` que deleta notificacoes com `created_at < NOW() - INTERVAL '30 days'`
+- Executar a limpeza dentro de `verificar_pagamentos_pendentes()` para que rode automaticamente junto com a verificacao ja existente (1x por hora/sessao)
 
-3. **Resposta 429** -- Retorna status HTTP 429 com:
-   - Header `Retry-After` indicando segundos ate reset
-   - Corpo JSON com mensagem amigavel em portugues
-   - Headers CORS mantidos
+### Resumo das Mudancas
 
-4. **Logging** -- Cada bloqueio gera um log estruturado para monitoramento
-
-### Arquivos Modificados
-
-- `supabase/functions/geobot-chat/index.ts` -- Adicionar rate limiter (20 req/min)
-- `supabase/functions/invite-user/index.ts` -- Adicionar rate limiter (5 req/min)
-- `supabase/functions/accept-invite/index.ts` -- Adicionar rate limiter (10 req/min)
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/hooks/useNotifications.ts` | Filtro de 30 dias na query + limite de 5 notificacoes |
+| Nova migracao SQL | Funcao de limpeza automatica + integracao com RPC existente |
 

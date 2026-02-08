@@ -1,36 +1,45 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-// Tipos de validação
-interface ChatRequest {
-  messages: Array<{
-    role: string;
-    content: string;
-  }>;
+// --- Rate Limiter ---
+class RateLimiter {
+  private requests = new Map<string, { count: number; resetAt: number }>();
+  constructor(private maxRequests: number, private windowMs: number) {}
+
+  isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    // Cleanup expired entries
+    for (const [key, val] of this.requests) {
+      if (val.resetAt <= now) this.requests.delete(key);
+    }
+    const entry = this.requests.get(ip);
+    if (!entry) {
+      this.requests.set(ip, { count: 1, resetAt: now + this.windowMs });
+      return false;
+    }
+    if (entry.resetAt <= now) {
+      this.requests.set(ip, { count: 1, resetAt: now + this.windowMs });
+      return false;
+    }
+    entry.count++;
+    return entry.count > this.maxRequests;
+  }
 }
 
-// Validação de entrada
+const rateLimiter = new RateLimiter(20, 60_000);
+
+// Tipos de validação
+interface ChatRequest {
+  messages: Array<{ role: string; content: string }>;
+}
+
 function validateChatRequest(body: any): ChatRequest {
-  if (!body || typeof body !== 'object') {
-    throw new Error('Invalid request body');
-  }
-
-  if (!Array.isArray(body.messages)) {
-    throw new Error('Messages must be an array');
-  }
-
-  if (body.messages.length === 0) {
-    throw new Error('Messages array cannot be empty');
-  }
-
+  if (!body || typeof body !== 'object') throw new Error('Invalid request body');
+  if (!Array.isArray(body.messages)) throw new Error('Messages must be an array');
+  if (body.messages.length === 0) throw new Error('Messages array cannot be empty');
   for (const msg of body.messages) {
-    if (!msg.role || !msg.content) {
-      throw new Error('Each message must have role and content');
-    }
-    if (typeof msg.role !== 'string' || typeof msg.content !== 'string') {
-      throw new Error('Role and content must be strings');
-    }
+    if (!msg.role || !msg.content) throw new Error('Each message must have role and content');
+    if (typeof msg.role !== 'string' || typeof msg.content !== 'string') throw new Error('Role and content must be strings');
   }
-
   return body as ChatRequest;
 }
 
@@ -41,26 +50,29 @@ const corsHeaders = {
 
 serve(async (req) => {
   const startTime = Date.now();
-  
-  // Log estruturado
-  console.log(JSON.stringify({
-    timestamp: new Date().toISOString(),
-    method: req.method,
-    url: req.url,
-  }));
+
+  console.log(JSON.stringify({ timestamp: new Date().toISOString(), method: req.method, url: req.url }));
 
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Rate limiting
+  const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (rateLimiter.isRateLimited(clientIP)) {
+    console.warn(JSON.stringify({ timestamp: new Date().toISOString(), event: "rate_limited", ip: clientIP, function: "geobot-chat" }));
+    return new Response(
+      JSON.stringify({ error: "Muitas requisições. Tente novamente em breve." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }
+    );
   }
 
   try {
     const body = await req.json();
     const { messages } = validateChatRequest(body);
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+
+    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const systemPrompt = `Você é o Consultor Financeiro & Operacional da TopoVision, uma empresa de topografia que busca compreender e melhorar sua performance financeira e operacional.
 Seu papel é transformar números em insights elegantes e humanos — traduzindo o que os dados dizem em uma linguagem que inspira ação e entendimento.
@@ -113,54 +125,29 @@ Responda sempre em português brasileiro de forma concisa e objetiva.`;
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages,
-        ],
+        messages: [{ role: "system", content: systemPrompt }, ...messages],
         stream: true,
       }),
     });
 
     if (!response.ok) {
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limits exceeded, please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Rate limits exceeded, please try again later." }), { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
+        return new Response(JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
       const errorText = await response.text();
       console.error("AI gateway error:", response.status, errorText);
-      return new Response(
-        JSON.stringify({ error: "AI gateway error" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return new Response(JSON.stringify({ error: "AI gateway error" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    return new Response(response.body, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
-    });
+    return new Response(response.body, { headers: { ...corsHeaders, "Content-Type": "text/event-stream" } });
   } catch (e) {
     const duration = Date.now() - startTime;
-    
-    // Log estruturado de erro
-    console.error(JSON.stringify({
-      timestamp: new Date().toISOString(),
-      error: e instanceof Error ? e.message : "Unknown error",
-      stack: e instanceof Error ? e.stack : undefined,
-      duration_ms: duration,
-    }));
-
+    console.error(JSON.stringify({ timestamp: new Date().toISOString(), error: e instanceof Error ? e.message : "Unknown error", stack: e instanceof Error ? e.stack : undefined, duration_ms: duration }));
     return new Response(
-      JSON.stringify({ 
-        error: e instanceof Error ? e.message : "Unknown error",
-        timestamp: new Date().toISOString(),
-      }),
+      JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error", timestamp: new Date().toISOString() }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

@@ -1,45 +1,53 @@
 
 
-## Plano Owner Ilimitado para o Administrador do SaaS
+## Correcao de Dois Problemas: Aviso de Limite Falso + Scroll das Observacoes
 
-### Problema
-O administrador/dono do SaaS esta sendo tratado como um cliente comum, sujeito aos limites do plano Trial (5 usuarios, 50 clientes, 25 propriedades, expira em 7 dias). Como dono da plataforma, ele precisa de acesso irrestrito.
+### Problema 1: Aviso de "Limite Atingido" Permanente
 
-### Solucao
+**Causa raiz identificada**: O hook `usePlanLimits.ts` retorna valores padrao quando o plano ainda nao foi carregado (`plan === null`). Esses valores padrao definem `isWithinLimit: () => false` e `isActive: false`, o que faz o sistema mostrar o alerta de limite atingido mesmo que o plano Owner esteja correto no banco de dados.
 
-Criar um plano "Owner" com limites altissimos e assinatura permanente via migracao SQL. Nenhuma mudanca de codigo e necessaria.
+O banco de dados esta correto -- o plano Owner esta ativo com 99.999 clientes permitidos e 0 clientes cadastrados. O problema e puramente no frontend: durante o carregamento (ou se qualquer atraso ocorrer), o alerta aparece incorretamente.
 
-### Migracao SQL
+**Solucao**: Modificar `usePlanLimits.ts` para considerar o estado de carregamento. Quando os dados ainda estao sendo carregados, os metodos `isWithinLimit` e `checkAndNotify` devem retornar `true` (permitir) em vez de `false` (bloquear), evitando falsos alertas.
 
-1. **Criar plano "Owner"** na tabela `subscription_plans`:
-   - `name`: "Owner"
-   - `slug`: "owner"
-   - `price_cents`: 0 (gratuito)
-   - `interval`: "year"
-   - `max_users`: 9999
-   - `max_properties`: 99999
-   - `max_clients`: 99999
-   - `features`: todas habilitadas (incluindo `suporte_prioritario`)
-   - `is_active`: true
+Adicionalmente, modificar `ClientePropriedadeUnificadoDialog.tsx` para nao mostrar o alerta de limite enquanto os dados estiverem carregando.
 
-2. **Atualizar a assinatura do tenant do usuario** (`3a7ebb04-00d0-4bc3-9e16-d212ec1b65cc`):
-   - Trocar o `plan_id` para o novo plano Owner
-   - Mudar `status` de "trialing" para "active"
-   - Estender `current_period_end` para 2099-12-31 (efetivamente permanente)
+### Problema 2: Area de Observacoes sem Scroll
+
+**Causa raiz**: O `DialogContent` usa `max-h-[90vh] flex flex-col` e o `ScrollArea` usa `flex-1`, mas sem uma altura concreta calculada, o `ScrollArea` do Radix nao consegue determinar quando ativar a barra de rolagem. Isso faz com que o conteudo do formulario fique cortado na parte inferior, especialmente o campo de Observacoes.
+
+**Solucao**: Adicionar `overflow-hidden` ao container e garantir que o `ScrollArea` tenha altura resolvida via `min-h-0` no container flex, alem de adicionar uma altura maxima explicita ao `ScrollArea`.
 
 ### Detalhes Tecnicos
 
-Sera uma unica migracao SQL com dois comandos:
-- `INSERT INTO subscription_plans` para criar o plano Owner
-- `UPDATE tenant_subscriptions` para vincular o tenant ao novo plano
+#### Arquivo: `src/hooks/usePlanLimits.ts`
 
-Isso resolve o problema imediatamente sem nenhuma alteracao de codigo no frontend ou nos hooks de verificacao de limite, pois eles ja respeitam os valores do banco.
+- Importar `isLoading` do `useTenant()` (ja disponivel no TenantContext)
+- Exportar `isLoading` no retorno do hook
+- Alterar os defaults quando `plan` e null:
+  - `isWithinLimit: () => true` (permitir durante carregamento)
+  - `checkAndNotify: () => true` (permitir durante carregamento)
+  - `isActive: true` (assumir ativo durante carregamento)
 
-### Arquivos Modificados
+#### Arquivo: `src/contexts/TenantContext.tsx`
 
-| Tipo | Detalhe |
-|------|---------|
-| Migracao SQL | Criar plano Owner + atualizar assinatura do tenant |
+- Nenhuma mudanca necessaria -- `isLoading` ja e exposto
 
-Nenhum arquivo de codigo sera modificado.
+#### Arquivo: `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx`
+
+- Usar o `isLoading` do `usePlanLimits` para nao calcular `isAtClientLimit` enquanto carrega
+- Corrigir o `ScrollArea`: trocar `className="flex-1 pr-4"` para `className="flex-1 min-h-0 max-h-[calc(90vh-220px)] pr-4"` para garantir que a barra de rolagem funcione
+- Isso resolve tanto o scroll do conteudo quanto a visibilidade do campo de Observacoes
+
+#### Arquivo: `src/components/cadastros/ClienteDialog.tsx`
+
+- Mesma correcao de loading para `canAddClient`: considerar o estado de carregamento do plano
+
+### Resumo das Mudancas
+
+| Arquivo | Mudanca |
+|---------|---------|
+| `src/hooks/usePlanLimits.ts` | Exportar `isLoading`, defaults permissivos durante carregamento |
+| `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx` | Considerar loading no alerta de limite + corrigir altura do ScrollArea |
+| `src/components/cadastros/ClienteDialog.tsx` | Considerar loading no calculo de `canAddClient` |
 

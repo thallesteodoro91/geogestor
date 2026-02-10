@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { User, MapPin, Plus, Trash2, StickyNote } from "lucide-react";
+import { User, MapPin, Plus, Trash2 } from "lucide-react";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -431,18 +431,6 @@ export function ClientePropriedadeUnificadoDialog({
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="anotacoes" className="flex items-center gap-2">
-                    <StickyNote className="h-4 w-4 text-yellow-500" />
-                    Observações
-                  </Label>
-                  <Textarea
-                    id="anotacoes"
-                    {...register("anotacoes")}
-                    placeholder="Observações sobre o cliente..."
-                    rows={3}
-                  />
-                </div>
               </TabsContent>
 
               {/* Tab Propriedades */}
@@ -597,19 +585,6 @@ export function ClientePropriedadeUnificadoDialog({
                                   />
                                 </div>
 
-                                <div className="col-span-2">
-                                  <Label className="text-xs flex items-center gap-1">
-                                    <StickyNote className="h-3 w-3 text-yellow-500" />
-                                    Observações
-                                  </Label>
-                                  <Textarea
-                                    value={prop.observacoes}
-                                    onChange={(e) => updatePropriedade(index, "observacoes", e.target.value)}
-                                    placeholder="Observações sobre a propriedade..."
-                                    rows={2}
-                                    className="text-sm"
-                                  />
-                                </div>
                               </div>
                             </CardContent>
                           </Card>

@@ -1,52 +1,45 @@
 
 
-## Correcao de Notificacoes: Filtro de 30 dias e Limite Ideal
+## Plano Owner Ilimitado para o Administrador do SaaS
 
-### Problema Identificado
-
-Existem dois problemas distintos:
-
-1. **Sem filtro de data na busca**: O hook `useNotifications.ts` busca as 10 notificacoes mais recentes sem nenhum filtro de idade. Notificacoes criadas ha mais de 30 dias continuam aparecendo no sino.
-2. **Sem limpeza automatica**: Notificacoes antigas nunca sao removidas do banco de dados, acumulando indefinidamente.
+### Problema
+O administrador/dono do SaaS esta sendo tratado como um cliente comum, sujeito aos limites do plano Trial (5 usuarios, 50 clientes, 25 propriedades, expira em 7 dias). Como dono da plataforma, ele precisa de acesso irrestrito.
 
 ### Solucao
 
-#### 1. Filtrar notificacoes por 30 dias no hook (useNotifications.ts)
+Criar um plano "Owner" com limites altissimos e assinatura permanente via migracao SQL. Nenhuma mudanca de codigo e necessaria.
 
-Adicionar um filtro na query para buscar apenas notificacoes dos ultimos 30 dias:
+### Migracao SQL
 
-```text
-.from('notificacoes')
-.select('*')
-.gte('created_at', dataLimite30dias)  // <-- novo filtro
-.order('created_at', { ascending: false })
-.limit(5)
-```
+1. **Criar plano "Owner"** na tabela `subscription_plans`:
+   - `name`: "Owner"
+   - `slug`: "owner"
+   - `price_cents`: 0 (gratuito)
+   - `interval`: "year"
+   - `max_users`: 9999
+   - `max_properties`: 99999
+   - `max_clients`: 99999
+   - `features`: todas habilitadas (incluindo `suporte_prioritario`)
+   - `is_active`: true
 
-- Mudar o limite de **10 para 5** notificacoes no menu, que e um numero mais adequado para um dropdown de notificacoes (evita scroll excessivo e foca no que e relevante).
-
-#### 2. Filtrar tambem no Realtime (useNotifications.ts)
-
-No handler de INSERT do Realtime, manter o `.slice(0, 5)` para consistencia com o novo limite.
-
-#### 3. Criar migracao para limpeza automatica (SQL)
-
-Criar uma funcao SQL `limpar_notificacoes_antigas()` que remove notificacoes com mais de 30 dias e seus dismissals associados. Isso evita acumulo no banco.
+2. **Atualizar a assinatura do tenant do usuario** (`3a7ebb04-00d0-4bc3-9e16-d212ec1b65cc`):
+   - Trocar o `plan_id` para o novo plano Owner
+   - Mudar `status` de "trialing" para "active"
+   - Estender `current_period_end` para 2099-12-31 (efetivamente permanente)
 
 ### Detalhes Tecnicos
 
-**Arquivo: `src/hooks/useNotifications.ts`**
-- Na funcao `fetchNotifications`: adicionar filtro `.gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())` e mudar `.limit(10)` para `.limit(5)`
-- No handler Realtime de INSERT: mudar `.slice(0, 10)` para `.slice(0, 5)`
+Sera uma unica migracao SQL com dois comandos:
+- `INSERT INTO subscription_plans` para criar o plano Owner
+- `UPDATE tenant_subscriptions` para vincular o tenant ao novo plano
 
-**Migracao SQL:**
-- Criar funcao `limpar_notificacoes_antigas()` que deleta notificacoes com `created_at < NOW() - INTERVAL '30 days'`
-- Executar a limpeza dentro de `verificar_pagamentos_pendentes()` para que rode automaticamente junto com a verificacao ja existente (1x por hora/sessao)
+Isso resolve o problema imediatamente sem nenhuma alteracao de codigo no frontend ou nos hooks de verificacao de limite, pois eles ja respeitam os valores do banco.
 
-### Resumo das Mudancas
+### Arquivos Modificados
 
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/hooks/useNotifications.ts` | Filtro de 30 dias na query + limite de 5 notificacoes |
-| Nova migracao SQL | Funcao de limpeza automatica + integracao com RPC existente |
+| Tipo | Detalhe |
+|------|---------|
+| Migracao SQL | Criar plano Owner + atualizar assinatura do tenant |
+
+Nenhum arquivo de codigo sera modificado.
 

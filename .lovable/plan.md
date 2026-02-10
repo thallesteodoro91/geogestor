@@ -1,53 +1,51 @@
 
+## Correcoes no Dialog de Editar Cliente (3 problemas)
 
-## Correcao de Dois Problemas: Aviso de Limite Falso + Scroll das Observacoes
+### Problema 1: Aviso de limite do plano persistente
+O sistema continua mostrando alertas de "limite atingido" mesmo apos criar o plano Owner. A solucao definitiva e remover completamente as verificacoes de plano dos dialogs de cliente, conforme solicitado.
 
-### Problema 1: Aviso de "Limite Atingido" Permanente
+### Problema 2: Label "anotacoes" e scroll cortado
+O `ClienteDialog.tsx` (usado na pagina de detalhes do cliente) tem `overflow-y-auto` no `DialogContent`, mas o conteudo pode ficar cortado. O `ClientePropriedadeUnificadoDialog.tsx` (usado no Cadastros) ja tem o label "Observacoes" correto, mas o placeholder diz "Anotacoes sobre o cliente..." -- sera corrigido.
 
-**Causa raiz identificada**: O hook `usePlanLimits.ts` retorna valores padrao quando o plano ainda nao foi carregado (`plan === null`). Esses valores padrao definem `isWithinLimit: () => false` e `isActive: false`, o que faz o sistema mostrar o alerta de limite atingido mesmo que o plano Owner esteja correto no banco de dados.
+### Problema 3: Aba "Propriedades" desabilitada ao editar
+No `ClientePropriedadeUnificadoDialog.tsx`, a aba Propriedades tem `disabled={isEditing}` (linha 297), impedindo o acesso ao editar. Sera habilitada e, em vez de bloquear, mostrara as propriedades existentes do cliente para consulta.
 
-O banco de dados esta correto -- o plano Owner esta ativo com 99.999 clientes permitidos e 0 clientes cadastrados. O problema e puramente no frontend: durante o carregamento (ou se qualquer atraso ocorrer), o alerta aparece incorretamente.
+---
 
-**Solucao**: Modificar `usePlanLimits.ts` para considerar o estado de carregamento. Quando os dados ainda estao sendo carregados, os metodos `isWithinLimit` e `checkAndNotify` devem retornar `true` (permitir) em vez de `false` (bloquear), evitando falsos alertas.
+### Mudancas por arquivo
 
-Adicionalmente, modificar `ClientePropriedadeUnificadoDialog.tsx` para nao mostrar o alerta de limite enquanto os dados estiverem carregando.
+#### `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx`
+- **Remover** imports de `usePlanLimits`, `useResourceCounts`, `PlanLimitAlert`
+- **Remover** variaveis `isAtClientLimit`, `isAtPropertyLimit` e toda logica de limite
+- **Remover** o bloco `{isAtClientLimit && <PlanLimitAlert .../>}` e `{isAtPropertyLimit && <PlanLimitAlert .../>}`
+- **Remover** `disabled={isAtClientLimit}` do botao Salvar e `disabled={isAtPropertyLimit}` do botao Adicionar Propriedade
+- **Remover** verificacao de limite no `onSubmit`
+- **Habilitar aba Propriedades**: remover `disabled={isEditing}` do `TabsTrigger`
+- **Carregar propriedades ao editar**: no `useEffect` quando `cliente` existe, buscar propriedades do banco (`dim_propriedade` filtrado por `id_cliente`) e popular o estado `propriedades`
+- **Corrigir placeholder**: trocar "Anotacoes sobre o cliente..." por "Observacoes sobre o cliente..."
 
-### Problema 2: Area de Observacoes sem Scroll
+#### `src/components/cadastros/ClienteDialog.tsx`
+- **Remover** imports de `usePlanLimits`, `useResourceCounts`, `PlanLimitAlert`
+- **Remover** variaveis `canAddClient`, `planLoading`, `clientsCount`
+- **Remover** `{!isEditing && <PlanLimitAlert .../>}`
+- **Remover** verificacao de limite no `onSubmit`
+- **Remover** `disabled={!isEditing && !canAddClient}` do botao Salvar
+- **Trocar** label de "Observacoes" (ja correto) -- manter, mas corrigir placeholder "Observacoes sobre o cliente..."
 
-**Causa raiz**: O `DialogContent` usa `max-h-[90vh] flex flex-col` e o `ScrollArea` usa `flex-1`, mas sem uma altura concreta calculada, o `ScrollArea` do Radix nao consegue determinar quando ativar a barra de rolagem. Isso faz com que o conteudo do formulario fique cortado na parte inferior, especialmente o campo de Observacoes.
+#### `src/hooks/usePlanLimits.ts`
+- Manter o arquivo sem alteracoes (outros componentes podem usa-lo)
 
-**Solucao**: Adicionar `overflow-hidden` ao container e garantir que o `ScrollArea` tenha altura resolvida via `min-h-0` no container flex, alem de adicionar uma altura maxima explicita ao `ScrollArea`.
+### Detalhes tecnicos para a aba Propriedades no modo edicao
 
-### Detalhes Tecnicos
+Ao abrir o dialog em modo edicao, o `useEffect` fara uma query:
+```text
+supabase.from('dim_propriedade')
+  .select('*')
+  .eq('id_cliente', cliente.id_cliente)
+```
 
-#### Arquivo: `src/hooks/usePlanLimits.ts`
+As propriedades existentes serao exibidas nos mesmos cards de formulario, permitindo visualizacao e edicao. O botao "Adicionar Propriedade" tambem ficara disponivel para vincular novas propriedades.
 
-- Importar `isLoading` do `useTenant()` (ja disponivel no TenantContext)
-- Exportar `isLoading` no retorno do hook
-- Alterar os defaults quando `plan` e null:
-  - `isWithinLimit: () => true` (permitir durante carregamento)
-  - `checkAndNotify: () => true` (permitir durante carregamento)
-  - `isActive: true` (assumir ativo durante carregamento)
-
-#### Arquivo: `src/contexts/TenantContext.tsx`
-
-- Nenhuma mudanca necessaria -- `isLoading` ja e exposto
-
-#### Arquivo: `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx`
-
-- Usar o `isLoading` do `usePlanLimits` para nao calcular `isAtClientLimit` enquanto carrega
-- Corrigir o `ScrollArea`: trocar `className="flex-1 pr-4"` para `className="flex-1 min-h-0 max-h-[calc(90vh-220px)] pr-4"` para garantir que a barra de rolagem funcione
-- Isso resolve tanto o scroll do conteudo quanto a visibilidade do campo de Observacoes
-
-#### Arquivo: `src/components/cadastros/ClienteDialog.tsx`
-
-- Mesma correcao de loading para `canAddClient`: considerar o estado de carregamento do plano
-
-### Resumo das Mudancas
-
-| Arquivo | Mudanca |
-|---------|---------|
-| `src/hooks/usePlanLimits.ts` | Exportar `isLoading`, defaults permissivos durante carregamento |
-| `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx` | Considerar loading no alerta de limite + corrigir altura do ScrollArea |
-| `src/components/cadastros/ClienteDialog.tsx` | Considerar loading no calculo de `canAddClient` |
-
+Ao salvar em modo edicao:
+- Propriedades existentes (com `id`) serao atualizadas via `upsert`
+- Propriedades novas (sem `id`) serao inseridas

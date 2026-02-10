@@ -67,8 +67,8 @@ export function ClientePropriedadeUnificadoDialog({
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!cliente;
-  const isAtClientLimit = !isEditing && !planLimits.isWithinLimit('clients', clientsCount);
-  const isAtPropertyLimit = !planLimits.isWithinLimit('properties', propertiesCount);
+  const isAtClientLimit = !planLimits.isLoading && !isEditing && !planLimits.isWithinLimit('clients', clientsCount);
+  const isAtPropertyLimit = !planLimits.isLoading && !planLimits.isWithinLimit('properties', propertiesCount);
 
   useEffect(() => {
     if (open) {
@@ -305,7 +305,7 @@ export function ClientePropriedadeUnificadoDialog({
               </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 pr-4">
+            <ScrollArea className="flex-1 min-h-0 max-h-[calc(90vh-220px)] pr-4">
               {/* Tab Cliente */}
               <TabsContent value="cliente" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">

@@ -28,10 +28,10 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: cliente || {}
   });
-  const { isWithinLimit } = usePlanLimits();
+  const { isWithinLimit, isLoading: planLoading } = usePlanLimits();
   const { clientsCount } = useResourceCounts();
   const isEditing = !!cliente;
-  const canAddClient = isEditing || isWithinLimit('clients', clientsCount);
+  const canAddClient = planLoading || isEditing || isWithinLimit('clients', clientsCount);
 
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
     cliente?.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []

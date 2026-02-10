@@ -11,6 +11,7 @@ export interface PlanLimits {
   planSlug: string;
   isTrialing: boolean;
   isActive: boolean;
+  isLoading: boolean;
   canAccess: (feature: string) => boolean;
   isWithinLimit: (resource: ResourceType, currentCount: number) => boolean;
   /**
@@ -21,28 +22,30 @@ export interface PlanLimits {
 }
 
 export function usePlanLimits(): PlanLimits {
-  const { subscription, canAddResource, getResourceLimit, isSubscriptionActive } = useTenant();
+  const { subscription, canAddResource, getResourceLimit, isSubscriptionActive, isLoading: tenantLoading } = useTenant();
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
 
   const plan = subscription?.plan;
   const isActive = isSubscriptionActive();
   const isTrialing = subscription?.status === 'trialing';
 
-  const defaultLimits: PlanLimits = {
-    maxUsers: 1,
-    maxProperties: 5,
-    maxClients: 10,
-    features: {},
-    planName: 'Sem Plano',
-    planSlug: 'none',
-    isTrialing: false,
-    isActive: false,
-    canAccess: () => false,
-    isWithinLimit: () => false,
-    checkAndNotify: () => false,
-  };
-
-  if (!plan) return defaultLimits;
+  // While loading, be permissive to avoid false "limit reached" alerts
+  if (tenantLoading || !plan) {
+    return {
+      maxUsers: 9999,
+      maxProperties: 99999,
+      maxClients: 99999,
+      features: {},
+      planName: tenantLoading ? 'Carregando...' : 'Sem Plano',
+      planSlug: 'none',
+      isTrialing: false,
+      isActive: true,
+      isLoading: tenantLoading,
+      canAccess: () => true,
+      isWithinLimit: () => true,
+      checkAndNotify: () => true,
+    };
+  }
 
   const getCurrentCount = (resource: ResourceType): number => {
     switch (resource) {
@@ -94,6 +97,7 @@ export function usePlanLimits(): PlanLimits {
     planSlug: plan.slug,
     isTrialing,
     isActive,
+    isLoading: false,
     canAccess: (feature: string) => {
       if (!isActive) return false;
       return plan.features[feature] === true;

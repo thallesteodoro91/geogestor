@@ -1,51 +1,37 @@
 
-## Correcoes no Dialog de Editar Cliente (3 problemas)
+## Scroll e Campo de Observacoes nos Dialogos de Cliente e Propriedade
 
-### Problema 1: Aviso de limite do plano persistente
-O sistema continua mostrando alertas de "limite atingido" mesmo apos criar o plano Owner. A solucao definitiva e remover completamente as verificacoes de plano dos dialogs de cliente, conforme solicitado.
+### Problema
+Os dialogos de cadastro/edicao de Cliente e Propriedade ficam cortados na parte inferior, sem barra de scroll visivel. Alem disso, falta o campo "Observacoes" em ambos.
 
-### Problema 2: Label "anotacoes" e scroll cortado
-O `ClienteDialog.tsx` (usado na pagina de detalhes do cliente) tem `overflow-y-auto` no `DialogContent`, mas o conteudo pode ficar cortado. O `ClientePropriedadeUnificadoDialog.tsx` (usado no Cadastros) ja tem o label "Observacoes" correto, mas o placeholder diz "Anotacoes sobre o cliente..." -- sera corrigido.
+### Mudancas
 
-### Problema 3: Aba "Propriedades" desabilitada ao editar
-No `ClientePropriedadeUnificadoDialog.tsx`, a aba Propriedades tem `disabled={isEditing}` (linha 297), impedindo o acesso ao editar. Sera habilitada e, em vez de bloquear, mostrara as propriedades existentes do cliente para consulta.
+#### 1. `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx`
 
----
+**Scroll**: O `ScrollArea` ja existe (linha 309), mas precisa de ajuste. Trocar o wrapper para usar `overflow-y-auto` diretamente no container do conteudo das tabs em vez do `ScrollArea` do Radix (que tem problemas conhecidos de calculo de altura em containers flex). Alternativa: manter o `ScrollArea` mas garantir que o `DialogContent` tenha `overflow-hidden` e o scroll funcione corretamente.
 
-### Mudancas por arquivo
+**Campo Observacoes no Cliente** (aba Cliente, apos a secao de Prospeccao/Categoria):
+- Adicionar um `Textarea` com label "Observacoes" e placeholder "Observacoes sobre o cliente..."
+- Vinculado ao campo `anotacoes` do form (que e o nome da coluna no banco)
 
-#### `src/components/cadastros/ClientePropriedadeUnificadoDialog.tsx`
-- **Remover** imports de `usePlanLimits`, `useResourceCounts`, `PlanLimitAlert`
-- **Remover** variaveis `isAtClientLimit`, `isAtPropertyLimit` e toda logica de limite
-- **Remover** o bloco `{isAtClientLimit && <PlanLimitAlert .../>}` e `{isAtPropertyLimit && <PlanLimitAlert .../>}`
-- **Remover** `disabled={isAtClientLimit}` do botao Salvar e `disabled={isAtPropertyLimit}` do botao Adicionar Propriedade
-- **Remover** verificacao de limite no `onSubmit`
-- **Habilitar aba Propriedades**: remover `disabled={isEditing}` do `TabsTrigger`
-- **Carregar propriedades ao editar**: no `useEffect` quando `cliente` existe, buscar propriedades do banco (`dim_propriedade` filtrado por `id_cliente`) e popular o estado `propriedades`
-- **Corrigir placeholder**: trocar "Anotacoes sobre o cliente..." por "Observacoes sobre o cliente..."
+**Campo Observacoes na Propriedade** (dentro de cada card de propriedade, apos Longitude):
+- Adicionar um `Textarea` com label "Observacoes" e placeholder "Observacoes sobre a propriedade..."
+- Vinculado ao campo `observacoes` da propriedade via `updatePropriedade`
 
-#### `src/components/cadastros/ClienteDialog.tsx`
-- **Remover** imports de `usePlanLimits`, `useResourceCounts`, `PlanLimitAlert`
-- **Remover** variaveis `canAddClient`, `planLoading`, `clientsCount`
-- **Remover** `{!isEditing && <PlanLimitAlert .../>}`
-- **Remover** verificacao de limite no `onSubmit`
-- **Remover** `disabled={!isEditing && !canAddClient}` do botao Salvar
-- **Trocar** label de "Observacoes" (ja correto) -- manter, mas corrigir placeholder "Observacoes sobre o cliente..."
+**Correcao de scroll**: Substituir `ScrollArea` (Radix) por um `div` com `overflow-y-auto` e `max-h-[calc(90vh-200px)]` para garantir scroll nativo funcional.
 
-#### `src/hooks/usePlanLimits.ts`
-- Manter o arquivo sem alteracoes (outros componentes podem usa-lo)
+#### 2. `src/components/cadastros/ClienteDialog.tsx`
 
-### Detalhes tecnicos para a aba Propriedades no modo edicao
+**Scroll**: O `DialogContent` ja tem `overflow-y-auto` (linha 136), mas adicionar `ScrollArea` ou garantir que o scroll nativo funcione com o conteudo expandido.
 
-Ao abrir o dialog em modo edicao, o `useEffect` fara uma query:
-```text
-supabase.from('dim_propriedade')
-  .select('*')
-  .eq('id_cliente', cliente.id_cliente)
-```
+**Campo Observacoes** (apos a secao de Prospeccao/Categoria, antes do `DialogFooter`):
+- Adicionar import de `Textarea`
+- Adicionar campo `Textarea` com label "Observacoes", placeholder "Observacoes sobre o cliente..."
+- Vinculado via `register("anotacoes")`
 
-As propriedades existentes serao exibidas nos mesmos cards de formulario, permitindo visualizacao e edicao. O botao "Adicionar Propriedade" tambem ficara disponivel para vincular novas propriedades.
+### Detalhes tecnicos
 
-Ao salvar em modo edicao:
-- Propriedades existentes (com `id`) serao atualizadas via `upsert`
-- Propriedades novas (sem `id`) serao inseridas
+- O campo no banco de dados `dim_cliente` se chama `anotacoes`, mas o label exibido sera "Observacoes"
+- O campo no banco de dados `dim_propriedade` se chama `observacoes`
+- A correcao de scroll usa `overflow-y-auto` nativo em vez do `ScrollArea` do Radix, que tem problemas de calculo de altura em layouts flex
+- O `DialogFooter` ficara fora da area de scroll para permanecer sempre visivel

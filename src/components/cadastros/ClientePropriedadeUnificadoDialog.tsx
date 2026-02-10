@@ -396,7 +396,7 @@ export function ClientePropriedadeUnificadoDialog({
                 <div className="grid grid-cols-2 gap-6">
                   <div>
                     <Label className="mb-3 block">Prospecção</Label>
-                    <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       {prospeccaoOpcoes.map((option) => (
                         <div key={option} className="flex items-center space-x-2">
                           <Checkbox
@@ -414,7 +414,7 @@ export function ClientePropriedadeUnificadoDialog({
 
                   <div>
                     <Label className="mb-3 block">Categoria do Cliente</Label>
-                    <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                       {categoriaOpcoes.map((option) => (
                         <div key={option} className="flex items-center space-x-2">
                           <Checkbox

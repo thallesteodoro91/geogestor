@@ -19,9 +19,6 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
-import { usePlanLimits } from "@/hooks/usePlanLimits";
-import { useResourceCounts } from "@/hooks/useResourceCounts";
-import { PlanLimitAlert } from "@/components/plan";
 
 interface PropriedadeForm {
   nome_da_propriedade: string;
@@ -57,9 +54,6 @@ export function ClientePropriedadeUnificadoDialog({
   onSuccess
 }: ClientePropriedadeUnificadoDialogProps) {
   const { register, handleSubmit, reset, setValue, watch } = useForm();
-  const planLimits = usePlanLimits();
-  const { clientsCount, propertiesCount, isLoading: countsLoading } = useResourceCounts();
-  
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>([]);
   const [categoriaOptions, setCategoriaOptions] = useState<string[]>([]);
   const [propriedades, setPropriedades] = useState<PropriedadeForm[]>([]);
@@ -67,8 +61,6 @@ export function ClientePropriedadeUnificadoDialog({
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!cliente;
-  const isAtClientLimit = !planLimits.isLoading && !isEditing && !planLimits.isWithinLimit('clients', clientsCount);
-  const isAtPropertyLimit = !planLimits.isLoading && !planLimits.isWithinLimit('properties', propertiesCount);
 
   useEffect(() => {
     if (open) {
@@ -87,8 +79,35 @@ export function ClientePropriedadeUnificadoDialog({
         });
         setProspeccaoOptions(cliente.origem?.split(", ").filter(Boolean) || []);
         setCategoriaOptions(cliente.categoria?.split(", ").filter(Boolean) || []);
-        // Don't load properties in edit mode - use separate property dialog
-        setPropriedades([]);
+        // Load existing properties for this client
+        const fetchProps = async () => {
+          const { data } = await supabase
+            .from('dim_propriedade')
+            .select('*')
+            .eq('id_cliente', cliente.id_cliente);
+          if (data && data.length > 0) {
+            setPropriedades(data.map((p: any) => ({
+              id_propriedade: p.id_propriedade,
+              nome_da_propriedade: p.nome_da_propriedade || "",
+              area_ha: p.area_ha ?? "",
+              cidade: p.cidade || "",
+              municipio: p.municipio || "",
+              tipo: p.tipo || "",
+              situacao: p.situacao || "",
+              matricula: p.matricula || "",
+              ccir: p.ccir || "",
+              car: p.car || "",
+              itr: p.itr || "",
+              latitude: p.latitude ?? "",
+              longitude: p.longitude ?? "",
+              possui_memorial_descritivo: p.possui_memorial_descritivo || "",
+              observacoes: p.observacoes || "",
+            })));
+          } else {
+            setPropriedades([]);
+          }
+        };
+        fetchProps();
       } else {
         // New client mode
         reset({
@@ -150,11 +169,6 @@ export function ClientePropriedadeUnificadoDialog({
   };
 
   const onSubmit = async (data: any) => {
-    if (isAtClientLimit) {
-      toast.error("Limite de clientes atingido no seu plano");
-      return;
-    }
-
     if (!data.nome?.trim()) {
       toast.error("Nome do cliente é obrigatório");
       setActiveTab("cliente");
@@ -167,15 +181,6 @@ export function ClientePropriedadeUnificadoDialog({
       toast.error("Todas as propriedades devem ter um nome");
       setActiveTab("propriedades");
       return;
-    }
-
-    // Check property limit
-    if (!isEditing && propriedades.length > 0 && isAtPropertyLimit) {
-      const availableSlots = planLimits.maxProperties - propertiesCount;
-      if (propriedades.length > availableSlots) {
-        toast.error(`Você pode adicionar no máximo ${availableSlots} propriedade(s) com seu plano atual`);
-        return;
-      }
     }
 
     setSaving(true);
@@ -283,10 +288,6 @@ export function ClientePropriedadeUnificadoDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {isAtClientLimit && (
-          <PlanLimitAlert resource="clients" currentCount={clientsCount} />
-        )}
-
         <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
             <TabsList className="grid w-full grid-cols-2">
@@ -294,7 +295,7 @@ export function ClientePropriedadeUnificadoDialog({
                 <User className="h-4 w-4 text-blue-500" />
                 Cliente
               </TabsTrigger>
-              <TabsTrigger value="propriedades" className="gap-2" disabled={isEditing}>
+              <TabsTrigger value="propriedades" className="gap-2">
                 <MapPin className="h-4 w-4 text-green-500" />
                 Propriedades
                 {propriedades.length > 0 && (
@@ -438,7 +439,7 @@ export function ClientePropriedadeUnificadoDialog({
                   <Textarea
                     id="anotacoes"
                     {...register("anotacoes")}
-                    placeholder="Anotações sobre o cliente..."
+                    placeholder="Observações sobre o cliente..."
                     rows={3}
                   />
                 </div>
@@ -446,33 +447,21 @@ export function ClientePropriedadeUnificadoDialog({
 
               {/* Tab Propriedades */}
               <TabsContent value="propriedades" className="space-y-4 mt-4">
-                {isEditing ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>Para editar propriedades, use o botão de propriedade na lista de clientes.</p>
-                  </div>
-                ) : (
-                  <>
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
-                        Adicione propriedades vinculadas a este cliente (opcional)
+                        {isEditing ? "Propriedades vinculadas a este cliente" : "Adicione propriedades vinculadas a este cliente (opcional)"}
                       </p>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={addPropriedade}
-                        disabled={isAtPropertyLimit}
                         className="gap-2"
                       >
                         <Plus className="h-4 w-4" />
                         Adicionar Propriedade
                       </Button>
                     </div>
-
-                    {isAtPropertyLimit && (
-                      <PlanLimitAlert resource="properties" currentCount={propertiesCount} />
-                    )}
 
                     {propriedades.length === 0 ? (
                       <Card className="border-dashed">
@@ -627,8 +616,6 @@ export function ClientePropriedadeUnificadoDialog({
                         ))}
                       </div>
                     )}
-                  </>
-                )}
               </TabsContent>
             </ScrollArea>
           </Tabs>
@@ -637,7 +624,7 @@ export function ClientePropriedadeUnificadoDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving || isAtClientLimit}>
+            <Button type="submit" disabled={saving}>
               {saving ? "Salvando..." : isEditing ? "Salvar" : "Salvar Tudo"}
             </Button>
           </DialogFooter>

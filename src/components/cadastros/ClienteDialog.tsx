@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
+
 import { useForm } from "react-hook-form";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -12,7 +12,7 @@ import { useState, useEffect } from "react";
 import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
-import { StickyNote } from "lucide-react";
+
 
 interface ClienteDialogProps {
   open: boolean;
@@ -265,13 +265,6 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
               </div>
             </div>
             
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="anotacoes" className="flex items-center gap-2">
-                <StickyNote className="h-4 w-4 text-amber-500" />
-                Observações
-              </Label>
-              <Textarea id="anotacoes" {...register("anotacoes")} rows={4} placeholder="Observações sobre o cliente..." />
-            </div>
           </div>
 
           <DialogFooter>

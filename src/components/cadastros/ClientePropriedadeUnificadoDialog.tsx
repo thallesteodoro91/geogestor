@@ -21,6 +21,7 @@ import { getCurrentTenantId } from "@/services/supabase.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 
 interface PropriedadeForm {
+  id_propriedade?: string; // exists for saved properties
   nome_da_propriedade: string;
   area_ha?: number | string;
   cidade?: string;
@@ -57,6 +58,7 @@ export function ClientePropriedadeUnificadoDialog({
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>([]);
   const [categoriaOptions, setCategoriaOptions] = useState<string[]>([]);
   const [propriedades, setPropriedades] = useState<PropriedadeForm[]>([]);
+  const [originalPropIds, setOriginalPropIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState("cliente");
   const [saving, setSaving] = useState(false);
 
@@ -86,7 +88,7 @@ export function ClientePropriedadeUnificadoDialog({
             .select('*')
             .eq('id_cliente', cliente.id_cliente);
           if (data && data.length > 0) {
-            setPropriedades(data.map((p: any) => ({
+            const mapped = data.map((p: any) => ({
               id_propriedade: p.id_propriedade,
               nome_da_propriedade: p.nome_da_propriedade || "",
               area_ha: p.area_ha ?? "",
@@ -102,9 +104,12 @@ export function ClientePropriedadeUnificadoDialog({
               longitude: p.longitude ?? "",
               possui_memorial_descritivo: p.possui_memorial_descritivo || "",
               observacoes: p.observacoes || "",
-            })));
+            }));
+            setPropriedades(mapped);
+            setOriginalPropIds(data.map((p: any) => p.id_propriedade));
           } else {
             setPropriedades([]);
+            setOriginalPropIds([]);
           }
         };
         fetchProps();
@@ -124,6 +129,7 @@ export function ClientePropriedadeUnificadoDialog({
         setProspeccaoOptions([]);
         setCategoriaOptions([]);
         setPropriedades([]);
+        setOriginalPropIds([]);
       }
       setActiveTab("cliente");
     }
@@ -219,6 +225,75 @@ export function ClientePropriedadeUnificadoDialog({
 
         if (error) throw error;
         clienteId = cliente.id_cliente;
+
+        // Handle property changes
+        const currentPropIds = propriedades
+          .filter(p => p.id_propriedade)
+          .map(p => p.id_propriedade!);
+
+        // Delete removed properties
+        const deletedIds = originalPropIds.filter(id => !currentPropIds.includes(id));
+        if (deletedIds.length > 0) {
+          const { error: delError } = await supabase
+            .from("dim_propriedade")
+            .delete()
+            .in("id_propriedade", deletedIds);
+          if (delError) throw delError;
+        }
+
+        // Update existing properties
+        const existingProps = propriedades.filter(p => p.id_propriedade);
+        for (const p of existingProps) {
+          const { error: updError } = await supabase
+            .from("dim_propriedade")
+            .update({
+              nome_da_propriedade: p.nome_da_propriedade.trim(),
+              area_ha: p.area_ha ? Number(p.area_ha) : null,
+              cidade: p.cidade?.trim() || null,
+              municipio: p.municipio?.trim() || null,
+              tipo: p.tipo || null,
+              situacao: p.situacao || null,
+              matricula: p.matricula?.trim() || null,
+              ccir: p.ccir?.trim() || null,
+              car: p.car?.trim() || null,
+              itr: p.itr?.trim() || null,
+              latitude: p.latitude ? Number(p.latitude) : null,
+              longitude: p.longitude ? Number(p.longitude) : null,
+              possui_memorial_descritivo: p.possui_memorial_descritivo || null,
+              observacoes: p.observacoes?.trim() || null,
+            })
+            .eq("id_propriedade", p.id_propriedade!);
+          if (updError) throw updError;
+        }
+
+        // Insert new properties
+        const newProps = propriedades.filter(p => !p.id_propriedade);
+        if (newProps.length > 0) {
+          const newPropsData = newProps.map(p => ({
+            nome_da_propriedade: p.nome_da_propriedade.trim(),
+            area_ha: p.area_ha ? Number(p.area_ha) : null,
+            cidade: p.cidade?.trim() || null,
+            municipio: p.municipio?.trim() || null,
+            tipo: p.tipo || null,
+            situacao: p.situacao || null,
+            matricula: p.matricula?.trim() || null,
+            ccir: p.ccir?.trim() || null,
+            car: p.car?.trim() || null,
+            itr: p.itr?.trim() || null,
+            latitude: p.latitude ? Number(p.latitude) : null,
+            longitude: p.longitude ? Number(p.longitude) : null,
+            possui_memorial_descritivo: p.possui_memorial_descritivo || null,
+            observacoes: p.observacoes?.trim() || null,
+            id_cliente: clienteId,
+            tenant_id: tenantId,
+          }));
+
+          const { error: insError } = await supabase
+            .from("dim_propriedade")
+            .insert(newPropsData);
+          if (insError) throw insError;
+        }
+
         toast.success("Cliente atualizado com sucesso!");
       } else {
         // Create new client

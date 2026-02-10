@@ -2,6 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 
@@ -133,12 +134,13 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{cliente ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
         </DialogHeader>
         
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4 pr-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="nome">Nome *</Label>
@@ -267,7 +269,19 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             
           </div>
 
-          <DialogFooter>
+          <div className="col-span-2 space-y-2">
+            <Label htmlFor="anotacoes">Observações</Label>
+            <Textarea
+              id="anotacoes"
+              {...register("anotacoes")}
+              placeholder="Observações sobre o cliente..."
+              rows={3}
+            />
+          </div>
+
+          </div>
+
+          <DialogFooter className="mt-4 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>

@@ -306,7 +306,7 @@ export function ClientePropriedadeUnificadoDialog({
               </TabsTrigger>
             </TabsList>
 
-            <ScrollArea className="flex-1 min-h-0 max-h-[calc(90vh-220px)] pr-4">
+            <div className="flex-1 min-h-0 overflow-y-auto max-h-[calc(90vh-220px)] pr-4">
               {/* Tab Cliente */}
               <TabsContent value="cliente" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -429,6 +429,18 @@ export function ClientePropriedadeUnificadoDialog({
                       ))}
                     </div>
                   </div>
+                </div>
+
+                <Separator />
+
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="anotacoes">Observações</Label>
+                  <Textarea
+                    id="anotacoes"
+                    {...register("anotacoes")}
+                    placeholder="Observações sobre o cliente..."
+                    rows={3}
+                  />
                 </div>
 
               </TabsContent>
@@ -585,6 +597,17 @@ export function ClientePropriedadeUnificadoDialog({
                                   />
                                 </div>
 
+                                <div className="col-span-2">
+                                  <Label className="text-xs">Observações</Label>
+                                  <Textarea
+                                    value={prop.observacoes || ""}
+                                    onChange={(e) => updatePropriedade(index, "observacoes", e.target.value)}
+                                    placeholder="Observações sobre a propriedade..."
+                                    rows={3}
+                                    className="text-sm"
+                                  />
+                                </div>
+
                               </div>
                             </CardContent>
                           </Card>
@@ -592,7 +615,7 @@ export function ClientePropriedadeUnificadoDialog({
                       </div>
                     )}
               </TabsContent>
-            </ScrollArea>
+            </div>
           </Tabs>
 
           <DialogFooter className="mt-4 pt-4 border-t">

@@ -12,9 +12,6 @@ import { useState, useEffect } from "react";
 import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
-import { usePlanLimits } from "@/hooks/usePlanLimits";
-import { useResourceCounts } from "@/hooks/useResourceCounts";
-import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
 import { StickyNote } from "lucide-react";
 
 interface ClienteDialogProps {
@@ -28,10 +25,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: cliente || {}
   });
-  const { isWithinLimit, isLoading: planLoading } = usePlanLimits();
-  const { clientsCount } = useResourceCounts();
   const isEditing = !!cliente;
-  const canAddClient = planLoading || isEditing || isWithinLimit('clients', clientsCount);
 
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
     cliente?.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []
@@ -77,18 +71,6 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   };
 
   const onSubmit = async (data: any) => {
-    if (!isEditing && !canAddClient) {
-      toast.error("Limite de clientes atingido. Faça upgrade do seu plano.", {
-        description: "Acesse Configurações > Plano para fazer upgrade.",
-        action: {
-          label: "Ver Planos",
-          onClick: () => window.location.href = '/configuracoes',
-        },
-        duration: 6000,
-      });
-      return;
-    }
-    
     try {
       // Obter tenant_id para garantir isolamento de dados
       const { data: { user } } = await supabase.auth.getUser();
@@ -155,8 +137,6 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
         <DialogHeader>
           <DialogTitle>{cliente ? "Editar Cliente" : "Novo Cliente"}</DialogTitle>
         </DialogHeader>
-        
-        {!isEditing && <PlanLimitAlert resource="clients" currentCount={clientsCount} />}
         
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -298,7 +278,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={!isEditing && !canAddClient}>Salvar</Button>
+            <Button type="submit">Salvar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

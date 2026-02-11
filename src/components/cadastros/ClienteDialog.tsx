@@ -205,7 +205,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="situacao">Situação do Serviço</Label>
+              <Label htmlFor="situacao">Situação</Label>
               <Select onValueChange={(value) => setValue("situacao", value)} defaultValue={cliente?.situacao}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione..." />

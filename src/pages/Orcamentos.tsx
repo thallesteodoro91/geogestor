@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,9 @@ export default function Orcamentos() {
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 15;
 
   const { data: orcamentos = [], isLoading } = useQuery({
     queryKey: ['orcamentos'],
@@ -243,6 +246,25 @@ export default function Orcamentos() {
     }
   };
 
+  // Filter orcamentos by search
+  const filteredOrcamentos = orcamentos.filter(orc => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      orc.dim_cliente?.nome?.toLowerCase().includes(term) ||
+      orc.fato_servico?.nome_do_servico?.toLowerCase().includes(term) ||
+      orc.codigo_orcamento?.toLowerCase().includes(term) ||
+      orc.situacao_do_pagamento?.toLowerCase().includes(term)
+    );
+  });
+
+  // Pagination
+  const totalPages = Math.ceil(filteredOrcamentos.length / itemsPerPage);
+  const paginatedOrcamentos = filteredOrcamentos.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);
   const orcamentosConvertidos = orcamentos.filter(o => o.orcamento_convertido).length;
   const taxaConversao = orcamentos.length > 0 ? (orcamentosConvertidos / orcamentos.length * 100) : 0;
@@ -276,12 +298,23 @@ export default function Orcamentos() {
         </div>
 
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Lista de Orçamentos</CardTitle>
-            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+          <CardHeader className="space-y-4">
+            <div className="flex flex-row items-center justify-between">
+              <CardTitle>Lista de Orçamentos</CardTitle>
+              <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Orçamento
             </Button>
+            </div>
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por cliente, serviço ou código..."
+                className="pl-9 h-9 text-sm"
+                value={searchTerm}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              />
+            </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogContent className="max-w-2xl">
                 <DialogHeader>
@@ -414,12 +447,12 @@ export default function Orcamentos() {
                   <TableRow>
                     <TableCell colSpan={6} className="text-center">Carregando...</TableCell>
                   </TableRow>
-                ) : orcamentos.length === 0 ? (
+                ) : filteredOrcamentos.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center">Nenhum orçamento encontrado</TableCell>
                   </TableRow>
                 ) : (
-                  orcamentos.map((orc) => (
+                  paginatedOrcamentos.map((orc) => (
                     <TableRow key={orc.id_orcamento}>
                       <TableCell>{new Date(orc.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
                       <TableCell>{orc.dim_cliente?.nome || '-'}</TableCell>
@@ -462,6 +495,17 @@ export default function Orcamentos() {
                 )}
               </TableBody>
             </Table>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <p className="text-sm text-muted-foreground">
+                  {filteredOrcamentos.length} orçamento(s) • Página {currentPage} de {totalPages}
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>Anterior</Button>
+                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próxima</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

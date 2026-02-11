@@ -18,6 +18,7 @@ import { Separator } from "@/components/ui/separator";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
+import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 
 interface PropriedadeForm {
@@ -294,6 +295,7 @@ export function ClientePropriedadeUnificadoDialog({
           if (insError) throw insError;
         }
 
+        await logAuditEvent({ action: 'UPDATE', entity: 'Cliente', entityId: clienteId, oldData: { ...cliente }, newData: clienteData });
         toast.success("Cliente atualizado com sucesso!");
       } else {
         // Create new client
@@ -334,6 +336,7 @@ export function ClientePropriedadeUnificadoDialog({
           if (propError) throw propError;
         }
 
+        await logAuditEvent({ action: 'INSERT', entity: 'Cliente', entityId: clienteId, newData: clienteData });
         const propCount = propriedades.length;
         toast.success(
           propCount > 0 

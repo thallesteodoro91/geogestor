@@ -17,6 +17,7 @@ import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
+import { useTheme } from "next-themes";
 import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
@@ -25,6 +26,7 @@ import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const queryClient = useQueryClient();
+  const { theme, setTheme } = useTheme();
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -392,15 +394,10 @@ export default function Configuracoes() {
                   <Label>Modo Escuro</Label>
                   <p className="text-sm text-muted-foreground">Ativar tema escuro no sistema</p>
                 </div>
-                <Switch />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Animações</Label>
-                  <p className="text-sm text-muted-foreground">Habilitar animações e transições</p>
-                </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={theme === "dark"}
+                  onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                />
               </div>
             </CardContent>
           </Card>
@@ -416,26 +413,11 @@ export default function Configuracoes() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Story Cards Automáticos</Label>
-                  <p className="text-sm text-muted-foreground">Receber insights AI sobre performance</p>
+                  <Label>Alertas de Pagamento</Label>
+                  <p className="text-sm text-muted-foreground">Notificar sobre pagamentos próximos e vencidos</p>
                 </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Alertas de Desvio Orçamentário</Label>
-                  <p className="text-sm text-muted-foreground">Notificar quando houver desvios significativos</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Relatórios Mensais</Label>
-                  <p className="text-sm text-muted-foreground">Receber resumo executivo mensal por email</p>
-                </div>
-                <Switch />
+                <Switch defaultChecked disabled />
+                <span className="text-xs text-muted-foreground ml-2">Sempre ativo</span>
               </div>
             </CardContent>
           </Card>

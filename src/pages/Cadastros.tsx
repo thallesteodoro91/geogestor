@@ -102,6 +102,10 @@ export default function Cadastros() {
       
       if (error) {
         console.error('Erro ao deletar:', error);
+        // Check for FK constraint error
+        if (error.code === '23503' || error.message?.includes('foreign key') || error.message?.includes('violates')) {
+          throw new Error('Este registro possui dependências (serviços, orçamentos ou propriedades vinculados). Remova as dependências antes de excluir.');
+        }
         throw error;
       }
       

@@ -219,34 +219,58 @@ const Dashboard = () => {
           </div>
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 grid-8pt">
             <StoryCard
-              title="Receita em Alta, Margem sob Atenção"
-              insight="A receita cresceu 12,5% no período, sinalizando forte demanda. Porém, as despesas avançaram 5,1%, pressionando a margem líquida. Recomenda-se revisar a estrutura de custos fixos para preservar a rentabilidade."
+              title="Receita e Margem"
+              insight={kpis && kpiVariation 
+                ? `A receita ${kpiVariation.variations.receita_total >= 0 ? 'cresceu' : 'recuou'} ${formatVariation(kpiVariation.variations.receita_total)} no período. ${
+                    (kpis.margem_liquida_percent || 0) > 15 
+                      ? 'A margem líquida está saudável, indicando boa eficiência operacional.'
+                      : 'Recomenda-se revisar a estrutura de custos para preservar a rentabilidade.'
+                  }`
+                : "Carregando análise de receita e margem..."}
               category="financial"
-              trend="alert"
+              trend={kpiVariation?.variations.receita_total >= 0 ? "up" : "alert"}
               emphasis="high"
-              action="Análise detalhada de custos operacionais prioritária"
+              action={kpiVariation?.variations.receita_total < 0 ? "Análise detalhada de custos operacionais prioritária" : undefined}
             />
             <StoryCard
-              title="Eficiência Operacional em Destaque"
-              insight="O tempo médio de conclusão reduziu 15%, resultado direto da otimização de rotas e melhor coordenação das equipes de campo. Isso amplia a capacidade de atender novos clientes sem expandir recursos."
+              title="Performance Operacional"
+              insight={kpis 
+                ? `${kpis.servicos_concluidos || 0} de ${kpis.total_servicos || 0} serviços concluídos. ${
+                    (kpis.taxa_conversao_percent || 0) > 50
+                      ? `Taxa de conversão de ${(kpis.taxa_conversao_percent || 0).toFixed(0)}% — acima da média do setor.`
+                      : `Taxa de conversão de ${(kpis.taxa_conversao_percent || 0).toFixed(0)}% — há espaço para melhorar o follow-up comercial.`
+                  }`
+                : "Carregando indicadores operacionais..."}
               category="operational"
               trend="up"
               emphasis="high"
             />
             <StoryCard
-              title="Taxa de Conversão Sólida"
-              insight="Com 68% de conversão de orçamentos em serviços, o desempenho comercial está acima da média do setor. Este é um indicador de boa qualidade técnica e precificação competitiva."
-              category="strategic"
-              trend="up"
+              title="Ticket Médio"
+              insight={kpis && kpiVariation
+                ? `Ticket médio de R$ ${(kpis.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, ${
+                    kpiVariation.variations.ticket_medio >= 0 
+                      ? `em alta de ${formatVariation(kpiVariation.variations.ticket_medio)}, reflexo de serviços de maior valor agregado.`
+                      : `com recuo de ${formatVariation(kpiVariation.variations.ticket_medio)}. Avaliar precificação.`
+                  }`
+                : "Carregando análise de ticket médio..."}
+              category="financial"
+              trend={kpiVariation?.variations.ticket_medio >= 0 ? "up" : "alert"}
               emphasis="medium"
-              action="Manter estratégia de precificação e follow-up comercial"
             />
             <StoryCard
-              title="Ticket Médio em Expansão"
-              insight="O ticket médio subiu 6,3%, reflexo de serviços mais complexos e de maior valor agregado. A empresa está capturando projetos de topografia para grandes propriedades rurais com sucesso."
-              category="financial"
-              trend="up"
+              title="Despesas sob Controle"
+              insight={kpis && kpiVariation
+                ? `Total de despesas: R$ ${(kpis.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${formatVariation(kpiVariation.variations.total_despesas)} vs anterior). ${
+                    kpiVariation.variations.total_despesas <= 0 
+                      ? 'Custos em queda — boa gestão de recursos.'
+                      : 'Atenção: custos em alta — revisar categorias com maior impacto.'
+                  }`
+                : "Carregando análise de despesas..."}
+              category="strategic"
+              trend={kpiVariation?.variations.total_despesas <= 0 ? "up" : "alert"}
               emphasis="medium"
+              action={kpiVariation?.variations.total_despesas > 5 ? "Manter estratégia de precificação e follow-up comercial" : undefined}
             />
           </div>
         </div>

@@ -28,6 +28,25 @@ export function usePlanLimits(): PlanLimits {
   const plan = subscription?.plan;
   const isActive = isSubscriptionActive();
   const isTrialing = subscription?.status === 'trialing';
+  const isOwner = plan?.slug === 'owner';
+
+  // Owner plan: unlimited everything, never blocked
+  if (plan && isOwner) {
+    return {
+      maxUsers: 99999,
+      maxProperties: 99999,
+      maxClients: 99999,
+      features: plan.features || {},
+      planName: plan.name,
+      planSlug: plan.slug,
+      isTrialing: false,
+      isActive: true,
+      isLoading: false,
+      canAccess: () => true,
+      isWithinLimit: () => true,
+      checkAndNotify: () => true,
+    };
+  }
 
   // While loading, be permissive to avoid false "limit reached" alerts
   if (tenantLoading || !plan) {

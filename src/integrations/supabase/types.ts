@@ -1948,7 +1948,7 @@ export type Database = {
       }
       create_tenant_for_user: {
         Args: { p_company_name: string; p_user_id: string }
-        Returns: Json
+        Returns: string
       }
       gerar_codigo_orcamento: {
         Args: { p_cliente_nome: string; p_tenant_id: string }

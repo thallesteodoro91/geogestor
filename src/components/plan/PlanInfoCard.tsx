@@ -46,18 +46,24 @@ interface PlanInfoCardProps {
 
 export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount = 1 }: PlanInfoCardProps) {
   const { subscription } = useTenant();
-  const { planName, maxUsers, maxClients, maxProperties, isTrialing, isActive, features } = usePlanLimits();
+  const planLimits = usePlanLimits();
+  const { planName, maxUsers, maxClients, maxProperties, isTrialing, isActive, features, planSlug } = planLimits;
 
   const periodEnd = subscription?.current_period_end 
     ? format(new Date(subscription.current_period_end), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
     : null;
 
+  const isOwner = planSlug === 'owner';
+
   const statusBadge = () => {
+    if (isOwner) {
+      return <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">Owner</Badge>;
+    }
     if (!isActive) {
       return <Badge variant="destructive">Inativo</Badge>;
     }
     if (isTrialing) {
-      return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Trial</Badge>;
+      return <Badge variant="secondary" className="bg-yellow-500/20 text-yellow-600 border-yellow-500/30">Avaliação</Badge>;
     }
     return <Badge variant="secondary" className="bg-green-500/20 text-green-600 border-green-500/30">Ativo</Badge>;
   };

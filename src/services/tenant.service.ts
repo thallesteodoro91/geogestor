@@ -27,12 +27,12 @@ export async function createTenant(userId: string, companyName: string) {
 
   if (error) throw error;
 
-  const result = data as { id: string; name: string; slug: string };
+  const tenantId = data as unknown as string;
 
   return {
-    id: result.id,
-    name: result.name,
-    slug: result.slug,
+    id: tenantId,
+    name: companyName.trim(),
+    slug: slugify(companyName),
     logo_url: null,
     settings: {}
   };

@@ -1,63 +1,18 @@
 /**
- * Sales Funnel Chart Component
- * Visualizes budget conversion from total to approved
+ * Sales Funnel Chart — custom horizontal bar visualization
  */
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
-import { useSalesFunnel, FunnelStage } from "@/hooks/useSalesFunnel";
-import {
-  FunnelChart,
-  Funnel,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  LabelList,
-} from "recharts";
-
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: Array<{ payload: FunnelStage }>;
-}
-
-const CustomTooltip = ({ active, payload }: CustomTooltipProps) => {
-  if (!active || !payload || !payload.length) return null;
-
-  const data = payload[0].payload;
-
-  return (
-    <div className="rounded-lg border bg-background p-3 shadow-lg">
-      <div className="flex items-center gap-2 mb-2">
-        <span 
-          className="w-3 h-3 rounded-full shrink-0"
-          style={{ backgroundColor: data.fill }}
-        />
-        <p className="font-semibold text-foreground">{data.name}</p>
-      </div>
-      <div className="space-y-1 text-sm">
-        <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">{data.value}</span> orçamentos
-        </p>
-        <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">{data.percentage.toFixed(1)}%</span> do total
-        </p>
-        {data.conversionRate !== null && (
-          <p className="text-muted-foreground border-t pt-1 mt-1">
-            Taxa de conversão:{" "}
-            <span className="font-medium text-success">{data.conversionRate.toFixed(1)}%</span>
-          </p>
-        )}
-      </div>
-    </div>
-  );
-};
+import { useSalesFunnel } from "@/hooks/useSalesFunnel";
+import { ArrowDown, FileX2 } from "lucide-react";
 
 export const SalesFunnelChart = () => {
   const { density } = useChartSettings();
   const { data, isLoading } = useSalesFunnel();
 
-  const cardPadding = density === "compact" ? "p-4" : "p-6";
-  const chartHeight = density === "compact" ? 250 : 300;
+  const compact = density === "compact";
 
   if (isLoading) {
     return (
@@ -66,9 +21,14 @@ export const SalesFunnelChart = () => {
           <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
           <CardDescription>Conversão de orçamentos</CardDescription>
         </CardHeader>
-        <CardContent className={cardPadding}>
-          <div className="flex items-center justify-center" style={{ height: chartHeight }}>
-            <p className="text-muted-foreground">Carregando...</p>
+        <CardContent className={compact ? "p-4" : "p-6"}>
+          <div className="space-y-5">
+            {[100, 72, 48, 28].map((w, i) => (
+              <div key={i} className="flex flex-col items-center gap-1">
+                <Skeleton className="h-12 rounded-lg" style={{ width: `${w}%` }} />
+                {i < 3 && <Skeleton className="h-5 w-14 rounded-full mt-1" />}
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -82,54 +42,74 @@ export const SalesFunnelChart = () => {
           <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
           <CardDescription>Conversão de orçamentos</CardDescription>
         </CardHeader>
-        <CardContent className={cardPadding}>
-          <div className="flex items-center justify-center" style={{ height: chartHeight }}>
-            <p className="text-muted-foreground">Nenhum orçamento encontrado</p>
+        <CardContent className={compact ? "p-4" : "p-6"}>
+          <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+            <FileX2 className="h-10 w-10 opacity-40" />
+            <p className="text-sm">Nenhum orçamento encontrado</p>
           </div>
         </CardContent>
       </Card>
     );
   }
 
+  const maxValue = data.stages[0]?.value || 1;
+
   return (
     <Card className="interactive-lift" role="region" aria-labelledby="funnel-title">
       <CardHeader>
         <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
         <CardDescription>
-          {data.aprovados} de {data.total} orçamentos aprovados ({((data.aprovados / data.total) * 100).toFixed(0)}%)
+          {data.aprovados} de {data.total} aprovados ({((data.aprovados / data.total) * 100).toFixed(0)}%)
+          {data.recusados > 0 && (
+            <span className="ml-2 text-destructive/70">· {data.recusados} recusados</span>
+          )}
         </CardDescription>
       </CardHeader>
-      <CardContent className={cardPadding}>
-        <ResponsiveContainer width="100%" height={chartHeight}>
-          <FunnelChart>
-            <Tooltip content={<CustomTooltip />} />
-            <Funnel
-              data={data.stages}
-              dataKey="value"
-              nameKey="name"
-              isAnimationActive
-            >
-              {data.stages.map((entry, index) => (
-                <Cell key={`cell-${index}`} fill={entry.fill} />
-              ))}
-              <LabelList
-                position="right"
-                fill="hsl(var(--foreground))"
-                stroke="none"
-                dataKey="name"
-                fontSize={12}
-              />
-              <LabelList
-                position="center"
-                fill="#fff"
-                stroke="none"
-                dataKey="value"
-                fontSize={14}
-                fontWeight="bold"
-              />
-            </Funnel>
-          </FunnelChart>
-        </ResponsiveContainer>
+      <CardContent className={compact ? "p-4" : "p-6"}>
+        <div className="space-y-1">
+          {data.stages.map((stage, index) => {
+            const widthPercent = Math.max((stage.value / maxValue) * 100, 8);
+            const isLast = index === data.stages.length - 1;
+
+            return (
+              <div key={stage.name}>
+                {/* Bar */}
+                <div className="flex flex-col items-center">
+                  <div className="w-full flex justify-center">
+                    <div
+                      className="relative h-12 rounded-lg flex items-center justify-between px-4 transition-all duration-500 ease-out group cursor-default"
+                      style={{
+                        width: `${widthPercent}%`,
+                        backgroundColor: stage.fill,
+                        minWidth: "120px",
+                      }}
+                    >
+                      <span className="text-white text-xs font-medium truncate">
+                        {stage.name}
+                      </span>
+                      <span className="text-white text-sm font-bold tabular-nums whitespace-nowrap ml-2">
+                        {stage.value}
+                        <span className="text-white/70 text-xs font-normal ml-1">
+                          ({stage.percentage.toFixed(0)}%)
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conversion arrow */}
+                {!isLast && stage.conversionRate !== null && (
+                  <div className="flex items-center justify-center gap-1.5 py-1 text-muted-foreground/60">
+                    <ArrowDown className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium tabular-nums">
+                      {stage.conversionRate.toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

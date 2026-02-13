@@ -429,7 +429,7 @@ export async function generateStandardPDF(
     const footerY = margin + 30;
     drawLine(page, margin, footerY + 20, width - margin, primaryColor);
     
-    page.drawText('Este orçamento foi gerado automaticamente pelo sistema SkyGeo 360.', {
+    page.drawText('Este orçamento foi gerado automaticamente pelo sistema GeoGestor.', {
       x: margin,
       y: footerY,
       size: 8,

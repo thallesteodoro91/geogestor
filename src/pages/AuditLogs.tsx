@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/contexts/TenantContext';
+import { useUserRole } from '@/hooks/useUserRole';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,40 +29,28 @@ const ENTITY_OPTIONS = ['Orçamento', 'Despesa', 'Serviço', 'Cliente'];
 
 export default function AuditLogs() {
   const { user } = useAuth();
+  const { tenant } = useTenant();
+  const { isAdmin, isLoading: isLoadingRole } = useUserRole();
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [filterAction, setFilterAction] = useState('');
   const [filterEntity, setFilterEntity] = useState('');
   const [filterDateStart, setFilterDateStart] = useState('');
   const [filterDateEnd, setFilterDateEnd] = useState('');
 
-  // Check admin role
-  const { data: isAdmin, isLoading: isLoadingRole } = useQuery({
-    queryKey: ['user-is-admin', user?.id],
-    queryFn: async () => {
-      if (!user) return false;
-      const { data } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .maybeSingle();
-      return !!data;
-    },
-    enabled: !!user,
-  });
-
-  // Fetch audit logs
+  // Fetch audit logs with tenant_id filter
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['audit-logs', filterAction, filterEntity, filterDateStart, filterDateEnd],
+    queryKey: ['audit-logs', tenant?.id, filterAction, filterEntity, filterDateStart, filterDateEnd],
     queryFn: async () => {
+      if (!tenant?.id) return [];
       let query = supabase
         .from('audit_logs' as any)
         .select('*')
+        .eq('tenant_id', tenant.id)
         .order('created_at', { ascending: false })
         .limit(500);
 
-      if (filterAction) query = query.eq('action', filterAction);
-      if (filterEntity) query = query.eq('entity', filterEntity);
+      if (filterAction && filterAction !== 'all') query = query.eq('action', filterAction);
+      if (filterEntity && filterEntity !== 'all') query = query.eq('entity', filterEntity);
       if (filterDateStart) query = query.gte('created_at', filterDateStart);
       if (filterDateEnd) query = query.lte('created_at', filterDateEnd + 'T23:59:59');
 
@@ -68,7 +58,7 @@ export default function AuditLogs() {
       if (error) throw error;
       return data || [];
     },
-    enabled: isAdmin === true,
+    enabled: isAdmin === true && !!tenant?.id,
   });
 
   // Fetch user profiles for display names
@@ -87,7 +77,6 @@ export default function AuditLogs() {
   });
 
   const profileMap = new Map(profiles.map((p: any) => [p.id, p]));
-
   const pagination = usePagination(logs, { initialPageSize: 20 });
 
   if (isLoadingRole) {
@@ -123,16 +112,13 @@ export default function AuditLogs() {
           <p className="text-muted-foreground">Rastreabilidade de ações críticas do sistema</p>
         </div>
 
-        {/* Filtros */}
         <Card>
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Ação</Label>
                 <Select value={filterAction} onValueChange={setFilterAction}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
                     <SelectItem value="INSERT">Criação</SelectItem>
@@ -144,9 +130,7 @@ export default function AuditLogs() {
               <div className="space-y-2">
                 <Label>Entidade</Label>
                 <Select value={filterEntity} onValueChange={setFilterEntity}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todas" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Todas" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todas</SelectItem>
                     {ENTITY_OPTIONS.map(e => (
@@ -165,28 +149,17 @@ export default function AuditLogs() {
               </div>
             </div>
             {(filterAction || filterEntity || filterDateStart || filterDateEnd) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setFilterAction('');
-                  setFilterEntity('');
-                  setFilterDateStart('');
-                  setFilterDateEnd('');
-                }}
-              >
+              <Button variant="ghost" size="sm" className="mt-3" onClick={() => {
+                setFilterAction(''); setFilterEntity(''); setFilterDateStart(''); setFilterDateEnd('');
+              }}>
                 Limpar filtros
               </Button>
             )}
           </CardContent>
         </Card>
 
-        {/* Tabela */}
         <Card>
-          <CardHeader>
-            <CardTitle>Registros ({logs.length})</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>Registros ({logs.length})</CardTitle></CardHeader>
           <CardContent>
             {isLoading ? (
               <p className="text-center text-muted-foreground py-8">Carregando...</p>
@@ -219,9 +192,7 @@ export default function AuditLogs() {
                                   {format(new Date(log.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                                 </TableCell>
                                 <TableCell>{profile?.full_name || profile?.email || log.user_id.slice(0, 8)}</TableCell>
-                                <TableCell>
-                                  <Badge variant={badge.variant}>{badge.label}</Badge>
-                                </TableCell>
+                                <TableCell><Badge variant={badge.variant}>{badge.label}</Badge></TableCell>
                                 <TableCell>{log.entity}</TableCell>
                                 <TableCell>
                                   <CollapsibleTrigger asChild>
@@ -266,7 +237,6 @@ export default function AuditLogs() {
                     </TableBody>
                   </Table>
                 </div>
-
                 <TablePagination
                   currentPage={pagination.currentPage}
                   totalPages={pagination.totalPages}

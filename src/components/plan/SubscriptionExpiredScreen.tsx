@@ -24,7 +24,7 @@ export function SubscriptionExpiredScreen({ planName, expiredAt }: SubscriptionE
           </div>
           <CardTitle className="text-2xl">Assinatura Expirada</CardTitle>
           <CardDescription className="text-base">
-            Seu plano <strong>{planName}</strong> expirou
+            Seu período de avaliação do plano <strong>{planName}</strong> expirou
             {formattedDate && <> em <strong>{formattedDate}</strong></>}.
           </CardDescription>
         </CardHeader>

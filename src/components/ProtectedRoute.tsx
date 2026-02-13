@@ -85,18 +85,18 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Verificar se a assinatura expirou
-  if (subscription && subscription.current_period_end) {
+  // Verificar se a assinatura expirou (bypass para plano Owner)
+  const isOwnerPlan = subscription?.plan?.slug === 'owner';
+  if (!isOwnerPlan && subscription && subscription.current_period_end) {
     const now = new Date();
     const periodEnd = new Date(subscription.current_period_end);
     const isExpired = periodEnd < now;
     const status = subscription.status;
 
-    // Bloquear se expirado e não é um plano ativo pago
     if (isExpired && status !== 'active') {
       return (
         <SubscriptionExpiredScreen
-          planName={subscription.plan?.name || 'Trial'}
+          planName={subscription.plan?.name || 'Completo'}
           expiredAt={subscription.current_period_end}
         />
       );

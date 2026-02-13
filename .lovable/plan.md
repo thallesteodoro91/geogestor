@@ -1,50 +1,58 @@
 
-## Analise SaaS do GeoGestor - Status das Melhorias
+
+## Simplificacao do SaaS: Conta Admin Ilimitada + Plano Unico
 
 ---
 
-### IMPLEMENTADO ✅
+### Contexto Atual
 
-#### Prioridade 1 - Críticas
-1. ✅ **Bloqueio de trial expirado** — `ProtectedRoute` agora verifica `current_period_end` e mostra tela de assinatura expirada (`SubscriptionExpiredScreen`)
-2. ✅ **Barras de uso de recursos** — `UsageBar` agora renderizado no `PlanInfoCard` com contagens reais (clientes, propriedades, usuários)
-3. ✅ **Ações destrutivas restritas a admins** — Zona de Perigo, dados demo e TenantSettingsCard protegidos por `useUserRole`
+- Existem 5 planos no banco: **Trial**, **Owner**, **Completo Mensal**, **Completo Semestral**, **Completo Anual**
+- Novos tenants recebem automaticamente o plano Trial (7 dias) via funcao `create_tenant_for_user`
+- A conta admin (tenant "teste") ja usa o plano Owner com limites altos e expiracao em 2099
+- O `ProtectedRoute` bloqueia acesso quando o trial expira, mas nao distingue o plano Owner
 
-#### Prioridade 2 - Importantes
-4. ✅ **Unificação de roles** — `AuditLogs` agora usa `tenant_members.role` via `useUserRole` hook (fonte única de verdade)
-5. ✅ **Filtro de tenant nos AuditLogs** — Query agora inclui `.eq('tenant_id', tenant.id)`
-6. ✅ **Hardcoded removido** — Info do sistema agora mostra contagens reais e nome correto
-7. ✅ **Card AI decorativo removido** — Seção "Integração AI" removida de Configurações
+### Mudancas Planejadas
 
-#### Prioridade 3 - Melhorias
-8. ✅ **Consistência de marca** — Padronizado para "GeoGestor" em Auth, Sidebar, Configurações, PDF template
-9. ✅ **Planos inativos limpos** — Starter, Professional, Enterprise removidos do banco
-10. ✅ **Onboarding.tsx removido** — Código morto eliminado
+#### 1. Garantir que conta Owner nunca seja bloqueada
+
+Alterar `ProtectedRoute.tsx` para ignorar verificacao de expiracao quando o plano e "owner":
+
+```
+if (subscription?.plan?.slug === 'owner') -> pular verificacao
+```
+
+Alterar `usePlanLimits.ts` para retornar limites ilimitados quando `planSlug === 'owner'`, garantindo que nenhum toast de limite apareca.
+
+#### 2. Simplificar para 1 plano de cliente
+
+Manter apenas **2 planos** no banco:
+- **Owner** (slug: `owner`) -- para a conta admin, sem limites
+- **Completo** (slug: `completo`) -- plano unico para clientes, com todas as funcionalidades
+
+Acoes no banco de dados:
+- Remover planos: `trial`, `completo-semestral`, `completo-anual`
+- Renomear `completo-mensal` para `completo` (atualizar slug e nome)
+- Migrar o tenant "SkyGeo" (atualmente em Trial expirado) para o plano Completo
+
+#### 3. Atualizar funcao de onboarding
+
+Alterar a funcao `create_tenant_for_user` no banco para atribuir o plano **Completo** (ao inves de Trial) a novos tenants, com status `trialing` e 7 dias de trial. Assim novos clientes ja entram no plano correto com periodo de avaliacao.
+
+#### 4. Atualizar interface
+
+- `PlanInfoCard.tsx`: Remover logica de "Trial" badge, simplificar para mostrar "Completo" ou "Owner"
+- `SubscriptionExpiredScreen.tsx`: Ajustar texto para referenciar o plano unico
+- `usePlanLimits.ts`: Adicionar verificacao `isOwner` para bypass de limites
 
 ---
 
-### PENDENTE
+### Arquivos alterados
 
-- ❌ **Integração de pagamento (Stripe)** — Requer habilitação do Stripe e configuração de produtos/preços
-- ❌ **Página de escolha de plano** — Depende da integração Stripe
-- ❌ **Funcionalidade de remover membro** e alterar role pós-convite
-- ❌ **Domínio próprio para emails** de convite (requer configuração DNS externa)
-
----
-
-### Arquivos Criados/Modificados
-
-| Arquivo | Ação |
+| Arquivo | Acao |
 |---------|------|
-| `src/hooks/useUserRole.ts` | Novo — hook para verificar role via tenant_members |
-| `src/components/plan/SubscriptionExpiredScreen.tsx` | Novo — tela de bloqueio pós-expiração |
-| `src/components/ProtectedRoute.tsx` | Editado — verificação de assinatura expirada |
-| `src/components/plan/PlanInfoCard.tsx` | Editado — UsageBar renderizado |
-| `src/components/plan/TenantSettingsCard.tsx` | Editado — read-only para não-admins |
-| `src/pages/AuditLogs.tsx` | Editado — useUserRole + filtro tenant_id |
-| `src/pages/Configuracoes.tsx` | Editado — admin checks, hardcoded removido, AI card removido |
-| `src/pages/Auth.tsx` | Editado — marca "GeoGestor" |
-| `src/components/layout/Sidebar.tsx` | Editado — marca "GeoGestor" |
-| `src/modules/index.ts` | Editado — marca "GeoGestor" |
-| `src/lib/pdfTemplateGenerator.ts` | Editado — marca "GeoGestor" |
-| `src/pages/Onboarding.tsx` | Removido — código morto |
+| `src/components/ProtectedRoute.tsx` | Bypass de expiracao para plano Owner |
+| `src/hooks/usePlanLimits.ts` | Limites ilimitados para Owner |
+| `src/components/plan/PlanInfoCard.tsx` | Simplificar exibicao para 1 plano |
+| `src/components/plan/SubscriptionExpiredScreen.tsx` | Ajustar texto |
+| Migracao SQL | Remover planos extras, renomear completo-mensal, atualizar `create_tenant_for_user` |
+

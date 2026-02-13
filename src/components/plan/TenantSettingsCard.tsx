@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { useEffect } from "react";
 import { useTenant } from "@/contexts/TenantContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Save, Bell } from "lucide-react";
+import { Building2, Save, Bell, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 
 export function TenantSettingsCard() {
   const { tenant, refetchTenant } = useTenant();
+  const { isAdmin, isLoading: roleLoading } = useUserRole();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(tenant?.name || "");
   const [alertDaysThreshold, setAlertDaysThreshold] = useState<number>(
@@ -56,6 +58,39 @@ export function TenantSettingsCard() {
   };
 
   if (!tenant) return null;
+
+  // Mostrar card read-only para não-admins
+  if (!roleLoading && !isAdmin) {
+    return (
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-primary" />
+            <CardTitle>Informações da Empresa</CardTitle>
+          </div>
+          <CardDescription>
+            Dados principais da sua empresa
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Nome da Empresa</Label>
+              <p className="text-sm font-medium">{tenant.name}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Identificador</Label>
+              <p className="text-sm text-muted-foreground">{tenant.slug}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 rounded-lg bg-muted/50">
+            <ShieldAlert className="h-4 w-4" />
+            <span>Apenas administradores podem alterar as configurações da empresa.</span>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

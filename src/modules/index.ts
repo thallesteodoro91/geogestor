@@ -1,5 +1,5 @@
 /**
- * @fileoverview Módulos da aplicação SkyGeo 360
+ * @fileoverview Módulos da aplicação GeoGestor
  * 
  * Arquitetura modular tenant-aware:
  * - CRM: Gestão de clientes e propriedades

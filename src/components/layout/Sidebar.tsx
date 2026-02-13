@@ -95,8 +95,8 @@ export const Sidebar = ({ className, onNavigate }: SidebarProps) => {
               </span>
             </div>
             <div>
-              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'SkyGeo'}</h1>
-              <p className="text-xs text-muted-foreground">Performance & Insights</p>
+              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'GeoGestor'}</h1>
+              <p className="text-xs text-muted-foreground">Gestão para Topografia</p>
             </div>
           </div>
           <nav className="flex flex-1 flex-col">

@@ -93,6 +93,28 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
           </div>
         </div>
 
+        {/* Barras de uso de recursos */}
+        <div className="space-y-4">
+          <h4 className="text-sm font-medium">Uso de Recursos</h4>
+          <UsageBar
+            label="Clientes"
+            current={clientsCount}
+            max={maxClients}
+            icon={<UserCircle className="h-4 w-4" />}
+          />
+          <UsageBar
+            label="Propriedades"
+            current={propertiesCount}
+            max={maxProperties}
+            icon={<MapPin className="h-4 w-4" />}
+          />
+          <UsageBar
+            label="Usuários"
+            current={usersCount}
+            max={maxUsers}
+            icon={<Users className="h-4 w-4" />}
+          />
+        </div>
 
         {featuresList.length > 0 && (
           <div className="space-y-3">

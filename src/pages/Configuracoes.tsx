@@ -7,13 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Bot, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2 } from "lucide-react";
+import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2, ShieldAlert } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { TenantSettingsCard } from "@/components/plan/TenantSettingsCard";
 import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { useUserRole } from "@/hooks/useUserRole";
 import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
@@ -25,6 +26,7 @@ import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
+  const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
@@ -422,37 +424,6 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Bot className="h-5 w-5 text-primary" />
-                <CardTitle>Integração AI</CardTitle>
-              </div>
-              <CardDescription>Configurações do Consultor Financeiro GPT-5</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Consultor Financeiro Ativo</Label>
-                  <p className="text-sm text-muted-foreground">Habilitar análises automáticas com IA</p>
-                </div>
-                <Switch defaultChecked />
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label htmlFor="frequencia">Frequência de Análises</Label>
-                <select 
-                  id="frequencia" 
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                  defaultValue="Semanal"
-                >
-                  <option value="Diária">Diária</option>
-                  <option value="Semanal">Semanal</option>
-                  <option value="Mensal">Mensal</option>
-                </select>
-              </div>
-            </CardContent>
-          </Card>
 
           <Card>
             <CardHeader>
@@ -547,51 +518,53 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FlaskConical className="h-5 w-5 text-primary" />
-                <CardTitle>Dados de Demonstração</CardTitle>
-              </div>
-              <CardDescription>Gerar dados fictícios para testar o sistema e visualizar os gráficos</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                <p className="text-sm">
-                  Gere <strong>50 clientes fictícios</strong> com propriedades, orçamentos e despesas para testar 
-                  todas as funcionalidades e visualizar os gráficos com dados realistas.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  ⚠️ Os dados gerados serão marcados como "[DEMO]" e podem ser removidos posteriormente.
-                </p>
-              </div>
-              
-              {demoProgress && (
-                <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm text-primary">{demoProgress}</span>
+          {isAdmin && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <FlaskConical className="h-5 w-5 text-primary" />
+                  <CardTitle>Dados de Demonstração</CardTitle>
                 </div>
-              )}
-              
-              <div className="flex gap-3">
-                <Button 
-                  onClick={() => setGenerateDemoDialogOpen(true)}
-                  disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
-                >
-                  <FlaskConical className="h-4 w-4 mr-2" />
-                  {generateDemoMutation.isPending ? 'Gerando...' : 'Gerar 50 Clientes Demo'}
-                </Button>
-                <Button 
-                  variant="outline"
-                  onClick={() => setRemoveDemoDialogOpen(true)}
-                  disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {removeDemoMutation.isPending ? 'Removendo...' : 'Remover Dados Demo'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                <CardDescription>Gerar dados fictícios para testar o sistema e visualizar os gráficos</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                  <p className="text-sm">
+                    Gere <strong>50 clientes fictícios</strong> com propriedades, orçamentos e despesas para testar 
+                    todas as funcionalidades e visualizar os gráficos com dados realistas.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    ⚠️ Os dados gerados serão marcados como "[DEMO]" e podem ser removidos posteriormente.
+                  </p>
+                </div>
+                
+                {demoProgress && (
+                  <div className="flex items-center gap-2 p-3 bg-primary/10 rounded-lg">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <span className="text-sm text-primary">{demoProgress}</span>
+                  </div>
+                )}
+                
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => setGenerateDemoDialogOpen(true)}
+                    disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
+                  >
+                    <FlaskConical className="h-4 w-4 mr-2" />
+                    {generateDemoMutation.isPending ? 'Gerando...' : 'Gerar 50 Clientes Demo'}
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={() => setRemoveDemoDialogOpen(true)}
+                    disabled={generateDemoMutation.isPending || removeDemoMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    {removeDemoMutation.isPending ? 'Removendo...' : 'Remover Dados Demo'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -599,7 +572,7 @@ export default function Configuracoes() {
                 <Database className="h-5 w-5 text-primary" />
                 <CardTitle>Dados e Backup</CardTitle>
               </div>
-              <CardDescription>Gerenciar importação, exportação e backup de dados</CardDescription>
+              <CardDescription>Gerenciar importação de dados</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-4">
@@ -607,32 +580,30 @@ export default function Configuracoes() {
                   <Upload className="h-4 w-4 mr-2" />
                   Importar CSV
                 </Button>
-                <Button variant="outline">Exportar Dados</Button>
-                <Button variant="outline">Fazer Backup</Button>
               </div>
-              <Separator />
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Último Backup</p>
-                <p className="text-sm text-muted-foreground">15 de Maio de 2025 às 14:30</p>
-              </div>
-              <Separator />
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <p className="text-sm font-medium">Zona de Perigo</p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
-                </p>
-                <Button 
-                  variant="destructive" 
-                  onClick={() => setDeleteAllDataDialogOpen(true)}
-                  disabled={deleteAllDataMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {deleteAllDataMutation.isPending ? 'Excluindo...' : 'Excluir Todos os Dados'}
-                </Button>
-              </div>
+
+              {isAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <p className="text-sm font-medium">Zona de Perigo</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
+                    </p>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setDeleteAllDataDialogOpen(true)}
+                      disabled={deleteAllDataMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleteAllDataMutation.isPending ? 'Excluindo...' : 'Excluir Todos os Dados'}
+                    </Button>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -642,22 +613,22 @@ export default function Configuracoes() {
                 <Info className="h-5 w-5 text-primary" />
                 <CardTitle>Informações do Sistema</CardTitle>
               </div>
-              <CardDescription>Versão e logs do TopoVision Dashboard</CardDescription>
+              <CardDescription>GeoGestor — Plataforma de Gestão para Topografia</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex justify-between">
-                <span className="text-sm font-medium">Versão</span>
-                <span className="text-sm text-muted-foreground">1.0.0</span>
+                <span className="text-sm font-medium">Sistema</span>
+                <span className="text-sm text-muted-foreground">GeoGestor</span>
               </div>
               <Separator />
               <div className="flex justify-between">
-                <span className="text-sm font-medium">Última Atualização</span>
-                <span className="text-sm text-muted-foreground">Maio 2025</span>
+                <span className="text-sm font-medium">Clientes</span>
+                <span className="text-sm text-muted-foreground">{clientsCount} registros</span>
               </div>
               <Separator />
               <div className="flex justify-between">
-                <span className="text-sm font-medium">Registros de Dados</span>
-                <span className="text-sm text-muted-foreground">1.247 registros</span>
+                <span className="text-sm font-medium">Propriedades</span>
+                <span className="text-sm text-muted-foreground">{propertiesCount} registros</span>
               </div>
             </CardContent>
           </Card>

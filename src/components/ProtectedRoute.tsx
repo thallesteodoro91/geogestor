@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
+import { SubscriptionExpiredScreen } from "@/components/plan/SubscriptionExpiredScreen";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const { tenant, isLoading: tenantLoading, error: tenantError, refetchTenant } = useTenant();
+  const { tenant, subscription, isLoading: tenantLoading, error: tenantError, refetchTenant } = useTenant();
   const location = useLocation();
   const redirectCountRef = useRef(0);
   const lastPathRef = useRef(location.pathname);
@@ -16,7 +17,6 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     if (location.pathname === "/onboarding" && lastPathRef.current !== "/onboarding") {
       redirectCountRef.current += 1;
-      console.log('[ProtectedRoute] Redirect to onboarding count:', redirectCountRef.current);
     }
     lastPathRef.current = location.pathname;
   }, [location.pathname]);
@@ -26,14 +26,13 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       setIsAuthenticated(!!session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
     });
 
-    return () => subscription.unsubscribe();
+    return () => authSub.unsubscribe();
   }, []);
 
-  // Aguarda verificação de autenticação
   if (isAuthenticated === null) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -42,12 +41,10 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Redireciona para login se não autenticado
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Aguarda carregamento do tenant
   if (tenantLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -56,9 +53,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Se houve erro ou loop de redirecionamento, mostrar tela de erro
   if (tenantError || redirectCountRef.current >= 3) {
-    console.error('[ProtectedRoute] Tenant error or redirect loop detected:', { tenantError, redirectCount: redirectCountRef.current });
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4 p-6 max-w-md">
@@ -79,9 +74,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
               Tentar novamente
             </Button>
             <Button 
-              onClick={() => {
-                supabase.auth.signOut();
-              }}
+              onClick={() => { supabase.auth.signOut(); }}
               variant="outline"
             >
               Sair
@@ -92,8 +85,23 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Tenant is now auto-created in TenantContext, so we just wait for it
-  // No more redirect to onboarding needed
+  // Verificar se a assinatura expirou
+  if (subscription && subscription.current_period_end) {
+    const now = new Date();
+    const periodEnd = new Date(subscription.current_period_end);
+    const isExpired = periodEnd < now;
+    const status = subscription.status;
+
+    // Bloquear se expirado e não é um plano ativo pago
+    if (isExpired && status !== 'active') {
+      return (
+        <SubscriptionExpiredScreen
+          planName={subscription.plan?.name || 'Trial'}
+          expiredAt={subscription.current_period_end}
+        />
+      );
+    }
+  }
 
   return <>{children}</>;
 };

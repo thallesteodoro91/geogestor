@@ -43,8 +43,11 @@ export const PAYMENT_METHOD_OPTIONS = [
 
 // Status de situação do orçamento (para calendário/aprovação)
 export const BUDGET_SITUATION = {
-  PENDENTE: 'Pendente',
+  EM_ANALISE: 'Em Analise',
+  EM_NEGOCIACAO: 'Em Negociacao',
   APROVADO: 'Aprovado',
+  RECUSADO: 'Recusado',
+  PENDENTE: 'Pendente',
   CANCELADO: 'Cancelado',
 } as const;
 
@@ -52,8 +55,11 @@ export type BudgetSituation = typeof BUDGET_SITUATION[keyof typeof BUDGET_SITUAT
 
 // Opções para dropdown de situação do orçamento
 export const BUDGET_SITUATION_OPTIONS = [
-  { value: BUDGET_SITUATION.PENDENTE, label: 'Pendente' },
+  { value: BUDGET_SITUATION.EM_ANALISE, label: 'Em Análise' },
+  { value: BUDGET_SITUATION.EM_NEGOCIACAO, label: 'Em Negociação' },
   { value: BUDGET_SITUATION.APROVADO, label: 'Aprovado' },
+  { value: BUDGET_SITUATION.RECUSADO, label: 'Recusado' },
+  { value: BUDGET_SITUATION.PENDENTE, label: 'Pendente' },
   { value: BUDGET_SITUATION.CANCELADO, label: 'Cancelado' },
 ] as const;
 
@@ -121,9 +127,24 @@ export const PAYMENT_METHOD_COLORS = {
 } as const;
 
 export const BUDGET_SITUATION_COLORS = {
+  EM_ANALISE: {
+    bg: 'hsl(217,91%,60%)',
+    bgHover: 'hsl(217,91%,55%)',
+    text: 'white',
+  },
+  EM_NEGOCIACAO: {
+    bg: 'hsl(173,80%,45%)',
+    bgHover: 'hsl(173,80%,40%)',
+    text: 'white',
+  },
   APROVADO: {
     bg: 'hsl(142,76%,36%)',
     bgHover: 'hsl(142,76%,30%)',
+    text: 'white',
+  },
+  RECUSADO: {
+    bg: 'hsl(0,100%,50%)',
+    bgHover: 'hsl(0,100%,45%)',
     text: 'white',
   },
   PENDENTE: {
@@ -241,8 +262,14 @@ export const getPaymentMethodColor = (method: string | null | undefined): string
  */
 export const getBudgetSituationBadgeClass = (situation: string | null | undefined): string => {
   switch (situation) {
+    case BUDGET_SITUATION.EM_ANALISE:
+      return `bg-[${BUDGET_SITUATION_COLORS.EM_ANALISE.bg}] text-${BUDGET_SITUATION_COLORS.EM_ANALISE.text} hover:bg-[${BUDGET_SITUATION_COLORS.EM_ANALISE.bgHover}]`;
+    case BUDGET_SITUATION.EM_NEGOCIACAO:
+      return `bg-[${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bg}] text-${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.text} hover:bg-[${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bgHover}]`;
     case BUDGET_SITUATION.APROVADO:
       return `bg-[${BUDGET_SITUATION_COLORS.APROVADO.bg}] text-${BUDGET_SITUATION_COLORS.APROVADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.APROVADO.bgHover}]`;
+    case BUDGET_SITUATION.RECUSADO:
+      return `bg-[${BUDGET_SITUATION_COLORS.RECUSADO.bg}] text-${BUDGET_SITUATION_COLORS.RECUSADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.RECUSADO.bgHover}]`;
     case BUDGET_SITUATION.CANCELADO:
       return `bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bg}] text-${BUDGET_SITUATION_COLORS.CANCELADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bgHover}]`;
     case BUDGET_SITUATION.PENDENTE:
@@ -258,8 +285,14 @@ export const getBudgetSituationBadgeClass = (situation: string | null | undefine
  */
 export const getBudgetSituationColor = (situation: string | null | undefined): string => {
   switch (situation) {
+    case BUDGET_SITUATION.EM_ANALISE:
+      return BUDGET_SITUATION_COLORS.EM_ANALISE.bg;
+    case BUDGET_SITUATION.EM_NEGOCIACAO:
+      return BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bg;
     case BUDGET_SITUATION.APROVADO:
       return BUDGET_SITUATION_COLORS.APROVADO.bg;
+    case BUDGET_SITUATION.RECUSADO:
+      return BUDGET_SITUATION_COLORS.RECUSADO.bg;
     case BUDGET_SITUATION.CANCELADO:
       return BUDGET_SITUATION_COLORS.CANCELADO.bg;
     case BUDGET_SITUATION.PENDENTE:

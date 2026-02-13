@@ -1,6 +1,6 @@
 /**
  * Hook para buscar dados do funil de vendas
- * Agrega orçamentos por situação e calcula taxas de conversão
+ * Agrega orçamentos por situação real do banco e calcula taxas de conversão
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -18,8 +18,10 @@ export interface FunnelStage {
 export interface SalesFunnelData {
   stages: FunnelStage[];
   total: number;
-  pendentes: number;
+  emAnalise: number;
+  emNegociacao: number;
   aprovados: number;
+  recusados: number;
 }
 
 export function useSalesFunnel() {
@@ -29,7 +31,7 @@ export function useSalesFunnel() {
       const tenantId = await getCurrentTenantId();
       
       if (!tenantId) {
-        return { stages: [], total: 0, pendentes: 0, aprovados: 0 };
+        return { stages: [], total: 0, emAnalise: 0, emNegociacao: 0, aprovados: 0, recusados: 0 };
       }
 
       const { data, error } = await supabase
@@ -42,23 +44,25 @@ export function useSalesFunnel() {
         throw error;
       }
 
-      // Contagem por situação
       const total = data?.length || 0;
-      const pendentes = data?.filter(o => o.situacao === "Pendente").length || 0;
+      const emAnalise = data?.filter(o => o.situacao === "Em Analise").length || 0;
+      const emNegociacao = data?.filter(o => o.situacao === "Em Negociacao").length || 0;
       const aprovados = data?.filter(o => o.situacao === "Aprovado").length || 0;
-      
-      // Ativos = Pendentes + Aprovados (excluindo cancelados)
-      const ativos = pendentes + aprovados;
+      const recusados = data?.filter(o => o.situacao === "Recusado").length || 0;
 
-      // Taxas de conversão
-      const taxaAtivos = total > 0 ? (ativos / total) * 100 : 0;
-      const taxaAprovados = ativos > 0 ? (aprovados / ativos) * 100 : 0;
+      // Ativos = todos exceto recusados
+      const ativos = total - recusados;
 
-      // Cores do gradiente (azul → teal → verde)
+      // Taxas de conversão entre etapas
+      const taxaAnalise = total > 0 ? (ativos / total) * 100 : 0;
+      const taxaNegociacao = ativos > 0 ? (emNegociacao / ativos) * 100 : 0;
+      const taxaAprovados = (emAnalise + emNegociacao) > 0 ? (aprovados / (emAnalise + emNegociacao + aprovados)) * 100 : 0;
+
       const colors = {
-        top: "hsl(217, 91%, 60%)",    // Azul
-        middle: "hsl(173, 80%, 45%)", // Teal
-        bottom: "hsl(142, 76%, 36%)", // Verde
+        total: "hsl(239, 84%, 67%)",     // Indigo
+        analise: "hsl(217, 91%, 60%)",    // Blue
+        negociacao: "hsl(173, 80%, 45%)", // Teal
+        aprovados: "hsl(142, 76%, 36%)",  // Green
       };
 
       const stages: FunnelStage[] = [
@@ -66,27 +70,34 @@ export function useSalesFunnel() {
           name: "Total de Orçamentos",
           value: total,
           percentage: 100,
-          conversionRate: taxaAtivos,
-          fill: colors.top,
+          conversionRate: taxaAnalise,
+          fill: colors.total,
+        },
+        {
+          name: "Em Análise",
+          value: emAnalise,
+          percentage: total > 0 ? (emAnalise / total) * 100 : 0,
+          conversionRate: taxaNegociacao,
+          fill: colors.analise,
         },
         {
           name: "Em Negociação",
-          value: ativos,
-          percentage: total > 0 ? (ativos / total) * 100 : 0,
+          value: emNegociacao,
+          percentage: total > 0 ? (emNegociacao / total) * 100 : 0,
           conversionRate: taxaAprovados,
-          fill: colors.middle,
+          fill: colors.negociacao,
         },
         {
           name: "Aprovados",
           value: aprovados,
           percentage: total > 0 ? (aprovados / total) * 100 : 0,
           conversionRate: null,
-          fill: colors.bottom,
+          fill: colors.aprovados,
         },
       ];
 
-      return { stages, total, pendentes, aprovados };
+      return { stages, total, emAnalise, emNegociacao, aprovados, recusados };
     },
-    staleTime: 1000 * 60 * 5, // 5 minutos
+    staleTime: 1000 * 60 * 5,
   });
 }

@@ -1,18 +1,45 @@
 /**
- * Sales Funnel Chart — custom horizontal bar visualization
+ * Sales Funnel Chart — custom horizontal bar visualization with year/month filters
  */
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { useSalesFunnel } from "@/hooks/useSalesFunnel";
+import { useAvailableYears } from "@/hooks/useAvailableYears";
 import { ArrowDown, FileX2 } from "lucide-react";
+
+const MESES = [
+  { value: "1", label: "Jan" },
+  { value: "2", label: "Fev" },
+  { value: "3", label: "Mar" },
+  { value: "4", label: "Abr" },
+  { value: "5", label: "Mai" },
+  { value: "6", label: "Jun" },
+  { value: "7", label: "Jul" },
+  { value: "8", label: "Ago" },
+  { value: "9", label: "Set" },
+  { value: "10", label: "Out" },
+  { value: "11", label: "Nov" },
+  { value: "12", label: "Dez" },
+];
 
 export const SalesFunnelChart = () => {
   const { density } = useChartSettings();
-  const { data, isLoading } = useSalesFunnel();
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
+
+  const { data: availableYears } = useAvailableYears();
+  const { data, isLoading } = useSalesFunnel(selectedYear, selectedMonth);
 
   const compact = density === "compact";
+
+  const periodLabel = selectedMonth
+    ? `${MESES[selectedMonth - 1]?.label} ${selectedYear}`
+    : `${selectedYear}`;
 
   if (isLoading) {
     return (
@@ -39,8 +66,35 @@ export const SalesFunnelChart = () => {
     return (
       <Card className="interactive-lift" role="region" aria-labelledby="funnel-title">
         <CardHeader>
-          <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
-          <CardDescription>Conversão de orçamentos</CardDescription>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
+              <CardDescription>Conversão de orçamentos · {periodLabel}</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
+                <SelectTrigger className="h-8 w-[80px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(availableYears || [currentYear]).map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedMonth ? String(selectedMonth) : "all"} onValueChange={(v) => setSelectedMonth(v === "all" ? null : Number(v))}>
+                <SelectTrigger className="h-8 w-[80px] text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {MESES.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className={compact ? "p-4" : "p-6"}>
           <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
@@ -57,13 +111,41 @@ export const SalesFunnelChart = () => {
   return (
     <Card className="interactive-lift" role="region" aria-labelledby="funnel-title">
       <CardHeader>
-        <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
-        <CardDescription>
-          {data.aprovados} de {data.total} aprovados ({((data.aprovados / data.total) * 100).toFixed(0)}%)
-          {data.recusados > 0 && (
-            <span className="ml-2 text-destructive/70">· {data.recusados} recusados</span>
-          )}
-        </CardDescription>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <CardTitle id="funnel-title">Funil de Vendas</CardTitle>
+            <CardDescription>
+              {data.aprovados} de {data.total} aprovados ({((data.aprovados / data.total) * 100).toFixed(0)}%)
+              {data.recusados > 0 && (
+                <span className="ml-2 text-destructive/70">· {data.recusados} recusados</span>
+              )}
+              <span className="ml-2">· {periodLabel}</span>
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            <Select value={String(selectedYear)} onValueChange={(v) => setSelectedYear(Number(v))}>
+              <SelectTrigger className="h-8 w-[80px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(availableYears || [currentYear]).map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={selectedMonth ? String(selectedMonth) : "all"} onValueChange={(v) => setSelectedMonth(v === "all" ? null : Number(v))}>
+              <SelectTrigger className="h-8 w-[80px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {MESES.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className={compact ? "p-4" : "p-6"}>
         <div className="space-y-1">

@@ -159,7 +159,7 @@ export const SalesFunnelChart = () => {
                 <div className="flex flex-col items-center">
                   <div className="w-full flex justify-center">
                     <div
-                      className="relative h-12 rounded-lg flex items-center justify-between px-4 transition-all duration-500 ease-out group cursor-default"
+                      className="relative h-12 rounded-lg flex items-center justify-between px-4 transition-all duration-300 ease-out group cursor-default hover:scale-[1.03] hover:shadow-lg hover:brightness-110"
                       style={{
                         width: `${widthPercent}%`,
                         backgroundColor: stage.fill,

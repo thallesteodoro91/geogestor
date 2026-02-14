@@ -1,48 +1,12 @@
 
 
-## Simplificacao do SaaS: Conta Admin Ilimitada + Plano Unico
+## Filtro de Ano e Mes para o Funil de Vendas
 
 ---
 
-### Contexto Atual
+### O que muda
 
-- Existem 5 planos no banco: **Trial**, **Owner**, **Completo Mensal**, **Completo Semestral**, **Completo Anual**
-- Novos tenants recebem automaticamente o plano Trial (7 dias) via funcao `create_tenant_for_user`
-- A conta admin (tenant "teste") ja usa o plano Owner com limites altos e expiracao em 2099
-- O `ProtectedRoute` bloqueia acesso quando o trial expira, mas nao distingue o plano Owner
-
-### Mudancas Planejadas
-
-#### 1. Garantir que conta Owner nunca seja bloqueada
-
-Alterar `ProtectedRoute.tsx` para ignorar verificacao de expiracao quando o plano e "owner":
-
-```
-if (subscription?.plan?.slug === 'owner') -> pular verificacao
-```
-
-Alterar `usePlanLimits.ts` para retornar limites ilimitados quando `planSlug === 'owner'`, garantindo que nenhum toast de limite apareca.
-
-#### 2. Simplificar para 1 plano de cliente
-
-Manter apenas **2 planos** no banco:
-- **Owner** (slug: `owner`) -- para a conta admin, sem limites
-- **Completo** (slug: `completo`) -- plano unico para clientes, com todas as funcionalidades
-
-Acoes no banco de dados:
-- Remover planos: `trial`, `completo-semestral`, `completo-anual`
-- Renomear `completo-mensal` para `completo` (atualizar slug e nome)
-- Migrar o tenant "SkyGeo" (atualmente em Trial expirado) para o plano Completo
-
-#### 3. Atualizar funcao de onboarding
-
-Alterar a funcao `create_tenant_for_user` no banco para atribuir o plano **Completo** (ao inves de Trial) a novos tenants, com status `trialing` e 7 dias de trial. Assim novos clientes ja entram no plano correto com periodo de avaliacao.
-
-#### 4. Atualizar interface
-
-- `PlanInfoCard.tsx`: Remover logica de "Trial" badge, simplificar para mostrar "Completo" ou "Owner"
-- `SubscriptionExpiredScreen.tsx`: Ajustar texto para referenciar o plano unico
-- `usePlanLimits.ts`: Adicionar verificacao `isOwner` para bypass de limites
+Adicionar seletores de **ano** e **mes** no header do card do Funil de Vendas, permitindo filtrar os orcamentos por periodo. Quando nenhum mes e selecionado, mostra o ano inteiro. A query no banco passa a filtrar por `data_orcamento` dentro do periodo escolhido.
 
 ---
 
@@ -50,9 +14,28 @@ Alterar a funcao `create_tenant_for_user` no banco para atribuir o plano **Compl
 
 | Arquivo | Acao |
 |---------|------|
-| `src/components/ProtectedRoute.tsx` | Bypass de expiracao para plano Owner |
-| `src/hooks/usePlanLimits.ts` | Limites ilimitados para Owner |
-| `src/components/plan/PlanInfoCard.tsx` | Simplificar exibicao para 1 plano |
-| `src/components/plan/SubscriptionExpiredScreen.tsx` | Ajustar texto |
-| Migracao SQL | Remover planos extras, renomear completo-mensal, atualizar `create_tenant_for_user` |
+| `src/hooks/useSalesFunnel.ts` | Aceitar parametros `ano` e `mes`, filtrar query por `data_orcamento` |
+| `src/components/charts/SalesFunnelChart.tsx` | Adicionar seletores de ano/mes no header do card |
+
+---
+
+### Detalhes tecnicos
+
+#### 1. Hook `useSalesFunnel.ts`
+
+- Adicionar parametros opcionais `ano?: number` e `mes?: number | null`
+- Incluir na `queryKey`: `["sales-funnel", ano, mes]`
+- Adicionar filtros na query:
+  - Se `ano` e `mes` definidos: filtrar `data_orcamento` entre primeiro e ultimo dia do mes
+  - Se so `ano` definido: filtrar `data_orcamento` entre 1/jan e 31/dez do ano
+- Usar `useAvailableYears` como referencia para o padrao de filtragem por data
+
+#### 2. Componente `SalesFunnelChart.tsx`
+
+- Adicionar estado local `selectedYear` (default: ano atual) e `selectedMonth` (default: `null` = todos)
+- No `CardHeader`, ao lado do titulo, colocar dois `<Select>` compactos:
+  - **Ano**: lista de anos com dados (usar `useAvailableYears`)
+  - **Mes**: "Todos" + Jan a Dez (1-12), com nomes abreviados
+- Passar `selectedYear` e `selectedMonth` para `useSalesFunnel(selectedYear, selectedMonth)`
+- Na `CardDescription`, indicar o periodo filtrado (ex: "Mar 2025" ou "2025")
 

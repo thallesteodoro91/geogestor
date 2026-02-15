@@ -12,7 +12,6 @@ export interface PlanLimits {
   isTrialing: boolean;
   isActive: boolean;
   isLoading: boolean;
-  canAccess: (feature: string) => boolean;
   isWithinLimit: (resource: ResourceType, currentCount: number) => boolean;
   /**
    * Verifica limite e mostra toast de erro se atingido
@@ -42,7 +41,6 @@ export function usePlanLimits(): PlanLimits {
       isTrialing: false,
       isActive: true,
       isLoading: false,
-      canAccess: () => true,
       isWithinLimit: () => true,
       checkAndNotify: () => true,
     };
@@ -60,7 +58,6 @@ export function usePlanLimits(): PlanLimits {
       isTrialing: false,
       isActive: true,
       isLoading: tenantLoading,
-      canAccess: () => true,
       isWithinLimit: () => true,
       checkAndNotify: () => true,
     };
@@ -117,10 +114,6 @@ export function usePlanLimits(): PlanLimits {
     isTrialing,
     isActive,
     isLoading: false,
-    canAccess: (feature: string) => {
-      if (!isActive) return false;
-      return plan.features[feature] === true;
-    },
     isWithinLimit: (resource: ResourceType, currentCount: number) => {
       return canAddResource(resource, currentCount);
     },

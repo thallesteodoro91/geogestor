@@ -83,6 +83,16 @@ export const NotificationsMenu = () => {
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
           <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 text-xs"
+                onClick={markAllAsRead}
+              >
+                Marcar todas
+              </Button>
+            )}
             {notifications.length > 0 && (
               <Button 
                 variant="ghost" 
@@ -95,16 +105,6 @@ export const NotificationsMenu = () => {
               >
                 <Trash2 className="h-3 w-3 mr-1" />
                 Limpar
-              </Button>
-            )}
-            {unreadCount > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 text-xs"
-                onClick={markAllAsRead}
-              >
-                Marcar todas
               </Button>
             )}
           </div>

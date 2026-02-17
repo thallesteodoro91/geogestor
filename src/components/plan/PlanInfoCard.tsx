@@ -1,9 +1,11 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2 } from "lucide-react";
+import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2, Sparkles } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -47,6 +49,7 @@ interface PlanInfoCardProps {
 export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount = 1 }: PlanInfoCardProps) {
   const { subscription } = useTenant();
   const planLimits = usePlanLimits();
+  const navigate = useNavigate();
   const { planName, maxUsers, maxClients, maxProperties, isTrialing, isActive, features, planSlug } = planLimits;
 
   const periodEnd = subscription?.current_period_end 
@@ -134,6 +137,15 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
               ))}
             </div>
           </div>
+        )}
+        {!isOwner && (
+          <Button
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+            onClick={() => navigate("/assinatura")}
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            {isActive && !isTrialing ? "Gerenciar Assinatura" : "Fazer Upgrade"}
+          </Button>
         )}
       </CardContent>
     </Card>

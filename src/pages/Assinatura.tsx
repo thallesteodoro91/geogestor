@@ -14,7 +14,9 @@ import {
   Users,
   Check,
   Sparkles,
+  Loader2,
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const benefits = [
   {
@@ -84,11 +86,34 @@ const allFeatures = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState("anual");
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
 
-  const handleSubscribe = (planLabel: string) => {
-    toast.info("Redirecionando para o gateway de pagamento...", {
-      description: `Plano ${planLabel} selecionado. Integração em breve.`,
-    });
+  const handleSubscribe = async (planId: string, planLabel: string) => {
+    setLoadingPlan(planId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Faça login para assinar um plano.");
+        navigate("/auth");
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { planId },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error || !data?.url) {
+        throw new Error(error?.message || "Erro ao criar sessão de pagamento");
+      }
+
+      window.location.href = data.url;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro inesperado";
+      toast.error("Erro ao iniciar pagamento", { description: msg });
+    } finally {
+      setLoadingPlan(null);
+    }
   };
 
   return (
@@ -206,13 +231,18 @@ export default function Assinatura() {
                             : ""
                         }`}
                         variant={isBest ? "default" : "outline"}
+                        disabled={loadingPlan === plan.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleSubscribe(plan.label);
+                          handleSubscribe(plan.id, plan.label);
                         }}
                       >
-                        <Sparkles className="h-4 w-4 mr-1" />
-                        Assinar Agora
+                        {loadingPlan === plan.id ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4 mr-1" />
+                        )}
+                        {loadingPlan === plan.id ? "Aguarde..." : "Assinar Agora"}
                       </Button>
                     </div>
                   </div>
@@ -275,7 +305,7 @@ export default function Assinatura() {
           <Button
             size="lg"
             className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-10 text-base hover:opacity-90 border-0 shadow-lg shadow-purple-500/25"
-            onClick={() => handleSubscribe("Anual")}
+            onClick={() => handleSubscribe("anual", "Anual")}
           >
             <Sparkles className="h-5 w-5 mr-2" />
             Começar Agora com Melhor Valor

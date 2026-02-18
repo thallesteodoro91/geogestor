@@ -163,7 +163,7 @@ export default function Assinatura() {
                   }`}
                 >
                   {isBest && (
-                    <Badge className="absolute -top-5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md">
+                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md">
                       Melhor Valor
                     </Badge>
                   )}

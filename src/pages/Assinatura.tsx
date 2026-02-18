@@ -8,7 +8,7 @@ import {
   ArrowLeft,
   DollarSign,
   Globe,
-  FileText,
+  
   Headphones,
   WifiOff,
   Users,
@@ -30,13 +30,6 @@ const benefits = [
     description: "Visualize propriedades com camadas geográficas, KML e análise territorial avançada.",
     color: "text-blue-500",
     bg: "bg-blue-500/10",
-  },
-  {
-    icon: FileText,
-    title: "Geração de Contratos PDF",
-    description: "Crie orçamentos e contratos profissionais com sua marca em poucos cliques.",
-    color: "text-amber-500",
-    bg: "bg-amber-500/10",
   },
   {
     icon: Headphones,

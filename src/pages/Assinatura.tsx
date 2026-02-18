@@ -151,50 +151,55 @@ export default function Assinatura() {
               const isBest = plan.best;
 
               return (
-                <div
-                  key={plan.id}
-                  onClick={() => setSelectedPlan(plan.id)}
-                  className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 ${
-                    isBest
-                      ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20"
-                      : isSelected
-                        ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
-                        : "bg-border"
-                  }`}
-                >
-                  {isBest && (
-                    <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md">
-                      Melhor Valor
-                    </Badge>
-                  )}
-                  <div className="rounded-[15px] bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl p-6 h-full flex flex-col">
-                    <p className="font-semibold text-lg">{plan.label}</p>
-                    <div className="mt-4 mb-1">
-                      <span className="text-4xl font-extrabold">R$ {plan.perMonth}</span>
-                      <span className="text-muted-foreground text-sm">{plan.period}</span>
+                <div key={plan.id} className="flex flex-col">
+                  {isBest ? (
+                    <div className="flex justify-center mb-0">
+                      <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md rounded-b-none rounded-t-xl">
+                        Melhor Valor
+                      </Badge>
                     </div>
-                    {plan.total !== plan.perMonth && (
-                      <p className="text-xs text-muted-foreground mb-4">
-                        Total: R$ {plan.total}
-                      </p>
-                    )}
-                    {plan.total === plan.perMonth && <div className="mb-4" />}
+                  ) : (
+                    <div className="h-6" />
+                  )}
+                  <div
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 flex-1 ${
+                      isBest
+                        ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-tl-none"
+                        : isSelected
+                          ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
+                          : "bg-border"
+                    }`}
+                  >
+                    <div className="rounded-[15px] bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl p-6 h-full flex flex-col">
+                      <p className="font-semibold text-lg">{plan.label}</p>
+                      <div className="mt-4 mb-1">
+                        <span className="text-4xl font-extrabold">R$ {plan.perMonth}</span>
+                        <span className="text-muted-foreground text-sm">{plan.period}</span>
+                      </div>
+                      {plan.total !== plan.perMonth && (
+                        <p className="text-xs text-muted-foreground mb-4">
+                          Total: R$ {plan.total}
+                        </p>
+                      )}
+                      {plan.total === plan.perMonth && <div className="mb-4" />}
 
-                    <Button
-                      className={`w-full mt-auto ${
-                        isBest
-                          ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
-                          : ""
-                      }`}
-                      variant={isBest ? "default" : "outline"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSubscribe(plan.label);
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      Assinar Agora
-                    </Button>
+                      <Button
+                        className={`w-full mt-auto ${
+                          isBest
+                            ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+                            : ""
+                        }`}
+                        variant={isBest ? "default" : "outline"}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSubscribe(plan.label);
+                        }}
+                      >
+                        <Sparkles className="h-4 w-4 mr-1" />
+                        Assinar Agora
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );

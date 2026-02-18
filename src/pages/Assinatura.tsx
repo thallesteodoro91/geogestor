@@ -74,7 +74,7 @@ const allFeatures = [
   "GeoBot IA — Assistente inteligente",
   "Calendário de compromissos",
   "Gestão de clientes e propriedades",
-  "Orçamentos e contratos em PDF",
+  "Orçamentos em PDF",
   "Importe os mapas das propriedades (KML/KMZ)",
   "Relatórios e exportações",
   "Equipe multi-usuário",

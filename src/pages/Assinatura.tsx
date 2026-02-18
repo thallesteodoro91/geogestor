@@ -235,6 +235,40 @@ export default function Assinatura() {
           </div>
         </section>
 
+        {/* FAQ */}
+        <section className="max-w-2xl mx-auto space-y-4">
+          <h3 className="text-lg font-semibold text-center">Perguntas Frequentes</h3>
+          <div className="space-y-3">
+            {[
+              {
+                q: "Posso cancelar a qualquer momento?",
+                a: "Sim. Você pode cancelar sua assinatura quando quiser, sem multas ou burocracia. O acesso continua até o fim do período já pago.",
+              },
+              {
+                q: "Há período de teste gratuito?",
+                a: "Oferecemos um plano gratuito com funcionalidades básicas para você conhecer a plataforma. Para acesso completo, escolha um dos planos pagos acima.",
+              },
+              {
+                q: "Quais formas de pagamento são aceitas?",
+                a: "Aceitamos cartões de crédito (Visa, Mastercard, Elo, American Express), Pix e boleto bancário.",
+              },
+              {
+                q: "Posso mudar de plano depois?",
+                a: "Sim. Você pode fazer upgrade ou downgrade do seu plano a qualquer momento. O valor é ajustado proporcionalmente.",
+              },
+              {
+                q: "Os dados da minha empresa ficam seguros?",
+                a: "Absolutamente. Todos os dados são armazenados com criptografia e backups automáticos. Você é o único proprietário das suas informações.",
+              },
+            ].map((item) => (
+              <div key={item.q} className="bg-muted/30 rounded-xl p-5 space-y-2">
+                <p className="font-semibold text-sm">{item.q}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* Final CTA */}
         <section className="text-center space-y-4 py-8">
           <p className="text-muted-foreground text-base">Pronto para transformar sua gestão rural?</p>

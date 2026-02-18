@@ -75,7 +75,7 @@ const allFeatures = [
   "Calendário de compromissos",
   "Gestão de clientes e propriedades",
   "Orçamentos e contratos em PDF",
-  "Mapas via satélite",
+  "Importe os mapas das propriedades (KML/KMZ)",
   "Relatórios e exportações",
   "Equipe multi-usuário",
   "Suporte prioritário",

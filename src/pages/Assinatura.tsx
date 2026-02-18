@@ -33,7 +33,7 @@ const benefits = [
   },
   {
     icon: FileText,
-    title: "Geração de Contratos PDF",
+    title: "Geração de Orçamentos PDF",
     description: "Crie orçamentos profissionais com sua marca em poucos cliques.",
     color: "text-amber-500",
     bg: "bg-amber-500/10",
@@ -62,10 +62,10 @@ const benefits = [
 ];
 
 const plans = [
-  { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês" },
-  { id: "trimestral", label: "Trimestral", price: 86, total: 260, perMonth: 86, period: "/mês" },
-  { id: "semestral", label: "Semestral", price: 80, total: 480, perMonth: 80, period: "/mês" },
-  { id: "anual", label: "Anual", price: 70, total: 840, perMonth: 70, period: "/mês", best: true },
+  { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês", discount: null, savings: null },
+  { id: "trimestral", label: "Trimestral", price: 86, total: 260, perMonth: 86, period: "/mês", discount: "Economize 11%", savings: null },
+  { id: "semestral", label: "Semestral", price: 80, total: 480, perMonth: 80, period: "/mês", discount: "Economize 18%", savings: null },
+  { id: "anual", label: "Anual", price: 70, total: 840, perMonth: 70, period: "/mês", discount: "Economize 28%", savings: "vs R$97/mês no plano mensal — você economiza R$324/ano", best: true },
 ];
 
 const allFeatures = [
@@ -165,24 +165,39 @@ export default function Assinatura() {
                     onClick={() => setSelectedPlan(plan.id)}
                     className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 flex-1 ${
                       isBest
-                        ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-tl-none"
+                        ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-t-none"
                         : isSelected
                           ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
                           : "bg-border"
                     }`}
                   >
-                    <div className="rounded-[15px] bg-white/60 dark:bg-gray-900/60 backdrop-blur-xl p-6 h-full flex flex-col">
+                    <div className="rounded-[15px] bg-card/80 backdrop-blur-xl p-6 h-full flex flex-col">
                       <p className="font-semibold text-lg">{plan.label}</p>
                       <div className="mt-4 mb-1">
                         <span className="text-4xl font-extrabold">R$ {plan.perMonth}</span>
                         <span className="text-muted-foreground text-sm">{plan.period}</span>
                       </div>
+
+                      {plan.discount && (
+                        <span className="inline-flex items-center self-start text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-0.5 mb-2">
+                          {plan.discount}
+                        </span>
+                      )}
+
                       {plan.total !== plan.perMonth && (
-                        <p className="text-xs text-muted-foreground mb-4">
+                        <p className="text-xs text-muted-foreground mb-1">
                           Total: R$ {plan.total}
                         </p>
                       )}
-                      {plan.total === plan.perMonth && <div className="mb-4" />}
+
+                      {plan.savings && (
+                        <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+                          {plan.savings}
+                        </p>
+                      )}
+
+                      {!plan.discount && !plan.savings && <div className="mb-4" />}
+                      {plan.discount && !plan.savings && <div className="mb-2" />}
 
                       <Button
                         className={`w-full mt-auto ${
@@ -208,7 +223,7 @@ export default function Assinatura() {
         </section>
 
         {/* Feature list */}
-        <section className="max-w-2xl mx-auto space-y-4">
+        <section className="max-w-2xl mx-auto bg-muted/30 rounded-2xl p-8 space-y-4">
           <h3 className="text-lg font-semibold text-center">Incluso em todos os planos</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
             {allFeatures.map((f) => (
@@ -218,6 +233,19 @@ export default function Assinatura() {
               </div>
             ))}
           </div>
+        </section>
+
+        {/* Final CTA */}
+        <section className="text-center space-y-4 py-8">
+          <p className="text-muted-foreground text-base">Pronto para transformar sua gestão rural?</p>
+          <Button
+            size="lg"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-10 text-base hover:opacity-90 border-0 shadow-lg shadow-purple-500/25"
+            onClick={() => handleSubscribe("Anual")}
+          >
+            <Sparkles className="h-5 w-5 mr-2" />
+            Começar Agora com Melhor Valor
+          </Button>
         </section>
       </div>
     </div>

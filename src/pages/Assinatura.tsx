@@ -34,7 +34,7 @@ const benefits = [
   {
     icon: FileText,
     title: "Geração de Contratos PDF",
-    description: "Crie orçamentos e contratos profissionais com sua marca em poucos cliques.",
+    description: "Crie orçamentos profissionais com sua marca em poucos cliques.",
     color: "text-amber-500",
     bg: "bg-amber-500/10",
   },

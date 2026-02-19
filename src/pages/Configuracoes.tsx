@@ -25,6 +25,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-generator.service";
 import { useTenant } from "@/contexts/TenantContext";
+import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -32,6 +33,7 @@ export default function Configuracoes() {
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
   const { refetchTenant } = useTenant();
+  const { refetch: refetchStripe } = useStripeSubscription();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(false);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
@@ -43,10 +45,12 @@ export default function Configuracoes() {
   const [removeDemoDialogOpen, setRemoveDemoDialogOpen] = useState(false);
   const [demoProgress, setDemoProgress] = useState<string | null>(null);
 
-  // Detectar checkout=success e atualizar status da assinatura
+  // Detectar checkout=success, sincronizar com Stripe e atualizar status da assinatura
   useEffect(() => {
     if (searchParams.get("checkout") === "success") {
       setShowCheckoutSuccess(true);
+      // Sincronizar com Stripe (verifica assinatura ativa e atualiza DB)
+      refetchStripe();
       // Atualizar o status da assinatura no contexto global
       refetchTenant();
       // Limpar o parâmetro da URL sem recarregar a página

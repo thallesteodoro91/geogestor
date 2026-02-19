@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2, ShieldAlert } from "lucide-react";
+import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2, ShieldAlert, PartyPopper, X } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -23,12 +24,16 @@ import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-generator.service";
+import { useTenant } from "@/contexts/TenantContext";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
+  const { refetchTenant } = useTenant();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(false);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
@@ -37,6 +42,20 @@ export default function Configuracoes() {
   const [generateDemoDialogOpen, setGenerateDemoDialogOpen] = useState(false);
   const [removeDemoDialogOpen, setRemoveDemoDialogOpen] = useState(false);
   const [demoProgress, setDemoProgress] = useState<string | null>(null);
+
+  // Detectar checkout=success e atualizar status da assinatura
+  useEffect(() => {
+    if (searchParams.get("checkout") === "success") {
+      setShowCheckoutSuccess(true);
+      // Atualizar o status da assinatura no contexto global
+      refetchTenant();
+      // Limpar o parâmetro da URL sem recarregar a página
+      setSearchParams((prev) => {
+        prev.delete("checkout");
+        return prev;
+      });
+    }
+  }, []);
 
   // Fetch current user data
   const { data: currentUser } = useQuery({
@@ -316,6 +335,31 @@ export default function Configuracoes() {
   return (
     <AppLayout>
       <div className="space-y-8">
+        {/* Banner de sucesso pós-checkout */}
+        {showCheckoutSuccess && (
+          <div className="relative flex items-start gap-4 rounded-2xl border border-green-500/30 bg-gradient-to-r from-green-500/10 to-emerald-500/10 p-5 shadow-sm">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-500/20">
+              <PartyPopper className="h-5 w-5 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="flex-1 space-y-1">
+              <p className="font-semibold text-green-700 dark:text-green-300">
+                Bem-vindo ao GeoGestor Premium! 🎉
+              </p>
+              <p className="text-sm text-green-600/80 dark:text-green-400/80">
+                Sua assinatura foi ativada com sucesso. Todos os recursos premium já estão disponíveis para você. Obrigado por assinar!
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 text-green-600 hover:text-green-700 hover:bg-green-500/10 dark:text-green-400"
+              onClick={() => setShowCheckoutSuccess(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+
         <div>
           <h1 className="text-4xl font-heading font-bold text-foreground">Configurações</h1>
           <p className="text-muted-foreground mt-2">Personalize o sistema e gerencie suas preferências</p>

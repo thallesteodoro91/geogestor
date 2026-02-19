@@ -1,13 +1,15 @@
 import { useTenant } from "@/contexts/TenantContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2, Sparkles } from "lucide-react";
+import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2, Sparkles, RefreshCw, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 interface UsageBarProps {
   label: string;
@@ -47,8 +49,9 @@ interface PlanInfoCardProps {
 }
 
 export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount = 1 }: PlanInfoCardProps) {
-  const { subscription } = useTenant();
+  const { subscription, refetchTenant } = useTenant();
   const planLimits = usePlanLimits();
+  const { subscribed, subscription_end: stripeEnd, isLoading: stripeLoading, refetch: refetchStripe } = useStripeSubscription();
   const navigate = useNavigate();
   const { planName, maxUsers, maxClients, maxProperties, isTrialing, isActive, features, planSlug } = planLimits;
 
@@ -58,9 +61,22 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
 
   const isOwner = planSlug === 'owner';
 
+  const handleVerifySubscription = async () => {
+    refetchStripe();
+    await refetchTenant();
+    toast.success("Status da assinatura atualizado!");
+  };
+
   const statusBadge = () => {
     if (isOwner) {
       return <Badge variant="secondary" className="bg-primary/20 text-primary border-primary/30">Owner</Badge>;
+    }
+    if (subscribed) {
+      return (
+        <Badge variant="secondary" className="bg-green-500/20 text-green-600 border-green-500/30 flex items-center gap-1">
+          <ShieldCheck className="h-3 w-3" />Ativo (Stripe)
+        </Badge>
+      );
     }
     if (!isActive) {
       return <Badge variant="destructive">Inativo</Badge>;
@@ -83,7 +99,21 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
             <Crown className="h-5 w-5 text-primary" />
             <CardTitle>Plano & Assinatura</CardTitle>
           </div>
-          {statusBadge()}
+          <div className="flex items-center gap-2">
+            {statusBadge()}
+            {!isOwner && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleVerifySubscription}
+                disabled={stripeLoading}
+                title="Verificar assinatura no Stripe"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${stripeLoading ? "animate-spin" : ""}`} />
+              </Button>
+            )}
+          </div>
         </div>
         <CardDescription>
           Gerencie seu plano e acompanhe o uso de recursos
@@ -93,13 +123,22 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
           <div>
             <p className="font-medium text-lg">{planName}</p>
-            {periodEnd && (
+            {(stripeEnd || periodEnd) && (
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
-                {isTrialing ? "Trial expira em" : "Próxima cobrança"}: {periodEnd}
+                {isTrialing ? "Trial expira em" : "Próxima cobrança"}:{" "}
+                {stripeEnd
+                  ? format(new Date(stripeEnd), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+                  : periodEnd}
               </p>
             )}
           </div>
+          {subscribed && (
+            <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Verificado</span>
+            </div>
+          )}
         </div>
 
         {/* Barras de uso de recursos */}
@@ -144,7 +183,7 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
             onClick={() => navigate("/assinatura")}
           >
             <Sparkles className="h-4 w-4 mr-2" />
-            {isActive && !isTrialing ? "Gerenciar Assinatura" : "Fazer Upgrade"}
+            {subscribed || (isActive && !isTrialing) ? "Gerenciar Assinatura" : "Fazer Upgrade"}
           </Button>
         )}
       </CardContent>

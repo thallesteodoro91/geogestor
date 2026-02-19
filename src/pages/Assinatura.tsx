@@ -107,7 +107,7 @@ export default function Assinatura() {
         throw new Error(error?.message || "Erro ao criar sessão de pagamento");
       }
 
-      window.location.href = data.url;
+      window.open(data.url, "_blank");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro inesperado";
       toast.error("Erro ao iniciar pagamento", { description: msg });

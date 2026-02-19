@@ -24,16 +24,19 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Usuário não autenticado");
 
+    // Ler o body antes de qualquer operação async para não perder o stream
+    const { planId } = await req.json();
+
+    // Criar client com Authorization header no global para que getUser() funcione corretamente
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      { global: { headers: { Authorization: authHeader } } }
     );
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.email) throw new Error("Usuário não autenticado ou sem e-mail");
 
-    const { planId } = await req.json();
     const priceId = PRICE_IDS[planId];
     if (!priceId) throw new Error(`Plano inválido: ${planId}`);
 

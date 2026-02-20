@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2, ShieldAlert, PartyPopper, X } from "lucide-react";
+import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, FlaskConical, Loader2, ShieldAlert, PartyPopper, X, FileSpreadsheet } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -21,6 +21,7 @@ import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { useTheme } from "next-themes";
 import { CsvImportDialog } from "@/components/import/CsvImportDialog";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 import { generateAndInsertDemoData, removeDemoData } from "@/services/demo-data-generator.service";
@@ -41,6 +42,7 @@ export default function Configuracoes() {
   const [userEmail, setUserEmail] = useState("");
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [generateDemoDialogOpen, setGenerateDemoDialogOpen] = useState(false);
   const [removeDemoDialogOpen, setRemoveDemoDialogOpen] = useState(false);
   const [demoProgress, setDemoProgress] = useState<string | null>(null);
@@ -628,6 +630,10 @@ export default function Configuracoes() {
                   <Upload className="h-4 w-4 mr-2" />
                   Importar CSV
                 </Button>
+                <Button onClick={() => setSmartImportOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importação Inteligente
+                </Button>
               </div>
 
               {isAdmin && (
@@ -691,6 +697,14 @@ export default function Configuracoes() {
           queryClient.invalidateQueries({ queryKey: ['propriedades'] });
           queryClient.invalidateQueries({ queryKey: ['tipos-servico'] });
           queryClient.invalidateQueries({ queryKey: ['tipos-despesa'] });
+        }}
+      />
+
+      <SmartImporter
+        open={smartImportOpen}
+        onOpenChange={setSmartImportOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['clientes'] });
         }}
       />
 

@@ -69,6 +69,33 @@ export async function deleteCliente(id: string) {
 }
 
 /**
+ * Insere múltiplos clientes em lote (batch insert)
+ * Divide em chunks de 500 para evitar limites do Supabase
+ */
+export async function createClientesBatch(
+  records: Omit<Cliente, 'id_cliente' | 'created_at' | 'updated_at'>[]
+) {
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) throw new Error('Sessão inválida: tenant não identificado.');
+
+  const CHUNK_SIZE = 500;
+  const results: { success: number; errors: string[] } = { success: 0, errors: [] };
+
+  for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+    const chunk = records.slice(i, i + CHUNK_SIZE).map((r) => ({ ...r, tenant_id: tenantId }));
+    const { data, error } = await supabase.from('dim_cliente').insert(chunk as any).select();
+
+    if (error) {
+      results.errors.push(`Lote ${Math.floor(i / CHUNK_SIZE) + 1}: ${error.message}`);
+    } else {
+      results.success += data?.length ?? chunk.length;
+    }
+  }
+
+  return results;
+}
+
+/**
  * Sanitizes search term for safe use in ILIKE queries
  * Escapes special PostgreSQL ILIKE pattern characters (% and _)
  */

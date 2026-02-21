@@ -27,9 +27,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { supabase } from "@/integrations/supabase/client";
-import { getCurrentTenantId } from "@/services/supabase.service";
+import { Progress } from "@/components/ui/progress";
+import { createClientesBatch } from "@/modules/crm/services/cliente.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
@@ -219,6 +220,7 @@ export function SmartImporter({
   onOpenChange,
   onSuccess,
 }: SmartImporterProps) {
+  const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("upload");
   const [rawData, setRawData] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -230,8 +232,10 @@ export function SmartImporter({
     success: number;
     errors: string[];
   } | null>(null);
+  const [importProgress, setImportProgress] = useState(0);
 
   const reset = () => {
+    setImportProgress(0);
     setStep("upload");
     setRawData([]);
     setHeaders([]);
@@ -392,32 +396,26 @@ export function SmartImporter({
 
     setStep("importing");
     setIsLoading(true);
-    const errors: string[] = [];
-    let success = 0;
+    setImportProgress(0);
 
     try {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) {
-        toast.error("Sessão inválida. Faça login novamente.");
-        setIsLoading(false);
-        setStep("preview");
-        return;
-      }
+      // 1. Build all records as a single array BEFORE calling the API
+      const skippedErrors: string[] = [];
+      const recordsToInsert: Record<string, any>[] = [];
 
       for (let i = 0; i < allValidatedRows.length; i++) {
         const validation = allValidatedRows[i];
 
-        // Skip rows with errors if user chose to skip
         if (validation.hasErrors) {
           if (skipErrors) {
-            errors.push(
+            skippedErrors.push(
               `Linha ${i + 2}: Pulada — ${Object.values(validation.errors).join(", ")}`
             );
             continue;
           }
         }
 
-        const record: Record<string, any> = { tenant_id: tenantId };
+        const record: Record<string, any> = {};
         for (const field of SYSTEM_FIELDS) {
           if (!mappings[field.key]) continue;
           let val: any = validation.row[field.key];
@@ -428,21 +426,27 @@ export function SmartImporter({
           if (field.key === "idade") val = parseInt(val) || null;
           record[field.key] = val;
         }
-
-        const { error } = await supabase
-          .from("dim_cliente" as any)
-          .insert([record as any]);
-
-        if (error) {
-          errors.push(`Linha ${i + 2}: ${error.message}`);
-        } else {
-          success++;
-        }
+        recordsToInsert.push(record);
       }
 
-      setImportResult({ success, errors });
+      setImportProgress(30);
+
+      // 2. Single batch insert call
+      const result = await createClientesBatch(recordsToInsert as any);
+
+      setImportProgress(90);
+
+      const allErrors = [...skippedErrors, ...result.errors];
+      setImportResult({ success: result.success, errors: allErrors });
       setStep("result");
-      if (success > 0) onSuccess?.();
+      setImportProgress(100);
+
+      if (result.success > 0) {
+        // 3. Invalidate React Query cache for immediate UI refresh
+        queryClient.invalidateQueries({ queryKey: ["clientes"] });
+        queryClient.invalidateQueries({ queryKey: ["resource-counts"] });
+        onSuccess?.();
+      }
     } catch (err: any) {
       toast.error(`Erro: ${err.message}`);
       setStep("preview");
@@ -732,6 +736,12 @@ export function SmartImporter({
                 Processando{" "}
                 {skipErrors ? validCount : rawData.length} registros
               </p>
+              <div className="w-full max-w-xs">
+                <Progress value={importProgress} className="h-2" />
+                <p className="text-xs text-muted-foreground text-center mt-1">
+                  {importProgress}%
+                </p>
+              </div>
             </div>
           )}
 

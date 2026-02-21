@@ -45,7 +45,9 @@ import {
   ArrowLeft,
   Download,
   AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -231,11 +233,14 @@ export function SmartImporter({
   const [importResult, setImportResult] = useState<{
     success: number;
     errors: string[];
+    failedRows: Record<string, string>[];
   } | null>(null);
   const [importProgress, setImportProgress] = useState(0);
+  const [defaultValues, setDefaultValues] = useState<Record<string, string>>({});
 
   const reset = () => {
     setImportProgress(0);
+    setDefaultValues({});
     setStep("upload");
     setRawData([]);
     setHeaders([]);
@@ -333,6 +338,10 @@ export function SmartImporter({
 
         let val = (row[idx] ?? "").toString().trim();
 
+        // Apply default value if empty
+        if (!val && defaultValues[field.key]) {
+          val = defaultValues[field.key].trim();
+        }
         // Sanitize currency-like values
         if (val && /R\$|,\d{2}$/.test(val)) {
           val = sanitizeCurrency(val);
@@ -349,16 +358,16 @@ export function SmartImporter({
         }
       }
 
-      // Check required fields
+      // Check required fields (also consider defaults)
       for (const field of SYSTEM_FIELDS) {
-        if (field.required && mappings[field.key] && !mapped[field.key]?.trim()) {
+        if (field.required && mappings[field.key] && !mapped[field.key]?.trim() && !defaultValues[field.key]?.trim()) {
           errors[field.key] = `${field.label} é obrigatório`;
         }
       }
 
       return { row: mapped, errors, hasErrors: Object.keys(errors).length > 0 };
     },
-    [mappings, headers]
+    [mappings, headers, defaultValues]
   );
 
   const allValidatedRows = useMemo(() => {
@@ -399,9 +408,9 @@ export function SmartImporter({
     setImportProgress(0);
 
     try {
-      // 1. Build all records as a single array BEFORE calling the API
       const skippedErrors: string[] = [];
       const recordsToInsert: Record<string, any>[] = [];
+      const failedRows: Record<string, string>[] = [];
 
       for (let i = 0; i < allValidatedRows.length; i++) {
         const validation = allValidatedRows[i];
@@ -411,6 +420,7 @@ export function SmartImporter({
             skippedErrors.push(
               `Linha ${i + 2}: Pulada — ${Object.values(validation.errors).join(", ")}`
             );
+            failedRows.push({ ...validation.row, _erro: Object.values(validation.errors).join("; ") });
             continue;
           }
         }
@@ -431,18 +441,16 @@ export function SmartImporter({
 
       setImportProgress(30);
 
-      // 2. Single batch insert call
       const result = await createClientesBatch(recordsToInsert as any);
 
       setImportProgress(90);
 
       const allErrors = [...skippedErrors, ...result.errors];
-      setImportResult({ success: result.success, errors: allErrors });
+      setImportResult({ success: result.success, errors: allErrors, failedRows });
       setStep("result");
       setImportProgress(100);
 
       if (result.success > 0) {
-        // 3. Invalidate React Query cache for immediate UI refresh
         queryClient.invalidateQueries({ queryKey: ["clientes"] });
         queryClient.invalidateQueries({ queryKey: ["resource-counts"] });
         onSuccess?.();
@@ -453,6 +461,22 @@ export function SmartImporter({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ─── Download failed rows as CSV ──────────────────────────────────
+  const downloadFailedRows = () => {
+    if (!importResult?.failedRows?.length) return;
+    const fields = [...mappedFields.map(f => f.label), "Erro"];
+    const keys = [...mappedFields.map(f => f.key), "_erro"];
+    const rows = importResult.failedRows.map(r => keys.map(k => r[k] || "").join(";"));
+    const csv = [fields.join(";"), ...rows].join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "linhas_com_erro.csv";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -568,7 +592,7 @@ export function SmartImporter({
                       key={field.key}
                       className="flex items-center gap-4 px-2"
                     >
-                      <Label className="w-40 shrink-0 text-sm">
+                      <Label className="w-36 shrink-0 text-sm">
                         {field.label}
                         {field.required && (
                           <span className="text-destructive ml-1">*</span>
@@ -583,7 +607,7 @@ export function SmartImporter({
                           }))
                         }
                       >
-                        <SelectTrigger className="w-64">
+                        <SelectTrigger className="w-52">
                           <SelectValue placeholder="— Não importar —" />
                         </SelectTrigger>
                         <SelectContent>
@@ -597,9 +621,20 @@ export function SmartImporter({
                           ))}
                         </SelectContent>
                       </Select>
+                      <Input
+                        placeholder="Valor padrão"
+                        className="w-40"
+                        value={defaultValues[field.key] || ""}
+                        onChange={(e) =>
+                          setDefaultValues((prev) => ({
+                            ...prev,
+                            [field.key]: e.target.value,
+                          }))
+                        }
+                      />
                       {mappings[field.key] && (
-                        <Badge variant="secondary" className="text-xs">
-                          ✓ Mapeado
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          ✓
                         </Badge>
                       )}
                     </div>
@@ -775,6 +810,17 @@ export function SmartImporter({
                         ))}
                       </ul>
                     </ScrollArea>
+                    {importResult.failedRows.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        onClick={downloadFailedRows}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Baixar linhas com erro (.csv)
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}
@@ -795,9 +841,28 @@ export function SmartImporter({
                 Voltar
               </Button>
               <Button
+                variant="secondary"
                 onClick={() => {
                   const missing = SYSTEM_FIELDS.filter(
-                    (f) => f.required && !mappings[f.key]
+                    (f) => f.required && !mappings[f.key] && !defaultValues[f.key]?.trim()
+                  );
+                  if (missing.length) {
+                    toast.error(
+                      `Mapeie ou defina valor padrão para: ${missing.map((f) => f.label).join(", ")}`
+                    );
+                    return;
+                  }
+                  setStep("preview");
+                  toast.success(`${validCount} de ${rawData.length} linhas válidas`);
+                }}
+              >
+                <ShieldCheck className="h-4 w-4 mr-2" />
+                Validar Agora
+              </Button>
+              <Button
+                onClick={() => {
+                  const missing = SYSTEM_FIELDS.filter(
+                    (f) => f.required && !mappings[f.key] && !defaultValues[f.key]?.trim()
                   );
                   if (missing.length) {
                     toast.error(

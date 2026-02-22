@@ -1,49 +1,29 @@
 
-## Diagnóstico: Tela Branca ao Clicar em "Assinar Agora"
 
-### Causa raiz identificada
+## Corrigir Assinatura do Dono do SaaS
 
-O código atual usa `window.location.href = data.url` para redirecionar o usuário ao Stripe Checkout. Isso substitui completamente a página atual pela página de pagamento do Stripe (`checkout.stripe.com`). O resultado visível é uma **tela branca** momentânea enquanto o browser carrega o domínio externo — e se o redirecionamento falhar silenciosamente (por políticas do browser, bloqueadores ou permissões do iframe), a página simplesmente fica em branco.
+### Problema Raiz
+A correção de codigo anterior esta correta, mas os dados no banco de dados estao errados. Seu tenant esta associado ao plano "Completo" com status "trialing" expirado, quando deveria estar no plano "Owner" com status "active".
 
-A solução correta, conforme as boas práticas do próprio Stripe, é abrir o checkout em uma nova aba usando `window.open(data.url, "_blank")`. Isso:
-- Mantém o usuário no app durante o pagamento
-- Evita a tela branca
-- Permite que o usuário feche a aba do Stripe e volte ao app facilmente
+### Solucao
+Executar uma migracao SQL para atualizar o registro da assinatura do seu tenant:
 
-### Segundo problema encontrado: erro 500 na edge function
+1. Alterar o `plan_id` para apontar para o plano "Owner" (`a49be20d-8285-4c02-946a-b42250ba1c9f`)
+2. Alterar o `status` de "trialing" para "active"
+3. Remover a data de expiracao (`current_period_end` = null) -- plano Owner nao expira
 
-Ao testar a edge function diretamente, ela retorna `{"error":"Usuário não autenticado"}` com status 500. Isso ocorre porque a função usa `supabase.auth.getUser(token)` com um client criado com a `SUPABASE_ANON_KEY` sem passar o token nos headers globais — o padrão correto é passar a Authorization no client ou usar `getClaims`. Isso pode estar causando falha silenciosa no frontend: `error` retorna com mensagem mas o toast não aparece porque a tela já ficou branca.
+### Detalhes Tecnicos
 
-### O que será alterado
-
-**Arquivo: `src/pages/Assinatura.tsx`**
-
-Linha 110: substituir `window.location.href = data.url` por `window.open(data.url, "_blank")`.
-
-Isso é a única mudança necessária no frontend.
-
-**Arquivo: `supabase/functions/create-checkout/index.ts`**
-
-Corrigir a autenticação do usuário para passar o token corretamente no client do Supabase, seguindo o padrão recomendado — criando o client com o Authorization header global, garantindo que `getUser()` funcione:
-
-```typescript
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-  { global: { headers: { Authorization: authHeader } } }
-);
-const { data: { user }, error: userError } = await supabase.auth.getUser();
+**Migracao SQL a ser executada:**
+```sql
+UPDATE tenant_subscriptions
+SET 
+  plan_id = 'a49be20d-8285-4c02-946a-b42250ba1c9f',
+  status = 'active',
+  current_period_end = NULL,
+  updated_at = NOW()
+WHERE tenant_id = 'a0000000-0000-0000-0000-000000000001';
 ```
 
-Além disso, a leitura do body (`req.json()`) deve acontecer **antes** da autenticação para evitar que o stream seja consumido incorretamente — vamos reorganizar a ordem de leitura para ser mais segura.
+Isso resolve o problema de forma definitiva -- nenhuma alteracao de codigo necessaria, apenas a correcao dos dados.
 
-### Resumo das mudanças
-
-| Arquivo | Mudança |
-|---|---|
-| `src/pages/Assinatura.tsx` | `window.location.href` → `window.open(..., "_blank")` |
-| `supabase/functions/create-checkout/index.ts` | Corrigir autenticação passando token no client Supabase + reorganizar leitura do body |
-
-### Por que apenas isso resolve o problema
-
-A tela branca é causada pelo redirecionamento da aba atual. Ao abrir em nova aba, o usuário continua vendo o app e o Stripe Checkout abre normalmente. A correção da edge function garante que a autenticação funcione corretamente e o checkout seja gerado sem erros.

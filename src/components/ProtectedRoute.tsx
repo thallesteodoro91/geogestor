@@ -85,15 +85,17 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Verificar se a assinatura expirou (bypass para plano Owner)
+  // Verificar se a assinatura expirou (bypass para plano Owner e status active)
   const isOwnerPlan = subscription?.plan?.slug === 'owner';
-  if (!isOwnerPlan && subscription && subscription.current_period_end) {
+  const isActive = subscription?.status === 'active';
+  
+  // Owner plan NEVER expires; active subscriptions are always allowed
+  if (!isOwnerPlan && !isActive && subscription && subscription.current_period_end) {
     const now = new Date();
     const periodEnd = new Date(subscription.current_period_end);
     const isExpired = periodEnd < now;
-    const status = subscription.status;
 
-    if (isExpired && status !== 'active') {
+    if (isExpired) {
       return (
         <SubscriptionExpiredScreen
           planName={subscription.plan?.name || 'Completo'}

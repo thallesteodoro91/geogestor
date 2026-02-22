@@ -51,11 +51,8 @@ export default function Configuracoes() {
   useEffect(() => {
     if (searchParams.get("checkout") === "success") {
       setShowCheckoutSuccess(true);
-      // Sincronizar com Stripe (verifica assinatura ativa e atualiza DB)
       refetchStripe();
-      // Atualizar o status da assinatura no contexto global
       refetchTenant();
-      // Limpar o parâmetro da URL sem recarregar a página
       setSearchParams((prev) => {
         prev.delete("checkout");
         return prev;
@@ -63,7 +60,6 @@ export default function Configuracoes() {
     }
   }, []);
 
-  // Fetch current user data
   const { data: currentUser } = useQuery({
     queryKey: ['current-user'],
     queryFn: async () => {
@@ -73,7 +69,6 @@ export default function Configuracoes() {
     },
   });
 
-  // Fetch user profile for avatar
   const { data: userProfile } = useQuery({
     queryKey: ['user-profile', currentUser?.id],
     queryFn: async () => {
@@ -89,7 +84,6 @@ export default function Configuracoes() {
     enabled: !!currentUser?.id,
   });
 
-  // Set initial values when user data loads
   useEffect(() => {
     if (currentUser) {
       setUserEmail(currentUser.email || "");
@@ -97,18 +91,14 @@ export default function Configuracoes() {
     }
   }, [currentUser]);
 
-  // Mutation to update user profile
   const updateUserMutation = useMutation({
     mutationFn: async ({ name, email }: { name: string; email: string }) => {
       const updates: any = {
         data: { full_name: name }
       };
-      
-      // Only update email if it changed
       if (email !== currentUser?.email) {
         updates.email = email;
       }
-
       const { error } = await supabase.auth.updateUser(updates);
       if (error) throw error;
     },
@@ -127,34 +117,26 @@ export default function Configuracoes() {
     queryFn: async () => {
       const tenantId = await getCurrentTenantId();
       if (!tenantId) return null;
-      
-      // Buscar empresa existente
       const { data, error } = await supabase
         .from('dim_empresa')
         .select('*')
         .eq('tenant_id', tenantId)
         .maybeSingle();
-      
       if (error) throw error;
-      
-      // Se não existir, criar automaticamente
       if (!data) {
         const { data: tenant } = await supabase
           .from('tenants')
           .select('name')
           .eq('id', tenantId)
           .single();
-        
         const { data: newEmpresa, error: createError } = await supabase
           .from('dim_empresa')
           .insert({ nome: tenant?.name || 'Minha Empresa', tenant_id: tenantId })
           .select()
           .single();
-        
         if (createError) throw createError;
         return newEmpresa;
       }
-      
       return data;
     },
   });
@@ -179,7 +161,6 @@ export default function Configuracoes() {
     },
   });
 
-  // Mutation para excluir todos os dados da empresa
   const deleteAllDataMutation = useMutation({
     mutationFn: async () => {
       const tenantId = await getCurrentTenantId();
@@ -190,7 +171,6 @@ export default function Configuracoes() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        // Invalidar todas as queries relevantes
         queryClient.invalidateQueries({ queryKey: ['clientes'] });
         queryClient.invalidateQueries({ queryKey: ['propriedades'] });
         queryClient.invalidateQueries({ queryKey: ['servicos'] });
@@ -201,7 +181,6 @@ export default function Configuracoes() {
         queryClient.invalidateQueries({ queryKey: ['kpis'] });
         queryClient.invalidateQueries({ queryKey: ['eventos'] });
         queryClient.invalidateQueries({ queryKey: ['tarefas'] });
-        
         toast.success(`Dados excluídos com sucesso! ${result.totalExcluido} registros removidos.`);
       } else {
         throw new Error(result.error || 'Erro ao excluir dados');
@@ -212,7 +191,6 @@ export default function Configuracoes() {
     },
   });
 
-  // Mutation para gerar dados demo
   const generateDemoMutation = useMutation({
     mutationFn: async () => {
       const tenantId = await getCurrentTenantId();
@@ -230,7 +208,6 @@ export default function Configuracoes() {
         queryClient.invalidateQueries({ queryKey: ['despesas'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         queryClient.invalidateQueries({ queryKey: ['kpis'] });
-        
         toast.success(
           `Dados demo criados! ${result.clientesInseridos} clientes, ${result.propriedadesInseridas} propriedades, ${result.orcamentosInseridos} orçamentos, ${result.despesasInseridas} despesas.`
         );
@@ -244,7 +221,6 @@ export default function Configuracoes() {
     },
   });
 
-  // Mutation para remover dados demo
   const removeDemoMutation = useMutation({
     mutationFn: async () => {
       const tenantId = await getCurrentTenantId();
@@ -261,7 +237,6 @@ export default function Configuracoes() {
         queryClient.invalidateQueries({ queryKey: ['despesas'] });
         queryClient.invalidateQueries({ queryKey: ['dashboard'] });
         queryClient.invalidateQueries({ queryKey: ['kpis'] });
-        
         if (result.clientesRemovidos > 0) {
           toast.success(`${result.clientesRemovidos} clientes demo removidos com sucesso!`);
         } else {
@@ -279,19 +254,15 @@ export default function Configuracoes() {
   const handleTemplateUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
     if (file.type !== 'application/pdf') {
       toast.error('Apenas arquivos PDF são permitidos');
       return;
     }
-
     if (file.size > 5 * 1024 * 1024) {
       toast.error('Arquivo muito grande. Máximo: 5MB');
       return;
     }
-
     setUploadingTemplate(true);
-
     try {
       const fileName = `template-orcamento-${Date.now()}.pdf`;
       const { error: uploadError } = await supabase.storage
@@ -300,17 +271,13 @@ export default function Configuracoes() {
           cacheControl: '3600',
           upsert: false,
         });
-
       if (uploadError) throw uploadError;
-
       const { data: { publicUrl } } = supabase.storage
         .from('empresa-assets')
         .getPublicUrl(fileName);
-
       await updateEmpresaMutation.mutateAsync({
         template_orcamento_url: publicUrl,
       });
-
       toast.success('Template carregado com sucesso!');
     } catch (error: any) {
       toast.error(`Erro ao fazer upload: ${error.message}`);
@@ -321,17 +288,14 @@ export default function Configuracoes() {
 
   const handleRemoveTemplate = async () => {
     if (!empresa?.template_orcamento_url) return;
-
     try {
       const fileName = empresa.template_orcamento_url.split('/').pop();
       if (fileName) {
         await supabase.storage.from('empresa-assets').remove([fileName]);
       }
-
       await updateEmpresaMutation.mutateAsync({
         template_orcamento_url: null,
       });
-
       toast.success('Template removido!');
     } catch (error: any) {
       toast.error(`Erro ao remover: ${error.message}`);
@@ -372,16 +336,7 @@ export default function Configuracoes() {
         </div>
 
         <div className="grid gap-6">
-          <TenantSettingsCard />
-          
-          <PlanInfoCard 
-            clientsCount={clientsCount}
-            propertiesCount={propertiesCount}
-            usersCount={usersCount}
-          />
-
-          <TeamManagementSection />
-
+          {/* 1. Perfil do Usuário */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -432,6 +387,7 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
+          {/* 2. Aparência */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -454,27 +410,20 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Bell className="h-5 w-5 text-primary" />
-                <CardTitle>Notificações</CardTitle>
-              </div>
-              <CardDescription>Controle como você recebe alertas e Story Cards</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Alertas de Pagamento</Label>
-                  <p className="text-sm text-muted-foreground">Notificar sobre pagamentos próximos e vencidos</p>
-                </div>
-                <Switch defaultChecked disabled />
-                <span className="text-xs text-muted-foreground ml-2">Sempre ativo</span>
-              </div>
-            </CardContent>
-          </Card>
+          {/* 3. Informações da Empresa */}
+          <TenantSettingsCard />
+          
+          {/* 4. Plano & Assinatura */}
+          <PlanInfoCard 
+            clientsCount={clientsCount}
+            propertiesCount={propertiesCount}
+            usersCount={usersCount}
+          />
 
+          {/* 5. Gestão de Equipe */}
+          <TeamManagementSection />
 
+          {/* 6. Template de Orçamento */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -487,7 +436,6 @@ export default function Configuracoes() {
               {empresa?.template_orcamento_url ? (
                 <div className="space-y-4">
                   <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/20">
-                    {/* PDF Preview Thumbnail */}
                     <a
                       href={empresa.template_orcamento_url}
                       target="_blank"
@@ -568,6 +516,74 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
+          {/* 7. Dados e Backup */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-primary" />
+                <CardTitle>Dados e Backup</CardTitle>
+              </div>
+              <CardDescription>Gerenciar importação de dados</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-4">
+                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Importar CSV
+                </Button>
+                <Button onClick={() => setSmartImportOpen(true)}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importação Inteligente
+                </Button>
+              </div>
+
+              {isAdmin && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <AlertTriangle className="h-4 w-4" />
+                      <p className="text-sm font-medium">Zona de Perigo</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
+                    </p>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => setDeleteAllDataDialogOpen(true)}
+                      disabled={deleteAllDataMutation.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      {deleteAllDataMutation.isPending ? 'Excluindo...' : 'Excluir Todos os Dados'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 8. Notificações */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                <CardTitle>Notificações</CardTitle>
+              </div>
+              <CardDescription>Controle como você recebe alertas e Story Cards</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Alertas de Pagamento</Label>
+                  <p className="text-sm text-muted-foreground">Notificar sobre pagamentos próximos e vencidos</p>
+                </div>
+                <Switch defaultChecked disabled />
+                <span className="text-xs text-muted-foreground ml-2">Sempre ativo</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 9. Dados de Demonstração (admin) */}
           {isAdmin && (
             <Card>
               <CardHeader>
@@ -616,51 +632,7 @@ export default function Configuracoes() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                <CardTitle>Dados e Backup</CardTitle>
-              </div>
-              <CardDescription>Gerenciar importação de dados</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-4">
-                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar CSV
-                </Button>
-                <Button onClick={() => setSmartImportOpen(true)}>
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Importação Inteligente
-                </Button>
-              </div>
-
-              {isAdmin && (
-                <>
-                  <Separator />
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-destructive">
-                      <AlertTriangle className="h-4 w-4" />
-                      <p className="text-sm font-medium">Zona de Perigo</p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
-                    </p>
-                    <Button 
-                      variant="destructive" 
-                      onClick={() => setDeleteAllDataDialogOpen(true)}
-                      disabled={deleteAllDataMutation.isPending}
-                    >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      {deleteAllDataMutation.isPending ? 'Excluindo...' : 'Excluir Todos os Dados'}
-                    </Button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
+          {/* 10. Informações do Sistema */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">

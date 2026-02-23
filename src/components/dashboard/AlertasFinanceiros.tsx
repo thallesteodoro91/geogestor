@@ -21,10 +21,13 @@ interface AlertaFinanceiro {
 
 export function AlertasFinanceiros() {
   const { tenant } = useTenant();
+  const alertasEnabled = tenant?.settings?.alertas_pagamento_enabled !== false;
   const alertDaysThreshold = (tenant?.settings?.alert_days_threshold as number) || 30;
 
   const { data: alertas, isLoading } = useQuery({
-    queryKey: ['alertas-financeiros', alertDaysThreshold],
+    queryKey: ['alertas-financeiros', alertDaysThreshold, alertasEnabled],
+    enabled: alertasEnabled,
+    
     queryFn: async () => {
       const { data, error } = await supabase
         .from('vw_alertas_financeiros')
@@ -51,6 +54,8 @@ export function AlertasFinanceiros() {
     },
     refetchInterval: 60000,
   });
+
+  if (!alertasEnabled) return null;
 
   const getIcon = (status: string) => {
     switch (status) {

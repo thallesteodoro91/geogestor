@@ -1,6 +1,7 @@
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Crown, LogOut, AlertTriangle } from "lucide-react";
+import { Crown, LogOut, AlertTriangle, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -11,6 +12,7 @@ interface SubscriptionExpiredScreenProps {
 }
 
 export function SubscriptionExpiredScreen({ planName, expiredAt }: SubscriptionExpiredScreenProps) {
+  const navigate = useNavigate();
   const formattedDate = expiredAt
     ? format(new Date(expiredAt), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
     : null;
@@ -35,14 +37,20 @@ export function SubscriptionExpiredScreen({ planName, expiredAt }: SubscriptionE
               <p className="font-medium">Renove para continuar</p>
             </div>
             <p className="text-sm text-muted-foreground">
-              Entre em contato com o administrador do sistema para renovar sua assinatura e recuperar o acesso completo ao GeoGestor.
+              Escolha um plano e recupere o acesso completo ao GeoGestor.
             </p>
           </div>
 
           <div className="flex gap-3">
             <Button
+              className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+              onClick={() => navigate("/assinatura")}
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              Renovar Assinatura
+            </Button>
+            <Button
               variant="outline"
-              className="flex-1"
               onClick={() => supabase.auth.signOut()}
             >
               <LogOut className="h-4 w-4 mr-2" />

@@ -33,7 +33,7 @@ export default function Configuracoes() {
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
   const { theme, setTheme } = useTheme();
-  const { refetchTenant } = useTenant();
+  const { tenant, refetchTenant } = useTenant();
   const { refetch: refetchStripe } = useStripeSubscription();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(false);
@@ -515,8 +515,28 @@ export default function Configuracoes() {
                   <Label>Alertas de Pagamento</Label>
                   <p className="text-sm text-muted-foreground">Notificar sobre pagamentos próximos e vencidos</p>
                 </div>
-                <Switch defaultChecked disabled />
-                <span className="text-xs text-muted-foreground ml-2">Sempre ativo</span>
+                <Switch 
+                  checked={tenant?.settings?.alertas_pagamento_enabled !== false}
+                  onCheckedChange={async (checked) => {
+                    if (!tenant) return;
+                    try {
+                      const { error } = await supabase
+                        .from('tenants')
+                        .update({ 
+                          settings: { 
+                            ...tenant.settings, 
+                            alertas_pagamento_enabled: checked 
+                          } 
+                        })
+                        .eq('id', tenant.id);
+                      if (error) throw error;
+                      refetchTenant();
+                      toast.success(checked ? 'Alertas de pagamento ativados' : 'Alertas de pagamento desativados');
+                    } catch {
+                      toast.error('Erro ao salvar preferência');
+                    }
+                  }}
+                />
               </div>
             </CardContent>
           </Card>

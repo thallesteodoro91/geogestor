@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTenant } from "@/contexts/TenantContext";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
@@ -5,11 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2, Sparkles, RefreshCw, ShieldCheck } from "lucide-react";
+import { Crown, Users, MapPin, UserCircle, Calendar, CheckCircle2, Sparkles, RefreshCw, ShieldCheck, CreditCard } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface UsageBarProps {
   label: string;
@@ -53,6 +55,7 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
   const planLimits = usePlanLimits();
   const { subscribed, subscription_end: stripeEnd, isLoading: stripeLoading, refetch: refetchStripe } = useStripeSubscription();
   const navigate = useNavigate();
+  const [portalLoading, setPortalLoading] = useState(false);
   const { planName, maxUsers, maxClients, maxProperties, isTrialing, isActive, features, planSlug } = planLimits;
 
   const periodEnd = subscription?.current_period_end 
@@ -65,6 +68,23 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
     refetchStripe();
     await refetchTenant();
     toast.success("Status da assinatura atualizado!");
+  };
+
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error) throw error;
+      if (data?.url) {
+        window.open(data.url, "_blank");
+      } else {
+        throw new Error("URL do portal não retornada");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao abrir portal de gerenciamento");
+    } finally {
+      setPortalLoading(false);
+    }
   };
 
   const statusBadge = () => {
@@ -178,13 +198,26 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
           </div>
         )}
         {!isOwner && (
-          <Button
-            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
-            onClick={() => navigate("/assinatura")}
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            {subscribed || (isActive && !isTrialing) ? "Gerenciar Assinatura" : "Fazer Upgrade"}
-          </Button>
+          <div className="flex flex-col gap-2">
+            <Button
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+              onClick={() => navigate("/assinatura")}
+            >
+              <Sparkles className="h-4 w-4 mr-2" />
+              {subscribed || (isActive && !isTrialing) ? "Alterar Plano" : "Fazer Upgrade"}
+            </Button>
+            {subscribed && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleOpenPortal}
+                disabled={portalLoading}
+              >
+                <CreditCard className="h-4 w-4 mr-2" />
+                {portalLoading ? "Abrindo..." : "Gerenciar Pagamento"}
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

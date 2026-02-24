@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.simulate-expiry]
 verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true

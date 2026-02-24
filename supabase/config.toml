@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.check-subscription]
 verify_jwt = false
+
+[functions.simulate-expiry]
+verify_jwt = true

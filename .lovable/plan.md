@@ -1,35 +1,42 @@
 
 
-## Adicionar Botao "Renovar Assinatura" na Tela de Expiracao
+## Simulacao de Assinatura Expirada e Fluxo de Renovacao
 
-### O que sera feito
+### Objetivo
 
-Quando o usuario entra na conta e a assinatura esta expirada, a tela `SubscriptionExpiredScreen` atualmente mostra apenas a opcao de "Sair" e pede para contatar o administrador. A alteracao adiciona um botao "Renovar Assinatura" que redireciona para `/assinatura`, permitindo que o proprio usuario escolha um plano e pague.
+Criar uma edge function temporaria `simulate-expiry` que permite alternar o estado da assinatura do usuario logado entre "expirada" e "ativa", para testar o fluxo completo de renovacao.
 
-### Alteracoes
+### O que sera criado
 
-**Arquivo:** `src/components/plan/SubscriptionExpiredScreen.tsx`
+**Arquivo:** `supabase/functions/simulate-expiry/index.ts`
 
-1. Importar `useNavigate` do react-router-dom e o icone `Sparkles`
-2. Substituir o texto "Entre em contato com o administrador" por uma mensagem que incentive a renovacao direta
-3. Adicionar um botao principal "Renovar Assinatura" ao lado do botao "Sair", com estilo gradient (mesmo padrao da pagina `/assinatura`) que navega para `/assinatura`
-4. O botao "Renovar Assinatura" fica como acao primaria (destaque visual), e o "Sair" como secundario
+Uma edge function com duas acoes:
+- `action: "expire"` — Muda a assinatura do usuario para plano Completo com status `expired` e data de expiracao no passado (20/02/2026)
+- `action: "restore"` — Restaura a assinatura para plano Owner com status `active`
 
-**Resultado visual:**
+### Como testar o fluxo
+
+1. **Expirar a assinatura**: Apos deploy, chamar a funcao com `action: "expire"`. Ao recarregar a pagina, o `ProtectedRoute` detecta que o plano nao e Owner, o status nao e `active`, e a data expirou — exibindo a tela `SubscriptionExpiredScreen`.
+
+2. **Visualizar a tela de expiracao**: O usuario vera:
+   - Icone de alerta
+   - Mensagem "Assinatura Expirada"
+   - Botao "Renovar Assinatura" (gradient roxo/rosa) que navega para `/assinatura`
+   - Botao "Sair" para logout
+
+3. **Clicar em "Renovar Assinatura"**: Redireciona para a pagina `/assinatura` com os planos disponiveis
+
+4. **Restaurar**: Chamar a funcao com `action: "restore"` para voltar ao estado normal
+
+### Detalhes Tecnicos
+
+A edge function usa o `SUPABASE_SERVICE_ROLE_KEY` (ja configurado) para atualizar `tenant_subscriptions` diretamente, contornando RLS. Identifica o tenant do usuario autenticado via `tenant_members`.
+
+Logica do `ProtectedRoute` que sera acionada (ja implementada):
 ```text
-+----------------------------------+
-|     ⚠ Assinatura Expirada        |
-|                                  |
-|  Seu periodo do plano Completo   |
-|  expirou em 23 de fevereiro...   |
-|                                  |
-|  👑 Renove para continuar        |
-|  Escolha um plano e recupere     |
-|  o acesso completo ao GeoGestor. |
-|                                  |
-|  [✨ Renovar Assinatura] [Sair]  |
-+----------------------------------+
+if (!isOwnerPlan && !isActive && subscription.current_period_end < now)
+  → mostra SubscriptionExpiredScreen
 ```
 
-Nenhuma outra alteracao necessaria -- a rota `/assinatura` ja existe e funciona de forma independente (nao requer `ProtectedRoute`).
+A funcao e apenas para simulacao/testes e pode ser removida depois.
 

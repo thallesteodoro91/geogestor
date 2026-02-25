@@ -15,8 +15,12 @@ import {
   Check,
   Sparkles,
   Loader2,
+  Crown,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useTenant } from "@/contexts/TenantContext";
+import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 
 const benefits = [
   {
@@ -87,6 +91,26 @@ export default function Assinatura() {
   const navigate = useNavigate();
   const [selectedPlan, setSelectedPlan] = useState("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const { subscription } = useTenant();
+  const stripeStatus = useStripeSubscription();
+
+  const isActiveSubscriber = stripeStatus.subscribed || 
+    (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
+
+  const handleOpenPortal = async () => {
+    setPortalLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("customer-portal");
+      if (error || !data?.url) throw new Error(error?.message || "Erro ao abrir portal");
+      window.open(data.url, "_blank");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Erro inesperado";
+      toast.error("Erro ao abrir portal de gerenciamento", { description: msg });
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const handleSubscribe = async (planId: string, planLabel: string) => {
     setLoadingPlan(planId);
@@ -141,6 +165,37 @@ export default function Assinatura() {
             Automatize sua gestão rural, aumente a produtividade da equipe e tome decisões baseadas em dados — tudo em uma única plataforma.
           </p>
         </section>
+
+        {/* Active Subscription Banner */}
+        {isActiveSubscriber && (
+          <section className="max-w-3xl mx-auto">
+            <Card className="border-emerald-500/30 bg-emerald-500/5">
+              <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-4">
+                <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-500/10 shrink-0">
+                  <Crown className="h-6 w-6 text-emerald-500" />
+                </div>
+                <div className="flex-1 text-center sm:text-left">
+                  <p className="font-semibold text-lg">Você já possui uma assinatura ativa!</p>
+                  <p className="text-sm text-muted-foreground">
+                    Para gerenciar sua assinatura, alterar método de pagamento ou cancelar, acesse o portal de gerenciamento.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleOpenPortal}
+                  disabled={portalLoading}
+                  className="shrink-0"
+                >
+                  {portalLoading ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                  )}
+                  Gerenciar Assinatura
+                </Button>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
         {/* Benefits Grid */}
         <section className="space-y-8">

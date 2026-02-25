@@ -68,10 +68,10 @@ const benefits = [
 ];
 
 const plans = [
-  { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês", discount: null, savings: null },
-  { id: "trimestral", label: "Trimestral", price: 86, total: 260, perMonth: 86, period: "/mês", discount: "Economize 11%", savings: null },
-  { id: "semestral", label: "Semestral", price: 80, total: 480, perMonth: 80, period: "/mês", discount: "Economize 18%", savings: null },
-  { id: "anual", label: "Anual", price: 70, total: 840, perMonth: 70, period: "/mês", discount: "Economize 28%", savings: "vs R$97/mês no plano mensal — você economiza R$324/ano", best: true },
+  { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês", discount: null, savings: null, priceId: "price_1T2DaxK3j5PLJZVV2QghyqC5" },
+  { id: "trimestral", label: "Trimestral", price: 86, total: 260, perMonth: 86, period: "/mês", discount: "Economize 11%", savings: null, priceId: "price_1T2DbOK3j5PLJZVV2o5aMbqN" },
+  { id: "semestral", label: "Semestral", price: 80, total: 480, perMonth: 80, period: "/mês", discount: "Economize 18%", savings: null, priceId: "price_1T2DbfK3j5PLJZVV9qD9q5F6" },
+  { id: "anual", label: "Anual", price: 70, total: 840, perMonth: 70, period: "/mês", discount: "Economize 28%", savings: "vs R$97/mês no plano mensal — você economiza R$324/ano", best: true, priceId: "price_1T2DbzK3j5PLJZVVbM9rKysr" },
 ];
 
 const allFeatures = [
@@ -229,10 +229,18 @@ export default function Assinatura() {
             {plans.map((plan) => {
               const isSelected = selectedPlan === plan.id;
               const isBest = plan.best;
+              const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === plan.priceId;
 
               return (
                 <div key={plan.id} className="flex flex-col">
-                  {isBest ? (
+                  {isCurrentPlan ? (
+                    <div className="flex justify-center mb-0">
+                      <Badge className="bg-emerald-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md rounded-b-none rounded-t-xl">
+                        <Crown className="h-3 w-3 mr-1" />
+                        Seu Plano Atual
+                      </Badge>
+                    </div>
+                  ) : isBest ? (
                     <div className="flex justify-center mb-0">
                       <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md rounded-b-none rounded-t-xl">
                         Melhor Valor
@@ -244,11 +252,13 @@ export default function Assinatura() {
                   <div
                     onClick={() => setSelectedPlan(plan.id)}
                     className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 flex-1 ${
-                      isBest
-                        ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-t-none"
-                        : isSelected
-                          ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
-                          : "bg-border"
+                      isCurrentPlan
+                        ? "bg-emerald-500 shadow-xl shadow-emerald-500/20 rounded-t-none"
+                        : isBest
+                          ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-t-none"
+                          : isSelected
+                            ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
+                            : "bg-border"
                     }`}
                   >
                     <div className="rounded-[15px] bg-card/80 backdrop-blur-xl p-6 h-full flex flex-col">
@@ -279,26 +289,45 @@ export default function Assinatura() {
                       {!plan.discount && !plan.savings && <div className="mb-4" />}
                       {plan.discount && !plan.savings && <div className="mb-2" />}
 
-                      <Button
-                        className={`w-full mt-auto ${
-                          isBest
-                            ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
-                            : ""
-                        }`}
-                        variant={isBest ? "default" : "outline"}
-                        disabled={loadingPlan === plan.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSubscribe(plan.id, plan.label);
-                        }}
-                      >
-                        {loadingPlan === plan.id ? (
-                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4 mr-1" />
-                        )}
-                        {loadingPlan === plan.id ? "Aguarde..." : "Assinar Agora"}
-                      </Button>
+                      {isCurrentPlan ? (
+                        <Button
+                          className="w-full mt-auto"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPortal();
+                          }}
+                          disabled={portalLoading}
+                        >
+                          {portalLoading ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                          )}
+                          Gerenciar Assinatura
+                        </Button>
+                      ) : (
+                        <Button
+                          className={`w-full mt-auto ${
+                            isBest
+                              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+                              : ""
+                          }`}
+                          variant={isBest ? "default" : "outline"}
+                          disabled={loadingPlan === plan.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSubscribe(plan.id, plan.label);
+                          }}
+                        >
+                          {loadingPlan === plan.id ? (
+                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-4 w-4 mr-1" />
+                          )}
+                          {loadingPlan === plan.id ? "Aguarde..." : isActiveSubscriber ? "Trocar Plano" : "Assinar Agora"}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -356,15 +385,30 @@ export default function Assinatura() {
 
         {/* Final CTA */}
         <section className="text-center space-y-4 py-8">
-          <p className="text-muted-foreground text-base">Pronto para transformar sua gestão rural?</p>
-          <Button
-            size="lg"
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-10 text-base hover:opacity-90 border-0 shadow-lg shadow-purple-500/25"
-            onClick={() => handleSubscribe("anual", "Anual")}
-          >
-            <Sparkles className="h-5 w-5 mr-2" />
-            Começar Agora com Melhor Valor
-          </Button>
+          <p className="text-muted-foreground text-base">
+            {isActiveSubscriber ? "Precisa de ajuda com sua assinatura?" : "Pronto para transformar sua gestão rural?"}
+          </p>
+          {isActiveSubscriber ? (
+            <Button
+              size="lg"
+              variant="outline"
+              className="px-10 text-base"
+              onClick={handleOpenPortal}
+              disabled={portalLoading}
+            >
+              {portalLoading ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <ExternalLink className="h-5 w-5 mr-2" />}
+              Abrir Portal de Gerenciamento
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-10 text-base hover:opacity-90 border-0 shadow-lg shadow-purple-500/25"
+              onClick={() => handleSubscribe("anual", "Anual")}
+            >
+              <Sparkles className="h-5 w-5 mr-2" />
+              Começar Agora com Melhor Valor
+            </Button>
+          )}
         </section>
       </div>
     </div>

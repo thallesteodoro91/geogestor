@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, TrendingUp, CalendarIcon, X } from "lucide-react";
+import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, TrendingUp, CalendarIcon, X, LayoutGrid, List } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { KanbanBoard } from "@/components/servicos/KanbanBoard";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +37,7 @@ export default function Servicos() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingServico, setEditingServico] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [statusFilter, setStatusFilter] = useState("all");
   const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
@@ -143,10 +146,24 @@ export default function Servicos() {
             <h1 className="text-3xl font-heading font-bold text-foreground">Serviços</h1>
             <p className="text-muted-foreground">Acompanhe o andamento de todos os serviços</p>
           </div>
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Serviço
-          </Button>
+          <div className="flex items-center gap-3">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
+              <TabsList className="h-9">
+                <TabsTrigger value="table" className="px-3">
+                  <List className="h-4 w-4 mr-1.5" />
+                  Lista
+                </TabsTrigger>
+                <TabsTrigger value="kanban" className="px-3">
+                  <LayoutGrid className="h-4 w-4 mr-1.5" />
+                  Kanban
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button onClick={() => setIsDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Serviço
+            </Button>
+          </div>
         </div>
 
         {/* KPIs */}
@@ -175,7 +192,9 @@ export default function Servicos() {
           />
         </div>
 
-        {/* Filtros */}
+        {viewMode === "kanban" ? (
+          <KanbanBoard servicos={filteredServicos} />
+        ) : (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg">Lista de Serviços</CardTitle>
@@ -368,6 +387,7 @@ export default function Servicos() {
             )}
           </CardContent>
         </Card>
+        )}
 
         <NovoServicoDialog
           open={isDialogOpen}

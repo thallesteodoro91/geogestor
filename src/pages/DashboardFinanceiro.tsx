@@ -10,6 +10,7 @@ import { SalesFunnelChart } from "@/components/charts/SalesFunnelChart";
 import { TimeGranularityControl, DensityToggle } from "@/components/controls";
 import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
+import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
 import { useDashboardMetrics, calculateDerivedKPIs } from "@/hooks/useDashboardMetrics";
 import { standardChartColors, colorblindSafeColors } from "@/data/financial-mock-data";
 import {
@@ -293,6 +294,11 @@ const DashboardFinanceiro = () => {
             data={metrics?.margem_por_servico || []}
             isLoading={isLoading}
           />
+        </section>
+
+        {/* Quarta Linha - Insights com IA */}
+        <section aria-label="Insights com IA">
+          <AIInsightsCard />
         </section>
 
       </div>

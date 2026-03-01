@@ -144,7 +144,10 @@ export function TenantProvider({ children }: { children: ReactNode }) {
           return;
         } catch (createError) {
           console.error('[TenantContext] Failed to auto-create tenant:', createError);
-          throw createError;
+          const msg = createError instanceof Error ? createError.message : String(createError);
+          throw new Error(
+            `Não foi possível configurar sua conta. ${msg.includes('slug') ? 'Erro interno de configuração.' : msg} Tente sair e entrar novamente. Se o problema persistir, entre em contato com o suporte.`
+          );
         }
       }
 

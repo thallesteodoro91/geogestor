@@ -1,80 +1,50 @@
 
 
-## Analise Completa do SaaS GeoGestor — O Que Funciona e O Que Precisa de Atencao
+## Diagnóstico
 
-Apos inspecao detalhada do codigo, banco de dados, edge functions e fluxos de assinatura, segue o diagnostico completo:
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
----
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-### O QUE ESTA FUNCIONANDO CORRETAMENTE
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-| Area | Status | Detalhes |
-|------|--------|----------|
-| Multi-tenancy (RLS) | OK | Todas as 29 tabelas publicas tem RLS ativado com politicas consistentes |
-| TenantContext | OK | Carrega tenant, subscription e plano automaticamente; auto-cria tenant para novos usuarios |
-| ProtectedRoute | OK | Verifica autenticacao, carregamento do tenant, expiracao de assinatura; bypass correto para plano Owner |
-| SubscriptionExpiredScreen | OK | Tela de expiracao com botao "Renovar Assinatura" que navega para `/assinatura` |
-| Pagina /assinatura | OK | Landing page com 4 planos, integrada com `create-checkout` edge function |
-| Edge Function create-checkout | OK | Mapeia planIds para price_ids Stripe, cria sessao de checkout |
-| Edge Function check-subscription | OK | Verifica Stripe, sincroniza status com `tenant_subscriptions` no banco |
-| Edge Function customer-portal | OK | Gera sessao do Stripe Billing Portal |
-| Edge Function simulate-expiry | OK | Funcional para testes de expiracao/restauracao |
-| PlanInfoCard | OK | Exibe plano, uso de recursos, badges de status, botoes de upgrade e gerenciamento |
-| Stripe Subscription Hook | OK | `useStripeSubscription` com auto-refresh a cada 5 min e on window focus |
-| KPI Financeiros (calcular_kpis_v2) | OK | View materializada retorna dados corretos (R$ 2.8M receita, 150 clientes, 161 orcamentos) |
-| Checkout Success Flow | OK | Banner pos-checkout, refetch de tenant e Stripe |
-| Alertas de Pagamento Toggle | OK | Switch funcional em Configuracoes, respeitado pelo componente AlertasFinanceiros |
-| Subscription Plans | OK | 2 planos no banco: Owner (ilimitado, gratuito) e Completo (R$197/mes) |
-| Limites de Plano | OK | `usePlanLimits` verifica limites e notifica usuario |
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
----
+## Correção
 
-### PONTOS QUE PRECISAM DE ATENCAO OU CORRECAO
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-#### 1. Falta de Webhook Stripe para Cancelamentos/Expiracoes (MEDIO)
-**Problema:** O sistema depende exclusivamente do `check-subscription` (polling a cada 5 min) para detectar cancelamentos no Stripe. Se um usuario cancela pelo Customer Portal, o status so sera atualizado quando o hook fizer polling. Nao ha webhook para atualizacao em tempo real.
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-**Impacto:** Baixo na pratica — o polling de 5 min + refetch on focus e suficiente para a maioria dos cenarios. Porem, entre o cancelamento e o proximo polling, o usuario ainda ve "Ativo".
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
 
-**Recomendacao:** Para o momento atual, o polling e adequado. Um webhook seria ideal a longo prazo.
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
----
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
 
-#### 2. Pagina /assinatura Nao Sabe Se o Usuario Ja Tem Assinatura Ativa (BAIXO)
-**Problema:** Quando um usuario com assinatura ativa acessa `/assinatura`, ele ve a mesma landing page sem indicacao de que ja esta pagando. Nao ha destaque no plano atual nem aviso de que criara uma assinatura duplicada no Stripe.
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-**Recomendacao:** Exibir o plano atual como "Seu Plano" na pagina, ou redirecionar para o Customer Portal quando ja assinante.
+## Impacto
 
----
-
-#### 3. Plano "Completo" no Banco Com price_cents=19700 vs Precos na UI (INFORMATIVO)
-**Problema:** O `subscription_plans.price_cents` esta como 19700 (R$197) mas a UI mostra R$97/mes no plano mensal. Isso nao causa bug porque os precos reais sao gerenciados pelo Stripe (os price_ids estao corretos na edge function), e o campo `price_cents` no banco nao e usado para cobranca. Porem, a inconsistencia pode confundir em auditoria.
-
----
-
-#### 4. Rota `/assinatura` Fora do ProtectedRoute — Sem TenantContext (VERIFICAR)
-**Problema:** A rota `/assinatura` esta fora do `ProtectedRoute`, o que e correto para permitir acesso com assinatura expirada. Porem, ela ainda esta dentro do `TenantProvider` (que envolve todo o App), entao o contexto de tenant esta disponivel. Isso funciona corretamente.
-
----
-
-#### 5. Campo `total_servicos` Retornando 0 nos KPIs (VERIFICAR DADOS)
-**Observacao:** Os logs mostram `total_servicos: 0` e `servicos_concluidos: 0`, apesar de ter 161 orcamentos e 150 clientes. Isso pode indicar que nao ha registros na tabela `fato_servico` para este tenant, ou que os servicos nao estao sendo criados. Nao e um bug de codigo — e ausencia de dados na tabela de servicos.
-
----
-
-#### 6. Taxa de Conversao 0% (DADOS)
-**Observacao:** `taxa_conversao_percent: 0` indica que nenhum orcamento tem `orcamento_convertido = true`. Novamente, e questao de dados, nao de logica.
-
----
-
-### RESUMO GERAL
-
-O SaaS esta **funcional e bem estruturado**. Os fluxos criticos (autenticacao, multi-tenancy, assinatura, pagamento, renovacao, gerenciamento Stripe) estao todos implementados e conectados. As edge functions seguem boas praticas com logging e tratamento de erros.
-
-Os unicos pontos de melhoria sao:
-- Indicar plano atual na pagina `/assinatura` para evitar duplicacao
-- Considerar webhook Stripe para sincronia em tempo real (futuro)
-- Verificar se a ausencia de servicos (`total_servicos: 0`) e intencional ou se falta integracao de dados
-
-Nenhuma correcao urgente e necessaria.
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

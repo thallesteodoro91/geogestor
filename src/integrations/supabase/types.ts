@@ -1808,7 +1808,7 @@ export type Database = {
           logo_url?: string | null
           name: string
           settings?: Json | null
-          slug: string
+          slug?: string
           updated_at?: string | null
         }
         Update: {

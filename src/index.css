@@ -322,3 +322,53 @@ All colors MUST be HSL.
     background-color: hsl(var(--chart-primary));
   }
 }
+
+/* ===== Print Styles for Executive Report ===== */
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide sidebar, header, nav, buttons */
+  .print\:hidden,
+  nav,
+  header,
+  aside,
+  [data-sidebar],
+  .fixed.inset-y-0 {
+    display: none !important;
+  }
+
+  /* Remove padding from layout */
+  main, .relatorio-executivo-container {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Cards for print */
+  .report-content .card,
+  .report-content [class*="Card"] {
+    box-shadow: none !important;
+    border: 1px solid #e5e7eb !important;
+  }
+
+  /* Recharts SVG colors */
+  .recharts-surface {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

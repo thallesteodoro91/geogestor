@@ -260,7 +260,9 @@ const RelatorioExecutivo = () => {
             {/* Novos Clientes */}
             <Card className="print:shadow-none print:border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Novos Clientes ({data.clientes.length})</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-accent" /> Novos Clientes ({data.clientes.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.clientes.length > 0 ? (

@@ -2,8 +2,9 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
-import { Loader2, FileText } from "lucide-react";
+import { Loader2, FileText, AlertTriangle } from "lucide-react";
 import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente } from "@/hooks/useRelatorioData";
+import skyGeoLogo from "@/assets/skygeo-logo.png";
 
 /* ===== Monochromatic SkyGeo Palette ===== */
 const SKYGEO_BLUE = "#1e3a5f";
@@ -24,6 +25,9 @@ interface PrintableReportProps {
   taxaConversao: number;
   conversao: { convertidos: number; total: number; taxa: number } | null | undefined;
   variacaoReceita: number | null;
+  receitaAnterior: number | null;
+  despesaAnterior: number | null;
+  lucroAnterior: number | null;
   dadosSemanais: DadoSemanal[];
   receitaCategorias: ReceitaCategoria[];
   clientes: ClienteNovo[];
@@ -40,16 +44,49 @@ function generateReportId(): string {
   return `SG-${id}`;
 }
 
+function calcVariation(current: number, previous: number | null): number | null {
+  if (previous === null || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
+
 export function PrintableReport({
   empresa, periodoLabel, receitaTotal, despesaTotal, lucroLiquido, margemLucro,
-  taxaConversao, conversao, variacaoReceita, dadosSemanais, receitaCategorias,
-  clientes, servicosCusto, orcamentosPendentes, aiSummary, isLoading,
+  taxaConversao, conversao, variacaoReceita, receitaAnterior, despesaAnterior, lucroAnterior,
+  dadosSemanais, receitaCategorias, clientes, servicosCusto, orcamentosPendentes, aiSummary, isLoading,
 }: PrintableReportProps) {
   const geradoEm = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const dataEmissao = format(new Date(), "dd/MM/yyyy");
   const reportId = generateReportId();
 
+  // Real margin calculation: Margem = Lucro / Faturamento
+  const margemReal = receitaTotal > 0 ? (lucroLiquido / receitaTotal) * 100 : 0;
+
   const isSaudavel = lucroLiquido >= 0 && (variacaoReceita === null || variacaoReceita >= 0);
+
+  // KPI variations vs previous month
+  const varDespesa = calcVariation(despesaTotal, despesaAnterior);
+  const varLucro = calcVariation(lucroLiquido, lucroAnterior);
+
+  // Conditional: check if all categories are "Sem Categoria" or similar
+  const allUncategorized = receitaCategorias.length > 0 &&
+    receitaCategorias.every((c) => {
+      const cat = c.categoria?.toLowerCase().trim();
+      return !cat || cat === "sem categoria" || cat === "outros" || cat === "null";
+    });
+
+  // AI next steps for footer
+  const nextSteps: string[] = [];
+  if (aiSummary.data?.insights?.length > 0) {
+    aiSummary.data.insights.forEach((insight: any) => {
+      if (insight.acao) nextSteps.push(insight.acao);
+    });
+  }
+  // Fallback next steps based on data
+  if (nextSteps.length === 0) {
+    if (lucroLiquido < 0) nextSteps.push("Revisar estrutura de custos para identificar fontes de prejuízo.");
+    if (orcamentosPendentes.length > 0) nextSteps.push(`Retomar contato com ${orcamentosPendentes.length} orçamento(s) pendente(s).`);
+    if (allUncategorized) nextSteps.push("Categorizar serviços para melhor visibilidade da distribuição de receita.");
+  }
 
   if (isLoading) {
     return (
@@ -64,15 +101,18 @@ export function PrintableReport({
 
       {/* ═══════════ PAGE 1 ═══════════ */}
 
-      {/* HEADER — Technical */}
+      {/* HEADER — Technical with Logo */}
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${SKYGEO_BLUE}`, paddingBottom: "16px", marginBottom: "28px" }}>
-        <div>
-          <h1 style={{ fontSize: "22px", fontWeight: 800, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.02em" }}>
-            SkyGeo
-          </h1>
-          <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-            Inteligência Geoespacial & Gestão
-          </p>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
+          <div>
+            <h1 style={{ fontSize: "22px", fontWeight: 800, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.02em" }}>
+              SkyGeo
+            </h1>
+            <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Inteligência Geoespacial & Gestão
+            </p>
+          </div>
         </div>
         <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace", fontSize: "9px", color: "#64748b", lineHeight: 1.8 }}>
           <p style={{ margin: 0 }}>ID: <strong style={{ color: "#1a1a1a" }}>{reportId}</strong></p>
@@ -106,19 +146,19 @@ export function PrintableReport({
         </span>
       </div>
 
-      {/* KPI BAND — 3 core metrics */}
+      {/* KPI BAND — 3 core metrics with variations */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 0 32px", padding: "20px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
-        <KPIValue label="Faturamento" value={formatarMoeda(receitaTotal)} color={SKYGEO_BLUE} />
-        <div style={{ width: "1px", height: "40px", background: "#d1d5db", margin: "0 32px" }} />
-        <KPIValue label="Total Gasto" value={formatarMoeda(despesaTotal)} color="#dc2626" />
-        <div style={{ width: "1px", height: "40px", background: "#d1d5db", margin: "0 32px" }} />
-        <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "#16a34a" : "#dc2626"} />
+        <KPIValue label="Faturamento" value={formatarMoeda(receitaTotal)} color={SKYGEO_BLUE} variation={variacaoReceita} />
+        <div style={{ width: "1px", height: "48px", background: "#d1d5db", margin: "0 32px" }} />
+        <KPIValue label="Total Gasto" value={formatarMoeda(despesaTotal)} color="#dc2626" variation={varDespesa} invertColor />
+        <div style={{ width: "1px", height: "48px", background: "#d1d5db", margin: "0 32px" }} />
+        <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "#16a34a" : "#dc2626"} variation={varLucro} />
       </div>
 
       {/* SECONDARY METRICS — small row */}
       <div style={{ display: "flex", gap: "24px", marginBottom: "28px", paddingLeft: "4px" }}>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
-          Margem de Lucro: <strong style={{ color: margemLucro >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{formatarPercentual(margemLucro)}</strong>
+          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{margemReal >= 0 ? "" : "−"}{formatarPercentual(Math.abs(margemReal))}</strong>
         </span>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
           Taxa de Conversão: <strong style={{ color: SKYGEO_BLUE }}>{formatarPercentual(taxaConversao)}</strong>
@@ -136,14 +176,18 @@ export function PrintableReport({
           </div>
         ) : aiSummary.data?.insights?.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {/* Narrative intro */}
-            {variacaoReceita !== null && (
-              <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.8 }}>
-                No período analisado, a empresa registrou {variacaoReceita >= 0 ? "um crescimento" : "uma retração"} de{" "}
-                <strong>{Math.abs(variacaoReceita).toFixed(1)}%</strong> no faturamento em relação ao mês anterior,
-                com receita total de <strong>{formatarMoeda(receitaTotal)}</strong> e despesas de <strong>{formatarMoeda(despesaTotal)}</strong>.
-              </p>
-            )}
+            {/* Narrative intro — uses only current period data */}
+            <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.8 }}>
+              No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
+              <strong>{formatarMoeda(receitaTotal)}</strong> e despesas de{" "}
+              <strong>{formatarMoeda(despesaTotal)}</strong>, resultando em{" "}
+              {lucroLiquido >= 0 ? "lucro" : "prejuízo"} líquido de{" "}
+              <strong style={{ color: lucroLiquido >= 0 ? "#16a34a" : "#dc2626" }}>{formatarMoeda(Math.abs(lucroLiquido))}</strong>
+              {variacaoReceita !== null && (
+                <>, com {variacaoReceita >= 0 ? "crescimento" : "retração"} de{" "}
+                <strong>{Math.abs(variacaoReceita).toFixed(1)}%</strong> no faturamento em relação ao mês anterior</>
+              )}.
+            </p>
 
             {/* AI Insights */}
             {aiSummary.data.insights.map((insight: any, i: number) => (
@@ -169,9 +213,11 @@ export function PrintableReport({
           </div>
         ) : (
           <p style={{ fontSize: "12px", color: "#6b7280", margin: 0, fontStyle: "italic" }}>
+            No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
+            <strong>{formatarMoeda(receitaTotal)}</strong>.{" "}
             {variacaoReceita !== null
-              ? `No período analisado, houve ${variacaoReceita >= 0 ? "um crescimento" : "uma retração"} de ${Math.abs(variacaoReceita).toFixed(1)}% no faturamento.`
-              : "Dados insuficientes para gerar o sumário executivo neste período."}
+              ? `Houve ${variacaoReceita >= 0 ? "crescimento" : "retração"} de ${Math.abs(variacaoReceita).toFixed(1)}% em relação ao mês anterior.`
+              : "Dados insuficientes para comparação com período anterior."}
           </p>
         )}
       </section>
@@ -179,8 +225,8 @@ export function PrintableReport({
       {/* ═══════════ PAGE 2 — CHARTS ═══════════ */}
       <div style={{ pageBreakBefore: "always" }} />
 
-      <section style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: "28px", marginBottom: "32px" }} className="page-break-inside-avoid">
-        {/* Bar Chart — 60% */}
+      <section style={{ display: "grid", gridTemplateColumns: allUncategorized ? "1fr" : "3fr 2fr", gap: "28px", marginBottom: "32px" }} className="page-break-inside-avoid">
+        {/* Bar Chart — 60% (or 100% if donut hidden) */}
         <div>
           <SectionTitle>Entradas vs Saídas — Semanal</SectionTitle>
           {dadosSemanais.length > 0 ? (
@@ -206,10 +252,17 @@ export function PrintableReport({
           )}
         </div>
 
-        {/* Donut Chart — 40% */}
-        <div>
-          <SectionTitle>Receita por Tipo de Serviço</SectionTitle>
-          {receitaCategorias.length > 0 ? (
+        {/* Donut Chart — 40% (conditional) */}
+        {allUncategorized ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
+            <AlertTriangle style={{ width: 20, height: 20, color: "#d97706", marginBottom: "8px" }} />
+            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", fontWeight: 500 }}>
+              Categorize seus serviços para visualizar a distribuição de receita.
+            </p>
+          </div>
+        ) : receitaCategorias.length > 0 ? (
+          <div>
+            <SectionTitle>Receita por Tipo de Serviço</SectionTitle>
             <div style={{ height: 210 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -234,10 +287,13 @@ export function PrintableReport({
                 </PieChart>
               </ResponsiveContainer>
             </div>
-          ) : (
+          </div>
+        ) : (
+          <div>
+            <SectionTitle>Receita por Tipo de Serviço</SectionTitle>
             <EmptyState />
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       {/* ═══════════ TABLES ═══════════ */}
@@ -261,24 +317,32 @@ export function PrintableReport({
         )}
       </section>
 
-      {/* Serviços com Maior Custo */}
+      {/* Serviços com Maior Prejuízo / Custo */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
         <SectionTitle>Serviços com Maior Custo</SectionTitle>
         {servicosCusto.length > 0 ? (
           <PrintTable
-            headers={["Serviço", "Receita", "Custo", "Margem"]}
-            colWidths={["40%", "20%", "20%", "20%"]}
-            alignRight={[false, true, true, true]}
-            rows={servicosCusto.map((s) => [
-              s.nome,
-              formatarMoeda(s.receita),
-              formatarMoeda(s.custo),
-              formatarPercentual(s.margem),
-            ])}
-            cellColors={servicosCusto.map((s) => ({
-              2: "#dc2626",
-              3: s.margem >= 0 ? "#16a34a" : "#dc2626",
-            }))}
+            headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
+            colWidths={["28%", "17%", "17%", "17%", "21%"]}
+            alignRight={[false, true, true, true, true]}
+            rows={servicosCusto.map((s) => {
+              const margemContrib = s.receita - s.custo;
+              return [
+                s.nome,
+                formatarMoeda(s.receita),
+                formatarMoeda(s.custo),
+                formatarPercentual(s.margem),
+                formatarMoeda(margemContrib),
+              ];
+            })}
+            cellColors={servicosCusto.map((s) => {
+              const margemContrib = s.receita - s.custo;
+              return {
+                2: "#dc2626",
+                3: s.margem >= 0 ? "#16a34a" : "#dc2626",
+                4: margemContrib >= 0 ? "#16a34a" : "#dc2626",
+              };
+            })}
           />
         ) : (
           <EmptyState />
@@ -306,13 +370,29 @@ export function PrintableReport({
       </section>
 
       {/* ═══════════ FOOTER ═══════════ */}
-      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "12px", marginTop: "40px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <p style={{ fontSize: "8px", color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-          Documento confidencial — SkyGeo
-        </p>
-        <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0 }}>
-          Powered by GeoGestor · {geradoEm}
-        </p>
+      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px" }}>
+        {/* Próximos Passos Sugeridos */}
+        {nextSteps.length > 0 && (
+          <div style={{ marginBottom: "16px", padding: "12px 16px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+            <p style={{ fontSize: "9px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+              Próximos Passos Sugeridos
+            </p>
+            <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "10px", color: "#374151", lineHeight: 1.8 }}>
+              {nextSteps.map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        )}
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <p style={{ fontSize: "8px", color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            Documento confidencial — SkyGeo
+          </p>
+          <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0 }}>
+            Powered by GeoGestor · {geradoEm}
+          </p>
+        </div>
       </footer>
     </div>
   );
@@ -320,11 +400,24 @@ export function PrintableReport({
 
 /* ═══════════ Sub-components ═══════════ */
 
-function KPIValue({ label, value, color }: { label: string; value: string; color: string }) {
+function VariationBadge({ value, invert }: { value: number | null; invert?: boolean }) {
+  if (value === null) return null;
+  // For expenses, an increase is bad (red), decrease is good (green)
+  const isPositive = invert ? value <= 0 : value >= 0;
+  const color = isPositive ? "#16a34a" : "#dc2626";
+  return (
+    <span style={{ fontSize: "9px", color, fontWeight: 600, display: "block", marginTop: "2px" }}>
+      {value >= 0 ? "▲" : "▼"} {Math.abs(value).toFixed(1)}% <span style={{ fontWeight: 400, color: "#94a3b8" }}>vs mês ant.</span>
+    </span>
+  );
+}
+
+function KPIValue({ label, value, color, variation, invertColor }: { label: string; value: string; color: string; variation?: number | null; invertColor?: boolean }) {
   return (
     <div style={{ textAlign: "center", minWidth: "120px" }}>
       <p style={{ fontSize: "9px", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 4px", fontWeight: 500 }}>{label}</p>
       <p style={{ fontSize: "20px", fontWeight: 800, color, margin: 0, letterSpacing: "-0.02em" }}>{value}</p>
+      <VariationBadge value={variation ?? null} invert={invertColor} />
     </div>
   );
 }

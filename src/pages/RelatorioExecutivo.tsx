@@ -417,6 +417,9 @@ const RelatorioExecutivo = () => {
             taxaConversao={taxaConversao}
             conversao={data.conversao}
             variacaoReceita={data.variacaoReceita}
+            receitaAnterior={data.metricsAnterior?.receita_total ?? null}
+            despesaAnterior={data.metricsAnterior?.total_despesas ?? null}
+            lucroAnterior={data.derivedKPIsAnterior?.lucro_liquido ?? null}
             dadosSemanais={data.dadosSemanais}
             receitaCategorias={data.receitaCategorias}
             clientes={data.clientes}

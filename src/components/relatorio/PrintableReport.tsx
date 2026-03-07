@@ -354,23 +354,24 @@ export function PrintableReport({
         )}
       </section>
 
-      {/* Orçamentos Pendentes */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
         {orcamentosPendentes.length > 0 ? (
-          <PrintTable
-            headers={["Código", "Cliente", "Valor", "Vencimento"]}
-            colWidths={["20%", "35%", "25%", "20%"]}
-            alignRight={[false, false, true, false]}
-            rows={orcamentosPendentes.map((o) => [
-              o.codigo || "—",
-              o.cliente,
-              formatarMoeda(o.valor),
-              o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
-            ])}
-          />
+          <>
+            <SectionTitle>Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
+            <PrintTable
+              headers={["Código", "Cliente", "Valor", "Vencimento"]}
+              colWidths={["20%", "35%", "25%", "20%"]}
+              alignRight={[false, false, true, false]}
+              rows={orcamentosPendentes.map((o) => [
+                o.codigo || "—",
+                o.cliente,
+                formatarMoeda(o.valor),
+                o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
+              ])}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Não há orçamentos pendentes para este período." />
         )}
       </section>
 

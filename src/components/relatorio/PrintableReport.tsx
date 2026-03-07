@@ -301,20 +301,22 @@ export function PrintableReport({
 
       {/* Novos Clientes */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Novos Clientes ({clientes.length})</SectionTitle>
         {clientes.length > 0 ? (
-          <PrintTable
-            headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
-            colWidths={["30%", "18%", "20%", "32%"]}
-            rows={clientes.map((c) => [
-              c.nome,
-              c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
-              c.telefone || "—",
-              c.email || "—",
-            ])}
-          />
+          <>
+            <SectionTitle>Novos Clientes ({clientes.length})</SectionTitle>
+            <PrintTable
+              headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
+              colWidths={["30%", "18%", "20%", "32%"]}
+              rows={clientes.map((c) => [
+                c.nome,
+                c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
+                c.telefone || "—",
+                c.email || "—",
+              ])}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Não houve novos clientes cadastrados neste período." />
         )}
       </section>
 

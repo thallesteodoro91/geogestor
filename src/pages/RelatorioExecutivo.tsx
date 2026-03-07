@@ -413,11 +413,14 @@ const RelatorioExecutivo = () => {
   );
 };
 
-function KPIBox({ label, value, color, subtitle }: { label: string; value: string; color: string; subtitle?: string }) {
+function KPIBox({ label, value, color, subtitle, icon }: { label: string; value: string; color: string; subtitle?: string; icon?: React.ReactNode }) {
   return (
     <Card className="print:shadow-none print:border">
       <CardContent className="p-3 print:p-2">
-        <p className="text-xs text-muted-foreground print:text-gray-500">{label}</p>
+        <div className="flex items-center gap-1.5 mb-1">
+          {icon && <span className={color}>{icon}</span>}
+          <p className="text-xs text-muted-foreground print:text-gray-500">{label}</p>
+        </div>
         <p className={`text-lg font-bold ${color} print:text-sm`}>{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </CardContent>

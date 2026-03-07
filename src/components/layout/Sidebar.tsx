@@ -28,6 +28,7 @@ const navigationSections = [
     items: [
       { name: "GeoBot", href: "/geobot", icon: Bot },
       { name: "Calendário", href: "/calendario", icon: CalendarDays },
+      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
     ]
   },
   {

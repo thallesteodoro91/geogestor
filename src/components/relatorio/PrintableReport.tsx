@@ -454,12 +454,12 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ message }: { message?: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", background: "#f8fafc", borderRadius: "6px", border: "1px dashed #e2e8f0" }}>
-      <FileText style={{ width: 18, height: 18, color: "#cbd5e1", marginBottom: "8px" }} />
-      <p style={{ fontSize: "10px", color: "#94a3b8", margin: 0, fontStyle: "italic" }}>
-        Nenhuma movimentação registrada no período.
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "16px 20px", background: "#f8fafc", borderRadius: "6px", border: "1px dashed #e2e8f0" }}>
+      <FileText style={{ width: 16, height: 16, color: "#cbd5e1", flexShrink: 0 }} />
+      <p style={{ fontSize: "11px", color: "#94a3b8", margin: 0, fontStyle: "italic" }}>
+        {message || "Nenhuma movimentação registrada no período."}
       </p>
     </div>
   );

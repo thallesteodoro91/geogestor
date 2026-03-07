@@ -7,6 +7,8 @@ import { ptBR } from "date-fns/locale";
 interface RelatorioParams {
   mes: number; // 0-11
   ano: number;
+  customInicio?: string; // yyyy-MM-dd
+  customFim?: string;    // yyyy-MM-dd
 }
 
 export interface DadoSemanal {
@@ -41,9 +43,9 @@ export interface OrcamentoPendente {
   data_faturamento: string | null;
 }
 
-export function useRelatorioData({ mes, ano }: RelatorioParams) {
-  const dataInicio = format(startOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
-  const dataFim = format(endOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
+export function useRelatorioData({ mes, ano, customInicio, customFim }: RelatorioParams) {
+  const dataInicio = customInicio || format(startOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
+  const dataFim = customFim || format(endOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
 
   const mesAnteriorDate = subMonths(new Date(ano, mes, 1), 1);
   const dataInicioAnterior = format(startOfMonth(mesAnteriorDate), "yyyy-MM-dd");

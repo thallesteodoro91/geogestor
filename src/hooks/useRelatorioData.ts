@@ -7,6 +7,8 @@ import { ptBR } from "date-fns/locale";
 interface RelatorioParams {
   mes: number; // 0-11
   ano: number;
+  customInicio?: string; // yyyy-MM-dd
+  customFim?: string;    // yyyy-MM-dd
 }
 
 export interface DadoSemanal {

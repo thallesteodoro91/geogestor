@@ -295,7 +295,9 @@ const RelatorioExecutivo = () => {
             {/* Serviços com Maior Custo */}
             <Card className="print:shadow-none print:border page-break-inside-avoid">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Serviços com Maior Custo</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-amber-500" /> Serviços com Maior Custo
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.servicosCusto.length > 0 ? (

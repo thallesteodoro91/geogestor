@@ -18,6 +18,7 @@ const navigationSections = [
       { name: "Gestão da Empresa", href: "/", icon: LayoutDashboard },
       { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
+      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
     ]
   },
   {

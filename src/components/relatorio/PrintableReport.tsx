@@ -254,10 +254,11 @@ export function PrintableReport({
 
         {/* Donut Chart — 40% (conditional) */}
         {allUncategorized ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
-            <AlertTriangle style={{ width: 20, height: 20, color: "#d97706", marginBottom: "8px" }} />
-            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", fontWeight: 500 }}>
-              Categorize seus serviços para visualizar a distribuição de receita.
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
+            <AlertTriangle style={{ width: 22, height: 22, color: "#d97706", marginBottom: "10px" }} />
+            <p style={{ fontSize: "10px", fontWeight: 700, color: "#92400e", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Pendência</p>
+            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", lineHeight: 1.6 }}>
+              Categorize seus serviços para habilitar a análise de lucratividade por tipo de serviço.
             </p>
           </div>
         ) : receitaCategorias.length > 0 ? (

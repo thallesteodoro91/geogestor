@@ -1,41 +1,50 @@
 
 
-# Refatorar Relatório Executivo -- Design Editorial Profissional
+## Diagnóstico
 
-## Problema
-O relatório atual usa o mesmo visual do dashboard (cards flutuantes, fundo escuro, cores vibrantes) e não tem aparência profissional para impressão/PDF.
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-## Solução
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-### 1. Novo componente `PrintableReport.tsx`
-Componente separado, renderizado dentro da página, com estilo editorial print-first:
-- **Fundo branco forçado**, texto preto/cinza escuro (`#1a1a1a`, `#4b5563`)
-- Font sans-serif limpa (Inter, já instalada)
-- Sem cards flutuantes -- seções lineares separadas por `border-b` sutis
-- Cabeçalho: nome da empresa à esquerda, "Relatório Mensal de Gestão" + período à direita
-- **Sumário Executivo da IA** logo após os KPIs, em caixa com `border-l-4` e fundo `#f9fafb`
-- KPIs em linha horizontal com separadores verticais (não cards)
-- Tabelas com cabeçalhos `bg-gray-100` e linhas zebradas (`even:bg-gray-50`)
-- Mensagem elegante para seções vazias: *"Não houve movimentação nesta categoria no período."*
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-### 2. Cores dos gráficos sóbrias para documento
-- Barras: azul marinho `#1e3a5f` (entradas) e cinza `#9ca3af` (saídas)
-- Donut: paleta sóbria (azul marinho, slate, teal, amber escuro)
-- Remover `CartesianGrid`, manter apenas eixos limpos
-- Legendas com fonte legível
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-### 3. CSS de impressão refinado
-Atualizar `@media print` no `index.css`:
-- Forçar fundo branco em tudo, sem sombras
-- `page-break-inside: avoid` nas seções
-- Ocultar toda UI (sidebar, header, controles)
-- Garantir que o `PrintableReport` ocupe 100% da área
+## Correção
 
-### 4. Fluxo de exportação
-Manter `window.print()` (sem dependência extra). O componente `PrintableReport` já terá estilo editorial que funciona tanto na tela quanto impresso. A página `RelatorioExecutivo.tsx` mantém os controles (seletor de mês, filtro de datas) separados do conteúdo imprimível.
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-### Arquivos alterados
-- **Criar**: `src/components/relatorio/PrintableReport.tsx` -- componente editorial
-- **Editar**: `src/pages/RelatorioExecutivo.tsx` -- usar PrintableReport para o conteúdo do relatório
-- **Editar**: `src/index.css` -- refinar print styles
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
+
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

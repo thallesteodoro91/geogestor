@@ -327,31 +327,44 @@ All colors MUST be HSL.
 @media print {
   @page {
     size: A4;
-    margin: 15mm;
+    margin: 12mm 15mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   body {
     background: white !important;
-    color: black !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    color: #1a1a1a !important;
   }
 
-  /* Hide sidebar, header, nav, buttons */
+  /* Hide all UI chrome */
   .print\:hidden,
   nav,
   header,
   aside,
   [data-sidebar],
-  .fixed.inset-y-0 {
+  .fixed.inset-y-0,
+  button,
+  .sonner-toast-container {
     display: none !important;
   }
 
-  /* Remove padding from layout */
-  main, .relatorio-executivo-container {
+  /* Full-width layout */
+  main,
+  .relatorio-executivo-container,
+  .report-content {
     margin: 0 !important;
     padding: 0 !important;
     max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* PrintableReport already uses inline styles for white bg */
+  .printable-report {
+    padding: 0 !important;
   }
 
   .page-break-inside-avoid {
@@ -359,16 +372,14 @@ All colors MUST be HSL.
     break-inside: avoid;
   }
 
-  /* Cards for print */
-  .report-content .card,
-  .report-content [class*="Card"] {
-    box-shadow: none !important;
-    border: 1px solid #e5e7eb !important;
+  /* Recharts SVG colors preserved */
+  .recharts-surface {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Recharts SVG colors */
-  .recharts-surface {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  /* Remove shadows from everything */
+  * {
+    box-shadow: none !important;
   }
 }

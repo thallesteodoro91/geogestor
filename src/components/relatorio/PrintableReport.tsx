@@ -322,33 +322,35 @@ export function PrintableReport({
 
       {/* Serviços com Maior Prejuízo / Custo */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Serviços com Maior Custo</SectionTitle>
         {servicosCusto.length > 0 ? (
-          <PrintTable
-            headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
-            colWidths={["28%", "17%", "17%", "17%", "21%"]}
-            alignRight={[false, true, true, true, true]}
-            rows={servicosCusto.map((s) => {
-              const margemContrib = s.receita - s.custo;
-              return [
-                s.nome,
-                formatarMoeda(s.receita),
-                formatarMoeda(s.custo),
-                formatarPercentual(s.margem),
-                formatarMoeda(margemContrib),
-              ];
-            })}
-            cellColors={servicosCusto.map((s) => {
-              const margemContrib = s.receita - s.custo;
-              return {
-                2: "#dc2626",
-                3: s.margem >= 0 ? "#16a34a" : "#dc2626",
-                4: margemContrib >= 0 ? "#16a34a" : "#dc2626",
-              };
-            })}
-          />
+          <>
+            <SectionTitle>Serviços com Maior Custo</SectionTitle>
+            <PrintTable
+              headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
+              colWidths={["28%", "17%", "17%", "17%", "21%"]}
+              alignRight={[false, true, true, true, true]}
+              rows={servicosCusto.map((s) => {
+                const margemContrib = s.receita - s.custo;
+                return [
+                  s.nome,
+                  formatarMoeda(s.receita),
+                  formatarMoeda(s.custo),
+                  formatarPercentual(s.margem),
+                  formatarMoeda(margemContrib),
+                ];
+              })}
+              cellColors={servicosCusto.map((s) => {
+                const margemContrib = s.receita - s.custo;
+                return {
+                  2: "#dc2626",
+                  3: s.margem >= 0 ? "#16a34a" : "#dc2626",
+                  4: margemContrib >= 0 ? "#16a34a" : "#dc2626",
+                };
+              })}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Nenhum serviço com custo registrado neste período." />
         )}
       </section>
 

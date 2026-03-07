@@ -74,19 +74,19 @@ export function PrintableReport({
       return !cat || cat === "sem categoria" || cat === "outros" || cat === "null";
     });
 
-  // AI next steps for footer
-  const nextSteps: string[] = [];
+  // Insights do Gestor for footer — always ensure at least 3
+  const insightsGestor: string[] = [];
   if (aiSummary.data?.insights?.length > 0) {
     aiSummary.data.insights.forEach((insight: any) => {
-      if (insight.acao) nextSteps.push(insight.acao);
+      if (insight.acao && insightsGestor.length < 3) insightsGestor.push(insight.acao);
     });
   }
-  // Fallback next steps based on data
-  if (nextSteps.length === 0) {
-    if (lucroLiquido < 0) nextSteps.push("Revisar estrutura de custos para identificar fontes de prejuízo.");
-    if (orcamentosPendentes.length > 0) nextSteps.push(`Retomar contato com ${orcamentosPendentes.length} orçamento(s) pendente(s).`);
-    if (allUncategorized) nextSteps.push("Categorizar serviços para melhor visibilidade da distribuição de receita.");
-  }
+  // Fallback insights based on data analysis
+  if (lucroLiquido < 0 && insightsGestor.length < 3) insightsGestor.push("Revisar custos fixos e variáveis para identificar oportunidades de redução.");
+  if (orcamentosPendentes.length > 0 && insightsGestor.length < 3) insightsGestor.push(`Retomar contato com ${orcamentosPendentes.length} orçamento(s) pendente(s) para conversão.`);
+  if (allUncategorized && insightsGestor.length < 3) insightsGestor.push("Categorizar serviços para melhor visibilidade da distribuição de receita.");
+  if (despesaTotal > receitaTotal && insightsGestor.length < 3) insightsGestor.push("Analisar despesas que excedem o faturamento e priorizar cortes.");
+  if (insightsGestor.length < 3) insightsGestor.push("Acompanhar evolução mensal dos KPIs para identificar tendências.");
 
   if (isLoading) {
     return (

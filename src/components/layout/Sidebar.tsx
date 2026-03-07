@@ -18,7 +18,6 @@ const navigationSections = [
       { name: "Gestão da Empresa", href: "/", icon: LayoutDashboard },
       { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
-      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
     ]
   },
   {
@@ -29,6 +28,7 @@ const navigationSections = [
     items: [
       { name: "GeoBot", href: "/geobot", icon: Bot },
       { name: "Calendário", href: "/calendario", icon: CalendarDays },
+      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
     ]
   },
   {

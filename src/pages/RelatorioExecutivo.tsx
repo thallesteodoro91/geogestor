@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw } from "lucide-react";
+import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useRelatorioData } from "@/hooks/useRelatorioData";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
@@ -172,11 +172,11 @@ const RelatorioExecutivo = () => {
             <div className="grid grid-cols-5 gap-4"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 print:grid-cols-5 print:gap-2">
-              <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" />
-              <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" />
-              <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-emerald-600" : "text-destructive"} />
-              <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-emerald-600" : "text-destructive"} />
-              <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} />
+              <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" icon={<DollarSign className="h-4 w-4" />} />
+              <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" icon={<TrendingDown className="h-4 w-4" />} />
+              <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-emerald-600" : "text-destructive"} icon={<BadgeDollarSign className="h-4 w-4" />} />
+              <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-emerald-600" : "text-destructive"} icon={<Percent className="h-4 w-4" />} />
+              <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} icon={<Target className="h-4 w-4" />} />
             </div>
           )}
 
@@ -195,7 +195,9 @@ const RelatorioExecutivo = () => {
             {/* Bar Chart */}
             <Card className="print:shadow-none print:border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Entradas vs Saídas (Semanal)</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-emerald-500" /> Entradas vs Saídas (Semanal)
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[220px] print:h-[180px]">
@@ -216,7 +218,9 @@ const RelatorioExecutivo = () => {
             {/* Donut Chart */}
             <Card className="print:shadow-none print:border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Receita por Tipo de Serviço</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <PieChartIcon className="h-4 w-4 text-primary" /> Receita por Tipo de Serviço
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[220px] print:h-[180px]">
@@ -256,7 +260,9 @@ const RelatorioExecutivo = () => {
             {/* Novos Clientes */}
             <Card className="print:shadow-none print:border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Novos Clientes ({data.clientes.length})</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-accent" /> Novos Clientes ({data.clientes.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.clientes.length > 0 ? (
@@ -289,7 +295,9 @@ const RelatorioExecutivo = () => {
             {/* Serviços com Maior Custo */}
             <Card className="print:shadow-none print:border page-break-inside-avoid">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Serviços com Maior Custo</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-amber-500" /> Serviços com Maior Custo
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.servicosCusto.length > 0 ? (
@@ -324,7 +332,9 @@ const RelatorioExecutivo = () => {
             {/* Orçamentos Pendentes */}
             <Card className="print:shadow-none print:border page-break-inside-avoid">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Orçamentos Pendentes ({data.orcamentosPendentes.length})</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-500" /> Orçamentos Pendentes ({data.orcamentosPendentes.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.orcamentosPendentes.length > 0 ? (
@@ -403,11 +413,14 @@ const RelatorioExecutivo = () => {
   );
 };
 
-function KPIBox({ label, value, color, subtitle }: { label: string; value: string; color: string; subtitle?: string }) {
+function KPIBox({ label, value, color, subtitle, icon }: { label: string; value: string; color: string; subtitle?: string; icon?: React.ReactNode }) {
   return (
     <Card className="print:shadow-none print:border">
       <CardContent className="p-3 print:p-2">
-        <p className="text-xs text-muted-foreground print:text-gray-500">{label}</p>
+        <div className="flex items-center gap-1.5 mb-1">
+          {icon && <span className={color}>{icon}</span>}
+          <p className="text-xs text-muted-foreground print:text-gray-500">{label}</p>
+        </div>
         <p className={`text-lg font-bold ${color} print:text-sm`}>{value}</p>
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
       </CardContent>

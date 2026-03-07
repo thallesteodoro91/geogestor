@@ -208,6 +208,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
 
   return {
     metrics: metricsAtual.data,
+    metricsAnterior: metricsAnterior.data,
     derivedKPIs,
     derivedKPIsAnterior,
     variacaoReceita,

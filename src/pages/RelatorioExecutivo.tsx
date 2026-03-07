@@ -218,7 +218,9 @@ const RelatorioExecutivo = () => {
             {/* Donut Chart */}
             <Card className="print:shadow-none print:border">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Receita por Tipo de Serviço</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <PieChartIcon className="h-4 w-4 text-primary" /> Receita por Tipo de Serviço
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="h-[220px] print:h-[180px]">

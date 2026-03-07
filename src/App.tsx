@@ -29,6 +29,7 @@ const CalendarioDetalhes = lazy(() => import("./pages/CalendarioDetalhes"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Assinatura = lazy(() => import("./pages/Assinatura"));
+const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 

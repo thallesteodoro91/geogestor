@@ -1,50 +1,48 @@
 
 
-## Diagnóstico
+# Refatorar PrintableReport -- Storytelling com Dados
 
-**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
+Refatorar apenas o componente `PrintableReport.tsx` (exportação/impressão). A tela do relatório executivo permanece inalterada.
 
-```
-null value in column "slug" of relation "tenants" violates not-null constraint
-```
+## Mudanças no `PrintableReport.tsx`
 
-Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
+### 1. Cabeçalho Técnico (Página 1)
+- Esquerda: Logo "SkyGeo" com tagline
+- Direita: bloco monospace com ID do Relatório (hash curto gerado), Data de Emissão, Responsável (nome da empresa)
 
-O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
+### 2. Seção de Contexto -- Estado de Saúde Financeira
+- Abaixo do cabeçalho, uma linha com badge sutil indicando o estado:
+  - "Saudável" (lucro positivo, variação >= 0)
+  - "Atenção" (lucro negativo ou queda)
+- Exibe a variação percentual em destaque
 
-## Correção
+### 3. Banda de KPIs Simplificada
+- Apenas 3 KPIs principais lado a lado: Faturamento, Gasto, Lucro Líquido
+- Separados por linhas verticais finas e whitespace
+- Remover Margem de Lucro e Taxa Conversão da banda principal (mover como dado secundário no sumário)
 
-Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+### 4. Sumário Executivo -- Design Editorial
+- Ocupa o centro da primeira página
+- Insights da IA com títulos em tipografia diferenciada (serif-style weight)
+- Ações recomendadas em box cinza claro neutro, rotulado como "Insight de Gestão"
+- Texto corrido para descrições
 
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
-RETURNS uuid ...
-AS $$
-  -- Gerar slug a partir do nome
-  v_slug := lower(regexp_replace(
-    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
-                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
-    '[^a-z0-9]+', '-', 'g'));
-  -- Remover hífens nas extremidades
-  v_slug := trim(both '-' from v_slug);
-  -- Garantir unicidade com sufixo aleatório
-  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+### 5. Gráficos (Página 2) -- Proporção Áurea
+- Grid assimétrico: gráfico de barras ocupa ~60% da largura, donut ~40%
+- Paleta monocromática: azul SkyGeo `#1e3a5f` como cor primária, tons de cinza/slate para secundários
+- Remover cores vibrantes do donut, usar variações de opacidade do azul
+- Eixos limpos, sem grid lines
 
-  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
-$$
-```
+### 6. Tabelas -- `table-layout: fixed`
+- Extrair sub-componente `PrintTable` com `table-layout: fixed` e `word-break: break-word`
+- Colunas de e-mail/telefone com largura fixa para não quebrar layout
+- Empty state elegante: ícone sutil + "Nenhuma movimentação registrada no período" centralizado em box cinza claro
 
-Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+### 7. Rodapé
+- Numeração de página implícita
+- "Documento confidencial -- SkyGeo · Powered by GeoGestor"
 
-```sql
-ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
-```
-
-**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
-
-## Impacto
-
-- Corrige o bloqueio de login para todos os novos clientes
-- Zero impacto nos 2 tenants existentes
-- Garante slugs únicos e válidos automaticamente
+## Arquivos alterados
+- **Editar**: `src/components/relatorio/PrintableReport.tsx` -- reescrever com storytelling
+- Nenhuma mudança em `RelatorioExecutivo.tsx` ou `index.css`
 

@@ -378,16 +378,16 @@ export function PrintableReport({
       {/* ═══════════ FOOTER ═══════════ */}
       <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px" }}>
         {/* Próximos Passos Sugeridos */}
-        {nextSteps.length > 0 && (
+        {insightsGestor.length > 0 && (
           <div style={{ marginBottom: "16px", padding: "12px 16px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
             <p style={{ fontSize: "9px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-              Próximos Passos Sugeridos
+              Insights do Gestor
             </p>
-            <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "10px", color: "#374151", lineHeight: 1.8 }}>
-              {nextSteps.map((step, i) => (
+            <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "10px", color: "#374151", lineHeight: 1.8 }}>
+              {insightsGestor.slice(0, 3).map((step, i) => (
                 <li key={i}>{step}</li>
               ))}
-            </ol>
+            </ul>
           </div>
         )}
 

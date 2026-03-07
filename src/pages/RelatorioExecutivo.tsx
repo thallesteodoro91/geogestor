@@ -332,7 +332,9 @@ const RelatorioExecutivo = () => {
             {/* Orçamentos Pendentes */}
             <Card className="print:shadow-none print:border page-break-inside-avoid">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-semibold">Orçamentos Pendentes ({data.orcamentosPendentes.length})</CardTitle>
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-500" /> Orçamentos Pendentes ({data.orcamentosPendentes.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {data.orcamentosPendentes.length > 0 ? (

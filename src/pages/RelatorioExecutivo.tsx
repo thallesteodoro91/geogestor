@@ -172,11 +172,11 @@ const RelatorioExecutivo = () => {
             <div className="grid grid-cols-5 gap-4"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 print:grid-cols-5 print:gap-2">
-              <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" />
-              <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" />
-              <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-emerald-600" : "text-destructive"} />
-              <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-emerald-600" : "text-destructive"} />
-              <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} />
+              <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" icon={<DollarSign className="h-4 w-4" />} />
+              <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" icon={<TrendingDown className="h-4 w-4" />} />
+              <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-emerald-600" : "text-destructive"} icon={<BadgeDollarSign className="h-4 w-4" />} />
+              <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-emerald-600" : "text-destructive"} icon={<Percent className="h-4 w-4" />} />
+              <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} icon={<Target className="h-4 w-4" />} />
             </div>
           )}
 

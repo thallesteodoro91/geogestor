@@ -74,19 +74,19 @@ export function PrintableReport({
       return !cat || cat === "sem categoria" || cat === "outros" || cat === "null";
     });
 
-  // AI next steps for footer
-  const nextSteps: string[] = [];
+  // Insights do Gestor for footer — always ensure at least 3
+  const insightsGestor: string[] = [];
   if (aiSummary.data?.insights?.length > 0) {
     aiSummary.data.insights.forEach((insight: any) => {
-      if (insight.acao) nextSteps.push(insight.acao);
+      if (insight.acao && insightsGestor.length < 3) insightsGestor.push(insight.acao);
     });
   }
-  // Fallback next steps based on data
-  if (nextSteps.length === 0) {
-    if (lucroLiquido < 0) nextSteps.push("Revisar estrutura de custos para identificar fontes de prejuízo.");
-    if (orcamentosPendentes.length > 0) nextSteps.push(`Retomar contato com ${orcamentosPendentes.length} orçamento(s) pendente(s).`);
-    if (allUncategorized) nextSteps.push("Categorizar serviços para melhor visibilidade da distribuição de receita.");
-  }
+  // Fallback insights based on data analysis
+  if (lucroLiquido < 0 && insightsGestor.length < 3) insightsGestor.push("Revisar custos fixos e variáveis para identificar oportunidades de redução.");
+  if (orcamentosPendentes.length > 0 && insightsGestor.length < 3) insightsGestor.push(`Retomar contato com ${orcamentosPendentes.length} orçamento(s) pendente(s) para conversão.`);
+  if (allUncategorized && insightsGestor.length < 3) insightsGestor.push("Categorizar serviços para melhor visibilidade da distribuição de receita.");
+  if (despesaTotal > receitaTotal && insightsGestor.length < 3) insightsGestor.push("Analisar despesas que excedem o faturamento e priorizar cortes.");
+  if (insightsGestor.length < 3) insightsGestor.push("Acompanhar evolução mensal dos KPIs para identificar tendências.");
 
   if (isLoading) {
     return (
@@ -106,7 +106,7 @@ export function PrintableReport({
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
           <div>
-            <h1 style={{ fontSize: "22px", fontWeight: 800, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.02em" }}>
+            <h1 style={{ fontSize: "28px", fontWeight: 900, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.03em", fontFamily: "'Inter', system-ui, sans-serif" }}>
               SkyGeo
             </h1>
             <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
@@ -158,7 +158,7 @@ export function PrintableReport({
       {/* SECONDARY METRICS — small row */}
       <div style={{ display: "flex", gap: "24px", marginBottom: "28px", paddingLeft: "4px" }}>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
-          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{margemReal >= 0 ? "" : "−"}{formatarPercentual(Math.abs(margemReal))}</strong>
+          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{margemReal < 0 ? "-" : ""}{formatarPercentual(Math.abs(margemReal))}</strong>
         </span>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
           Taxa de Conversão: <strong style={{ color: SKYGEO_BLUE }}>{formatarPercentual(taxaConversao)}</strong>
@@ -254,10 +254,11 @@ export function PrintableReport({
 
         {/* Donut Chart — 40% (conditional) */}
         {allUncategorized ? (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
-            <AlertTriangle style={{ width: 20, height: 20, color: "#d97706", marginBottom: "8px" }} />
-            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", fontWeight: 500 }}>
-              Categorize seus serviços para visualizar a distribuição de receita.
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
+            <AlertTriangle style={{ width: 22, height: 22, color: "#d97706", marginBottom: "10px" }} />
+            <p style={{ fontSize: "10px", fontWeight: 700, color: "#92400e", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Pendência</p>
+            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", lineHeight: 1.6 }}>
+              Categorize seus serviços para habilitar a análise de lucratividade por tipo de serviço.
             </p>
           </div>
         ) : receitaCategorias.length > 0 ? (
@@ -300,88 +301,93 @@ export function PrintableReport({
 
       {/* Novos Clientes */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Novos Clientes ({clientes.length})</SectionTitle>
         {clientes.length > 0 ? (
-          <PrintTable
-            headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
-            colWidths={["30%", "18%", "20%", "32%"]}
-            rows={clientes.map((c) => [
-              c.nome,
-              c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
-              c.telefone || "—",
-              c.email || "—",
-            ])}
-          />
+          <>
+            <SectionTitle>Novos Clientes ({clientes.length})</SectionTitle>
+            <PrintTable
+              headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
+              colWidths={["30%", "18%", "20%", "32%"]}
+              rows={clientes.map((c) => [
+                c.nome,
+                c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
+                c.telefone || "—",
+                c.email || "—",
+              ])}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Não houve novos clientes cadastrados neste período." />
         )}
       </section>
 
       {/* Serviços com Maior Prejuízo / Custo */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Serviços com Maior Custo</SectionTitle>
         {servicosCusto.length > 0 ? (
-          <PrintTable
-            headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
-            colWidths={["28%", "17%", "17%", "17%", "21%"]}
-            alignRight={[false, true, true, true, true]}
-            rows={servicosCusto.map((s) => {
-              const margemContrib = s.receita - s.custo;
-              return [
-                s.nome,
-                formatarMoeda(s.receita),
-                formatarMoeda(s.custo),
-                formatarPercentual(s.margem),
-                formatarMoeda(margemContrib),
-              ];
-            })}
-            cellColors={servicosCusto.map((s) => {
-              const margemContrib = s.receita - s.custo;
-              return {
-                2: "#dc2626",
-                3: s.margem >= 0 ? "#16a34a" : "#dc2626",
-                4: margemContrib >= 0 ? "#16a34a" : "#dc2626",
-              };
-            })}
-          />
+          <>
+            <SectionTitle>Serviços com Maior Custo</SectionTitle>
+            <PrintTable
+              headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
+              colWidths={["28%", "17%", "17%", "17%", "21%"]}
+              alignRight={[false, true, true, true, true]}
+              rows={servicosCusto.map((s) => {
+                const margemContrib = s.receita - s.custo;
+                return [
+                  s.nome,
+                  formatarMoeda(s.receita),
+                  formatarMoeda(s.custo),
+                  formatarPercentual(s.margem),
+                  formatarMoeda(margemContrib),
+                ];
+              })}
+              cellColors={servicosCusto.map((s) => {
+                const margemContrib = s.receita - s.custo;
+                return {
+                  2: "#dc2626",
+                  3: s.margem >= 0 ? "#16a34a" : "#dc2626",
+                  4: margemContrib >= 0 ? "#16a34a" : "#dc2626",
+                };
+              })}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Nenhum serviço com custo registrado neste período." />
         )}
       </section>
 
-      {/* Orçamentos Pendentes */}
       <section style={{ marginBottom: "28px" }} className="page-break-inside-avoid">
-        <SectionTitle>Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
         {orcamentosPendentes.length > 0 ? (
-          <PrintTable
-            headers={["Código", "Cliente", "Valor", "Vencimento"]}
-            colWidths={["20%", "35%", "25%", "20%"]}
-            alignRight={[false, false, true, false]}
-            rows={orcamentosPendentes.map((o) => [
-              o.codigo || "—",
-              o.cliente,
-              formatarMoeda(o.valor),
-              o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
-            ])}
-          />
+          <>
+            <SectionTitle>Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
+            <PrintTable
+              headers={["Código", "Cliente", "Valor", "Vencimento"]}
+              colWidths={["20%", "35%", "25%", "20%"]}
+              alignRight={[false, false, true, false]}
+              rows={orcamentosPendentes.map((o) => [
+                o.codigo || "—",
+                o.cliente,
+                formatarMoeda(o.valor),
+                o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
+              ])}
+            />
+          </>
         ) : (
-          <EmptyState />
+          <EmptyState message="Não há orçamentos pendentes para este período." />
         )}
       </section>
 
       {/* ═══════════ FOOTER ═══════════ */}
       <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px" }}>
         {/* Próximos Passos Sugeridos */}
-        {nextSteps.length > 0 && (
+        {insightsGestor.length > 0 && (
           <div style={{ marginBottom: "16px", padding: "12px 16px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
             <p style={{ fontSize: "9px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-              Próximos Passos Sugeridos
+              Insights do Gestor
             </p>
-            <ol style={{ margin: 0, paddingLeft: "16px", fontSize: "10px", color: "#374151", lineHeight: 1.8 }}>
-              {nextSteps.map((step, i) => (
+            <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "10px", color: "#374151", lineHeight: 1.8 }}>
+              {insightsGestor.slice(0, 3).map((step, i) => (
                 <li key={i}>{step}</li>
               ))}
-            </ol>
+            </ul>
           </div>
         )}
 
@@ -448,12 +454,12 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ message }: { message?: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px 16px", background: "#f8fafc", borderRadius: "6px", border: "1px dashed #e2e8f0" }}>
-      <FileText style={{ width: 18, height: 18, color: "#cbd5e1", marginBottom: "8px" }} />
-      <p style={{ fontSize: "10px", color: "#94a3b8", margin: 0, fontStyle: "italic" }}>
-        Nenhuma movimentação registrada no período.
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", padding: "16px 20px", background: "#f8fafc", borderRadius: "6px", border: "1px dashed #e2e8f0" }}>
+      <FileText style={{ width: 16, height: 16, color: "#cbd5e1", flexShrink: 0 }} />
+      <p style={{ fontSize: "11px", color: "#94a3b8", margin: 0, fontStyle: "italic" }}>
+        {message || "Nenhuma movimentação registrada no período."}
       </p>
     </div>
   );

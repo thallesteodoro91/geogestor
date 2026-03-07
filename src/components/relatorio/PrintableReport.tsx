@@ -106,7 +106,7 @@ export function PrintableReport({
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
           <div>
-            <h1 style={{ fontSize: "22px", fontWeight: 800, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.02em" }}>
+            <h1 style={{ fontSize: "28px", fontWeight: 900, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.03em", fontFamily: "'Inter', system-ui, sans-serif" }}>
               SkyGeo
             </h1>
             <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>

@@ -347,9 +347,13 @@ All colors MUST be HSL.
   aside,
   [data-sidebar],
   .fixed.inset-y-0,
-  button,
   .sonner-toast-container {
     display: none !important;
+  }
+
+  /* Show print-only content */
+  .print\:block {
+    display: block !important;
   }
 
   /* Full-width layout */

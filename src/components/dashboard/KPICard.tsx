@@ -31,9 +31,10 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
         <div className="flex items-start gap-4">
           <div className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-            iconColor ? `${iconColor.replace('text-', 'bg-').split('-').slice(0, -1).join('-')}-500/10` : "bg-muted/50"
-          )} style={iconColor ? { backgroundColor: `color-mix(in srgb, currentColor 10%, transparent)` } : undefined}>
-            <Icon className={cn("h-5 w-5", iconColorClass)} />
+            iconColorClass,
+            iconColor ? "bg-current/10" : "bg-muted/50"
+          )}>
+            <Icon className="h-5 w-5" />
           </div>
           
           <div className="space-y-1.5 flex-1 min-w-0">

@@ -69,12 +69,12 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
   
   const { data: currentDespesas } = await supabase
     .from('fato_despesas')
-    .select('valor_da_despesa')
+    .select('valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fato_despesas_id_tipodespesa_fkey(classificacao)')
     .gte('data_da_despesa', currentPeriodStart.toISOString().split('T')[0]);
   
   const { data: previousDespesas } = await supabase
     .from('fato_despesas')
-    .select('valor_da_despesa')
+    .select('valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fato_despesas_id_tipodespesa_fkey(classificacao)')
     .gte('data_da_despesa', previousPeriodStart.toISOString().split('T')[0])
     .lte('data_da_despesa', previousPeriodEnd.toISOString().split('T')[0]);
   

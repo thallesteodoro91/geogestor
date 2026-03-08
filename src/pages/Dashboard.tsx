@@ -191,7 +191,7 @@ const Dashboard = () => {
               title="Concluídos"
               value={String(kpis?.servicos_concluidos || 0)}
               icon={ClipboardCheck}
-              iconColor="text-teal-500"
+              iconColor="#14b8a6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
             />

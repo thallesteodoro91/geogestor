@@ -30,10 +30,13 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
           <div className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-            iconColor ? `${iconColor.replace('text-', 'bg-').split('-').slice(0, -1).join('-')}-500/10` : "bg-muted/50"
-          )} style={iconColor ? { backgroundColor: `color-mix(in srgb, currentColor 10%, transparent)` } : undefined}>
-            <Icon className={cn("h-5 w-5", iconColorClass)} />
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg relative",
+            !iconColor && "bg-muted/50"
+          )}>
+            {iconColor && (
+              <div className={cn("absolute inset-0 rounded-lg opacity-10", iconColor.replace('text-', 'bg-'))} />
+            )}
+            <Icon className={cn("h-5 w-5 relative z-10", iconColorClass)} />
           </div>
           
           <div className="space-y-1.5 flex-1 min-w-0">

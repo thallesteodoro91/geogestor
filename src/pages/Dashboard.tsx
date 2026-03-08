@@ -97,7 +97,7 @@ const Dashboard = () => {
               title="Receita Total"
               value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Banknote}
-              iconColor="text-indigo-500"
+              iconColor="#6366f1"
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
             />

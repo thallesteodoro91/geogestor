@@ -184,6 +184,7 @@ const GestaoEmpresa = () => {
                   title="Margem Contribuição"
                   value={`${(kpis?.margem_contribuicao_percent || 0).toFixed(1)}%`}
                   icon={Percent}
+                  iconColor="#8b5cf6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
                   changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
                 />
@@ -191,6 +192,7 @@ const GestaoEmpresa = () => {
                   title="Ponto de Equilíbrio"
                   value={`R$ ${(kpis?.ponto_equilibrio_receita || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={Calculator}
+                  iconColor="#06b6d4"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
                   changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
                 />
@@ -198,6 +200,7 @@ const GestaoEmpresa = () => {
                   title="Desvio Orçamentário"
                   value={`${(kpis?.desvio_orcamentario_percent || 0).toFixed(1)}%`}
                   icon={Target}
+                  iconColor="#f59e0b"
                   change="--"
                   changeType="neutral"
                 />
@@ -205,6 +208,7 @@ const GestaoEmpresa = () => {
                   title="Taxa de Conversão"
                   value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
                   icon={Users}
+                  iconColor="#14b8a6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
                   changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
                 />

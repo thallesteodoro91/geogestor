@@ -164,16 +164,19 @@ export default function Operacional() {
                 title="Tempo Médio Conclusão"
                 value={`${metrics?.kpis.tempoMedioDias || 0} dias`}
                 icon={Clock}
+                iconColor="#f59e0b"
               />
               <KPICard
                 title="Produtividade"
                 value={`${metrics?.kpis.produtividade || 0}%`}
                 icon={TrendingUp}
+                iconColor="#10b981"
               />
               <KPICard
                 title="Ticket Médio"
                 value={`R$ ${(metrics?.kpis.ticketMedio || 0).toLocaleString('pt-BR')}`}
                 icon={DollarSign}
+                iconColor="#3b82f6"
               />
             </>
           )}

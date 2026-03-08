@@ -60,6 +60,7 @@ export default function Planejamento() {
             change="+0.3%"
             changeType="neutral"
             icon={Target}
+            iconColor="#f59e0b"
           />
           <KPICard
             title="Margem Contribuição"
@@ -67,6 +68,7 @@ export default function Planejamento() {
             change="+2.1%"
             changeType="positive"
             icon={TrendingUp}
+            iconColor="#8b5cf6"
           />
           <KPICard
             title="Taxa de Conversão"
@@ -74,6 +76,7 @@ export default function Planejamento() {
             change="+3.5%"
             changeType="positive"
             icon={Users}
+            iconColor="#14b8a6"
           />
           <KPICard
             title="Pipeline Total"
@@ -81,6 +84,7 @@ export default function Planejamento() {
             change="+8%"
             changeType="positive"
             icon={DollarSign}
+            iconColor="#6366f1"
           />
         </div>
 

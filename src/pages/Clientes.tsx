@@ -78,21 +78,25 @@ export default function Clientes() {
             title="Total de Clientes"
             value={kpis.totalClientes.toString()}
             icon={Users}
+            iconColor="#6366f1"
           />
           <KPICard
             title="LTV Médio"
             value={formatLTV(kpis.ltvMedio)}
             icon={Award}
+            iconColor="#10b981"
           />
           <KPICard
             title="Top 3 Clientes"
             value={`${kpis.top3Percentual}%`}
             icon={TrendingUp}
+            iconColor="#f59e0b"
           />
           <KPICard
             title="Cidades Ativas"
             value={kpis.cidadesAtivas.toString()}
             icon={MapPin}
+            iconColor="#14b8a6"
           />
         </div>
 

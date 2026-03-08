@@ -194,21 +194,20 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
 
-          {/* Central de Controle - acessível via botão no card */}
-          <TabsContent value="central" className="mt-4">
-            <ClienteCentralControle 
-              clienteId={id!} 
-              servicos={servicos}
-              propriedades={propriedades}
-            />
-          </TabsContent>
-
           <TabsContent value="financeiro" className="mt-4">
             {loadingServicos || loadingOrcamentos ? (
               <Skeleton className="h-64" />
             ) : (
               <ClienteFinanceiro servicos={servicos} orcamentos={orcamentos} />
             )}
+          </TabsContent>
+
+          <TabsContent value="central" className="mt-4">
+            <ClienteCentralControle 
+              clienteId={id!} 
+              servicos={servicos}
+              propriedades={propriedades}
+            />
           </TabsContent>
         </Tabs>
 

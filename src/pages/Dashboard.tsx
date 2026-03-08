@@ -127,15 +127,16 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* KPIs Secundários - Margens e Operacionais */}
+        {/* KPIs Secundários — Contexto adicional (menor destaque visual) */}
         <div className="space-y-3 animate-fade-in" style={{ animationDelay: "0.1s" }}>
           <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Margens e Performance Operacional</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Análise de rentabilidade e conversão</p>
+            <h2 className="text-lg font-heading font-medium text-muted-foreground">Contexto Operacional</h2>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6 grid-8pt">
             {isLoading ? (
               <>
+                <SkeletonKPI />
+                <SkeletonKPI />
                 <SkeletonKPI />
                 <SkeletonKPI />
                 <SkeletonKPI />
@@ -145,61 +146,42 @@ const Dashboard = () => {
               <>
             <KPICard
               title="Margem Bruta"
-              value={isLoading ? "..." : `${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
+              value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
             />
             <KPICard
-              title="Margem Líquida"
-              value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
-              icon={Calculator}
-              change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
-              changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
-            />
-            <KPICard
-              title="Taxa de Conversão"
-              value={isLoading ? "..." : `${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
+              title="Taxa Conversão"
+              value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
             />
             <KPICard
               title="Ticket Médio"
-              value={isLoading ? "..." : `R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              value={`R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Receipt}
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
             />
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* KPIs Operacionais */}
-        <div className="space-y-3 animate-fade-in" style={{ animationDelay: "0.2s" }}>
-          <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Operacionais</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Acompanhamento de entregas e execução</p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
-            {isLoading ? (
-              <>
-                <SkeletonKPI />
-                <SkeletonKPI />
-              </>
-            ) : (
-              <>
             <KPICard
-              title="Total de Serviços"
-              value={isLoading ? "..." : String(kpis?.total_servicos || 0)}
+              title="Lucro Bruto"
+              value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              icon={TrendingUp}
+              change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
+              changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
+            />
+            <KPICard
+              title="Serviços"
+              value={String(kpis?.total_servicos || 0)}
               icon={ClipboardList}
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
             />
             <KPICard
-              title="Serviços Concluídos"
-              value={isLoading ? "..." : String(kpis?.servicos_concluidos || 0)}
+              title="Concluídos"
+              value={String(kpis?.servicos_concluidos || 0)}
               icon={ClipboardCheck}
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}

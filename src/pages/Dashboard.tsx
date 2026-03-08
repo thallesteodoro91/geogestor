@@ -105,7 +105,7 @@ const Dashboard = () => {
               title="Lucro Líquido"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={CircleDollarSign}
-              iconColor="text-emerald-500"
+              iconColor="#10b981"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
             />

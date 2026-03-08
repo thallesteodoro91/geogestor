@@ -78,11 +78,11 @@ const Dashboard = () => {
           onFilterChange={setFilters}
         />
 
-        {/* KPIs Principais - Financeiros */}
+        {/* KPIs Principais — Foco nos 4 mais importantes (Storytelling com Dados: elimine a saturação) */}
         <div className="space-y-3 animate-fade-in">
           <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Financeiros</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Visão consolidada da saúde financeira</p>
+            <h2 className="text-xl font-heading font-semibold text-foreground">Saúde Financeira</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">Os indicadores que mais importam para a tomada de decisão</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
             {isLoading ? (
@@ -102,18 +102,18 @@ const Dashboard = () => {
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
             />
             <KPICard
-              title="Lucro Bruto"
-              value={isLoading ? "..." : `R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-              icon={TrendingUp}
-              change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
-              changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
-            />
-            <KPICard
               title="Lucro Líquido"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={CircleDollarSign}
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
+            />
+            <KPICard
+              title="Margem Líquida"
+              value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
+              icon={Percent}
+              change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
+              changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
             />
             <KPICard
               title="Total de Despesas"

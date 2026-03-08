@@ -458,6 +458,7 @@ export default function Despesas() {
             title={hasDateFilter ? "Total no Período" : "Total de Despesas"}
             value={`R$ ${totalDespesasFiltradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
+            iconColor="#f43f5e"
           />
           <KPICard
             title={hasDateFilter ? "Despesas Filtradas" : "Despesas do Mês"}
@@ -468,6 +469,7 @@ export default function Despesas() {
                   .reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa)), 0)
             ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={TrendingDown}
+            iconColor="#ef4444"
           />
         </div>
 

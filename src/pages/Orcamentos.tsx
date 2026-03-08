@@ -282,16 +282,19 @@ export default function Orcamentos() {
             title="Total de Orçamentos"
             value={orcamentos.length.toString()}
             icon={FileText}
+            iconColor="#6366f1"
           />
           <KPICard
             title="Receita Esperada"
             value={`R$ ${receitaEsperadaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={TrendingUp}
+            iconColor="#10b981"
           />
           <KPICard
             title="Taxa de Conversão"
             value={`${taxaConversao.toFixed(1)}%`}
             icon={Target}
+            iconColor="#f59e0b"
             change={`${orcamentosConvertidos} convertidos`}
             changeType="positive"
           />

@@ -172,11 +172,13 @@ export default function Servicos() {
             title="Total de Serviços"
             value={totalServicos.toString()}
             icon={Briefcase}
+            iconColor="#6366f1"
           />
           <KPICard
             title="Concluídos"
             value={servicosConcluidos.toString()}
             icon={CheckCircle2}
+            iconColor="#10b981"
             change={totalServicos > 0 ? `${Math.round((servicosConcluidos / totalServicos) * 100)}%` : "0%"}
             changeType="positive"
           />
@@ -184,11 +186,13 @@ export default function Servicos() {
             title="Em Andamento"
             value={servicosEmAndamento.toString()}
             icon={Clock}
+            iconColor="#f59e0b"
           />
           <KPICard
             title="Média de Progresso"
             value={`${mediaProgresso}%`}
             icon={TrendingUp}
+            iconColor="#3b82f6"
           />
         </div>
 

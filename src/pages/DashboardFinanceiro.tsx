@@ -112,6 +112,7 @@ const DashboardFinanceiro = () => {
                   title="Receita Bruta"
                   value={formatCurrency(metrics?.receita_total || 0)}
                   icon={DollarSign}
+                  iconColor="#6366f1"
                   changeType="neutral"
                 />
 
@@ -119,6 +120,7 @@ const DashboardFinanceiro = () => {
                   title="Receita Líquida"
                   value={formatCurrency(derivedKPIs?.receita_liquida || 0)}
                   icon={DollarSign}
+                  iconColor="#3b82f6"
                   changeType="neutral"
                 />
 
@@ -126,6 +128,7 @@ const DashboardFinanceiro = () => {
                   title="Margem Contribuição"
                   value={formatPercent(derivedKPIs?.margem_contribuicao_percent || 0)}
                   icon={Target}
+                  iconColor="#8b5cf6"
                   changeType="positive"
                 />
 
@@ -133,6 +136,7 @@ const DashboardFinanceiro = () => {
                   title="Ponto de Equilíbrio"
                   value={formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}
                   icon={AlertCircle}
+                  iconColor="#f59e0b"
                   changeType="neutral"
                 />
               </>

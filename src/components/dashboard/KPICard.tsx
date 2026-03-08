@@ -21,7 +21,7 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
     changeType === "negative" ? "interactive-lift-negative" :
     "interactive-lift";
 
-  const iconColorClass = iconColor || "text-muted-foreground";
+  
   
   return (
     <Card className={cn(

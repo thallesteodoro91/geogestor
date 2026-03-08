@@ -76,7 +76,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
       const { data, error } = await supabase
         .from("fato_servico")
         .select("nome_do_servico, receita_servico, custo_servico")
-        .or(`data_do_servico_inicio.gte.${dataInicio},data_do_servico_inicio.is.null`)
+        .gte("data_do_servico_inicio", dataInicio)
         .lte("data_do_servico_inicio", dataFim)
         .order("custo_servico", { ascending: false })
         .limit(10);

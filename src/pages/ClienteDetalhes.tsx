@@ -152,7 +152,7 @@ export default function ClienteDetalhes() {
 
         {/* Tabs com detalhes */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="propriedades">
               Propriedades ({propriedades.length})
             </TabsTrigger>
@@ -163,7 +163,10 @@ export default function ClienteDetalhes() {
               Orçamentos ({orcamentos.length})
             </TabsTrigger>
             <TabsTrigger value="financeiro">
-              Resumo Financeiro
+              Financeiro
+            </TabsTrigger>
+            <TabsTrigger value="central">
+              Central de Controle
             </TabsTrigger>
           </TabsList>
 
@@ -191,21 +194,20 @@ export default function ClienteDetalhes() {
             )}
           </TabsContent>
 
-          {/* Central de Controle - acessível via botão no card */}
-          <TabsContent value="central" className="mt-4">
-            <ClienteCentralControle 
-              clienteId={id!} 
-              servicos={servicos}
-              propriedades={propriedades}
-            />
-          </TabsContent>
-
           <TabsContent value="financeiro" className="mt-4">
             {loadingServicos || loadingOrcamentos ? (
               <Skeleton className="h-64" />
             ) : (
               <ClienteFinanceiro servicos={servicos} orcamentos={orcamentos} />
             )}
+          </TabsContent>
+
+          <TabsContent value="central" className="mt-4">
+            <ClienteCentralControle 
+              clienteId={id!} 
+              servicos={servicos}
+              propriedades={propriedades}
+            />
           </TabsContent>
         </Tabs>
 

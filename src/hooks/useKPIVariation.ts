@@ -69,12 +69,12 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
   
   const { data: currentDespesas } = await supabase
     .from('fato_despesas')
-    .select('valor_da_despesa')
+    .select('valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fato_despesas_id_tipodespesa_fkey(classificacao)')
     .gte('data_da_despesa', currentPeriodStart.toISOString().split('T')[0]);
   
   const { data: previousDespesas } = await supabase
     .from('fato_despesas')
-    .select('valor_da_despesa')
+    .select('valor_da_despesa, dim_tipodespesa:dim_tipodespesa!fato_despesas_id_tipodespesa_fkey(classificacao)')
     .gte('data_da_despesa', previousPeriodStart.toISOString().split('T')[0])
     .lte('data_da_despesa', previousPeriodEnd.toISOString().split('T')[0]);
   
@@ -89,15 +89,31 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
     .gte('created_at', previousPeriodStart.toISOString())
     .lte('created_at', previousPeriodEnd.toISOString());
   
+  // Helper to split expenses by classification
+  const splitExpenses = (despesas: any[]) => {
+    let variaveis = 0;
+    let fixas = 0;
+    (despesas || []).forEach((d: any) => {
+      const valor = d.valor_da_despesa || 0;
+      const classificacao = d.dim_tipodespesa?.classificacao;
+      if (classificacao === 'VARIAVEL') {
+        variaveis += valor;
+      } else {
+        fixas += valor;
+      }
+    });
+    return { variaveis, fixas, total: variaveis + fixas };
+  };
+
   // Calculate current period metrics
   const currentReceitaTotal = (currentOrcamentos || []).reduce((sum, o) => sum + (o.receita_esperada || 0), 0);
-  const currentDespesasTotal = (currentDespesas || []).reduce((sum, d) => sum + (d.valor_da_despesa || 0), 0);
+  const currentDesp = splitExpenses(currentDespesas || []);
   const currentImpostos = (currentOrcamentos || []).reduce((sum, o) => 
     sum + ((o.receita_esperada || 0) * (o.percentual_imposto || 0) / 100), 0
   );
   const currentReceitaLiquida = currentReceitaTotal - currentImpostos;
-  const currentLucroBruto = currentReceitaLiquida - currentDespesasTotal * 0.6; // Custos diretos = 60% despesas
-  const currentLucroLiquido = currentReceitaLiquida - currentDespesasTotal;
+  const currentLucroBruto = currentReceitaLiquida - currentDesp.variaveis;
+  const currentLucroLiquido = currentReceitaLiquida - currentDesp.total;
   const currentTotalServicos = (currentServicos || []).length;
   const currentServicosConcluidos = (currentServicos || []).filter(s => s.situacao_do_servico === 'Concluído').length;
   const currentTotalOrcamentos = (currentOrcamentos || []).length;
@@ -105,13 +121,13 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
   
   // Calculate previous period metrics
   const previousReceitaTotal = (previousOrcamentos || []).reduce((sum, o) => sum + (o.receita_esperada || 0), 0);
-  const previousDespesasTotal = (previousDespesas || []).reduce((sum, d) => sum + (d.valor_da_despesa || 0), 0);
+  const previousDesp = splitExpenses(previousDespesas || []);
   const previousImpostos = (previousOrcamentos || []).reduce((sum, o) => 
     sum + ((o.receita_esperada || 0) * (o.percentual_imposto || 0) / 100), 0
   );
   const previousReceitaLiquida = previousReceitaTotal - previousImpostos;
-  const previousLucroBruto = previousReceitaLiquida - previousDespesasTotal * 0.6;
-  const previousLucroLiquido = previousReceitaLiquida - previousDespesasTotal;
+  const previousLucroBruto = previousReceitaLiquida - previousDesp.variaveis;
+  const previousLucroLiquido = previousReceitaLiquida - previousDesp.total;
   const previousTotalServicos = (previousServicos || []).length;
   const previousServicosConcluidos = (previousServicos || []).filter(s => s.situacao_do_servico === 'Concluído').length;
   const previousTotalOrcamentos = (previousOrcamentos || []).length;
@@ -121,7 +137,7 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
     receita_total: currentReceitaTotal,
     lucro_bruto: currentLucroBruto,
     lucro_liquido: currentLucroLiquido,
-    total_despesas: currentDespesasTotal,
+    total_despesas: currentDesp.total,
     margem_bruta_percent: currentReceitaTotal > 0 ? (currentLucroBruto / currentReceitaTotal) * 100 : 0,
     margem_liquida_percent: currentReceitaTotal > 0 ? (currentLucroLiquido / currentReceitaTotal) * 100 : 0,
     taxa_conversao_percent: currentTotalOrcamentos > 0 ? (currentConvertidos / currentTotalOrcamentos) * 100 : 0,
@@ -134,7 +150,7 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
     receita_total: previousReceitaTotal,
     lucro_bruto: previousLucroBruto,
     lucro_liquido: previousLucroLiquido,
-    total_despesas: previousDespesasTotal,
+    total_despesas: previousDesp.total,
     margem_bruta_percent: previousReceitaTotal > 0 ? (previousLucroBruto / previousReceitaTotal) * 100 : 0,
     margem_liquida_percent: previousReceitaTotal > 0 ? (previousLucroLiquido / previousReceitaTotal) * 100 : 0,
     taxa_conversao_percent: previousTotalOrcamentos > 0 ? (previousConvertidos / previousTotalOrcamentos) * 100 : 0,

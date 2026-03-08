@@ -58,8 +58,8 @@ export function PrintableReport({
   const dataEmissao = format(new Date(), "dd/MM/yyyy");
   const reportId = generateReportId();
 
-  // Real margin calculation: Margem = Lucro / Faturamento
-  const margemReal = receitaTotal > 0 ? (lucroLiquido / receitaTotal) * 100 : 0;
+  // Real margin calculation: Margem = Lucro / Faturamento (handles negative lucro)
+  const margemReal = receitaTotal !== 0 ? (lucroLiquido / receitaTotal) * 100 : 0;
 
   const isSaudavel = lucroLiquido >= 0 && (variacaoReceita === null || variacaoReceita >= 0);
 

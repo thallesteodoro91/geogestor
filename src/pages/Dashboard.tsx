@@ -121,7 +121,7 @@ const Dashboard = () => {
               title="Total de Despesas"
               value={isLoading ? "..." : `R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingDown}
-              iconColor="text-rose-500"
+              iconColor="#f43f5e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
               changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
             />

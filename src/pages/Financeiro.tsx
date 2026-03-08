@@ -203,7 +203,6 @@ const Financeiro = () => {
                     <SmartCategoryChart
                       data={expenseData}
                       height={300}
-                      maxPieCategories={4}
                       format="currency"
                       ariaLabel="Gráfico de composição de despesas"
                     />

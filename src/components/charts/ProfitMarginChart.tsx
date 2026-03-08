@@ -1,10 +1,21 @@
+/**
+ * Profit Margin Evolution Chart
+ * 
+ * Storytelling com Dados:
+ * - Cap. 2: Line chart for continuous time series
+ * - Cap. 3: Remove dots on every point (clutter) — only show on hover
+ * - Cap. 4: Two intentional colors — primary for gross, secondary for net. 
+ *   Comparison lines muted.
+ * - Cap. 7: Narrative subtitle guides interpretation
+ */
+
 import { useState } from "react";
-import { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { RichTooltip } from "./RichTooltip";
 import { useProfitMarginChartData } from "@/hooks/useChartData";
 import { useAvailableYears } from "@/hooks/useAvailableYears";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const ProfitMarginChart = () => {
@@ -13,11 +24,11 @@ export const ProfitMarginChart = () => {
   const [compareYear, setCompareYear] = useState<number | null>(null);
   const { data: availableYears, isLoading: yearsLoading } = useAvailableYears();
   const { data, isLoading } = useProfitMarginChartData(selectedYear);
-  const { data: compareData, isLoading: compareLoading } = useProfitMarginChartData(compareYear || undefined);
+  const { data: compareData } = useProfitMarginChartData(compareYear || undefined);
 
   if (isLoading || yearsLoading) {
     return (
-      <Card className="interactive-lift">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Evolução das Margens</CardTitle>
         </CardHeader>
@@ -28,13 +39,11 @@ export const ProfitMarginChart = () => {
     );
   }
 
-  // Filter to only show months with data or up to current month (only for current year)
   const currentMonth = new Date().getMonth();
   const filteredData = selectedYear === currentYear 
     ? (data || []).slice(0, currentMonth + 1)
     : (data || []);
   
-  // Merge comparison data if selected
   const mergedData = filteredData.map((item, index) => {
     const compareItem = compareYear && compareData ? compareData[index] : null;
     return {
@@ -44,16 +53,18 @@ export const ProfitMarginChart = () => {
     };
   });
   
-  // If no data, show placeholder
   const hasData = filteredData.some(d => d.margemBruta > 0 || d.margemLiquida > 0);
-
-  // Available years for comparison (exclude selected year)
   const compareYears = (availableYears || []).filter(y => y !== selectedYear);
 
   return (
-    <Card className="interactive-lift">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg">Evolução das Margens</CardTitle>
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+        <div>
+          <CardTitle className="text-lg font-heading font-semibold">Evolução das Margens</CardTitle>
+          <CardDescription className="text-sm">
+            Margem bruta vs líquida — a diferença revela o peso das despesas fixas
+          </CardDescription>
+        </div>
         <div className="flex items-center gap-2">
           <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(Number(v))}>
             <SelectTrigger className="w-[100px] h-8">
@@ -88,69 +99,95 @@ export const ProfitMarginChart = () => {
       <CardContent>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            <p>Sem dados de margem para exibir em {selectedYear}</p>
+            <p>Sem dados de margem para {selectedYear}</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={mergedData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+            <LineChart data={mergedData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              {/* Cap. 3: Minimal grid */}
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke="hsl(var(--border))" 
+                opacity={0.3}
+                vertical={false}
+              />
               <XAxis 
                 dataKey="month" 
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
+                tickLine={false}
+                axisLine={false}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
+                tickLine={false}
+                axisLine={false}
                 tickFormatter={(value) => `${value}%`}
                 domain={[-20, 100]}
               />
+              {/* Cap. 4: Reference line at 0% to anchor interpretation */}
+              <ReferenceLine 
+                y={0} 
+                stroke="hsl(var(--muted-foreground))" 
+                strokeWidth={1}
+                opacity={0.5}
+              />
               <Tooltip
                 content={<RichTooltip format="percent" showDifference differenceLabel="Diferença" />}
-                cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
-              <Legend />
-              {/* Current year lines - solid */}
+              <Legend 
+                wrapperStyle={{ paddingTop: 12 }}
+                formatter={(value: string) => (
+                  <span className="text-xs text-muted-foreground">{value}</span>
+                )}
+              />
+              {/* Cap. 4: Two clear colors — emerald for gross (healthier), indigo for net */}
               <Line
                 type="monotone"
                 dataKey="margemBruta"
                 stroke="hsl(var(--chart-positive))"
-                strokeWidth={3}
-                dot={{ fill: "hsl(var(--chart-positive))", r: 5 }}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, fill: "hsl(var(--chart-positive))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 name={`Margem Bruta ${selectedYear}`}
               />
               <Line
                 type="monotone"
                 dataKey="margemLiquida"
                 stroke="hsl(var(--chart-primary))"
-                strokeWidth={3}
-                dot={{ fill: "hsl(var(--chart-primary))", r: 5 }}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, fill: "hsl(var(--chart-primary))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 name={`Margem Líquida ${selectedYear}`}
               />
-              {/* Comparison year lines - dashed */}
+              {/* Comparison — de-emphasized (Cap. 4) */}
               {compareYear && (
                 <>
                   <Line
                     type="monotone"
                     dataKey="margemBrutaCompare"
-                    stroke="hsl(48, 96%, 53%)"
-                    strokeWidth={2}
+                    stroke="hsl(var(--chart-positive))"
+                    strokeWidth={1.5}
                     strokeDasharray="5 5"
-                    dot={{ fill: "hsl(48, 96%, 53%)", r: 4 }}
+                    strokeOpacity={0.4}
+                    dot={false}
                     name={`Margem Bruta ${compareYear}`}
                   />
                   <Line
                     type="monotone"
                     dataKey="margemLiquidaCompare"
-                    stroke="hsl(280, 70%, 50%)"
-                    strokeWidth={2}
+                    stroke="hsl(var(--chart-primary))"
+                    strokeWidth={1.5}
                     strokeDasharray="5 5"
-                    dot={{ fill: "hsl(280, 70%, 50%)", r: 4 }}
+                    strokeOpacity={0.4}
+                    dot={false}
                     name={`Margem Líquida ${compareYear}`}
                   />
                 </>
               )}
-            </ComposedChart>
+            </LineChart>
           </ResponsiveContainer>
         )}
       </CardContent>

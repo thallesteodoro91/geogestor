@@ -159,7 +159,7 @@ const Dashboard = () => {
               title="Taxa Conversão"
               value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
-              iconColor="text-amber-500"
+              iconColor="#f59e0b"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
             />

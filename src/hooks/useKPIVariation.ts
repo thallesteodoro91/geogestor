@@ -150,7 +150,7 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
     receita_total: previousReceitaTotal,
     lucro_bruto: previousLucroBruto,
     lucro_liquido: previousLucroLiquido,
-    total_despesas: previousDespesasTotal,
+    total_despesas: previousDesp.total,
     margem_bruta_percent: previousReceitaTotal > 0 ? (previousLucroBruto / previousReceitaTotal) * 100 : 0,
     margem_liquida_percent: previousReceitaTotal > 0 ? (previousLucroLiquido / previousReceitaTotal) * 100 : 0,
     taxa_conversao_percent: previousTotalOrcamentos > 0 ? (previousConvertidos / previousTotalOrcamentos) * 100 : 0,

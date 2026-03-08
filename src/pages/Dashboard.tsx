@@ -175,7 +175,7 @@ const Dashboard = () => {
               title="Lucro Bruto"
               value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
-              iconColor="text-green-500"
+              iconColor="#22c55e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
             />

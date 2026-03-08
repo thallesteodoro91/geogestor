@@ -121,13 +121,13 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
   
   // Calculate previous period metrics
   const previousReceitaTotal = (previousOrcamentos || []).reduce((sum, o) => sum + (o.receita_esperada || 0), 0);
-  const previousDespesasTotal = (previousDespesas || []).reduce((sum, d) => sum + (d.valor_da_despesa || 0), 0);
+  const previousDesp = splitExpenses(previousDespesas || []);
   const previousImpostos = (previousOrcamentos || []).reduce((sum, o) => 
     sum + ((o.receita_esperada || 0) * (o.percentual_imposto || 0) / 100), 0
   );
   const previousReceitaLiquida = previousReceitaTotal - previousImpostos;
-  const previousLucroBruto = previousReceitaLiquida - previousDespesasTotal * 0.6;
-  const previousLucroLiquido = previousReceitaLiquida - previousDespesasTotal;
+  const previousLucroBruto = previousReceitaLiquida - previousDesp.variaveis;
+  const previousLucroLiquido = previousReceitaLiquida - previousDesp.total;
   const previousTotalServicos = (previousServicos || []).length;
   const previousServicosConcluidos = (previousServicos || []).filter(s => s.situacao_do_servico === 'Concluído').length;
   const previousTotalOrcamentos = (previousOrcamentos || []).length;

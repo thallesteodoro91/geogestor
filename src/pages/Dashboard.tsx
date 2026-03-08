@@ -113,7 +113,7 @@ const Dashboard = () => {
               title="Margem Líquida"
               value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               icon={Percent}
-              iconColor="text-cyan-500"
+              iconColor="#06b6d4"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
               changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
             />

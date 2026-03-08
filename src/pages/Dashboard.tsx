@@ -167,7 +167,7 @@ const Dashboard = () => {
               title="Ticket Médio"
               value={`R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Receipt}
-              iconColor="text-blue-500"
+              iconColor="#3b82f6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
             />

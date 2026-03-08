@@ -1,37 +1,50 @@
 
 
-## Plan: Restore KPICard hover animations and per-icon colors
+## Diagnóstico
 
-### What changed and needs to be restored
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-The KPICard currently has a generic `hover:shadow-md` and all icons use `text-muted-foreground`. The user wants:
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-1. **Hover glow based on changeType**: Green glow for positive, red glow for negative (using existing `interactive-lift-positive` / `interactive-lift-negative` utility classes from `index.css`)
-2. **Individual icon colors**: Each icon should have a color that reflects its meaning (e.g., green for revenue, red for expenses, blue for margin)
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-### Changes
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-**File: `src/components/dashboard/KPICard.tsx`**
+## Correção
 
-- Add an optional `iconColor` prop (string for Tailwind class like `"text-emerald-500"`)
-- Replace the static `hover:shadow-md` with conditional classes:
-  - `changeType === "positive"` → `interactive-lift-positive` (green glow on hover)
-  - `changeType === "negative"` → `interactive-lift-negative` (red glow on hover)
-  - `changeType === "neutral"` → `interactive-lift` (default purple glow)
-- Replace `text-muted-foreground` on the icon with the `iconColor` prop, falling back to `text-muted-foreground`
-- Apply matching tinted background to icon container (e.g., `bg-emerald-500/10` for green icons)
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-**File: `src/pages/Dashboard.tsx`**
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-- Pass `iconColor` to each KPICard with contextual colors:
-  - Receita Total → `"text-indigo-500"` (primary/revenue)
-  - Lucro Líquido → `"text-emerald-500"` (positive/profit)
-  - Margem Líquida → `"text-cyan-500"` (accent)
-  - Total de Despesas → `"text-rose-500"` (negative/expense)
-  - Margem Bruta → `"text-violet-500"`
-  - Taxa Conversão → `"text-amber-500"`
-  - Ticket Médio → `"text-blue-500"`
-  - Lucro Bruto → `"text-green-500"`
-  - Serviços → `"text-slate-500"`
-  - Concluídos → `"text-teal-500"`
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
+
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

@@ -89,15 +89,31 @@ async function fetchKPIWithVariation(): Promise<KPIVariation> {
     .gte('created_at', previousPeriodStart.toISOString())
     .lte('created_at', previousPeriodEnd.toISOString());
   
+  // Helper to split expenses by classification
+  const splitExpenses = (despesas: any[]) => {
+    let variaveis = 0;
+    let fixas = 0;
+    (despesas || []).forEach((d: any) => {
+      const valor = d.valor_da_despesa || 0;
+      const classificacao = d.dim_tipodespesa?.classificacao;
+      if (classificacao === 'VARIAVEL') {
+        variaveis += valor;
+      } else {
+        fixas += valor;
+      }
+    });
+    return { variaveis, fixas, total: variaveis + fixas };
+  };
+
   // Calculate current period metrics
   const currentReceitaTotal = (currentOrcamentos || []).reduce((sum, o) => sum + (o.receita_esperada || 0), 0);
-  const currentDespesasTotal = (currentDespesas || []).reduce((sum, d) => sum + (d.valor_da_despesa || 0), 0);
+  const currentDesp = splitExpenses(currentDespesas || []);
   const currentImpostos = (currentOrcamentos || []).reduce((sum, o) => 
     sum + ((o.receita_esperada || 0) * (o.percentual_imposto || 0) / 100), 0
   );
   const currentReceitaLiquida = currentReceitaTotal - currentImpostos;
-  const currentLucroBruto = currentReceitaLiquida - currentDespesasTotal * 0.6; // Custos diretos = 60% despesas
-  const currentLucroLiquido = currentReceitaLiquida - currentDespesasTotal;
+  const currentLucroBruto = currentReceitaLiquida - currentDesp.variaveis;
+  const currentLucroLiquido = currentReceitaLiquida - currentDesp.total;
   const currentTotalServicos = (currentServicos || []).length;
   const currentServicosConcluidos = (currentServicos || []).filter(s => s.situacao_do_servico === 'Concluído').length;
   const currentTotalOrcamentos = (currentOrcamentos || []).length;

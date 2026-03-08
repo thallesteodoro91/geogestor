@@ -151,6 +151,7 @@ const Dashboard = () => {
               title="Margem Bruta"
               value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
+              iconColor="text-violet-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
             />
@@ -158,6 +159,7 @@ const Dashboard = () => {
               title="Taxa Conversão"
               value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
+              iconColor="text-amber-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
             />
@@ -165,6 +167,7 @@ const Dashboard = () => {
               title="Ticket Médio"
               value={`R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Receipt}
+              iconColor="text-blue-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
             />
@@ -172,6 +175,7 @@ const Dashboard = () => {
               title="Lucro Bruto"
               value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
+              iconColor="text-green-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
             />
@@ -179,6 +183,7 @@ const Dashboard = () => {
               title="Serviços"
               value={String(kpis?.total_servicos || 0)}
               icon={ClipboardList}
+              iconColor="text-slate-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
             />
@@ -186,6 +191,7 @@ const Dashboard = () => {
               title="Concluídos"
               value={String(kpis?.servicos_concluidos || 0)}
               icon={ClipboardCheck}
+              iconColor="text-teal-500"
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
             />

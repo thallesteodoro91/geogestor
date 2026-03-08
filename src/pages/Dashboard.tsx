@@ -18,7 +18,6 @@ import {
   CircleDollarSign, 
   TrendingDown, 
   Percent, 
-  Calculator, 
   Target, 
   Receipt, 
   ClipboardList, 

@@ -151,7 +151,7 @@ const Dashboard = () => {
               title="Margem Bruta"
               value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
-              iconColor="text-violet-500"
+              iconColor="#8b5cf6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
             />

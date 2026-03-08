@@ -158,7 +158,7 @@ export function PrintableReport({
       {/* SECONDARY METRICS — small row */}
       <div style={{ display: "flex", gap: "24px", marginBottom: "28px", paddingLeft: "4px" }}>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
-          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{margemReal < 0 ? "-" : ""}{formatarPercentual(Math.abs(margemReal))}</strong>
+          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : "#dc2626" }}>{formatarPercentual(margemReal)}</strong>
         </span>
         <span style={{ fontSize: "10px", color: "#6b7280" }}>
           Taxa de Conversão: <strong style={{ color: SKYGEO_BLUE }}>{formatarPercentual(taxaConversao)}</strong>

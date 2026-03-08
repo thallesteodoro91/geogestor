@@ -9,6 +9,7 @@ interface KPICardProps {
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   icon: LucideIcon;
+  /** Hex color for the icon, e.g. "#6366f1" */
   iconColor?: string;
 }
 

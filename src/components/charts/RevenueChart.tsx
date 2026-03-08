@@ -1,10 +1,21 @@
+/**
+ * Revenue vs Expense Chart
+ * 
+ * Storytelling com Dados:
+ * - Cap. 2: Line chart for continuous time series data (not area — overlapping areas obscure data)
+ * - Cap. 3: Remove clutter — no gradients fills, minimal grid, clean axes
+ * - Cap. 4: Strategic color — green=revenue (positive), red=expense (cost). 
+ *   Muted comparison lines with dashes.
+ * - Cap. 7: Action-oriented title that tells the story
+ */
+
 import { useState } from "react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { RichTooltip } from "./RichTooltip";
 import { useRevenueChartData } from "@/hooks/useChartData";
 import { useAvailableYears } from "@/hooks/useAvailableYears";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const RevenueChart = () => {
@@ -17,7 +28,7 @@ export const RevenueChart = () => {
 
   if (isLoading || yearsLoading) {
     return (
-      <Card className="interactive-lift">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Receita vs Despesa</CardTitle>
         </CardHeader>
@@ -28,13 +39,11 @@ export const RevenueChart = () => {
     );
   }
 
-  // Filter to only show months with data or up to current month (only for current year)
   const currentMonth = new Date().getMonth();
   const filteredData = selectedYear === currentYear 
     ? (data || []).slice(0, currentMonth + 1)
     : (data || []);
   
-  // Merge comparison data if selected
   const mergedData = filteredData.map((item, index) => {
     const compareItem = compareYear && compareData ? compareData[index] : null;
     return {
@@ -44,16 +53,19 @@ export const RevenueChart = () => {
     };
   });
   
-  // If no data, show placeholder
   const hasData = filteredData.some(d => d.receita > 0 || d.despesa > 0);
-
-  // Available years for comparison (exclude selected year)
   const compareYears = (availableYears || []).filter(y => y !== selectedYear);
 
   return (
-    <Card className="interactive-lift">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg">Receita vs Despesa</CardTitle>
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+        <div>
+          {/* Cap. 7: Title tells the story, subtitle adds context */}
+          <CardTitle className="text-lg font-heading font-semibold">Receita vs Despesa</CardTitle>
+          <CardDescription className="text-sm">
+            Evolução mensal — identifique meses onde despesas superam a receita
+          </CardDescription>
+        </div>
         <div className="flex items-center gap-2">
           <Select value={selectedYear.toString()} onValueChange={(v) => setSelectedYear(Number(v))}>
             <SelectTrigger className="w-[100px] h-8">
@@ -88,38 +100,31 @@ export const RevenueChart = () => {
       <CardContent>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            <p>Sem dados financeiros para exibir em {selectedYear}</p>
+            <p>Sem dados financeiros para {selectedYear}</p>
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={mergedData}>
-              <defs>
-                <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--chart-positive))" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="hsl(var(--chart-positive))" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--chart-negative))" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(var(--chart-negative))" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorReceitaCompare" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(var(--chart-primary))" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(var(--chart-primary))" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorDespesaCompare" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="hsl(280, 70%, 50%)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="hsl(280, 70%, 50%)" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+            {/* Cap. 2: Line chart for time series — clean and direct */}
+            <LineChart data={mergedData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              {/* Cap. 3: Minimal grid — horizontal only, very light */}
+              <CartesianGrid 
+                strokeDasharray="3 3" 
+                stroke="hsl(var(--border))" 
+                opacity={0.3} 
+                vertical={false}
+              />
               <XAxis 
                 dataKey="month" 
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
+                tickLine={false}
+                axisLine={false}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
                 fontSize={12}
+                tickLine={false}
+                axisLine={false}
                 tickFormatter={(value) => {
                   if (value === 0) return 'R$ 0';
                   return `R$ ${(value / 1000).toFixed(0)}k`;
@@ -127,48 +132,59 @@ export const RevenueChart = () => {
               />
               <Tooltip
                 content={<RichTooltip format="currency" showDifference differenceLabel="Lucro" />}
-                cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }}
+                cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
               />
-              <Legend />
-              <Area
+              <Legend 
+                wrapperStyle={{ paddingTop: 12 }}
+                formatter={(value: string) => (
+                  <span className="text-xs text-muted-foreground">{value}</span>
+                )}
+              />
+              {/* Cap. 4: Strategic color — green for revenue (good), red for expense (cost) */}
+              <Line
                 type="monotone"
                 dataKey="receita"
                 stroke="hsl(var(--chart-positive))"
-                fill="url(#colorReceita)"
                 strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, fill: "hsl(var(--chart-positive))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 name={`Receita ${selectedYear}`}
               />
-              <Area
+              <Line
                 type="monotone"
                 dataKey="despesa"
                 stroke="hsl(var(--chart-negative))"
-                fill="url(#colorDespesa)"
                 strokeWidth={2.5}
+                dot={false}
+                activeDot={{ r: 5, fill: "hsl(var(--chart-negative))", stroke: "hsl(var(--background))", strokeWidth: 2 }}
                 name={`Despesa ${selectedYear}`}
               />
+              {/* Comparison lines — muted and dashed (Cap. 4: de-emphasize secondary info) */}
               {compareYear && (
                 <>
-                  <Area
+                  <Line
                     type="monotone"
                     dataKey="receitaCompare"
-                    stroke="hsl(var(--chart-primary))"
-                    fill="url(#colorReceitaCompare)"
-                    strokeWidth={2}
+                    stroke="hsl(var(--chart-positive))"
+                    strokeWidth={1.5}
                     strokeDasharray="5 5"
+                    strokeOpacity={0.4}
+                    dot={false}
                     name={`Receita ${compareYear}`}
                   />
-                  <Area
+                  <Line
                     type="monotone"
                     dataKey="despesaCompare"
-                    stroke="hsl(280, 70%, 50%)"
-                    fill="url(#colorDespesaCompare)"
-                    strokeWidth={2}
+                    stroke="hsl(var(--chart-negative))"
+                    strokeWidth={1.5}
                     strokeDasharray="5 5"
+                    strokeOpacity={0.4}
+                    dot={false}
                     name={`Despesa ${compareYear}`}
                   />
                 </>
               )}
-            </AreaChart>
+            </LineChart>
           </ResponsiveContainer>
         )}
       </CardContent>

@@ -136,6 +136,7 @@ const GestaoEmpresa = () => {
                   title="Receita Total"
                   value={`R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={Banknote}
+                  iconColor="#6366f1"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
                   changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
                 />
@@ -143,6 +144,7 @@ const GestaoEmpresa = () => {
                   title="Lucro Bruto"
                   value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={TrendingUp}
+                  iconColor="#22c55e"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
                   changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
                 />
@@ -150,6 +152,7 @@ const GestaoEmpresa = () => {
                   title="Lucro Líquido"
                   value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={CircleDollarSign}
+                  iconColor="#10b981"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
                   changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
                 />
@@ -157,6 +160,7 @@ const GestaoEmpresa = () => {
                   title="Total Despesas"
                   value={`R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={TrendingDown}
+                  iconColor="#f43f5e"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
                   changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
                 />

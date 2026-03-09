@@ -23,7 +23,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
           <Button
             variant="ghost"
             size="icon"
-            className="fixed top-4 left-4 z-50 md:hidden"
+            className="fixed top-4 left-4 z-50 md:hidden print:hidden"
             aria-label="Abrir menu de navegação"
           >
             <Menu className="h-5 w-5" />

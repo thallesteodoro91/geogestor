@@ -360,7 +360,7 @@ All colors MUST be HSL.
   /* Hide all UI chrome */
   .print\:hidden,
   nav,
-  header,
+  header.sticky,
   aside,
   [data-sidebar],
   .fixed.inset-y-0,

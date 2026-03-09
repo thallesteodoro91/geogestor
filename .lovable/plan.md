@@ -1,36 +1,50 @@
 
-## Objetivo
-Remover o ícone “☰” (botão de menu mobile) que está aparecendo por cima do relatório na exportação/geração do PDF, e garantir que o layout de impressão não esconda o cabeçalho do próprio relatório.
 
-## 1) Diagnóstico (causa raiz)
-- O ícone “☰” vem do botão de menu mobile do `AppLayout`:
-  - `src/components/layout/AppLayout.tsx` cria um `<Button className="fixed top-4 left-4 z-50 md:hidden"> ... <Menu/>`
-- Em modo impressão (`@media print`), as regras responsivas do Tailwind (`md:hidden`) **não são aplicadas como no screen**, então o botão pode aparecer mesmo no desktop.
-- Além disso, o CSS de impressão atual esconde **todo** `<header>` (`src/index.css`), o que também pode esconder o cabeçalho do `PrintableReport` (que usa `<header>`).
+## Diagnóstico
 
-## 2) Correção principal (remover o ☰ do PDF)
-### 2.1. Esconder explicitamente o botão no modo impressão
-**Arquivo:** `src/components/layout/AppLayout.tsx`
-- Adicionar a classe `print:hidden` no botão do menu mobile (o botão fixo no topo-esquerdo).
-- (Opcional, mas recomendado) adicionar também um identificador semântico para manutenção, ex.: `data-print="hide"`.
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-**Resultado esperado:** o botão “☰” não aparece nem na prévia nem no PDF final.
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-## 3) Ajuste de robustez do CSS de impressão (evitar esconder cabeçalho do relatório)
-**Arquivo:** `src/index.css` (bloco `@media print`)
-- Alterar o seletor que hoje esconde `header` globalmente para algo específico do header do app.
-  - Trocar `header,` por `header.sticky,` (o header do app tem classe `sticky` em `src/components/layout/Header.tsx`)
-- Manter `nav`, `aside`, etc. como estão para continuar removendo o “chrome” do app na impressão.
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**Resultado esperado:** o cabeçalho do `PrintableReport` (logo/ID/emissão) volta a ser renderizado no PDF, melhorando a qualidade do relatório.
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-## 4) Verificação (checklist objetivo)
-1. Abrir `/relatorio-executivo` e clicar em **Exportar PDF**.
-2. Conferir na prévia e no PDF salvo:
-   - Ícone “☰” não aparece em nenhuma página.
-   - Cabeçalho do relatório (SkyGeo + ID/Emissão/Responsável) aparece normalmente.
-   - A data/período não tem sobreposição visual.
+## Correção
 
-## Arquivos que serão alterados
-- `src/components/layout/AppLayout.tsx` (adicionar `print:hidden` ao botão do menu)
-- `src/index.css` (ajustar regra de impressão para não esconder todo `<header>`, apenas o header “sticky” do app)
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
+
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
+

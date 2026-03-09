@@ -316,28 +316,30 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.servicosCusto.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead className="text-right">Receita</TableHead>
-                        <TableHead className="text-right">Custo</TableHead>
-                        <TableHead className="text-right">Margem</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.servicosCusto.map((s, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{s.nome}</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
-                          <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
-                          <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                            {formatarPercentual(s.margem)}
-                          </TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Serviço</TableHead>
+                          <TableHead className="text-right">Receita</TableHead>
+                          <TableHead className="text-right">Custo</TableHead>
+                          <TableHead className="text-right">Margem</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.servicosCusto.map((s, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{s.nome}</TableCell>
+                            <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
+                            <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
+                            <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                              {formatarPercentual(s.margem)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum serviço no período.</p>
                 )}

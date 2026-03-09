@@ -32,8 +32,11 @@ interface PrintableReportProps {
   clientes: ClienteNovo[];
   servicosCusto: ServicoCusto[];
   orcamentosPendentes: OrcamentoPendente[];
+  topClientes: TopCliente[];
+  historico12Meses: HistoricoMensal[];
   aiSummary: { isLoading: boolean; data: any };
   isLoading: boolean;
+  isDraft?: boolean;
 }
 
 function generateReportId(): string {

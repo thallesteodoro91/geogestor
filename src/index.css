@@ -327,7 +327,24 @@ All colors MUST be HSL.
 @media print {
   @page {
     size: A4;
-    margin: 12mm 15mm;
+    margin: 12mm 15mm 20mm;
+
+    @bottom-right {
+      content: "Página " counter(page) " / " counter(pages);
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 8pt;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+    }
+
+    @bottom-left {
+      content: "Documento confidencial — SkyGeo";
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 8pt;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
   }
 
   * {

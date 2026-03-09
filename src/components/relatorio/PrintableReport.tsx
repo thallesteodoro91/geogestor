@@ -448,13 +448,10 @@ export function PrintableReport({
       )}
 
       {/* ═══════════ FOOTER ═══════════ */}
-      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px", paddingBottom: "8px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <p style={{ fontSize: "8px", color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            Documento confidencial — SkyGeo
-          </p>
-          <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0 }}>
-            Powered by GeoGestor · {geradoEm}
+      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "14px", marginTop: "40px", paddingBottom: "8px" }}>
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+          <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0, letterSpacing: "0.04em" }}>
+            Powered by GeoGestor · Gerado em {geradoEm}
           </p>
         </div>
       </footer>

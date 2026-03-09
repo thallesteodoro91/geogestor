@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { format, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy, Download } from "lucide-react";
@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { downloadReportPDF } from "@/lib/pdfReportGenerator";
+import { captureReportAsPDF } from "@/lib/pdfReportGenerator";
+import { PrintableReport } from "@/components/relatorio/PrintableReport";
 import { toast } from "sonner";
 
 const DONUT_COLORS = [
@@ -41,6 +42,7 @@ const RelatorioExecutivo = () => {
   const [customInicio, setCustomInicio] = useState<Date | undefined>();
   const [customFim, setCustomFim] = useState<Date | undefined>();
   const [showComparison, setShowComparison] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const customInicioStr = modoCustom && customInicio ? format(customInicio, "yyyy-MM-dd") : undefined;
   const customFimStr = modoCustom && customFim ? format(customFim, "yyyy-MM-dd") : undefined;
@@ -99,56 +101,19 @@ const RelatorioExecutivo = () => {
   // Calculate variation
   const variacaoReceita = receitaAnterior > 0 ? ((receitaTotal - receitaAnterior) / receitaAnterior) * 100 : null;
 
-  // Build insights for PDF
-  const buildInsights = (): string[] => {
-    const insights: string[] = [];
-    if (aiSummary.data?.insights?.length > 0) {
-      aiSummary.data.insights.forEach((insight: any) => {
-        if (insight.acao && insights.length < 4) insights.push(insight.acao);
-      });
-    }
-    if (lucroLiquido < 0 && insights.length < 4) insights.push("Revisar custos fixos e variáveis para identificar oportunidades de redução.");
-    if (data.orcamentosPendentes.length > 0 && insights.length < 4) insights.push(`Retomar contato com ${data.orcamentosPendentes.length} orçamento(s) pendente(s) para conversão.`);
-    if (insights.length < 3) insights.push("Acompanhar evolução mensal dos KPIs para identificar tendências.");
-    return insights;
-  };
-
   const [isDownloading, setIsDownloading] = useState(false);
 
-  // Calculate MoM variations for expenses and profit
-  const variacaoDespesa = despesaAnterior > 0 ? ((despesaTotal - despesaAnterior) / despesaAnterior) * 100 : null;
-  const variacaoLucro = lucroAnterior !== 0 ? ((lucroLiquido - lucroAnterior) / Math.abs(lucroAnterior)) * 100 : null;
-
   const handleDownloadPDF = async () => {
+    if (!reportRef.current) {
+      toast.error("Erro ao preparar relatório");
+      return;
+    }
     setIsDownloading(true);
     try {
-      await downloadReportPDF({
-        empresa: data.empresa?.nome || "GeoGestor",
-        periodoLabel: periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1),
-        receitaTotal,
-        despesaTotal,
-        lucroLiquido,
-        margemLucro,
-        taxaConversao,
-        variacaoReceita,
-        // MoM variations
-        variacaoDespesa,
-        variacaoLucro,
-        receitaAnterior,
-        despesaAnterior,
-        lucroAnterior,
-        // Data arrays
-        topClientes: data.topClientes,
-        servicosCusto: data.servicosCusto,
-        orcamentosPendentes: data.orcamentosPendentes,
-        receitaCategorias: data.receitaCategorias,
-        dadosSemanais: data.dadosSemanais,
-        clientesNovos: data.clientes,
-        historico12Meses: data.historico12Meses,
-        aiInsights: aiSummary.data?.insights || [],
-        insights: buildInsights(),
-        isDraft,
-      }, `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`);
+      await captureReportAsPDF(
+        reportRef.current,
+        `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`
+      );
       toast.success("PDF baixado com sucesso!");
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
@@ -548,6 +513,34 @@ const RelatorioExecutivo = () => {
           <div className="text-center text-xs text-muted-foreground pt-4 border-t border-border">
             Relatório gerado em {format(new Date(), "dd/MM/yyyy 'às' HH:mm")} · {data.empresa?.nome || "GeoGestor"} · Powered by GeoGestor
           </div>
+        </div>
+
+        {/* ===== HIDDEN PRINTABLE REPORT (captured by html2canvas) ===== */}
+        <div ref={reportRef} style={{ display: "none" }}>
+          <PrintableReport
+            empresa={data.empresa}
+            periodoLabel={periodoLabel}
+            receitaTotal={receitaTotal}
+            despesaTotal={despesaTotal}
+            lucroLiquido={lucroLiquido}
+            margemLucro={margemLucro}
+            taxaConversao={taxaConversao}
+            conversao={data.conversao}
+            variacaoReceita={variacaoReceita}
+            receitaAnterior={receitaAnterior}
+            despesaAnterior={despesaAnterior}
+            lucroAnterior={lucroAnterior}
+            dadosSemanais={data.dadosSemanais}
+            receitaCategorias={data.receitaCategorias}
+            clientes={data.clientes}
+            servicosCusto={data.servicosCusto}
+            orcamentosPendentes={data.orcamentosPendentes}
+            topClientes={data.topClientes}
+            historico12Meses={data.historico12Meses}
+            aiSummary={aiSummary}
+            isLoading={data.isLoading}
+            isDraft={isDraft}
+          />
         </div>
 
       </div>

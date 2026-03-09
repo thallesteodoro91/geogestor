@@ -525,4 +525,49 @@ function KPIBox({ label, value, color, subtitle, icon }: { label: string; value:
   );
 }
 
+function ComparisonKPI({ label, current, previous, format: fmt, invertColors, icon }: { 
+  label: string; 
+  current: number; 
+  previous: number; 
+  format: "currency" | "percent"; 
+  invertColors?: boolean;
+  icon?: React.ReactNode;
+}) {
+  const variation = previous > 0 ? ((current - previous) / previous) * 100 : null;
+  const isPositive = invertColors ? (variation !== null && variation <= 0) : (variation !== null && variation >= 0);
+  
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-1.5 mb-3">
+          {icon && <span className="text-muted-foreground">{icon}</span>}
+          <p className="text-sm font-medium text-muted-foreground">{label}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Atual</p>
+            <p className="text-lg font-bold text-primary">
+              {fmt === "currency" ? formatarMoeda(current) : formatarPercentual(current)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Anterior</p>
+            <p className="text-lg font-semibold text-muted-foreground">
+              {fmt === "currency" ? formatarMoeda(previous) : formatarPercentual(previous)}
+            </p>
+          </div>
+        </div>
+        {variation !== null && (
+          <div className={cn(
+            "mt-3 pt-3 border-t text-center text-sm font-semibold",
+            isPositive ? "text-chart-positive" : "text-destructive"
+          )}>
+            {variation >= 0 ? "▲" : "▼"} {Math.abs(variation).toFixed(1)}%
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default RelatorioExecutivo;

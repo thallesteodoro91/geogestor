@@ -416,7 +416,7 @@ const RelatorioExecutivo = () => {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-orange-500" /> Orçamentos Pendentes ({data.orcamentosPendentes.length})
+                  <Clock className="h-4 w-4 text-chart-negative" /> Orçamentos Pendentes ({data.orcamentosPendentes.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>

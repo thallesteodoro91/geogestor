@@ -280,26 +280,28 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.clientes.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Data Cadastro</TableHead>
-                        <TableHead>Telefone</TableHead>
-                        <TableHead>E-mail</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.clientes.map((c, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{c.nome}</TableCell>
-                          <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
-                          <TableCell>{c.telefone || "—"}</TableCell>
-                          <TableCell>{c.email || "—"}</TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Data Cadastro</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>E-mail</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.clientes.map((c, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{c.nome}</TableCell>
+                            <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
+                            <TableCell>{c.telefone || "—"}</TableCell>
+                            <TableCell>{c.email || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum novo cliente no período.</p>
                 )}

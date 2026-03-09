@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy, Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy, Download } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useRelatorioData } from "@/hooks/useRelatorioData";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { PrintableReport } from "@/components/relatorio/PrintableReport";
+
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -131,6 +131,10 @@ const RelatorioExecutivo = () => {
         servicosCusto: data.servicosCusto,
         orcamentosPendentes: data.orcamentosPendentes,
         receitaCategorias: data.receitaCategorias,
+        dadosSemanais: data.dadosSemanais,
+        clientesNovos: data.clientes,
+        historico12Meses: data.historico12Meses,
+        aiInsights: aiSummary.data?.insights || [],
         insights: buildInsights(),
         isDraft,
       }, `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`);
@@ -165,9 +169,6 @@ const RelatorioExecutivo = () => {
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading || data.isLoading} className="gap-2">
                 {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Baixar PDF
-              </Button>
-              <Button onClick={() => window.print()} className="gap-2">
-                <Printer className="h-4 w-4" /> Exportar PDF
               </Button>
             </div>
           </div>
@@ -533,33 +534,6 @@ const RelatorioExecutivo = () => {
           </div>
         </div>
 
-        {/* ===== PRINT-ONLY: Professional editorial layout ===== */}
-        <div className="hidden print:block">
-          <PrintableReport
-            empresa={data.empresa}
-            periodoLabel={periodoLabel}
-            receitaTotal={receitaTotal}
-            despesaTotal={despesaTotal}
-            lucroLiquido={lucroLiquido}
-            margemLucro={margemLucro}
-            taxaConversao={taxaConversao}
-            conversao={data.conversao}
-            variacaoReceita={data.variacaoReceita}
-            receitaAnterior={data.metricsAnterior?.receita_total ?? null}
-            despesaAnterior={data.metricsAnterior?.total_despesas ?? null}
-            lucroAnterior={data.derivedKPIsAnterior?.lucro_liquido ?? null}
-            dadosSemanais={data.dadosSemanais}
-            receitaCategorias={data.receitaCategorias}
-            clientes={data.clientes}
-            servicosCusto={data.servicosCusto}
-            orcamentosPendentes={data.orcamentosPendentes}
-            topClientes={data.topClientes}
-            historico12Meses={data.historico12Meses}
-            aiSummary={aiSummary}
-            isLoading={data.isLoading}
-            isDraft={isDraft}
-          />
-        </div>
       </div>
     </AppLayout>
   );

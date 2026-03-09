@@ -284,7 +284,7 @@ function wrapText(text: string, maxChars: number): string[] {
 
 export async function downloadReportPDF(data: ReportData, filename?: string): Promise<void> {
   const pdfBytes = await generateReportPDF(data);
-  const blob = new Blob([pdfBytes.buffer], { type: "application/pdf" });
+  const blob = new Blob([new Uint8Array(pdfBytes)], { type: "application/pdf" });
   const url = URL.createObjectURL(blob);
 
   const link = document.createElement("a");

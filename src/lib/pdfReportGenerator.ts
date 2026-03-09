@@ -127,9 +127,9 @@ export async function generateReportPDF(data: ReportData): Promise<Uint8Array> {
       size: 60,
       font: helveticaBold,
       color: rgb(0.9, 0.9, 0.9),
-      rotate: { type: "degrees" as const, angle: -30 },
+      rotate: { angle: -30, type: "degrees" },
       opacity: 0.3,
-    });
+    } as any);
   }
 
   // === TABLE OF CONTENTS ===

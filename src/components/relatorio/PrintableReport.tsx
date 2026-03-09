@@ -133,8 +133,27 @@ export function PrintableReport({
   }
 
   return (
-    <div className="printable-report" style={{ background: "#fff", color: "#1a1a1a", fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.7, fontSize: "12px" }}>
+    <div className="printable-report" style={{ background: "#fff", color: "#1a1a1a", fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.7, fontSize: "12px", position: "relative" }}>
 
+      {/* Marca d'água RASCUNHO */}
+      {isDraft && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%) rotate(-30deg)",
+          fontSize: "72px",
+          fontWeight: 900,
+          color: "rgba(30,58,95,0.06)",
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          pointerEvents: "none",
+          zIndex: 0,
+          whiteSpace: "nowrap",
+        }}>
+          RASCUNHO
+        </div>
+      )}
       {/* ═══════════ PAGE 1 ═══════════ */}
 
       {/* HEADER */}

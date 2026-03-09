@@ -280,32 +280,16 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.clientes.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Data Cadastro</TableHead>
-                          <TableHead>Telefone</TableHead>
-                          <TableHead>E-mail</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.clientes.map((c, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{c.nome}</TableCell>
-                            <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
-                            <TableCell>{c.telefone || "—"}</TableCell>
-                            <TableCell>{c.email || "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum novo cliente no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.clientes}
+                  emptyMessage="Nenhum novo cliente no período."
+                  columns={[
+                    { header: "Nome", render: (c) => <span className="font-medium">{c.nome}</span> },
+                    { header: "Data Cadastro", render: (c) => c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—" },
+                    { header: "Telefone", render: (c) => c.telefone || "—" },
+                    { header: "E-mail", render: (c) => c.email || "—" },
+                  ]}
+                />
               </CardContent>
             </Card>
 

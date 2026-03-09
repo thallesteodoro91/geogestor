@@ -221,7 +221,7 @@ const RelatorioExecutivo = () => {
                       />
                       <Tooltip 
                         content={<RichTooltip format="currency" />}
-                        cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.08)', radius: 4 }}
                       />
                       <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} activeBar={false} />
                       <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} activeBar={false} />
@@ -280,26 +280,28 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.clientes.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Data Cadastro</TableHead>
-                        <TableHead>Telefone</TableHead>
-                        <TableHead>E-mail</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.clientes.map((c, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{c.nome}</TableCell>
-                          <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
-                          <TableCell>{c.telefone || "—"}</TableCell>
-                          <TableCell>{c.email || "—"}</TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Data Cadastro</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead>E-mail</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.clientes.map((c, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{c.nome}</TableCell>
+                            <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
+                            <TableCell>{c.telefone || "—"}</TableCell>
+                            <TableCell>{c.email || "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum novo cliente no período.</p>
                 )}
@@ -314,28 +316,30 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.servicosCusto.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Serviço</TableHead>
-                        <TableHead className="text-right">Receita</TableHead>
-                        <TableHead className="text-right">Custo</TableHead>
-                        <TableHead className="text-right">Margem</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.servicosCusto.map((s, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{s.nome}</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
-                          <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
-                          <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                            {formatarPercentual(s.margem)}
-                          </TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Serviço</TableHead>
+                          <TableHead className="text-right">Receita</TableHead>
+                          <TableHead className="text-right">Custo</TableHead>
+                          <TableHead className="text-right">Margem</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.servicosCusto.map((s, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{s.nome}</TableCell>
+                            <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
+                            <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
+                            <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
+                              {formatarPercentual(s.margem)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum serviço no período.</p>
                 )}
@@ -350,26 +354,28 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.orcamentosPendentes.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.orcamentosPendentes.map((o, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
-                          <TableCell>{o.cliente}</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
-                          <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                          <TableHead>Vencimento</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.orcamentosPendentes.map((o, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
+                            <TableCell>{o.cliente}</TableCell>
+                            <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
+                            <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum orçamento pendente no período.</p>
                 )}

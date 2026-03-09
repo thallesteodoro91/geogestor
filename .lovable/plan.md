@@ -1,51 +1,50 @@
 
 
-## Plano: Remover cinza do gráfico + Padronizar tabelas
+## Diagnóstico
 
-### 1. Gráfico "Entradas vs Saídas" — Realce colorido suave no hover
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-**Arquivo:** `src/pages/RelatorioExecutivo.tsx`, linha 224
-
-Substituir o cursor atual por um realce colorido suave, igual ao padrão do Dashboard Financeiro (linha 215 de `DashboardFinanceiro.tsx`):
-
-```tsx
-// De:
-cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
-
-// Para:
-cursor={{ fill: 'hsl(var(--primary) / 0.08)', radius: 4 }}
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
 ```
 
-Isso aplica um preenchimento suave roxo/azul transparente em vez do cinza sólido padrão do Recharts.
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-### 2. Tabelas — Adicionar wrapper `rounded-lg border` 
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-As 3 tabelas do relatório (Novos Clientes, Serviços com Maior Custo, Orçamentos Pendentes) estão sem o container com borda arredondada. Outras telas como `AuditLogs.tsx` e `ServicosOrcamentos.tsx` usam `<div className="rounded-lg border">` ou `<div className="rounded-md border">` ao redor da `<Table>`.
+## Correção
 
-**Arquivo:** `src/pages/RelatorioExecutivo.tsx`
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-Envolver cada `<Table>` com `<div className="rounded-lg border bg-card">`:
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-- Linha 283 (Novos Clientes)
-- Linha 317 (Serviços com Maior Custo)  
-- Linha 353 (Orçamentos Pendentes)
-
-Exemplo da mudança:
-```tsx
-// De:
-<Table>
-  ...
-</Table>
-
-// Para:
-<div className="rounded-lg border bg-card">
-  <Table>
-    ...
-  </Table>
-</div>
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
 ```
 
-### Resultado
-- Hover no gráfico mostra realce suave colorido (sem cinza)
-- Tabelas com bordas arredondadas, consistentes com o resto da aplicação
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

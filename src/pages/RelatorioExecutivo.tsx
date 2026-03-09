@@ -259,7 +259,7 @@ const RelatorioExecutivo = () => {
                             <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip formatter={(v: number) => formatarMoeda(v)} />
+                        <Tooltip content={<RichTooltip format="currency" />} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (

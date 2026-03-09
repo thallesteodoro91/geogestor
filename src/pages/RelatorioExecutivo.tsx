@@ -300,34 +300,18 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.servicosCusto.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Serviço</TableHead>
-                          <TableHead className="text-right">Receita</TableHead>
-                          <TableHead className="text-right">Custo</TableHead>
-                          <TableHead className="text-right">Margem</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.servicosCusto.map((s, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{s.nome}</TableCell>
-                            <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
-                            <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
-                            <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                              {formatarPercentual(s.margem)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum serviço no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.servicosCusto}
+                  emptyMessage="Nenhum serviço no período."
+                  columns={[
+                    { header: "Serviço", render: (s) => <span className="font-medium">{s.nome}</span> },
+                    { header: "Receita", headerClassName: "text-right", cellClassName: "text-right", render: (s) => formatarMoeda(s.receita) },
+                    { header: "Custo", headerClassName: "text-right", cellClassName: "text-right text-destructive", render: (s) => formatarMoeda(s.custo) },
+                    { header: "Margem", headerClassName: "text-right", cellClassName: "text-right font-semibold", render: (s) => (
+                      <span className={s.margem >= 0 ? "text-emerald-600" : "text-destructive"}>{formatarPercentual(s.margem)}</span>
+                    )},
+                  ]}
+                />
               </CardContent>
             </Card>
 

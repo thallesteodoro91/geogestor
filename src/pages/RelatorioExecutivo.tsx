@@ -223,8 +223,8 @@ const RelatorioExecutivo = () => {
                         content={<RichTooltip format="currency" />}
                         cursor={false}
                       />
-                      <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} activeBar={false} />
+                      <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} activeBar={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

@@ -177,13 +177,28 @@ export function PrintableReport({
       </header>
 
       {/* TITLE + PERIOD */}
-      <div style={{ marginBottom: "20px" }}>
+      <div style={{ marginBottom: "16px" }}>
         <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
           Relatório de Gestão Financeira
         </h2>
         <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
           {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
         </p>
+      </div>
+
+      {/* ÍNDICE / SUMÁRIO */}
+      <div style={{ marginBottom: "20px", padding: "10px 14px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+        <p style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
+          Conteúdo
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "9px", color: "#64748b" }}>
+          <span>1. Sumário Executivo</span>
+          <span>2. Entradas vs Saídas</span>
+          <span>3. Receita por Categoria</span>
+          {topClientes.length > 0 && <span>4. Top Clientes</span>}
+          <span>{topClientes.length > 0 ? "5" : "4"}. Tabelas Detalhadas</span>
+          <span>{topClientes.length > 0 ? "6" : "5"}. Plano de Ação</span>
+        </div>
       </div>
 
       {/* HEALTH STATUS */}

@@ -177,8 +177,13 @@ const RelatorioExecutivo = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading || data.isLoading} className="gap-2">
-                {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <Button 
+                onClick={handleDownloadPDF} 
+                disabled={isDownloading || data.isLoading} 
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg px-6"
+                size="lg"
+              >
+                {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
                 Baixar PDF
               </Button>
             </div>

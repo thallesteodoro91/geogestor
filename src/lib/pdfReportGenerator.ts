@@ -286,7 +286,7 @@ export async function generateReportPDF(data: ReportData): Promise<Uint8Array> {
       const varColor = kpi.invertVariation 
         ? (kpi.variation <= 0 ? SUCCESS_GREEN : ALERT_RED)
         : (kpi.variation >= 0 ? SUCCESS_GREEN : ALERT_RED);
-      const arrow = kpi.variation >= 0 ? "▲" : "▼";
+      const arrow = kpi.variation >= 0 ? "(+)" : "(-)";
       drawText(page, `${arrow} ${formatVariation(kpi.variation)}`, x + 5, y + 3, helvetica, 7, varColor);
     }
   });

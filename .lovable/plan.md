@@ -1,51 +1,50 @@
 
-## Plano: Corrigir erro do PDF e dar destaque visual ao botão
 
-### Problema Identificado
+## Diagnóstico
 
-**Erro**: `WinAnsi cannot encode "▼" (0x25bc)`
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-O `pdf-lib` usa fontes padrão (Helvetica) com codificação WinAnsi que **não suporta** caracteres Unicode como `▲` e `▼`. O erro ocorre na linha 289 do `pdfReportGenerator.ts`.
-
----
-
-### Solução
-
-**Arquivo 1: `src/lib/pdfReportGenerator.ts`**
-
-Substituir os caracteres Unicode por texto ASCII compatível:
-- `▲` → `(+)` ou símbolo de seta textual
-- `▼` → `(-)` ou símbolo de seta textual
-
-```typescript
-// Antes (linha 289):
-const arrow = kpi.variation >= 0 ? "▲" : "▼";
-
-// Depois:
-const arrow = kpi.variation >= 0 ? "(+)" : "(-)";
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
 ```
 
-**Arquivo 2: `src/pages/RelatorioExecutivo.tsx`**
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-Transformar o botão "Baixar PDF" em um elemento visualmente destacado:
-- Mudar de `variant="outline"` para `variant="default"` (cor primária)
-- Adicionar tamanho maior e ícone mais proeminente
-- Aplicar classes de destaque: `bg-primary text-primary-foreground shadow-lg`
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-```tsx
-<Button 
-  onClick={handleDownloadPDF} 
-  disabled={isDownloading || data.isLoading} 
-  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg px-6"
-  size="lg"
->
-  {isDownloading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
-  Baixar PDF
-</Button>
+## Correção
+
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
 ```
 
----
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-### Resultado Esperado
-- PDF gera sem erros (caracteres ASCII compatíveis)
-- Botão "Baixar PDF" com destaque visual (cor primária, sombra, tamanho maior)
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
+

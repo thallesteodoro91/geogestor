@@ -1,50 +1,87 @@
 
+## Análise Comparativa: PDF Gerado via `pdf-lib` vs. Relatório Completo (`PrintableReport.tsx`)
 
-## Diagnóstico
+### Resumo da Situação
 
-**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
+O **PrintableReport.tsx** (antigo `window.print()`) contém um relatório completo seguindo os princípios de *Storytelling com Dados*. O **pdfReportGenerator.ts** atual está **incompleto** — faltam conteúdos e não segue a estrutura narrativa do livro.
 
-```
-null value in column "slug" of relation "tenants" violates not-null constraint
-```
+---
 
-Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
+### Conteúdo Faltante no PDF Gerado
 
-O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
+| Seção | PrintableReport | pdfReportGenerator | Status |
+|-------|----------------|-------------------|--------|
+| **Variações MoM (Faturamento, Despesa, Lucro)** | ✅ Indicadores sob cada KPI | ❌ Apenas texto opcional | **FALTA** |
+| **Sparkline 12 meses** com área gradiente | ✅ AreaChart visual | ✅ Barras simples | Parcial |
+| **Métricas secundárias** (Margem + Conversão detalhada) | ✅ Linha adicional | ❌ Só na banda KPI | **FALTA** |
+| **Destaques do Período** (bullets narrativos) | ✅ Seção dedicada | ❌ Não existe | **FALTA** |
+| **Sumário Executivo narrativo** | ✅ Parágrafo + insights cards | ❌ Só lista de insights | **FALTA** |
+| **Subtítulos explicativos** em cada seção | ✅ "Identifique padrões..." | ❌ Títulos secos | **FALTA** |
+| **Tabela de Serviços enriquecida** | ✅ Margem Contrib. + Summary row + row highlight | ✅ Parcial (sem highlight visual) | Parcial |
+| **Alerta de categorização** | ✅ Card amarelo quando dados não categorizados | ❌ Seção omitida silenciosamente | **FALTA** |
+| **Top Clientes** em cards visuais | ✅ Cards com troféu e %  | ✅ Lista simples | Parcial |
+| **Plano de Ação** com contexto | ✅ Seção estilizada | ✅ Existe como fallback | OK |
 
-## Correção
+---
 
-Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+### Problemas de Storytelling no PDF Atual
 
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
-RETURNS uuid ...
-AS $$
-  -- Gerar slug a partir do nome
-  v_slug := lower(regexp_replace(
-    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
-                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
-    '[^a-z0-9]+', '-', 'g'));
-  -- Remover hífens nas extremidades
-  v_slug := trim(both '-' from v_slug);
-  -- Garantir unicidade com sufixo aleatório
-  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+Segundo o livro *Storytelling com Dados*:
 
-  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
-$$
-```
+1. **Cap. 1 — Contexto**: Cada visualização deve responder "E daí?". O PDF atual tem títulos sem subtítulos explicativos que guiem o leitor.
 
-Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+2. **Cap. 3 — Eliminar clutter**: OK no geral, mas faltam elementos de contexto narrativo (Destaques do Período).
 
-```sql
-ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
-```
+3. **Cap. 4 — Direcionar atenção**: As variações MoM (▲ +5.2%) são essenciais para destacar mudanças — **faltam completamente**.
 
-**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+4. **Cap. 7 — Narrativa**: O Sumário Executivo deveria incluir um parágrafo introdutório sintetizando o período, não apenas bullets.
 
-## Impacto
+5. **Hierarchy visual**: Os KPIs mostram valores, mas sem indicadores de variação perdem poder de storytelling.
 
-- Corrige o bloqueio de login para todos os novos clientes
-- Zero impacto nos 2 tenants existentes
-- Garante slugs únicos e válidos automaticamente
+---
 
+### Plano de Correção
+
+**Arquivo**: `src/lib/pdfReportGenerator.ts`
+
+#### 1. Adicionar Variações MoM aos KPIs
+- Expandir `ReportData` para incluir `variacaoDespesa`, `variacaoLucro`
+- Desenhar indicadores ▲/▼ sob cada valor na banda de KPIs
+
+#### 2. Adicionar seção "Destaques do Período"
+- Gerar bullets narrativos automaticamente (crescimento/retração receita, situação despesas, margem, orçamentos pendentes)
+- Posicionar após Health Status, antes da banda de KPIs
+
+#### 3. Adicionar Sumário Executivo Narrativo
+- Parágrafo de abertura: "No período de X, a empresa registrou..."
+- Seguido dos insight cards com título + descrição + ação
+
+#### 4. Adicionar subtítulos descritivos em cada seção
+- "Entradas vs Saídas" → + "Compare entradas e saídas semanais para identificar padrões de fluxo de caixa."
+- "Receita por Categoria" → + "Identifique quais categorias de serviço geram mais receita."
+
+#### 5. Adicionar alerta de categorização
+- Se todas as categorias são "sem categoria", desenhar box amarelo com aviso
+
+#### 6. Enriquecer tabela de Serviços
+- Adicionar coluna "Margem Contrib." (receita - custo)
+- Adicionar linha de totais/médias
+- Highlight visual em linhas com margem negativa
+
+#### 7. Melhorar Top Clientes
+- Adicionar indicador visual de ranking (1º, 2º, 3º)
+- Incluir percentual do total
+
+#### 8. Atualizar `RelatorioExecutivo.tsx`
+- Passar novos campos: `variacaoDespesa`, `variacaoLucro`, `receitaAnterior`, `despesaAnterior`, `lucroAnterior`
+
+---
+
+### Resultado Esperado
+
+PDF gerado com:
+- Narrativa estruturada (Destaques → Sumário → Gráficos → Tabelas → Plano de Ação)
+- Indicadores MoM em todos os KPIs principais
+- Subtítulos que contextualizam cada seção
+- Alertas visuais para dados incompletos
+- Tabelas com destaque semântico (cores para positivo/negativo)

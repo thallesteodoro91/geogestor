@@ -261,7 +261,7 @@ const RelatorioExecutivo = () => {
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Trophy className="h-4 w-4 text-amber-500" /> Top Clientes por Faturamento
+                      <Trophy className="h-4 w-4 text-accent" /> Top Clientes por Faturamento
                     </CardTitle>
                   </CardHeader>
                   <CardContent>

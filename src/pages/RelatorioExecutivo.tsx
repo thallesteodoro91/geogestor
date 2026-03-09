@@ -115,6 +115,10 @@ const RelatorioExecutivo = () => {
 
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // Calculate MoM variations for expenses and profit
+  const variacaoDespesa = despesaAnterior > 0 ? ((despesaTotal - despesaAnterior) / despesaAnterior) * 100 : null;
+  const variacaoLucro = lucroAnterior !== 0 ? ((lucroLiquido - lucroAnterior) / Math.abs(lucroAnterior)) * 100 : null;
+
   const handleDownloadPDF = async () => {
     setIsDownloading(true);
     try {
@@ -127,6 +131,13 @@ const RelatorioExecutivo = () => {
         margemLucro,
         taxaConversao,
         variacaoReceita,
+        // MoM variations
+        variacaoDespesa,
+        variacaoLucro,
+        receitaAnterior,
+        despesaAnterior,
+        lucroAnterior,
+        // Data arrays
         topClientes: data.topClientes,
         servicosCusto: data.servicosCusto,
         orcamentosPendentes: data.orcamentosPendentes,

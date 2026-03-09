@@ -322,32 +322,16 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.orcamentosPendentes.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                          <TableHead>Vencimento</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.orcamentosPendentes.map((o, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
-                            <TableCell>{o.cliente}</TableCell>
-                            <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
-                            <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum orçamento pendente no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.orcamentosPendentes}
+                  emptyMessage="Nenhum orçamento pendente no período."
+                  columns={[
+                    { header: "Código", render: (o) => <span className="font-medium">{o.codigo || "—"}</span> },
+                    { header: "Cliente", render: (o) => o.cliente },
+                    { header: "Valor", headerClassName: "text-right", cellClassName: "text-right", render: (o) => formatarMoeda(o.valor) },
+                    { header: "Vencimento", render: (o) => o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—" },
+                  ]}
+                />
               </CardContent>
             </Card>
           </div>

@@ -208,6 +208,59 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
     },
   });
 
+  // Top 3 clientes por receita no período
+  const topClientesQuery = useQuery({
+    queryKey: ["relatorio-top-clientes", dataInicio, dataFim],
+    queryFn: async (): Promise<TopCliente[]> => {
+      const { data, error } = await supabase
+        .from("fato_orcamento")
+        .select("receita_esperada, dim_cliente:dim_cliente!fk_orcamento_cliente(nome)")
+        .gte("data_orcamento", dataInicio)
+        .lte("data_orcamento", dataFim)
+        .not("id_cliente", "is", null);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data || []).forEach((o: any) => {
+        const nome = o.dim_cliente?.nome || "Sem nome";
+        map[nome] = (map[nome] || 0) + (o.receita_esperada || 0);
+      });
+      const total = Object.values(map).reduce((s, v) => s + v, 0);
+      return Object.entries(map)
+        .map(([nome, receita]) => ({ nome, receita, percentual: total > 0 ? (receita / total) * 100 : 0 }))
+        .sort((a, b) => b.receita - a.receita)
+        .slice(0, 3);
+    },
+  });
+
+  // Histórico 12 meses para sparkline
+  const historico12MesesQuery = useQuery({
+    queryKey: ["relatorio-historico-12m", ano, mes],
+    queryFn: async (): Promise<HistoricoMensal[]> => {
+      const resultMeses: HistoricoMensal[] = [];
+      const base = new Date(ano, mes, 1);
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+        resultMeses.push({ label: format(d, "MMM/yy", { locale: ptBR }), receita: 0 });
+      }
+      const inicio12 = format(startOfMonth(new Date(base.getFullYear(), base.getMonth() - 11, 1)), "yyyy-MM-dd");
+      const fim12 = format(endOfMonth(base), "yyyy-MM-dd");
+      const { data: orc } = await supabase
+        .from("fato_orcamento")
+        .select("data_orcamento, receita_esperada")
+        .gte("data_orcamento", inicio12)
+        .lte("data_orcamento", fim12);
+      (orc || []).forEach((o) => {
+        const d = new Date(o.data_orcamento);
+        const monthDiff = (base.getFullYear() - d.getFullYear()) * 12 + (base.getMonth() - d.getMonth());
+        const idx = 11 - monthDiff;
+        if (idx >= 0 && idx < 12) {
+          resultMeses[idx].receita += o.receita_esperada || 0;
+        }
+      });
+      return resultMeses;
+    },
+  });
+
   const derivedKPIs = metricsAtual.data ? calculateDerivedKPIs(metricsAtual.data) : null;
   const derivedKPIsAnterior = metricsAnterior.data ? calculateDerivedKPIs(metricsAnterior.data) : null;
 

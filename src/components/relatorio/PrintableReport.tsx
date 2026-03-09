@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, LineChart, Line, Area, AreaChart, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, Cell } from "recharts";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
 import { Loader2, FileText, AlertTriangle, Trophy, TrendingUp } from "lucide-react";
 import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente, TopCliente, HistoricoMensal } from "@/hooks/useRelatorioData";
@@ -12,7 +12,6 @@ const SKYGEO_BLUE_10 = "rgba(30,58,95,0.10)";
 const SKYGEO_BLUE_20 = "rgba(30,58,95,0.20)";
 const ALERT_RED = "#dc2626";
 const SUCCESS_GREEN = "#16a34a";
-const BAR_PALETTE = [SKYGEO_BLUE, "rgba(30,58,95,0.80)", "rgba(30,58,95,0.60)", "rgba(30,58,95,0.45)", "rgba(30,58,95,0.30)", "#64748b", "#94a3b8", "#cbd5e1"];
 
 // Gradient colors for the 12-month revenue trend chart
 const MONTH_GRADIENT_COLORS = [
@@ -161,406 +160,430 @@ export function PrintableReport({
           RASCUNHO
         </div>
       )}
-      {/* ═══════════ PAGE 1 ═══════════ */}
 
-      {/* HEADER */}
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${SKYGEO_BLUE}`, paddingBottom: "16px", marginBottom: "36px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
-          <div>
-            <h1 style={{ fontSize: "28px", fontWeight: 900, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.03em", fontFamily: "'Inter', system-ui, sans-serif" }}>
-              SkyGeo
-            </h1>
-            <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
-              Inteligência Geoespacial & Gestão
-            </p>
+      {/* ═══════════ HEADER SECTION ═══════════ */}
+      <div data-pdf-section="header">
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${SKYGEO_BLUE}`, paddingBottom: "16px", marginBottom: "20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
+            <div>
+              <h1 style={{ fontSize: "28px", fontWeight: 900, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.03em", fontFamily: "'Inter', system-ui, sans-serif" }}>
+                SkyGeo
+              </h1>
+              <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                Inteligência Geoespacial & Gestão
+              </p>
+            </div>
+          </div>
+          <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace", fontSize: "9px", color: "#64748b", lineHeight: 1.8 }}>
+            <p style={{ margin: 0 }}>ID: <strong style={{ color: "#1a1a1a" }}>{reportId}</strong></p>
+            <p style={{ margin: 0 }}>Emissão: <strong style={{ color: "#1a1a1a" }}>{dataEmissao}</strong></p>
+            <p style={{ margin: 0 }}>Responsável: <strong style={{ color: "#1a1a1a" }}>{empresa?.nome || "GeoGestor"}</strong></p>
+          </div>
+        </header>
+
+        {/* TITLE + PERIOD */}
+        <div style={{ marginBottom: "16px" }}>
+          <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
+            Relatório de Gestão Financeira
+          </h2>
+          <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
+            {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
+          </p>
+        </div>
+
+        {/* ÍNDICE / SUMÁRIO */}
+        <div style={{ marginBottom: "16px", padding: "10px 14px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+          <p style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
+            Conteúdo
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "9px", color: "#64748b" }}>
+            <span>1. Sumário Executivo</span>
+            <span>2. Entradas vs Saídas</span>
+            <span>3. Receita por Categoria</span>
+            {topClientes.length > 0 && <span>4. Top Clientes</span>}
+            <span>{topClientes.length > 0 ? "5" : "4"}. Tabelas Detalhadas</span>
+            <span>{topClientes.length > 0 ? "6" : "5"}. Plano de Ação</span>
           </div>
         </div>
-        <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace", fontSize: "9px", color: "#64748b", lineHeight: 1.8 }}>
-          <p style={{ margin: 0 }}>ID: <strong style={{ color: "#1a1a1a" }}>{reportId}</strong></p>
-          <p style={{ margin: 0 }}>Emissão: <strong style={{ color: "#1a1a1a" }}>{dataEmissao}</strong></p>
-          <p style={{ margin: 0 }}>Responsável: <strong style={{ color: "#1a1a1a" }}>{empresa?.nome || "GeoGestor"}</strong></p>
-        </div>
-      </header>
-
-      {/* TITLE + PERIOD */}
-      <div style={{ marginBottom: "16px" }}>
-        <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
-          Relatório de Gestão Financeira
-        </h2>
-        <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
-          {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
-        </p>
       </div>
 
-      {/* ÍNDICE / SUMÁRIO */}
-      <div style={{ marginBottom: "20px", padding: "10px 14px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
-        <p style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
-          Conteúdo
-        </p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "9px", color: "#64748b" }}>
-          <span>1. Sumário Executivo</span>
-          <span>2. Entradas vs Saídas</span>
-          <span>3. Receita por Categoria</span>
-          {topClientes.length > 0 && <span>4. Top Clientes</span>}
-          <span>{topClientes.length > 0 ? "5" : "4"}. Tabelas Detalhadas</span>
-          <span>{topClientes.length > 0 ? "6" : "5"}. Plano de Ação</span>
+      {/* ═══════════ HEALTH STATUS SECTION ═══════════ */}
+      <div data-pdf-section="health">
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "20px", padding: "10px 16px", background: isSaudavel ? "#f0fdf4" : "#fef3c7", borderRadius: "4px", borderLeft: `4px solid ${isSaudavel ? SUCCESS_GREEN : "#d97706"}` }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: isSaudavel ? SUCCESS_GREEN : "#d97706", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            {isSaudavel ? "● Saudável" : "● Atenção"}
+          </span>
+          <span style={{ fontSize: "11px", color: "#4b5563" }}>
+            Estado de Saúde Financeira
+            {variacaoReceita !== null && (
+              <> — <strong style={{ color: variacaoReceita >= 0 ? SUCCESS_GREEN : ALERT_RED }}>
+                {variacaoReceita >= 0 ? "+" : ""}{variacaoReceita.toFixed(1)}%
+              </strong> vs. mês anterior</>
+            )}
+          </span>
         </div>
       </div>
 
-      {/* HEALTH STATUS */}
-      <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "28px", padding: "10px 16px", background: isSaudavel ? "#f0fdf4" : "#fef3c7", borderRadius: "4px", borderLeft: `4px solid ${isSaudavel ? SUCCESS_GREEN : "#d97706"}` }}>
-        <span style={{ fontSize: "11px", fontWeight: 700, color: isSaudavel ? SUCCESS_GREEN : "#d97706", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-          {isSaudavel ? "● Saudável" : "● Atenção"}
-        </span>
-        <span style={{ fontSize: "11px", color: "#4b5563" }}>
-          Estado de Saúde Financeira
-          {variacaoReceita !== null && (
-            <> — <strong style={{ color: variacaoReceita >= 0 ? SUCCESS_GREEN : ALERT_RED }}>
-              {variacaoReceita >= 0 ? "+" : ""}{variacaoReceita.toFixed(1)}%
-            </strong> vs. mês anterior</>
-          )}
-        </span>
+      {/* ═══════════ KPI BAND SECTION ═══════════ */}
+      <div data-pdf-section="kpis">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 0 20px", padding: "22px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
+          <KPIValue label="Faturamento" value={formatarMoeda(receitaTotal)} color={SKYGEO_BLUE} variation={variacaoReceita} />
+          <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
+          <KPIValue label="Total Gasto" value={formatarMoeda(despesaTotal)} color={ALERT_RED} variation={varDespesa} invertColor />
+          <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
+          <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED} variation={varLucro} />
+        </div>
+
+        {/* SECONDARY METRICS */}
+        <div style={{ display: "flex", gap: "24px", marginBottom: "20px", paddingLeft: "4px" }}>
+          <span style={{ fontSize: "10px", color: "#6b7280" }}>
+            Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : ALERT_RED }}>{formatarPercentual(margemReal)}</strong>
+          </span>
+          <span style={{ fontSize: "10px", color: "#6b7280" }}>
+            Taxa de Conversão: <strong style={{ color: SKYGEO_BLUE }}>{formatarPercentual(taxaConversao)}</strong>
+            {conversao && <> ({conversao.convertidos}/{conversao.total} orçam.)</>}
+          </span>
+        </div>
       </div>
 
-      {/* KPI BAND — larger values (24px) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 0 20px", padding: "22px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
-        <KPIValue label="Faturamento" value={formatarMoeda(receitaTotal)} color={SKYGEO_BLUE} variation={variacaoReceita} />
-        <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
-        <KPIValue label="Total Gasto" value={formatarMoeda(despesaTotal)} color={ALERT_RED} variation={varDespesa} invertColor />
-        <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
-        <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED} variation={varLucro} />
-      </div>
-
-      {/* TENDÊNCIA 12 MESES — Bar chart com gradiente */}
+      {/* ═══════════ TENDÊNCIA 12 MESES SECTION ═══════════ */}
       {historico12Meses.length > 0 && historico12Meses.some(h => h.receita > 0) && (
-        <div style={{ marginBottom: "28px", padding: "16px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
-            <TrendingUp style={{ width: 14, height: 14, color: SKYGEO_BLUE }} />
-            <span style={{ fontSize: "10px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Tendência de Receita — 12 meses
-            </span>
-          </div>
-          <div style={{ height: 120 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={historico12Meses} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
-                <XAxis dataKey="label" fontSize={7} tick={{ fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                <YAxis hide />
-                <Bar dataKey="receita" radius={[3, 3, 0, 0]}>
-                  {historico12Meses.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={MONTH_GRADIENT_COLORS[index % MONTH_GRADIENT_COLORS.length]} />
-                  ))}
-                  <LabelList dataKey="receita" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 7, fill: "#64748b", fontWeight: 600 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* SECONDARY METRICS */}
-      <div style={{ display: "flex", gap: "24px", marginBottom: "36px", paddingLeft: "4px" }}>
-        <span style={{ fontSize: "10px", color: "#6b7280" }}>
-          Margem de Lucro: <strong style={{ color: margemReal >= 0 ? SKYGEO_BLUE : ALERT_RED }}>{formatarPercentual(margemReal)}</strong>
-        </span>
-        <span style={{ fontSize: "10px", color: "#6b7280" }}>
-          Taxa de Conversão: <strong style={{ color: SKYGEO_BLUE }}>{formatarPercentual(taxaConversao)}</strong>
-          {conversao && <> ({conversao.convertidos}/{conversao.total} orçam.)</>}
-        </span>
-      </div>
-
-      {/* ═══════════ DESTAQUES DO PERÍODO (Narrative Bridge) ═══════════ */}
-      {destaques.length > 0 && (
-        <div style={{ marginBottom: "36px", padding: "14px 18px", background: "#f8fafc", borderLeft: `4px solid ${SKYGEO_BLUE}`, borderRadius: "0 6px 6px 0" }}>
-          <p style={{ fontSize: "10px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
-            Destaques do Período
-          </p>
-          <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "11px", color: "#374151", lineHeight: 1.9 }}>
-            {destaques.slice(0, 4).map((d, i) => (
-              <li key={i}>{d}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* ═══════════ EXECUTIVE SUMMARY ═══════════ */}
-      <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-        <SectionTitle subtitle="Análise consolidada do período com recomendações estratégicas.">Sumário Executivo</SectionTitle>
-
-        {aiSummary.isLoading ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#6b7280", fontSize: "12px", padding: "16px 0" }}>
-            <Loader2 className="h-4 w-4 animate-spin" /> Gerando análise...
-          </div>
-        ) : aiSummary.data?.insights?.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.8 }}>
-              No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
-              <strong>{formatarMoeda(receitaTotal)}</strong> e despesas de{" "}
-              <strong>{formatarMoeda(despesaTotal)}</strong>, resultando em{" "}
-              {lucroLiquido >= 0 ? "lucro" : "prejuízo"} líquido de{" "}
-              <strong style={{ color: lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED }}>{formatarMoeda(Math.abs(lucroLiquido))}</strong>
-              {variacaoReceita !== null && (
-                <>, com {variacaoReceita >= 0 ? "crescimento" : "retração"} de{" "}
-                <strong>{Math.abs(variacaoReceita).toFixed(1)}%</strong> no faturamento em relação ao mês anterior</>
-              )}.
-            </p>
-
-            {aiSummary.data.insights.map((insight: any, i: number) => (
-              <div key={i} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "14px 18px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.1em", background: SKYGEO_BLUE_10, padding: "2px 6px", borderRadius: "3px" }}>
-                    Insight de Gestão
-                  </span>
-                </div>
-                <p style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px" }}>
-                  {insight.titulo}
-                </p>
-                <p style={{ fontSize: "11px", color: "#475569", margin: 0, lineHeight: 1.7 }}>
-                  {insight.descricao}
-                </p>
-                {insight.acao && (
-                  <p style={{ fontSize: "10px", color: SKYGEO_BLUE, margin: "8px 0 0", fontWeight: 600 }}>
-                    → Recomendação: {insight.acao}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p style={{ fontSize: "12px", color: "#6b7280", margin: 0, fontStyle: "italic" }}>
-            No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
-            <strong>{formatarMoeda(receitaTotal)}</strong>.{" "}
-            {variacaoReceita !== null
-              ? `Houve ${variacaoReceita >= 0 ? "crescimento" : "retração"} de ${Math.abs(variacaoReceita).toFixed(1)}% em relação ao mês anterior.`
-              : "Dados insuficientes para comparação com período anterior."}
-          </p>
-        )}
-      </section>
-
-      {/* ═══════════ PAGE 2 — CHARTS ═══════════ */}
-      <div style={{ pageBreakBefore: "always" }} />
-
-      {/* WEEKLY BAR CHART — with direct data labels, no Y-axis grid */}
-      <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-        <SectionTitle subtitle="Compare entradas e saídas semanais para identificar padrões de fluxo de caixa.">Entradas vs Saídas — Semanal</SectionTitle>
-        {dadosSemanais.length > 0 ? (
-          <>
-            <div style={{ height: 220 }}>
+        <div data-pdf-section="trend">
+          <div style={{ marginBottom: "20px", padding: "16px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+              <TrendingUp style={{ width: 14, height: 14, color: SKYGEO_BLUE }} />
+              <span style={{ fontSize: "10px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Tendência de Receita — 12 meses
+              </span>
+            </div>
+            <div style={{ height: 120 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dadosSemanais} margin={{ top: 20, right: 12, left: 0, bottom: 5 }}>
-                  <XAxis dataKey="semana" fontSize={9} tick={{ fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                <BarChart data={historico12Meses} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+                  <XAxis dataKey="label" fontSize={7} tick={{ fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                   <YAxis hide />
-                  <Bar dataKey="entradas" name="Entradas" fill={SKYGEO_BLUE} radius={[3, 3, 0, 0]}>
-                    <LabelList dataKey="entradas" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 8, fill: SKYGEO_BLUE, fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="saidas" name="Saídas" fill="#94a3b8" radius={[3, 3, 0, 0]}>
-                    <LabelList dataKey="saidas" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 8, fill: "#64748b", fontWeight: 600 }} />
+                  <Bar dataKey="receita" radius={[3, 3, 0, 0]}>
+                    {historico12Meses.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={MONTH_GRADIENT_COLORS[index % MONTH_GRADIENT_COLORS.length]} />
+                    ))}
+                    <LabelList dataKey="receita" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 7, fill: "#64748b", fontWeight: 600 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "8px" }}>
-              <LegendItem color={SKYGEO_BLUE} label="Entradas" />
-              <LegendItem color="#94a3b8" label="Saídas" />
-            </div>
-          </>
-        ) : (
-          <EmptyState />
-        )}
-      </section>
+          </div>
+        </div>
+      )}
 
-      {/* HORIZONTAL BAR CHART — Receita por Tipo de Serviço (replaces Donut) */}
-      {allUncategorized ? (
-        <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
-            <AlertTriangle style={{ width: 22, height: 22, color: "#d97706", marginBottom: "10px" }} />
-            <p style={{ fontSize: "10px", fontWeight: 700, color: "#92400e", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Pendência</p>
-            <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", lineHeight: 1.6 }}>
-              Categorize seus serviços para habilitar a análise de lucratividade por tipo de serviço.
+      {/* ═══════════ DESTAQUES DO PERÍODO SECTION ═══════════ */}
+      {destaques.length > 0 && (
+        <div data-pdf-section="highlights">
+          <div style={{ marginBottom: "20px", padding: "14px 18px", background: "#f8fafc", borderLeft: `4px solid ${SKYGEO_BLUE}`, borderRadius: "0 6px 6px 0" }}>
+            <p style={{ fontSize: "10px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 8px" }}>
+              Destaques do Período
             </p>
+            <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "11px", color: "#374151", lineHeight: 1.9 }}>
+              {destaques.slice(0, 4).map((d, i) => (
+                <li key={i}>{d}</li>
+              ))}
+            </ul>
           </div>
+        </div>
+      )}
+
+      {/* ═══════════ EXECUTIVE SUMMARY SECTION ═══════════ */}
+      <div data-pdf-section="summary">
+        <section style={{ marginBottom: "20px" }}>
+          <SectionTitle subtitle="Análise consolidada do período com recomendações estratégicas.">Sumário Executivo</SectionTitle>
+
+          {aiSummary.isLoading ? (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#6b7280", fontSize: "12px", padding: "16px 0" }}>
+              <Loader2 className="h-4 w-4 animate-spin" /> Gerando análise...
+            </div>
+          ) : aiSummary.data?.insights?.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <p style={{ fontSize: "12px", color: "#374151", margin: 0, lineHeight: 1.8 }}>
+                No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
+                <strong>{formatarMoeda(receitaTotal)}</strong> e despesas de{" "}
+                <strong>{formatarMoeda(despesaTotal)}</strong>, resultando em{" "}
+                {lucroLiquido >= 0 ? "lucro" : "prejuízo"} líquido de{" "}
+                <strong style={{ color: lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED }}>{formatarMoeda(Math.abs(lucroLiquido))}</strong>
+                {variacaoReceita !== null && (
+                  <>, com {variacaoReceita >= 0 ? "crescimento" : "retração"} de{" "}
+                  <strong>{Math.abs(variacaoReceita).toFixed(1)}%</strong> no faturamento em relação ao mês anterior</>
+                )}.
+              </p>
+
+              {aiSummary.data.insights.map((insight: any, i: number) => (
+                <div key={i} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "6px", padding: "14px 18px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.1em", background: SKYGEO_BLUE_10, padding: "2px 6px", borderRadius: "3px" }}>
+                      Insight de Gestão
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "13px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px" }}>
+                    {insight.titulo}
+                  </p>
+                  <p style={{ fontSize: "11px", color: "#475569", margin: 0, lineHeight: 1.7 }}>
+                    {insight.descricao}
+                  </p>
+                  {insight.acao && (
+                    <p style={{ fontSize: "10px", color: SKYGEO_BLUE, margin: "8px 0 0", fontWeight: 600 }}>
+                      → Recomendação: {insight.acao}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: "12px", color: "#6b7280", margin: 0, fontStyle: "italic" }}>
+              No período de <strong>{periodoLabel}</strong>, a empresa registrou faturamento de{" "}
+              <strong>{formatarMoeda(receitaTotal)}</strong>.{" "}
+              {variacaoReceita !== null
+                ? `Houve ${variacaoReceita >= 0 ? "crescimento" : "retração"} de ${Math.abs(variacaoReceita).toFixed(1)}% em relação ao mês anterior.`
+                : "Dados insuficientes para comparação com período anterior."}
+            </p>
+          )}
         </section>
+      </div>
+
+      {/* ═══════════ WEEKLY BAR CHART SECTION ═══════════ */}
+      <div data-pdf-section="weekly-chart">
+        <section style={{ marginBottom: "20px" }}>
+          <SectionTitle subtitle="Compare entradas e saídas semanais para identificar padrões de fluxo de caixa.">Entradas vs Saídas — Semanal</SectionTitle>
+          {dadosSemanais.length > 0 ? (
+            <>
+              <div style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={dadosSemanais} margin={{ top: 20, right: 12, left: 0, bottom: 5 }}>
+                    <XAxis dataKey="semana" fontSize={9} tick={{ fill: "#64748b" }} axisLine={{ stroke: "#e2e8f0" }} tickLine={false} />
+                    <YAxis hide />
+                    <Bar dataKey="entradas" name="Entradas" fill={SKYGEO_BLUE} radius={[3, 3, 0, 0]}>
+                      <LabelList dataKey="entradas" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 8, fill: SKYGEO_BLUE, fontWeight: 600 }} />
+                    </Bar>
+                    <Bar dataKey="saidas" name="Saídas" fill="#94a3b8" radius={[3, 3, 0, 0]}>
+                      <LabelList dataKey="saidas" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 8, fill: "#64748b", fontWeight: 600 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "8px" }}>
+                <LegendItem color={SKYGEO_BLUE} label="Entradas" />
+                <LegendItem color="#94a3b8" label="Saídas" />
+              </div>
+            </>
+          ) : (
+            <EmptyState />
+          )}
+        </section>
+      </div>
+
+      {/* ═══════════ CATEGORY CHART SECTION ═══════════ */}
+      {allUncategorized ? (
+        <div data-pdf-section="category-chart">
+          <section style={{ marginBottom: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "28px 20px", background: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
+              <AlertTriangle style={{ width: 22, height: 22, color: "#d97706", marginBottom: "10px" }} />
+              <p style={{ fontSize: "10px", fontWeight: 700, color: "#92400e", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.06em" }}>Pendência</p>
+              <p style={{ fontSize: "11px", color: "#92400e", margin: 0, textAlign: "center", lineHeight: 1.6 }}>
+                Categorize seus serviços para habilitar a análise de lucratividade por tipo de serviço.
+              </p>
+            </div>
+          </section>
+        </div>
       ) : sortedCategorias.length > 0 ? (
-        <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-          <SectionTitle subtitle="Identifique quais categorias de serviço geram mais receita.">Receita por Tipo de Serviço</SectionTitle>
-          <div style={{ height: Math.max(140, sortedCategorias.length * 36 + 20) }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={sortedCategorias} layout="vertical" margin={{ top: 4, right: 80, left: 4, bottom: 4 }}>
-                <XAxis type="number" hide />
-                <YAxis
-                  type="category"
-                  dataKey="categoria"
-                  width={120}
-                  fontSize={10}
-                  tick={{ fill: "#374151" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Bar dataKey="valor" fill={SKYGEO_BLUE} radius={[0, 4, 4, 0]} barSize={20}>
-                  <LabelList
-                    dataKey="valor"
-                    position="right"
-                    formatter={(v: number) => formatarMoeda(v)}
-                    style={{ fontSize: 9, fill: "#374151", fontWeight: 600 }}
+        <div data-pdf-section="category-chart">
+          <section style={{ marginBottom: "20px" }}>
+            <SectionTitle subtitle="Identifique quais categorias de serviço geram mais receita.">Receita por Tipo de Serviço</SectionTitle>
+            <div style={{ height: Math.max(140, sortedCategorias.length * 36 + 20) }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={sortedCategorias} layout="vertical" margin={{ top: 4, right: 80, left: 4, bottom: 4 }}>
+                  <XAxis type="number" hide />
+                  <YAxis
+                    type="category"
+                    dataKey="categoria"
+                    width={120}
+                    fontSize={10}
+                    tick={{ fill: "#374151" }}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </section>
+                  <Bar dataKey="valor" fill={SKYGEO_BLUE} radius={[0, 4, 4, 0]} barSize={20}>
+                    <LabelList
+                      dataKey="valor"
+                      position="right"
+                      formatter={(v: number) => formatarMoeda(v)}
+                      style={{ fontSize: 9, fill: "#374151", fontWeight: 600 }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </section>
+        </div>
       ) : null}
 
-      {/* ═══════════ TOP 3 CLIENTES ═══════════ */}
+      {/* ═══════════ TOP CLIENTES SECTION ═══════════ */}
       {topClientes.length > 0 && (
-        <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-          <SectionTitle subtitle="Clientes que mais contribuíram para o faturamento no período.">Top Clientes por Faturamento</SectionTitle>
-          <div style={{ display: "flex", gap: "16px" }}>
-            {topClientes.map((cliente, i) => (
-              <div key={i} style={{ 
-                flex: 1, 
-                padding: "16px", 
-                background: i === 0 ? SKYGEO_BLUE_10 : "#f8fafc", 
-                borderRadius: "6px", 
-                border: i === 0 ? `2px solid ${SKYGEO_BLUE}` : "1px solid #e2e8f0",
-                textAlign: "center"
-              }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginBottom: "8px" }}>
-                  <Trophy style={{ width: 14, height: 14, color: i === 0 ? SKYGEO_BLUE : "#94a3b8" }} />
-                  <span style={{ fontSize: "8px", fontWeight: 700, color: i === 0 ? SKYGEO_BLUE : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                    {i + 1}º lugar
-                  </span>
+        <div data-pdf-section="top-clients">
+          <section style={{ marginBottom: "20px" }}>
+            <SectionTitle subtitle="Clientes que mais contribuíram para o faturamento no período.">Top Clientes por Faturamento</SectionTitle>
+            <div style={{ display: "flex", gap: "16px" }}>
+              {topClientes.map((cliente, i) => (
+                <div key={i} style={{ 
+                  flex: 1, 
+                  padding: "16px", 
+                  background: i === 0 ? SKYGEO_BLUE_10 : "#f8fafc", 
+                  borderRadius: "6px", 
+                  border: i === 0 ? `2px solid ${SKYGEO_BLUE}` : "1px solid #e2e8f0",
+                  textAlign: "center"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginBottom: "8px" }}>
+                    <Trophy style={{ width: 14, height: 14, color: i === 0 ? SKYGEO_BLUE : "#94a3b8" }} />
+                    <span style={{ fontSize: "8px", fontWeight: 700, color: i === 0 ? SKYGEO_BLUE : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      {i + 1}º lugar
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px", lineHeight: 1.3 }}>
+                    {cliente.nome.length > 20 ? cliente.nome.substring(0, 17) + "..." : cliente.nome}
+                  </p>
+                  <p style={{ fontSize: "14px", fontWeight: 800, color: SKYGEO_BLUE, margin: "0 0 2px" }}>
+                    {formatarMoeda(cliente.receita)}
+                  </p>
+                  <p style={{ fontSize: "9px", color: "#64748b", margin: 0 }}>
+                    {cliente.percentual.toFixed(1)}% do total
+                  </p>
                 </div>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px", lineHeight: 1.3 }}>
-                  {cliente.nome.length > 20 ? cliente.nome.substring(0, 17) + "..." : cliente.nome}
-                </p>
-                <p style={{ fontSize: "14px", fontWeight: 800, color: SKYGEO_BLUE, margin: "0 0 2px" }}>
-                  {formatarMoeda(cliente.receita)}
-                </p>
-                <p style={{ fontSize: "9px", color: "#64748b", margin: 0 }}>
-                  {cliente.percentual.toFixed(1)}% do total
-                </p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ═══════════ TABLES ═══════════ */}
-
-      {/* Novos Clientes */}
-      <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-        {clientes.length > 0 ? (
-          <>
-            <SectionTitle subtitle="Clientes adicionados à base durante o período.">Novos Clientes ({clientes.length})</SectionTitle>
-            <PrintTable
-              headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
-              colWidths={["30%", "18%", "20%", "32%"]}
-              rows={clientes.map((c) => [
-                c.nome,
-                c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
-                c.telefone || "—",
-                c.email || "—",
-              ])}
-            />
-          </>
-        ) : (
-          <EmptyState message="Não houve novos clientes cadastrados neste período." />
-        )}
-      </section>
-
-      {/* Serviços com Maior Custo — enhanced with summary row & row highlighting */}
-      <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-        {servicosCusto.length > 0 ? (
-          <>
-            <SectionTitle subtitle="Serviços ordenados pelo custo total, com destaque para margens negativas.">Serviços com Maior Custo</SectionTitle>
-            <PrintTable
-              headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
-              colWidths={["28%", "17%", "17%", "17%", "21%"]}
-              alignRight={[false, true, true, true, true]}
-              boldColumns={[3, 4]}
-              rows={servicosCusto.map((s) => {
-                const margemContrib = s.receita - s.custo;
-                return [
-                  s.nome,
-                  formatarMoeda(s.receita),
-                  formatarMoeda(s.custo),
-                  formatarPercentual(s.margem),
-                  formatarMoeda(margemContrib),
-                ];
-              })}
-              rowHighlight={servicosCusto.map((s) => s.margem < 0)}
-              cellColors={servicosCusto.map((s) => {
-                const margemContrib = s.receita - s.custo;
-                return {
-                  2: ALERT_RED,
-                  3: s.margem >= 0 ? SUCCESS_GREEN : ALERT_RED,
-                  4: margemContrib >= 0 ? SUCCESS_GREEN : ALERT_RED,
-                };
-              })}
-              summaryRow={[
-                "Total / Média",
-                formatarMoeda(totalReceita),
-                formatarMoeda(totalCusto),
-                formatarPercentual(avgMargem),
-                formatarMoeda(totalReceita - totalCusto),
-              ]}
-              summaryColors={{
-                3: avgMargem >= 0 ? SUCCESS_GREEN : ALERT_RED,
-                4: (totalReceita - totalCusto) >= 0 ? SUCCESS_GREEN : ALERT_RED,
-              }}
-            />
-          </>
-        ) : (
-          <EmptyState message="Nenhum serviço com custo registrado neste período." />
-        )}
-      </section>
-
-      {/* Orçamentos Pendentes */}
-      <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
-        {orcamentosPendentes.length > 0 ? (
-          <>
-            <SectionTitle subtitle="Orçamentos aguardando aprovação ou pagamento.">Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
-            <PrintTable
-              headers={["Código", "Cliente", "Valor", "Vencimento"]}
-              colWidths={["20%", "35%", "25%", "20%"]}
-              alignRight={[false, false, true, false]}
-              rows={orcamentosPendentes.map((o) => [
-                o.codigo || "—",
-                o.cliente,
-                formatarMoeda(o.valor),
-                o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
-              ])}
-            />
-          </>
-        ) : (
-          <EmptyState message="Não há orçamentos pendentes para este período." />
-        )}
-      </section>
-
-      {/* ═══════════ INSIGHTS DO GESTOR — Promoted Section (Now What?) ═══════════ */}
-      {insightsGestor.length > 0 && (
-        <section style={{ marginBottom: "36px", pageBreakInside: "avoid" }}>
-          <SectionTitle subtitle="Ações recomendadas com base na análise dos dados do período.">Plano de Ação</SectionTitle>
-          <div style={{ padding: "16px 20px", background: SKYGEO_BLUE_10, borderRadius: "6px", border: `1px solid ${SKYGEO_BLUE_20}` }}>
-            <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "11px", color: "#1e293b", lineHeight: 2.0 }}>
-              {insightsGestor.slice(0, 4).map((step, i) => (
-                <li key={i} style={{ paddingLeft: "4px" }}>
-                  <span style={{ fontWeight: 600, color: SKYGEO_BLUE }}>{step}</span>
-                </li>
               ))}
-            </ol>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
       )}
 
-      {/* ═══════════ FOOTER ═══════════ */}
-      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "14px", marginTop: "40px", paddingBottom: "8px" }}>
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-          <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0, letterSpacing: "0.04em" }}>
-            Powered by GeoGestor · Gerado em {geradoEm}
-          </p>
+      {/* ═══════════ NOVOS CLIENTES TABLE SECTION ═══════════ */}
+      <div data-pdf-section="new-clients">
+        <section style={{ marginBottom: "20px" }}>
+          {clientes.length > 0 ? (
+            <>
+              <SectionTitle subtitle="Clientes adicionados à base durante o período.">Novos Clientes ({clientes.length})</SectionTitle>
+              <PrintTable
+                headers={["Nome", "Data Cadastro", "Telefone", "E-mail"]}
+                colWidths={["30%", "18%", "20%", "32%"]}
+                rows={clientes.map((c) => [
+                  c.nome,
+                  c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—",
+                  c.telefone || "—",
+                  c.email || "—",
+                ])}
+              />
+            </>
+          ) : (
+            <EmptyState message="Não houve novos clientes cadastrados neste período." />
+          )}
+        </section>
+      </div>
+
+      {/* ═══════════ SERVIÇOS COM CUSTO TABLE SECTION ═══════════ */}
+      <div data-pdf-section="services">
+        <section style={{ marginBottom: "20px" }}>
+          {servicosCusto.length > 0 ? (
+            <>
+              <SectionTitle subtitle="Serviços ordenados pelo custo total, com destaque para margens negativas.">Serviços com Maior Custo</SectionTitle>
+              <PrintTable
+                headers={["Serviço", "Receita", "Custo", "Margem", "Margem Contrib."]}
+                colWidths={["28%", "17%", "17%", "17%", "21%"]}
+                alignRight={[false, true, true, true, true]}
+                boldColumns={[3, 4]}
+                rows={servicosCusto.map((s) => {
+                  const margemContrib = s.receita - s.custo;
+                  return [
+                    s.nome,
+                    formatarMoeda(s.receita),
+                    formatarMoeda(s.custo),
+                    formatarPercentual(s.margem),
+                    formatarMoeda(margemContrib),
+                  ];
+                })}
+                rowHighlight={servicosCusto.map((s) => s.margem < 0)}
+                cellColors={servicosCusto.map((s) => {
+                  const margemContrib = s.receita - s.custo;
+                  return {
+                    2: ALERT_RED,
+                    3: s.margem >= 0 ? SUCCESS_GREEN : ALERT_RED,
+                    4: margemContrib >= 0 ? SUCCESS_GREEN : ALERT_RED,
+                  };
+                })}
+                summaryRow={[
+                  "Total / Média",
+                  formatarMoeda(totalReceita),
+                  formatarMoeda(totalCusto),
+                  formatarPercentual(avgMargem),
+                  formatarMoeda(totalReceita - totalCusto),
+                ]}
+                summaryColors={{
+                  3: avgMargem >= 0 ? SUCCESS_GREEN : ALERT_RED,
+                  4: (totalReceita - totalCusto) >= 0 ? SUCCESS_GREEN : ALERT_RED,
+                }}
+              />
+            </>
+          ) : (
+            <EmptyState message="Nenhum serviço com custo registrado neste período." />
+          )}
+        </section>
+      </div>
+
+      {/* ═══════════ ORÇAMENTOS PENDENTES TABLE SECTION ═══════════ */}
+      <div data-pdf-section="pending">
+        <section style={{ marginBottom: "20px" }}>
+          {orcamentosPendentes.length > 0 ? (
+            <>
+              <SectionTitle subtitle="Orçamentos aguardando aprovação ou pagamento.">Orçamentos Pendentes ({orcamentosPendentes.length})</SectionTitle>
+              <PrintTable
+                headers={["Código", "Cliente", "Valor", "Vencimento"]}
+                colWidths={["20%", "35%", "25%", "20%"]}
+                alignRight={[false, false, true, false]}
+                rows={orcamentosPendentes.map((o) => [
+                  o.codigo || "—",
+                  o.cliente,
+                  formatarMoeda(o.valor),
+                  o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—",
+                ])}
+              />
+            </>
+          ) : (
+            <EmptyState message="Não há orçamentos pendentes para este período." />
+          )}
+        </section>
+      </div>
+
+      {/* ═══════════ PLANO DE AÇÃO SECTION ═══════════ */}
+      {insightsGestor.length > 0 && (
+        <div data-pdf-section="action-plan">
+          <section style={{ marginBottom: "20px" }}>
+            <SectionTitle subtitle="Ações recomendadas com base na análise dos dados do período.">Plano de Ação</SectionTitle>
+            <div style={{ padding: "16px 20px", background: SKYGEO_BLUE_10, borderRadius: "6px", border: `1px solid ${SKYGEO_BLUE_20}` }}>
+              <ol style={{ margin: 0, paddingLeft: "18px", fontSize: "11px", color: "#1e293b", lineHeight: 2.0 }}>
+                {insightsGestor.slice(0, 4).map((step, i) => (
+                  <li key={i} style={{ paddingLeft: "4px" }}>
+                    <span style={{ fontWeight: 600, color: SKYGEO_BLUE }}>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </section>
         </div>
-      </footer>
+      )}
+
+      {/* ═══════════ FOOTER SECTION ═══════════ */}
+      <div data-pdf-section="footer">
+        <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "14px", marginTop: "20px", paddingBottom: "8px" }}>
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
+            <p style={{ fontSize: "8px", color: "#cbd5e1", margin: 0, letterSpacing: "0.04em" }}>
+              Powered by GeoGestor · Gerado em {geradoEm}
+            </p>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

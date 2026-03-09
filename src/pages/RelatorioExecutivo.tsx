@@ -498,8 +498,11 @@ const RelatorioExecutivo = () => {
             clientes={data.clientes}
             servicosCusto={data.servicosCusto}
             orcamentosPendentes={data.orcamentosPendentes}
+            topClientes={data.topClientes}
+            historico12Meses={data.historico12Meses}
             aiSummary={aiSummary}
             isLoading={data.isLoading}
+            isDraft={isDraft}
           />
         </div>
       </div>

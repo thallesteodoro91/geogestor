@@ -166,7 +166,7 @@ const RelatorioExecutivo = () => {
             </div>
             <div className="text-right">
               <p className="text-sm font-medium text-foreground">Relatório Executivo Mensal</p>
-              <p className="text-lg font-bold capitalize text-primary">{periodoLabel}</p>
+              <p className="text-lg font-bold text-primary">{periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}</p>
             </div>
           </div>
 

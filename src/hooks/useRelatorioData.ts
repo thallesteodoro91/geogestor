@@ -43,6 +43,17 @@ export interface OrcamentoPendente {
   data_faturamento: string | null;
 }
 
+export interface TopCliente {
+  nome: string;
+  receita: number;
+  percentual: number;
+}
+
+export interface HistoricoMensal {
+  label: string;
+  receita: number;
+}
+
 export function useRelatorioData({ mes, ano, customInicio, customFim }: RelatorioParams) {
   const dataInicio = customInicio || format(startOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
   const dataFim = customFim || format(endOfMonth(new Date(ano, mes)), "yyyy-MM-dd");

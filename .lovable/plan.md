@@ -1,88 +1,50 @@
 
-## Plano: Migrar para html2canvas + jsPDF
 
-### Problema Identificado
+## Diagnóstico
 
-1. **Palavras desaparecendo**: O `pdf-lib` usa fontes WinAnsi que não suportam caracteres acentuados (ç, ã, é, etc.) — texto cortado silenciosamente
-2. **Barras do gráfico com mesma cor**: O código atual usa `ACCENT_CYAN` fixo para todas as 12 barras (linha 410)
-3. **Formatação inconsistente**: Layouts geométricos manuais são frágeis e difíceis de manter
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-### Solução: html2canvas + jsPDF
-
-Capturar o DOM do relatório como imagem garante:
-- ✅ Todos os caracteres (Unicode, acentos, emojis)
-- ✅ Cores/gradientes dos gráficos Recharts exatamente como na tela
-- ✅ Layout CSS completo preservado
-- ✅ Manutenção simplificada (uma fonte de verdade)
-
----
-
-### Mudanças Técnicas
-
-**1. Instalar dependências**
-```bash
-npm install jspdf html2canvas
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
 ```
 
-**2. `src/lib/pdfReportGenerator.ts`** — Reescrever completamente:
-- Exportar função `captureReportAsPDF(elementRef, filename)` que:
-  - Usa `html2canvas` com `scale: 2` para alta qualidade
-  - Calcula dimensões A4 (210mm × 297mm)
-  - Divide em múltiplas páginas automaticamente se conteúdo exceder altura
-  - Adiciona cabeçalho/rodapé em cada página (logo SkyGeo, paginação)
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**3. `src/pages/RelatorioExecutivo.tsx`**:
-- Criar ref para o container do relatório: `const reportRef = useRef<HTMLDivElement>(null)`
-- Mover conteúdo do relatório (KPIs, gráficos, tabelas, insights) para um componente printável `<PrintableReportContent>`
-- `handleDownloadPDF` chama a nova função passando o ref
-- Aplicar cores degradê ao gráfico de 12 meses via gradiente CSS ou cores progressivas no Recharts
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-**4. Cores do gráfico 12 meses** — Adicionar gradiente:
-```tsx
-// No BarChart, usar cores progressivas por mês
-const GRADIENT_COLORS = [
-  "#0891b2", "#06b6d4", "#22d3ee", "#67e8f9", // Q1-Q2 tons cyan
-  "#059669", "#10b981", "#34d399", "#6ee7b7", // Q2-Q3 tons green
-  "#8b5cf6", "#a78bfa", "#c4b5fd", "#ddd6fe"  // Q3-Q4 tons purple
-];
+## Correção
+
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
 ```
 
-**5. Remover código antigo**:
-- Deletar funções `pdf-lib` (drawText, drawRect, generateReportPDF, etc.)
-- Manter apenas a nova abordagem html2canvas
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
----
-
-### Estrutura do PDF Final
-
-```text
-PÁGINA 1:
-├── Header (SkyGeo + metadados)
-├── KPIs (5 cards com variação MoM)
-├── Top 3 Clientes
-├── Gráfico Semanal (cores verde/vermelho)
-└── Gráfico Pizza Categorias
-
-PÁGINA 2 (se necessário):
-├── Tendência 12 meses (barras com gradiente)
-├── Tabela Serviços & Custos
-├── Tabela Novos Clientes
-└── Orçamentos Pendentes
-
-PÁGINA 3 (se necessário):
-├── Insights IA (cards completos)
-└── Rodapé com timestamp
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
 ```
 
----
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-### Benefícios
+## Impacto
 
-| Aspecto | Antes (pdf-lib) | Depois (html2canvas) |
-|---------|----------------|---------------------|
-| Acentos | ❌ Falha silenciosa | ✅ Preservados |
-| Gráficos | Desenho geométrico | ✅ Recharts visual |
-| Manutenção | 580+ linhas | ~50 linhas |
-| Gradientes | ❌ Cor única | ✅ CSS/Recharts |
-| Fidelidade | Aproximada | ✅ Pixel-perfect |
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

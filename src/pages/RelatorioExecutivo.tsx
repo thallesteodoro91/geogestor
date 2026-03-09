@@ -296,7 +296,7 @@ const RelatorioExecutivo = () => {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-emerald-500" /> Entradas vs Saídas (Semanal)
+                  <BarChart3 className="h-4 w-4 text-chart-positive" /> Entradas vs Saídas (Semanal)
                 </CardTitle>
               </CardHeader>
               <CardContent>

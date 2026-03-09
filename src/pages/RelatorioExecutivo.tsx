@@ -170,9 +170,6 @@ const RelatorioExecutivo = () => {
                 {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 Baixar PDF
               </Button>
-              <Button onClick={() => window.print()} className="gap-2">
-                <Printer className="h-4 w-4" /> Exportar PDF
-              </Button>
             </div>
           </div>
 

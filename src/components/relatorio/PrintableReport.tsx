@@ -54,7 +54,8 @@ function calcVariation(current: number, previous: number | null): number | null 
 export function PrintableReport({
   empresa, periodoLabel, receitaTotal, despesaTotal, lucroLiquido, margemLucro,
   taxaConversao, conversao, variacaoReceita, receitaAnterior, despesaAnterior, lucroAnterior,
-  dadosSemanais, receitaCategorias, clientes, servicosCusto, orcamentosPendentes, aiSummary, isLoading,
+  dadosSemanais, receitaCategorias, clientes, servicosCusto, orcamentosPendentes,
+  topClientes, historico12Meses, aiSummary, isLoading, isDraft,
 }: PrintableReportProps) {
   const geradoEm = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const dataEmissao = format(new Date(), "dd/MM/yyyy");

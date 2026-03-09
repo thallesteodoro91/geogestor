@@ -183,27 +183,112 @@ const RelatorioExecutivo = () => {
             </div>
           </div>
 
-          {/* KPIs */}
-          {data.isLoading ? (
-            <div className="grid grid-cols-5 gap-4"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" icon={<DollarSign className="h-4 w-4" />} />
-              <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" icon={<TrendingDown className="h-4 w-4" />} />
-              <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-emerald-600" : "text-destructive"} icon={<BadgeDollarSign className="h-4 w-4" />} />
-              <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-emerald-600" : "text-destructive"} icon={<Percent className="h-4 w-4" />} />
-              <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} icon={<Target className="h-4 w-4" />} />
-            </div>
+          {/* Empty State */}
+          {!data.isLoading && !hasData && (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <FileQuestion className="h-16 w-16 text-muted-foreground/40 mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">Nenhum dado no período</h3>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  Não há movimentações financeiras registradas para {periodoLabel}. 
+                  Cadastre serviços, orçamentos ou despesas para visualizar o relatório.
+                </p>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Variação mensal */}
-          {data.variacaoReceita !== null && (
-            <p className="text-sm text-muted-foreground">
-              {data.variacaoReceita >= 0 ? "📈" : "📉"} Variação de faturamento em relação ao mês anterior:{" "}
-              <span className={data.variacaoReceita >= 0 ? "text-emerald-600 font-semibold" : "text-destructive font-semibold"}>
-                {data.variacaoReceita >= 0 ? "+" : ""}{data.variacaoReceita.toFixed(1)}%
-              </span>
-            </p>
+          {/* KPIs with comparison toggle */}
+          {(data.isLoading || hasData) && (
+            <>
+              {/* Comparison Toggle */}
+              <div className="flex items-center justify-end gap-2">
+                <Switch id="comparison-toggle" checked={showComparison} onCheckedChange={setShowComparison} />
+                <Label htmlFor="comparison-toggle" className="text-sm text-muted-foreground cursor-pointer">
+                  <ArrowLeftRight className="h-3.5 w-3.5 inline mr-1" />
+                  Comparar com mês anterior
+                </Label>
+              </div>
+
+              {data.isLoading ? (
+                <div className="grid grid-cols-5 gap-4"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div>
+              ) : showComparison ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <ComparisonKPI 
+                    label="Faturamento" 
+                    current={receitaTotal} 
+                    previous={receitaAnterior} 
+                    format="currency" 
+                    icon={<DollarSign className="h-4 w-4" />}
+                  />
+                  <ComparisonKPI 
+                    label="Despesas" 
+                    current={despesaTotal} 
+                    previous={despesaAnterior} 
+                    format="currency" 
+                    invertColors 
+                    icon={<TrendingDown className="h-4 w-4" />}
+                  />
+                  <ComparisonKPI 
+                    label="Lucro Líquido" 
+                    current={lucroLiquido} 
+                    previous={lucroAnterior} 
+                    format="currency" 
+                    icon={<BadgeDollarSign className="h-4 w-4" />}
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <KPIBox label="Total Faturado" value={formatarMoeda(receitaTotal)} color="text-primary" icon={<DollarSign className="h-4 w-4" />} />
+                  <KPIBox label="Total Gasto" value={formatarMoeda(despesaTotal)} color="text-destructive" icon={<TrendingDown className="h-4 w-4" />} />
+                  <KPIBox label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? "text-chart-positive" : "text-destructive"} icon={<BadgeDollarSign className="h-4 w-4" />} />
+                  <KPIBox label="Margem de Lucro" value={formatarPercentual(margemLucro)} color={margemLucro >= 0 ? "text-chart-positive" : "text-destructive"} icon={<Percent className="h-4 w-4" />} />
+                  <KPIBox label="Taxa Conversão" value={formatarPercentual(taxaConversao)} color="text-accent" subtitle={data.conversao ? `${data.conversao.convertidos}/${data.conversao.total} orçam.` : undefined} icon={<Target className="h-4 w-4" />} />
+                </div>
+              )}
+
+              {/* Variação mensal */}
+              {!showComparison && data.variacaoReceita !== null && (
+                <p className="text-sm text-muted-foreground">
+                  {data.variacaoReceita >= 0 ? "📈" : "📉"} Variação de faturamento em relação ao mês anterior:{" "}
+                  <span className={data.variacaoReceita >= 0 ? "text-chart-positive font-semibold" : "text-destructive font-semibold"}>
+                    {data.variacaoReceita >= 0 ? "+" : ""}{data.variacaoReceita.toFixed(1)}%
+                  </span>
+                </p>
+              )}
+
+              {/* Top 3 Clientes */}
+              {data.topClientes.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Trophy className="h-4 w-4 text-amber-500" /> Top Clientes por Faturamento
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {data.topClientes.map((cliente, i) => (
+                        <div key={i} className={cn(
+                          "p-4 rounded-lg border text-center",
+                          i === 0 ? "bg-primary/5 border-primary" : "bg-muted/30 border-border"
+                        )}>
+                          <div className="flex items-center justify-center gap-1.5 mb-2">
+                            <Trophy className={cn("h-4 w-4", i === 0 ? "text-primary" : "text-muted-foreground")} />
+                            <span className={cn("text-xs font-semibold", i === 0 ? "text-primary" : "text-muted-foreground")}>
+                              {i + 1}º lugar
+                            </span>
+                          </div>
+                          <p className="font-semibold text-foreground truncate" title={cliente.nome}>
+                            {cliente.nome}
+                          </p>
+                          <p className="text-lg font-bold text-primary">{formatarMoeda(cliente.receita)}</p>
+                          <p className="text-xs text-muted-foreground">{cliente.percentual.toFixed(1)}% do total</p>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {/* Charts Row */}

@@ -131,6 +131,10 @@ const RelatorioExecutivo = () => {
         servicosCusto: data.servicosCusto,
         orcamentosPendentes: data.orcamentosPendentes,
         receitaCategorias: data.receitaCategorias,
+        dadosSemanais: data.dadosSemanais,
+        clientesNovos: data.clientes,
+        historico12Meses: data.historico12Meses,
+        aiInsights: aiSummary.data?.insights || [],
         insights: buildInsights(),
         isDraft,
       }, `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`);

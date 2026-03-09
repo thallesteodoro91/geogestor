@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, LineChart, Line, Area, AreaChart } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, LineChart, Line, Area, AreaChart, Cell } from "recharts";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
 import { Loader2, FileText, AlertTriangle, Trophy, TrendingUp } from "lucide-react";
 import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente, TopCliente, HistoricoMensal } from "@/hooks/useRelatorioData";

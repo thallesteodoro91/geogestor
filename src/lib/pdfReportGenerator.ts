@@ -145,7 +145,7 @@ export async function generateReportPDF(data: ReportData): Promise<Uint8Array> {
   const statusTextColor = isHealthy ? SUCCESS_GREEN : rgb(0.85, 0.47, 0.02);
   drawRect(page, margin, y - 25, contentWidth, 25, statusColor);
   drawRect(page, margin, y - 25, 3, 25, statusTextColor);
-  drawText(page, isHealthy ? "● Saudável" : "● Atenção", margin + 12, y - 17, helveticaBold, 9, statusTextColor);
+  drawText(page, isHealthy ? "[OK] Saudavel" : "[!] Atencao", margin + 12, y - 17, helveticaBold, 9, statusTextColor);
   const statusText = data.variacaoReceita !== null
     ? ` — ${data.variacaoReceita >= 0 ? "+" : ""}${formatPercent(data.variacaoReceita)} vs. mês anterior`
     : "";

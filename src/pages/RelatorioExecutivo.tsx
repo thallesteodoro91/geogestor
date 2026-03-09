@@ -1,14 +1,13 @@
-import { useState, useRef } from "react";
-import { format } from "date-fns";
+import { useState } from "react";
+import { format, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useRelatorioData } from "@/hooks/useRelatorioData";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RelatorioPaginatedTable } from "@/components/relatorio/RelatorioPaginatedTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
@@ -18,6 +17,8 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { PrintableReport } from "@/components/relatorio/PrintableReport";
 import { RichTooltip } from "@/components/charts/RichTooltip";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 const DONUT_COLORS = [
   "hsl(262, 83%, 58%)",

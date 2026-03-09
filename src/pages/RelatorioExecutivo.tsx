@@ -161,9 +161,15 @@ const RelatorioExecutivo = () => {
                 <h2 className="text-lg font-bold">{periodoLabel}</h2>
               )}
             </div>
-            <Button onClick={() => window.print()} className="gap-2">
-              <Printer className="h-4 w-4" /> Exportar PDF
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading || data.isLoading} className="gap-2">
+                {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Baixar PDF
+              </Button>
+              <Button onClick={() => window.print()} className="gap-2">
+                <Printer className="h-4 w-4" /> Exportar PDF
+              </Button>
+            </div>
           </div>
 
           {/* Date range filters */}

@@ -38,6 +38,7 @@ const RelatorioExecutivo = () => {
   const [modoCustom, setModoCustom] = useState(false);
   const [customInicio, setCustomInicio] = useState<Date | undefined>();
   const [customFim, setCustomFim] = useState<Date | undefined>();
+  const [showComparison, setShowComparison] = useState(false);
 
   const customInicioStr = modoCustom && customInicio ? format(customInicio, "yyyy-MM-dd") : undefined;
   const customFimStr = modoCustom && customFim ? format(customFim, "yyyy-MM-dd") : undefined;

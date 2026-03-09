@@ -406,6 +406,41 @@ export function PrintableReport({
         </section>
       ) : null}
 
+      {/* ═══════════ TOP 3 CLIENTES ═══════════ */}
+      {topClientes.length > 0 && (
+        <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
+          <SectionTitle subtitle="Clientes que mais contribuíram para o faturamento no período.">Top Clientes por Faturamento</SectionTitle>
+          <div style={{ display: "flex", gap: "16px" }}>
+            {topClientes.map((cliente, i) => (
+              <div key={i} style={{ 
+                flex: 1, 
+                padding: "16px", 
+                background: i === 0 ? SKYGEO_BLUE_10 : "#f8fafc", 
+                borderRadius: "6px", 
+                border: i === 0 ? `2px solid ${SKYGEO_BLUE}` : "1px solid #e2e8f0",
+                textAlign: "center"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginBottom: "8px" }}>
+                  <Trophy style={{ width: 14, height: 14, color: i === 0 ? SKYGEO_BLUE : "#94a3b8" }} />
+                  <span style={{ fontSize: "8px", fontWeight: 700, color: i === 0 ? SKYGEO_BLUE : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {i + 1}º lugar
+                  </span>
+                </div>
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px", lineHeight: 1.3 }}>
+                  {cliente.nome.length > 20 ? cliente.nome.substring(0, 17) + "..." : cliente.nome}
+                </p>
+                <p style={{ fontSize: "14px", fontWeight: 800, color: SKYGEO_BLUE, margin: "0 0 2px" }}>
+                  {formatarMoeda(cliente.receita)}
+                </p>
+                <p style={{ fontSize: "9px", color: "#64748b", margin: 0 }}>
+                  {cliente.percentual.toFixed(1)}% do total
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ═══════════ TABLES ═══════════ */}
 
       {/* Novos Clientes */}

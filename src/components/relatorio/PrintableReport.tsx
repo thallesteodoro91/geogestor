@@ -580,7 +580,7 @@ function PrintTable({ headers, rows, colWidths, alignRight, boldColumns, cellCol
                 <td
                   key={ci}
                   style={{
-                    padding: "7px 10px",
+                    padding: "8px 12px",
                     textAlign: alignRight?.[ci] ? "right" : "left",
                     borderBottom: "1px solid #f1f5f9",
                     color: cellColors?.[ri]?.[ci] || "#1e293b",

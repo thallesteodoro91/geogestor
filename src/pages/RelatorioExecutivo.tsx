@@ -221,7 +221,7 @@ const RelatorioExecutivo = () => {
                       />
                       <Tooltip 
                         content={<RichTooltip format="currency" />}
-                        cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
+                        cursor={{ fill: 'hsl(var(--primary) / 0.08)', radius: 4 }}
                       />
                       <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} activeBar={false} />
                       <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} activeBar={false} />

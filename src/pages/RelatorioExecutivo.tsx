@@ -96,6 +96,53 @@ const RelatorioExecutivo = () => {
   // Check if there's any data
   const hasData = receitaTotal > 0 || despesaTotal > 0 || data.clientes.length > 0 || data.servicosCusto.length > 0;
 
+  // Calculate variation
+  const variacaoReceita = receitaAnterior > 0 ? ((receitaTotal - receitaAnterior) / receitaAnterior) * 100 : null;
+
+  // Build insights for PDF
+  const buildInsights = (): string[] => {
+    const insights: string[] = [];
+    if (aiSummary.data?.insights?.length > 0) {
+      aiSummary.data.insights.forEach((insight: any) => {
+        if (insight.acao && insights.length < 4) insights.push(insight.acao);
+      });
+    }
+    if (lucroLiquido < 0 && insights.length < 4) insights.push("Revisar custos fixos e variáveis para identificar oportunidades de redução.");
+    if (data.orcamentosPendentes.length > 0 && insights.length < 4) insights.push(`Retomar contato com ${data.orcamentosPendentes.length} orçamento(s) pendente(s) para conversão.`);
+    if (insights.length < 3) insights.push("Acompanhar evolução mensal dos KPIs para identificar tendências.");
+    return insights;
+  };
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      await downloadReportPDF({
+        empresa: data.empresa?.nome || "GeoGestor",
+        periodoLabel: periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1),
+        receitaTotal,
+        despesaTotal,
+        lucroLiquido,
+        margemLucro,
+        taxaConversao,
+        variacaoReceita,
+        topClientes: data.topClientes,
+        servicosCusto: data.servicosCusto,
+        orcamentosPendentes: data.orcamentosPendentes,
+        receitaCategorias: data.receitaCategorias,
+        insights: buildInsights(),
+        isDraft,
+      }, `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`);
+      toast.success("PDF baixado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="relatorio-executivo-container">

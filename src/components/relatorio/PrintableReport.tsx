@@ -232,31 +232,28 @@ export function PrintableReport({
         <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED} variation={varLucro} />
       </div>
 
-      {/* SPARKLINE 12 MESES */}
+      {/* TENDÊNCIA 12 MESES — Bar chart com gradiente */}
       {historico12Meses.length > 0 && historico12Meses.some(h => h.receita > 0) && (
-        <div style={{ marginBottom: "28px", padding: "12px 16px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-            <TrendingUp style={{ width: 12, height: 12, color: SKYGEO_BLUE }} />
-            <span style={{ fontSize: "9px", fontWeight: 600, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              Tendência 12 meses
+        <div style={{ marginBottom: "28px", padding: "16px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+            <TrendingUp style={{ width: 14, height: 14, color: SKYGEO_BLUE }} />
+            <span style={{ fontSize: "10px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Tendência de Receita — 12 meses
             </span>
           </div>
-          <div style={{ height: 50 }}>
+          <div style={{ height: 120 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={historico12Meses} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-                <defs>
-                  <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={SKYGEO_BLUE} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={SKYGEO_BLUE} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area type="monotone" dataKey="receita" stroke={SKYGEO_BLUE} strokeWidth={2} fill="url(#sparkGradient)" />
-              </AreaChart>
+              <BarChart data={historico12Meses} margin={{ top: 8, right: 4, left: 4, bottom: 4 }}>
+                <XAxis dataKey="label" fontSize={7} tick={{ fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                <YAxis hide />
+                <Bar dataKey="receita" radius={[3, 3, 0, 0]}>
+                  {historico12Meses.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={MONTH_GRADIENT_COLORS[index % MONTH_GRADIENT_COLORS.length]} />
+                  ))}
+                  <LabelList dataKey="receita" position="top" formatter={(v: number) => v > 0 ? `${(v / 1000).toFixed(0)}k` : ""} style={{ fontSize: 7, fill: "#64748b", fontWeight: 600 }} />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "7px", color: "#94a3b8", marginTop: "4px" }}>
-            <span>{historico12Meses[0]?.label}</span>
-            <span>{historico12Meses[11]?.label}</span>
           </div>
         </div>
       )}

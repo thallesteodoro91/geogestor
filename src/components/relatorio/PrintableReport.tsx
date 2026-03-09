@@ -1,9 +1,9 @@
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, LabelList, LineChart, Line, Area, AreaChart } from "recharts";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
-import { Loader2, FileText, AlertTriangle } from "lucide-react";
-import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente } from "@/hooks/useRelatorioData";
+import { Loader2, FileText, AlertTriangle, Trophy, TrendingUp } from "lucide-react";
+import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente, TopCliente, HistoricoMensal } from "@/hooks/useRelatorioData";
 import skyGeoLogo from "@/assets/skygeo-logo.png";
 
 /* ===== Monochromatic SkyGeo Palette ===== */
@@ -32,8 +32,11 @@ interface PrintableReportProps {
   clientes: ClienteNovo[];
   servicosCusto: ServicoCusto[];
   orcamentosPendentes: OrcamentoPendente[];
+  topClientes: TopCliente[];
+  historico12Meses: HistoricoMensal[];
   aiSummary: { isLoading: boolean; data: any };
   isLoading: boolean;
+  isDraft?: boolean;
 }
 
 function generateReportId(): string {
@@ -51,7 +54,8 @@ function calcVariation(current: number, previous: number | null): number | null 
 export function PrintableReport({
   empresa, periodoLabel, receitaTotal, despesaTotal, lucroLiquido, margemLucro,
   taxaConversao, conversao, variacaoReceita, receitaAnterior, despesaAnterior, lucroAnterior,
-  dadosSemanais, receitaCategorias, clientes, servicosCusto, orcamentosPendentes, aiSummary, isLoading,
+  dadosSemanais, receitaCategorias, clientes, servicosCusto, orcamentosPendentes,
+  topClientes, historico12Meses, aiSummary, isLoading, isDraft,
 }: PrintableReportProps) {
   const geradoEm = format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const dataEmissao = format(new Date(), "dd/MM/yyyy");
@@ -129,8 +133,27 @@ export function PrintableReport({
   }
 
   return (
-    <div className="printable-report" style={{ background: "#fff", color: "#1a1a1a", fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.7, fontSize: "12px" }}>
+    <div className="printable-report" style={{ background: "#fff", color: "#1a1a1a", fontFamily: "'Inter', system-ui, sans-serif", lineHeight: 1.7, fontSize: "12px", position: "relative" }}>
 
+      {/* Marca d'água RASCUNHO */}
+      {isDraft && (
+        <div style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%) rotate(-30deg)",
+          fontSize: "72px",
+          fontWeight: 900,
+          color: "rgba(30,58,95,0.06)",
+          textTransform: "uppercase",
+          letterSpacing: "0.1em",
+          pointerEvents: "none",
+          zIndex: 0,
+          whiteSpace: "nowrap",
+        }}>
+          RASCUNHO
+        </div>
+      )}
       {/* ═══════════ PAGE 1 ═══════════ */}
 
       {/* HEADER */}
@@ -154,13 +177,28 @@ export function PrintableReport({
       </header>
 
       {/* TITLE + PERIOD */}
-      <div style={{ marginBottom: "20px" }}>
+      <div style={{ marginBottom: "16px" }}>
         <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
           Relatório de Gestão Financeira
         </h2>
         <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
           {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
         </p>
+      </div>
+
+      {/* ÍNDICE / SUMÁRIO */}
+      <div style={{ marginBottom: "20px", padding: "10px 14px", background: "#f8fafc", borderRadius: "4px", border: "1px solid #e2e8f0" }}>
+        <p style={{ fontSize: "8px", fontWeight: 700, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 6px" }}>
+          Conteúdo
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", fontSize: "9px", color: "#64748b" }}>
+          <span>1. Sumário Executivo</span>
+          <span>2. Entradas vs Saídas</span>
+          <span>3. Receita por Categoria</span>
+          {topClientes.length > 0 && <span>4. Top Clientes</span>}
+          <span>{topClientes.length > 0 ? "5" : "4"}. Tabelas Detalhadas</span>
+          <span>{topClientes.length > 0 ? "6" : "5"}. Plano de Ação</span>
+        </div>
       </div>
 
       {/* HEALTH STATUS */}
@@ -179,13 +217,42 @@ export function PrintableReport({
       </div>
 
       {/* KPI BAND — larger values (24px) */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 0 36px", padding: "22px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 0 20px", padding: "22px 0", borderTop: "1px solid #e5e7eb", borderBottom: "1px solid #e5e7eb" }}>
         <KPIValue label="Faturamento" value={formatarMoeda(receitaTotal)} color={SKYGEO_BLUE} variation={variacaoReceita} />
         <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
         <KPIValue label="Total Gasto" value={formatarMoeda(despesaTotal)} color={ALERT_RED} variation={varDespesa} invertColor />
         <div style={{ width: "1px", height: "52px", background: "#d1d5db", margin: "0 36px" }} />
         <KPIValue label="Lucro Líquido" value={formatarMoeda(lucroLiquido)} color={lucroLiquido >= 0 ? SUCCESS_GREEN : ALERT_RED} variation={varLucro} />
       </div>
+
+      {/* SPARKLINE 12 MESES */}
+      {historico12Meses.length > 0 && historico12Meses.some(h => h.receita > 0) && (
+        <div style={{ marginBottom: "28px", padding: "12px 16px", background: "#f8fafc", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <TrendingUp style={{ width: 12, height: 12, color: SKYGEO_BLUE }} />
+            <span style={{ fontSize: "9px", fontWeight: 600, color: SKYGEO_BLUE, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Tendência 12 meses
+            </span>
+          </div>
+          <div style={{ height: 50 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={historico12Meses} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={SKYGEO_BLUE} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={SKYGEO_BLUE} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area type="monotone" dataKey="receita" stroke={SKYGEO_BLUE} strokeWidth={2} fill="url(#sparkGradient)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "7px", color: "#94a3b8", marginTop: "4px" }}>
+            <span>{historico12Meses[0]?.label}</span>
+            <span>{historico12Meses[11]?.label}</span>
+          </div>
+        </div>
+      )}
 
       {/* SECONDARY METRICS */}
       <div style={{ display: "flex", gap: "24px", marginBottom: "36px", paddingLeft: "4px" }}>
@@ -338,6 +405,41 @@ export function PrintableReport({
           </div>
         </section>
       ) : null}
+
+      {/* ═══════════ TOP 3 CLIENTES ═══════════ */}
+      {topClientes.length > 0 && (
+        <section style={{ marginBottom: "36px" }} className="page-break-inside-avoid">
+          <SectionTitle subtitle="Clientes que mais contribuíram para o faturamento no período.">Top Clientes por Faturamento</SectionTitle>
+          <div style={{ display: "flex", gap: "16px" }}>
+            {topClientes.map((cliente, i) => (
+              <div key={i} style={{ 
+                flex: 1, 
+                padding: "16px", 
+                background: i === 0 ? SKYGEO_BLUE_10 : "#f8fafc", 
+                borderRadius: "6px", 
+                border: i === 0 ? `2px solid ${SKYGEO_BLUE}` : "1px solid #e2e8f0",
+                textAlign: "center"
+              }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", marginBottom: "8px" }}>
+                  <Trophy style={{ width: 14, height: 14, color: i === 0 ? SKYGEO_BLUE : "#94a3b8" }} />
+                  <span style={{ fontSize: "8px", fontWeight: 700, color: i === 0 ? SKYGEO_BLUE : "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {i + 1}º lugar
+                  </span>
+                </div>
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "#1e293b", margin: "0 0 4px", lineHeight: 1.3 }}>
+                  {cliente.nome.length > 20 ? cliente.nome.substring(0, 17) + "..." : cliente.nome}
+                </p>
+                <p style={{ fontSize: "14px", fontWeight: 800, color: SKYGEO_BLUE, margin: "0 0 2px" }}>
+                  {formatarMoeda(cliente.receita)}
+                </p>
+                <p style={{ fontSize: "9px", color: "#64748b", margin: 0 }}>
+                  {cliente.percentual.toFixed(1)}% do total
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══════════ TABLES ═══════════ */}
 

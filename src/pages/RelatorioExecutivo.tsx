@@ -9,6 +9,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { RelatorioPaginatedTable } from "@/components/relatorio/RelatorioPaginatedTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -279,32 +280,16 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.clientes.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Data Cadastro</TableHead>
-                          <TableHead>Telefone</TableHead>
-                          <TableHead>E-mail</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.clientes.map((c, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{c.nome}</TableCell>
-                            <TableCell>{c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—"}</TableCell>
-                            <TableCell>{c.telefone || "—"}</TableCell>
-                            <TableCell>{c.email || "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum novo cliente no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.clientes}
+                  emptyMessage="Nenhum novo cliente no período."
+                  columns={[
+                    { header: "Nome", render: (c) => <span className="font-medium">{c.nome}</span> },
+                    { header: "Data Cadastro", render: (c) => c.data_cadastro ? format(new Date(c.data_cadastro), "dd/MM/yyyy") : "—" },
+                    { header: "Telefone", render: (c) => c.telefone || "—" },
+                    { header: "E-mail", render: (c) => c.email || "—" },
+                  ]}
+                />
               </CardContent>
             </Card>
 
@@ -315,34 +300,18 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.servicosCusto.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Serviço</TableHead>
-                          <TableHead className="text-right">Receita</TableHead>
-                          <TableHead className="text-right">Custo</TableHead>
-                          <TableHead className="text-right">Margem</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.servicosCusto.map((s, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{s.nome}</TableCell>
-                            <TableCell className="text-right">{formatarMoeda(s.receita)}</TableCell>
-                            <TableCell className="text-right text-destructive">{formatarMoeda(s.custo)}</TableCell>
-                            <TableCell className={`text-right font-semibold ${s.margem >= 0 ? "text-emerald-600" : "text-destructive"}`}>
-                              {formatarPercentual(s.margem)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum serviço no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.servicosCusto}
+                  emptyMessage="Nenhum serviço no período."
+                  columns={[
+                    { header: "Serviço", render: (s) => <span className="font-medium">{s.nome}</span> },
+                    { header: "Receita", headerClassName: "text-right", cellClassName: "text-right", render: (s) => formatarMoeda(s.receita) },
+                    { header: "Custo", headerClassName: "text-right", cellClassName: "text-right text-destructive", render: (s) => formatarMoeda(s.custo) },
+                    { header: "Margem", headerClassName: "text-right", cellClassName: "text-right font-semibold", render: (s) => (
+                      <span className={s.margem >= 0 ? "text-emerald-600" : "text-destructive"}>{formatarPercentual(s.margem)}</span>
+                    )},
+                  ]}
+                />
               </CardContent>
             </Card>
 
@@ -353,32 +322,16 @@ const RelatorioExecutivo = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {data.orcamentosPendentes.length > 0 ? (
-                  <div className="rounded-lg border bg-card">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                          <TableHead>Vencimento</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {data.orcamentosPendentes.map((o, i) => (
-                          <TableRow key={i}>
-                            <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
-                            <TableCell>{o.cliente}</TableCell>
-                            <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
-                            <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-3">Nenhum orçamento pendente no período.</p>
-                )}
+                <RelatorioPaginatedTable
+                  data={data.orcamentosPendentes}
+                  emptyMessage="Nenhum orçamento pendente no período."
+                  columns={[
+                    { header: "Código", render: (o) => <span className="font-medium">{o.codigo || "—"}</span> },
+                    { header: "Cliente", render: (o) => o.cliente },
+                    { header: "Valor", headerClassName: "text-right", cellClassName: "text-right", render: (o) => formatarMoeda(o.valor) },
+                    { header: "Vencimento", render: (o) => o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—" },
+                  ]}
+                />
               </CardContent>
             </Card>
           </div>

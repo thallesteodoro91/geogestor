@@ -230,6 +230,8 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
     receitaCategorias: categoriasQuery.data || [],
     conversao: conversaoQuery.data,
     empresa: empresaQuery.data,
+    topClientes: topClientesQuery.data || [],
+    historico12Meses: historico12MesesQuery.data || [],
     isLoading,
   };
 }

@@ -394,7 +394,7 @@ const RelatorioExecutivo = () => {
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Wrench className="h-4 w-4 text-amber-500" /> Serviços com Maior Custo
+                  <Wrench className="h-4 w-4 text-accent" /> Serviços com Maior Custo
                 </CardTitle>
               </CardHeader>
               <CardContent>

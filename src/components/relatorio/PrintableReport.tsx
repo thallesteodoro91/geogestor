@@ -14,6 +14,13 @@ const ALERT_RED = "#dc2626";
 const SUCCESS_GREEN = "#16a34a";
 const BAR_PALETTE = [SKYGEO_BLUE, "rgba(30,58,95,0.80)", "rgba(30,58,95,0.60)", "rgba(30,58,95,0.45)", "rgba(30,58,95,0.30)", "#64748b", "#94a3b8", "#cbd5e1"];
 
+// Gradient colors for the 12-month revenue trend chart
+const MONTH_GRADIENT_COLORS = [
+  "#0e4d64", "#0f6178", "#11768d", "#138aa1", // Q1 - deep teal
+  "#159eb6", "#17b2ca", "#1ec6de", "#3dd4e8", // Q2 - bright cyan
+  "#1e5a8a", "#2270a8", "#2686c6", "#2a9ce4", // Q3-Q4 - royal blue
+];
+
 interface PrintableReportProps {
   empresa: { nome: string } | null | undefined;
   periodoLabel: string;

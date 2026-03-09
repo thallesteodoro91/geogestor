@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format, isSameMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy } from "lucide-react";
+import { Printer, ChevronLeft, ChevronRight, Sparkles, Loader2, CalendarIcon, RotateCcw, DollarSign, TrendingDown, BadgeDollarSign, Percent, Target, BarChart3, PieChart as PieChartIcon, UserPlus, Wrench, Clock, ArrowLeftRight, FileQuestion, Trophy, Download } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { useRelatorioData } from "@/hooks/useRelatorioData";
 import { formatarMoeda, formatarPercentual } from "@/core/finance";
@@ -19,6 +19,8 @@ import { PrintableReport } from "@/components/relatorio/PrintableReport";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { downloadReportPDF } from "@/lib/pdfReportGenerator";
+import { toast } from "sonner";
 
 const DONUT_COLORS = [
   "hsl(262, 83%, 58%)",
@@ -94,6 +96,53 @@ const RelatorioExecutivo = () => {
   // Check if there's any data
   const hasData = receitaTotal > 0 || despesaTotal > 0 || data.clientes.length > 0 || data.servicosCusto.length > 0;
 
+  // Calculate variation
+  const variacaoReceita = receitaAnterior > 0 ? ((receitaTotal - receitaAnterior) / receitaAnterior) * 100 : null;
+
+  // Build insights for PDF
+  const buildInsights = (): string[] => {
+    const insights: string[] = [];
+    if (aiSummary.data?.insights?.length > 0) {
+      aiSummary.data.insights.forEach((insight: any) => {
+        if (insight.acao && insights.length < 4) insights.push(insight.acao);
+      });
+    }
+    if (lucroLiquido < 0 && insights.length < 4) insights.push("Revisar custos fixos e variáveis para identificar oportunidades de redução.");
+    if (data.orcamentosPendentes.length > 0 && insights.length < 4) insights.push(`Retomar contato com ${data.orcamentosPendentes.length} orçamento(s) pendente(s) para conversão.`);
+    if (insights.length < 3) insights.push("Acompanhar evolução mensal dos KPIs para identificar tendências.");
+    return insights;
+  };
+
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    setIsDownloading(true);
+    try {
+      await downloadReportPDF({
+        empresa: data.empresa?.nome || "GeoGestor",
+        periodoLabel: periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1),
+        receitaTotal,
+        despesaTotal,
+        lucroLiquido,
+        margemLucro,
+        taxaConversao,
+        variacaoReceita,
+        topClientes: data.topClientes,
+        servicosCusto: data.servicosCusto,
+        orcamentosPendentes: data.orcamentosPendentes,
+        receitaCategorias: data.receitaCategorias,
+        insights: buildInsights(),
+        isDraft,
+      }, `relatorio-${periodoLabel.replace(/\s/g, "-").toLowerCase()}.pdf`);
+      toast.success("PDF baixado com sucesso!");
+    } catch (error) {
+      console.error("Erro ao gerar PDF:", error);
+      toast.error("Erro ao gerar PDF");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <AppLayout>
       <div className="relatorio-executivo-container">
@@ -112,9 +161,15 @@ const RelatorioExecutivo = () => {
                 <h2 className="text-lg font-bold">{periodoLabel}</h2>
               )}
             </div>
-            <Button onClick={() => window.print()} className="gap-2">
-              <Printer className="h-4 w-4" /> Exportar PDF
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={handleDownloadPDF} disabled={isDownloading || data.isLoading} className="gap-2">
+                {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                Baixar PDF
+              </Button>
+              <Button onClick={() => window.print()} className="gap-2">
+                <Printer className="h-4 w-4" /> Exportar PDF
+              </Button>
+            </div>
           </div>
 
           {/* Date range filters */}

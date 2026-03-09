@@ -15,7 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { PrintableReport } from "@/components/relatorio/PrintableReport";
+
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";

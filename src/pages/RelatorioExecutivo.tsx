@@ -221,10 +221,10 @@ const RelatorioExecutivo = () => {
                       />
                       <Tooltip 
                         content={<RichTooltip format="currency" />}
-                        cursor={{ stroke: 'hsl(var(--muted-foreground))', strokeWidth: 1, strokeDasharray: '3 3' }}
+                        cursor={false}
                       />
-                      <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="entradas" name="Entradas" fill="hsl(var(--chart-positive))" radius={[4, 4, 0, 0]} activeBar={false} />
+                      <Bar dataKey="saidas" name="Saídas" fill="hsl(var(--chart-negative))" radius={[4, 4, 0, 0]} activeBar={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -259,7 +259,7 @@ const RelatorioExecutivo = () => {
                             <Cell key={i} fill={DONUT_COLORS[i % DONUT_COLORS.length]} />
                           ))}
                         </Pie>
-                        <Tooltip content={<RichTooltip format="currency" />} />
+                        <Tooltip content={<RichTooltip format="currency" />} cursor={false} />
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (

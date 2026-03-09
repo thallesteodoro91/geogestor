@@ -91,7 +91,7 @@ const RelatorioExecutivo = () => {
               {!modoCustom && (
                 <>
                   <Button variant="outline" size="icon" onClick={handlePrev}><ChevronLeft className="h-4 w-4" /></Button>
-                  <h2 className="text-lg font-bold capitalize">{periodoLabel}</h2>
+                  <h2 className="text-lg font-bold">{periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}</h2>
                   <Button variant="outline" size="icon" onClick={handleNext}><ChevronRight className="h-4 w-4" /></Button>
                 </>
               )}

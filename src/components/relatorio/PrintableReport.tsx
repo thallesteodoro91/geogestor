@@ -155,11 +155,11 @@ export function PrintableReport({
 
       {/* TITLE + PERIOD */}
       <div style={{ marginBottom: "20px" }}>
-        <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
+        <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
           Relatório de Gestão Financeira
         </h2>
-        <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0, textTransform: "capitalize" }}>
-          {periodoLabel}
+        <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
+          {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
         </p>
       </div>
 

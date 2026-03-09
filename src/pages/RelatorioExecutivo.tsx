@@ -354,26 +354,28 @@ const RelatorioExecutivo = () => {
               </CardHeader>
               <CardContent>
                 {data.orcamentosPendentes.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.orcamentosPendentes.map((o, i) => (
-                        <TableRow key={i}>
-                          <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
-                          <TableCell>{o.cliente}</TableCell>
-                          <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
-                          <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
+                  <div className="rounded-lg border bg-card">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                          <TableHead>Vencimento</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {data.orcamentosPendentes.map((o, i) => (
+                          <TableRow key={i}>
+                            <TableCell className="font-medium">{o.codigo || "—"}</TableCell>
+                            <TableCell>{o.cliente}</TableCell>
+                            <TableCell className="text-right">{formatarMoeda(o.valor)}</TableCell>
+                            <TableCell>{o.data_faturamento ? format(new Date(o.data_faturamento), "dd/MM/yyyy") : "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground py-3">Nenhum orçamento pendente no período.</p>
                 )}

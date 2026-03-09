@@ -155,11 +155,11 @@ export function PrintableReport({
 
       {/* TITLE + PERIOD */}
       <div style={{ marginBottom: "20px" }}>
-        <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
+        <h2 style={{ fontSize: "18px", fontWeight: 700, color: "#1a1a1a", margin: "0 0 4px" }}>
           Relatório de Gestão Financeira
         </h2>
-        <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0, textTransform: "capitalize" }}>
-          {periodoLabel}
+        <p style={{ fontSize: "13px", color: SKYGEO_BLUE, fontWeight: 600, margin: 0 }}>
+          {periodoLabel.charAt(0).toUpperCase() + periodoLabel.slice(1)}
         </p>
       </div>
 
@@ -448,7 +448,7 @@ export function PrintableReport({
       )}
 
       {/* ═══════════ FOOTER ═══════════ */}
-      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px" }}>
+      <footer style={{ borderTop: `2px solid ${SKYGEO_BLUE}`, paddingTop: "16px", marginTop: "40px", paddingBottom: "8px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <p style={{ fontSize: "8px", color: "#94a3b8", margin: 0, textTransform: "uppercase", letterSpacing: "0.06em" }}>
             Documento confidencial — SkyGeo
@@ -556,7 +556,7 @@ function PrintTable({ headers, rows, colWidths, alignRight, boldColumns, cellCol
               key={i}
               style={{
                 background: "#f1f5f9",
-                padding: "8px 10px",
+                padding: "10px 12px",
                 textAlign: alignRight?.[i] ? "right" : "left",
                 fontWeight: 600,
                 color: "#334155",
@@ -580,7 +580,7 @@ function PrintTable({ headers, rows, colWidths, alignRight, boldColumns, cellCol
                 <td
                   key={ci}
                   style={{
-                    padding: "7px 10px",
+                    padding: "8px 12px",
                     textAlign: alignRight?.[ci] ? "right" : "left",
                     borderBottom: "1px solid #f1f5f9",
                     color: cellColors?.[ri]?.[ci] || "#1e293b",

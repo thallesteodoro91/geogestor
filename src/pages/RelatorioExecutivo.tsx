@@ -534,33 +534,6 @@ const RelatorioExecutivo = () => {
           </div>
         </div>
 
-        {/* ===== PRINT-ONLY: Professional editorial layout ===== */}
-        <div className="hidden print:block">
-          <PrintableReport
-            empresa={data.empresa}
-            periodoLabel={periodoLabel}
-            receitaTotal={receitaTotal}
-            despesaTotal={despesaTotal}
-            lucroLiquido={lucroLiquido}
-            margemLucro={margemLucro}
-            taxaConversao={taxaConversao}
-            conversao={data.conversao}
-            variacaoReceita={data.variacaoReceita}
-            receitaAnterior={data.metricsAnterior?.receita_total ?? null}
-            despesaAnterior={data.metricsAnterior?.total_despesas ?? null}
-            lucroAnterior={data.derivedKPIsAnterior?.lucro_liquido ?? null}
-            dadosSemanais={data.dadosSemanais}
-            receitaCategorias={data.receitaCategorias}
-            clientes={data.clientes}
-            servicosCusto={data.servicosCusto}
-            orcamentosPendentes={data.orcamentosPendentes}
-            topClientes={data.topClientes}
-            historico12Meses={data.historico12Meses}
-            aiSummary={aiSummary}
-            isLoading={data.isLoading}
-            isDraft={isDraft}
-          />
-        </div>
       </div>
     </AppLayout>
   );

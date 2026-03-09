@@ -556,7 +556,7 @@ function PrintTable({ headers, rows, colWidths, alignRight, boldColumns, cellCol
               key={i}
               style={{
                 background: "#f1f5f9",
-                padding: "8px 10px",
+                padding: "10px 12px",
                 textAlign: alignRight?.[i] ? "right" : "left",
                 fontWeight: 600,
                 color: "#334155",

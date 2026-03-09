@@ -83,6 +83,17 @@ const RelatorioExecutivo = () => {
   const margemLucro = receitaTotal > 0 ? (lucroLiquido / receitaTotal) * 100 : 0;
   const taxaConversao = data.conversao?.taxa || 0;
 
+  // Check if period is current month (for draft watermark)
+  const isDraft = !modoCustom && isSameMonth(new Date(ano, mes), now);
+
+  // Previous period values for comparison
+  const receitaAnterior = data.metricsAnterior?.receita_total || 0;
+  const despesaAnterior = data.metricsAnterior?.total_despesas || 0;
+  const lucroAnterior = data.derivedKPIsAnterior?.lucro_liquido || 0;
+
+  // Check if there's any data
+  const hasData = receitaTotal > 0 || despesaTotal > 0 || data.clientes.length > 0 || data.servicosCusto.length > 0;
+
   return (
     <AppLayout>
       <div className="relatorio-executivo-container">

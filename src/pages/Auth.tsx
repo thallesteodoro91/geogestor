@@ -158,7 +158,7 @@ export default function Auth() {
           toast.error(error.message);
         }
       } else {
-        toast.success("Conta criada com sucesso! Você será redirecionado.");
+        toast.success("Conta criada! Verifique seu email para ativar sua conta.");
       }
     } catch (error: any) {
       if (error.errors) {

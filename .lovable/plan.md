@@ -1,100 +1,50 @@
 
 
-## Analise Completa: Fluxo do Novo Usuario e Problemas Encontrados
+## Diagnóstico
 
-### Simulacao do Fluxo
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-| Etapa | Acao | Resultado Esperado | Status |
-|-------|------|--------------------|--------|
-| 1 | Acessa `/auth` e cria conta | Formulario de cadastro | OK |
-| 2 | Confirma email e faz login | Redireciona para `/` | OK |
-| 3 | TenantContext cria empresa automaticamente | Tenant + trial 7 dias | OK |
-| 4 | Navega pelos menus da sidebar | Todas as paginas carregam | OK |
-| 5 | Trial de 7 dias expira | Tela de assinatura expirada | **BUG** |
-| 6 | Clica "Renovar Assinatura" | Vai para `/assinatura` | OK |
-| 7 | Seleciona plano e clica "Assinar" | Abre Stripe checkout nova aba | OK |
-| 8 | Completa pagamento e retorna | `/configuracoes?checkout=success` | OK |
-
----
-
-### BUG CRITICO: Trial expirado nunca bloqueia o usuario
-
-**Arquivo**: `src/components/ProtectedRoute.tsx`, linha 93
-
-```typescript
-// Codigo atual:
-if (!isOwnerPlan && !isActive && subscription && subscription.current_period_end)
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
 ```
 
-O `isActive` retorna `true` quando `status === 'trialing'`. Quando o trial de 7 dias expira, o status permanece `'trialing'` no banco (nao existe cron/trigger que mude). Como `!isActive` e `false`, o bloco de expiracao **nunca executa** para usuarios em trial expirado.
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**Resultado**: Usuarios com trial vencido continuam tendo acesso completo ao sistema indefinidamente.
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-**Correcao**: Alterar a logica para considerar que `trialing` com `current_period_end` no passado e uma assinatura expirada.
+## Correção
 
-### Problema Secundario: Mensagem de signup enganosa
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-**Arquivo**: `src/pages/Auth.tsx`, linha 161
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-O toast diz "Conta criada com sucesso! Voce sera redirecionado." mas sem auto-confirm habilitado, o usuario precisa verificar o email primeiro. A mensagem deveria instruir o usuario a verificar o email.
-
----
-
-### Mudancas Tecnicas
-
-**1. `src/components/ProtectedRoute.tsx`** -- Corrigir logica de expiracao do trial:
-
-Substituir a verificacao na linha 88-106 para:
-- Se status for `'trialing'` E `current_period_end` ja passou, considerar expirado
-- Se status for `'active'`, permitir sempre (Stripe garante)
-- Se status for `'owner'`, permitir sempre
-
-```typescript
-const isOwnerPlan = subscription?.plan?.slug === 'owner';
-const isActive = subscription?.status === 'active';
-const isTrialing = subscription?.status === 'trialing';
-
-if (!isOwnerPlan && subscription && subscription.current_period_end) {
-  const now = new Date();
-  const periodEnd = new Date(subscription.current_period_end);
-  const isExpired = periodEnd < now;
-
-  // Active (paid via Stripe) never blocked here; trialing with expired period = blocked
-  if (isExpired && !isActive) {
-    return <SubscriptionExpiredScreen ... />;
-  }
-}
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
 ```
 
-**2. `src/pages/Auth.tsx`** -- Corrigir mensagem de signup:
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-Alterar o toast de sucesso para instruir verificacao de email:
-```typescript
-toast.success("Conta criada! Verifique seu email para ativar sua conta.");
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
 ```
 
----
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-### Menus e Navegacao
+## Impacto
 
-Todos os itens da sidebar foram verificados e mapeiam para rotas validas:
-- Gestao da Empresa (`/`) -- OK
-- Dashboard Financeiro (`/dashboard-financeiro`) -- OK
-- Operacional (`/operacional`) -- OK
-- GeoBot (`/geobot`) -- OK
-- Calendario (`/calendario`) -- OK
-- Relatorio Executivo (`/relatorio-executivo`) -- OK
-- Servicos (`/servicos`) -- OK
-- Orcamento (`/servicos-orcamentos`) -- OK
-- Despesas (`/despesas`) -- OK
-- Clientes e Projetos (`/clientes`) -- OK
-- Cadastros (`/cadastros`) -- OK
-- Logs de Auditoria (`/audit-logs`) -- OK
-- Configuracoes (via UserMenu) -- OK
-- Assinatura (`/assinatura`) -- OK, nao protegido (correto para usuarios expirados)
-
-### Arquivos a Editar
-
-1. `src/components/ProtectedRoute.tsx` -- Corrigir logica de trial expirado
-2. `src/pages/Auth.tsx` -- Corrigir mensagem de signup
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

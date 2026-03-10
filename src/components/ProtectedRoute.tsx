@@ -89,7 +89,8 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const isOwnerPlan = subscription?.plan?.slug === 'owner';
   const isActive = subscription?.status === 'active';
   
-  // Owner plan NEVER expires; active subscriptions are always allowed
+  // Owner plan NEVER expires; active (paid) subscriptions are always allowed
+  // Trialing with expired period = blocked (no cron changes status automatically)
   if (!isOwnerPlan && !isActive && subscription && subscription.current_period_end) {
     const now = new Date();
     const periodEnd = new Date(subscription.current_period_end);

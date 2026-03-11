@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.email-notifications]
 verify_jwt = false
+
+[functions.trial-expiry-reminder]
+verify_jwt = false

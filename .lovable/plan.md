@@ -1,50 +1,68 @@
 
 
-## Diagnóstico
+## Verificacao Completa do Fluxo: Signup → Trial → Expiracao → Pagamento
 
-**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
+### Resultado: FLUXO FUNCIONAL com observacoes
 
-```
-null value in column "slug" of relation "tenants" violates not-null constraint
-```
+---
 
-Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
+### 1. Signup (Criar Conta) -- OK
+- **Auth.tsx**: Formulario com Email, Senha, Confirmar Senha
+- Mensagem corrigida: "Conta criada! Verifique seu email para ativar sua conta."
+- Google OAuth disponivel como alternativa
+- Validacao de senha minima (6 chars) e confirmacao
 
-O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
+### 2. Auto-provisioning do Tenant -- OK
+- **TenantContext.tsx** (linha 93-151): Se usuario nao tem tenant, `createTenant()` e chamado automaticamente
+- **create_tenant_for_user** (DB function): Cria tenant + member (admin) + subscription (trialing, 7 dias) + dim_empresa
+- Status: `trialing`, `current_period_end = NOW() + 7 days`
 
-## Correção
+### 3. Acesso durante Trial -- OK
+- **ProtectedRoute.tsx** (linha 94): `!isOwnerPlan && !isActive` -- `trialing` nao e `active`, entao verifica data
+- Se `current_period_end` ainda nao passou → acesso liberado
+- Todos os menus funcionam normalmente
 
-Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+### 4. Trial Expira -- OK (corrigido anteriormente)
+- **ProtectedRoute.tsx** (linha 94-106): Quando `trialing` e `current_period_end < now()`:
+  - `isOwnerPlan = false` ✅
+  - `isActive = false` (status e `trialing`, nao `active`) ✅
+  - `isExpired = true` ✅
+  - Renderiza `SubscriptionExpiredScreen` ✅
 
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
-RETURNS uuid ...
-AS $$
-  -- Gerar slug a partir do nome
-  v_slug := lower(regexp_replace(
-    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
-                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
-    '[^a-z0-9]+', '-', 'g'));
-  -- Remover hífens nas extremidades
-  v_slug := trim(both '-' from v_slug);
-  -- Garantir unicidade com sufixo aleatório
-  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+### 5. Tela de Expiracao -- OK
+- **SubscriptionExpiredScreen.tsx**: Mostra plano expirado, data formatada em PT-BR
+- Botao "Renovar Assinatura" → `navigate("/assinatura")` ✅
+- Botao "Sair" → `supabase.auth.signOut()` ✅
 
-  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
-$$
-```
+### 6. Pagina de Assinatura Acessivel -- OK
+- **App.tsx** (linha 75): `/assinatura` NAO esta envolvida em `ProtectedRoute`
+- Usuario com trial expirado consegue acessar sem bloqueio ✅
 
-Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+### 7. Checkout Stripe -- OK
+- **Assinatura.tsx** (linha 115-141): `handleSubscribe` chama `create-checkout` edge function
+- Abre Stripe checkout em nova aba (`window.open(url, "_blank")`) ✅
+- 4 planos mapeados: mensal, trimestral, semestral, anual
 
-```sql
-ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
-```
+### 8. Webhook pos-pagamento -- OK
+- **stripe-webhook/index.ts**: Evento `customer.subscription.created` atualiza `tenant_subscriptions`
+- Status muda para `active`, `stripe_subscription_id` e `stripe_customer_id` salvos
+- `current_period_end` atualizado com data real do Stripe
 
-**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+### 9. Retorno pos-checkout -- OK
+- Success URL: `/configuracoes?checkout=success`
+- **Configuracoes.tsx**: Detecta `checkout=success`, exibe banner, chama `refetchTenant()`
+- TenantContext recarrega subscription → status `active` → `ProtectedRoute` libera acesso
 
-## Impacto
+### 10. simulate-expiry (Ferramenta de teste) -- OK
+- `action: "expire"` → muda para plano `completo`, status `expired`, data no passado
+- `action: "restore"` → muda para plano `owner`, status `active`, data futura
 
-- Corrige o bloqueio de login para todos os novos clientes
-- Zero impacto nos 2 tenants existentes
-- Garante slugs únicos e válidos automaticamente
+---
+
+### Problema Potencial Identificado
+
+**Assinatura.tsx depende de autenticacao para checkout (linha 118-123)**:
+Quando o usuario esta na tela de expiracao e clica "Renovar Assinatura", ele navega para `/assinatura`. A pagina `/assinatura` NAO esta protegida, mas o `handleSubscribe` verifica `supabase.auth.getSession()`. Como o usuario ainda esta autenticado (so a assinatura expirou, nao a sessao), isso funciona corretamente. ✅
+
+**Conclusao**: O fluxo completo esta funcional. Nenhuma mudanca de codigo necessaria.
 

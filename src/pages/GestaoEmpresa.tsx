@@ -120,6 +120,8 @@ const GestaoEmpresa = () => {
           <p className="text-base text-muted-foreground">Visão estratégica, planejamento e análise financeira</p>
         </div>
 
+        <TrialBanner />
+
         <GlobalFilters clientes={clientes} empresas={empresas} onFilterChange={setFilters} />
 
         {/* KPIs Financeiros */}

@@ -25,6 +25,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { TrialBanner } from "@/components/plan/TrialBanner";
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -118,6 +119,8 @@ const GestaoEmpresa = () => {
           <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Gestão da Empresa</h1>
           <p className="text-base text-muted-foreground">Visão estratégica, planejamento e análise financeira</p>
         </div>
+
+        <TrialBanner />
 
         <GlobalFilters clientes={clientes} empresas={empresas} onFilterChange={setFilters} />
 

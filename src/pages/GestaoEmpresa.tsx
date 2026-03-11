@@ -25,6 +25,7 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { useAuth } from "@/hooks/useAuth";
+import { TrialBanner } from "@/components/plan/TrialBanner";
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 

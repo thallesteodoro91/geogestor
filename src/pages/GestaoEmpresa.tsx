@@ -35,7 +35,7 @@ const GestaoEmpresa = () => {
 
   const { data: kpis, isLoading } = useKPIs();
   const { data: kpiVariation } = useKPIVariation();
-  const { data: funnelData } = useSalesFunnel();
+  
 
   // Fetch monthly financial data for charts
   const currentYear = new Date().getFullYear();

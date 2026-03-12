@@ -310,8 +310,6 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              {/* Sales Funnel in budget tab */}
-              <SalesFunnelChart />
             </div>
           </TabsContent>
 

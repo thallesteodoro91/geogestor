@@ -11,9 +11,7 @@ import { ChartTitle } from "@/components/charts/ChartTitle";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
-import { useSalesFunnel } from "@/hooks/useSalesFunnel";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
-import { SalesFunnelChart } from "@/components/charts/SalesFunnelChart";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,7 +35,7 @@ const GestaoEmpresa = () => {
 
   const { data: kpis, isLoading } = useKPIs();
   const { data: kpiVariation } = useKPIVariation();
-  const { data: funnelData } = useSalesFunnel();
+  
 
   // Fetch monthly financial data for charts
   const currentYear = new Date().getFullYear();
@@ -258,10 +256,6 @@ const GestaoEmpresa = () => {
               <ProfitMarginChart />
             </div>
 
-            {/* Sales Funnel */}
-            {funnelData && funnelData.stages && funnelData.stages.length > 0 && (
-              <SalesFunnelChart />
-            )}
           </TabsContent>
 
           <TabsContent value="orcamento" className="space-y-6">
@@ -314,8 +308,6 @@ const GestaoEmpresa = () => {
                 </CardContent>
               </Card>
 
-              {/* Sales Funnel in budget tab */}
-              <SalesFunnelChart />
             </div>
           </TabsContent>
 

@@ -258,10 +258,6 @@ const GestaoEmpresa = () => {
               <ProfitMarginChart />
             </div>
 
-            {/* Sales Funnel */}
-            {funnelData && funnelData.stages && funnelData.stages.length > 0 && (
-              <SalesFunnelChart />
-            )}
           </TabsContent>
 
           <TabsContent value="orcamento" className="space-y-6">

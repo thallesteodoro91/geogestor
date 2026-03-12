@@ -76,7 +76,7 @@ serve(async (req) => {
         .from("tenant_subscriptions")
         .update({
           plan_id: plan.id,
-          status: "expired",
+          status: "trialing",
           current_period_end: "2026-02-20T00:00:00Z",
           updated_at: new Date().toISOString(),
         })

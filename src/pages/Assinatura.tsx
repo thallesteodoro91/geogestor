@@ -360,7 +360,7 @@ export default function Assinatura() {
               },
               {
                 q: "Há período de teste gratuito?",
-                a: "Oferecemos um plano gratuito com funcionalidades básicas para você conhecer a plataforma. Para acesso completo, escolha um dos planos pagos acima.",
+                a: "Oferecemos 7 dias de avaliação gratuita com acesso completo a todas as funcionalidades. Após o período, escolha um dos planos pagos para continuar usando.",
               },
               {
                 q: "Quais formas de pagamento são aceitas?",

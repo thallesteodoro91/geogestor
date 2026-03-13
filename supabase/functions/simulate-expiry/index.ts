@@ -1,6 +1,21 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
+class RateLimiter {
+  private requests = new Map<string, { count: number; resetAt: number }>();
+  constructor(private maxRequests: number, private windowMs: number) {}
+  isRateLimited(ip: string): boolean {
+    const now = Date.now();
+    for (const [key, val] of this.requests) { if (val.resetAt <= now) this.requests.delete(key); }
+    const entry = this.requests.get(ip);
+    if (!entry) { this.requests.set(ip, { count: 1, resetAt: now + this.windowMs }); return false; }
+    if (entry.resetAt <= now) { this.requests.set(ip, { count: 1, resetAt: now + this.windowMs }); return false; }
+    entry.count++;
+    return entry.count > this.maxRequests;
+  }
+}
+const rateLimiter = new RateLimiter(5, 60_000);
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -10,6 +25,12 @@ const corsHeaders = {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  if (rateLimiter.isRateLimited(clientIP)) {
+    return new Response(JSON.stringify({ error: "Muitas requisições. Tente novamente em breve." }),
+      { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } });
   }
 
   try {

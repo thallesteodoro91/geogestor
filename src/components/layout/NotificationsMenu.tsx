@@ -124,20 +124,6 @@ export const NotificationsMenu = () => {
                 Marcar todas
               </Button>
             )}
-            {notifications.length > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 text-xs text-destructive hover:text-destructive"
-                onClick={(e) => {
-                  e.preventDefault();
-                  clearAllNotifications();
-                }}
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Limpar
-              </Button>
-            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
@@ -163,10 +149,10 @@ export const NotificationsMenu = () => {
                       <div className="h-2 w-2 rounded-full bg-primary" />
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground group-hover:text-accent-foreground">
                     {notification.mensagem}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground group-hover:text-accent-foreground/70">
                     {formatDistanceToNow(new Date(notification.created_at), {
                       addSuffix: true,
                       locale: ptBR,
@@ -190,6 +176,25 @@ export const NotificationsMenu = () => {
             </div>
           )}
         </ScrollArea>
+        {notifications.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="flex justify-end p-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  clearAllNotifications();
+                }}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Limpar tudo
+              </Button>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -1,44 +1,50 @@
 
 
-## Plano: Melhorias no Menu de Notificações e Verificação de Alertas
+## Diagnóstico
 
-### 1. Mover botão "Limpar" para o canto inferior direito
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-Atualmente o botão "Limpar" fica no header junto com "Marcar todas". Será movido para um rodapé fixo no final do dropdown, posicionado à direita.
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-**Arquivo:** `src/components/layout/NotificationsMenu.tsx`
-- Remover o botão "Limpar" do `DropdownMenuLabel` (linhas 127-140)
-- Adicionar um rodapé após o `ScrollArea` com o botão "Limpar" alinhado à direita usando `flex justify-end`
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-### 2. Melhorar visibilidade dos itens no hover
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-O `DropdownMenuItem` usa `hover:bg-accent` (linha 153), mas os textos usam `text-muted-foreground` que pode ficar ilegível sobre o fundo de hover.
+## Correção
 
-**Arquivo:** `src/components/layout/NotificationsMenu.tsx`
-- Adicionar classes de hover nos textos da notificação para garantir contraste:
-  - Mensagem: `group-hover:text-accent-foreground`
-  - Timestamp: `group-hover:text-accent-foreground/70`
-- O título já usa `text-foreground` ou `text-destructive`, que têm bom contraste
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-### 3. Verificação da lógica de alertas de pagamento
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-Analisei a função `verificar_pagamentos_pendentes()` no banco:
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
 
-- **Pagamentos próximos**: Cria alerta quando faltam **3 dias ou menos** para vencer. Não duplica se já existe notificação do tipo `pagamento` para o mesmo orçamento **no mesmo dia**.
-- **Pagamentos vencidos**: Cria alerta quando já passou a data. Não duplica se já existe notificação do tipo `vencido` nos **últimos 3 dias**, nem se foi descartada nos últimos 3 dias.
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-**Resumo da frequência**: Um alerta de "vencido" reaparece a cada **3 dias** enquanto o pagamento não for quitado. Isso está funcional e correto.
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
 
-A verificação é disparada:
-- 1x por sessão (controlada via `sessionStorage`, máximo 1x por hora)
-- Via chamada `supabase.rpc('verificar_pagamentos_pendentes')` no hook `useNotifications`
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-**Nenhuma correção necessária** na lógica de alertas — está funcionando conforme esperado.
+## Impacto
 
-### Resumo das alterações
-
-| Arquivo | Mudança |
-|---------|---------|
-| `NotificationsMenu.tsx` | Mover "Limpar" para rodapé inferior direito |
-| `NotificationsMenu.tsx` | Melhorar contraste do texto no hover das notificações |
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

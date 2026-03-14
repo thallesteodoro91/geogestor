@@ -176,6 +176,25 @@ export const NotificationsMenu = () => {
             </div>
           )}
         </ScrollArea>
+        {notifications.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="flex justify-end p-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-xs text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.preventDefault();
+                  clearAllNotifications();
+                }}
+              >
+                <Trash2 className="h-3 w-3 mr-1" />
+                Limpar tudo
+              </Button>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

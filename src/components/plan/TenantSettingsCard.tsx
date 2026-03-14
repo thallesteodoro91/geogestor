@@ -175,7 +175,7 @@ export function TenantSettingsCard() {
         <div className="flex justify-end">
         <Button 
           onClick={handleSave} 
-          disabled={loading || (name === tenant.name && alertDaysThreshold === ((tenant.settings?.alert_days_threshold as number) || 30))}
+          disabled={loading || (name === tenant.name && alertDaysThreshold === ((tenant.settings?.alert_days_threshold as number) || 30) && overdueAlertFrequency === ((tenant.settings?.overdue_alert_frequency_days as number) || 3))}
         >
             <Save className="h-4 w-4 mr-2" />
             {loading ? "Salvando..." : "Salvar"}

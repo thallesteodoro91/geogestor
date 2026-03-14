@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";

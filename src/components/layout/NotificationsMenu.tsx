@@ -86,16 +86,6 @@ export const NotificationsMenu = () => {
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs"
-              onClick={handleSendEmailReport}
-              disabled={sendingEmail}
-              title="Enviar resumo por email"
-            >
-              {sendingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-            </Button>
             {unreadCount > 0 && (
               <Button 
                 variant="ghost" 

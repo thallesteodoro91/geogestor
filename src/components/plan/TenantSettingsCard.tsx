@@ -39,6 +39,7 @@ export function TenantSettingsCard() {
       const updatedSettings = {
         ...tenant.settings,
         alert_days_threshold: alertDaysThreshold,
+        overdue_alert_frequency_days: overdueAlertFrequency,
       };
 
       const { error } = await supabase

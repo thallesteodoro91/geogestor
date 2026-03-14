@@ -51,9 +51,8 @@ const getPriorityColor = (prioridade: string) => {
 export const NotificationsMenu = () => {
   const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, dismissNotification } = useNotifications();
   const navigate = useNavigate();
-  const [sendingEmail, setSendingEmail] = useState(false);
 
-  const handleSendEmailReport = async () => {
+  const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
     setSendingEmail(true);
     try {
       const { data, error } = await supabase.functions.invoke("email-notifications");

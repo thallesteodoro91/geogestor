@@ -19,6 +19,9 @@ export function TenantSettingsCard() {
   const [alertDaysThreshold, setAlertDaysThreshold] = useState<number>(
     (tenant?.settings?.alert_days_threshold as number) || 30
   );
+  const [overdueAlertFrequency, setOverdueAlertFrequency] = useState<number>(
+    (tenant?.settings?.overdue_alert_frequency_days as number) || 3
+  );
 
   useEffect(() => {
     if (tenant) {

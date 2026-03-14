@@ -124,20 +124,6 @@ export const NotificationsMenu = () => {
                 Marcar todas
               </Button>
             )}
-            {notifications.length > 0 && (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="h-6 text-xs text-destructive hover:text-destructive"
-                onClick={(e) => {
-                  e.preventDefault();
-                  clearAllNotifications();
-                }}
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Limpar
-              </Button>
-            )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />

@@ -53,23 +53,6 @@ export const NotificationsMenu = () => {
   const navigate = useNavigate();
 
   const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
-    setSendingEmail(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("email-notifications");
-      if (error) throw error;
-      if (data?.sent) {
-        toast.success(`Relatório enviado por email! (${data.summary.pagamentos} pagamentos, ${data.summary.tarefas_atrasadas} tarefas)`);
-      } else {
-        toast.info("Nenhuma notificação pendente para enviar.");
-      }
-    } catch (err: any) {
-      toast.error("Erro ao enviar relatório: " + (err.message || "Tente novamente"));
-    } finally {
-      setSendingEmail(false);
-    }
-  };
-
-  const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
     e.stopPropagation();
     await dismissNotification(notificationId);
   };

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X, Mail, Loader2 } from "lucide-react";
+import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

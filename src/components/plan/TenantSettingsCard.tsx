@@ -19,11 +19,15 @@ export function TenantSettingsCard() {
   const [alertDaysThreshold, setAlertDaysThreshold] = useState<number>(
     (tenant?.settings?.alert_days_threshold as number) || 30
   );
+  const [overdueAlertFrequency, setOverdueAlertFrequency] = useState<number>(
+    (tenant?.settings?.overdue_alert_frequency_days as number) || 3
+  );
 
   useEffect(() => {
     if (tenant) {
       setName(tenant.name || "");
       setAlertDaysThreshold((tenant.settings?.alert_days_threshold as number) || 30);
+      setOverdueAlertFrequency((tenant.settings?.overdue_alert_frequency_days as number) || 3);
     }
   }, [tenant]);
 
@@ -35,6 +39,7 @@ export function TenantSettingsCard() {
       const updatedSettings = {
         ...tenant.settings,
         alert_days_threshold: alertDaysThreshold,
+        overdue_alert_frequency_days: overdueAlertFrequency,
       };
 
       const { error } = await supabase
@@ -150,13 +155,27 @@ export function TenantSettingsCard() {
               Alertas serão exibidos quando o vencimento estiver dentro deste período (1-90 dias)
             </p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="overdue-frequency">Frequência de alerta de pagamento vencido</Label>
+            <Input
+              id="overdue-frequency"
+              type="number"
+              min={1}
+              max={30}
+              value={overdueAlertFrequency}
+              onChange={(e) => setOverdueAlertFrequency(Number(e.target.value))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Intervalo em dias para reenviar alertas de pagamentos vencidos (1-30 dias)
+            </p>
+          </div>
         </div>
       </div>
 
         <div className="flex justify-end">
         <Button 
           onClick={handleSave} 
-          disabled={loading || (name === tenant.name && alertDaysThreshold === ((tenant.settings?.alert_days_threshold as number) || 30))}
+          disabled={loading || (name === tenant.name && alertDaysThreshold === ((tenant.settings?.alert_days_threshold as number) || 30) && overdueAlertFrequency === ((tenant.settings?.overdue_alert_frequency_days as number) || 3))}
         >
             <Save className="h-4 w-4 mr-2" />
             {loading ? "Salvando..." : "Salvar"}

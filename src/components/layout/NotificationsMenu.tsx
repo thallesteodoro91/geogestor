@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X, Mail, Loader2 } from "lucide-react";
+import { Bell, DollarSign, FileText, CheckCircle, AlertTriangle, CreditCard, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,8 +11,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useNotifications } from "@/hooks/useNotifications";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -51,24 +48,6 @@ const getPriorityColor = (prioridade: string) => {
 export const NotificationsMenu = () => {
   const { notifications, loading, unreadCount, markAsRead, markAllAsRead, clearAllNotifications, dismissNotification } = useNotifications();
   const navigate = useNavigate();
-  const [sendingEmail, setSendingEmail] = useState(false);
-
-  const handleSendEmailReport = async () => {
-    setSendingEmail(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("email-notifications");
-      if (error) throw error;
-      if (data?.sent) {
-        toast.success(`Relatório enviado por email! (${data.summary.pagamentos} pagamentos, ${data.summary.tarefas_atrasadas} tarefas)`);
-      } else {
-        toast.info("Nenhuma notificação pendente para enviar.");
-      }
-    } catch (err: any) {
-      toast.error("Erro ao enviar relatório: " + (err.message || "Tente novamente"));
-    } finally {
-      setSendingEmail(false);
-    }
-  };
 
   const handleDismiss = async (e: React.MouseEvent, notificationId: string) => {
     e.stopPropagation();
@@ -104,16 +83,6 @@ export const NotificationsMenu = () => {
         <DropdownMenuLabel className="flex items-center justify-between">
           <span>Notificações</span>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs"
-              onClick={handleSendEmailReport}
-              disabled={sendingEmail}
-              title="Enviar resumo por email"
-            >
-              {sendingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-            </Button>
             {unreadCount > 0 && (
               <Button 
                 variant="ghost" 

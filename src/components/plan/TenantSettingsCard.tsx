@@ -155,6 +155,20 @@ export function TenantSettingsCard() {
               Alertas serão exibidos quando o vencimento estiver dentro deste período (1-90 dias)
             </p>
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="overdue-frequency">Frequência de alerta de pagamento vencido</Label>
+            <Input
+              id="overdue-frequency"
+              type="number"
+              min={1}
+              max={30}
+              value={overdueAlertFrequency}
+              onChange={(e) => setOverdueAlertFrequency(Number(e.target.value))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Intervalo em dias para reenviar alertas de pagamentos vencidos (1-30 dias)
+            </p>
+          </div>
         </div>
       </div>
 

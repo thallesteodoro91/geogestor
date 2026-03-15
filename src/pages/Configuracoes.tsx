@@ -465,14 +465,22 @@ export default function Configuracoes() {
               <CardDescription>Gerenciar importação de dados</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-3">
                 <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Importar CSV
                 </Button>
-                <Button onClick={() => setSmartImportOpen(true)}>
+                <Button onClick={() => { setSmartImportEntity("clientes"); setSmartImportOpen(true); }}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
-                  Importação Inteligente
+                  Importar Clientes
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("propriedades"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Propriedades
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("orcamentos"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Orçamentos
                 </Button>
               </div>
 

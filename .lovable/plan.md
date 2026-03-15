@@ -1,69 +1,50 @@
 
 
-## Plano: Simulação de importação com colunas diferentes e melhoria do auto-mapeamento
+## Diagnóstico
 
-### Diagnóstico do mapeamento atual
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-A função `autoMap` (linha 303-315 do SmartImporter.tsx) faz matching assim:
-
-```text
-Cabeçalho CSV (normalizado) vs. field.key e field.label
-Matching: igualdade exata OU substring (includes)
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
 ```
 
-**Cenários que JA funcionam:**
-- `Nome` → `nome` (exato)
-- `telefone_celular` → `celular` (includes)
-- `E-mail` → `email` (normalizado: `email`)
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**Cenários que FALHAM (nomes comuns em planilhas reais):**
-- `Contato` → deveria mapear para `telefone` ou `celular`
-- `Fone` / `Tel` / `WhatsApp` → deveria mapear para `celular`
-- `Razão Social` / `Nome Completo` / `Cliente` → deveria mapear para `nome`
-- `Cidade` / `Localização` / `Local` → deveria mapear para `endereco`
-- `Observação` / `Nota` / `Comentário` → deveria mapear para `anotacoes`
-- `Status` / `Ativo/Inativo` → deveria mapear para `situacao`
-- `Tipo` / `Segmento` → deveria mapear para `categoria`
-- `Canal` / `Como conheceu` → deveria mapear para `origem`
-- `Data` / `Cadastrado em` / `Dt Cadastro` → deveria mapear para `data_cadastro`
-- `Documento` / `CPF/CNPJ` → deveria tentar CPF ou CNPJ
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-### Alterações propostas
+## Correção
 
-**Arquivo:** `src/components/import/SmartImporter.tsx`
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-1. **Adicionar dicionário de sinônimos** para cada campo do sistema, contendo variações comuns em planilhas brasileiras:
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-```typescript
-const FIELD_SYNONYMS: Record<string, string[]> = {
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia"],
-  cpf: ["documento", "cpfcnpj", "doc"],
-  cnpj: ["documento", "cpfcnpj", "inscricao"],
-  telefone: ["fone", "tel", "fixo", "telefonecontato"],
-  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil"],
-  email: ["correio", "mail", "emailcontato"],
-  endereco: ["local", "localizacao", "cidade", "rua", "logradouro", "end"],
-  categoria: ["tipo", "segmento", "classificacao", "tipocliente"],
-  origem: ["canal", "comoconheceu", "fonte", "indicacao", "prospeccao"],
-  situacao: ["status", "ativo", "estado"],
-  anotacoes: ["observacao", "obs", "nota", "comentario", "descricao"],
-  data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao"],
-  idade: ["age"],
-};
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
 ```
 
-2. **Melhorar a função `autoMap`** para consultar o dicionário de sinônimos além do matching atual, aplicando normalização com remoção de acentos.
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-3. **Adicionar indicador visual** na etapa de mapeamento mostrando o nível de confiança do match (exato, sinônimo, parcial) para o usuário validar.
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
 
-### Resultado esperado
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-Com essas mudanças, ao importar uma planilha com colunas como `"Cliente"`, `"Fone"`, `"WhatsApp"`, `"Cidade"`, `"Status"`, o sistema mapeará automaticamente para os campos corretos sem intervenção manual. O mapeamento manual ainda estará disponível para casos não cobertos.
+## Impacto
 
-### Resumo
-
-| Arquivo | Mudança |
-|---------|---------|
-| `SmartImporter.tsx` | Adicionar dicionário de sinônimos e melhorar `autoMap` com matching fuzzy por sinônimos |
-| `SmartImporter.tsx` | Indicador visual de confiança do mapeamento automático |
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

@@ -237,6 +237,7 @@ export function SmartImporter({
   } | null>(null);
   const [importProgress, setImportProgress] = useState(0);
   const [defaultValues, setDefaultValues] = useState<Record<string, string>>({});
+  const [matchConfidences, setMatchConfidences] = useState<Record<string, "exact" | "synonym" | "partial">>({});
 
   const reset = () => {
     setImportProgress(0);
@@ -248,6 +249,7 @@ export function SmartImporter({
     setFileName("");
     setImportResult(null);
     setSkipErrors(false);
+    setMatchConfidences({});
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -300,18 +302,74 @@ export function SmartImporter({
     }
   }, []);
 
+  const FIELD_SYNONYMS: Record<string, string[]> = {
+    nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato"],
+    cpf: ["documento", "cpfcnpj", "doc", "documentocliente"],
+    cnpj: ["documento", "cpfcnpj", "inscricao", "cnpjcliente"],
+    telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato"],
+    celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel"],
+    email: ["correio", "mail", "emailcontato", "emailcliente", "correioeletronico"],
+    endereco: ["local", "localizacao", "cidade", "rua", "logradouro", "end", "enderecocompleto", "morada"],
+    categoria: ["tipo", "segmento", "classificacao", "tipocliente", "grupocliente"],
+    origem: ["canal", "comoconheceu", "fonte", "indicacao", "prospeccao", "origemcliente"],
+    situacao: ["status", "ativo", "estado", "statuscliente", "ativoinativo"],
+    anotacoes: ["observacao", "obs", "nota", "comentario", "descricao", "notas", "observacoes"],
+    data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao", "datainicio", "criadoem"],
+    idade: ["age", "idadecliente"],
+  };
+
+  const normalize = (s: string) =>
+    s.toLowerCase()
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[_\s\-.*]/g, "");
+
+  type MatchConfidence = "exact" | "synonym" | "partial";
+
+  
+
   const autoMap = (fileHeaders: string[]) => {
     const newMappings: Record<string, string> = {};
+    const confidences: Record<string, MatchConfidence> = {};
+
     for (const field of SYSTEM_FIELDS) {
-      const match = fileHeaders.find((h) => {
-        const a = h.toLowerCase().replace(/[_\s*]/g, "");
-        const b = field.key.toLowerCase().replace(/[_\s]/g, "");
-        const c = field.label.toLowerCase().replace(/[_\s]/g, "");
-        return a === b || a === c || a.includes(b) || b.includes(a);
+      const b = normalize(field.key);
+      const c = normalize(field.label);
+
+      // 1. Exact match
+      let match = fileHeaders.find((h) => {
+        const a = normalize(h);
+        return a === b || a === c;
       });
-      if (match) newMappings[field.key] = match;
+      if (match) {
+        newMappings[field.key] = match;
+        confidences[field.key] = "exact";
+        continue;
+      }
+
+      // 2. Synonym match
+      const synonyms = FIELD_SYNONYMS[field.key] || [];
+      match = fileHeaders.find((h) => {
+        const a = normalize(h);
+        return synonyms.some((syn) => a === syn || a.includes(syn) || syn.includes(a));
+      });
+      if (match) {
+        newMappings[field.key] = match;
+        confidences[field.key] = "synonym";
+        continue;
+      }
+
+      // 3. Partial/substring match
+      match = fileHeaders.find((h) => {
+        const a = normalize(h);
+        return a.includes(b) || b.includes(a) || a.includes(c) || c.includes(a);
+      });
+      if (match) {
+        newMappings[field.key] = match;
+        confidences[field.key] = "partial";
+      }
     }
     setMappings(newMappings);
+    setMatchConfidences(confidences);
   };
 
   const handleDrop = useCallback(
@@ -633,8 +691,23 @@ export function SmartImporter({
                         }
                       />
                       {mappings[field.key] && (
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          ✓
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs shrink-0 ${
+                            matchConfidences[field.key] === "exact"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : matchConfidences[field.key] === "synonym"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {matchConfidences[field.key] === "exact"
+                            ? "✓ Exato"
+                            : matchConfidences[field.key] === "synonym"
+                            ? "≈ Sinônimo"
+                            : matchConfidences[field.key] === "partial"
+                            ? "~ Parcial"
+                            : "✓"}
                         </Badge>
                       )}
                     </div>

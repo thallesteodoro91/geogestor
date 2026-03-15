@@ -691,8 +691,23 @@ export function SmartImporter({
                         }
                       />
                       {mappings[field.key] && (
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          ✓
+                        <Badge
+                          variant="secondary"
+                          className={`text-xs shrink-0 ${
+                            matchConfidences[field.key] === "exact"
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                              : matchConfidences[field.key] === "synonym"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {matchConfidences[field.key] === "exact"
+                            ? "✓ Exato"
+                            : matchConfidences[field.key] === "synonym"
+                            ? "≈ Sinônimo"
+                            : matchConfidences[field.key] === "partial"
+                            ? "~ Parcial"
+                            : "✓"}
                         </Badge>
                       )}
                     </div>

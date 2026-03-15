@@ -594,8 +594,12 @@ export default function Configuracoes() {
       <SmartImporter
         open={smartImportOpen}
         onOpenChange={setSmartImportOpen}
+        entityType={smartImportEntity}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['clientes'] });
+          queryClient.invalidateQueries({ queryKey: ['propriedades'] });
+          queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+          queryClient.invalidateQueries({ queryKey: ['resource-counts'] });
         }}
       />
 

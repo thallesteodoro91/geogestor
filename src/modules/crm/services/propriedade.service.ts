@@ -89,3 +89,29 @@ export async function deletePropriedade(id: string) {
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;
 }
+
+export async function createPropriedadesBatch(
+  records: Omit<Propriedade, 'id_propriedade' | 'created_at' | 'updated_at'>[]
+) {
+  const tenantId = await getCurrentTenantId();
+  const BATCH_SIZE = 500;
+  let success = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < records.length; i += BATCH_SIZE) {
+    const batch = records.slice(i, i + BATCH_SIZE).map((r) => ({
+      ...r,
+      tenant_id: tenantId,
+    }));
+    const { data, error } = await supabase
+      .from('dim_propriedade')
+      .insert(batch)
+      .select();
+    if (error) {
+      errors.push(`Lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
+    } else {
+      success += data?.length || 0;
+    }
+  }
+  return { success, errors };
+}

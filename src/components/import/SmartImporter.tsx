@@ -249,6 +249,7 @@ export function SmartImporter({
     setFileName("");
     setImportResult(null);
     setSkipErrors(false);
+    setMatchConfidences({});
   };
 
   // ─── File processing ───────────────────────────────────────────────

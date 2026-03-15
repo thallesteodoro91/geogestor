@@ -237,6 +237,7 @@ export function SmartImporter({
   } | null>(null);
   const [importProgress, setImportProgress] = useState(0);
   const [defaultValues, setDefaultValues] = useState<Record<string, string>>({});
+  const [matchConfidences, setMatchConfidences] = useState<Record<string, "exact" | "synonym" | "partial">>({});
 
   const reset = () => {
     setImportProgress(0);

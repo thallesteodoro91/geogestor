@@ -324,7 +324,7 @@ export function SmartImporter({
 
   type MatchConfidence = "exact" | "synonym" | "partial";
 
-  const [matchConfidences, setMatchConfidences] = useState<Record<string, MatchConfidence>>({});
+  
 
   const autoMap = (fileHeaders: string[]) => {
     const newMappings: Record<string, string> = {};

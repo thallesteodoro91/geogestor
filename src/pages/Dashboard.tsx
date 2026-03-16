@@ -192,6 +192,8 @@ const Dashboard = () => {
               iconColor="#22c55e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
+              description="Receita menos custos diretos dos serviços."
+              calculation="Receita Total - Custos Variáveis"
             />
             <KPICard
               title="Serviços"

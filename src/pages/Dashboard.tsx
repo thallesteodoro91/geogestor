@@ -110,6 +110,8 @@ const Dashboard = () => {
               iconColor="#10b981"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
+              description="Resultado final após dedução de impostos, custos e despesas."
+              calculation="Receita - Impostos - Custos - Despesas"
             />
             <KPICard
               title="Margem Líquida"

@@ -160,6 +160,8 @@ const GestaoEmpresa = () => {
                   iconColor="#10b981"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
                   changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
+                  description="Resultado final após todas as deduções."
+                  calculation="Receita - Impostos - Custos - Despesas"
                 />
                 <KPICard
                   title="Total Despesas"

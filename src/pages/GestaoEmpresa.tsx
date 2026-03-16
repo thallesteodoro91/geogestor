@@ -216,6 +216,8 @@ const GestaoEmpresa = () => {
                   iconColor="#f59e0b"
                   change="--"
                   changeType="neutral"
+                  description="Diferença entre valores orçados e realizados."
+                  calculation="((Realizado - Orçado) / Orçado) × 100"
                 />
                 <KPICard
                   title="Taxa de Conversão"

@@ -172,6 +172,8 @@ const Dashboard = () => {
               iconColor="#f59e0b"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
+              description="Percentual de orçamentos convertidos em serviços."
+              calculation="(Orçamentos aprovados / Total de orçamentos) × 100"
             />
             <KPICard
               title="Ticket Médio"

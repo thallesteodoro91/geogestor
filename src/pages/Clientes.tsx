@@ -79,24 +79,32 @@ export default function Clientes() {
             value={kpis.totalClientes.toString()}
             icon={Users}
             iconColor="#6366f1"
+            description="Número total de clientes cadastrados na base."
+            calculation="Contagem de clientes ativos"
           />
           <KPICard
             title="LTV Médio"
             value={formatLTV(kpis.ltvMedio)}
             icon={Award}
             iconColor="#10b981"
+            description="Valor médio que cada cliente gera ao longo do relacionamento."
+            calculation="Σ receita por cliente / Nº de clientes"
           />
           <KPICard
             title="Top 3 Clientes"
             value={`${kpis.top3Percentual}%`}
             icon={TrendingUp}
             iconColor="#f59e0b"
+            description="Percentual de receita concentrado nos 3 maiores clientes."
+            calculation="Receita Top 3 / Receita Total × 100"
           />
           <KPICard
             title="Cidades Ativas"
             value={kpis.cidadesAtivas.toString()}
             icon={MapPin}
             iconColor="#14b8a6"
+            description="Número de cidades distintas com propriedades cadastradas."
+            calculation="Contagem de cidades únicas"
           />
         </div>
 

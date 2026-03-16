@@ -165,18 +165,24 @@ export default function Operacional() {
                 value={`${metrics?.kpis.tempoMedioDias || 0} dias`}
                 icon={Clock}
                 iconColor="#f59e0b"
+                description="Média de dias entre início e conclusão dos serviços."
+                calculation="Σ (Data Fim - Data Início) / Nº Serviços Concluídos"
               />
               <KPICard
                 title="Produtividade"
                 value={`${metrics?.kpis.produtividade || 0}%`}
                 icon={TrendingUp}
                 iconColor="#10b981"
+                description="Percentual de serviços concluídos sobre o total."
+                calculation="(Serviços Concluídos / Total de Serviços) × 100"
               />
               <KPICard
                 title="Ticket Médio"
                 value={`R$ ${(metrics?.kpis.ticketMedio || 0).toLocaleString('pt-BR')}`}
                 icon={DollarSign}
                 iconColor="#3b82f6"
+                description="Valor médio de receita por serviço realizado."
+                calculation="Receita Total / Nº de Serviços"
               />
             </>
           )}

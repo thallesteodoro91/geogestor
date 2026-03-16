@@ -294,6 +294,8 @@ export default function ServicosOrcamentos() {
             icon={FileText}
             change={`${Math.round(taxaConversao)}%`}
             changeType="positive"
+            description="Quantidade total de orçamentos emitidos no período."
+            calculation="Contagem de orçamentos"
           />
           <KPICard
             title="Taxa de Conversão"
@@ -301,6 +303,8 @@ export default function ServicosOrcamentos() {
             icon={TrendingUp}
             change="+8%"
             changeType="positive"
+            description="Percentual de orçamentos convertidos em serviços."
+            calculation="(Orçamentos aprovados / Total) × 100"
           />
           <KPICard
             title="Receita Orçada"
@@ -308,6 +312,8 @@ export default function ServicosOrcamentos() {
             icon={DollarSign}
             change="+15%"
             changeType="positive"
+            description="Soma da receita esperada de todos os orçamentos."
+            calculation="Σ receita esperada dos orçamentos"
           />
           <KPICard
             title="Ticket Médio"
@@ -315,6 +321,8 @@ export default function ServicosOrcamentos() {
             icon={Calculator}
             change="+5%"
             changeType="positive"
+            description="Valor médio por orçamento emitido."
+            calculation="Receita Orçada / Nº de Orçamentos"
           />
         </div>
 

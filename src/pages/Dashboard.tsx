@@ -100,6 +100,8 @@ const Dashboard = () => {
               iconColor="#6366f1"
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
+              description="Soma de toda receita gerada no período a partir de orçamentos e serviços."
+              calculation="Σ receita de serviços + orçamentos"
             />
             <KPICard
               title="Lucro Líquido"
@@ -108,6 +110,8 @@ const Dashboard = () => {
               iconColor="#10b981"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
+              description="Resultado final após dedução de impostos, custos e despesas."
+              calculation="Receita - Impostos - Custos - Despesas"
             />
             <KPICard
               title="Margem Líquida"
@@ -116,6 +120,8 @@ const Dashboard = () => {
               iconColor="#06b6d4"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
               changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
+              description="Percentual de lucro líquido sobre a receita total."
+              calculation="(Lucro Líquido / Receita Total) × 100"
             />
             <KPICard
               title="Total de Despesas"
@@ -124,6 +130,8 @@ const Dashboard = () => {
               iconColor="#f43f5e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
               changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
+              description="Soma de todas as despesas operacionais no período."
+              calculation="Σ despesas fixas + variáveis"
             />
               </>
             )}
@@ -154,6 +162,8 @@ const Dashboard = () => {
               iconColor="#8b5cf6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
+              description="Rentabilidade antes das despesas fixas."
+              calculation="(Receita - Custos Variáveis) / Receita × 100"
             />
             <KPICard
               title="Taxa Conversão"
@@ -162,6 +172,8 @@ const Dashboard = () => {
               iconColor="#f59e0b"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
+              description="Percentual de orçamentos convertidos em serviços."
+              calculation="(Orçamentos aprovados / Total de orçamentos) × 100"
             />
             <KPICard
               title="Ticket Médio"
@@ -170,6 +182,8 @@ const Dashboard = () => {
               iconColor="#3b82f6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
+              description="Valor médio de receita por serviço realizado."
+              calculation="Receita Total / Nº de Serviços"
             />
             <KPICard
               title="Lucro Bruto"
@@ -178,6 +192,8 @@ const Dashboard = () => {
               iconColor="#22c55e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
+              description="Receita menos custos diretos dos serviços."
+              calculation="Receita Total - Custos Variáveis"
             />
             <KPICard
               title="Serviços"
@@ -186,6 +202,8 @@ const Dashboard = () => {
               iconColor="#64748b"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
+              description="Total de serviços cadastrados no período."
+              calculation="Contagem de todos os serviços"
             />
             <KPICard
               title="Concluídos"
@@ -194,6 +212,8 @@ const Dashboard = () => {
               iconColor="#14b8a6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
+              description="Serviços finalizados com sucesso."
+              calculation="Contagem de serviços com status 'Concluído'"
             />
               </>
             )}

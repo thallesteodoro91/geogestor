@@ -114,6 +114,8 @@ const DashboardFinanceiro = () => {
                   icon={DollarSign}
                   iconColor="#6366f1"
                   changeType="neutral"
+                  description="Faturamento total antes de impostos e deduções."
+                  calculation="Σ valor de todos os orçamentos faturados"
                 />
 
                 <KPICard
@@ -122,6 +124,8 @@ const DashboardFinanceiro = () => {
                   icon={DollarSign}
                   iconColor="#3b82f6"
                   changeType="neutral"
+                  description="Receita após dedução de impostos."
+                  calculation="Receita Bruta - Impostos"
                 />
 
                 <KPICard
@@ -130,6 +134,8 @@ const DashboardFinanceiro = () => {
                   icon={Target}
                   iconColor="#8b5cf6"
                   changeType="positive"
+                  description="Percentual da receita disponível para cobrir custos fixos e gerar lucro."
+                  calculation="(Receita Líquida - Custos Variáveis) / Receita Líquida × 100"
                 />
 
                 <KPICard
@@ -138,6 +144,8 @@ const DashboardFinanceiro = () => {
                   icon={AlertCircle}
                   iconColor="#f59e0b"
                   changeType="neutral"
+                  description="Receita mínima necessária para cobrir todos os custos."
+                  calculation="Custos Fixos / Margem de Contribuição (%)"
                 />
               </>
             )}

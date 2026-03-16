@@ -140,6 +140,8 @@ const GestaoEmpresa = () => {
                   iconColor="#6366f1"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
                   changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
+                  description="Soma de toda receita gerada no período."
+                  calculation="Σ receita de serviços + orçamentos"
                 />
                 <KPICard
                   title="Lucro Bruto"
@@ -148,6 +150,8 @@ const GestaoEmpresa = () => {
                   iconColor="#22c55e"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
                   changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
+                  description="Receita menos custos diretos dos serviços."
+                  calculation="Receita Total - Custos Variáveis"
                 />
                 <KPICard
                   title="Lucro Líquido"
@@ -156,6 +160,8 @@ const GestaoEmpresa = () => {
                   iconColor="#10b981"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
                   changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
+                  description="Resultado final após todas as deduções."
+                  calculation="Receita - Impostos - Custos - Despesas"
                 />
                 <KPICard
                   title="Total Despesas"
@@ -164,6 +170,8 @@ const GestaoEmpresa = () => {
                   iconColor="#f43f5e"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
                   changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
+                  description="Soma de todas as despesas operacionais."
+                  calculation="Σ despesas fixas + variáveis"
                 />
               </>
             )}
@@ -188,6 +196,8 @@ const GestaoEmpresa = () => {
                   iconColor="#8b5cf6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
                   changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
+                  description="Percentual disponível para cobrir custos fixos e gerar lucro."
+                  calculation="(Receita - Custos Variáveis) / Receita × 100"
                 />
                 <KPICard
                   title="Ponto de Equilíbrio"
@@ -196,6 +206,8 @@ const GestaoEmpresa = () => {
                   iconColor="#06b6d4"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
                   changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
+                  description="Receita mínima para cobrir todos os custos."
+                  calculation="Custos Fixos / Margem de Contribuição (%)"
                 />
                 <KPICard
                   title="Desvio Orçamentário"
@@ -204,6 +216,8 @@ const GestaoEmpresa = () => {
                   iconColor="#f59e0b"
                   change="--"
                   changeType="neutral"
+                  description="Diferença entre valores orçados e realizados."
+                  calculation="((Realizado - Orçado) / Orçado) × 100"
                 />
                 <KPICard
                   title="Taxa de Conversão"
@@ -212,6 +226,8 @@ const GestaoEmpresa = () => {
                   iconColor="#14b8a6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
                   changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
+                  description="Percentual de orçamentos convertidos em serviços."
+                  calculation="(Orçamentos aprovados / Total) × 100"
                 />
               </>
             )}

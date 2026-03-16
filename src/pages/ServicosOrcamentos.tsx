@@ -294,6 +294,8 @@ export default function ServicosOrcamentos() {
             icon={FileText}
             change={`${Math.round(taxaConversao)}%`}
             changeType="positive"
+            description="Quantidade total de orçamentos emitidos no período."
+            calculation="Contagem de orçamentos"
           />
           <KPICard
             title="Taxa de Conversão"

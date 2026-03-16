@@ -120,6 +120,8 @@ const Dashboard = () => {
               iconColor="#06b6d4"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
               changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
+              description="Percentual de lucro líquido sobre a receita total."
+              calculation="(Lucro Líquido / Receita Total) × 100"
             />
             <KPICard
               title="Total de Despesas"

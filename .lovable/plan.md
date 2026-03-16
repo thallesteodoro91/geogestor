@@ -1,50 +1,59 @@
 
 
-## Diagnóstico
+## Plano: Adicionar ícone de informação com tooltip nos KPICards
 
-**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
+### O que será feito
 
+Adicionar um pequeno ícone de informação (ℹ️) ao lado do título de cada KPI Card. Ao passar o mouse, uma tooltip aparece mostrando:
+- **Descrição** do que o KPI representa
+- **Fórmula/Cálculo** utilizado para chegar ao valor
+
+A informação de variação (comparação dos últimos meses) será mantida intacta.
+
+### Alterações
+
+**1. `src/components/dashboard/KPICard.tsx`**
+- Adicionar props opcionais `description?: string` e `calculation?: string`
+- Renderizar um ícone `Info` (lucide) ao lado do título
+- Ao hover, exibir tooltip com descrição e fórmula
+- Manter todo o comportamento existente de variação inalterado
+
+**2. Páginas que usam KPICard** (adicionar `description` e `calculation` em cada uso):
+- `src/pages/Dashboard.tsx` — 10 KPIs (Receita Total, Lucro Líquido, Margem Líquida, Despesas, Margem Bruta, Taxa Conversão, Ticket Médio, Lucro Bruto, Serviços, Concluídos)
+- `src/pages/GestaoEmpresa.tsx` — 8 KPIs
+- `src/pages/DashboardFinanceiro.tsx` — KPIs financeiros
+- `src/pages/Operacional.tsx` — 3 KPIs (Tempo Médio, Produtividade, Ticket Médio)
+- `src/pages/Despesas.tsx` — KPIs de despesas
+- `src/pages/Clientes.tsx` — KPIs de clientes
+- `src/pages/ServicosOrcamentos.tsx` — KPIs de orçamentos
+
+### Exemplo de descrições e cálculos
+
+| KPI | Descrição | Cálculo |
+|-----|-----------|---------|
+| Receita Total | Soma de toda receita gerada no período | Σ receita de serviços + orçamentos |
+| Lucro Líquido | Resultado final após todas as deduções | Receita - Impostos - Custos - Despesas |
+| Margem Líquida | Percentual de lucro sobre a receita | (Lucro Líquido / Receita Líquida) × 100 |
+| Total Despesas | Soma de todas as despesas operacionais | Σ despesas fixas + variáveis |
+| Margem Bruta | Rentabilidade antes das despesas fixas | (Receita - Custos Variáveis) / Receita × 100 |
+| Taxa Conversão | Percentual de orçamentos convertidos | (Orçamentos aprovados / Total) × 100 |
+| Ticket Médio | Valor médio por serviço | Receita Total / Nº de Serviços |
+
+### Visual
+
+```text
+┌─────────────────────────────┐
+│ [💰]  Receita Total  [ℹ️]   │
+│       R$ 150.000,00         │
+│       ▲ +12,3%              │
+└─────────────────────────────┘
+         ↓ hover no ℹ️
+┌─────────────────────────────┐
+│ Soma de toda receita gerada │
+│ no período selecionado.     │
+│                             │
+│ Cálculo: Σ receita de       │
+│ serviços + orçamentos       │
+└─────────────────────────────┘
 ```
-null value in column "slug" of relation "tenants" violates not-null constraint
-```
-
-Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
-
-O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
-
-## Correção
-
-Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
-
-```sql
-CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
-RETURNS uuid ...
-AS $$
-  -- Gerar slug a partir do nome
-  v_slug := lower(regexp_replace(
-    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
-                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
-    '[^a-z0-9]+', '-', 'g'));
-  -- Remover hífens nas extremidades
-  v_slug := trim(both '-' from v_slug);
-  -- Garantir unicidade com sufixo aleatório
-  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
-
-  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
-$$
-```
-
-Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
-
-```sql
-ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
-```
-
-**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
-
-## Impacto
-
-- Corrige o bloqueio de login para todos os novos clientes
-- Zero impacto nos 2 tenants existentes
-- Garante slugs únicos e válidos automaticamente
 

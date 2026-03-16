@@ -303,6 +303,8 @@ export default function ServicosOrcamentos() {
             icon={TrendingUp}
             change="+8%"
             changeType="positive"
+            description="Percentual de orçamentos convertidos em serviços."
+            calculation="(Orçamentos aprovados / Total) × 100"
           />
           <KPICard
             title="Receita Orçada"

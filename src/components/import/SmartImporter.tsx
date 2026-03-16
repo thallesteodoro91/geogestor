@@ -653,6 +653,20 @@ export function SmartImporter({
       setStep("result");
       setImportProgress(100);
 
+      // Registrar auditoria da importação
+      logAuditEvent({
+        action: 'INSERT',
+        entity: `importacao_${entityType}`,
+        newData: {
+          entidade: entityType,
+          arquivo: fileName,
+          total_linhas: allValidatedRows.length,
+          importados_com_sucesso: result.success,
+          linhas_com_erro: allErrors.length,
+          erros: allErrors.slice(0, 20),
+        },
+      });
+
       if (result.success > 0) {
         const queryKeys: string[] = [];
         switch (entityType) {

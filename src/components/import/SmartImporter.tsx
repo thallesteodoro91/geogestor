@@ -31,6 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { createClientesBatch } from "@/modules/crm/services/cliente.service";
 import { createPropriedadesBatch } from "@/modules/crm/services/propriedade.service";
 import { createOrcamentosBatch } from "@/modules/finance/services/orcamento.service";
+import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";

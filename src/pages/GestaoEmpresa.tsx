@@ -196,6 +196,8 @@ const GestaoEmpresa = () => {
                   iconColor="#8b5cf6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
                   changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
+                  description="Percentual disponível para cobrir custos fixos e gerar lucro."
+                  calculation="(Receita - Custos Variáveis) / Receita × 100"
                 />
                 <KPICard
                   title="Ponto de Equilíbrio"

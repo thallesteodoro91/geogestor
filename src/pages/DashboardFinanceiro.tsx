@@ -124,6 +124,8 @@ const DashboardFinanceiro = () => {
                   icon={DollarSign}
                   iconColor="#3b82f6"
                   changeType="neutral"
+                  description="Receita após dedução de impostos."
+                  calculation="Receita Bruta - Impostos"
                 />
 
                 <KPICard

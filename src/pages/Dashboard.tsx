@@ -130,6 +130,8 @@ const Dashboard = () => {
               iconColor="#f43f5e"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
               changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
+              description="Soma de todas as despesas operacionais no período."
+              calculation="Σ despesas fixas + variáveis"
             />
               </>
             )}

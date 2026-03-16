@@ -206,6 +206,8 @@ const GestaoEmpresa = () => {
                   iconColor="#06b6d4"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
                   changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
+                  description="Receita mínima para cobrir todos os custos."
+                  calculation="Custos Fixos / Margem de Contribuição (%)"
                 />
                 <KPICard
                   title="Desvio Orçamentário"

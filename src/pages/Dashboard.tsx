@@ -100,6 +100,8 @@ const Dashboard = () => {
               iconColor="#6366f1"
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
+              description="Soma de toda receita gerada no período a partir de orçamentos e serviços."
+              calculation="Σ receita de serviços + orçamentos"
             />
             <KPICard
               title="Lucro Líquido"

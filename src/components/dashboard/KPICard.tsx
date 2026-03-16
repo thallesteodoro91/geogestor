@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { LucideIcon, TrendingUp, TrendingDown } from "lucide-react";
+import { LucideIcon, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface KPICardProps {
@@ -11,9 +11,13 @@ interface KPICardProps {
   icon: LucideIcon;
   /** Hex color for the icon, e.g. "#6366f1" */
   iconColor?: string;
+  /** Description shown in the info tooltip */
+  description?: string;
+  /** Calculation formula shown in the info tooltip */
+  calculation?: string;
 }
 
-export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, iconColor }: KPICardProps) => {
+export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, iconColor, description, calculation }: KPICardProps) => {
   const cleanChange = change?.replace(/^[+-]\s*/, '');
 
   const hoverClass =

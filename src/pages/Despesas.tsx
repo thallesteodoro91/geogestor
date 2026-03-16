@@ -459,6 +459,8 @@ export default function Despesas() {
             value={`R$ ${totalDespesasFiltradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
             iconColor="#f43f5e"
+            description="Soma de todas as despesas registradas no período selecionado."
+            calculation="Σ valor de cada despesa confirmada"
           />
           <KPICard
             title={hasDateFilter ? "Despesas Filtradas" : "Despesas do Mês"}

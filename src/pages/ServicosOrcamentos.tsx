@@ -312,6 +312,8 @@ export default function ServicosOrcamentos() {
             icon={DollarSign}
             change="+15%"
             changeType="positive"
+            description="Soma da receita esperada de todos os orçamentos."
+            calculation="Σ receita esperada dos orçamentos"
           />
           <KPICard
             title="Ticket Médio"

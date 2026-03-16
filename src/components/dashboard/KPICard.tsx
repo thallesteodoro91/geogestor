@@ -45,9 +45,30 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
           </div>
           
           <div className="space-y-1.5 flex-1 min-w-0">
-            <p className="text-sm font-medium text-muted-foreground leading-relaxed">
-              {title}
-            </p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-muted-foreground leading-relaxed">
+                {title}
+              </p>
+              {description && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-primary transition-colors shrink-0" />
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[280px]">
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-popover-foreground">{description}</p>
+                        {calculation && (
+                          <p className="text-xs text-muted-foreground">
+                            <span className="font-semibold">Cálculo:</span> {calculation}
+                          </p>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-2xl font-heading font-bold text-foreground leading-tight tracking-tight">
                 {value}

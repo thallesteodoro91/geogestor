@@ -79,6 +79,8 @@ export default function Clientes() {
             value={kpis.totalClientes.toString()}
             icon={Users}
             iconColor="#6366f1"
+            description="Número total de clientes cadastrados na base."
+            calculation="Contagem de clientes ativos"
           />
           <KPICard
             title="LTV Médio"

@@ -182,6 +182,8 @@ const Dashboard = () => {
               iconColor="#3b82f6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
+              description="Valor médio de receita por serviço realizado."
+              calculation="Receita Total / Nº de Serviços"
             />
             <KPICard
               title="Lucro Bruto"

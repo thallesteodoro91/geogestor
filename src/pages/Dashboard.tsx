@@ -202,6 +202,8 @@ const Dashboard = () => {
               iconColor="#64748b"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
+              description="Total de serviços cadastrados no período."
+              calculation="Contagem de todos os serviços"
             />
             <KPICard
               title="Concluídos"

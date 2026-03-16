@@ -114,6 +114,8 @@ const DashboardFinanceiro = () => {
                   icon={DollarSign}
                   iconColor="#6366f1"
                   changeType="neutral"
+                  description="Faturamento total antes de impostos e deduções."
+                  calculation="Σ valor de todos os orçamentos faturados"
                 />
 
                 <KPICard

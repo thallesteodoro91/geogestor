@@ -87,6 +87,8 @@ export default function Clientes() {
             value={formatLTV(kpis.ltvMedio)}
             icon={Award}
             iconColor="#10b981"
+            description="Valor médio que cada cliente gera ao longo do relacionamento."
+            calculation="Σ receita por cliente / Nº de clientes"
           />
           <KPICard
             title="Top 3 Clientes"

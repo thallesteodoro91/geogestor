@@ -134,6 +134,8 @@ const DashboardFinanceiro = () => {
                   icon={Target}
                   iconColor="#8b5cf6"
                   changeType="positive"
+                  description="Percentual da receita disponível para cobrir custos fixos e gerar lucro."
+                  calculation="(Receita Líquida - Custos Variáveis) / Receita Líquida × 100"
                 />
 
                 <KPICard

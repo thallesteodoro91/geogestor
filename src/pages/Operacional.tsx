@@ -173,6 +173,8 @@ export default function Operacional() {
                 value={`${metrics?.kpis.produtividade || 0}%`}
                 icon={TrendingUp}
                 iconColor="#10b981"
+                description="Percentual de serviços concluídos sobre o total."
+                calculation="(Serviços Concluídos / Total de Serviços) × 100"
               />
               <KPICard
                 title="Ticket Médio"

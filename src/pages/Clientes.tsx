@@ -95,6 +95,8 @@ export default function Clientes() {
             value={`${kpis.top3Percentual}%`}
             icon={TrendingUp}
             iconColor="#f59e0b"
+            description="Percentual de receita concentrado nos 3 maiores clientes."
+            calculation="Receita Top 3 / Receita Total × 100"
           />
           <KPICard
             title="Cidades Ativas"

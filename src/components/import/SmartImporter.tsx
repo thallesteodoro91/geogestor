@@ -31,6 +31,7 @@ import { Progress } from "@/components/ui/progress";
 import { createClientesBatch } from "@/modules/crm/services/cliente.service";
 import { createPropriedadesBatch } from "@/modules/crm/services/propriedade.service";
 import { createOrcamentosBatch } from "@/modules/finance/services/orcamento.service";
+import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -651,6 +652,20 @@ export function SmartImporter({
       setImportResult({ success: result.success, errors: allErrors, failedRows });
       setStep("result");
       setImportProgress(100);
+
+      // Registrar auditoria da importação
+      logAuditEvent({
+        action: 'INSERT',
+        entity: `importacao_${entityType}`,
+        newData: {
+          entidade: entityType,
+          arquivo: fileName,
+          total_linhas: allValidatedRows.length,
+          importados_com_sucesso: result.success,
+          linhas_com_erro: allErrors.length,
+          erros: allErrors.slice(0, 20),
+        },
+      });
 
       if (result.success > 0) {
         const queryKeys: string[] = [];

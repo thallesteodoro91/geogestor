@@ -165,6 +165,8 @@ export default function Operacional() {
                 value={`${metrics?.kpis.tempoMedioDias || 0} dias`}
                 icon={Clock}
                 iconColor="#f59e0b"
+                description="Média de dias entre início e conclusão dos serviços."
+                calculation="Σ (Data Fim - Data Início) / Nº Serviços Concluídos"
               />
               <KPICard
                 title="Produtividade"

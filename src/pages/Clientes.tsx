@@ -103,6 +103,8 @@ export default function Clientes() {
             value={kpis.cidadesAtivas.toString()}
             icon={MapPin}
             iconColor="#14b8a6"
+            description="Número de cidades distintas com propriedades cadastradas."
+            calculation="Contagem de cidades únicas"
           />
         </div>
 

@@ -144,6 +144,8 @@ const DashboardFinanceiro = () => {
                   icon={AlertCircle}
                   iconColor="#f59e0b"
                   changeType="neutral"
+                  description="Receita mínima necessária para cobrir todos os custos."
+                  calculation="Custos Fixos / Margem de Contribuição (%)"
                 />
               </>
             )}

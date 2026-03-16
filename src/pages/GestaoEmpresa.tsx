@@ -226,6 +226,8 @@ const GestaoEmpresa = () => {
                   iconColor="#14b8a6"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
                   changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
+                  description="Percentual de orçamentos convertidos em serviços."
+                  calculation="(Orçamentos aprovados / Total) × 100"
                 />
               </>
             )}

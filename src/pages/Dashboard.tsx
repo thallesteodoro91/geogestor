@@ -212,6 +212,8 @@ const Dashboard = () => {
               iconColor="#14b8a6"
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
+              description="Serviços finalizados com sucesso."
+              calculation="Contagem de serviços com status 'Concluído'"
             />
               </>
             )}

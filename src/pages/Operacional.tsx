@@ -181,6 +181,8 @@ export default function Operacional() {
                 value={`R$ ${(metrics?.kpis.ticketMedio || 0).toLocaleString('pt-BR')}`}
                 icon={DollarSign}
                 iconColor="#3b82f6"
+                description="Valor médio de receita por serviço realizado."
+                calculation="Receita Total / Nº de Serviços"
               />
             </>
           )}

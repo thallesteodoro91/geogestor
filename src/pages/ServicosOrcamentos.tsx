@@ -321,6 +321,8 @@ export default function ServicosOrcamentos() {
             icon={Calculator}
             change="+5%"
             changeType="positive"
+            description="Valor médio por orçamento emitido."
+            calculation="Receita Orçada / Nº de Orçamentos"
           />
         </div>
 

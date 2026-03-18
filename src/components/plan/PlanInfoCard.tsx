@@ -149,27 +149,6 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
           Minha Assinatura
         </Button>
 
-        <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
-          <div>
-            <p className="font-medium text-lg">{planName}</p>
-            {(stripeEnd || periodEnd) && (
-              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                {isTrialing ? "Trial expira em" : "Próxima cobrança"}:{" "}
-                {stripeEnd
-                  ? format(new Date(stripeEnd), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-                  : periodEnd}
-              </p>
-            )}
-          </div>
-          {subscribed && (
-            <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-              <ShieldCheck className="h-4 w-4" />
-              <span>Verificado</span>
-            </div>
-          )}
-        </div>
-
         {/* Barras de uso de recursos */}
         <div className="space-y-4">
           <h4 className="text-sm font-medium">Uso de Recursos</h4>
@@ -191,6 +170,27 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
             max={maxUsers}
             icon={<Users className="h-4 w-4" />}
           />
+        </div>
+
+        <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+          <div>
+            <p className="font-medium text-lg">{planName}</p>
+            {(stripeEnd || periodEnd) && (
+              <p className="text-sm text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {isTrialing ? "Trial expira em" : "Próxima cobrança"}:{" "}
+                {stripeEnd
+                  ? format(new Date(stripeEnd), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+                  : periodEnd}
+              </p>
+            )}
+          </div>
+          {subscribed && (
+            <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+              <ShieldCheck className="h-4 w-4" />
+              <span>Verificado</span>
+            </div>
+          )}
         </div>
 
         {featuresList.length > 0 && (

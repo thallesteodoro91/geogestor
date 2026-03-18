@@ -1256,8 +1256,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onCloseAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>{orcamento ? "Editar Orçamento" : "Novo Orçamento"}</DialogTitle>
         </DialogHeader>

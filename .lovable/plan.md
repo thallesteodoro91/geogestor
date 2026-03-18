@@ -1,58 +1,50 @@
 
 
-## Plano: Teste End-to-End — Jornada Completa do Usuário
+## Diagnóstico
 
-### Cenário simulado
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-Um novo usuário se cadastra, assina o plano, importa dados via planilha (com colunas renomeadas), realiza operações CRUD, gera orçamento e relatório.
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-### Etapas de teste
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**1. Cadastro e Autenticação**
-- Criar conta via `/auth` com email e senha
-- Verificar redirecionamento para o dashboard
-- Confirmar trial de 7 dias ativo no banner
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-**2. Assinatura (simulada)**
-- Navegar até `/assinatura` via botão "Minha Assinatura" nas configurações
-- Verificar exibição dos planos (Mensal R$97, Trimestral, Semestral, Anual)
-- Simular ativação via `simulate-expiry` (restore → owner) para desbloquear acesso completo
+## Correção
 
-**3. Importação de planilha com colunas renomeadas**
-- Abrir Smart Importer em `/configuracoes`
-- Importar CSV de clientes com colunas como "Nome Completo" (em vez de "nome"), "E-mail" (em vez de "email"), "Fone" (em vez de "telefone")
-- Verificar auto-mapping por sinônimos
-- Confirmar preview e executar importação
-- Repetir para propriedades com colunas como "Fazenda" (→ nome_da_propriedade), "Cidade" (→ municipio)
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-**4. CRUD de Clientes e Propriedades**
-- Adicionar cliente manualmente via Cadastros
-- Editar dados do cliente
-- Adicionar propriedade vinculada
-- Excluir propriedade e cliente
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-**5. Despesas**
-- Adicionar despesa com tipo e valor
-- Editar despesa
-- Excluir despesa
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
 
-**6. Gerar Orçamento**
-- Criar orçamento via wizard com cliente, propriedade, serviços e despesas
-- Verificar código automático gerado
-- Confirmar cálculos financeiros (receita, impostos, lucro, margem)
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-**7. Relatório Mensal**
-- Navegar para `/relatorio-executivo`
-- Verificar KPIs, gráficos semanais, tabelas
-- Gerar PDF do relatório
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
 
-### Método
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-Usarei o browser automation para navegar pela aplicação, preencher formulários, verificar resultados e reportar qualquer bug encontrado. Cada etapa será documentada com screenshots.
+## Impacto
 
-### Limitações
-
-- O cadastro real requer confirmação de email — usarei uma conta já existente ou simularei via `simulate-expiry`
-- O checkout Stripe não será testado com pagamento real
-- Importação CSV requer upload de arquivo, que pode ter limitações no browser automation
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

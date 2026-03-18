@@ -140,6 +140,15 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <Button
+          variant="outline"
+          className="w-full border-primary/30 text-primary hover:bg-primary/10"
+          onClick={() => navigate("/assinatura")}
+        >
+          <Crown className="h-4 w-4 mr-2" />
+          Minha Assinatura
+        </Button>
+
         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
           <div>
             <p className="font-medium text-lg">{planName}</p>

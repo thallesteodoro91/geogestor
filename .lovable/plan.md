@@ -1,19 +1,50 @@
 
 
-## Plano: Botão "Minha Assinatura" nas Configurações
+## Diagnóstico
 
-### O que será feito
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-Adicionar um botão "Minha Assinatura" no card de Plano & Assinatura (seção 4 das Configurações) que navega para a página `/assinatura`. A página `/assinatura` já existe e é uma landing page completa com benefícios, planos de preço, FAQ e CTAs — exatamente o mesmo destino usado quando a assinatura expira (`SubscriptionExpiredScreen` redireciona para `/assinatura`).
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-### Alteração
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-**`src/components/plan/PlanInfoCard.tsx`**
-- Adicionar um botão "Minha Assinatura" com ícone `Crown` no topo do card ou junto aos botões existentes
-- O botão navega para `/assinatura` onde o usuário vê toda a landing page com funcionalidades, ferramentas, planos e preços
-- Visível para todos os usuários (inclusive owner), funcionando como vitrine do SaaS
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-### Detalhes técnicos
+## Correção
 
-O componente `PlanInfoCard` já possui `useNavigate` e um botão que navega para `/assinatura` (o botão "Fazer Upgrade" / "Alterar Plano"). A adição será um botão dedicado "Minha Assinatura" mais proeminente, separado da lógica de upgrade, para que o usuário acesse a landing page completa a qualquer momento.
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
+
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
+
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
+
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
+
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
+
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
+
+## Impacto
+
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

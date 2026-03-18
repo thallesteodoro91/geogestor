@@ -172,6 +172,20 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
           />
         </div>
 
+        {featuresList.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium">Funcionalidades Incluídas</h4>
+            <div className="grid grid-cols-2 gap-2">
+              {featuresList.map((feature) => (
+                <div key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  <span className="capitalize">{feature.replace(/_/g, ' ')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
           <div>
             <p className="font-medium text-lg">{planName}</p>
@@ -192,20 +206,6 @@ export function PlanInfoCard({ clientsCount = 0, propertiesCount = 0, usersCount
             </div>
           )}
         </div>
-
-        {featuresList.length > 0 && (
-          <div className="space-y-3">
-            <h4 className="text-sm font-medium">Funcionalidades Incluídas</h4>
-            <div className="grid grid-cols-2 gap-2">
-              {featuresList.map((feature) => (
-                <div key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <span className="capitalize">{feature.replace(/_/g, ' ')}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
         {!isOwner && (
           <div className="flex flex-col gap-2">
             <Button

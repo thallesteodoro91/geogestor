@@ -1117,7 +1117,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a situação" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent usePortal={false}>
                 <SelectItem value="_none">Selecione a situação</SelectItem>
                 {PAYMENT_STATUS_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>

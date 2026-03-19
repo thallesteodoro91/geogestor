@@ -5,6 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarServicoIniciado, registrarServicoConcluido } from '@/modules/crm/services/cliente-eventos.service';
+import { syncEventToGoogle } from '@/services/google-calendar.service';
 
 export interface Servico {
   id_servico: string;

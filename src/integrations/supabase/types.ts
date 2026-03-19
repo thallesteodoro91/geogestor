@@ -1260,6 +1260,97 @@ export type Database = {
           },
         ]
       }
+      google_calendar_sync: {
+        Row: {
+          created_at: string | null
+          google_event_id: string
+          id: string
+          local_event_id: string
+          local_event_type: string
+          tenant_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          google_event_id: string
+          id?: string
+          local_event_id: string
+          local_event_type: string
+          tenant_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          google_event_id?: string
+          id?: string
+          local_event_id?: string
+          local_event_type?: string
+          tenant_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_sync_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      google_calendar_tokens: {
+        Row: {
+          access_token: string
+          calendar_id: string | null
+          created_at: string | null
+          id: string
+          last_synced_at: string | null
+          refresh_token: string
+          sync_token: string | null
+          tenant_id: string
+          token_expires_at: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          calendar_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          refresh_token: string
+          sync_token?: string | null
+          tenant_id: string
+          token_expires_at: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          calendar_id?: string | null
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          refresh_token?: string
+          sync_token?: string | null
+          tenant_id?: string
+          token_expires_at?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_tokens_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notificacao_dismissals: {
         Row: {
           dismissed_at: string

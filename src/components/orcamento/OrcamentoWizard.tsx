@@ -592,7 +592,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <SelectTrigger>
               <SelectValue placeholder="Selecione um cliente..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent usePortal={false}>
               <SelectItem value="_none">Selecione um cliente...</SelectItem>
               {clientes.map((c) => (
                 <SelectItem key={c.id_cliente} value={c.id_cliente}>{c.nome}</SelectItem>
@@ -748,7 +748,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <SelectTrigger>
               <SelectValue placeholder="Selecione uma propriedade..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent usePortal={false}>
               <SelectItem value="_none">Nenhuma propriedade</SelectItem>
               {propriedades.map((p) => (
                 <SelectItem key={p.id_propriedade} value={p.id_propriedade}>{p.nome_da_propriedade}</SelectItem>
@@ -889,7 +889,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent usePortal={false}>
                       <SelectItem value="_none">Selecione...</SelectItem>
                       {servicos.map((s) => (
                         <SelectItem key={s.id_tiposervico} value={s.id_tiposervico}>{s.nome}</SelectItem>
@@ -1067,7 +1067,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent usePortal={false}>
                       <SelectItem value="_none">Selecione...</SelectItem>
                       {tiposDespesa.map((t) => (
                         <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>
@@ -1117,7 +1117,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a situação" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent usePortal={false}>
                 <SelectItem value="_none">Selecione a situação</SelectItem>
                 {PAYMENT_STATUS_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
@@ -1140,7 +1140,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a forma" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent usePortal={false}>
                 <SelectItem value="_none">Selecione a forma</SelectItem>
                 {PAYMENT_METHOD_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>

@@ -5,6 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarOrcamentoEmitido, registrarOrcamentoConvertido } from '@/modules/crm/services/cliente-eventos.service';
+import { syncEventToGoogle } from '@/services/google-calendar.service';
 
 export interface Orcamento {
   id_orcamento: string;
@@ -86,6 +87,9 @@ export async function createOrcamento(data: Omit<Orcamento, 'id_orcamento' | 'cr
     } catch (e) {
       console.error('Erro ao registrar evento de orçamento:', e);
     }
+
+    // Sync to Google Calendar (fire-and-forget)
+    syncEventToGoogle(result.data.id_orcamento, 'orcamento');
   }
   
   return result;
@@ -122,6 +126,11 @@ export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
         console.error('Erro ao registrar evento de conversão:', e);
       }
     }
+  }
+
+  // Sync to Google Calendar (fire-and-forget)
+  if (result.data && !result.error) {
+    syncEventToGoogle(id, 'orcamento');
   }
   
   return result;

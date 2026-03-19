@@ -5,6 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarServicoIniciado, registrarServicoConcluido } from '@/modules/crm/services/cliente-eventos.service';
+import { syncEventToGoogle } from '@/services/google-calendar.service';
 
 export interface Servico {
   id_servico: string;
@@ -81,6 +82,9 @@ export async function createServico(data: Omit<Servico, 'id_servico' | 'created_
     } catch (e) {
       console.error('Erro ao registrar evento de serviço:', e);
     }
+
+    // Sync to Google Calendar (fire-and-forget)
+    syncEventToGoogle(result.data.id_servico, 'servico');
   }
   
   return result;
@@ -117,6 +121,11 @@ export async function updateServico(id: string, data: Partial<Servico>) {
     } catch (e) {
       console.error('Erro ao registrar evento de serviço concluído:', e);
     }
+  }
+
+  // Sync to Google Calendar (fire-and-forget)
+  if (result.data && !result.error) {
+    syncEventToGoogle(id, 'servico');
   }
   
   return result;

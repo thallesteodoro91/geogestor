@@ -1,65 +1,50 @@
 
 
-## Plano: Sincronização Google Calendar com Calendário GeoGestor
+## Diagnóstico
 
-### Visão geral
+**Causa raiz encontrada**: A função de banco de dados `create_tenant_for_user` insere um registro na tabela `tenants` sem preencher a coluna `slug`, que é `NOT NULL` e não tem valor default. Isso faz com que toda criação de tenant para novos usuários falhe com:
 
-Implementar sincronização bidirecional entre o calendário do GeoGestor (orçamentos e serviços) e o Google Calendar do usuário. Eventos criados/editados no GeoGestor aparecem no Google Calendar e vice-versa.
+```
+null value in column "slug" of relation "tenants" violates not-null constraint
+```
 
-### Pré-requisitos
+Os 2 tenants existentes no banco já têm slug preenchido (foram criados antes ou manualmente), por isso o erro só afeta **novos clientes** ao fazer primeiro login.
 
-O Google Calendar API requer credenciais OAuth. O GeoGestor precisa:
-1. Permissão do usuário para acessar seu Google Calendar
-2. Edge Functions para comunicar com a API do Google
+O erro é capturado no `TenantContext` e exibido como "Erro ao carregar dados do tenant".
 
-Como o Lovable Cloud não suporta Google Calendar como conector nativo, será necessário configurar OAuth manualmente via Google Cloud Console.
+## Correção
 
-### Etapas
+Uma única migração SQL que atualiza a função `create_tenant_for_user` para gerar o slug automaticamente a partir do nome da empresa (slugify: lowercase, remove acentos, substitui espaços por hífens):
 
-**1. Tabela de mapeamento no banco de dados**
-- Criar tabela `google_calendar_sync` com colunas: `user_id`, `tenant_id`, `google_event_id`, `local_event_id`, `local_event_type` (orcamento/servico), `sync_token`, `last_synced_at`
-- Criar tabela `google_calendar_tokens` para armazenar refresh tokens por usuário
-- RLS: cada usuário só vê seus próprios tokens e mapeamentos
+```sql
+CREATE OR REPLACE FUNCTION public.create_tenant_for_user(p_user_id uuid, p_company_name text)
+RETURNS uuid ...
+AS $$
+  -- Gerar slug a partir do nome
+  v_slug := lower(regexp_replace(
+    translate(trim(p_company_name), 'áàãâéèêíìîóòõôúùûçÁÀÃÂÉÈÊÍÌÎÓÒÕÔÚÙÛÇ',
+                                    'aaaaeeeiiioooouuucAAAAEEEIIIOOOOUUUC'),
+    '[^a-z0-9]+', '-', 'g'));
+  -- Remover hífens nas extremidades
+  v_slug := trim(both '-' from v_slug);
+  -- Garantir unicidade com sufixo aleatório
+  v_slug := v_slug || '-' || substr(gen_random_uuid()::text, 1, 6);
 
-**2. Configurar Google OAuth (manual pelo usuário)**
-- O usuário precisa criar credenciais OAuth no Google Cloud Console
-- Escopos necessários: `calendar.events`, `calendar.readonly`
-- Armazenar `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` como secrets do projeto
+  INSERT INTO tenants (name, slug) VALUES (p_company_name, v_slug) ...
+$$
+```
 
-**3. Edge Function: `google-calendar-auth`**
-- Gera URL de autorização OAuth
-- Recebe callback com código de autorização
-- Troca código por access/refresh token
-- Armazena tokens na tabela `google_calendar_tokens`
+Adicionalmente, como medida de segurança, será adicionado um valor `DEFAULT` na coluna `slug` para evitar futuros problemas:
 
-**4. Edge Function: `google-calendar-sync`**
-- Push: quando orçamento/serviço é criado/editado no GeoGestor, cria/atualiza evento no Google Calendar
-- Pull: usa sync tokens para buscar mudanças incrementais do Google
-- Mapeia campos: título, datas, descrição (cliente + propriedade + município)
-- Persiste `geogestor_id` nas `extendedProperties` do evento Google
+```sql
+ALTER TABLE tenants ALTER COLUMN slug SET DEFAULT '';
+```
 
-**5. Edge Function: `google-calendar-webhook`**
-- Recebe notificações push do Google quando eventos mudam
-- Atualiza dados locais correspondentes
+**Nenhuma alteração no frontend é necessária** — o `TenantContext` e o `tenant.service.ts` já tratam o fluxo corretamente; o problema é exclusivamente no banco de dados.
 
-**6. UI na página de Configurações**
-- Botão "Conectar Google Calendar" na seção de integrações
-- Status de conexão (conectado/desconectado)
-- Botão para forçar sincronização manual
-- Opção para desconectar
+## Impacto
 
-**7. Sync automático via triggers**
-- Após insert/update em `fato_orcamento` ou `fato_servico`, disparar sync para Google Calendar
-- Pode ser feito via chamada da Edge Function no frontend após mutations
-
-### Limitações e considerações
-
-- O usuário precisará criar credenciais no Google Cloud Console (processo manual)
-- Refresh tokens expiram se o usuário revogar acesso
-- Sync bidirecional requer cuidado com conflitos (last-write-wins)
-- Webhooks do Google requerem URL pública (as Edge Functions já são públicas)
-
-### Alternativa simplificada
-
-Se a complexidade do OAuth completo for um bloqueio, uma alternativa é exportar eventos como arquivo `.ics` que o usuário importa manualmente no Google Calendar. Isso é mais simples mas não é automático.
+- Corrige o bloqueio de login para todos os novos clientes
+- Zero impacto nos 2 tenants existentes
+- Garante slugs únicos e válidos automaticamente
 

@@ -122,6 +122,11 @@ export async function updateServico(id: string, data: Partial<Servico>) {
       console.error('Erro ao registrar evento de serviço concluído:', e);
     }
   }
+
+  // Sync to Google Calendar (fire-and-forget)
+  if (result.data && !result.error) {
+    syncEventToGoogle(id, 'servico');
+  }
   
   return result;
 }

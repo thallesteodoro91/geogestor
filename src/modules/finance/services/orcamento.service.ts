@@ -127,6 +127,11 @@ export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
       }
     }
   }
+
+  // Sync to Google Calendar (fire-and-forget)
+  if (result.data && !result.error) {
+    syncEventToGoogle(id, 'orcamento');
+  }
   
   return result;
 }

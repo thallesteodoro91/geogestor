@@ -1140,7 +1140,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
               <SelectTrigger>
                 <SelectValue placeholder="Selecione a forma" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent usePortal={false}>
                 <SelectItem value="_none">Selecione a forma</SelectItem>
                 {PAYMENT_METHOD_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>

@@ -27,6 +27,7 @@ import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+import { GoogleCalendarCard } from "@/components/settings/GoogleCalendarCard";
 
 export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();

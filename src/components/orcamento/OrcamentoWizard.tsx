@@ -889,7 +889,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent usePortal={false}>
                       <SelectItem value="_none">Selecione...</SelectItem>
                       {servicos.map((s) => (
                         <SelectItem key={s.id_tiposervico} value={s.id_tiposervico}>{s.nome}</SelectItem>

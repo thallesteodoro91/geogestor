@@ -1067,7 +1067,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent usePortal={false}>
                       <SelectItem value="_none">Selecione...</SelectItem>
                       {tiposDespesa.map((t) => (
                         <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>

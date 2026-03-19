@@ -82,6 +82,9 @@ export async function createServico(data: Omit<Servico, 'id_servico' | 'created_
     } catch (e) {
       console.error('Erro ao registrar evento de serviço:', e);
     }
+
+    // Sync to Google Calendar (fire-and-forget)
+    syncEventToGoogle(result.data.id_servico, 'servico');
   }
   
   return result;

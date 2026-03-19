@@ -5,6 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarOrcamentoEmitido, registrarOrcamentoConvertido } from '@/modules/crm/services/cliente-eventos.service';
+import { syncEventToGoogle } from '@/services/google-calendar.service';
 
 export interface Orcamento {
   id_orcamento: string;

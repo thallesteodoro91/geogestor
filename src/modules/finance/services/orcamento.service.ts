@@ -87,6 +87,9 @@ export async function createOrcamento(data: Omit<Orcamento, 'id_orcamento' | 'cr
     } catch (e) {
       console.error('Erro ao registrar evento de orçamento:', e);
     }
+
+    // Sync to Google Calendar (fire-and-forget)
+    syncEventToGoogle(result.data.id_orcamento, 'orcamento');
   }
   
   return result;

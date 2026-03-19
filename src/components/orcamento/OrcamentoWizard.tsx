@@ -748,7 +748,7 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <SelectTrigger>
               <SelectValue placeholder="Selecione uma propriedade..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent usePortal={false}>
               <SelectItem value="_none">Nenhuma propriedade</SelectItem>
               {propriedades.map((p) => (
                 <SelectItem key={p.id_propriedade} value={p.id_propriedade}>{p.nome_da_propriedade}</SelectItem>

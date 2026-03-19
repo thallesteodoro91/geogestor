@@ -32,3 +32,12 @@ verify_jwt = false
 
 [functions.trial-expiry-reminder]
 verify_jwt = false
+
+[functions.google-calendar-auth]
+verify_jwt = false
+
+[functions.google-calendar-sync]
+verify_jwt = false
+
+[functions.google-calendar-webhook]
+verify_jwt = false

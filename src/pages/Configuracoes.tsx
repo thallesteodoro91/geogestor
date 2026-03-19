@@ -510,6 +510,9 @@ export default function Configuracoes() {
             </CardContent>
           </Card>
 
+          {/* 7.5 Google Calendar */}
+          <GoogleCalendarCard />
+
           {/* 8. Notificações */}
           <Card>
             <CardHeader>

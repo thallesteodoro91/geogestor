@@ -50,40 +50,8 @@ export async function connectGoogleCalendar(): Promise<void> {
     throw new Error('Erro ao gerar URL de autorização');
   }
 
-  // Open OAuth popup
-  const popup = window.open(data.url, 'google-calendar-auth', 'width=500,height=700,scrollbars=yes');
-
-  return new Promise((resolve, reject) => {
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'google-calendar-success') {
-        window.removeEventListener('message', handleMessage);
-        resolve();
-      } else if (event.data?.type === 'google-calendar-error') {
-        window.removeEventListener('message', handleMessage);
-        reject(new Error(event.data.error || 'Falha na autorização'));
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-
-    // Timeout after 5 minutes
-    setTimeout(() => {
-      window.removeEventListener('message', handleMessage);
-      if (popup && !popup.closed) popup.close();
-      reject(new Error('Tempo limite de autorização excedido'));
-    }, 5 * 60 * 1000);
-
-    // Check if popup was closed without completing
-    const checkClosed = setInterval(() => {
-      if (popup?.closed) {
-        clearInterval(checkClosed);
-        // Give a small delay for the message to arrive
-        setTimeout(() => {
-          window.removeEventListener('message', handleMessage);
-        }, 2000);
-      }
-    }, 500);
-  });
+  // Full page redirect instead of popup
+  window.location.href = data.url;
 }
 
 /**

@@ -54,23 +54,25 @@ Deno.serve(async (req) => {
       });
 
       const tokenData = await tokenRes.json();
-      if (!tokenRes.ok) {
-        console.error("Token exchange failed:", tokenData);
-        return new Response(
-          `<html><body><script>window.opener?.postMessage({type:'google-calendar-error',error:'Token exchange failed'},'*');window.close();</script></body></html>`,
-          { headers: { ...corsHeaders, "Content-Type": "text/html" } }
-        );
-      }
 
       // Parse state to get user info
       let stateData: { user_id: string; tenant_id: string; origin: string };
       try {
         stateData = JSON.parse(atob(state));
       } catch {
-        return new Response(
-          `<html><body><script>window.opener?.postMessage({type:'google-calendar-error',error:'Invalid state'},'*');window.close();</script></body></html>`,
-          { headers: { ...corsHeaders, "Content-Type": "text/html" } }
-        );
+        return new Response(null, {
+          status: 302,
+          headers: { ...corsHeaders, Location: "/?google-calendar=error" },
+        });
+      }
+
+      if (!tokenRes.ok) {
+        console.error("Token exchange failed:", tokenData);
+        const redirectUrl = `${stateData.origin}/configuracoes?google-calendar=error`;
+        return new Response(null, {
+          status: 302,
+          headers: { ...corsHeaders, Location: redirectUrl },
+        });
       }
 
       // Store tokens using service role (bypasses RLS for upsert)
@@ -93,17 +95,19 @@ Deno.serve(async (req) => {
 
       if (upsertError) {
         console.error("Failed to store tokens:", upsertError);
-        return new Response(
-          `<html><body><script>window.opener?.postMessage({type:'google-calendar-error',error:'Failed to store tokens'},'*');window.close();</script></body></html>`,
-          { headers: { ...corsHeaders, "Content-Type": "text/html" } }
-        );
+        const redirectUrl = `${stateData.origin}/configuracoes?google-calendar=error`;
+        return new Response(null, {
+          status: 302,
+          headers: { ...corsHeaders, Location: redirectUrl },
+        });
       }
 
-      // Success - close popup and notify parent
-      return new Response(
-        `<html><body><script>window.opener?.postMessage({type:'google-calendar-success'},'*');window.close();</script></body></html>`,
-        { headers: { ...corsHeaders, "Content-Type": "text/html" } }
-      );
+      // Success - redirect back to app
+      const redirectUrl = `${stateData.origin}/configuracoes?google-calendar=success`;
+      return new Response(null, {
+        status: 302,
+        headers: { ...corsHeaders, Location: redirectUrl },
+      });
     }
 
     // Generate auth URL (called from frontend)

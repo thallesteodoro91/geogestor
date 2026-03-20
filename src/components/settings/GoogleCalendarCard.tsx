@@ -20,6 +20,19 @@ export function GoogleCalendarCard() {
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcResult = params.get('google-calendar');
+    if (gcResult === 'success') {
+      toast.success('Google Calendar conectado com sucesso!');
+      queryClient.invalidateQueries({ queryKey: ['google-calendar-status'] });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (gcResult === 'error') {
+      toast.error('Erro ao conectar Google Calendar');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [queryClient]);
+
   const { data: status, isLoading } = useQuery({
     queryKey: ["google-calendar-status"],
     queryFn: getGoogleCalendarStatus,

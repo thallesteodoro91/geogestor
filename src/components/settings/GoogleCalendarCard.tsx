@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,19 @@ export function GoogleCalendarCard() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gcResult = params.get('google-calendar');
+    if (gcResult === 'success') {
+      toast.success('Google Calendar conectado com sucesso!');
+      queryClient.invalidateQueries({ queryKey: ['google-calendar-status'] });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (gcResult === 'error') {
+      toast.error('Erro ao conectar Google Calendar');
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, [queryClient]);
 
   const { data: status, isLoading } = useQuery({
     queryKey: ["google-calendar-status"],

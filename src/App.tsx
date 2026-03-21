@@ -32,6 +32,7 @@ const Assinatura = lazy(() => import("./pages/Assinatura"));
 const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
+const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,7 @@ const App = () => {
                     <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />
                     <Route path="/assinatura" element={<Assinatura />} />
+                    <Route path="/politica-de-privacidade" element={<PoliticaPrivacidade />} />
                     <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>

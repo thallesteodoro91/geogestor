@@ -456,14 +456,14 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
+          <p className="mt-4 text-center text-xs text-muted-foreground">
+            Ao usar a plataforma, você concorda com nossa{" "}
+            <a href="/politica-de-privacidade" className="underline hover:text-primary">
+              Política de Privacidade
+            </a>.
+          </p>
         </CardContent>
       </Card>
-      <p className="mt-4 text-center text-xs text-muted-foreground">
-        Ao usar a plataforma, você concorda com nossa{" "}
-        <a href="/politica-de-privacidade" className="underline hover:text-primary">
-          Política de Privacidade
-        </a>.
-      </p>
     </div>
   );
 }

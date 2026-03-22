@@ -307,20 +307,7 @@ export default function Auth() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="login-password">Senha</Label>
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="px-0 h-auto text-xs text-muted-foreground hover:text-primary"
-                        onClick={() => {
-                          setShowForgotPassword(true);
-                          setResetEmail(email);
-                        }}
-                      >
-                        Esqueci minha senha
-                      </Button>
-                    </div>
+                    <Label htmlFor="login-password">Senha</Label>
                     <Input
                       id="login-password"
                       type="password"
@@ -329,6 +316,17 @@ export default function Auth() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                     />
+                    <Button
+                      type="button"
+                      variant="link"
+                      className="px-0 h-auto text-xs text-muted-foreground hover:text-primary"
+                      onClick={() => {
+                        setShowForgotPassword(true);
+                        setResetEmail(email);
+                      }}
+                    >
+                      Esqueci minha senha
+                    </Button>
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>
                     {loading ? "Entrando..." : "Entrar"}

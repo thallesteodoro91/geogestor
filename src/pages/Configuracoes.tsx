@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, ShieldAlert, PartyPopper, X, FileSpreadsheet } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";

@@ -123,49 +123,11 @@ export function TenantSettingsCard() {
           </div>
         </div>
 
-      <Separator className="my-4" />
-
-      <div className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Bell className="h-4 w-4 text-muted-foreground" />
-          <h4 className="text-sm font-medium">Configurações de Alertas</h4>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="alert-days">Dias para alerta de pagamento próximo</Label>
-            <Input
-              id="alert-days"
-              type="number"
-              min={1}
-              max={90}
-              value={alertDaysThreshold}
-              onChange={(e) => setAlertDaysThreshold(Number(e.target.value))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Alertas serão exibidos quando o vencimento estiver dentro deste período (1-90 dias)
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="overdue-frequency">Frequência de alerta de pagamento vencido</Label>
-            <Input
-              id="overdue-frequency"
-              type="number"
-              min={1}
-              max={30}
-              value={overdueAlertFrequency}
-              onChange={(e) => setOverdueAlertFrequency(Number(e.target.value))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Intervalo em dias para reenviar alertas de pagamentos vencidos (1-30 dias)
-            </p>
-          </div>
-        </div>
-      </div>
 
         <div className="flex justify-end">
         <Button 
           onClick={handleSave} 
-          disabled={loading || (name === tenant.name && alertDaysThreshold === ((tenant.settings?.alert_days_threshold as number) || 30) && overdueAlertFrequency === ((tenant.settings?.overdue_alert_frequency_days as number) || 3))}
+          disabled={loading || name === tenant.name}
         >
             <Save className="h-4 w-4 mr-2" />
             {loading ? "Salvando..." : "Salvar"}

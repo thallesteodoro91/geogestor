@@ -16,12 +16,6 @@ export function TenantSettingsCard() {
   const { isAdmin, isLoading: roleLoading } = useUserRole();
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState(tenant?.name || "");
-  const [alertDaysThreshold, setAlertDaysThreshold] = useState<number>(
-    (tenant?.settings?.alert_days_threshold as number) || 30
-  );
-  const [overdueAlertFrequency, setOverdueAlertFrequency] = useState<number>(
-    (tenant?.settings?.overdue_alert_frequency_days as number) || 3
-  );
 
   useEffect(() => {
     if (tenant) {

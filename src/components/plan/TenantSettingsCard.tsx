@@ -20,8 +20,6 @@ export function TenantSettingsCard() {
   useEffect(() => {
     if (tenant) {
       setName(tenant.name || "");
-      setAlertDaysThreshold((tenant.settings?.alert_days_threshold as number) || 30);
-      setOverdueAlertFrequency((tenant.settings?.overdue_alert_frequency_days as number) || 3);
     }
   }, [tenant]);
 

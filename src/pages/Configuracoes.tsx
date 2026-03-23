@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, ShieldAlert, PartyPopper, X, FileSpreadsheet } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
@@ -522,7 +523,7 @@ export default function Configuracoes() {
               </div>
               <CardDescription>Controle como você recebe alertas e Story Cards</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Alertas de Pagamento</Label>
@@ -551,6 +552,89 @@ export default function Configuracoes() {
                   }}
                 />
               </div>
+
+              {tenant?.settings?.alertas_pagamento_enabled !== false && (
+                <>
+                  <Separator />
+
+                  <div className="space-y-2">
+                    <Label htmlFor="alert-days-threshold">Antecedência dos alertas</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Defina com quantos dias de antecedência você deseja ser notificado sobre pagamentos próximos do vencimento.
+                    </p>
+                    <Select
+                      value={String((tenant?.settings?.alert_days_threshold as number) || 30)}
+                      onValueChange={async (value) => {
+                        if (!tenant) return;
+                        try {
+                          const { error } = await supabase
+                            .from('tenants')
+                            .update({
+                              settings: {
+                                ...tenant.settings,
+                                alert_days_threshold: Number(value),
+                              },
+                            })
+                            .eq('id', tenant.id);
+                          if (error) throw error;
+                          refetchTenant();
+                          toast.success(`Alertas aparecerão com ${value} dias de antecedência`);
+                        } catch {
+                          toast.error('Erro ao salvar preferência');
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="alert-days-threshold" className="w-full max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">7 dias antes do vencimento</SelectItem>
+                        <SelectItem value="15">15 dias antes do vencimento</SelectItem>
+                        <SelectItem value="30">30 dias antes do vencimento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="overdue-frequency">Frequência de alertas vencidos</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Após o vencimento, defina a cada quantos dias o sistema irá lembrá-lo novamente sobre pagamentos em atraso.
+                    </p>
+                    <Select
+                      value={String((tenant?.settings?.overdue_alert_frequency_days as number) || 3)}
+                      onValueChange={async (value) => {
+                        if (!tenant) return;
+                        try {
+                          const { error } = await supabase
+                            .from('tenants')
+                            .update({
+                              settings: {
+                                ...tenant.settings,
+                                overdue_alert_frequency_days: Number(value),
+                              },
+                            })
+                            .eq('id', tenant.id);
+                          if (error) throw error;
+                          refetchTenant();
+                          toast.success(`Alertas de vencidos aparecerão a cada ${value} dia(s)`);
+                        } catch {
+                          toast.error('Erro ao salvar preferência');
+                        }
+                      }}
+                    >
+                      <SelectTrigger id="overdue-frequency" className="w-full max-w-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">A cada 1 dia</SelectItem>
+                        <SelectItem value="3">A cada 3 dias</SelectItem>
+                        <SelectItem value="5">A cada 5 dias</SelectItem>
+                        <SelectItem value="7">A cada 7 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

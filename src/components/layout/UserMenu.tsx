@@ -74,6 +74,10 @@ export const UserMenu = () => {
           <Settings className="mr-2 h-4 w-4" />
           <span>Configurações</span>
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/politica-de-privacidade")}>
+          <Shield className="mr-2 h-4 w-4" />
+          <span>Política de Privacidade</span>
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="text-destructive focus:text-destructive">
           <LogOut className="mr-2 h-4 w-4" />

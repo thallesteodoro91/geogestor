@@ -36,7 +36,7 @@ export function TenantSettingsCard() {
         .from('tenants')
         .update({ 
           name: name.trim(),
-          settings: updatedSettings,
+          settings: tenant.settings as any,
         })
         .eq('id', tenant.id);
 

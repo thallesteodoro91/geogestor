@@ -91,6 +91,18 @@ export default function Auth() {
     }
   };
 
+  const isNetworkError = (error: any): boolean => {
+    const msg = error?.message?.toLowerCase() || "";
+    return (
+      msg.includes("failed to fetch") ||
+      msg.includes("network") ||
+      msg.includes("net::") ||
+      msg.includes("econnrefused") ||
+      msg.includes("timeout") ||
+      error?.name === "TypeError" && msg.includes("fetch")
+    );
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -104,7 +116,11 @@ export default function Auth() {
       });
 
       if (error) {
-        if (error.message.includes("Invalid login credentials")) {
+        if (isNetworkError(error)) {
+          toast.error("Falha de conexão", {
+            description: "Não foi possível conectar ao servidor. Verifique sua internet e tente novamente.",
+          });
+        } else if (error.message.includes("Invalid login credentials")) {
           toast.error("Email ou senha incorretos");
         } else {
           toast.error(error.message);
@@ -119,7 +135,11 @@ export default function Auth() {
         handlePostLoginRedirect();
       }
     } catch (error: any) {
-      if (error.errors) {
+      if (isNetworkError(error)) {
+        toast.error("Sem conexão com o servidor", {
+          description: "Verifique sua conexão com a internet e tente novamente em alguns segundos.",
+        });
+      } else if (error.errors) {
         error.errors.forEach((err: any) => toast.error(err.message));
       } else {
         toast.error("Erro ao fazer login");

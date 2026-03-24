@@ -205,8 +205,14 @@ export default function Auth() {
       if (error) {
         toast.error("Erro ao fazer login com Google");
       }
-    } catch {
-      toast.error("Erro ao conectar com Google");
+    } catch (error: any) {
+      if (isNetworkError(error)) {
+        toast.error("Sem conexão com o servidor", {
+          description: "Verifique sua conexão com a internet e tente novamente.",
+        });
+      } else {
+        toast.error("Erro ao conectar com Google");
+      }
     } finally {
       setLoading(false);
     }

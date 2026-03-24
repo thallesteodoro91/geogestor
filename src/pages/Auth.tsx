@@ -181,7 +181,11 @@ export default function Auth() {
         toast.success("Conta criada! Verifique seu email para ativar sua conta.");
       }
     } catch (error: any) {
-      if (error.errors) {
+      if (isNetworkError(error)) {
+        toast.error("Sem conexão com o servidor", {
+          description: "Verifique sua conexão com a internet e tente novamente.",
+        });
+      } else if (error.errors) {
         error.errors.forEach((err: any) => toast.error(err.message));
       } else {
         toast.error("Erro ao criar conta");

@@ -127,7 +127,7 @@ export const CompromissoDialog = ({
     mutationFn: async (data: any) => {
       const { error } = await supabase.from("fato_servico").insert([
         {
-          nome_do_servico: "Novo Serviço",
+          nome_do_servico: data.nome_do_servico || "Novo Serviço",
           id_cliente: data.id_cliente,
           id_propriedade: data.id_propriedade,
           data_do_servico_inicio: data.data_inicio,

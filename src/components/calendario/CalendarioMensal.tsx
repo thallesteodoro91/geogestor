@@ -7,14 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SERVICE_STATUS, getServiceStatusColor, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION, getBudgetSituationColor, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
+import { SERVICE_STATUS, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "./calendario-custom.css";
 
-const locales = {
-  "pt-BR": ptBR,
-};
+const locales = { "pt-BR": ptBR };
 
 const localizer = dateFnsLocalizer({
   format,
@@ -39,6 +37,14 @@ interface CalendarEvent {
   };
 }
 
+const LEGENDA_ITEMS = [
+  { cor: "#246BCE", label: "🛠️ Serviço" },
+  { cor: BUDGET_SITUATION_COLORS.APROVADO.bg, label: "✓ Aprovado" },
+  { cor: BUDGET_SITUATION_COLORS.PENDENTE.bg, label: "⏱ Pendente", textDark: true },
+  { cor: SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg, label: "⟳ Em Andamento" },
+  { cor: SERVICE_STATUS_COLORS.CANCELADO.bg, label: "✕ Cancelado" },
+];
+
 export const CalendarioMensal = () => {
   const navigate = useNavigate();
   const [date, setDate] = useState(new Date());
@@ -46,27 +52,16 @@ export const CalendarioMensal = () => {
   const { data: eventos = [], isLoading } = useQuery({
     queryKey: ["calendario-eventos"],
     queryFn: async () => {
-      // Buscar orçamentos
       const { data: orcamentos } = await supabase
         .from("fato_orcamento")
-        .select(`
-          *,
-          cliente:dim_cliente!fk_orcamento_cliente(nome),
-          servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria)
-        `);
+        .select(`*, cliente:dim_cliente!fk_orcamento_cliente(nome), servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria)`);
 
-      // Buscar serviços
       const { data: servicos } = await supabase
         .from("fato_servico")
-        .select(`
-          *,
-          cliente:dim_cliente!fk_servico_cliente(nome),
-          propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)
-        `);
+        .select(`*, cliente:dim_cliente!fk_servico_cliente(nome), propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)`);
 
       const events: CalendarEvent[] = [];
 
-      // Adicionar orçamentos ao calendário
       orcamentos?.forEach((orc) => {
         if (orc.data_inicio) {
           events.push({
@@ -84,7 +79,6 @@ export const CalendarioMensal = () => {
         }
       });
 
-      // Adicionar serviços ao calendário
       servicos?.forEach((srv) => {
         if (srv.data_do_servico_inicio) {
           const status = srv.situacao_do_servico === SERVICE_STATUS.PLANEJADO ? "Agendado" : (srv.situacao_do_servico || "Agendado");
@@ -110,75 +104,41 @@ export const CalendarioMensal = () => {
   });
 
   const eventStyleGetter = (event: CalendarEvent) => {
-    const { status, categoria, tipo } = event.resource;
+    const { status, tipo } = event.resource;
     
-    // Cor específica para serviços: azul #246BCE
     if (tipo === "servico") {
       return {
         style: {
           background: "linear-gradient(135deg, #246BCE 0%, #1a5299 100%)",
-          borderRadius: "6px",
-          opacity: 0.95,
-          color: "white",
-          border: "0px",
-          borderLeft: "4px solid #1e88e5",
-          display: "block",
-          padding: "4px 8px",
-          fontWeight: "600",
-          fontSize: "0.85rem",
-          boxShadow: "0 2px 4px rgba(36, 107, 206, 0.3)",
+          borderRadius: "6px", opacity: 0.95, color: "white", border: "0px",
+          borderLeft: "4px solid #1e88e5", display: "block", padding: "4px 8px",
+          fontWeight: "600", fontSize: "0.85rem", boxShadow: "0 2px 4px rgba(36, 107, 206, 0.3)",
         },
       };
     }
     
     let backgroundColor = "hsl(var(--primary))";
-    let borderLeft = "4px solid white";
     
-    // Cores para orçamentos por categoria
-    if (categoria?.toLowerCase().includes("topografia")) {
-      backgroundColor = "linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)";
-    } else if (categoria?.toLowerCase().includes("georreferenciamento")) {
-      backgroundColor = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
-    } else if (categoria?.toLowerCase().includes("projeto")) {
-      backgroundColor = "linear-gradient(135deg, #a855f7 0%, #7c3aed 100%)";
-    }
-
-    // Cores por status usando helpers centralizados
     if (status === BUDGET_SITUATION.CANCELADO || status === SERVICE_STATUS.CANCELADO) {
-      const color = SERVICE_STATUS_COLORS.CANCELADO.bg;
-      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.CANCELADO.bgHover} 100%)`;
+      backgroundColor = `linear-gradient(135deg, ${SERVICE_STATUS_COLORS.CANCELADO.bg} 0%, ${SERVICE_STATUS_COLORS.CANCELADO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO) {
-      const color = BUDGET_SITUATION_COLORS.APROVADO.bg;
-      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${BUDGET_SITUATION_COLORS.APROVADO.bgHover} 100%)`;
+      backgroundColor = `linear-gradient(135deg, ${BUDGET_SITUATION_COLORS.APROVADO.bg} 0%, ${BUDGET_SITUATION_COLORS.APROVADO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.EM_ANDAMENTO) {
-      const color = SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg;
-      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.EM_ANDAMENTO.bgHover} 100%)`;
+      backgroundColor = `linear-gradient(135deg, ${SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg} 0%, ${SERVICE_STATUS_COLORS.EM_ANDAMENTO.bgHover} 100%)`;
     } else if (status === SERVICE_STATUS.EM_REVISAO) {
-      const color = SERVICE_STATUS_COLORS.EM_REVISAO.bg;
-      backgroundColor = `linear-gradient(135deg, ${color} 0%, ${SERVICE_STATUS_COLORS.EM_REVISAO.bgHover} 100%)`;
+      backgroundColor = `linear-gradient(135deg, ${SERVICE_STATUS_COLORS.EM_REVISAO.bg} 0%, ${SERVICE_STATUS_COLORS.EM_REVISAO.bgHover} 100%)`;
     }
-
-    borderLeft = "4px solid #fbbf24";
 
     return {
       style: {
-        background: backgroundColor,
-        borderRadius: "6px",
-        opacity: 0.95,
-        color: "white",
-        border: "0px",
-        borderLeft,
-        display: "block",
-        padding: "4px 8px",
-        fontWeight: "600",
-        fontSize: "0.85rem",
-        boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+        background: backgroundColor, borderRadius: "6px", opacity: 0.95, color: "white",
+        border: "0px", borderLeft: "4px solid #fbbf24", display: "block", padding: "4px 8px",
+        fontWeight: "600", fontSize: "0.85rem", boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
       },
     };
   };
 
   const handleSelectEvent = (event: CalendarEvent) => {
-    // O ID é no formato "tipo-uuid", precisamos separar apenas no primeiro hífen
     const separatorIndex = event.id.indexOf("-");
     const tipo = event.id.substring(0, separatorIndex);
     const id = event.id.substring(separatorIndex + 1);
@@ -186,11 +146,7 @@ export const CalendarioMensal = () => {
   };
 
   if (isLoading) {
-    return (
-      <Card className="p-6">
-        <Skeleton className="h-[600px] w-full" />
-      </Card>
-    );
+    return <Card className="p-6"><Skeleton className="h-[600px] w-full" /></Card>;
   }
 
   const eventTooltip = (event: CalendarEvent) => {
@@ -199,34 +155,43 @@ export const CalendarioMensal = () => {
   };
 
   return (
-    <Card className="p-6">
-      <Calendar
-        localizer={localizer}
-        events={eventos}
-        startAccessor="start"
-        endAccessor="end"
-        style={{ height: 600 }}
-        onSelectEvent={handleSelectEvent}
-        eventPropGetter={eventStyleGetter}
-        tooltipAccessor={eventTooltip}
-        date={date}
-        onNavigate={setDate}
-        messages={{
-          next: "Próximo",
-          previous: "Anterior",
-          today: "Hoje",
-          month: "Mês",
-          week: "Semana",
-          day: "Dia",
-          agenda: "Agenda",
-          date: "Data",
-          time: "Hora",
-          event: "Evento",
-          noEventsInRange: "Não há eventos neste período",
-          showMore: (total) => `+ ${total} mais`,
-        }}
-        culture="pt-BR"
-      />
-    </Card>
+    <div className="space-y-4">
+      <Card className="p-6">
+        <Calendar
+          localizer={localizer}
+          events={eventos}
+          startAccessor="start"
+          endAccessor="end"
+          style={{ height: 600 }}
+          onSelectEvent={handleSelectEvent}
+          eventPropGetter={eventStyleGetter}
+          tooltipAccessor={eventTooltip}
+          date={date}
+          onNavigate={setDate}
+          messages={{
+            next: "Próximo", previous: "Anterior", today: "Hoje",
+            month: "Mês", week: "Semana", day: "Dia", agenda: "Agenda",
+            date: "Data", time: "Hora", event: "Evento",
+            noEventsInRange: "Não há eventos neste período",
+            showMore: (total) => `+ ${total} mais`,
+          }}
+          culture="pt-BR"
+        />
+      </Card>
+
+      {/* Legenda de cores */}
+      <div className="flex flex-wrap items-center gap-3 px-2">
+        <span className="text-sm font-medium text-muted-foreground">Legenda:</span>
+        {LEGENDA_ITEMS.map((item) => (
+          <div key={item.label} className="flex items-center gap-1.5">
+            <div
+              className="w-3 h-3 rounded-sm"
+              style={{ backgroundColor: item.cor }}
+            />
+            <span className="text-xs text-muted-foreground">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };

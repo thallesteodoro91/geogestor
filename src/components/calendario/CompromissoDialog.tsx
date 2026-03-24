@@ -43,6 +43,7 @@ export const CompromissoDialog = ({
     id_cliente: "",
     id_servico: "",
     id_propriedade: "",
+    nome_do_servico: "",
     data_inicio: new Date().toISOString().split("T")[0],
     data_termino: "",
     valor_unitario: "",

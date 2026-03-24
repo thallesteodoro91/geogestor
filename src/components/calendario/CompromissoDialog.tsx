@@ -43,6 +43,7 @@ export const CompromissoDialog = ({
     id_cliente: "",
     id_servico: "",
     id_propriedade: "",
+    nome_do_servico: "",
     data_inicio: new Date().toISOString().split("T")[0],
     data_termino: "",
     valor_unitario: "",
@@ -126,7 +127,7 @@ export const CompromissoDialog = ({
     mutationFn: async (data: any) => {
       const { error } = await supabase.from("fato_servico").insert([
         {
-          nome_do_servico: "Novo Serviço",
+          nome_do_servico: data.nome_do_servico || "Novo Serviço",
           id_cliente: data.id_cliente,
           id_propriedade: data.id_propriedade,
           data_do_servico_inicio: data.data_inicio,
@@ -157,6 +158,7 @@ export const CompromissoDialog = ({
       id_cliente: "",
       id_servico: "",
       id_propriedade: "",
+      nome_do_servico: "",
       data_inicio: new Date().toISOString().split("T")[0],
       data_termino: "",
       valor_unitario: "",
@@ -320,6 +322,14 @@ export const CompromissoDialog = ({
 
             <TabsContent value="servico" className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2 space-y-2">
+                  <Label>Nome do Serviço *</Label>
+                  <Input
+                    value={formData.nome_do_servico}
+                    onChange={(e) => setFormData({ ...formData, nome_do_servico: e.target.value })}
+                    placeholder="Ex: Levantamento topográfico"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
                   <Select

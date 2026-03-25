@@ -173,7 +173,7 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
       <Card className="p-6">
         <Calendar
           localizer={localizer}
-          events={eventos}
+          events={eventosFiltrados}
           startAccessor="start"
           endAccessor="end"
           style={{ height: 600 }}

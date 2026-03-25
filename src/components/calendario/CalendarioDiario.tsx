@@ -12,7 +12,13 @@ import { cn } from "@/lib/utils";
 import { SERVICE_STATUS, getServiceStatusBadgeClasses, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION, getBudgetSituationBadgeClass, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
 
-export const CalendarioDiario = () => {
+interface CalendarioDiarioProps {
+  busca?: string;
+  filtroTipo?: string;
+  filtroStatus?: string;
+}
+
+export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatus = "todos" }: CalendarioDiarioProps) => {
   const navigate = useNavigate();
   const [dataSelecionada, setDataSelecionada] = useState(new Date());
 

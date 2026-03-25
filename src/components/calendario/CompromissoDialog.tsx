@@ -39,6 +39,7 @@ export const CompromissoDialog = ({
   eventoId,
 }: CompromissoDialogProps) => {
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
   const [tipo, setTipo] = useState<"orcamento" | "servico">(tipoInicial);
   const [formData, setFormData] = useState({
     id_cliente: "",

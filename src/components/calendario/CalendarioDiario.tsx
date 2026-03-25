@@ -170,7 +170,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
             </p>
           </Card>
         ) : (
-          eventos.map((evento) => {
+          eventosFiltrados.map((evento) => {
             const statusConfig = getStatusConfig(evento.status, evento.tipo);
             return (
               <Card

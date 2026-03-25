@@ -133,11 +133,12 @@ export const CompromissoDialog = ({
         {
           nome_do_servico: data.nome_do_servico || "Novo Serviço",
           id_cliente: data.id_cliente,
-          id_propriedade: data.id_propriedade,
+          id_propriedade: data.id_propriedade || null,
           data_do_servico_inicio: data.data_inicio,
           data_do_servico_fim: data.data_termino || null,
           situacao_do_servico: data.situacao_servico,
-          receita_servico: parseFloat(data.valor_unitario || 0),
+          receita_servico: parseFloat(data.valor_unitario || "0"),
+          tenant_id: tenant?.id,
         },
       ]);
       if (error) throw error;

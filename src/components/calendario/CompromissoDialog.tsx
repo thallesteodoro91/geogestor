@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { Calendar, Loader2, FileText, Briefcase } from "lucide-react";
 import { SERVICE_STATUS, CALENDAR_STATUS_OPTIONS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface CompromissoDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export const CompromissoDialog = ({
   eventoId,
 }: CompromissoDialogProps) => {
   const queryClient = useQueryClient();
+  const { tenant } = useTenant();
   const [tipo, setTipo] = useState<"orcamento" | "servico">(tipoInicial);
   const [formData, setFormData] = useState({
     id_cliente: "",
@@ -96,13 +98,14 @@ export const CompromissoDialog = ({
       const { error } = await supabase.from("fato_orcamento").insert([
         {
           id_cliente: data.id_cliente,
-          id_servico: data.id_servico,
-          id_propriedade: data.id_propriedade,
+          id_servico: data.id_servico || null,
+          id_propriedade: data.id_propriedade || null,
           data_orcamento: data.data_inicio,
           data_inicio: data.data_inicio,
           data_termino: data.data_termino || null,
-          valor_unitario: parseFloat(data.valor_unitario),
+          valor_unitario: parseFloat(data.valor_unitario) || 0,
           situacao: data.situacao,
+          tenant_id: tenant?.id,
         },
       ]);
       if (error) throw error;
@@ -112,6 +115,7 @@ export const CompromissoDialog = ({
       queryClient.invalidateQueries({ queryKey: ["calendario-semanal"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-diario"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-tabela"] });
+      queryClient.invalidateQueries({ queryKey: ["calendario-kpis"] });
       toast.success("Orçamento criado com sucesso!");
       onOpenChange(false);
       resetForm();
@@ -129,11 +133,12 @@ export const CompromissoDialog = ({
         {
           nome_do_servico: data.nome_do_servico || "Novo Serviço",
           id_cliente: data.id_cliente,
-          id_propriedade: data.id_propriedade,
+          id_propriedade: data.id_propriedade || null,
           data_do_servico_inicio: data.data_inicio,
           data_do_servico_fim: data.data_termino || null,
           situacao_do_servico: data.situacao_servico,
-          receita_servico: parseFloat(data.valor_unitario || 0),
+          receita_servico: parseFloat(data.valor_unitario || "0"),
+          tenant_id: tenant?.id,
         },
       ]);
       if (error) throw error;
@@ -143,6 +148,7 @@ export const CompromissoDialog = ({
       queryClient.invalidateQueries({ queryKey: ["calendario-semanal"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-diario"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-tabela"] });
+      queryClient.invalidateQueries({ queryKey: ["calendario-kpis"] });
       toast.success("Serviço criado com sucesso!");
       onOpenChange(false);
       resetForm();

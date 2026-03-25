@@ -12,7 +12,13 @@ import { cn } from "@/lib/utils";
 import { SERVICE_STATUS, getServiceStatusBadgeClasses, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION, getBudgetSituationBadgeClass, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
 
-export const CalendarioDiario = () => {
+interface CalendarioDiarioProps {
+  busca?: string;
+  filtroTipo?: string;
+  filtroStatus?: string;
+}
+
+export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatus = "todos" }: CalendarioDiarioProps) => {
   const navigate = useNavigate();
   const [dataSelecionada, setDataSelecionada] = useState(new Date());
 
@@ -81,7 +87,14 @@ export const CalendarioDiario = () => {
     },
   });
 
-  // Helper centralizado para configuração de status com ícones
+  // Apply filters
+  const eventosFiltrados = eventos.filter((evento) => {
+    const matchBusca = !busca || [evento.titulo, evento.cliente, evento.propriedade, evento.municipio].some(v => v.toLowerCase().includes(busca.toLowerCase()));
+    const matchTipo = filtroTipo === "todos" || evento.tipo === filtroTipo;
+    const matchStatus = filtroStatus === "todos" || evento.status === filtroStatus;
+    return matchBusca && matchTipo && matchStatus;
+  });
+
   const getStatusConfig = (status: string, tipo: string) => {
     const icon = 
       status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO ? "✓" :
@@ -149,7 +162,7 @@ export const CalendarioDiario = () => {
 
       {/* Timeline de Eventos */}
       <div className="space-y-4">
-        {eventos.length === 0 ? (
+        {eventosFiltrados.length === 0 ? (
           <Card className="p-12 text-center">
             <Calendar className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <p className="text-lg font-medium text-muted-foreground">
@@ -157,7 +170,7 @@ export const CalendarioDiario = () => {
             </p>
           </Card>
         ) : (
-          eventos.map((evento) => {
+          eventosFiltrados.map((evento) => {
             const statusConfig = getStatusConfig(evento.status, evento.tipo);
             return (
               <Card

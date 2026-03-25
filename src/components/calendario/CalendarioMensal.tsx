@@ -45,7 +45,13 @@ const LEGENDA_ITEMS = [
   { cor: SERVICE_STATUS_COLORS.CANCELADO.bg, label: "✕ Cancelado" },
 ];
 
-export const CalendarioMensal = () => {
+interface CalendarioMensalProps {
+  busca?: string;
+  filtroTipo?: string;
+  filtroStatus?: string;
+}
+
+export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatus = "todos" }: CalendarioMensalProps) => {
   const navigate = useNavigate();
   const [date, setDate] = useState(new Date());
 
@@ -101,6 +107,14 @@ export const CalendarioMensal = () => {
 
       return events;
     },
+  });
+
+  // Apply filters
+  const eventosFiltrados = eventos.filter((event) => {
+    const matchBusca = !busca || event.title.toLowerCase().includes(busca.toLowerCase()) || event.resource.cliente.toLowerCase().includes(busca.toLowerCase());
+    const matchTipo = filtroTipo === "todos" || event.resource.tipo === filtroTipo;
+    const matchStatus = filtroStatus === "todos" || event.resource.status === filtroStatus;
+    return matchBusca && matchTipo && matchStatus;
   });
 
   const eventStyleGetter = (event: CalendarEvent) => {
@@ -159,7 +173,7 @@ export const CalendarioMensal = () => {
       <Card className="p-6">
         <Calendar
           localizer={localizer}
-          events={eventos}
+          events={eventosFiltrados}
           startAccessor="start"
           endAccessor="end"
           style={{ height: 600 }}

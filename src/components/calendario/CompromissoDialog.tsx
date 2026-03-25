@@ -115,6 +115,7 @@ export const CompromissoDialog = ({
       queryClient.invalidateQueries({ queryKey: ["calendario-semanal"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-diario"] });
       queryClient.invalidateQueries({ queryKey: ["calendario-tabela"] });
+      queryClient.invalidateQueries({ queryKey: ["calendario-kpis"] });
       toast.success("Orçamento criado com sucesso!");
       onOpenChange(false);
       resetForm();

@@ -162,7 +162,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
 
       {/* Timeline de Eventos */}
       <div className="space-y-4">
-        {eventos.length === 0 ? (
+        {eventosFiltrados.length === 0 ? (
           <Card className="p-12 text-center">
             <Calendar className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
             <p className="text-lg font-medium text-muted-foreground">

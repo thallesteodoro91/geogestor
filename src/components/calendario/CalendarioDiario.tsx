@@ -87,7 +87,14 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
     },
   });
 
-  // Helper centralizado para configuração de status com ícones
+  // Apply filters
+  const eventosFiltrados = eventos.filter((evento) => {
+    const matchBusca = !busca || [evento.titulo, evento.cliente, evento.propriedade, evento.municipio].some(v => v.toLowerCase().includes(busca.toLowerCase()));
+    const matchTipo = filtroTipo === "todos" || evento.tipo === filtroTipo;
+    const matchStatus = filtroStatus === "todos" || evento.status === filtroStatus;
+    return matchBusca && matchTipo && matchStatus;
+  });
+
   const getStatusConfig = (status: string, tipo: string) => {
     const icon = 
       status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO ? "✓" :

@@ -98,13 +98,14 @@ export const CompromissoDialog = ({
       const { error } = await supabase.from("fato_orcamento").insert([
         {
           id_cliente: data.id_cliente,
-          id_servico: data.id_servico,
-          id_propriedade: data.id_propriedade,
+          id_servico: data.id_servico || null,
+          id_propriedade: data.id_propriedade || null,
           data_orcamento: data.data_inicio,
           data_inicio: data.data_inicio,
           data_termino: data.data_termino || null,
-          valor_unitario: parseFloat(data.valor_unitario),
+          valor_unitario: parseFloat(data.valor_unitario) || 0,
           situacao: data.situacao,
+          tenant_id: tenant?.id,
         },
       ]);
       if (error) throw error;

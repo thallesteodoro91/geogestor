@@ -45,7 +45,13 @@ const LEGENDA_ITEMS = [
   { cor: SERVICE_STATUS_COLORS.CANCELADO.bg, label: "✕ Cancelado" },
 ];
 
-export const CalendarioMensal = () => {
+interface CalendarioMensalProps {
+  busca?: string;
+  filtroTipo?: string;
+  filtroStatus?: string;
+}
+
+export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatus = "todos" }: CalendarioMensalProps) => {
   const navigate = useNavigate();
   const [date, setDate] = useState(new Date());
 

@@ -109,6 +109,14 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
     },
   });
 
+  // Apply filters
+  const eventosFiltrados = eventos.filter((event) => {
+    const matchBusca = !busca || event.title.toLowerCase().includes(busca.toLowerCase()) || event.resource.cliente.toLowerCase().includes(busca.toLowerCase());
+    const matchTipo = filtroTipo === "todos" || event.resource.tipo === filtroTipo;
+    const matchStatus = filtroStatus === "todos" || event.resource.status === filtroStatus;
+    return matchBusca && matchTipo && matchStatus;
+  });
+
   const eventStyleGetter = (event: CalendarEvent) => {
     const { status, tipo } = event.resource;
     

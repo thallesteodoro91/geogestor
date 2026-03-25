@@ -184,7 +184,7 @@ const Calendario = () => {
           </TabsContent>
 
           <TabsContent value="diario" className="mt-6">
-            <CalendarioDiario />
+            <CalendarioDiario busca={busca} filtroTipo={filtroTipo} filtroStatus={filtroStatus} />
           </TabsContent>
 
           <TabsContent value="tabela" className="mt-6">

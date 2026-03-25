@@ -23,6 +23,7 @@ import { toast } from "sonner";
 import { Calendar, Loader2, FileText, Briefcase } from "lucide-react";
 import { SERVICE_STATUS, CALENDAR_STATUS_OPTIONS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
+import { useTenant } from "@/contexts/TenantContext";
 
 interface CompromissoDialogProps {
   open: boolean;

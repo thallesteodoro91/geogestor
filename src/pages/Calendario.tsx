@@ -44,7 +44,7 @@ const Calendario = () => {
       const servicosEmAndamento = servicos?.filter(s => 
         s.situacao_do_servico === SERVICE_STATUS.EM_ANDAMENTO
       ).length || 0;
-      const valorTotal = (orcamentos || []).reduce((acc, o) => acc + (o.valor_unitario * o.quantidade), 0) +
+      const valorTotal = (orcamentos || []).reduce((acc, o) => acc + ((o.valor_unitario || 0) * (o.quantidade || 1)), 0) +
         (servicos || []).reduce((acc, s) => acc + (s.receita_servico || 0), 0);
 
       return { totalOrcamentos, totalServicos, orcamentosPendentes, servicosEmAndamento, valorTotal };

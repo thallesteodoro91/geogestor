@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, User, Briefcase, DollarSign, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -25,8 +25,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
   const { data: eventos = [], isLoading } = useQuery({
     queryKey: ["calendario-diario", dataSelecionada],
     queryFn: async () => {
-      const inicioDia = startOfDay(dataSelecionada);
-      const fimDia = endOfDay(dataSelecionada);
+      const diaStr = format(dataSelecionada, "yyyy-MM-dd");
 
       const { data: orcamentos } = await supabase
         .from("fato_orcamento")
@@ -36,8 +35,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
           servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria),
           propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio)
         `)
-        .gte("data_inicio", inicioDia.toISOString())
-        .lte("data_inicio", fimDia.toISOString());
+        .eq("data_inicio", diaStr);
 
       const { data: servicos } = await supabase
         .from("fato_servico")
@@ -46,8 +44,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
           cliente:dim_cliente!fk_servico_cliente(nome, celular, email),
           propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)
         `)
-        .gte("data_do_servico_inicio", inicioDia.toISOString())
-        .lte("data_do_servico_inicio", fimDia.toISOString());
+        .eq("data_do_servico_inicio", diaStr);
 
       const eventos = [
         ...(orcamentos || []).map((orc) => ({

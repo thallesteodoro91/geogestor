@@ -69,12 +69,13 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
       const events: CalendarEvent[] = [];
 
       orcamentos?.forEach((orc) => {
-        if (orc.data_inicio) {
+        const dataInicio = orc.data_inicio || orc.data_orcamento;
+        if (dataInicio) {
           events.push({
             id: `orc-${orc.id_orcamento}`,
             title: `💰 ${orc.cliente?.nome || "Cliente"} - ${orc.servico?.nome_do_servico || "Orçamento"}`,
-            start: new Date(orc.data_inicio),
-            end: orc.data_termino ? new Date(orc.data_termino) : new Date(orc.data_inicio),
+            start: new Date(dataInicio),
+            end: orc.data_termino ? new Date(orc.data_termino) : new Date(dataInicio),
             resource: {
               tipo: "orcamento",
               status: orc.situacao || BUDGET_SITUATION.PENDENTE,

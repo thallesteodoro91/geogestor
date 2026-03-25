@@ -181,6 +181,11 @@ export const CompromissoDialog = ({
       return;
     }
 
+    if (tipo === "servico" && !formData.nome_do_servico.trim()) {
+      toast.error("Informe o nome do serviço");
+      return;
+    }
+
     if (tipo === "orcamento") {
       createOrcamento.mutate(formData);
     } else {

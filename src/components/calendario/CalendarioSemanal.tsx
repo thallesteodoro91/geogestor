@@ -29,17 +29,20 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
   const { data: eventos = [], isLoading } = useQuery({
     queryKey: ["calendario-semanal", semanaOffset],
     queryFn: async () => {
+      const inicioStr = format(inicioSemana, "yyyy-MM-dd");
+      const fimStr = format(fimSemana, "yyyy-MM-dd");
+
       const { data: orcamentos } = await supabase
         .from("fato_orcamento")
         .select(`*, cliente:dim_cliente!fk_orcamento_cliente(nome, endereco), servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria), propriedade:dim_propriedade!fk_orcamento_propriedade(nome_da_propriedade, municipio)`)
-        .gte("data_inicio", inicioSemana.toISOString())
-        .lte("data_inicio", fimSemana.toISOString());
+        .gte("data_inicio", inicioStr)
+        .lte("data_inicio", fimStr);
 
       const { data: servicos } = await supabase
         .from("fato_servico")
         .select(`*, cliente:dim_cliente!fk_servico_cliente(nome, endereco), propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)`)
-        .gte("data_do_servico_inicio", inicioSemana.toISOString())
-        .lte("data_do_servico_inicio", fimSemana.toISOString());
+        .gte("data_do_servico_inicio", inicioStr)
+        .lte("data_do_servico_inicio", fimStr);
 
       return [
         ...(orcamentos || []).map((orc) => ({

@@ -221,7 +221,7 @@ export const CompromissoDialog = ({
           </TabsList>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            <TabsContent value="orcamento" className="space-y-4">
+            <TabsContent value="orcamento" className="space-y-4" forceMount style={{ display: tipo === "orcamento" ? undefined : "none" }}>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>

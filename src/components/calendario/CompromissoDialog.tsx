@@ -208,20 +208,33 @@ export const CompromissoDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tipo} onValueChange={(v) => setTipo(v as any)}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="orcamento" className="gap-2">
-              <FileText className="h-4 w-4" />
-              Orçamento
-            </TabsTrigger>
-            <TabsTrigger value="servico" className="gap-2">
-              <Briefcase className="h-4 w-4" />
-              Serviço
-            </TabsTrigger>
-          </TabsList>
+        <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              tipo === "orcamento" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setTipo("orcamento")}
+          >
+            <FileText className="h-4 w-4" />
+            Orçamento
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              tipo === "servico" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={() => setTipo("servico")}
+          >
+            <Briefcase className="h-4 w-4" />
+            Serviço
+          </button>
+        </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-            <TabsContent value="orcamento" className="space-y-4" forceMount style={{ display: tipo === "orcamento" ? undefined : "none" }}>
+            {tipo === "orcamento" && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
@@ -329,9 +342,9 @@ export const CompromissoDialog = ({
                   </Select>
                 </div>
               </div>
-            </TabsContent>
+            )}
 
-            <TabsContent value="servico" className="space-y-4" forceMount style={{ display: tipo === "servico" ? undefined : "none" }}>
+            {tipo === "servico" && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 space-y-2">
                   <Label>Nome do Serviço *</Label>
@@ -428,7 +441,7 @@ export const CompromissoDialog = ({
                   />
                 </div>
               </div>
-            </TabsContent>
+            )}
 
             <div className="flex justify-end gap-2 pt-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -446,7 +459,6 @@ export const CompromissoDialog = ({
               </Button>
             </div>
           </form>
-        </Tabs>
       </DialogContent>
     </Dialog>
   );

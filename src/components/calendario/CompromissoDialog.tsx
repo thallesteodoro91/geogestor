@@ -226,65 +226,50 @@ export const CompromissoDialog = ({
           </button>
         </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+           <form onSubmit={handleSubmit} className="space-y-4 mt-4">
             {tipo === "orcamento" && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={formData.id_cliente}
-                    onValueChange={(v) => setFormData({ ...formData, id_cliente: v, id_propriedade: "" })}
+                    onChange={(e) => setFormData({ ...formData, id_cliente: e.target.value, id_propriedade: "" })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientes.map((c) => (
-                        <SelectItem key={c.id_cliente} value={c.id_cliente}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="">Selecione...</option>
+                    {clientes.map((c) => (
+                      <option key={c.id_cliente} value={c.id_cliente}>{c.nome}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Serviço</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={formData.id_servico}
-                    onValueChange={(v) => setFormData({ ...formData, id_servico: v })}
+                    onChange={(e) => setFormData({ ...formData, id_servico: e.target.value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {servicos.map((s) => (
-                        <SelectItem key={s.id_servico} value={s.id_servico}>
-                          {s.nome_do_servico}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="">Selecione...</option>
+                    {servicos.map((s) => (
+                      <option key={s.id_servico} value={s.id_servico}>{s.nome_do_servico}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Propriedade</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     value={formData.id_propriedade}
-                    onValueChange={(v) => setFormData({ ...formData, id_propriedade: v })}
+                    onChange={(e) => setFormData({ ...formData, id_propriedade: e.target.value })}
                     disabled={!formData.id_cliente}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {propriedades.map((p) => (
-                        <SelectItem key={p.id_propriedade} value={p.id_propriedade}>
-                          {p.nome_da_propriedade}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="">Selecione...</option>
+                    {propriedades.map((p) => (
+                      <option key={p.id_propriedade} value={p.id_propriedade}>{p.nome_da_propriedade}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">
@@ -318,21 +303,15 @@ export const CompromissoDialog = ({
 
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={formData.situacao}
-                    onValueChange={(v) => setFormData({ ...formData, situacao: v })}
+                    onChange={(e) => setFormData({ ...formData, situacao: e.target.value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {BUDGET_SITUATION_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {BUDGET_SITUATION_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             )}
@@ -349,41 +328,31 @@ export const CompromissoDialog = ({
                 </div>
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={formData.id_cliente}
-                    onValueChange={(v) => setFormData({ ...formData, id_cliente: v, id_propriedade: "" })}
+                    onChange={(e) => setFormData({ ...formData, id_cliente: e.target.value, id_propriedade: "" })}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clientes.map((c) => (
-                        <SelectItem key={c.id_cliente} value={c.id_cliente}>
-                          {c.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="">Selecione...</option>
+                    {clientes.map((c) => (
+                      <option key={c.id_cliente} value={c.id_cliente}>{c.nome}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">
                   <Label>Propriedade</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                     value={formData.id_propriedade}
-                    onValueChange={(v) => setFormData({ ...formData, id_propriedade: v })}
+                    onChange={(e) => setFormData({ ...formData, id_propriedade: e.target.value })}
                     disabled={!formData.id_cliente}
                   >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {propriedades.map((p) => (
-                        <SelectItem key={p.id_propriedade} value={p.id_propriedade}>
-                          {p.nome_da_propriedade}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <option value="">Selecione...</option>
+                    {propriedades.map((p) => (
+                      <option key={p.id_propriedade} value={p.id_propriedade}>{p.nome_da_propriedade}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">
@@ -399,21 +368,15 @@ export const CompromissoDialog = ({
 
                 <div className="space-y-2">
                   <Label>Status</Label>
-                  <Select
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     value={formData.situacao_servico}
-                    onValueChange={(v) => setFormData({ ...formData, situacao_servico: v })}
+                    onChange={(e) => setFormData({ ...formData, situacao_servico: e.target.value })}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CALENDAR_STATUS_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    {CALENDAR_STATUS_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="space-y-2">

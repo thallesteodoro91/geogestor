@@ -331,7 +331,7 @@ export const CompromissoDialog = ({
               </div>
             </TabsContent>
 
-            <TabsContent value="servico" className="space-y-4">
+            <TabsContent value="servico" className="space-y-4" forceMount style={{ display: tipo === "servico" ? undefined : "none" }}>
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2 space-y-2">
                   <Label>Nome do Serviço *</Label>

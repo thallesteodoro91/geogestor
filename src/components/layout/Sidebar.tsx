@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Eye, Zap, Database, Bot, CalendarDays, Shield, ClipboardList } from "lucide-react";
+import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Eye, Zap, Database, Bot, CalendarDays, Shield, ClipboardList, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,7 @@ const navigationSections = [
       { name: "Clientes e Projetos", href: "/clientes", icon: Users },
       { name: "Cadastros", href: "/cadastros", icon: FileText },
       { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
+      { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
     ]
   }
 ];

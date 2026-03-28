@@ -30,6 +30,7 @@ const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Assinatura = lazy(() => import("./pages/Assinatura"));
 const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
+const Ajuda = lazy(() => import("./pages/Ajuda"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
@@ -73,6 +74,7 @@ const App = () => {
                     <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
                     <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />
+                    <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
                     <Route path="/assinatura" element={<Assinatura />} />
                     <Route path="/politica-de-privacidade" element={<PoliticaPrivacidade />} />
                     <Route path="*" element={<NotFound />} />

@@ -1,4 +1,4 @@
-import { Settings, LogOut, Shield } from "lucide-react";
+import { Settings, LogOut, Shield, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -73,6 +73,10 @@ export const UserMenu = () => {
         <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
           <Settings className="mr-2 h-4 w-4" />
           <span>Configurações</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/ajuda")}>
+          <HelpCircle className="mr-2 h-4 w-4" />
+          <span>Central de Ajuda</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/politica-de-privacidade")}>
           <Shield className="mr-2 h-4 w-4" />

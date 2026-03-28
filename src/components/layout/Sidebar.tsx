@@ -51,6 +51,7 @@ const navigationSections = [
       { name: "Clientes e Projetos", href: "/clientes", icon: Users },
       { name: "Cadastros", href: "/cadastros", icon: FileText },
       { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
+      { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
     ]
   }
 ];

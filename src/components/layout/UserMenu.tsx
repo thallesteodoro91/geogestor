@@ -74,6 +74,10 @@ export const UserMenu = () => {
           <Settings className="mr-2 h-4 w-4" />
           <span>Configurações</span>
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/ajuda")}>
+          <HelpCircle className="mr-2 h-4 w-4" />
+          <span>Central de Ajuda</span>
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/politica-de-privacidade")}>
           <Shield className="mr-2 h-4 w-4" />
           <span>Política de Privacidade</span>

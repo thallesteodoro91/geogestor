@@ -1,4 +1,4 @@
-import { Settings, LogOut, Shield } from "lucide-react";
+import { Settings, LogOut, Shield, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

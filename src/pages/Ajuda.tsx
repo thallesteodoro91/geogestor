@@ -181,7 +181,12 @@ const Ajuda = () => {
                                 const related = allSectionsMap.get(relId);
                                 if (!related) return null;
                                 return (
-                                  <Badge key={relId} variant="secondary" className="text-xs font-normal cursor-default">
+                                  <Badge
+                                    key={relId}
+                                    variant="secondary"
+                                    className="text-xs font-normal cursor-pointer hover:bg-primary/20 transition-colors"
+                                    onClick={() => scrollToSection(relId)}
+                                  >
                                     {related.title}
                                   </Badge>
                                 );

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,19 @@ import { HelpFeedback } from "@/components/ajuda/HelpFeedback";
 
 const Ajuda = () => {
   const [search, setSearch] = useState("");
+  const [openSections, setOpenSections] = useState<string[]>([]);
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    setOpenSections((prev) =>
+      prev.includes(sectionId) ? prev : [...prev, sectionId]
+    );
+    setTimeout(() => {
+      const el = document.getElementById(`section-${sectionId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 150);
+  }, []);
 
   const { filteredCategories, totalResults } = useMemo(() => {
     if (!search.trim()) return { filteredCategories: helpCategories, totalResults: 0 };
@@ -117,11 +130,12 @@ const Ajuda = () => {
                 {category.title}
               </h2>
 
-              <Accordion type="multiple" className="space-y-2">
+              <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-2">
                 {category.sections.map((section) => (
                   <AccordionItem
                     key={section.id}
                     value={section.id}
+                    id={`section-${section.id}`}
                     className="border rounded-lg px-4 bg-card"
                   >
                     <AccordionTrigger className="hover:no-underline">
@@ -167,7 +181,12 @@ const Ajuda = () => {
                                 const related = allSectionsMap.get(relId);
                                 if (!related) return null;
                                 return (
-                                  <Badge key={relId} variant="secondary" className="text-xs font-normal cursor-default">
+                                  <Badge
+                                    key={relId}
+                                    variant="secondary"
+                                    className="text-xs font-normal cursor-pointer hover:bg-primary/20 transition-colors"
+                                    onClick={() => scrollToSection(relId)}
+                                  >
                                     {related.title}
                                   </Badge>
                                 );

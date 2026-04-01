@@ -130,11 +130,12 @@ const Ajuda = () => {
                 {category.title}
               </h2>
 
-              <Accordion type="multiple" className="space-y-2">
+              <Accordion type="multiple" value={openSections} onValueChange={setOpenSections} className="space-y-2">
                 {category.sections.map((section) => (
                   <AccordionItem
                     key={section.id}
                     value={section.id}
+                    id={`section-${section.id}`}
                     className="border rounded-lg px-4 bg-card"
                   >
                     <AccordionTrigger className="hover:no-underline">

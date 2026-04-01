@@ -14,9 +14,10 @@ interface Message {
 
 interface GeoBotProps {
   kpis?: any;
+  initialPrompt?: string;
 }
 
-export function GeoBot({ kpis }: GeoBotProps) {
+export function GeoBot({ kpis, initialPrompt }: GeoBotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",

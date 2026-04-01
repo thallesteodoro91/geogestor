@@ -16,6 +16,19 @@ import { HelpFeedback } from "@/components/ajuda/HelpFeedback";
 
 const Ajuda = () => {
   const [search, setSearch] = useState("");
+  const [openSections, setOpenSections] = useState<string[]>([]);
+
+  const scrollToSection = useCallback((sectionId: string) => {
+    setOpenSections((prev) =>
+      prev.includes(sectionId) ? prev : [...prev, sectionId]
+    );
+    setTimeout(() => {
+      const el = document.getElementById(`section-${sectionId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 150);
+  }, []);
 
   const { filteredCategories, totalResults } = useMemo(() => {
     if (!search.trim()) return { filteredCategories: helpCategories, totalResults: 0 };

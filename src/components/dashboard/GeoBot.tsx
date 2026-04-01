@@ -35,6 +35,13 @@ export function GeoBot({ kpis, initialPrompt }: GeoBotProps) {
     }
   }, [messages]);
 
+  // Auto-send initial prompt from context
+  useEffect(() => {
+    if (initialPrompt && messages.length === 1) {
+      setInput(initialPrompt);
+    }
+  }, [initialPrompt]);
+
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;
 

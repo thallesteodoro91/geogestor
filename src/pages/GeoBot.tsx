@@ -26,7 +26,7 @@ const GeoBotPage = () => {
         </div>
         
         <div className="max-w-4xl mx-auto">
-          <GeoBot kpis={kpis} />
+          <GeoBot kpis={kpis} initialPrompt={contextParam ? CONTEXT_PROMPTS[contextParam] : undefined} />
         </div>
       </div>
     </AppLayout>

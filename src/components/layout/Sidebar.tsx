@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Target, Users, FileText, TrendingUp, Receipt, Briefcase, FileBarChart, LogOut, Eye, Zap, Database, Bot, CalendarDays, Shield, ClipboardList, HelpCircle } from "lucide-react";
+import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, FileBarChart, LogOut, Bot, CalendarDays, Shield, ClipboardList, HelpCircle, Settings, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -10,48 +10,59 @@ import { useTenant } from "@/contexts/TenantContext";
 
 const navigationSections = [
   {
-    title: "Visão",
-    icon: Eye,
+    title: "Visão Geral",
     color: "text-blue-500",
     bgColor: "bg-blue-500/10",
     items: [
-      { name: "Gestão da Empresa", href: "/", icon: LayoutDashboard },
+      { name: "Dashboard 360", href: "/", icon: LayoutDashboard },
       { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
-      { name: "Operacional", href: "/operacional", icon: TrendingUp },
     ]
   },
   {
-    title: "Inteligência",
-    icon: Bot,
-    color: "text-pink",
-    bgColor: "bg-pink/10",
+    title: "Financeiro",
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
     items: [
-      { name: "GeoBot", href: "/geobot", icon: Bot },
-      { name: "Calendário", href: "/calendario", icon: CalendarDays },
-      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
-    ]
-  },
-  {
-    title: "Operações",
-    icon: Zap,
-    color: "text-amber-500",
-    bgColor: "bg-amber-500/10",
-    items: [
-      { name: "Serviços", href: "/servicos", icon: Briefcase },
-      { name: "Orçamento", href: "/servicos-orcamentos", icon: FileBarChart },
+      { name: "Orçamentos", href: "/servicos-orcamentos", icon: FileBarChart },
       { name: "Despesas", href: "/despesas", icon: Receipt },
     ]
   },
   {
-    title: "Base de Dados",
-    icon: Database,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/10",
+    title: "Operação",
+    color: "text-amber-500",
+    bgColor: "bg-amber-500/10",
+    items: [
+      { name: "Serviços", href: "/servicos", icon: Briefcase },
+      { name: "Calendário", href: "/calendario", icon: CalendarDays },
+    ]
+  },
+  {
+    title: "Clientes",
+    color: "text-violet-500",
+    bgColor: "bg-violet-500/10",
     items: [
       { name: "Clientes e Projetos", href: "/clientes", icon: Users },
       { name: "Cadastros", href: "/cadastros", icon: FileText },
-      { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
+    ]
+  },
+  {
+    title: "Inteligência",
+    color: "text-pink-500",
+    bgColor: "bg-pink-500/10",
+    items: [
+      { name: "GeoBot", href: "/geobot", icon: Bot },
+      { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
+      { name: "Operacional", href: "/operacional", icon: TrendingUp },
+    ]
+  },
+  {
+    title: "Configurações",
+    color: "text-gray-500",
+    bgColor: "bg-gray-500/10",
+    items: [
+      { name: "Configurações", href: "/configuracoes", icon: Settings },
       { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
+      { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
     ]
   }
 ];
@@ -102,25 +113,24 @@ export const Sidebar = ({ className, onNavigate }: SidebarProps) => {
             </div>
           </div>
           <nav className="flex flex-1 flex-col">
-            <ul role="list" className="flex flex-1 flex-col gap-y-6">
+            <ul role="list" className="flex flex-1 flex-col gap-y-5">
               {navigationSections.map((section, index) => (
-                <li key={section.title} className="animate-fade-in" style={{ animationDelay: `${index * 0.1}s` }}>
-                  <div className="flex items-center gap-2 px-3 py-2 mb-2">
-                    <section.icon className={cn("h-5 w-5", section.color)} />
+                <li key={section.title} className="animate-fade-in" style={{ animationDelay: `${index * 0.05}s` }}>
+                  <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
                     <span className={cn(
-                      "text-sm font-bold uppercase tracking-wide",
+                      "text-xs font-bold uppercase tracking-wider",
                       section.color
                     )}>
                       {section.title}
                     </span>
                   </div>
-                  <ul role="list" className="-mx-2 space-y-1">
+                  <ul role="list" className="-mx-2 space-y-0.5">
                     {section.items.map((item) => (
                       <li key={item.name}>
                         <NavLink
                           to={item.href}
                           className={cn(
-                            "group flex gap-x-3 rounded-lg p-3 text-sm font-medium leading-6 transition-smooth hover-scale",
+                            "group flex gap-x-3 rounded-lg p-2.5 text-sm font-medium leading-6 transition-smooth hover-scale",
                             "text-muted-foreground hover:text-foreground hover:bg-muted",
                             "focus:outline-none focus-visible:outline-none focus-visible:ring-0"
                           )}

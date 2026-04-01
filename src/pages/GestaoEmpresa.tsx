@@ -12,30 +12,69 @@ import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
+import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
+import { NextActions } from "@/components/dashboard/NextActions";
+import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { FlowGuide } from "@/components/onboarding/FlowGuide";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { 
   Banknote, TrendingUp, CircleDollarSign, TrendingDown, 
   Percent, Calculator, Target, Users,
-  BadgeCheck, ShieldCheck, HeartPulse
+  BadgeCheck, ShieldCheck, HeartPulse, Bot, FileText
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell } from "recharts";
 import { RichTooltip } from "@/components/charts/RichTooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/plan/TrialBanner";
+import { useNavigate } from "react-router-dom";
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 const GestaoEmpresa = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [filters, setFilters] = useState<FilterState>({
     dataInicio: "", dataFim: "", clienteId: "", empresaId: "", categoria: "", situacao: "",
   });
 
   const { data: kpis, isLoading } = useKPIs();
   const { data: kpiVariation } = useKPIVariation();
-  
+
+  // Personalized greeting
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('full_name').eq('id', user!.id).maybeSingle();
+      return data;
+    },
+    enabled: !!user,
+  });
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Bom dia";
+    if (hour < 18) return "Boa tarde";
+    return "Boa noite";
+  };
+
+  const firstName = profile?.full_name?.split(' ')[0] || '';
+
+  // Pipeline KPI - pending budgets value
+  const { data: pipelineValue } = useQuery({
+    queryKey: ['pipeline-value'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('fato_orcamento')
+        .select('receita_esperada')
+        .in('situacao', ['Pendente', 'Em Análise', 'Em Negociação'])
+        .eq('orcamento_convertido', false);
+      return (data || []).reduce((acc, o) => acc + (o.receita_esperada || 0), 0);
+    },
+    enabled: !!user,
+  });
 
   // Fetch monthly financial data for charts
   const currentYear = new Date().getFullYear();
@@ -85,7 +124,6 @@ const GestaoEmpresa = () => {
       pontoEquilibrio: kpis?.ponto_equilibrio_receita ? kpis.ponto_equilibrio_receita / 12 : 0,
     }));
 
-  // Build budget deviation from monthly data
   const desvioData = (monthlyData || [])
     .filter((m: any) => m.receita > 0)
     .map((m: any) => {
@@ -93,7 +131,7 @@ const GestaoEmpresa = () => {
       return { mes: MONTH_NAMES[m.mes - 1], desvio: Number(desvio.toFixed(1)) };
     });
 
-  // Dynamic StoryCards based on real KPIs
+  // Dynamic StoryCards
   const generateStoryInsight = () => {
     if (!kpis || !kpiVariation) return null;
     const v = kpiVariation.variations;
@@ -113,12 +151,36 @@ const GestaoEmpresa = () => {
   return (
     <AppLayout>
       <div className="space-y-8">
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Gestão da Empresa</h1>
-          <p className="text-base text-muted-foreground">Visão estratégica, planejamento e análise financeira</p>
+        {/* Personalized Header */}
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
+              {getGreeting()}{firstName ? `, ${firstName}` : ''}! 👋
+            </h1>
+            <p className="text-base text-muted-foreground">
+              Aqui está o resumo da sua empresa
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            className="gap-2 shrink-0"
+            onClick={() => navigate('/geobot')}
+          >
+            <Bot className="h-4 w-4" />
+            Consultar GeoBot
+          </Button>
         </div>
 
         <TrialBanner />
+
+        {/* Onboarding Checklist */}
+        <OnboardingChecklist />
+
+        {/* Flow Guide */}
+        <FlowGuide />
+
+        {/* Critical Alerts */}
+        <CriticalAlerts />
 
         <GlobalFilters clientes={clientes} empresas={empresas} onFilterChange={setFilters} />
 
@@ -144,16 +206,6 @@ const GestaoEmpresa = () => {
                   calculation="Σ receita de serviços + orçamentos"
                 />
                 <KPICard
-                  title="Lucro Bruto"
-                  value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  icon={TrendingUp}
-                  iconColor="#22c55e"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
-                  changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
-                  description="Receita menos custos diretos dos serviços."
-                  calculation="Receita Total - Custos Variáveis"
-                />
-                <KPICard
                   title="Lucro Líquido"
                   value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                   icon={CircleDollarSign}
@@ -164,19 +216,30 @@ const GestaoEmpresa = () => {
                   calculation="Receita - Impostos - Custos - Despesas"
                 />
                 <KPICard
-                  title="Total Despesas"
-                  value={`R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  icon={TrendingDown}
-                  iconColor="#f43f5e"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
-                  changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
-                  description="Soma de todas as despesas operacionais."
-                  calculation="Σ despesas fixas + variáveis"
+                  title="Margem Líquida"
+                  value={`${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
+                  icon={Percent}
+                  iconColor="#8b5cf6"
+                  change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
+                  changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
+                  description="Percentual de lucro sobre a receita."
+                  calculation="Lucro Líquido / Receita Total × 100"
+                />
+                <KPICard
+                  title="Pipeline"
+                  value={`R$ ${(pipelineValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  icon={FileText}
+                  iconColor="#f59e0b"
+                  description="Valor total de orçamentos pendentes de aprovação."
+                  calculation="Σ receita esperada de orçamentos pendentes"
                 />
               </>
             )}
           </div>
         </div>
+
+        {/* Next Actions */}
+        <NextActions />
 
         {/* KPIs Estratégicos */}
         <div className="space-y-3">
@@ -251,12 +314,16 @@ const GestaoEmpresa = () => {
                     insight={stories.crescimento}
                     category="operational"
                     icon={TrendingUp}
+                    actionLabel="Ver Dashboard Financeiro"
+                    actionHref="/dashboard-financeiro"
                   />
                   <StoryCard
                     title="Margem Líquida"
                     insight={stories.margem}
                     category="operational"
                     icon={HeartPulse}
+                    actionLabel="Ver despesas"
+                    actionHref="/despesas"
                   />
                 </>
               ) : (
@@ -271,7 +338,6 @@ const GestaoEmpresa = () => {
               <RevenueChart />
               <ProfitMarginChart />
             </div>
-
           </TabsContent>
 
           <TabsContent value="orcamento" className="space-y-6">
@@ -285,6 +351,8 @@ const GestaoEmpresa = () => {
                 }` : 'Carregando dados...'}
                 category="operational"
                 icon={BadgeCheck}
+                actionLabel="Ver orçamentos"
+                actionHref="/servicos-orcamentos"
               />
               <StoryCard
                 title="Conversão de Orçamentos"
@@ -294,11 +362,12 @@ const GestaoEmpresa = () => {
                     : 'há espaço para melhorar o follow-up comercial e ajustar precificação.'
                 }` : 'Carregando dados...'}
                 category="operational"
+                actionLabel="Analisar com IA"
+                actionHref="/geobot?context=conversao"
               />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Budget Deviation Chart */}
               <Card className="interactive-lift border-0">
                 <CardHeader>
                   <ChartTitle title="Desvio da Margem Mensal (%)" description="Variação da margem vs média" />
@@ -323,7 +392,6 @@ const GestaoEmpresa = () => {
                   )}
                 </CardContent>
               </Card>
-
             </div>
           </TabsContent>
 
@@ -338,6 +406,8 @@ const GestaoEmpresa = () => {
                 }` : 'Carregando dados...'}
                 category="operational"
                 icon={ShieldCheck}
+                actionLabel="Analisar com IA"
+                actionHref="/geobot?context=margem"
               />
               <StoryCard
                 title="Estrutura de Custos"
@@ -347,6 +417,8 @@ const GestaoEmpresa = () => {
                     : 'Estrutura com maior peso em fixos — atenção à alavancagem operacional.'
                 }` : 'Carregando dados...'}
                 category="operational"
+                actionLabel="Ver despesas"
+                actionHref="/despesas"
               />
             </div>
 

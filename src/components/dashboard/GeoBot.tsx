@@ -14,9 +14,10 @@ interface Message {
 
 interface GeoBotProps {
   kpis?: any;
+  initialPrompt?: string;
 }
 
-export function GeoBot({ kpis }: GeoBotProps) {
+export function GeoBot({ kpis, initialPrompt }: GeoBotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
@@ -33,6 +34,13 @@ export function GeoBot({ kpis }: GeoBotProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // Auto-send initial prompt from context
+  useEffect(() => {
+    if (initialPrompt && messages.length === 1) {
+      setInput(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   const sendMessage = async () => {
     if (!input.trim() || isLoading) return;

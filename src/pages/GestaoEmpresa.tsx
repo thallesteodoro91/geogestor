@@ -6,9 +6,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { RevenueChart } from "@/components/charts/RevenueChart";
-import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
-import { ChartTitle } from "@/components/charts/ChartTitle";
-import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
+import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
@@ -16,39 +14,65 @@ import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
 import { NextActions } from "@/components/dashboard/NextActions";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { FlowGuide } from "@/components/onboarding/FlowGuide";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { 
-  Banknote, TrendingUp, CircleDollarSign, TrendingDown, 
-  Percent, Calculator, Target, Users,
-  BadgeCheck, ShieldCheck, HeartPulse, Bot, FileText
+import {
+  Banknote, CircleDollarSign, Percent, FileText,
+  TrendingUp, HeartPulse, Bot,
+  Briefcase, CheckCircle2, BarChart3, DollarSign,
 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Line, Cell } from "recharts";
-import { RichTooltip } from "@/components/charts/RichTooltip";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/plan/TrialBanner";
 import { useNavigate } from "react-router-dom";
 
-const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
 const GestaoEmpresa = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [filters, setFilters] = useState<FilterState>({
-    dataInicio: "", dataFim: "", clienteId: "", empresaId: "", categoria: "", situacao: "",
-  });
 
   const { data: kpis, isLoading } = useKPIs();
   const { data: kpiVariation } = useKPIVariation();
 
-  // Personalized greeting
+  // Profile for greeting
   const { data: profile } = useQuery({
-    queryKey: ['user-profile', user?.id],
+    queryKey: ["user-profile", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('full_name').eq('id', user!.id).maybeSingle();
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", user!.id).maybeSingle();
       return data;
+    },
+    enabled: !!user,
+  });
+
+  // Pipeline value
+  const { data: pipelineValue } = useQuery({
+    queryKey: ["pipeline-value"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("fato_orcamento")
+        .select("receita_esperada")
+        .in("situacao", ["Pendente", "Em Análise", "Em Negociação"])
+        .eq("orcamento_convertido", false);
+      return (data || []).reduce((acc, o) => acc + (o.receita_esperada || 0), 0);
+    },
+    enabled: !!user,
+  });
+
+  // Operational pulse
+  const { data: opPulse } = useQuery({
+    queryKey: ["operational-pulse"],
+    queryFn: async () => {
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+
+      const [activeRes, completedRes] = await Promise.all([
+        supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).in("situacao_do_servico", ["Em Andamento", "Planejado"]),
+        supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).eq("situacao_do_servico", "Concluído").gte("data_do_servico_fim", monthStart),
+      ]);
+
+      return {
+        servicosAtivos: activeRes.count || 0,
+        concluidosMes: completedRes.count || 0,
+      };
     },
     enabled: !!user,
   });
@@ -60,112 +84,41 @@ const GestaoEmpresa = () => {
     return "Boa noite";
   };
 
-  const firstName = profile?.full_name?.split(' ')[0] || '';
+  const firstName = profile?.full_name?.split(" ")[0] || "";
 
-  // Pipeline KPI - pending budgets value
-  const { data: pipelineValue } = useQuery({
-    queryKey: ['pipeline-value'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('fato_orcamento')
-        .select('receita_esperada')
-        .in('situacao', ['Pendente', 'Em Análise', 'Em Negociação'])
-        .eq('orcamento_convertido', false);
-      return (data || []).reduce((acc, o) => acc + (o.receita_esperada || 0), 0);
-    },
-    enabled: !!user,
-  });
-
-  // Fetch monthly financial data for charts
-  const currentYear = new Date().getFullYear();
-  const { data: monthlyData } = useQuery({
-    queryKey: ['monthly-financial-data', currentYear],
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_monthly_financial_data', { p_year: currentYear });
-      if (error) throw error;
-      return (data as any[]) || [];
-    },
-    enabled: !!user,
-  });
-
-  const { data: clientes = [] } = useQuery({
-    queryKey: ['clientes-filter'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('dim_cliente').select('id_cliente, nome').order('nome');
-      if (error) throw error;
-      return data.map(c => ({ id: c.id_cliente, nome: c.nome }));
-    },
-  });
-
-  const { data: empresas = [] } = useQuery({
-    queryKey: ['empresas-filter'],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('dim_empresa').select('id_empresa, nome').order('nome');
-      if (error) throw error;
-      return data.map(e => ({ id: e.id_empresa, nome: e.nome }));
-    },
-  });
-
-  // Build chart data from monthly RPC
-  const custoFixoVariavelData = (monthlyData || [])
-    .filter((m: any) => m.despesas_fixas > 0 || m.custos_variaveis > 0)
-    .map((m: any) => ({
-      mes: MONTH_NAMES[m.mes - 1],
-      fixo: m.despesas_fixas,
-      variavel: m.custos_variaveis,
-    }));
-
-  const pontoEquilibrioData = (monthlyData || [])
-    .filter((m: any) => m.receita > 0 || m.total_despesas > 0)
-    .map((m: any) => ({
-      mes: MONTH_NAMES[m.mes - 1],
-      receita: m.receita,
-      custoTotal: m.total_despesas,
-      pontoEquilibrio: kpis?.ponto_equilibrio_receita ? kpis.ponto_equilibrio_receita / 12 : 0,
-    }));
-
-  const desvioData = (monthlyData || [])
-    .filter((m: any) => m.receita > 0)
-    .map((m: any) => {
-      const desvio = m.receita > 0 ? ((m.receita - m.total_despesas) / m.receita * 100) - (kpis?.margem_liquida_percent || 0) : 0;
-      return { mes: MONTH_NAMES[m.mes - 1], desvio: Number(desvio.toFixed(1)) };
-    });
-
-  // Dynamic StoryCards
+  // Story insights
   const generateStoryInsight = () => {
     if (!kpis || !kpiVariation) return null;
     const v = kpiVariation.variations;
     return {
-      crescimento: v.receita_total >= 0
-        ? `A receita cresceu ${formatVariation(v.receita_total)} no período, mantendo trajetória ${v.receita_total > 5 ? 'ascendente forte' : 'estável'}.${v.lucro_bruto >= 0 ? ' Destaque para o aumento da margem bruta.' : ' Porém, a margem bruta recuou — revisar custos diretos.'}`
-        : `A receita recuou ${formatVariation(v.receita_total)} no período. É necessário revisar a estratégia comercial e pipeline de vendas.`,
-      margem: (kpis.margem_liquida_percent || 0) > 15
-        ? `Com margem líquida de ${(kpis.margem_liquida_percent || 0).toFixed(1)}%, a empresa demonstra forte capacidade de gerar lucro. O controle de custos tem sido efetivo.`
-        : (kpis.margem_liquida_percent || 0) > 0
-          ? `A margem líquida está em ${(kpis.margem_liquida_percent || 0).toFixed(1)}%. Há espaço para otimização de custos operacionais.`
-          : `Atenção: margem líquida negativa (${(kpis.margem_liquida_percent || 0).toFixed(1)}%). Revisão urgente de custos é necessária.`,
+      crescimento:
+        v.receita_total >= 0
+          ? `A receita cresceu ${formatVariation(v.receita_total)} no período, mantendo trajetória ${v.receita_total > 5 ? "ascendente forte" : "estável"}.${v.lucro_bruto >= 0 ? " Destaque para o aumento da margem bruta." : " Porém, a margem bruta recuou — revisar custos diretos."}`
+          : `A receita recuou ${formatVariation(v.receita_total)} no período. É necessário revisar a estratégia comercial e pipeline de vendas.`,
+      margem:
+        (kpis.margem_liquida_percent || 0) > 15
+          ? `Com margem líquida de ${(kpis.margem_liquida_percent || 0).toFixed(1)}%, a empresa demonstra forte capacidade de gerar lucro. O controle de custos tem sido efetivo.`
+          : (kpis.margem_liquida_percent || 0) > 0
+            ? `A margem líquida está em ${(kpis.margem_liquida_percent || 0).toFixed(1)}%. Há espaço para otimização de custos operacionais.`
+            : `Atenção: margem líquida negativa (${(kpis.margem_liquida_percent || 0).toFixed(1)}%). Revisão urgente de custos é necessária.`,
     };
   };
   const stories = generateStoryInsight();
 
   return (
     <AppLayout>
-      <div className="space-y-8">
-        {/* Personalized Header */}
+      <div className="space-y-6">
+        {/* 1. Header Personalizado */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
-              {getGreeting()}{firstName ? `, ${firstName}` : ''}! 👋
+              {getGreeting()}{firstName ? `, ${firstName}` : ""}! 👋
             </h1>
             <p className="text-base text-muted-foreground">
-              Aqui está o resumo da sua empresa
+              Aqui está o que precisa da sua atenção hoje
             </p>
           </div>
-          <Button
-            variant="outline"
-            className="gap-2 shrink-0"
-            onClick={() => navigate('/geobot')}
-          >
+          <Button variant="outline" className="gap-2 shrink-0" onClick={() => navigate("/geobot")}>
             <Bot className="h-4 w-4" />
             Consultar GeoBot
           </Button>
@@ -173,31 +126,36 @@ const GestaoEmpresa = () => {
 
         <TrialBanner />
 
-        {/* Onboarding Checklist */}
+        {/* 2. Onboarding (condicional) */}
         <OnboardingChecklist />
-
-        {/* Flow Guide */}
         <FlowGuide />
 
-        {/* Critical Alerts */}
-        <CriticalAlerts />
+        {/* 3. Alertas + Ações */}
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <h2 className="text-xl font-heading font-semibold text-foreground">O que precisa da sua atenção</h2>
+            <p className="text-sm text-muted-foreground">Alertas críticos e ações recomendadas</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <CriticalAlerts />
+            <NextActions />
+          </div>
+        </div>
 
-        <GlobalFilters clientes={clientes} empresas={empresas} onFilterChange={setFilters} />
-
-        {/* KPIs Financeiros */}
+        {/* 4. KPIs Essenciais (4 cards) */}
         <div className="space-y-3 animate-fade-in">
           <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Indicadores Financeiros</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Visão consolidada da saúde financeira</p>
+            <h2 className="text-xl font-heading font-semibold text-foreground">Saúde Financeira</h2>
+            <p className="text-sm text-muted-foreground">Indicadores principais da empresa</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {isLoading ? (
               <><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /></>
             ) : (
               <>
                 <KPICard
                   title="Receita Total"
-                  value={`R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  value={`R$ ${(kpis?.receita_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
                   icon={Banknote}
                   iconColor="#6366f1"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
@@ -207,7 +165,7 @@ const GestaoEmpresa = () => {
                 />
                 <KPICard
                   title="Lucro Líquido"
-                  value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
                   icon={CircleDollarSign}
                   iconColor="#10b981"
                   change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
@@ -227,7 +185,7 @@ const GestaoEmpresa = () => {
                 />
                 <KPICard
                   title="Pipeline"
-                  value={`R$ ${(pipelineValue || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                  value={`R$ ${(pipelineValue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
                   icon={FileText}
                   iconColor="#f59e0b"
                   description="Valor total de orçamentos pendentes de aprovação."
@@ -238,244 +196,108 @@ const GestaoEmpresa = () => {
           </div>
         </div>
 
-        {/* Next Actions */}
-        <NextActions />
-
-        {/* KPIs Estratégicos */}
+        {/* 5. Pulso Operacional (4 mini-cards compactos) */}
         <div className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Planejamento Estratégico</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Indicadores de metas e crescimento</p>
+            <h2 className="text-xl font-heading font-semibold text-foreground">Pulso Operacional</h2>
+            <p className="text-sm text-muted-foreground">Atividade do mês</p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 grid-8pt">
-            {isLoading ? (
-              <><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /></>
+          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+            <Card className="border-0">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Serviços Ativos</p>
+                  <p className="text-xl font-bold text-foreground">{opPulse?.servicosAtivos ?? "—"}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-0">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-chart-2/10">
+                  <CheckCircle2 className="h-5 w-5 text-chart-2" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Concluídos no Mês</p>
+                  <p className="text-xl font-bold text-foreground">{opPulse?.concluidosMes ?? "—"}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-0">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-chart-4/10">
+                  <BarChart3 className="h-5 w-5 text-chart-4" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
+                  <p className="text-xl font-bold text-foreground">{(kpis?.taxa_conversao_percent || 0).toFixed(1)}%</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-0">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-chart-5/10">
+                  <DollarSign className="h-5 w-5 text-chart-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Ticket Médio</p>
+                  <p className="text-xl font-bold text-foreground">
+                    R$ {(kpis?.receita_total && kpis?.total_servicos ? kpis.receita_total / kpis.total_servicos : 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* 6. Insights IA + Receita Mensal */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <AIInsightsCard />
+          <RevenueChart />
+        </div>
+
+        {/* 7. Narrativas (StoryCards) */}
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <h2 className="text-xl font-heading font-semibold text-foreground">Interpretação dos Dados</h2>
+            <p className="text-sm text-muted-foreground">Análise contextual dos seus resultados</p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {stories ? (
+              <>
+                <StoryCard
+                  title="Análise de Crescimento"
+                  insight={stories.crescimento}
+                  category="operational"
+                  icon={TrendingUp}
+                  actionLabel="Ver Dashboard Financeiro"
+                  actionHref="/dashboard-financeiro"
+                />
+                <StoryCard
+                  title="Margem Líquida"
+                  insight={stories.margem}
+                  category="operational"
+                  icon={HeartPulse}
+                  actionLabel="Ver despesas"
+                  actionHref="/despesas"
+                />
+              </>
             ) : (
               <>
-                <KPICard
-                  title="Margem Contribuição"
-                  value={`${(kpis?.margem_contribuicao_percent || 0).toFixed(1)}%`}
-                  icon={Percent}
-                  iconColor="#8b5cf6"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
-                  changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
-                  description="Percentual disponível para cobrir custos fixos e gerar lucro."
-                  calculation="(Receita - Custos Variáveis) / Receita × 100"
-                />
-                <KPICard
-                  title="Ponto de Equilíbrio"
-                  value={`R$ ${(kpis?.ponto_equilibrio_receita || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                  icon={Calculator}
-                  iconColor="#06b6d4"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
-                  changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
-                  description="Receita mínima para cobrir todos os custos."
-                  calculation="Custos Fixos / Margem de Contribuição (%)"
-                />
-                <KPICard
-                  title="Desvio Orçamentário"
-                  value={`${(kpis?.desvio_orcamentario_percent || 0).toFixed(1)}%`}
-                  icon={Target}
-                  iconColor="#f59e0b"
-                  change="--"
-                  changeType="neutral"
-                  description="Diferença entre valores orçados e realizados."
-                  calculation="((Realizado - Orçado) / Orçado) × 100"
-                />
-                <KPICard
-                  title="Taxa de Conversão"
-                  value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
-                  icon={Users}
-                  iconColor="#14b8a6"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
-                  changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
-                  description="Percentual de orçamentos convertidos em serviços."
-                  calculation="(Orçamentos aprovados / Total) × 100"
-                />
+                <Skeleton className="h-32" />
+                <Skeleton className="h-32" />
               </>
             )}
           </div>
         </div>
 
-        {/* Tabs com Análises */}
-        <Tabs defaultValue="visao-geral" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 gap-2">
-            <TabsTrigger value="visao-geral">Visão Geral</TabsTrigger>
-            <TabsTrigger value="orcamento">Orçamento</TabsTrigger>
-            <TabsTrigger value="equilibrio">Ponto de Equilíbrio</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="visao-geral" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {stories ? (
-                <>
-                  <StoryCard
-                    title="Análise de Crescimento"
-                    insight={stories.crescimento}
-                    category="operational"
-                    icon={TrendingUp}
-                    actionLabel="Ver Dashboard Financeiro"
-                    actionHref="/dashboard-financeiro"
-                  />
-                  <StoryCard
-                    title="Margem Líquida"
-                    insight={stories.margem}
-                    category="operational"
-                    icon={HeartPulse}
-                    actionLabel="Ver despesas"
-                    actionHref="/despesas"
-                  />
-                </>
-              ) : (
-                <>
-                  <Skeleton className="h-32" />
-                  <Skeleton className="h-32" />
-                </>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <RevenueChart />
-              <ProfitMarginChart />
-            </div>
-          </TabsContent>
-
-          <TabsContent value="orcamento" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoryCard
-                title="Desempenho Orçamentário"
-                insight={kpis ? `O desvio orçamentário está em ${(kpis.desvio_orcamentario_percent || 0).toFixed(1)}%. ${
-                  (kpis.desvio_orcamentario_percent || 0) < 5 
-                    ? 'Execução financeira dentro da meta, indicando boa disciplina orçamentária.'
-                    : 'Atenção ao controle de gastos — desvio acima do ideal.'
-                }` : 'Carregando dados...'}
-                category="operational"
-                icon={BadgeCheck}
-                actionLabel="Ver orçamentos"
-                actionHref="/servicos-orcamentos"
-              />
-              <StoryCard
-                title="Conversão de Orçamentos"
-                insight={kpis ? `Taxa de conversão de ${(kpis.taxa_conversao_percent || 0).toFixed(1)}% — ${
-                  (kpis.taxa_conversao_percent || 0) > 50 
-                    ? 'acima da média do setor, indicando boa qualidade técnica e precificação competitiva.'
-                    : 'há espaço para melhorar o follow-up comercial e ajustar precificação.'
-                }` : 'Carregando dados...'}
-                category="operational"
-                actionLabel="Analisar com IA"
-                actionHref="/geobot?context=conversao"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift border-0">
-                <CardHeader>
-                  <ChartTitle title="Desvio da Margem Mensal (%)" description="Variação da margem vs média" />
-                </CardHeader>
-                <CardContent className="h-80">
-                  {desvioData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={desvioData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip content={<RichTooltip format="percent" showVariation={false} />} cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }} />
-                        <Bar dataKey="desvio" name="Desvio (%)">
-                          {desvioData.map((entry: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={entry.desvio >= 0 ? "hsl(var(--success))" : "hsl(var(--destructive))"} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Sem dados no período</div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="equilibrio" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <StoryCard
-                title="Ponto de Equilíbrio"
-                insight={kpis ? `O ponto de equilíbrio está em R$ ${(kpis.ponto_equilibrio_receita || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. ${
-                  (kpis.receita_total || 0) > (kpis.ponto_equilibrio_receita || 0)
-                    ? `A empresa opera acima desse valor, com margem de segurança de ${kpis.receita_total ? (((kpis.receita_total - (kpis.ponto_equilibrio_receita || 0)) / kpis.receita_total) * 100).toFixed(0) : 0}%.`
-                    : 'A empresa está abaixo do ponto de equilíbrio — ação corretiva necessária.'
-                }` : 'Carregando dados...'}
-                category="operational"
-                icon={ShieldCheck}
-                actionLabel="Analisar com IA"
-                actionHref="/geobot?context=margem"
-              />
-              <StoryCard
-                title="Estrutura de Custos"
-                insight={kpis ? `Custos variáveis: R$ ${(kpis.custos_variaveis_reais || 0).toLocaleString('pt-BR')} | Custos fixos: R$ ${(kpis.despesas_fixas_reais || 0).toLocaleString('pt-BR')}. ${
-                  (kpis.custos_variaveis_reais || 0) > (kpis.despesas_fixas_reais || 0)
-                    ? 'Estrutura com maior peso em variáveis, favorecendo escalabilidade.'
-                    : 'Estrutura com maior peso em fixos — atenção à alavancagem operacional.'
-                }` : 'Carregando dados...'}
-                category="operational"
-                actionLabel="Ver despesas"
-                actionHref="/despesas"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="interactive-lift border-0">
-                <CardHeader>
-                  <ChartTitle title="Receita vs Ponto de Equilíbrio" description="Análise mensal" />
-                </CardHeader>
-                <CardContent className="h-80">
-                  {pontoEquilibrioData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={pontoEquilibrioData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip content={<RichTooltip format="currency" showVariation={false} />} cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }} />
-                        <Bar dataKey="custoTotal" fill="hsl(var(--chart-3))" name="Custo Total" />
-                        <Line type="monotone" dataKey="receita" stroke="hsl(var(--chart-1))" strokeWidth={2} name="Receita" />
-                        <Line type="monotone" dataKey="pontoEquilibrio" stroke="hsl(var(--destructive))" strokeWidth={2} strokeDasharray="5 5" name="Ponto de Equilíbrio" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Sem dados no período</div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="interactive-lift border-0">
-                <CardHeader>
-                  <ChartTitle title="Custos Fixos vs Variáveis" description="Estrutura de custos mensal" />
-                </CardHeader>
-                <CardContent className="h-80">
-                  {custoFixoVariavelData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={custoFixoVariavelData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
-                        <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
-                        <YAxis stroke="hsl(var(--muted-foreground))" />
-                        <Tooltip content={<RichTooltip format="currency" showVariation={false} />} cursor={{ fill: 'hsl(var(--primary) / 0.15)', radius: 4 }} />
-                        <Bar dataKey="fixo" stackId="a" fill="hsl(var(--chart-1))" name="Fixo" />
-                        <Bar dataKey="variavel" stackId="a" fill="hsl(var(--chart-2))" name="Variável" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Sem dados no período</div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
-
-        {/* Alertas Financeiros */}
+        {/* 8. Alertas Financeiros */}
         <div className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">Alertas e Recomendações</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">Insights automáticos do sistema</p>
+            <h2 className="text-xl font-heading font-semibold text-foreground">Alertas Financeiros</h2>
+            <p className="text-sm text-muted-foreground">Pagamentos e cobranças que precisam de ação</p>
           </div>
           <AlertasFinanceiros />
         </div>

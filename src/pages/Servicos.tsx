@@ -166,13 +166,23 @@ export default function Servicos() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-4">
+        {/* KPIs contextuais */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KPICard
-            title="Total de Serviços"
-            value={totalServicos.toString()}
-            icon={Briefcase}
-            iconColor="#6366f1"
+            title="Em Andamento"
+            value={servicosEmAndamento.toString()}
+            icon={Clock}
+            iconColor="#f59e0b"
+          />
+          <KPICard
+            title="Atrasados"
+            value={servicos.filter((s: any) => {
+              if (s.situacao_do_servico === 'Concluído' || s.situacao_do_servico === 'Cancelado') return false;
+              if (!s.data_do_servico_fim) return false;
+              return new Date(s.data_do_servico_fim) < new Date();
+            }).length.toString()}
+            icon={AlertCircle}
+            iconColor="#ef4444"
           />
           <KPICard
             title="Concluídos"
@@ -181,18 +191,6 @@ export default function Servicos() {
             iconColor="#10b981"
             change={totalServicos > 0 ? `${Math.round((servicosConcluidos / totalServicos) * 100)}%` : "0%"}
             changeType="positive"
-          />
-          <KPICard
-            title="Em Andamento"
-            value={servicosEmAndamento.toString()}
-            icon={Clock}
-            iconColor="#f59e0b"
-          />
-          <KPICard
-            title="Média de Progresso"
-            value={`${mediaProgresso}%`}
-            icon={TrendingUp}
-            iconColor="#3b82f6"
           />
         </div>
 

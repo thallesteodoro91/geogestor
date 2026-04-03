@@ -144,7 +144,7 @@ export default function Servicos() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground">Serviços</h1>
-            <p className="text-muted-foreground">Acompanhe o andamento de todos os serviços</p>
+            <p className="text-muted-foreground">Gerencie a execução dos seus serviços</p>
           </div>
           <div className="flex items-center gap-3">
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>

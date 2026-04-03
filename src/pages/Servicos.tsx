@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { NovoServicoDialog } from "@/components/servicos";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -144,7 +145,7 @@ export default function Servicos() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground">Serviços</h1>
-            <p className="text-muted-foreground">Acompanhe o andamento de todos os serviços</p>
+            <p className="text-muted-foreground">Gerencie a execução dos seus serviços</p>
           </div>
           <div className="flex items-center gap-3">
             <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
@@ -166,13 +167,23 @@ export default function Servicos() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-4">
+        {/* KPIs contextuais */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KPICard
-            title="Total de Serviços"
-            value={totalServicos.toString()}
-            icon={Briefcase}
-            iconColor="#6366f1"
+            title="Em Andamento"
+            value={servicosEmAndamento.toString()}
+            icon={Clock}
+            iconColor="#f59e0b"
+          />
+          <KPICard
+            title="Atrasados"
+            value={servicos.filter((s: any) => {
+              if (s.situacao_do_servico === 'Concluído' || s.situacao_do_servico === 'Cancelado') return false;
+              if (!s.data_do_servico_fim) return false;
+              return new Date(s.data_do_servico_fim) < new Date();
+            }).length.toString()}
+            icon={AlertCircle}
+            iconColor="#ef4444"
           />
           <KPICard
             title="Concluídos"
@@ -181,18 +192,6 @@ export default function Servicos() {
             iconColor="#10b981"
             change={totalServicos > 0 ? `${Math.round((servicosConcluidos / totalServicos) * 100)}%` : "0%"}
             changeType="positive"
-          />
-          <KPICard
-            title="Em Andamento"
-            value={servicosEmAndamento.toString()}
-            icon={Clock}
-            iconColor="#f59e0b"
-          />
-          <KPICard
-            title="Média de Progresso"
-            value={`${mediaProgresso}%`}
-            icon={TrendingUp}
-            iconColor="#3b82f6"
           />
         </div>
 
@@ -296,10 +295,19 @@ export default function Servicos() {
 
             {isLoading ? (
               <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+            ) : filteredServicos.length === 0 && !searchTerm && statusFilter === "all" ? (
+              <EmptyState
+                icon={Briefcase}
+                title="Nenhum serviço cadastrado"
+                description="Registre seu primeiro serviço para acompanhar prazos, equipe e progresso."
+                actionLabel="+ Criar Serviço"
+                onAction={() => setIsDialogOpen(true)}
+                tip="Vincule serviços a clientes e orçamentos para uma gestão completa"
+              />
             ) : filteredServicos.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                Nenhum serviço encontrado.
+                Nenhum serviço encontrado para os filtros aplicados.
               </div>
             ) : (
               <div className="overflow-x-auto">

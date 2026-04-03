@@ -286,48 +286,23 @@ export default function ServicosOrcamentos() {
           <p className="text-base text-muted-foreground">Gestão de orçamentos e propostas comerciais</p>
         </div>
 
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* KPIs contextuais */}
+        <div className="grid gap-4 md:grid-cols-2">
           <KPICard
             title="Total de Orçamentos"
             value={totalOrcamentos.toString()}
             icon={FileText}
-            change={`${Math.round(taxaConversao)}%`}
-            changeType="positive"
-            description="Quantidade total de orçamentos emitidos no período."
+            description="Quantidade total de orçamentos emitidos."
             calculation="Contagem de orçamentos"
           />
           <KPICard
             title="Taxa de Conversão"
             value={`${Math.round(taxaConversao)}%`}
             icon={TrendingUp}
-            change="+8%"
-            changeType="positive"
             description="Percentual de orçamentos convertidos em serviços."
             calculation="(Orçamentos aprovados / Total) × 100"
           />
-          <KPICard
-            title="Receita Orçada"
-            value={`R$ ${receitaOrcada.toLocaleString('pt-BR')}`}
-            icon={DollarSign}
-            change="+15%"
-            changeType="positive"
-            description="Soma da receita esperada de todos os orçamentos."
-            calculation="Σ receita esperada dos orçamentos"
-          />
-          <KPICard
-            title="Ticket Médio"
-            value={`R$ ${totalOrcamentos > 0 ? Math.round(receitaOrcada / totalOrcamentos).toLocaleString('pt-BR') : '0'}`}
-            icon={Calculator}
-            change="+5%"
-            changeType="positive"
-            description="Valor médio por orçamento emitido."
-            calculation="Receita Orçada / Nº de Orçamentos"
-          />
         </div>
-
-        {/* Despesas Pendentes de Confirmação */}
-        <DespesasPendentes />
 
         {/* Orçamentos */}
         <div className="space-y-4">
@@ -454,6 +429,16 @@ export default function ServicosOrcamentos() {
                   {loadingOrcamentos ? (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center">Carregando...</TableCell>
+                    </TableRow>
+                  ) : filteredOrcamentos.length === 0 && !searchTerm ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-12">
+                        <div className="flex flex-col items-center gap-2">
+                          <FileText className="h-10 w-10 text-muted-foreground/50" />
+                          <p className="font-medium text-foreground">Nenhum orçamento cadastrado</p>
+                          <p className="text-sm text-muted-foreground">Crie orçamentos profissionais e acompanhe aprovações</p>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ) : filteredOrcamentos.length === 0 ? (
                     <TableRow>

@@ -73,32 +73,12 @@ const Calendario = () => {
           </Button>
         </div>
 
-        {/* KPIs */}
+        {/* KPIs contextuais */}
         {kpis && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Card className="p-4 flex items-center gap-3">
               <div className="bg-primary/10 p-2 rounded-lg">
-                <FileText className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Orçamentos</p>
-                <p className="text-xl font-bold">{kpis.totalOrcamentos}</p>
-                <p className="text-xs text-muted-foreground">{kpis.orcamentosPendentes} pendentes</p>
-              </div>
-            </Card>
-            <Card className="p-4 flex items-center gap-3">
-              <div className="bg-[#246BCE]/10 p-2 rounded-lg">
-                <Briefcase className="h-5 w-5 text-[#246BCE]" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Serviços</p>
-                <p className="text-xl font-bold">{kpis.totalServicos}</p>
-                <p className="text-xs text-muted-foreground">{kpis.servicosEmAndamento} em andamento</p>
-              </div>
-            </Card>
-            <Card className="p-4 flex items-center gap-3">
-              <div className="bg-emerald-500/10 p-2 rounded-lg">
-                <ClipboardList className="h-5 w-5 text-emerald-600" />
+                <CalendarDays className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total de Eventos</p>
@@ -107,11 +87,20 @@ const Calendario = () => {
             </Card>
             <Card className="p-4 flex items-center gap-3">
               <div className="bg-amber-500/10 p-2 rounded-lg">
-                <DollarSign className="h-5 w-5 text-amber-600" />
+                <Briefcase className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground">Valor Total</p>
-                <p className="text-lg font-bold">{formatCurrency(kpis.valorTotal)}</p>
+                <p className="text-xs text-muted-foreground">Em Andamento</p>
+                <p className="text-xl font-bold">{kpis.servicosEmAndamento}</p>
+              </div>
+            </Card>
+            <Card className="p-4 flex items-center gap-3">
+              <div className="bg-blue-500/10 p-2 rounded-lg">
+                <FileText className="h-5 w-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Pendentes</p>
+                <p className="text-xl font-bold">{kpis.orcamentosPendentes}</p>
               </div>
             </Card>
           </div>

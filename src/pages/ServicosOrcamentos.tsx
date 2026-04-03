@@ -286,43 +286,21 @@ export default function ServicosOrcamentos() {
           <p className="text-base text-muted-foreground">Gestão de orçamentos e propostas comerciais</p>
         </div>
 
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* KPIs contextuais */}
+        <div className="grid gap-4 md:grid-cols-2">
           <KPICard
             title="Total de Orçamentos"
             value={totalOrcamentos.toString()}
             icon={FileText}
-            change={`${Math.round(taxaConversao)}%`}
-            changeType="positive"
-            description="Quantidade total de orçamentos emitidos no período."
+            description="Quantidade total de orçamentos emitidos."
             calculation="Contagem de orçamentos"
           />
           <KPICard
             title="Taxa de Conversão"
             value={`${Math.round(taxaConversao)}%`}
             icon={TrendingUp}
-            change="+8%"
-            changeType="positive"
             description="Percentual de orçamentos convertidos em serviços."
             calculation="(Orçamentos aprovados / Total) × 100"
-          />
-          <KPICard
-            title="Receita Orçada"
-            value={`R$ ${receitaOrcada.toLocaleString('pt-BR')}`}
-            icon={DollarSign}
-            change="+15%"
-            changeType="positive"
-            description="Soma da receita esperada de todos os orçamentos."
-            calculation="Σ receita esperada dos orçamentos"
-          />
-          <KPICard
-            title="Ticket Médio"
-            value={`R$ ${totalOrcamentos > 0 ? Math.round(receitaOrcada / totalOrcamentos).toLocaleString('pt-BR') : '0'}`}
-            icon={Calculator}
-            change="+5%"
-            changeType="positive"
-            description="Valor médio por orçamento emitido."
-            calculation="Receita Orçada / Nº de Orçamentos"
           />
         </div>
 

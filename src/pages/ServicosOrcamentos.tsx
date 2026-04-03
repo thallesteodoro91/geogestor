@@ -304,9 +304,6 @@ export default function ServicosOrcamentos() {
           />
         </div>
 
-        {/* Despesas Pendentes de Confirmação */}
-        <DespesasPendentes />
-
         {/* Orçamentos */}
         <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-4">

@@ -254,7 +254,7 @@ export default function Clientes() {
         <ClientePropriedadeUnificadoDialog
           open={dialogOpen.open}
           onOpenChange={(open) => setDialogOpen({ open })}
-          editingCliente={dialogOpen.data}
+          cliente={dialogOpen.data}
           onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
             setDialogOpen({ open: false });

@@ -160,8 +160,8 @@ export default function Cadastros() {
     <AppLayout>
       <div className="space-y-8">
         <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Base de Dados</h1>
-          <p className="text-muted-foreground mt-2">Gerenciar clientes, propriedades, serviços e tipos de despesa</p>
+          <h1 className="text-4xl font-heading font-bold text-foreground">Cadastros</h1>
+          <p className="text-muted-foreground mt-2">Configure os dados base do sistema: clientes, tipos de serviço e categorias de despesa</p>
         </div>
 
         <Tabs defaultValue="clientes-propriedades" className="w-full">

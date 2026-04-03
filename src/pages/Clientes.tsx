@@ -1,273 +1,278 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { KPICard } from "@/components/dashboard/KPICard";
-import { StoryCard } from "@/components/dashboard/StoryCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Users, TrendingUp, MapPin, Award, Loader2 } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, ComposedChart, Cell } from "recharts";
-import { useClientesAnalytics } from "@/hooks/useClientesAnalytics";
-import { useAvailableYears } from "@/hooks/useAvailableYears";
-import { formatCurrency } from "@/ui/formatters/currency.formatter";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { usePagination } from "@/hooks/usePagination";
+import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
+import { toast } from "sonner";
+import { Plus, Users, Eye, Edit, Trash2, MapPin, Search, Briefcase } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Clientes() {
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const { data: availableYears = [] } = useAvailableYears();
-  const { isLoading, paretoData, ltvData, rentabilidadeData, kpis } = useClientesAnalytics(selectedYear);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [situacaoFilter, setSituacaoFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  const formatLTV = (value: number) => {
-    if (value >= 1000) {
-      return `R$ ${(value / 1000).toFixed(1)}k`;
-    }
-    return formatCurrency(value);
-  };
+  const { data: clientes = [], isLoading } = useQuery({
+    queryKey: ["clientes-list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("dim_cliente")
+        .select(`
+          *,
+          dim_propriedade(id_propriedade, nome_da_propriedade),
+          fato_servico(id_servico, situacao_do_servico)
+        `)
+        .order("nome");
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-  // Generate dynamic insights based on real data
-  const getParetoInsight = () => {
-    if (paretoData.length === 0) return "Sem dados suficientes para análise de Pareto.";
-    const top3 = paretoData.slice(0, 3);
-    const top3Percent = top3.length > 0 ? top3[top3.length - 1]?.acumulado || 0 : 0;
-    return `Os três principais clientes representam ${top3Percent}% do faturamento, ${top3Percent >= 60 ? "indicando forte relacionamento com clientes-chave" : "com boa distribuição de receita"}.`;
-  };
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("dim_cliente").delete().eq("id_cliente", id);
+      if (error) {
+        if (error.code === "23503") throw new Error("Este cliente possui serviços ou propriedades vinculados. Remova as dependências antes.");
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
+      toast.success("Cliente excluído com sucesso!");
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
 
-  const getLtvInsight = () => {
-    if (ltvData.length < 2) return "Dados insuficientes para análise de tendência de LTV.";
-    const first = ltvData[0]?.ltv || 0;
-    const last = ltvData[ltvData.length - 1]?.ltv || 0;
-    const change = first > 0 ? ((last - first) / first) * 100 : 0;
-    if (change > 0) {
-      return `O LTV aumentou ${Math.round(change)}% no período, refletindo fidelização e aumento na frequência de projetos.`;
-    } else if (change < 0) {
-      return `O LTV diminuiu ${Math.abs(Math.round(change))}% no período. Considere estratégias de retenção.`;
-    }
-    return "O LTV permaneceu estável no período analisado.";
-  };
+  const filtered = clientes.filter((c: any) => {
+    const matchesSearch =
+      c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.cpf?.includes(searchTerm) ||
+      c.cnpj?.includes(searchTerm);
+    const matchesSituacao = situacaoFilter === "all" || c.situacao === situacaoFilter;
+    return matchesSearch && matchesSituacao;
+  });
 
-  const getRentabilidadeInsight = () => {
-    if (rentabilidadeData.length === 0) return "Sem dados de rentabilidade de projetos.";
-    const highProfit = rentabilidadeData.filter((r) => r.rentabilidade >= 30);
-    if (highProfit.length > 0) {
-      return `${highProfit.length} projeto(s) apresentam rentabilidade acima de 30%. Foco estratégico nestes serviços pode amplificar resultados.`;
-    }
-    return "Os projetos apresentam margens moderadas. Considere revisar custos operacionais.";
-  };
+  const pagination = usePagination(filtered, { initialPageSize: 15 });
 
-  if (isLoading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </AppLayout>
-    );
-  }
-
-  const hasData = paretoData.length > 0 || ltvData.length > 0 || rentabilidadeData.length > 0;
+  const getServicosAtivos = (cliente: any) =>
+    (cliente.fato_servico || []).filter((s: any) => s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Planejado").length;
 
   return (
     <AppLayout>
-      <div className="space-y-8">
-        <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Clientes e Projetos</h1>
-          <p className="text-muted-foreground mt-2">Análise de rentabilidade, LTV e distribuição geográfica</p>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-foreground">Clientes e Projetos</h1>
+            <p className="text-muted-foreground">Gerencie seus clientes e acompanhe projetos</p>
+          </div>
+          <Button onClick={() => setDialogOpen({ open: true })}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Cliente
+          </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <KPICard
-            title="Total de Clientes"
-            value={kpis.totalClientes.toString()}
-            icon={Users}
-            iconColor="#6366f1"
-            description="Número total de clientes cadastrados na base."
-            calculation="Contagem de clientes ativos"
-          />
-          <KPICard
-            title="LTV Médio"
-            value={formatLTV(kpis.ltvMedio)}
-            icon={Award}
-            iconColor="#10b981"
-            description="Valor médio que cada cliente gera ao longo do relacionamento."
-            calculation="Σ receita por cliente / Nº de clientes"
-          />
-          <KPICard
-            title="Top 3 Clientes"
-            value={`${kpis.top3Percentual}%`}
-            icon={TrendingUp}
-            iconColor="#f59e0b"
-            description="Percentual de receita concentrado nos 3 maiores clientes."
-            calculation="Receita Top 3 / Receita Total × 100"
-          />
-          <KPICard
-            title="Cidades Ativas"
-            value={kpis.cidadesAtivas.toString()}
-            icon={MapPin}
-            iconColor="#14b8a6"
-            description="Número de cidades distintas com propriedades cadastradas."
-            calculation="Contagem de cidades únicas"
-          />
-        </div>
-
-        {!hasData ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Users className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">Sem dados para análise</h3>
-              <p className="text-muted-foreground text-center max-w-md">
-                Cadastre clientes e orçamentos para visualizar análises de receita, LTV e rentabilidade.
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <Tabs defaultValue="analise" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="analise">Análise de Clientes</TabsTrigger>
-              <TabsTrigger value="projetos">Projetos</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="analise" className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <StoryCard
-                  title="Distribuição de Receita"
-                  insight={getParetoInsight()}
-                  category="strategic"
-                />
-                <StoryCard
-                  title="Tendência de LTV"
-                  insight={getLtvInsight()}
-                  category="financial"
+        {/* Content */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Lista de Clientes</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nome, CPF, e-mail..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9 text-sm"
                 />
               </div>
+              <Select value={situacaoFilter} onValueChange={setSituacaoFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-sm">
+                  <SelectValue placeholder="Situação" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="Ativo">Ativo</SelectItem>
+                  <SelectItem value="Inativo">Inativo</SelectItem>
+                  <SelectItem value="Prospecto">Prospecto</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {paretoData.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Receita por Cliente (Pareto)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={paretoData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="cliente" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                          <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                          <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" unit="%" />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: "hsl(var(--card))", 
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px"
-                            }}
-                            formatter={(value: number, name: string) => {
-                              if (name === "receita") return [formatCurrency(value), "Receita"];
-                              return [`${value}%`, "Acumulado"];
-                            }}
-                          />
-                          <Bar yAxisId="left" dataKey="receita" fill="hsl(var(--chart-1))" radius={[8, 8, 0, 0]} />
-                          <Line yAxisId="right" type="monotone" dataKey="acumulado" stroke="hsl(var(--chart-2))" strokeWidth={2} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                )}
-
-                {ltvData.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle>Evolução do LTV Médio</CardTitle>
-                        <Select
-                          value={selectedYear.toString()}
-                          onValueChange={(value) => setSelectedYear(Number(value))}
-                        >
-                          <SelectTrigger className="w-[100px] h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableYears.map((year) => (
-                              <SelectItem key={year} value={year.toString()}>
-                                {year}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={ltvData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="mes" stroke="hsl(var(--muted-foreground))" />
-                          <YAxis stroke="hsl(var(--muted-foreground))" tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: "hsl(var(--card))", 
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px"
-                            }}
-                            formatter={(value: number) => [formatCurrency(value), "LTV Médio"]}
-                          />
-                          <Line type="monotone" dataKey="ltv" stroke="hsl(var(--chart-3))" strokeWidth={3} dot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="projetos" className="space-y-6">
-              <StoryCard
-                title="Rentabilidade dos Projetos"
-                insight={getRentabilidadeInsight()}
-                category="operational"
+            {/* Table */}
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+            ) : filtered.length === 0 && !searchTerm && situacaoFilter === "all" ? (
+              <EmptyState
+                icon={Users}
+                title="Nenhum cliente cadastrado"
+                description="Cadastre seus clientes para organizar projetos, orçamentos e acompanhar o relacionamento."
+                actionLabel="+ Novo Cliente"
+                onAction={() => setDialogOpen({ open: true })}
+                tip="Você pode importar clientes via CSV em Configurações"
               />
+            ) : filtered.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Nenhum cliente encontrado para os filtros aplicados.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>CPF/CNPJ</TableHead>
+                      <TableHead>Contato</TableHead>
+                      <TableHead>Propriedades</TableHead>
+                      <TableHead>Serviços Ativos</TableHead>
+                      <TableHead>Situação</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagination.paginatedData.map((cliente: any) => {
+                      const propCount = (cliente.dim_propriedade || []).length;
+                      const servicosAtivos = getServicosAtivos(cliente);
+                      return (
+                        <TableRow
+                          key={cliente.id_cliente}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/clientes/${cliente.id_cliente}`)}
+                        >
+                          <TableCell className="font-medium">{cliente.nome}</TableCell>
+                          <TableCell className="text-sm">{cliente.cpf || cliente.cnpj || "-"}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {cliente.email && <div>{cliente.email}</div>}
+                              {cliente.telefone && <div className="text-muted-foreground">{cliente.telefone}</div>}
+                              {!cliente.email && !cliente.telefone && "-"}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {propCount > 0 ? (
+                              <Badge variant="secondary" className="gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {propCount}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {servicosAtivos > 0 ? (
+                              <Badge variant="default" className="gap-1">
+                                <Briefcase className="h-3 w-3" />
+                                {servicosAtivos}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {cliente.situacao ? (
+                              <Badge
+                                variant={cliente.situacao === "Ativo" ? "default" : "secondary"}
+                                className={
+                                  cliente.situacao === "Ativo"
+                                    ? "bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30"
+                                    : cliente.situacao === "Inativo"
+                                    ? "bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30"
+                                    : ""
+                                }
+                              >
+                                {cliente.situacao}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+                              <Button variant="ghost" size="icon" onClick={() => navigate(`/clientes/${cliente.id_cliente}`)} title="Ver detalhes">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" onClick={() => setDialogOpen({ open: true, data: cliente })} title="Editar">
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setDeleteTargetId(cliente.id_cliente);
+                                  setDeleteConfirmOpen(true);
+                                }}
+                                title="Excluir"
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
 
-              {rentabilidadeData.length > 0 ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Rentabilidade por Projeto (%)</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ResponsiveContainer width="100%" height={350}>
-                      <BarChart data={rentabilidadeData} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" stroke="hsl(var(--muted-foreground))" unit="%" />
-                        <YAxis dataKey="projeto" type="category" stroke="hsl(var(--muted-foreground))" width={150} fontSize={12} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: "hsl(var(--card))", 
-                            border: "1px solid hsl(var(--border))",
-                            borderRadius: "8px"
-                          }}
-                          formatter={(value: number, name: string) => {
-                            if (name === "rentabilidade") return [`${value}%`, "Rentabilidade"];
-                            return [value, name];
-                          }}
-                        />
-                        <Bar dataKey="rentabilidade" radius={[0, 8, 8, 0]}>
-                          {rentabilidadeData.map((_, index) => (
-                            <Cell key={`cell-${index}`} fill={`hsl(var(--chart-${(index % 5) + 1}))`} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium text-foreground mb-2">Sem dados de projetos</h3>
-                    <p className="text-muted-foreground text-center">
-                      Cadastre serviços com receita e custo para visualizar análises de rentabilidade.
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </TabsContent>
-          </Tabs>
-        )}
+                <TablePagination
+                  currentPage={pagination.currentPage}
+                  totalPages={pagination.totalPages}
+                  totalItems={pagination.totalItems}
+                  pageSize={pagination.pageSize}
+                  startIndex={pagination.startIndex}
+                  endIndex={pagination.endIndex}
+                  canGoNext={pagination.canGoNext}
+                  canGoPrevious={pagination.canGoPrevious}
+                  onPageChange={pagination.goToPage}
+                  onPageSizeChange={pagination.setPageSize}
+                  onFirstPage={pagination.goToFirstPage}
+                  onLastPage={pagination.goToLastPage}
+                  onNextPage={pagination.goToNextPage}
+                  onPreviousPage={pagination.goToPreviousPage}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Dialogs */}
+        <ClientePropriedadeUnificadoDialog
+          open={dialogOpen.open}
+          onOpenChange={(open) => setDialogOpen({ open })}
+          editingCliente={dialogOpen.data}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
+            setDialogOpen({ open: false });
+          }}
+        />
+
+        <ConfirmDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+          title="Excluir cliente"
+          description="Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita."
+          confirmLabel="Excluir"
+          onConfirm={() => {
+            if (deleteTargetId) deleteMutation.mutate(deleteTargetId);
+            setDeleteConfirmOpen(false);
+            setDeleteTargetId(null);
+          }}
+        />
       </div>
     </AppLayout>
   );

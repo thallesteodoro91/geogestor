@@ -1,146 +1,87 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getCurrentTenantId } from "@/services/supabase.service";
 import { createDespesa, updateDespesa, deleteDespesa } from "@/modules/finance/services/despesa.service";
 import { logAuditEvent } from "@/services/audit.service";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, DollarSign, TrendingDown } from "lucide-react";
+import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, Search } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
-import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
-import { despesaSchema } from "@/lib/validations";
-import { TimeGranularityControl } from "@/components/controls/TimeGranularityControl";
-import { useChartSettings } from "@/contexts/ChartSettingsContext";
+import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear, format, addMonths, addQuarters, addYears } from "date-fns";
+import { TablePagination } from "@/components/ui/table-pagination";
+import { usePagination } from "@/hooks/usePagination";
+import { despesaSchema } from "@/lib/validations";
+import { format, startOfMonth, endOfMonth } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
-  const { granularity, periodOffset } = useChartSettings();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState<FilterState>({
-    dataInicio: "",
-    dataFim: "",
-    clienteId: "",
-    empresaId: "",
-    categoria: "",
-    situacao: "",
-  });
+  const [categoriaFilter, setCategoriaFilter] = useState("all");
+  const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
+  const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     valor_da_despesa: "",
-    data_da_despesa: new Date().toISOString().split('T')[0],
+    data_da_despesa: new Date().toISOString().split("T")[0],
     id_tipodespesa: "",
     id_servico: "",
     observacoes: "",
   });
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
-  // Atualizar filtros de data baseado na granularidade e offset selecionados
-  const getDateRangeByGranularity = useCallback((gran: 'month' | 'quarter' | 'year', offset: number) => {
-    const now = new Date();
-    let start: Date;
-    let end: Date;
-
-    switch (gran) {
-      case 'month': {
-        const targetDate = addMonths(now, offset);
-        start = startOfMonth(targetDate);
-        end = endOfMonth(targetDate);
-        break;
-      }
-      case 'quarter': {
-        const targetDate = addQuarters(now, offset);
-        start = startOfQuarter(targetDate);
-        end = endOfQuarter(targetDate);
-        break;
-      }
-      case 'year': {
-        const targetDate = addYears(now, offset);
-        start = startOfYear(targetDate);
-        end = endOfYear(targetDate);
-        break;
-      }
-    }
-
-    return {
-      dataInicio: format(start, 'yyyy-MM-dd'),
-      dataFim: format(end, 'yyyy-MM-dd'),
-    };
-  }, []);
-
-  // Atualizar filtros quando granularidade ou offset muda
-  useEffect(() => {
-    const { dataInicio, dataFim } = getDateRangeByGranularity(granularity, periodOffset);
-    setFilters(prev => ({
-      ...prev,
-      dataInicio,
-      dataFim,
-    }));
-  }, [granularity, periodOffset, getDateRangeByGranularity]);
-
-  // Buscar despesas (apenas confirmadas ou sem status - não mostrar pendentes)
   const { data: despesas = [], isLoading } = useQuery({
-    queryKey: ['despesas'],
+    queryKey: ["despesas"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('fato_despesas')
+        .from("fato_despesas")
         .select(`
           *,
           dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao),
           fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)
         `)
-        .or('status.eq.confirmada,status.is.null')
-        .order('data_da_despesa', { ascending: false });
-      
+        .or("status.eq.confirmada,status.is.null")
+        .order("data_da_despesa", { ascending: false });
       if (error) throw error;
       return data || [];
     },
   });
 
-  // Buscar tipos de despesa
   const { data: tiposDespesa = [] } = useQuery({
-    queryKey: ['tipos-despesa'],
+    queryKey: ["tipos-despesa"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('dim_tipodespesa')
-        .select('*')
-        .order('categoria');
+      const { data, error } = await supabase.from("dim_tipodespesa").select("*").order("categoria");
       if (error) throw error;
       return data || [];
     },
   });
 
-  // Buscar serviços
   const { data: servicos = [] } = useQuery({
-    queryKey: ['servicos'],
+    queryKey: ["servicos"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('fato_servico')
-        .select('id_servico, nome_do_servico')
-        .order('nome_do_servico');
+      const { data, error } = await supabase.from("fato_servico").select("id_servico, nome_do_servico").order("nome_do_servico");
       if (error) throw error;
       return data || [];
     },
   });
 
-  // Criar/Atualizar despesa usando serviço centralizado
   const mutation = useMutation({
     mutationFn: async (data: typeof formData & { id_despesas?: string }) => {
       if (data.id_despesas) {
-        // Update
         const result = await updateDespesa(data.id_despesas, {
           valor_da_despesa: parseFloat(data.valor_da_despesa),
           data_da_despesa: data.data_da_despesa,
@@ -150,7 +91,6 @@ export default function Despesas() {
         });
         if (result.error) throw result.error;
       } else {
-        // Create - usa o serviço que já registra na timeline automaticamente
         const result = await createDespesa({
           valor_da_despesa: parseFloat(data.valor_da_despesa),
           data_da_despesa: data.data_da_despesa,
@@ -162,42 +102,30 @@ export default function Despesas() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['despesas'] });
-      const action = editingId ? 'UPDATE' : 'INSERT';
-      logAuditEvent({ action, entity: 'Despesa', entityId: editingId || undefined, newData: { ...formData } });
+      queryClient.invalidateQueries({ queryKey: ["despesas"] });
+      logAuditEvent({ action: editingId ? "UPDATE" : "INSERT", entity: "Despesa", entityId: editingId || undefined, newData: { ...formData } });
       toast.success(editingId ? "Despesa atualizada!" : "Despesa adicionada!");
       setIsDialogOpen(false);
       resetForm();
     },
-    onError: (error: any) => {
-      toast.error(`Erro: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Erro: ${error.message}`),
   });
 
-  // Deletar despesa usando serviço centralizado
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const result = await deleteDespesa(id);
       if (result.error) throw result.error;
     },
     onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ['despesas'] });
-      logAuditEvent({ action: 'DELETE', entity: 'Despesa', entityId: id });
+      queryClient.invalidateQueries({ queryKey: ["despesas"] });
+      logAuditEvent({ action: "DELETE", entity: "Despesa", entityId: id });
       toast.success("Despesa excluída!");
     },
-    onError: (error: any) => {
-      toast.error(`Erro ao excluir: ${error.message}`);
-    },
+    onError: (error: any) => toast.error(`Erro ao excluir: ${error.message}`),
   });
 
   const resetForm = () => {
-    setFormData({
-      valor_da_despesa: "",
-      data_da_despesa: new Date().toISOString().split('T')[0],
-      id_tipodespesa: "",
-      id_servico: "",
-      observacoes: "",
-    });
+    setFormData({ valor_da_despesa: "", data_da_despesa: new Date().toISOString().split("T")[0], id_tipodespesa: "", id_servico: "", observacoes: "" });
     setEditingId(null);
   };
 
@@ -215,7 +143,6 @@ export default function Despesas() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       const validatedData = despesaSchema.parse({
         valor_da_despesa: parseFloat(formData.valor_da_despesa),
@@ -224,7 +151,6 @@ export default function Despesas() {
         id_servico: formData.id_servico || null,
         observacoes: formData.observacoes || undefined,
       });
-      
       const dataToSubmit = {
         valor_da_despesa: validatedData.valor_da_despesa.toString(),
         data_da_despesa: validatedData.data_da_despesa,
@@ -232,411 +158,245 @@ export default function Despesas() {
         id_servico: validatedData.id_servico || "",
         observacoes: validatedData.observacoes || "",
       };
-      
       mutation.mutate(editingId ? { ...dataToSubmit, id_despesas: editingId } : dataToSubmit);
     } catch (error: any) {
-      if (error.errors) {
-        error.errors.forEach((err: any) => toast.error(err.message));
-      } else {
-        toast.error("Erro na validação dos dados");
-      }
+      if (error.errors) error.errors.forEach((err: any) => toast.error(err.message));
+      else toast.error("Erro na validação dos dados");
     }
   };
 
-  // Filtrar despesas primeiro (movido para cima para usar nos KPIs)
-  const getFilteredDespesas = () => {
-    return despesas.filter(d => {
-      const matchesSearch = 
-        d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase());
-
-      const matchesDataInicio = !filters.dataInicio || d.data_da_despesa >= filters.dataInicio;
-      const matchesDataFim = !filters.dataFim || d.data_da_despesa <= filters.dataFim;
-      const matchesCategoria = !filters.categoria || d.dim_tipodespesa?.categoria === filters.categoria;
-
-      return matchesSearch && matchesDataInicio && matchesDataFim && matchesCategoria;
-    });
-  };
-
-  const filteredDespesas = getFilteredDespesas();
-
-  // Verificar se há filtros de data ativos
-  const hasDateFilter = filters.dataInicio || filters.dataFim;
-
-  // Calcular KPIs baseado nos dados filtrados
-  const totalDespesasFiltradas = filteredDespesas.reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
-  const totalDespesasGeral = despesas.reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
-
-  // Agrupar por subcategoria usando dados filtrados
-  const despesasPorSubcategoria = filteredDespesas.reduce((acc: any, d) => {
-    const subcat = d.dim_tipodespesa?.subcategoria || 'Sem subcategoria';
-    acc[subcat] = (acc[subcat] || 0) + parseFloat(String(d.valor_da_despesa || 0));
-    return acc;
-  }, {});
-
-  // Cores para o Treemap - Refined Palette
-  const TREEMAP_COLORS = [
-    "hsl(239, 84%, 67%)",  // Indigo
-    "hsl(160, 84%, 39%)",  // Emerald
-    "hsl(48, 96%, 53%)",   // Yellow
-    "hsl(350, 89%, 60%)",  // Rose
-    "hsl(280, 68%, 60%)",  // Purple
-    "hsl(25, 95%, 53%)",   // Orange
-    "hsl(189, 94%, 43%)",  // Cyan
-    "hsl(330, 81%, 60%)",  // Pink
-  ];
-
-  const treemapData = Object.entries(despesasPorSubcategoria).map(([name, value], index) => ({
-    name,
-    size: value as number,
-    fill: TREEMAP_COLORS[index % TREEMAP_COLORS.length],
-    percentage: totalDespesasFiltradas > 0 ? ((value as number) / totalDespesasFiltradas * 100).toFixed(1) : "0",
-  }));
-
-  // Tooltip customizado para o Treemap
-  const CustomTreemapTooltip = ({ active, payload }: any) => {
-    if (!active || !payload || !payload.length) return null;
-    
-    const data = payload[0].payload;
-    return (
-      <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[180px]">
-        <div className="flex items-center gap-2 mb-2">
-          <div 
-            className="w-3 h-3 rounded-sm" 
-            style={{ backgroundColor: data.fill }}
-          />
-          <span className="font-semibold text-foreground">{data.name}</span>
-        </div>
-        <div className="space-y-1 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Valor:</span>
-            <span className="font-medium text-foreground">
-              R$ {Number(data.size).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Proporção:</span>
-            <span className="font-medium text-foreground">{data.percentage}%</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Estado para controlar hover das células
-  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
-
-  // Componente customizado para as células do Treemap com hover
-  const CustomTreemapContent = (props: any) => {
-    const { x, y, width, height, name, fill } = props;
-    const size = props.size ?? props.value ?? 0;
-    const isHovered = hoveredCell === name;
-    
-    // Skip rendering if dimensions are invalid
-    if (!width || !height || width <= 0 || height <= 0) return null;
-    
-    // Calcular transformação para hover
-    const hoverScale = isHovered ? 0.98 : 1;
-    const hoverOffset = isHovered ? 2 : 0;
-    
-    return (
-      <g
-        onMouseEnter={() => setHoveredCell(name)}
-        onMouseLeave={() => setHoveredCell(null)}
-        style={{ cursor: 'pointer' }}
-      >
-        {/* Sombra de destaque no hover */}
-        {isHovered && (
-          <rect
-            x={x - 2}
-            y={y - 2}
-            width={width + 4}
-            height={height + 4}
-            fill="none"
-            stroke="hsl(var(--primary))"
-            strokeWidth={3}
-            rx={6}
-            style={{ 
-              filter: 'drop-shadow(0 4px 12px hsl(var(--primary) / 0.4))',
-              opacity: 0.8
-            }}
-          />
-        )}
-        <rect
-          x={x + hoverOffset}
-          y={y + hoverOffset}
-          width={width * hoverScale}
-          height={height * hoverScale}
-          fill={fill || "hsl(var(--primary))"}
-          stroke="hsl(var(--background))"
-          strokeWidth={isHovered ? 3 : 2}
-          rx={4}
-          style={{
-            transition: 'all 0.2s ease-out',
-            filter: isHovered ? 'brightness(1.15)' : 'brightness(1)',
-            transformOrigin: `${x + width / 2}px ${y + height / 2}px`,
-          }}
-        />
-        {width > 60 && height > 40 && name && (
-          <>
-            <text
-              x={x + width / 2}
-              y={y + height / 2 - 8}
-              textAnchor="middle"
-              fill="white"
-              fontSize={isHovered ? 13 : 12}
-              fontWeight={isHovered ? "700" : "600"}
-              style={{ 
-                transition: 'all 0.2s ease-out',
-                textShadow: isHovered ? '0 2px 4px rgba(0,0,0,0.3)' : 'none'
-              }}
-            >
-              {name}
-            </text>
-            <text
-              x={x + width / 2}
-              y={y + height / 2 + 10}
-              textAnchor="middle"
-              fill="white"
-              fontSize={isHovered ? 12 : 11}
-              style={{ 
-                transition: 'all 0.2s ease-out',
-                textShadow: isHovered ? '0 2px 4px rgba(0,0,0,0.3)' : 'none'
-              }}
-            >
-              R$ {Number(size).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </text>
-          </>
-        )}
-      </g>
-    );
-  };
-
-  // filteredDespesas já calculado acima
-
-  const { data: clientes = [] } = useQuery({
-    queryKey: ['clientes'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('dim_cliente')
-        .select('id_cliente, nome')
-        .order('nome');
-      if (error) throw error;
-      return data.map(c => ({ id: c.id_cliente, nome: c.nome }));
-    },
+  // Filtering
+  const filteredDespesas = despesas.filter((d: any) => {
+    const matchesSearch =
+      d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      d.fato_servico?.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategoria = categoriaFilter === "all" || d.dim_tipodespesa?.categoria === categoriaFilter;
+    const matchesDataInicio = !dataInicio || d.data_da_despesa >= format(dataInicio, "yyyy-MM-dd");
+    const matchesDataFim = !dataFim || d.data_da_despesa <= format(dataFim, "yyyy-MM-dd");
+    return matchesSearch && matchesCategoria && matchesDataInicio && matchesDataFim;
   });
+
+  const pagination = usePagination(filteredDespesas, { initialPageSize: 15 });
+
+  // KPI: Total do mês corrente
+  const now = new Date();
+  const mesAtualInicio = format(startOfMonth(now), "yyyy-MM-dd");
+  const mesAtualFim = format(endOfMonth(now), "yyyy-MM-dd");
+  const totalMes = despesas
+    .filter((d: any) => d.data_da_despesa >= mesAtualInicio && d.data_da_despesa <= mesAtualFim)
+    .reduce((sum: number, d: any) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
+
+  // Unique categories for filter
+  const categorias = [...new Set(despesas.map((d: any) => d.dim_tipodespesa?.categoria).filter(Boolean))];
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <h1 className="text-3xl font-heading font-bold text-foreground">Despesas</h1>
-            <p className="text-muted-foreground">Gerencie todas as despesas da empresa</p>
+            <p className="text-muted-foreground">Registre e controle os custos da empresa</p>
           </div>
-          <TimeGranularityControl />
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Despesa
+          </Button>
         </div>
 
-        <GlobalFilters
-          clientes={clientes}
-          onFilterChange={(newFilters) => {
-            // Manter datas da granularidade se o usuário não especificar
-            setFilters(prev => ({
-              ...newFilters,
-              dataInicio: newFilters.dataInicio || prev.dataInicio,
-              dataFim: newFilters.dataFim || prev.dataFim,
-            }));
-          }}
-          showEmpresa={false}
-          showCategoria={false}
-          showSituacao={false}
-        />
-
+        {/* KPI contextual */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           <KPICard
-            title={hasDateFilter ? "Total no Período" : "Total de Despesas"}
-            value={`R$ ${totalDespesasFiltradas.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+            title="Total do Mês"
+            value={`R$ ${totalMes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
             icon={DollarSign}
             iconColor="#f43f5e"
-            description="Soma de todas as despesas registradas no período selecionado."
-            calculation="Σ valor de cada despesa confirmada"
-          />
-          <KPICard
-            title={hasDateFilter ? "Despesas Filtradas" : "Despesas do Mês"}
-            value={`R$ ${(hasDateFilter 
-              ? totalDespesasFiltradas 
-              : despesas
-                  .filter(d => new Date(d.data_da_despesa).getMonth() === new Date().getMonth())
-                  .reduce((sum, d) => sum + parseFloat(String(d.valor_da_despesa)), 0)
-            ).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            icon={TrendingDown}
-            iconColor="#ef4444"
-            description={hasDateFilter ? "Total de despesas no intervalo filtrado." : "Total de despesas do mês corrente."}
-            calculation="Σ despesas no período selecionado"
+            description="Soma das despesas do mês corrente."
+            calculation="Σ despesas do mês atual"
           />
         </div>
 
+        {/* Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>Despesas por Subcategoria</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Lista de Despesas</CardTitle>
           </CardHeader>
-          <CardContent>
-            {treemapData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <Treemap
-                  data={treemapData}
-                  dataKey="size"
-                  aspectRatio={4 / 3}
-                  content={<CustomTreemapContent />}
-                >
-                  <Tooltip content={<CustomTreemapTooltip />} />
-                </Treemap>
-              </ResponsiveContainer>
+          <CardContent className="space-y-3">
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px] max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por categoria, serviço..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-9 h-9 text-sm"
+                />
+              </div>
+              <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
+                <SelectTrigger className="w-[160px] h-9 text-sm">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  {categorias.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex items-center gap-2">
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataInicio && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dataInicio ? format(dataInicio, "dd/MM/yy", { locale: ptBR }) : "Início"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={dataInicio} onSelect={setDataInicio} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+                <span className="text-xs text-muted-foreground">até</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataFim && "text-muted-foreground")}>
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                      {dataFim ? format(dataFim, "dd/MM/yy", { locale: ptBR }) : "Fim"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar mode="single" selected={dataFim} onSelect={setDataFim} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                  </PopoverContent>
+                </Popover>
+                {(dataInicio || dataFim) && (
+                  <Button variant="ghost" size="icon" onClick={() => { setDataInicio(undefined); setDataFim(undefined); }} className="h-8 w-8">
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Data */}
+            {isLoading ? (
+              <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+            ) : filteredDespesas.length === 0 && !searchTerm && categoriaFilter === "all" && !dataInicio && !dataFim ? (
+              <EmptyState
+                icon={DollarSign}
+                title="Nenhuma despesa registrada"
+                description="Controle despesas para ter uma visão real da sua margem de lucro."
+                actionLabel="+ Registrar Despesa"
+                onAction={() => { resetForm(); setIsDialogOpen(true); }}
+                tip="Vincule despesas a serviços para rastrear custos por projeto"
+              />
+            ) : filteredDespesas.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">Nenhuma despesa encontrada para os filtros aplicados.</div>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-                Nenhuma despesa cadastrada
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead>Subcategoria</TableHead>
+                      <TableHead>Valor</TableHead>
+                      <TableHead>Serviço</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pagination.paginatedData.map((despesa: any) => (
+                      <TableRow key={despesa.id_despesas}>
+                        <TableCell>{new Date(despesa.data_da_despesa).toLocaleDateString("pt-BR")}</TableCell>
+                        <TableCell>{despesa.dim_tipodespesa?.categoria || "-"}</TableCell>
+                        <TableCell>{despesa.dim_tipodespesa?.subcategoria || "-"}</TableCell>
+                        <TableCell>R$ {parseFloat(String(despesa.valor_da_despesa)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+                        <TableCell>{despesa.fato_servico?.nome_do_servico || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => handleEdit(despesa)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => { setDeleteTargetId(despesa.id_despesas); setDeleteConfirmOpen(true); }}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                <TablePagination
+                  currentPage={pagination.currentPage}
+                  totalPages={pagination.totalPages}
+                  totalItems={pagination.totalItems}
+                  pageSize={pagination.pageSize}
+                  startIndex={pagination.startIndex}
+                  endIndex={pagination.endIndex}
+                  canGoNext={pagination.canGoNext}
+                  canGoPrevious={pagination.canGoPrevious}
+                  onPageChange={pagination.goToPage}
+                  onPageSizeChange={pagination.setPageSize}
+                  onFirstPage={pagination.goToFirstPage}
+                  onLastPage={pagination.goToLastPage}
+                  onNextPage={pagination.goToNextPage}
+                  onPreviousPage={pagination.goToPreviousPage}
+                />
               </div>
             )}
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Lista de Despesas</CardTitle>
-            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Despesa
-            </Button>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>{editingId ? "Editar" : "Adicionar"} Despesa</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <div>
-                    <Label htmlFor="valor">Valor *</Label>
-                    <Input
-                      id="valor"
-                      type="number"
-                      step="0.01"
-                      value={formData.valor_da_despesa}
-                      onChange={(e) => setFormData({ ...formData, valor_da_despesa: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="data">Data *</Label>
-                    <Input
-                      id="data"
-                      type="date"
-                      value={formData.data_da_despesa}
-                      onChange={(e) => setFormData({ ...formData, data_da_despesa: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tipo">Tipo de Despesa</Label>
-                    <Select value={formData.id_tipodespesa} onValueChange={(v) => setFormData({ ...formData, id_tipodespesa: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tiposDespesa.map((t) => (
-                          <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>
-                            {t.categoria} - {t.subcategoria}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="servico">Serviço Vinculado</Label>
-                    <Select value={formData.id_servico} onValueChange={(v) => setFormData({ ...formData, id_servico: v })}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Nenhum" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {servicos.map((s) => (
-                          <SelectItem key={s.id_servico} value={s.id_servico}>
-                            {s.nome_do_servico}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="obs">Observações</Label>
-                    <Textarea
-                      id="obs"
-                      value={formData.observacoes}
-                      onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                    {mutation.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </CardHeader>
-          <CardContent>
-            <Input
-              placeholder="Buscar despesas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="mb-4"
-            />
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Subcategoria</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Serviço</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">Carregando...</TableCell>
-                  </TableRow>
-                ) : filteredDespesas.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center">Nenhuma despesa encontrada</TableCell>
-                  </TableRow>
-                ) : (
-                  filteredDespesas.map((despesa) => (
-                    <TableRow key={despesa.id_despesas}>
-                      <TableCell>{new Date(despesa.data_da_despesa).toLocaleDateString('pt-BR')}</TableCell>
-                      <TableCell>{despesa.dim_tipodespesa?.categoria || '-'}</TableCell>
-                      <TableCell>{despesa.dim_tipodespesa?.subcategoria || '-'}</TableCell>
-                      <TableCell>R$ {parseFloat(String(despesa.valor_da_despesa)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                      <TableCell>{despesa.fato_servico?.nome_do_servico || '-'}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(despesa)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDeleteTargetId(despesa.id_despesas);
-                            setDeleteConfirmOpen(true);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        {/* Dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "Editar" : "Nova"} Despesa</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="valor">Valor *</Label>
+                <Input id="valor" type="number" step="0.01" value={formData.valor_da_despesa} onChange={(e) => setFormData({ ...formData, valor_da_despesa: e.target.value })} required />
+              </div>
+              <div>
+                <Label htmlFor="data">Data *</Label>
+                <Input id="data" type="date" value={formData.data_da_despesa} onChange={(e) => setFormData({ ...formData, data_da_despesa: e.target.value })} required />
+              </div>
+              <div>
+                <Label htmlFor="tipo">Tipo de Despesa</Label>
+                <Select value={formData.id_tipodespesa} onValueChange={(v) => setFormData({ ...formData, id_tipodespesa: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                  <SelectContent>
+                    {tiposDespesa.map((t: any) => (
+                      <SelectItem key={t.id_tipodespesa} value={t.id_tipodespesa}>{t.categoria} - {t.subcategoria}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="servico">Serviço Vinculado</Label>
+                <Select value={formData.id_servico} onValueChange={(v) => setFormData({ ...formData, id_servico: v })}>
+                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectContent>
+                    {servicos.map((s: any) => (
+                      <SelectItem key={s.id_servico} value={s.id_servico}>{s.nome_do_servico}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="obs">Observações</Label>
+                <Textarea id="obs" value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} />
+              </div>
+              <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                {mutation.isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <ConfirmDialog
           open={deleteConfirmOpen}
@@ -645,9 +405,7 @@ export default function Despesas() {
           description="Tem certeza que deseja excluir esta despesa? Esta ação não pode ser desfeita."
           confirmLabel="Excluir"
           onConfirm={() => {
-            if (deleteTargetId) {
-              deleteMutation.mutate(deleteTargetId);
-            }
+            if (deleteTargetId) deleteMutation.mutate(deleteTargetId);
             setDeleteConfirmOpen(false);
             setDeleteTargetId(null);
           }}

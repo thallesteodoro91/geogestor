@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { MapPin, Plus, Map, Building2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 import { PropriedadeDetalhesDialog } from "@/components/map";

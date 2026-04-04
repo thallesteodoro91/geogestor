@@ -14,8 +14,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
-import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase } from "lucide-react";
+import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Clientes() {
@@ -26,6 +27,7 @@ export default function Clientes() {
   const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: clientes = [], isLoading } = useQuery({
     queryKey: ["clientes-list"],
@@ -73,6 +75,10 @@ export default function Clientes() {
     <AppLayout>
       <div className="space-y-6">
         <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar Planilha
+          </Button>
           <Button onClick={() => setDialogOpen({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente
@@ -237,6 +243,13 @@ export default function Clientes() {
             queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
             setDialogOpen({ open: false });
           }}
+        />
+
+        <SmartImporter
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          entityType="clientes"
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["clientes-list"] })}
         />
 
         <ConfirmDialog

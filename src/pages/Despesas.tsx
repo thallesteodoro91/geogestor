@@ -18,8 +18,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X } from "lucide-react";
+import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, FileSpreadsheet } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -38,6 +39,7 @@ export default function Despesas() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [formData, setFormData] = useState({
     valor_da_despesa: "",
     data_da_despesa: new Date().toISOString().split("T")[0],
@@ -156,6 +158,10 @@ export default function Despesas() {
     <AppLayout>
       <div className="space-y-6">
         <PageHeader title="Despesas" subtitle="Registre e controle os custos da empresa">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             Nova Despesa
@@ -304,6 +310,8 @@ export default function Despesas() {
         </Dialog>
 
         <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title="Excluir despesa" description="Tem certeza que deseja excluir esta despesa?" confirmLabel="Excluir" onConfirm={() => { if (deleteTargetId) deleteMutation.mutate(deleteTargetId); setDeleteConfirmOpen(false); setDeleteTargetId(null); }} />
+
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="despesas" onSuccess={() => queryClient.invalidateQueries({ queryKey: ["despesas"] })} />
       </div>
     </AppLayout>
   );

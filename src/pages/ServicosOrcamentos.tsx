@@ -9,11 +9,12 @@ import { ContextualKPIs } from "@/components/layout/ContextualKPIs";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, Download, TrendingUp, CalendarIcon, X, Wand2, Info } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, Download, TrendingUp, CalendarIcon, X, Wand2, Info, FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -36,6 +37,7 @@ export default function ServicosOrcamentos() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'servico' | 'orcamento' } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: orcamentos = [], isLoading: loadingOrcamentos, refetch: refetchOrcamentos } = useQuery({
     queryKey: ['orcamentos'],
@@ -136,6 +138,10 @@ export default function ServicosOrcamentos() {
     <AppLayout>
       <div className="space-y-6">
         <PageHeader title="Orçamentos" subtitle="Gestão de orçamentos e propostas comerciais">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={() => setIsWizardOpen(true)}>
             <Wand2 className="mr-2 h-4 w-4" />
             Novo Orçamento
@@ -256,6 +262,7 @@ export default function ServicosOrcamentos() {
         <ServicoDialog open={isServicoDialogOpen} onOpenChange={setIsServicoDialogOpen} servico={editingServico} onSuccess={() => { refetchServicos(); setIsServicoDialogOpen(false); setEditingServico(null); }} />
         <OrcamentoDialog open={isOrcamentoDialogOpen} onOpenChange={setIsOrcamentoDialogOpen} orcamento={editingOrcamento} onSuccess={() => { refetchOrcamentos(); setIsOrcamentoDialogOpen(false); setEditingOrcamento(null); }} />
         <OrcamentoWizard open={isWizardOpen} onOpenChange={setIsWizardOpen} onSuccess={() => { refetchOrcamentos(); setIsWizardOpen(false); }} />
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="orcamentos" onSuccess={() => refetchOrcamentos()} />
         <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title={deleteTarget?.type === 'servico' ? 'Excluir serviço' : 'Excluir orçamento'} description={`Tem certeza que deseja excluir este ${deleteTarget?.type === 'servico' ? 'serviço' : 'orçamento'}?`} confirmLabel="Excluir" onConfirm={confirmDelete} />
       </div>
     </AppLayout>

@@ -12,12 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, CalendarIcon, X, LayoutGrid, List } from "lucide-react";
+import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, CalendarIcon, X, LayoutGrid, List, FileSpreadsheet } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/components/servicos/KanbanBoard";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { NovoServicoDialog } from "@/components/servicos";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -45,6 +46,7 @@ export default function Servicos() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: servicos = [], isLoading } = useQuery({
     queryKey: ["servicos"],
@@ -121,6 +123,10 @@ export default function Servicos() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Serviço
@@ -271,6 +277,8 @@ export default function Servicos() {
         )}
 
         <NovoServicoDialog open={isDialogOpen} onOpenChange={handleCloseDialog} editingServico={editingServico} />
+
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="servicos" onSuccess={() => queryClient.invalidateQueries({ queryKey: ["servicos"] })} />
 
         <ConfirmDialog
           open={deleteConfirmOpen}

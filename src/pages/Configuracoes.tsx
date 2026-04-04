@@ -21,7 +21,6 @@ import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { useTheme } from "next-themes";
-import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 import { SmartImporter, ImportEntityType } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
@@ -43,7 +42,6 @@ export default function Configuracoes() {
   const [userName, setUserName] = useState("");
   const [userEmail, setUserEmail] = useState("");
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
-  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [smartImportEntity, setSmartImportEntity] = useState<ImportEntityType>("clientes");
 
@@ -468,10 +466,6 @@ export default function Configuracoes() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar CSV
-                </Button>
                 <Button onClick={() => { setSmartImportEntity("clientes"); setSmartImportOpen(true); }}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Importar Clientes
@@ -483,6 +477,14 @@ export default function Configuracoes() {
                 <Button variant="secondary" onClick={() => { setSmartImportEntity("orcamentos"); setSmartImportOpen(true); }}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Importar Orçamentos
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("servicos"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Serviços
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("despesas"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Despesas
                 </Button>
               </div>
 
@@ -667,17 +669,6 @@ export default function Configuracoes() {
           </Card>
         </div>
       </div>
-
-      <CsvImportDialog 
-        open={csvImportOpen} 
-        onOpenChange={setCsvImportOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['clientes'] });
-          queryClient.invalidateQueries({ queryKey: ['propriedades'] });
-          queryClient.invalidateQueries({ queryKey: ['tipos-servico'] });
-          queryClient.invalidateQueries({ queryKey: ['tipos-despesa'] });
-        }}
-      />
 
       <SmartImporter
         open={smartImportOpen}

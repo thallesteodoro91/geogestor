@@ -111,6 +111,10 @@ export default function Servicos() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="servico"
+          onCreate={() => setIsDialogOpen(true)}
+        />
         <PageHeader title="Serviços" subtitle="Gerencie a execução dos seus serviços">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
             <TabsList className="h-9">

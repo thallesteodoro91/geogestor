@@ -75,6 +75,11 @@ export default function Clientes() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="cliente"
+          onImport={() => setImportOpen(true)}
+          onCreate={() => setDialogOpen({ open: true })}
+        />
         <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />

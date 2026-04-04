@@ -138,6 +138,10 @@ export default function ServicosOrcamentos() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="orcamento"
+          onCreate={() => setIsWizardOpen(true)}
+        />
         <PageHeader title="Orçamentos" subtitle="Gestão de orçamentos e propostas comerciais">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />

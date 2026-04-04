@@ -46,6 +46,7 @@ export default function Servicos() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: servicos = [], isLoading } = useQuery({
     queryKey: ["servicos"],

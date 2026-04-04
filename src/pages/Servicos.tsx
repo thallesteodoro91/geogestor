@@ -21,6 +21,7 @@ import { NovoServicoDialog } from "@/components/servicos";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";

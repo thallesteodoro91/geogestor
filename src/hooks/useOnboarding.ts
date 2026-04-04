@@ -48,9 +48,9 @@ export function useOnboarding() {
         },
         {
           id: "servico",
-          title: "Crie um serviço",
+          title: "Crie um projeto",
           description: "Registre o primeiro projeto para acompanhar",
-          href: "/servicos",
+          href: "/projetos",
           actionType: "create",
           completed: hasServicos,
           icon: "Briefcase",

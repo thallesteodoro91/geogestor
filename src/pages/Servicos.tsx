@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, CalendarIcon, X, LayoutGrid, List } from "lucide-react";
+import { Plus, Trash2, Edit, Briefcase, CheckCircle2, Clock, AlertCircle, Eye, CalendarIcon, X, LayoutGrid, List, FileSpreadsheet } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KanbanBoard } from "@/components/servicos/KanbanBoard";
 import { Badge } from "@/components/ui/badge";

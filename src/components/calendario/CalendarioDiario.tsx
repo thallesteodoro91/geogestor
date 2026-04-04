@@ -160,12 +160,13 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
       {/* Timeline de Eventos */}
       <div className="space-y-4">
         {eventosFiltrados.length === 0 ? (
-          <Card className="p-12 text-center">
-            <Calendar className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-            <p className="text-lg font-medium text-muted-foreground">
-              Nenhum compromisso agendado para este dia
-            </p>
-          </Card>
+          <EmptyState
+            icon={Calendar}
+            title="Sua agenda está livre"
+            description="Crie serviços ou orçamentos com datas para vê-los aqui automaticamente."
+            actionLabel="+ Novo Compromisso"
+            onAction={() => navigate("/servicos")}
+          />
         ) : (
           eventosFiltrados.map((evento) => {
             const statusConfig = getStatusConfig(evento.status, evento.tipo);

@@ -225,7 +225,7 @@ export default function Servicos() {
                   </TableHeader>
                   <TableBody>
                     {pagination.paginatedData.map((servico: any) => (
-                      <TableRow key={servico.id_servico} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/servicos/${servico.id_servico}`)}>
+                      <TableRow key={servico.id_servico} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/projetos/${servico.id_servico}`)}>
                         <TableCell className="font-medium">{servico.nome_do_servico}</TableCell>
                         <TableCell>{servico.dim_cliente?.nome || "-"}</TableCell>
                         <TableCell>{servico.dim_propriedade?.nome_da_propriedade || "-"}</TableCell>

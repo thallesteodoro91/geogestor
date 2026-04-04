@@ -37,6 +37,7 @@ export default function ServicosOrcamentos() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'servico' | 'orcamento' } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: orcamentos = [], isLoading: loadingOrcamentos, refetch: refetchOrcamentos } = useQuery({
     queryKey: ['orcamentos'],

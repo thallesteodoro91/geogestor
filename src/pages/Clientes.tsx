@@ -75,6 +75,10 @@ export default function Clientes() {
     <AppLayout>
       <div className="space-y-6">
         <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar Planilha
+          </Button>
           <Button onClick={() => setDialogOpen({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente

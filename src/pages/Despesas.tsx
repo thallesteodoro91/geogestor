@@ -20,6 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, FileSpreadsheet } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -230,9 +231,9 @@ export default function Despesas() {
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
           ) : filteredDespesas.length === 0 && !searchTerm && categoriaFilter === "all" && !dataInicio && !dataFim ? (
-            <EmptyState icon={DollarSign} title="Nenhuma despesa registrada" description="Controle despesas para ter uma visão real da sua margem de lucro." actionLabel="+ Registrar Despesa" onAction={() => { resetForm(); setIsDialogOpen(true); }} tip="Vincule despesas a serviços para rastrear custos por projeto" />
+            <EmptyState icon={DollarSign} title="Controle seus custos" description="Registre despesas para entender sua margem de lucro real e tomar decisões melhores." actionLabel="+ Registrar Despesa" onAction={() => { resetForm(); setIsDialogOpen(true); }} tip="Vincule a serviços para rastrear custos por projeto" />
           ) : filteredDespesas.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Nenhuma despesa encontrada para os filtros aplicados.</div>
+            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setCategoriaFilter("all"); setDataInicio(undefined); setDataFim(undefined); }} />
           ) : (
             <div className="overflow-x-auto">
               <Table>

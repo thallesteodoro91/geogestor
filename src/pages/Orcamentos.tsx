@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
 
 export default function Orcamentos() {
@@ -450,9 +452,23 @@ export default function Orcamentos() {
                   <TableRow>
                     <TableCell colSpan={6} className="text-center">Carregando...</TableCell>
                   </TableRow>
+                ) : filteredOrcamentos.length === 0 && !searchTerm ? (
+                  <TableRow>
+                    <TableCell colSpan={6}>
+                      <EmptyState
+                        icon={FileText}
+                        title="Envie sua primeira proposta"
+                        description="Crie orçamentos profissionais e acompanhe aprovações e pagamentos dos clientes."
+                        actionLabel="+ Criar Orçamento"
+                        onAction={() => { resetForm(); setIsDialogOpen(true); }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ) : filteredOrcamentos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center">Nenhum orçamento encontrado</TableCell>
+                    <TableCell colSpan={6}>
+                      <FilterEmptyState onClearFilters={() => setSearchTerm("")} />
+                    </TableCell>
                   </TableRow>
                 ) : (
                   paginatedOrcamentos.map((orc) => (

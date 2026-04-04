@@ -16,6 +16,7 @@ import {
   Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
@@ -159,14 +160,13 @@ export function ClienteTarefas({
 
   if (!tarefas?.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-8 text-center">
-        <ClipboardList className="h-10 w-10 text-muted-foreground mb-3" />
-        <p className="text-muted-foreground mb-3 text-sm">Nenhuma tarefa</p>
-        <Button onClick={onAddTarefa} size="sm">
-          <Plus className="h-4 w-4 mr-1" />
-          Nova
-        </Button>
-      </div>
+      <EmptyState
+        icon={ClipboardList}
+        title="Nenhuma tarefa pendente"
+        description="Crie tarefas para organizar o acompanhamento deste cliente."
+        actionLabel="+ Nova Tarefa"
+        onAction={onAddTarefa}
+      />
     );
   }
 

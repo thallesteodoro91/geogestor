@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { format, startOfWeek, endOfWeek, addWeeks } from "date-fns";
@@ -166,9 +167,13 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
         ))}
 
         {eventosFiltrados.length === 0 && (
-          <Card className="p-12 text-center">
-            <p className="text-muted-foreground">Nenhum compromisso encontrado para esta semana</p>
-          </Card>
+          <EmptyState
+            icon={Calendar}
+            title="Sua agenda está livre"
+            description="Crie serviços ou orçamentos com datas para vê-los aqui automaticamente."
+            actionLabel="+ Novo Compromisso"
+            onAction={() => navigate("/servicos")}
+          />
         )}
       </div>
     </div>

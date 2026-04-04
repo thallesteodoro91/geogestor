@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { MapPin, Plus, Map, Building2 } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
 import { PropriedadeDetalhesDialog } from "@/components/map";
@@ -22,17 +23,13 @@ export function ClientePropriedades({ propriedades, onNovaPropriedade }: Cliente
 
   if (propriedades.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Nenhuma propriedade cadastrada</h3>
-        <p className="text-muted-foreground mb-4">Este cliente ainda não possui propriedades vinculadas.</p>
-        {onNovaPropriedade && (
-          <Button onClick={onNovaPropriedade}>
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Propriedade
-          </Button>
-        )}
-      </div>
+      <EmptyState
+        icon={Building2}
+        title="Nenhuma propriedade vinculada"
+        description="Cadastre propriedades para visualizar áreas no mapa e vincular a serviços."
+        actionLabel="+ Adicionar Propriedade"
+        onAction={onNovaPropriedade || (() => {})}
+      />
     );
   }
 

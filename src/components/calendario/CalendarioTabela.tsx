@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -171,8 +172,14 @@ export const CalendarioTabela = ({ busca = "", filtroTipo = "todos", filtroStatu
 
             {eventosFiltrados.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
-                  Nenhum compromisso encontrado
+                <TableCell colSpan={9}>
+                  <EmptyState
+                    icon={Eye}
+                    title="Sua agenda está livre"
+                    description="Crie serviços ou orçamentos com datas para vê-los aqui automaticamente."
+                    actionLabel="+ Novo Compromisso"
+                    onAction={() => navigate("/servicos")}
+                  />
                 </TableCell>
               </TableRow>
             )}

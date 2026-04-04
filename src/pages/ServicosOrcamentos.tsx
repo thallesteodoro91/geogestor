@@ -16,6 +16,8 @@ import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -226,16 +228,19 @@ export default function ServicosOrcamentos() {
                 <TableRow><TableCell colSpan={9} className="text-center">Carregando...</TableCell></TableRow>
               ) : filteredOrcamentos.length === 0 && !searchTerm ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12">
-                    <div className="flex flex-col items-center gap-2">
-                      <FileText className="h-10 w-10 text-muted-foreground/50" />
-                      <p className="font-medium text-foreground">Nenhum orçamento cadastrado</p>
-                      <p className="text-sm text-muted-foreground">Crie orçamentos profissionais e acompanhe aprovações</p>
-                    </div>
+                  <TableCell colSpan={9}>
+                    <EmptyState
+                      icon={FileText}
+                      title="Envie sua primeira proposta"
+                      description="Crie orçamentos profissionais e acompanhe aprovações e pagamentos dos clientes."
+                      actionLabel="+ Criar Orçamento"
+                      onAction={() => setIsOrcamentoDialogOpen(true)}
+                      tip="Importe orçamentos de planilhas para agilizar"
+                    />
                   </TableCell>
                 </TableRow>
               ) : filteredOrcamentos.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center">Nenhum orçamento encontrado</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9}><FilterEmptyState onClearFilters={() => { setSearchTerm(""); setDataInicio(undefined); setDataFim(undefined); }} /></TableCell></TableRow>
               ) : (
                 pagination.paginatedData.map((orcamento) => (
                   <TableRow key={orcamento.id_orcamento}>

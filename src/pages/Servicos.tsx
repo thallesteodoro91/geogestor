@@ -200,9 +200,9 @@ export default function Servicos() {
             ) : filteredServicos.length === 0 && !searchTerm && statusFilter === "all" ? (
               <EmptyState
                 icon={Briefcase}
-                title="Crie seu primeiro serviço"
-                description="Registre serviços para acompanhar prazos, equipe e o progresso de cada projeto."
-                actionLabel="+ Criar Serviço"
+                title="Crie seu primeiro projeto"
+                description="Registre projetos para acompanhar prazos, equipe e progresso de cada execução."
+                actionLabel="+ Criar Projeto"
                 onAction={() => setIsDialogOpen(true)}
                 tip="Vincule a clientes e orçamentos para gestão completa"
               />

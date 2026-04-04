@@ -115,7 +115,7 @@ const GestaoEmpresa = () => {
 
         <TrialBanner />
         <OnboardingChecklist />
-        <FlowGuide />
+        
 
         {/* Alertas + Ações */}
         <div className="space-y-3">

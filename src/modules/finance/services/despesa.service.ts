@@ -122,3 +122,23 @@ export async function fetchDespesasByOrcamento(orcamentoId: string) {
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query.order('data_da_despesa', { ascending: false });
 }
+
+export async function createDespesasBatch(
+  records: Omit<Despesa, 'id_despesas' | 'created_at' | 'updated_at'>[]
+) {
+  const tenantId = await getCurrentTenantId();
+  if (!tenantId) throw new Error('Sessão inválida: tenant não identificado.');
+  const CHUNK_SIZE = 500;
+  const results: { success: number; errors: string[] } = { success: 0, errors: [] };
+
+  for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+    const chunk = records.slice(i, i + CHUNK_SIZE).map((r) => ({ ...r, tenant_id: tenantId }));
+    const { data, error } = await supabase.from('fato_despesas').insert(chunk as any).select();
+    if (error) {
+      results.errors.push(`Lote ${Math.floor(i / CHUNK_SIZE) + 1}: ${error.message}`);
+    } else {
+      results.success += data?.length ?? chunk.length;
+    }
+  }
+  return results;
+}

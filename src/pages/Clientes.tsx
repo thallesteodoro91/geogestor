@@ -176,14 +176,11 @@ export default function Clientes() {
                         <TableCell>
                           {cliente.situacao ? (
                             <Badge
-                              variant={cliente.situacao === "Ativo" ? "default" : "secondary"}
-                              className={
-                                cliente.situacao === "Ativo"
-                                  ? "bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30"
-                                  : cliente.situacao === "Inativo"
-                                  ? "bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30"
-                                  : ""
-                              }
+                              variant="secondary"
+                              className={(() => {
+                                const { getStatusClasses } = require("@/lib/statusColors");
+                                return getStatusClasses(cliente.situacao);
+                              })()}
                             >
                               {cliente.situacao}
                             </Badge>

@@ -179,7 +179,7 @@ export default function ServicoDetalhes() {
         {/* Progress */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Progresso do Serviço</CardTitle>
+            <CardTitle className="text-lg">Progresso do Projeto</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">

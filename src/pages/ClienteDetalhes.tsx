@@ -88,10 +88,6 @@ export default function ClienteDetalhes() {
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink href="/clientes">Base de Dados</BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
               <BreadcrumbLink href="/clientes">Clientes</BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator />

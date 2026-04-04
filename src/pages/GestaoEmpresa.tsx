@@ -14,7 +14,7 @@ import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
 import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
 import { NextActions } from "@/components/dashboard/NextActions";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
-import { FlowGuide } from "@/components/onboarding/FlowGuide";
+
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {

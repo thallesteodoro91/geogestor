@@ -116,7 +116,7 @@ export default function Servicos() {
           stepId="servico"
           onCreate={() => setIsDialogOpen(true)}
         />
-        <PageHeader title="Serviços" subtitle="Gerencie a execução dos seus serviços">
+        <PageHeader title="Projetos" subtitle="Gerencie a execução dos seus projetos">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
             <TabsList className="h-9">
               <TabsTrigger value="table" className="px-3">

@@ -178,10 +178,7 @@ export default function Clientes() {
                           {cliente.situacao ? (
                             <Badge
                               variant="secondary"
-                              className={(() => {
-                                const { getStatusClasses } = require("@/lib/statusColors");
-                                return getStatusClasses(cliente.situacao);
-                              })()}
+                              className={getStatusClasses(cliente.situacao)}
                             >
                               {cliente.situacao}
                             </Badge>

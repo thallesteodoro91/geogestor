@@ -150,7 +150,7 @@ export default function Servicos() {
         {viewMode === "kanban" ? (
           <KanbanBoard servicos={filteredServicos} />
         ) : (
-          <PageContent title="Lista de Serviços">
+          <PageContent title="Lista de Projetos">
             <FilterBar searchValue={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Buscar...">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[160px] h-9 text-sm">

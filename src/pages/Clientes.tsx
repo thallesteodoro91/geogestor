@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
 import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";

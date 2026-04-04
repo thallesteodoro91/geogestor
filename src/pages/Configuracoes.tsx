@@ -21,7 +21,6 @@ import { TeamManagementSection } from "@/components/team";
 import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { useTheme } from "next-themes";
-import { CsvImportDialog } from "@/components/import/CsvImportDialog";
 import { SmartImporter, ImportEntityType } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";

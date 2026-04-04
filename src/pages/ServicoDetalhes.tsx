@@ -124,7 +124,7 @@ export default function ServicoDetalhes() {
           </div>
           <Button onClick={() => setIsEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
-            Editar Serviço
+            Editar Projeto
           </Button>
         </div>
 

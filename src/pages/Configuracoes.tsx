@@ -43,7 +43,6 @@ export default function Configuracoes() {
   const [userEmail, setUserEmail] = useState("");
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
   const [smartImportOpen, setSmartImportOpen] = useState(false);
-  const [smartImportOpen, setSmartImportOpen] = useState(false);
   const [smartImportEntity, setSmartImportEntity] = useState<ImportEntityType>("clientes");
 
   // Detectar checkout=success, sincronizar com Stripe e atualizar status da assinatura

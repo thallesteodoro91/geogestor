@@ -262,6 +262,7 @@ export default function ServicosOrcamentos() {
         <ServicoDialog open={isServicoDialogOpen} onOpenChange={setIsServicoDialogOpen} servico={editingServico} onSuccess={() => { refetchServicos(); setIsServicoDialogOpen(false); setEditingServico(null); }} />
         <OrcamentoDialog open={isOrcamentoDialogOpen} onOpenChange={setIsOrcamentoDialogOpen} orcamento={editingOrcamento} onSuccess={() => { refetchOrcamentos(); setIsOrcamentoDialogOpen(false); setEditingOrcamento(null); }} />
         <OrcamentoWizard open={isWizardOpen} onOpenChange={setIsWizardOpen} onSuccess={() => { refetchOrcamentos(); setIsWizardOpen(false); }} />
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="orcamentos" onSuccess={() => refetchOrcamentos()} />
         <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title={deleteTarget?.type === 'servico' ? 'Excluir serviço' : 'Excluir orçamento'} description={`Tem certeza que deseja excluir este ${deleteTarget?.type === 'servico' ? 'serviço' : 'orçamento'}?`} confirmLabel="Excluir" onConfirm={confirmDelete} />
       </div>
     </AppLayout>

@@ -278,6 +278,8 @@ export default function Servicos() {
 
         <NovoServicoDialog open={isDialogOpen} onOpenChange={handleCloseDialog} editingServico={editingServico} />
 
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="servicos" onSuccess={() => queryClient.invalidateQueries({ queryKey: ["servicos"] })} />
+
         <ConfirmDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}

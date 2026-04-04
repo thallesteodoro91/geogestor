@@ -310,6 +310,8 @@ export default function Despesas() {
         </Dialog>
 
         <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title="Excluir despesa" description="Tem certeza que deseja excluir esta despesa?" confirmLabel="Excluir" onConfirm={() => { if (deleteTargetId) deleteMutation.mutate(deleteTargetId); setDeleteConfirmOpen(false); setDeleteTargetId(null); }} />
+
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="despesas" onSuccess={() => queryClient.invalidateQueries({ queryKey: ["despesas"] })} />
       </div>
     </AppLayout>
   );

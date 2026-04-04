@@ -123,6 +123,10 @@ export default function Servicos() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Serviço

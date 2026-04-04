@@ -245,6 +245,13 @@ export default function Clientes() {
           }}
         />
 
+        <SmartImporter
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          entityType="clientes"
+          onSuccess={() => queryClient.invalidateQueries({ queryKey: ["clientes-list"] })}
+        />
+
         <ConfirmDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}

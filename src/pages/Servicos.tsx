@@ -135,7 +135,7 @@ export default function Servicos() {
           </Button>
           <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Novo Serviço
+            Novo Projeto
           </Button>
         </PageHeader>
 

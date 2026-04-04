@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { ContextualKPIs } from "@/components/layout/ContextualKPIs";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
@@ -14,7 +15,6 @@ import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
 import { NextActions } from "@/components/dashboard/NextActions";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { FlowGuide } from "@/components/onboarding/FlowGuide";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,6 @@ const GestaoEmpresa = () => {
   const { data: kpis, isLoading } = useKPIs();
   const { data: kpiVariation } = useKPIVariation();
 
-  // Profile for greeting
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     queryFn: async () => {
@@ -43,7 +42,6 @@ const GestaoEmpresa = () => {
     enabled: !!user,
   });
 
-  // Pipeline value
   const { data: pipelineValue } = useQuery({
     queryKey: ["pipeline-value"],
     queryFn: async () => {
@@ -57,22 +55,16 @@ const GestaoEmpresa = () => {
     enabled: !!user,
   });
 
-  // Operational pulse
   const { data: opPulse } = useQuery({
     queryKey: ["operational-pulse"],
     queryFn: async () => {
       const now = new Date();
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-
       const [activeRes, completedRes] = await Promise.all([
         supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).in("situacao_do_servico", ["Em Andamento", "Planejado"]),
         supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).eq("situacao_do_servico", "Concluído").gte("data_do_servico_fim", monthStart),
       ]);
-
-      return {
-        servicosAtivos: activeRes.count || 0,
-        concluidosMes: completedRes.count || 0,
-      };
+      return { servicosAtivos: activeRes.count || 0, concluidosMes: completedRes.count || 0 };
     },
     enabled: !!user,
   });
@@ -86,7 +78,6 @@ const GestaoEmpresa = () => {
 
   const firstName = profile?.full_name?.split(" ")[0] || "";
 
-  // Story insights
   const generateStoryInsight = () => {
     if (!kpis || !kpiVariation) return null;
     const v = kpiVariation.variations;
@@ -108,15 +99,13 @@ const GestaoEmpresa = () => {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* 1. Header Personalizado */}
+        {/* Header Personalizado */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div className="space-y-1">
             <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
               {getGreeting()}{firstName ? `, ${firstName}` : ""}! 👋
             </h1>
-            <p className="text-base text-muted-foreground">
-              Aqui está o que precisa da sua atenção hoje
-            </p>
+            <p className="text-base text-muted-foreground">Aqui está o que precisa da sua atenção hoje</p>
           </div>
           <Button variant="outline" className="gap-2 shrink-0" onClick={() => navigate("/geobot")}>
             <Bot className="h-4 w-4" />
@@ -125,12 +114,10 @@ const GestaoEmpresa = () => {
         </div>
 
         <TrialBanner />
-
-        {/* 2. Onboarding (condicional) */}
         <OnboardingChecklist />
         <FlowGuide />
 
-        {/* 3. Alertas + Ações */}
+        {/* Alertas + Ações */}
         <div className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-xl font-heading font-semibold text-foreground">O que precisa da sua atenção</h2>
@@ -142,7 +129,7 @@ const GestaoEmpresa = () => {
           </div>
         </div>
 
-        {/* 4. KPIs Essenciais (4 cards) */}
+        {/* KPIs Essenciais */}
         <div className="space-y-3 animate-fade-in">
           <div className="space-y-1">
             <h2 className="text-xl font-heading font-semibold text-foreground">Saúde Financeira</h2>
@@ -153,112 +140,39 @@ const GestaoEmpresa = () => {
               <><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /><SkeletonKPI /></>
             ) : (
               <>
-                <KPICard
-                  title="Receita Total"
-                  value={`R$ ${(kpis?.receita_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                  icon={Banknote}
-                  iconColor="#6366f1"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
-                  changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
-                  description="Soma de toda receita gerada no período."
-                  calculation="Σ receita de serviços + orçamentos"
-                />
-                <KPICard
-                  title="Lucro Líquido"
-                  value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                  icon={CircleDollarSign}
-                  iconColor="#10b981"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
-                  changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
-                  description="Resultado final após todas as deduções."
-                  calculation="Receita - Impostos - Custos - Despesas"
-                />
-                <KPICard
-                  title="Margem Líquida"
-                  value={`${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
-                  icon={Percent}
-                  iconColor="#8b5cf6"
-                  change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
-                  changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
-                  description="Percentual de lucro sobre a receita."
-                  calculation="Lucro Líquido / Receita Total × 100"
-                />
-                <KPICard
-                  title="Pipeline"
-                  value={`R$ ${(pipelineValue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-                  icon={FileText}
-                  iconColor="#f59e0b"
-                  description="Valor total de orçamentos pendentes de aprovação."
-                  calculation="Σ receita esperada de orçamentos pendentes"
-                />
+                <KPICard title="Receita Total" value={`R$ ${(kpis?.receita_total || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={Banknote} iconColor="#6366f1" change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"} changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"} description="Soma de toda receita gerada no período." calculation="Σ receita de serviços + orçamentos" />
+                <KPICard title="Lucro Líquido" value={`R$ ${(kpis?.lucro_liquido || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={CircleDollarSign} iconColor="#10b981" change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"} changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"} description="Resultado final após todas as deduções." calculation="Receita - Impostos - Custos - Despesas" />
+                <KPICard title="Margem Líquida" value={`${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`} icon={Percent} iconColor="#8b5cf6" change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"} changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"} description="Percentual de lucro sobre a receita." calculation="Lucro Líquido / Receita Total × 100" />
+                <KPICard title="Pipeline" value={`R$ ${(pipelineValue || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`} icon={FileText} iconColor="#f59e0b" description="Valor total de orçamentos pendentes de aprovação." calculation="Σ receita esperada de orçamentos pendentes" />
               </>
             )}
           </div>
         </div>
 
-        {/* 5. Pulso Operacional (4 mini-cards compactos) */}
+        {/* Pulso Operacional */}
         <div className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-xl font-heading font-semibold text-foreground">Pulso Operacional</h2>
             <p className="text-sm text-muted-foreground">Atividade do mês</p>
           </div>
-          <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-            <Card className="border-0">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Briefcase className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Serviços Ativos</p>
-                  <p className="text-xl font-bold text-foreground">{opPulse?.servicosAtivos ?? "—"}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-0">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-chart-2/10">
-                  <CheckCircle2 className="h-5 w-5 text-chart-2" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Concluídos no Mês</p>
-                  <p className="text-xl font-bold text-foreground">{opPulse?.concluidosMes ?? "—"}</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-0">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-chart-4/10">
-                  <BarChart3 className="h-5 w-5 text-chart-4" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Taxa de Conversão</p>
-                  <p className="text-xl font-bold text-foreground">{(kpis?.taxa_conversao_percent || 0).toFixed(1)}%</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="border-0">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-chart-5/10">
-                  <DollarSign className="h-5 w-5 text-chart-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Ticket Médio</p>
-                  <p className="text-xl font-bold text-foreground">
-                    R$ {(kpis?.receita_total && kpis?.total_servicos ? kpis.receita_total / kpis.total_servicos : 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <ContextualKPIs
+            columns={4}
+            items={[
+              { label: "Serviços Ativos", value: opPulse?.servicosAtivos ?? "—", icon: Briefcase },
+              { label: "Concluídos no Mês", value: opPulse?.concluidosMes ?? "—", icon: CheckCircle2, iconColor: "text-chart-2", iconBg: "bg-chart-2/10" },
+              { label: "Taxa de Conversão", value: `${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`, icon: BarChart3, iconColor: "text-chart-4", iconBg: "bg-chart-4/10" },
+              { label: "Ticket Médio", value: `R$ ${(kpis?.receita_total && kpis?.total_servicos ? kpis.receita_total / kpis.total_servicos : 0).toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, icon: DollarSign, iconColor: "text-chart-5", iconBg: "bg-chart-5/10" },
+            ]}
+          />
         </div>
 
-        {/* 6. Insights IA + Receita Mensal */}
+        {/* Insights IA + Receita */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <AIInsightsCard />
           <RevenueChart />
         </div>
 
-        {/* 7. Narrativas (StoryCards) */}
+        {/* Narrativas */}
         <div className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-xl font-heading font-semibold text-foreground">Interpretação dos Dados</h2>
@@ -267,33 +181,16 @@ const GestaoEmpresa = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {stories ? (
               <>
-                <StoryCard
-                  title="Análise de Crescimento"
-                  insight={stories.crescimento}
-                  category="operational"
-                  icon={TrendingUp}
-                  actionLabel="Ver Dashboard Financeiro"
-                  actionHref="/dashboard-financeiro"
-                />
-                <StoryCard
-                  title="Margem Líquida"
-                  insight={stories.margem}
-                  category="operational"
-                  icon={HeartPulse}
-                  actionLabel="Ver despesas"
-                  actionHref="/despesas"
-                />
+                <StoryCard title="Análise de Crescimento" insight={stories.crescimento} category="operational" icon={TrendingUp} actionLabel="Ver Dashboard Financeiro" actionHref="/dashboard-financeiro" />
+                <StoryCard title="Margem Líquida" insight={stories.margem} category="operational" icon={HeartPulse} actionLabel="Ver despesas" actionHref="/despesas" />
               </>
             ) : (
-              <>
-                <Skeleton className="h-32" />
-                <Skeleton className="h-32" />
-              </>
+              <><Skeleton className="h-32" /><Skeleton className="h-32" /></>
             )}
           </div>
         </div>
 
-        {/* 8. Alertas Financeiros */}
+        {/* Alertas Financeiros */}
         <div className="space-y-3">
           <div className="space-y-1">
             <h2 className="text-xl font-heading font-semibold text-foreground">Alertas Financeiros</h2>

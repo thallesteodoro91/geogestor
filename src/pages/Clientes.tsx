@@ -20,6 +20,7 @@ import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
 import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getStatusClasses } from "@/lib/statusColors";
 
 export default function Clientes() {
   const navigate = useNavigate();

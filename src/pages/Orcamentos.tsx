@@ -16,6 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EmptyState } from "@/components/ui/empty-state";
+import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
 
 export default function Orcamentos() {

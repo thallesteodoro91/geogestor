@@ -199,17 +199,14 @@ export default function Servicos() {
             ) : filteredServicos.length === 0 && !searchTerm && statusFilter === "all" ? (
               <EmptyState
                 icon={Briefcase}
-                title="Nenhum serviço cadastrado"
-                description="Registre seu primeiro serviço para acompanhar prazos, equipe e progresso."
+                title="Crie seu primeiro serviço"
+                description="Registre serviços para acompanhar prazos, equipe e o progresso de cada projeto."
                 actionLabel="+ Criar Serviço"
                 onAction={() => setIsDialogOpen(true)}
-                tip="Vincule serviços a clientes e orçamentos para uma gestão completa"
+                tip="Vincule a clientes e orçamentos para gestão completa"
               />
             ) : filteredServicos.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <AlertCircle className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                Nenhum serviço encontrado para os filtros aplicados.
-              </div>
+              <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setStatusFilter("all"); setDataInicio(undefined); setDataFim(undefined); }} />
             ) : (
               <div className="overflow-x-auto">
                 <Table>

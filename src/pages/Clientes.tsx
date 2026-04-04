@@ -115,14 +115,14 @@ export default function Clientes() {
           ) : filtered.length === 0 && !searchTerm && situacaoFilter === "all" ? (
             <EmptyState
               icon={Users}
-              title="Nenhum cliente cadastrado"
-              description="Cadastre seus clientes para organizar projetos, orçamentos e acompanhar o relacionamento."
+              title="Organize sua base de clientes"
+              description="Cadastre clientes para gerar serviços, orçamentos e acompanhar receita por projeto."
               actionLabel="+ Novo Cliente"
               onAction={() => setDialogOpen({ open: true })}
-              tip="Você pode importar clientes via CSV em Configurações"
+              tip="Importe clientes de uma planilha para começar rápido"
             />
           ) : filtered.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Nenhum cliente encontrado para os filtros aplicados.</div>
+            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setSituacaoFilter("all"); }} />
           ) : (
             <div className="overflow-x-auto">
               <Table>

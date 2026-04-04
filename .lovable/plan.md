@@ -1,102 +1,136 @@
-## Padronização de Módulos — Plano de Implementação
+## Plano: Design System com Componentes Reutilizáveis e Regras de Priorização
 
-### Diagnóstico dos Problemas Atuais
+### Problema
 
-| Módulo | Problema Principal |
-|--------|--------------------|
-| **Clientes** | É um dashboard de analytics (Pareto, LTV, gráficos) — **não tem lista de clientes nem CRUD**. A gestão real está em Cadastros. Função confusa. |
-| **Serviços** | Bom, mas KPIs redundantes com Dashboard 360 (Total, Concluídos, Em Andamento, Média Progresso) |
-| **Orçamentos** | KPIs redundantes. Tem `DespesasPendentes` que não pertence aqui. Código de serviços não utilizado. |
-| **Despesas** | Treemap + GlobalFilters + TimeGranularityControl = complexidade excessiva para tela de execução. 3 KPIs redundantes. |
-| **Cadastros** | Título "Base de Dados" é confuso. Sem EmptyState padronizado. |
-| **Calendário** | KPIs financeiros (Valor Total, Orçamentos) não pertencem aqui. |
+Cada página reimplementa os mesmos padrões (header, filtros, KPIs, tabela com paginação, empty states) com variações inconsistentes: espaçamentos diferentes, headers com/sem ícone, filtros em `Card` ou soltos, KPIs com `KPICard` ou mini-cards manuais. Isso gera ~200 linhas repetidas por página.
+
+### Solução: 4 Componentes de Layout Reutilizáveis
 
 ---
 
-### 1. CLIENTES E PROJETOS → Gestão de Relacionamento
+#### 1. `PageHeader` — Cabeçalho padronizado
 
-**Transformação:** De dashboard analítico → Lista de clientes com CRUD e visão de relacionamento.
-
-**Estrutura nova:**
-```
-Header: "Clientes e Projetos" + "Gerencie seus clientes e acompanhe projetos"
-CTA: [+ Novo Cliente]
-─────────────────────────────
-Busca + Filtros (situação, cidade)
-─────────────────────────────
-Tabela de clientes:
-  Nome | CPF/CNPJ | Contato | Propriedades | Serviços Ativos | Situação | Ações
-  Ações: Ver detalhes | Editar | Novo Serviço | Excluir
-─────────────────────────────
-EmptyState: "Cadastre seu primeiro cliente para organizar projetos e faturamento"
+```tsx
+// src/components/layout/PageHeader.tsx
+interface PageHeaderProps {
+  title: string;
+  subtitle: string;
+  actions?: ReactNode; // Botões CTA
+}
 ```
 
-**O que REMOVE:** Todos os gráficos (Pareto, LTV, Rentabilidade), KPIs analíticos, StoryCards. Essas análises pertencem ao Dashboard Financeiro ou a uma aba futura de "Análise de Clientes".
+Substitui os blocos `<div className="flex flex-col sm:flex-row...">` que se repetem em todas as 6 páginas. Garante: título `text-3xl font-heading font-bold`, subtítulo `text-muted-foreground`, actions alinhados à direita com responsive collapse.
 
-**O que ADICIONA:** Lista real de clientes com CRUD (reutilizando dados que hoje estão só em Cadastros), contagem de serviços ativos por cliente, ações rápidas visíveis.
-
----
-
-### 2. SERVIÇOS → Execução Operacional
-
-**Mudanças:**
-- **Remover KPIs** "Total de Serviços" e "Média de Progresso" (já estão no Dashboard 360 como Pulso Operacional)
-- **Manter apenas 2 KPIs contextuais:** "Em Andamento" e "Atrasados" (data_fim < hoje e não concluído)
-- Header: subtítulo de "Acompanhe o andamento de todos os serviços" → "Gerencie a execução dos seus serviços"
-- **Adicionar EmptyState** padronizado usando componente `EmptyState`
+**Páginas afetadas:** Clientes, Serviços, Orçamentos, Despesas, Cadastros, Calendário.
 
 ---
 
-### 3. ORÇAMENTOS → Conversão Comercial
+#### 2. `FilterBar` — Barra de filtros consistente
 
-**Mudanças:**
-- **Remover `DespesasPendentes`** (pertence à tela Despesas)
-- **Reduzir KPIs de 4 → 2:** Manter "Total de Orçamentos" e "Taxa de Conversão". Remover "Receita Orçada" e "Ticket Médio" (pertencem ao Dashboard Financeiro)
-- **Adicionar EmptyState** padronizado
-- Header já está bom
+```tsx
+// src/components/layout/FilterBar.tsx
+interface FilterBarProps {
+  children: ReactNode; // Slots para Input, Select, DatePickers
+  className?: string;
+}
+```
 
----
+Wrapper que padroniza `flex flex-wrap items-center gap-3` dentro de um `Card` com `CardContent`. Inclui o ícone de Search no Input automaticamente quando passado como children.
 
-### 4. DESPESAS → Controle de Custos
-
-**Mudanças:**
-- **Remover Treemap** (visualização analítica → pertence ao Dashboard Financeiro)
-- **Remover GlobalFilters e TimeGranularityControl** (complexidade excessiva para execução)
-- **Reduzir KPIs de 3 → 1:** Manter apenas "Total do Mês" como contexto rápido
-- **Adicionar filtros simples:** Busca + Select de categoria + Filtro de data (igual ao padrão Serviços)
-- **Mover CTA para o header** (hoje está dentro do CardHeader da tabela)
-- **Adicionar EmptyState** padronizado
+**Páginas afetadas:** Todas as 6 (atualmente cada uma monta filtros de forma diferente).
 
 ---
 
-### 5. CADASTROS → Configuração do Sistema
+#### 3. `ContextualKPIs` — Mini-KPIs operacionais
 
-**Mudanças:**
-- **Título:** "Base de Dados" → "Cadastros"
-- **Subtítulo:** → "Configure os dados base do sistema: clientes, tipos de serviço e categorias de despesa"
-- **Adicionar EmptyState** por aba quando vazia
+```tsx
+// src/components/layout/ContextualKPIs.tsx
+interface ContextualKPI {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
+  color: string; // classe Tailwind como "text-primary" ou hex
+}
+interface ContextualKPIsProps {
+  items: ContextualKPI[];
+  columns?: 2 | 3 | 4; // default 3
+}
+```
+
+Substitui os mini-cards manuais do Calendário e do Dashboard 360 (Pulso Operacional). Renderiza cards compactos em grid. Usado para KPIs contextuais de execução (não analíticos).
+
+**Páginas afetadas:** Calendário (3 cards manuais), GestaoEmpresa (4 cards do Pulso Operacional).
 
 ---
 
-### 6. CALENDÁRIO → Agenda Operacional
+#### 4. `PageContent` — Container de conteúdo com Card
 
-**Mudanças:**
-- **Remover KPIs financeiros** (Orçamentos, Valor Total) — não pertencem à agenda
-- **Manter apenas 2 KPIs contextuais:** "Compromissos Hoje" e "Próximos 7 dias"
-- Já está bem estruturado no resto
+```tsx
+// src/components/layout/PageContent.tsx
+interface PageContentProps {
+  title?: string;
+  children: ReactNode;
+}
+```
+
+Wrapper `Card > CardHeader > CardContent` padronizado que todas as tabelas usam. Elimina repetição de `<Card><CardHeader><CardTitle>Lista de X</CardTitle></CardHeader><CardContent>`.
+
+**Páginas afetadas:** Clientes, Serviços, Despesas.
 
 ---
 
-### Resumo de Arquivos
+### Regras de Priorização por Tipo de Tela
+
+| Tipo de Tela | Hierarquia Visual (topo → base) |
+|---|---|
+| **Hub Analítico** (Dashboard 360, Dash Financeiro) | Alertas → KPIs → Insights IA → Gráficos → Narrativas |
+| **Execução com lista** (Clientes, Serviços, Despesas) | Header+CTA → KPIs contextuais (max 3) → Filtros → Tabela+Paginação |
+| **Execução comercial** (Orçamentos) | Header+CTA → KPIs (max 2) → Filtros com período → Tabela |
+| **Agenda** (Calendário) | Header+CTA → KPIs operacionais (max 3) → Filtros → Tabs de visualização |
+| **Configuração** (Cadastros) | Header → Tabs de entidades → Tabela por tab |
+
+**Regra geral:** Páginas de execução nunca têm mais de 3 KPIs contextuais. Gráficos e insights IA ficam exclusivamente nos hubs analíticos.
+
+---
+
+### Refactor das 6 Páginas
+
+Cada página será simplificada usando os novos componentes:
+
+**Clientes.tsx** (~280 → ~200 linhas)
+- `PageHeader` + `PageContent` com `FilterBar` dentro
+
+**Servicos.tsx** (~420 → ~300 linhas)
+- `PageHeader` + KPIs com `KPICard` existente + `PageContent` com `FilterBar`
+
+**Despesas.tsx** (~416 → ~300 linhas)
+- `PageHeader` + KPI único + `PageContent` com `FilterBar`
+
+**ServicosOrcamentos.tsx** (~568 → ~450 linhas)
+- `PageHeader` + 2 KPIs + `FilterBar` + Tabela
+
+**Calendario.tsx** (~190 → ~150 linhas)
+- `PageHeader` + `ContextualKPIs` + `FilterBar` (dentro de Card) + Tabs
+
+**GestaoEmpresa.tsx** (~307 → ~270 linhas)
+- Pulso Operacional usa `ContextualKPIs` em vez de 4 cards manuais
+
+---
+
+### Arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Reescrever | `src/pages/Clientes.tsx` (de analytics → lista CRUD) |
-| Editar | `src/pages/Servicos.tsx` (reduzir KPIs, EmptyState) |
-| Editar | `src/pages/ServicosOrcamentos.tsx` (remover DespesasPendentes, reduzir KPIs, EmptyState) |
-| Editar | `src/pages/Despesas.tsx` (remover Treemap/GlobalFilters, simplificar) |
-| Editar | `src/pages/Cadastros.tsx` (renomear, EmptyStates) |
-| Editar | `src/pages/Calendario.tsx` (trocar KPIs) |
+| Criar | `src/components/layout/PageHeader.tsx` |
+| Criar | `src/components/layout/FilterBar.tsx` |
+| Criar | `src/components/layout/ContextualKPIs.tsx` |
+| Criar | `src/components/layout/PageContent.tsx` |
+| Editar | `src/pages/Clientes.tsx` |
+| Editar | `src/pages/Servicos.tsx` |
+| Editar | `src/pages/Despesas.tsx` |
+| Editar | `src/pages/ServicosOrcamentos.tsx` |
+| Editar | `src/pages/Calendario.tsx` |
+| Editar | `src/pages/GestaoEmpresa.tsx` |
+| Editar | `src/pages/Cadastros.tsx` |
 
-**Nenhum componente novo necessário** — usa `EmptyState` existente em todas as telas.
-**Nenhuma migração de banco necessária.**
+Nenhuma migração de banco necessária.

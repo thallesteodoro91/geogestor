@@ -39,6 +39,7 @@ export default function Despesas() {
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [formData, setFormData] = useState({
     valor_da_despesa: "",
     data_da_despesa: new Date().toISOString().split("T")[0],

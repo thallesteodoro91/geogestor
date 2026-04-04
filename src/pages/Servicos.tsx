@@ -286,8 +286,8 @@ export default function Servicos() {
         <ConfirmDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}
-          title="Excluir serviço"
-          description="Tem certeza que deseja excluir este serviço? Esta ação não pode ser desfeita."
+          title="Excluir projeto"
+          description="Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita."
           confirmLabel="Excluir"
           onConfirm={() => {
             if (deleteTargetId) deleteMutation.mutate(deleteTargetId);

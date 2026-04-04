@@ -1,154 +1,99 @@
 
 
-## Plano: Evolucao do SmartImporter — Importacao de Nivel Premium
+## Plano: Onboarding Completo e Guiado
 
 ### Diagnostico do Estado Atual
 
-O SmartImporter ja e robusto: mapeamento automatico com 3 niveis de confianca (exato, sinonimo, parcial), validacao por campo, sanitizacao automatica (CPF, CNPJ, telefone, moeda, datas), importacao parcial com skip de erros, download de linhas falhas, e auditoria automatica.
+O sistema ja possui:
+- `OnboardingChecklist` com 5 passos (empresa, cliente, servico, orcamento, dashboard) exibido na home
+- `FlowGuide` com pills horizontais (redundante com o checklist)
+- `useOnboarding` hook verificando dados reais do banco
+- Botoes de importar planilha nos modulos (Clientes, Servicos, Despesas, Orcamentos)
+- SmartImporter premium integrado
 
-**Problemas identificados:**
+**Problemas:**
+1. **Sem despesa no onboarding** — etapa critica para valor financeiro faltante
+2. **Redundancia** — FlowGuide e OnboardingChecklist mostram a mesma coisa de formas diferentes
+3. **Sem orientacao contextual** — usuario clica no passo, chega na pagina e nao sabe o que fazer
+4. **Sem opcao de importacao no checklist** — cada passo so tem um CTA (ir para pagina), sem sugerir importar
+5. **Sem "pular" para usuario avancado** — unico jeito de sair e o X discreto
+6. **Etapa "empresa"** e pouco acionavel como primeiro passo — usuario quer ver valor rapido, nao configurar logotipo
 
-1. **Acessibilidade limitada** — So acessivel via Configuracoes, escondido do fluxo natural do usuario
-2. **Sem suporte a Servicos e Despesas** — Apenas Clientes, Propriedades e Orcamentos
-3. **Sem deteccao automatica de entidade** — Usuario precisa escolher manualmente o que esta importando
-4. **Preview limitado a 5 linhas** — Sem paginacao do preview
-5. **Sem resumo pos-importacao acionavel** — Resultado mostra numeros mas nao guia proximo passo
-6. **Sem vinculacao automatica** — Propriedades importadas nao se vinculam a clientes existentes por nome
-7. **Sem deteccao de duplicatas** — Importa registros que ja existem
-8. **Microcopy tecnica** — "Mapeamento", "Valor padrao", "Validar Agora" sao termos de dev
-9. **Duas ferramentas de import coexistem** — CsvImportDialog e SmartImporter fazem coisas similares, confunde
-
-### Melhorias Planejadas
-
----
-
-#### 1. Importacao acessivel de cada modulo (alta prioridade)
-
-Adicionar botao "Importar Planilha" direto nos empty states e headers de Clientes, Servicos, Orcamentos e Despesas. O usuario nao precisa ir ate Configuracoes.
-
-**Arquivos a editar:**
-- `src/pages/Clientes.tsx` — Botao no header e empty state
-- `src/pages/Servicos.tsx` — Botao no header e empty state
-- `src/pages/Despesas.tsx` — Botao no header e empty state
-- `src/pages/ServicosOrcamentos.tsx` — Botao no header e empty state
+### Mudancas Planejadas
 
 ---
 
-#### 2. Suporte a Servicos e Despesas (alta prioridade)
+#### 1. Redesign do OnboardingChecklist (alta prioridade)
 
-Expandir o SmartImporter com 2 novas entidades: `servicos` e `despesas`. Cada uma com campos, sinonimos, validadores e batch insert proprios.
+Reescrever `OnboardingChecklist.tsx` com:
+- **Dual-action por passo**: cada etapa mostra 2 botoes ("Importar planilha" + "Cadastrar manualmente")
+- **Icones por etapa** para reforco visual
+- **Microcopy acionavel** focada em resultado, nao descricao
+- **Botao "Pular configuracao"** visivel no header (nao so o X)
+- **Progresso textual**: "Sua empresa esta 40% configurada"
 
-**Novos campos:**
-- Servicos: nome_do_servico*, categoria, data_inicio, data_fim, situacao, receita, custo, descricao
-- Despesas: valor_da_despesa*, data_da_despesa*, observacoes, status
-
-**Novos sinonimos:**
-- Servicos: "projeto"→nome, "status"→situacao, "valor"→receita
-- Despesas: "gasto"→valor, "custo"→valor, "dt"→data
-
-**Arquivos a editar:**
-- `src/components/import/SmartImporter.tsx` — Adicionar SERVICO_FIELDS, DESPESA_FIELDS, sinonimos, batch handlers
-- `src/modules/operations/services/servico.service.ts` — Adicionar `createServicosBatch`
-- `src/modules/finance/services/despesa.service.ts` — Adicionar `createDespesasBatch`
-
----
-
-#### 3. Deteccao automatica de entidade (media prioridade)
-
-Ao fazer upload, analisar os headers do arquivo e sugerir qual entidade esta sendo importada (ex: se tem "CPF" e "telefone" → provavelmente Clientes).
-
-Logica: pontuar cada entidade pelo numero de matches nos headers. Mostrar sugestao com opcao de trocar.
-
-**Arquivo a editar:**
-- `src/components/import/SmartImporter.tsx` — Nova funcao `detectEntityType` + UI de sugestao no step upload
+Microcopy por etapa:
+| Passo | Titulo | Descricao | CTA Primario | CTA Secundario |
+|-------|--------|-----------|-------------|----------------|
+| 1 | Adicione seus clientes | Importe sua base de clientes para comecar | Importar planilha | Cadastrar cliente |
+| 2 | Crie um servico | Registre o primeiro projeto para acompanhar | Criar servico | — |
+| 3 | Gere um orcamento | Crie uma proposta comercial | Gerar orcamento | — |
+| 4 | Registre uma despesa | Controle os custos do seu negocio | Registrar despesa | Importar planilha |
+| 5 | Veja seu painel | Acompanhe os resultados da empresa | Ver dashboard | — |
 
 ---
 
-#### 4. Deteccao de duplicatas (media prioridade)
+#### 2. Atualizar useOnboarding (alta prioridade)
 
-Antes de importar, buscar registros existentes por nome (clientes) ou nome_do_servico (servicos) e alertar o usuario sobre possiveis duplicatas.
-
-**Arquivo a editar:**
-- `src/components/import/SmartImporter.tsx` — Nova etapa "dedup" entre preview e importing, com lista de possiveis duplicatas e opcao de pular
-
----
-
-#### 5. Vinculacao automatica (media prioridade)
-
-Ao importar Propriedades, se o arquivo tem coluna "Cliente", buscar por nome nos clientes existentes e vincular automaticamente via `id_cliente`. Mesma logica para Servicos e Orcamentos.
-
-**Arquivo a editar:**
-- `src/components/import/SmartImporter.tsx` — Logica de lookup por nome antes do insert
+- Adicionar passo "despesa" (verificar `fato_despesas` count > 0)
+- Remover passo "empresa" (pouco relevante para aha moment, fica em configuracoes)
+- Atualizar etapa "dashboard" para depender de clientes + servicos + despesas
+- Adicionar campo `actionType` por step: `"import" | "create" | "view"`
+- Adicionar `secondaryHref` para steps que suportam importacao
 
 ---
 
-#### 6. Microcopy humanizada (alta prioridade)
+#### 3. Banner contextual nas paginas destino (media prioridade)
 
-Trocar termos tecnicos por linguagem acessivel:
+Criar `OnboardingPageBanner.tsx` — componente que aparece no topo de cada pagina quando o passo correspondente esta pendente no onboarding.
 
-| Antes | Depois |
-|-------|--------|
-| "Mapeamento" | "Associar Colunas" |
-| "Valor padrao" | "Preencher automaticamente" |
-| "Validar Agora" | "Verificar Dados" |
-| "Preview" | "Conferir Dados" |
-| "— Nao importar —" | "Ignorar esta coluna" |
-| "Pular linhas com erro" | "Importar apenas as corretas" |
+```text
+┌─────────────────────────────────────────────────┐
+│ 📋 Passo 1 de 5: Adicione seus clientes         │
+│ Importe uma planilha ou cadastre manualmente    │
+│ [Importar planilha]  [Cadastrar cliente]  [×]   │
+└─────────────────────────────────────────────────┘
+```
 
-**Arquivo a editar:**
-- `src/components/import/SmartImporter.tsx` — Substituicoes de texto
+Renderizado condicionalmente em:
+- `Clientes.tsx` (passo "cliente")
+- `Servicos.tsx` (passo "servico")
+- `ServicosOrcamentos.tsx` (passo "orcamento")
+- `Despesas.tsx` (passo "despesa")
 
----
-
-#### 7. Resumo pos-importacao acionavel (alta prioridade)
-
-Apos importar, mostrar:
-- Numero importado com sucesso
-- CTA "Ver clientes importados" que leva ao modulo
-- Se houve erros: "Baixar planilha corrigida" + "Importar novamente"
-- Dica contextual: "Proximo passo: vincule propriedades aos seus clientes"
-
-**Arquivo a editar:**
-- `src/components/import/SmartImporter.tsx` — Refatorar step "result"
+So aparece enquanto o passo nao esta concluido E o onboarding nao foi dismissado.
 
 ---
 
-#### 8. Remover CsvImportDialog legado (baixa prioridade)
+#### 4. Remover FlowGuide (limpeza)
 
-O SmartImporter ja cobre tudo que o CsvImportDialog faz, com melhor UX. Remover o legado para evitar confusao.
-
-**Arquivos a editar:**
-- `src/pages/Configuracoes.tsx` — Remover referencia ao CsvImportDialog
-- `src/components/import/CsvImportDialog.tsx` — Deletar arquivo
+Eliminar `FlowGuide.tsx` — e redundante com o checklist redesenhado. Remover import de `GestaoEmpresa.tsx`.
 
 ---
-
-### Resumo de Impacto
-
-| Melhoria | Prioridade | Complexidade |
-|----------|-----------|-------------|
-| Botoes de import nos modulos | Alta | Baixa |
-| Suporte Servicos + Despesas | Alta | Media |
-| Microcopy humanizada | Alta | Baixa |
-| Resumo pos-import acionavel | Alta | Baixa |
-| Deteccao automatica entidade | Media | Baixa |
-| Deteccao duplicatas | Media | Media |
-| Vinculacao automatica | Media | Media |
-| Remover CsvImportDialog | Baixa | Baixa |
 
 ### Arquivos
 
 | Acao | Arquivo |
 |------|---------|
-| Editar | `src/components/import/SmartImporter.tsx` |
-| Editar | `src/pages/Clientes.tsx` |
-| Editar | `src/pages/Servicos.tsx` |
-| Editar | `src/pages/Despesas.tsx` |
-| Editar | `src/pages/ServicosOrcamentos.tsx` |
-| Editar | `src/pages/Configuracoes.tsx` |
-| Editar | `src/modules/operations/services/servico.service.ts` |
-| Editar | `src/modules/finance/services/despesa.service.ts` |
-| Deletar | `src/components/import/CsvImportDialog.tsx` |
+| Reescrever | `src/components/onboarding/OnboardingChecklist.tsx` |
+| Criar | `src/components/onboarding/OnboardingPageBanner.tsx` |
+| Editar | `src/hooks/useOnboarding.ts` |
+| Editar | `src/pages/GestaoEmpresa.tsx` (remover FlowGuide) |
+| Editar | `src/pages/Clientes.tsx` (add banner) |
+| Editar | `src/pages/Servicos.tsx` (add banner) |
+| Editar | `src/pages/ServicosOrcamentos.tsx` (add banner) |
+| Editar | `src/pages/Despesas.tsx` (add banner) |
+| Deletar | `src/components/onboarding/FlowGuide.tsx` |
 
-Nenhuma migracao de banco necessaria.
+Nenhuma migracao de banco necessaria — usa dados existentes.
 

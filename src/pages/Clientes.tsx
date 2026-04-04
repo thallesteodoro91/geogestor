@@ -86,10 +86,6 @@ export default function Clientes() {
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente
           </Button>
-          <Button onClick={() => setDialogOpen({ open: true })}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Cliente
-          </Button>
         </PageHeader>
 
         <PageContent title="Lista de Clientes">

@@ -158,6 +158,10 @@ export default function Despesas() {
     <AppLayout>
       <div className="space-y-6">
         <PageHeader title="Despesas" subtitle="Registre e controle os custos da empresa">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Importar
+          </Button>
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             Nova Despesa

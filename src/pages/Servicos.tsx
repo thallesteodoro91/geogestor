@@ -66,7 +66,7 @@ export default function Servicos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servicos"] });
-      toast.success("Serviço excluído com sucesso!");
+      toast.success("Projeto excluído com sucesso!");
     },
     onError: (error: any) => toast.error(`Erro ao excluir: ${error.message}`),
   });

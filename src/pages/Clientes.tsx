@@ -14,8 +14,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
+import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
-import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase } from "lucide-react";
+import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Clientes() {

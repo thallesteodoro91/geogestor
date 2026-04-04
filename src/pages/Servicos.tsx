@@ -242,7 +242,7 @@ export default function Servicos() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" onClick={() => navigate(`/servicos/${servico.id_servico}`)}>
+                            <Button variant="ghost" size="icon" onClick={() => navigate(`/projetos/${servico.id_servico}`)}>
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => { setEditingServico(servico); setIsDialogOpen(true); }}>

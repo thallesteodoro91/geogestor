@@ -16,6 +16,7 @@ import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";

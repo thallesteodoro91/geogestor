@@ -467,10 +467,6 @@ export default function Configuracoes() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Importar CSV
-                </Button>
                 <Button onClick={() => { setSmartImportEntity("clientes"); setSmartImportOpen(true); }}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Importar Clientes
@@ -482,6 +478,14 @@ export default function Configuracoes() {
                 <Button variant="secondary" onClick={() => { setSmartImportEntity("orcamentos"); setSmartImportOpen(true); }}>
                   <FileSpreadsheet className="h-4 w-4 mr-2" />
                   Importar Orçamentos
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("servicos"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Serviços
+                </Button>
+                <Button variant="secondary" onClick={() => { setSmartImportEntity("despesas"); setSmartImportOpen(true); }}>
+                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  Importar Despesas
                 </Button>
               </div>
 

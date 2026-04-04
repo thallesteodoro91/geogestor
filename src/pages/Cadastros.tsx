@@ -359,7 +359,7 @@ export default function Cadastros() {
           onSuccess={() => { fetchData(); setClienteUnificadoDialog({ open: false }); }}
         />
         <ClienteDialog open={clienteDialog.open} onOpenChange={(open) => setClienteDialog({ open })} cliente={clienteDialog.data} onSuccess={() => { fetchData(); setClienteDialog({ open: false }); }} />
-        <PropriedadeDialog open={propriedadeDialog.open} onOpenChange={(open) => setPropriedadeDialog({ open })} propriedade={propriedadeDialog.data} clienteId={propriedadeDialog.clienteId} onSuccess={() => { fetchData(); setPropriedadeDialog({ open: false }); }} />
+        <PropriedadeDialog open={propriedadeDialog.open} onOpenChange={(open) => setPropriedadeDialog({ open })} propriedade={propriedadeDialog.data} defaultClienteId={propriedadeDialog.clienteId} onSuccess={() => { fetchData(); setPropriedadeDialog({ open: false }); }} />
         <TipoDespesaDialog open={tipoDespesaDialog.open} onOpenChange={(open) => setTipoDespesaDialog({ open })} tipoDespesa={tipoDespesaDialog.data} onSuccess={() => { fetchData(); setTipoDespesaDialog({ open: false }); }} />
         <TipoServicoDialog open={tipoServicoDialog.open} onOpenChange={(open) => setTipoServicoDialog({ open })} tipoServico={tipoServicoDialog.data} onSuccess={() => { fetchData(); setTipoServicoDialog({ open: false }); }} />
 

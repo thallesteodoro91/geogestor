@@ -20,6 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, FileSpreadsheet } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";

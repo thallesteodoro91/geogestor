@@ -59,7 +59,7 @@ export function useOnboarding() {
           id: "orcamento",
           title: "Gere um orçamento",
           description: "Crie uma proposta comercial",
-          href: "/servicos-orcamentos",
+          href: "/orcamentos",
           actionType: "create",
           completed: hasOrcamentos,
           icon: "FileText",

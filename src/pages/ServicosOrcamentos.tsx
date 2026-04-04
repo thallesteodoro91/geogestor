@@ -9,7 +9,7 @@ import { ContextualKPIs } from "@/components/layout/ContextualKPIs";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, Download, TrendingUp, CalendarIcon, X, Wand2, Info } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, Download, TrendingUp, CalendarIcon, X, Wand2, Info, FileSpreadsheet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";

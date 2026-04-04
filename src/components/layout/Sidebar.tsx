@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, FileBarChart, LogOut, Bot, CalendarDays, Shield, ClipboardList, HelpCircle, Settings, TrendingUp } from "lucide-react";
+import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, LogOut, Bot, CalendarDays, Shield, ClipboardList, HelpCircle, Settings, TrendingUp, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -19,30 +19,22 @@ const navigationSections = [
     ]
   },
   {
-    title: "Financeiro",
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-500/10",
-    items: [
-      { name: "Orçamentos", href: "/servicos-orcamentos", icon: FileBarChart },
-      { name: "Despesas", href: "/despesas", icon: Receipt },
-    ]
-  },
-  {
     title: "Operação",
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
     items: [
-      { name: "Serviços", href: "/servicos", icon: Briefcase },
+      { name: "Projetos", href: "/projetos", icon: Briefcase },
+      { name: "Orçamentos", href: "/orcamentos", icon: FileText },
+      { name: "Despesas", href: "/despesas", icon: Receipt },
       { name: "Calendário", href: "/calendario", icon: CalendarDays },
     ]
   },
   {
-    title: "Clientes",
+    title: "Relacionamento",
     color: "text-violet-500",
     bgColor: "bg-violet-500/10",
     items: [
-      { name: "Clientes e Projetos", href: "/clientes", icon: Users },
-      { name: "Cadastros", href: "/cadastros", icon: FileText },
+      { name: "Clientes", href: "/clientes", icon: Users },
     ]
   },
   {
@@ -60,6 +52,8 @@ const navigationSections = [
     color: "text-gray-500",
     bgColor: "bg-gray-500/10",
     items: [
+      { name: "Cadastros", href: "/cadastros", icon: Settings },
+      { name: "Importação de Dados", href: "/importacao", icon: Upload },
       { name: "Configurações", href: "/configuracoes", icon: Settings },
       { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
       { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
@@ -108,7 +102,7 @@ export const Sidebar = ({ className, onNavigate }: SidebarProps) => {
               </span>
             </div>
             <div>
-              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'GeoGestor'}</h1>
+              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'SkyGeo'}</h1>
               <p className="text-xs text-muted-foreground">Gestão para Topografia</p>
             </div>
           </div>

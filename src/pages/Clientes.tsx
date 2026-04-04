@@ -20,6 +20,7 @@ import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
 import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getStatusClasses } from "@/lib/statusColors";
 
 export default function Clientes() {
   const navigate = useNavigate();
@@ -81,11 +82,7 @@ export default function Clientes() {
           onImport={() => setImportOpen(true)}
           onCreate={() => setDialogOpen({ open: true })}
         />
-        <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Importar Planilha
-          </Button>
+        <PageHeader title="Clientes" subtitle="Gerencie seus clientes e acompanhe o relacionamento">
           <Button onClick={() => setDialogOpen({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente
@@ -180,14 +177,8 @@ export default function Clientes() {
                         <TableCell>
                           {cliente.situacao ? (
                             <Badge
-                              variant={cliente.situacao === "Ativo" ? "default" : "secondary"}
-                              className={
-                                cliente.situacao === "Ativo"
-                                  ? "bg-green-500/20 text-green-700 dark:text-green-400 hover:bg-green-500/30"
-                                  : cliente.situacao === "Inativo"
-                                  ? "bg-red-500/20 text-red-700 dark:text-red-400 hover:bg-red-500/30"
-                                  : ""
-                              }
+                              variant="secondary"
+                              className={getStatusClasses(cliente.situacao)}
                             >
                               {cliente.situacao}
                             </Badge>

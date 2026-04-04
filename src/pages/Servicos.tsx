@@ -66,7 +66,7 @@ export default function Servicos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["servicos"] });
-      toast.success("Serviço excluído com sucesso!");
+      toast.success("Projeto excluído com sucesso!");
     },
     onError: (error: any) => toast.error(`Erro ao excluir: ${error.message}`),
   });
@@ -116,7 +116,7 @@ export default function Servicos() {
           stepId="servico"
           onCreate={() => setIsDialogOpen(true)}
         />
-        <PageHeader title="Serviços" subtitle="Gerencie a execução dos seus serviços">
+        <PageHeader title="Projetos" subtitle="Gerencie a execução dos seus projetos">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
             <TabsList className="h-9">
               <TabsTrigger value="table" className="px-3">
@@ -129,13 +129,10 @@ export default function Servicos() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Importar
-          </Button>
+          
           <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
-            Novo Serviço
+            Novo Projeto
           </Button>
         </PageHeader>
 
@@ -150,7 +147,7 @@ export default function Servicos() {
         {viewMode === "kanban" ? (
           <KanbanBoard servicos={filteredServicos} />
         ) : (
-          <PageContent title="Lista de Serviços">
+          <PageContent title="Lista de Projetos">
             <FilterBar searchValue={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Buscar...">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[160px] h-9 text-sm">
@@ -200,9 +197,9 @@ export default function Servicos() {
             ) : filteredServicos.length === 0 && !searchTerm && statusFilter === "all" ? (
               <EmptyState
                 icon={Briefcase}
-                title="Crie seu primeiro serviço"
-                description="Registre serviços para acompanhar prazos, equipe e o progresso de cada projeto."
-                actionLabel="+ Criar Serviço"
+                title="Crie seu primeiro projeto"
+                description="Registre projetos para acompanhar prazos, equipe e progresso de cada execução."
+                actionLabel="+ Criar Projeto"
                 onAction={() => setIsDialogOpen(true)}
                 tip="Vincule a clientes e orçamentos para gestão completa"
               />
@@ -225,7 +222,7 @@ export default function Servicos() {
                   </TableHeader>
                   <TableBody>
                     {pagination.paginatedData.map((servico: any) => (
-                      <TableRow key={servico.id_servico} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/servicos/${servico.id_servico}`)}>
+                      <TableRow key={servico.id_servico} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/projetos/${servico.id_servico}`)}>
                         <TableCell className="font-medium">{servico.nome_do_servico}</TableCell>
                         <TableCell>{servico.dim_cliente?.nome || "-"}</TableCell>
                         <TableCell>{servico.dim_propriedade?.nome_da_propriedade || "-"}</TableCell>
@@ -242,7 +239,7 @@ export default function Servicos() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
-                            <Button variant="ghost" size="icon" onClick={() => navigate(`/servicos/${servico.id_servico}`)}>
+                            <Button variant="ghost" size="icon" onClick={() => navigate(`/projetos/${servico.id_servico}`)}>
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" size="icon" onClick={() => { setEditingServico(servico); setIsDialogOpen(true); }}>
@@ -286,8 +283,8 @@ export default function Servicos() {
         <ConfirmDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}
-          title="Excluir serviço"
-          description="Tem certeza que deseja excluir este serviço? Esta ação não pode ser desfeita."
+          title="Excluir projeto"
+          description="Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita."
           confirmLabel="Excluir"
           onConfirm={() => {
             if (deleteTargetId) deleteMutation.mutate(deleteTargetId);

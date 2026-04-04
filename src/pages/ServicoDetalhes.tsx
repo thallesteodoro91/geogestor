@@ -81,11 +81,11 @@ export default function ServicoDetalhes() {
       <AppLayout>
         <div className="flex flex-col items-center justify-center py-12">
           <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-          <h2 className="text-xl font-semibold mb-2">Serviço não encontrado</h2>
-          <p className="text-muted-foreground mb-4">O serviço solicitado não existe ou foi removido.</p>
-          <Button onClick={() => navigate("/servicos")}>
+          <h2 className="text-xl font-semibold mb-2">Projeto não encontrado</h2>
+          <p className="text-muted-foreground mb-4">O projeto solicitado não existe ou foi removido.</p>
+          <Button onClick={() => navigate("/projetos")}>
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar para Serviços
+            Voltar para Projetos
           </Button>
         </div>
       </AppLayout>
@@ -101,7 +101,7 @@ export default function ServicoDetalhes() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate("/servicos")}
+              onClick={() => navigate("/projetos")}
               className="mb-2"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -124,7 +124,7 @@ export default function ServicoDetalhes() {
           </div>
           <Button onClick={() => setIsEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
-            Editar Serviço
+            Editar Projeto
           </Button>
         </div>
 
@@ -179,7 +179,7 @@ export default function ServicoDetalhes() {
         {/* Progress */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Progresso do Serviço</CardTitle>
+            <CardTitle className="text-lg">Progresso do Projeto</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-4">

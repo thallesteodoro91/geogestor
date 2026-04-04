@@ -145,10 +145,6 @@ export default function ServicosOrcamentos() {
           onCreate={() => setIsWizardOpen(true)}
         />
         <PageHeader title="Orçamentos" subtitle="Gestão de orçamentos e propostas comerciais">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Importar
-          </Button>
           <Button onClick={() => setIsWizardOpen(true)}>
             <Wand2 className="mr-2 h-4 w-4" />
             Novo Orçamento

@@ -177,14 +177,13 @@ export function ClienteTimeline({
 
   if (!eventos?.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <StickyNote className="h-16 w-16 text-muted-foreground mb-4" />
-        <p className="text-muted-foreground mb-4 text-lg">Nenhum evento registrado ainda</p>
-        <Button onClick={onAddEvento} size="lg">
-          <Plus className="h-5 w-5 mr-2" />
-          Adicionar nota
-        </Button>
-      </div>
+      <EmptyState
+        icon={StickyNote}
+        title="Nenhum evento registrado"
+        description="Registre eventos para manter o histórico completo de interações com este cliente."
+        actionLabel="+ Adicionar Evento"
+        onAction={onAddEvento}
+      />
     );
   }
 

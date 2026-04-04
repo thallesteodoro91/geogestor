@@ -13,11 +13,13 @@ export function ClienteOrcamentos({ orcamentos }: ClienteOrcamentosProps) {
 
   if (orcamentos.length === 0) {
     return (
-      <div className="text-center py-12">
-        <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Nenhum orçamento emitido</h3>
-        <p className="text-muted-foreground">Este cliente ainda não possui orçamentos cadastrados.</p>
-      </div>
+      <EmptyState
+        icon={FileText}
+        title="Nenhum orçamento emitido"
+        description="Formalize propostas comerciais e acompanhe pagamentos deste cliente."
+        actionLabel="+ Criar Orçamento"
+        onAction={() => {}}
+      />
     );
   }
 

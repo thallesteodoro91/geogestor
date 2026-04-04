@@ -12,11 +12,13 @@ interface ClienteServicosProps {
 export function ClienteServicos({ servicos }: ClienteServicosProps) {
   if (servicos.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Wrench className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-semibold mb-2">Nenhum serviço realizado</h3>
-        <p className="text-muted-foreground">Este cliente ainda não possui serviços vinculados.</p>
-      </div>
+      <EmptyState
+        icon={Wrench}
+        title="Este cliente ainda não tem serviços"
+        description="Crie um serviço vinculado para acompanhar a execução dos projetos deste cliente."
+        actionLabel="+ Criar Serviço"
+        onAction={() => {}}
+      />
     );
   }
 

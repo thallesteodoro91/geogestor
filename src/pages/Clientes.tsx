@@ -14,6 +14,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
 import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
@@ -74,6 +75,11 @@ export default function Clientes() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="cliente"
+          onImport={() => setImportOpen(true)}
+          onCreate={() => setDialogOpen({ open: true })}
+        />
         <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />

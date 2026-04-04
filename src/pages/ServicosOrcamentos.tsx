@@ -16,6 +16,7 @@ import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { OrcamentoWizard } from "@/components/orcamento/OrcamentoWizard";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { usePagination } from "@/hooks/usePagination";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
@@ -137,6 +138,10 @@ export default function ServicosOrcamentos() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="orcamento"
+          onCreate={() => setIsWizardOpen(true)}
+        />
         <PageHeader title="Orçamentos" subtitle="Gestão de orçamentos e propostas comerciais">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />

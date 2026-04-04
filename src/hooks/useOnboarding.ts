@@ -8,7 +8,10 @@ export interface OnboardingStep {
   title: string;
   description: string;
   href: string;
+  secondaryHref?: string;
+  actionType: "import" | "create" | "view";
   completed: boolean;
+  icon: string;
 }
 
 export function useOnboarding() {
@@ -20,54 +23,65 @@ export function useOnboarding() {
   const { data: steps = [], isLoading } = useQuery({
     queryKey: ["onboarding-steps", tenant?.id],
     queryFn: async () => {
-      // Check real data to determine completed steps
-      const [clientesRes, servicosRes, orcamentosRes, empresaRes] = await Promise.all([
+      const [clientesRes, servicosRes, orcamentosRes, despesasRes] = await Promise.all([
         supabase.from("dim_cliente").select("id_cliente", { count: "exact", head: true }),
         supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }),
         supabase.from("fato_orcamento").select("id_orcamento", { count: "exact", head: true }),
-        supabase.from("dim_empresa").select("id_empresa, nome").limit(1).maybeSingle(),
+        supabase.from("fato_despesas").select("id_despesas", { count: "exact", head: true }),
       ]);
 
       const hasClientes = (clientesRes.count || 0) > 0;
       const hasServicos = (servicosRes.count || 0) > 0;
       const hasOrcamentos = (orcamentosRes.count || 0) > 0;
-      const hasEmpresa = !!empresaRes.data?.nome;
+      const hasDespesas = (despesasRes.count || 0) > 0;
 
       const stepsList: OnboardingStep[] = [
         {
-          id: "empresa",
-          title: "Configure sua empresa",
-          description: "Defina o nome e logotipo da empresa",
-          href: "/configuracoes",
-          completed: hasEmpresa,
-        },
-        {
           id: "cliente",
-          title: "Cadastre seu primeiro cliente",
-          description: "Adicione um cliente para organizar projetos",
-          href: "/cadastros",
+          title: "Adicione seus clientes",
+          description: "Importe sua base de clientes para começar",
+          href: "/clientes",
+          secondaryHref: "/clientes",
+          actionType: "import",
           completed: hasClientes,
+          icon: "Users",
         },
         {
           id: "servico",
           title: "Crie um serviço",
-          description: "Registre um serviço para acompanhar progresso",
+          description: "Registre o primeiro projeto para acompanhar",
           href: "/servicos",
+          actionType: "create",
           completed: hasServicos,
+          icon: "Briefcase",
         },
         {
           id: "orcamento",
           title: "Gere um orçamento",
-          description: "Crie uma proposta comercial em PDF",
+          description: "Crie uma proposta comercial",
           href: "/servicos-orcamentos",
+          actionType: "create",
           completed: hasOrcamentos,
+          icon: "FileText",
+        },
+        {
+          id: "despesa",
+          title: "Registre uma despesa",
+          description: "Controle os custos do seu negócio",
+          href: "/despesas",
+          secondaryHref: "/despesas",
+          actionType: "import",
+          completed: hasDespesas,
+          icon: "Receipt",
         },
         {
           id: "dashboard",
-          title: "Analise seus resultados",
-          description: "Veja os indicadores financeiros e operacionais",
+          title: "Veja seu painel",
+          description: "Acompanhe os resultados da empresa",
           href: "/",
-          completed: hasClientes && hasServicos && hasOrcamentos,
+          actionType: "view",
+          completed: hasClientes && hasServicos && hasDespesas,
+          icon: "BarChart3",
         },
       ];
 
@@ -87,11 +101,6 @@ export function useOnboarding() {
     const newSettings = { ...tenant.settings, onboarding_completed: true };
     await supabase.from("tenants").update({ settings: newSettings }).eq("id", tenant.id);
   };
-
-  // Show onboarding if tenant is new (< 14 days) or hasn't dismissed
-  const tenantAge = tenant?.settings?.created_at
-    ? (Date.now() - new Date(tenant.settings.created_at as string).getTime()) / 86400000
-    : 0;
 
   const shouldShow = !isOnboardingDismissed && !isLoading;
 

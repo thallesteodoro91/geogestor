@@ -18,6 +18,7 @@ import { KanbanBoard } from "@/components/servicos/KanbanBoard";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { NovoServicoDialog } from "@/components/servicos";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -110,6 +111,10 @@ export default function Servicos() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="servico"
+          onCreate={() => setIsDialogOpen(true)}
+        />
         <PageHeader title="Serviços" subtitle="Gerencie a execução dos seus serviços">
           <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
             <TabsList className="h-9">

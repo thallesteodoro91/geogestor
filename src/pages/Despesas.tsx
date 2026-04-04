@@ -20,6 +20,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, FileSpreadsheet } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -157,6 +158,11 @@ export default function Despesas() {
   return (
     <AppLayout>
       <div className="space-y-6">
+        <OnboardingPageBanner
+          stepId="despesa"
+          onImport={() => setImportOpen(true)}
+          onCreate={() => { resetForm(); setIsDialogOpen(true); }}
+        />
         <PageHeader title="Despesas" subtitle="Registre e controle os custos da empresa">
           <Button variant="outline" onClick={() => setImportOpen(true)}>
             <FileSpreadsheet className="h-4 w-4 mr-2" />

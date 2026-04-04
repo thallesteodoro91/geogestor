@@ -27,6 +27,7 @@ export default function Clientes() {
   const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: clientes = [], isLoading } = useQuery({
     queryKey: ["clientes-list"],

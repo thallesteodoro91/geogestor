@@ -671,17 +671,6 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      <CsvImportDialog 
-        open={csvImportOpen} 
-        onOpenChange={setCsvImportOpen}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['clientes'] });
-          queryClient.invalidateQueries({ queryKey: ['propriedades'] });
-          queryClient.invalidateQueries({ queryKey: ['tipos-servico'] });
-          queryClient.invalidateQueries({ queryKey: ['tipos-despesa'] });
-        }}
-      />
-
       <SmartImporter
         open={smartImportOpen}
         onOpenChange={setSmartImportOpen}

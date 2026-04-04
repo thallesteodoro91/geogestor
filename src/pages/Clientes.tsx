@@ -81,10 +81,10 @@ export default function Clientes() {
           onImport={() => setImportOpen(true)}
           onCreate={() => setDialogOpen({ open: true })}
         />
-        <PageHeader title="Clientes e Projetos" subtitle="Gerencie seus clientes e acompanhe projetos">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Importar Planilha
+        <PageHeader title="Clientes" subtitle="Gerencie seus clientes e acompanhe o relacionamento">
+          <Button onClick={() => setDialogOpen({ open: true })}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Cliente
           </Button>
           <Button onClick={() => setDialogOpen({ open: true })}>
             <Plus className="h-4 w-4 mr-2" />

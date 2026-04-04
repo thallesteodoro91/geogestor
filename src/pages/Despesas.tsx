@@ -4,6 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { createDespesa, updateDespesa, deleteDespesa } from "@/modules/finance/services/despesa.service";
 import { logAuditEvent } from "@/services/audit.service";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { FilterBar } from "@/components/layout/FilterBar";
+import { ContextualKPIs } from "@/components/layout/ContextualKPIs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -14,9 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, Search } from "lucide-react";
-import { KPICard } from "@/components/dashboard/KPICard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -49,11 +51,7 @@ export default function Despesas() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("fato_despesas")
-        .select(`
-          *,
-          dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao),
-          fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)
-        `)
+        .select(`*, dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao), fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)`)
         .or("status.eq.confirmada,status.is.null")
         .order("data_da_despesa", { ascending: false });
       if (error) throw error;
@@ -82,22 +80,10 @@ export default function Despesas() {
   const mutation = useMutation({
     mutationFn: async (data: typeof formData & { id_despesas?: string }) => {
       if (data.id_despesas) {
-        const result = await updateDespesa(data.id_despesas, {
-          valor_da_despesa: parseFloat(data.valor_da_despesa),
-          data_da_despesa: data.data_da_despesa,
-          id_tipodespesa: data.id_tipodespesa || null,
-          id_servico: data.id_servico || null,
-          observacoes: data.observacoes,
-        });
+        const result = await updateDespesa(data.id_despesas, { valor_da_despesa: parseFloat(data.valor_da_despesa), data_da_despesa: data.data_da_despesa, id_tipodespesa: data.id_tipodespesa || null, id_servico: data.id_servico || null, observacoes: data.observacoes });
         if (result.error) throw result.error;
       } else {
-        const result = await createDespesa({
-          valor_da_despesa: parseFloat(data.valor_da_despesa),
-          data_da_despesa: data.data_da_despesa,
-          id_tipodespesa: data.id_tipodespesa || null,
-          id_servico: data.id_servico || null,
-          observacoes: data.observacoes,
-        });
+        const result = await createDespesa({ valor_da_despesa: parseFloat(data.valor_da_despesa), data_da_despesa: data.data_da_despesa, id_tipodespesa: data.id_tipodespesa || null, id_servico: data.id_servico || null, observacoes: data.observacoes });
         if (result.error) throw result.error;
       }
     },
@@ -130,13 +116,7 @@ export default function Despesas() {
   };
 
   const handleEdit = (despesa: any) => {
-    setFormData({
-      valor_da_despesa: despesa.valor_da_despesa.toString(),
-      data_da_despesa: despesa.data_da_despesa,
-      id_tipodespesa: despesa.id_tipodespesa || "",
-      id_servico: despesa.id_servico || "",
-      observacoes: despesa.observacoes || "",
-    });
+    setFormData({ valor_da_despesa: despesa.valor_da_despesa.toString(), data_da_despesa: despesa.data_da_despesa, id_tipodespesa: despesa.id_tipodespesa || "", id_servico: despesa.id_servico || "", observacoes: despesa.observacoes || "" });
     setEditingId(despesa.id_despesas);
     setIsDialogOpen(true);
   };
@@ -144,20 +124,8 @@ export default function Despesas() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const validatedData = despesaSchema.parse({
-        valor_da_despesa: parseFloat(formData.valor_da_despesa),
-        data_da_despesa: formData.data_da_despesa,
-        id_tipodespesa: formData.id_tipodespesa || null,
-        id_servico: formData.id_servico || null,
-        observacoes: formData.observacoes || undefined,
-      });
-      const dataToSubmit = {
-        valor_da_despesa: validatedData.valor_da_despesa.toString(),
-        data_da_despesa: validatedData.data_da_despesa,
-        id_tipodespesa: validatedData.id_tipodespesa || "",
-        id_servico: validatedData.id_servico || "",
-        observacoes: validatedData.observacoes || "",
-      };
+      const validatedData = despesaSchema.parse({ valor_da_despesa: parseFloat(formData.valor_da_despesa), data_da_despesa: formData.data_da_despesa, id_tipodespesa: formData.id_tipodespesa || null, id_servico: formData.id_servico || null, observacoes: formData.observacoes || undefined });
+      const dataToSubmit = { valor_da_despesa: validatedData.valor_da_despesa.toString(), data_da_despesa: validatedData.data_da_despesa, id_tipodespesa: validatedData.id_tipodespesa || "", id_servico: validatedData.id_servico || "", observacoes: validatedData.observacoes || "" };
       mutation.mutate(editingId ? { ...dataToSubmit, id_despesas: editingId } : dataToSubmit);
     } catch (error: any) {
       if (error.errors) error.errors.forEach((err: any) => toast.error(err.message));
@@ -167,11 +135,7 @@ export default function Despesas() {
 
   // Filtering
   const filteredDespesas = despesas.filter((d: any) => {
-    const matchesSearch =
-      d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.fato_servico?.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) || d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) || d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase()) || d.fato_servico?.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategoria = categoriaFilter === "all" || d.dim_tipodespesa?.categoria === categoriaFilter;
     const matchesDataInicio = !dataInicio || d.data_da_despesa >= format(dataInicio, "yyyy-MM-dd");
     const matchesDataFim = !dataFim || d.data_da_despesa <= format(dataFim, "yyyy-MM-dd");
@@ -180,175 +144,118 @@ export default function Despesas() {
 
   const pagination = usePagination(filteredDespesas, { initialPageSize: 15 });
 
-  // KPI: Total do mês corrente
+  // KPI
   const now = new Date();
   const mesAtualInicio = format(startOfMonth(now), "yyyy-MM-dd");
   const mesAtualFim = format(endOfMonth(now), "yyyy-MM-dd");
-  const totalMes = despesas
-    .filter((d: any) => d.data_da_despesa >= mesAtualInicio && d.data_da_despesa <= mesAtualFim)
-    .reduce((sum: number, d: any) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
+  const totalMes = despesas.filter((d: any) => d.data_da_despesa >= mesAtualInicio && d.data_da_despesa <= mesAtualFim).reduce((sum: number, d: any) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
 
-  // Unique categories for filter
   const categorias = [...new Set(despesas.map((d: any) => d.dim_tipodespesa?.categoria).filter(Boolean))];
 
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-heading font-bold text-foreground">Despesas</h1>
-            <p className="text-muted-foreground">Registre e controle os custos da empresa</p>
-          </div>
+        <PageHeader title="Despesas" subtitle="Registre e controle os custos da empresa">
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
             Nova Despesa
           </Button>
-        </div>
+        </PageHeader>
 
-        {/* KPI contextual */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <KPICard
-            title="Total do Mês"
-            value={`R$ ${totalMes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`}
-            icon={DollarSign}
-            iconColor="#f43f5e"
-            description="Soma das despesas do mês corrente."
-            calculation="Σ despesas do mês atual"
-          />
-        </div>
+        <ContextualKPIs
+          columns={2}
+          items={[
+            { label: "Total do Mês", value: `R$ ${totalMes.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`, icon: DollarSign, iconColor: "text-rose-500", iconBg: "bg-rose-500/10" },
+          ]}
+        />
 
-        {/* Table */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg">Lista de Despesas</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative flex-1 min-w-[200px] max-w-sm">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por categoria, serviço..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9 h-9 text-sm"
-                />
-              </div>
-              <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
-                <SelectTrigger className="w-[160px] h-9 text-sm">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <PageContent title="Lista de Despesas">
+          <FilterBar searchValue={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Buscar por categoria, serviço...">
+            <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
+              <SelectTrigger className="w-[160px] h-9 text-sm">
+                <SelectValue placeholder="Categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                {categorias.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-              <div className="flex items-center gap-2">
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataInicio && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                      {dataInicio ? format(dataInicio, "dd/MM/yy", { locale: ptBR }) : "Início"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={dataInicio} onSelect={setDataInicio} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-                <span className="text-xs text-muted-foreground">até</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataFim && "text-muted-foreground")}>
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5" />
-                      {dataFim ? format(dataFim, "dd/MM/yy", { locale: ptBR }) : "Fim"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={dataFim} onSelect={setDataFim} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
-                  </PopoverContent>
-                </Popover>
-                {(dataInicio || dataFim) && (
-                  <Button variant="ghost" size="icon" onClick={() => { setDataInicio(undefined); setDataFim(undefined); }} className="h-8 w-8">
-                    <X className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataInicio && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {dataInicio ? format(dataInicio, "dd/MM/yy", { locale: ptBR }) : "Início"}
                   </Button>
-                )}
-              </div>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dataInicio} onSelect={setDataInicio} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+              <span className="text-xs text-muted-foreground">até</span>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className={cn("h-9 w-[130px] justify-start text-left font-normal text-sm", !dataFim && "text-muted-foreground")}>
+                    <CalendarIcon className="mr-2 h-3.5 w-3.5" />
+                    {dataFim ? format(dataFim, "dd/MM/yy", { locale: ptBR }) : "Fim"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar mode="single" selected={dataFim} onSelect={setDataFim} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                </PopoverContent>
+              </Popover>
+              {(dataInicio || dataFim) && (
+                <Button variant="ghost" size="icon" onClick={() => { setDataInicio(undefined); setDataFim(undefined); }} className="h-8 w-8">
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
             </div>
+          </FilterBar>
 
-            {/* Data */}
-            {isLoading ? (
-              <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-            ) : filteredDespesas.length === 0 && !searchTerm && categoriaFilter === "all" && !dataInicio && !dataFim ? (
-              <EmptyState
-                icon={DollarSign}
-                title="Nenhuma despesa registrada"
-                description="Controle despesas para ter uma visão real da sua margem de lucro."
-                actionLabel="+ Registrar Despesa"
-                onAction={() => { resetForm(); setIsDialogOpen(true); }}
-                tip="Vincule despesas a serviços para rastrear custos por projeto"
-              />
-            ) : filteredDespesas.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">Nenhuma despesa encontrada para os filtros aplicados.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Subcategoria</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Serviço</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
+          {isLoading ? (
+            <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+          ) : filteredDespesas.length === 0 && !searchTerm && categoriaFilter === "all" && !dataInicio && !dataFim ? (
+            <EmptyState icon={DollarSign} title="Nenhuma despesa registrada" description="Controle despesas para ter uma visão real da sua margem de lucro." actionLabel="+ Registrar Despesa" onAction={() => { resetForm(); setIsDialogOpen(true); }} tip="Vincule despesas a serviços para rastrear custos por projeto" />
+          ) : filteredDespesas.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Nenhuma despesa encontrada para os filtros aplicados.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Subcategoria</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagination.paginatedData.map((despesa: any) => (
+                    <TableRow key={despesa.id_despesas}>
+                      <TableCell>{new Date(despesa.data_da_despesa).toLocaleDateString("pt-BR")}</TableCell>
+                      <TableCell>{despesa.dim_tipodespesa?.categoria || "-"}</TableCell>
+                      <TableCell>{despesa.dim_tipodespesa?.subcategoria || "-"}</TableCell>
+                      <TableCell>R$ {parseFloat(String(despesa.valor_da_despesa)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell>{despesa.fato_servico?.nome_do_servico || "-"}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(despesa)}><Edit className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" onClick={() => { setDeleteTargetId(despesa.id_despesas); setDeleteConfirmOpen(true); }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagination.paginatedData.map((despesa: any) => (
-                      <TableRow key={despesa.id_despesas}>
-                        <TableCell>{new Date(despesa.data_da_despesa).toLocaleDateString("pt-BR")}</TableCell>
-                        <TableCell>{despesa.dim_tipodespesa?.categoria || "-"}</TableCell>
-                        <TableCell>{despesa.dim_tipodespesa?.subcategoria || "-"}</TableCell>
-                        <TableCell>R$ {parseFloat(String(despesa.valor_da_despesa)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
-                        <TableCell>{despesa.fato_servico?.nome_do_servico || "-"}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => handleEdit(despesa)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => { setDeleteTargetId(despesa.id_despesas); setDeleteConfirmOpen(true); }}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-
-                <TablePagination
-                  currentPage={pagination.currentPage}
-                  totalPages={pagination.totalPages}
-                  totalItems={pagination.totalItems}
-                  pageSize={pagination.pageSize}
-                  startIndex={pagination.startIndex}
-                  endIndex={pagination.endIndex}
-                  canGoNext={pagination.canGoNext}
-                  canGoPrevious={pagination.canGoPrevious}
-                  onPageChange={pagination.goToPage}
-                  onPageSizeChange={pagination.setPageSize}
-                  onFirstPage={pagination.goToFirstPage}
-                  onLastPage={pagination.goToLastPage}
-                  onNextPage={pagination.goToNextPage}
-                  onPreviousPage={pagination.goToPreviousPage}
-                />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePagination currentPage={pagination.currentPage} totalPages={pagination.totalPages} totalItems={pagination.totalItems} pageSize={pagination.pageSize} startIndex={pagination.startIndex} endIndex={pagination.endIndex} canGoNext={pagination.canGoNext} canGoPrevious={pagination.canGoPrevious} onPageChange={pagination.goToPage} onPageSizeChange={pagination.setPageSize} onFirstPage={pagination.goToFirstPage} onLastPage={pagination.goToLastPage} onNextPage={pagination.goToNextPage} onPreviousPage={pagination.goToPreviousPage} />
+            </div>
+          )}
+        </PageContent>
 
         {/* Dialog */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -377,9 +284,9 @@ export default function Despesas() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="servico">Serviço Vinculado</Label>
+                <Label htmlFor="servico">Serviço</Label>
                 <Select value={formData.id_servico} onValueChange={(v) => setFormData({ ...formData, id_servico: v })}>
-                  <SelectTrigger><SelectValue placeholder="Nenhum" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     {servicos.map((s: any) => (
                       <SelectItem key={s.id_servico} value={s.id_servico}>{s.nome_do_servico}</SelectItem>
@@ -391,25 +298,12 @@ export default function Despesas() {
                 <Label htmlFor="obs">Observações</Label>
                 <Textarea id="obs" value={formData.observacoes} onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })} />
               </div>
-              <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                {mutation.isPending ? "Salvando..." : "Salvar"}
-              </Button>
+              <Button type="submit" className="w-full" disabled={mutation.isPending}>{editingId ? "Atualizar" : "Adicionar"}</Button>
             </form>
           </DialogContent>
         </Dialog>
 
-        <ConfirmDialog
-          open={deleteConfirmOpen}
-          onOpenChange={setDeleteConfirmOpen}
-          title="Excluir despesa"
-          description="Tem certeza que deseja excluir esta despesa? Esta ação não pode ser desfeita."
-          confirmLabel="Excluir"
-          onConfirm={() => {
-            if (deleteTargetId) deleteMutation.mutate(deleteTargetId);
-            setDeleteConfirmOpen(false);
-            setDeleteTargetId(null);
-          }}
-        />
+        <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title="Excluir despesa" description="Tem certeza que deseja excluir esta despesa?" confirmLabel="Excluir" onConfirm={() => { if (deleteTargetId) deleteMutation.mutate(deleteTargetId); setDeleteConfirmOpen(false); setDeleteTargetId(null); }} />
       </div>
     </AppLayout>
   );

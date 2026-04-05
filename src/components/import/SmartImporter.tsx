@@ -62,7 +62,13 @@ type Step = "upload" | "mapping" | "preview" | "importing" | "result";
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
 function sanitizeCurrency(value: string): string {
-  return value.replace(/R\$\s*/gi, "").replace(/\./g, "").replace(",", ".").trim();
+  // Handle Brazilian currency: R$ 1.500,00 → 1500.00
+  let v = value.replace(/R\$\s*/gi, "").trim();
+  // If has comma as decimal separator (Brazilian format)
+  if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
+    v = v.replace(/\./g, "").replace(",", ".");
+  }
+  return v;
 }
 
 function sanitizeDigitsOnly(value: string): string {
@@ -88,9 +94,14 @@ function formatCNPJ(value: string): string {
 function formatDate(value: string): string {
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-    const [d, m, y] = trimmed.split("/");
-    return `${y}-${m}-${d}`;
+  // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
+  const brMatch = trimmed.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
+  if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+  // Excel serial number (days since 1900-01-01)
+  const num = parseFloat(trimmed);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    const d = new Date(Date.UTC(1899, 11, 30 + num));
+    return d.toISOString().slice(0, 10);
   }
   return trimmed;
 }
@@ -98,14 +109,18 @@ function formatDate(value: string): string {
 // ─── Validators ─────────────────────────────────────────────────────────
 
 function validateEmail(v: string) { if (!v) return null; return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : "Email inválido"; }
-function validateCPF(v: string) { if (!v) return null; return sanitizeDigitsOnly(v).length !== 11 ? "CPF deve ter 11 dígitos" : null; }
-function validateCNPJ(v: string) { if (!v) return null; return sanitizeDigitsOnly(v).length !== 14 ? "CNPJ deve ter 14 dígitos" : null; }
+function validateCPF(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 11 ? "CPF deve ter 11 dígitos" : null; }
+function validateCNPJ(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 14 ? "CNPJ deve ter 14 dígitos" : null; }
 function validatePhone(v: string) { if (!v) return null; const n = sanitizeDigitsOnly(v).length; return n < 10 || n > 11 ? "Telefone deve ter 10 ou 11 dígitos" : null; }
 function validateAge(v: string) { if (!v) return null; const n = parseInt(v); return isNaN(n) || n < 0 || n > 150 ? "Idade inválida" : null; }
 function validateDate(v: string) { if (!v) return null; const f = formatDate(v); if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)"; return isNaN(new Date(f).getTime()) ? "Data inválida" : null; }
 function validateNome(v: string) { if (!v?.trim()) return "Nome é obrigatório"; return v.trim().length < 2 ? "Nome muito curto" : null; }
+function validateNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) ? "Valor deve ser um número" : null; }
 function validatePositiveNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
-function validateRequiredNumber(v: string) { if (!v?.trim()) return "Valor é obrigatório"; const n = parseFloat(v); if (isNaN(n)) return "Valor deve ser um número"; return n <= 0 ? "Valor deve ser maior que zero" : null; }
+function validateLatitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -90 || n > 90 ? "Latitude deve estar entre -90 e 90" : null; }
+function validateLongitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -180 || n > 180 ? "Longitude deve estar entre -180 e 180" : null; }
+function validateRequiredNumber(v: string) { if (!v?.trim()) return "Valor é obrigatório"; const san = sanitizeCurrency(v); const n = parseFloat(san); if (isNaN(n)) return "Valor deve ser um número"; return n <= 0 ? "Valor deve ser maior que zero" : null; }
+
 
 // ─── Entity-specific field definitions ─────────────────────────────────
 
@@ -138,8 +153,8 @@ const PROPRIEDADE_FIELDS: SystemField[] = [
   { key: "car", label: "CAR", required: false },
   { key: "ccir", label: "CCIR", required: false },
   { key: "itr", label: "ITR", required: false },
-  { key: "latitude", label: "Latitude", required: false, validate: validatePositiveNumber, type: "number" },
-  { key: "longitude", label: "Longitude", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "latitude", label: "Latitude", required: false, validate: validateLatitude, type: "number" },
+  { key: "longitude", label: "Longitude", required: false, validate: validateLongitude, type: "number" },
   { key: "anotacoes", label: "Anotações", required: false },
   { key: "observacoes", label: "Observações", required: false },
 ];
@@ -191,26 +206,26 @@ function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
 // ─── Entity-specific synonyms ──────────────────────────────────────────
 
 const CLIENTE_SYNONYMS: Record<string, string[]> = {
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato"],
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente"],
   cpf: ["documento", "cpfcnpj", "doc", "documentocliente"],
   cnpj: ["documento", "cpfcnpj", "inscricao", "cnpjcliente"],
-  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato"],
-  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel"],
+  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato", "telefone1", "tel1", "fone1"],
+  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel", "telefone2", "tel2"],
   email: ["correio", "mail", "emailcontato", "emailcliente", "correioeletronico"],
   endereco: ["local", "localizacao", "cidade", "rua", "logradouro", "end", "enderecocompleto", "morada"],
   categoria: ["tipo", "segmento", "classificacao", "tipocliente", "grupocliente"],
   origem: ["canal", "comoconheceu", "fonte", "indicacao", "prospeccao", "origemcliente"],
   situacao: ["status", "ativo", "estado", "statuscliente", "ativoinativo"],
   anotacoes: ["observacao", "obs", "nota", "comentario", "descricao", "notas", "observacoes"],
-  data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao", "datainicio", "criadoem"],
+  data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao", "datainicio", "criadoem", "dt"],
   idade: ["age", "idadecliente"],
 };
 
 const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
-  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda"],
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
   municipio: ["cidade", "mun", "localidade"],
   cidade: ["municipio", "localidade"],
-  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare"],
+  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare", "ha"],
   tipo: ["tipoimovel", "tipopropriedade", "classificacao"],
   situacao: ["status", "estado", "situacaoimovel"],
   situacao_imovel: ["statusimovel", "condicao"],
@@ -220,13 +235,13 @@ const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
   itr: ["impostoterritoralrural", "impostoterritorial"],
   latitude: ["lat", "coordlat"],
   longitude: ["lng", "lon", "coordlng", "coordlon"],
-  anotacoes: ["observacao", "obs", "nota", "comentario", "notas"],
+  anotacoes: ["observacao", "obs", "nota", "comentario", "notas", "observacoes"],
   observacoes: ["observacao", "obs", "nota", "comentario", "notas", "anotacoes"],
 };
 
 const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
-  data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor"],
+  data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao", "dt"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit"],
   quantidade: ["qtd", "qtde", "quant", "qty"],
   desconto: ["desc", "descontos"],
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada"],
@@ -242,17 +257,17 @@ const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
 const SERVICO_SYNONYMS: Record<string, string[]> = {
   nome_do_servico: ["servico", "projeto", "nome", "titulo", "nomeservico", "nomeprojeto", "atividade"],
   categoria: ["tipo", "classificacao", "tiposervico", "area"],
-  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data"],
+  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data", "dt"],
   data_do_servico_fim: ["datafim", "termino", "prazo", "dtfim", "datatermino"],
   situacao_do_servico: ["status", "situacao", "estado", "andamento"],
-  receita_servico: ["receita", "valor", "faturamento", "preco"],
+  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr"],
   custo_servico: ["custo", "despesa", "gasto"],
-  descricao: ["observacao", "obs", "detalhes", "nota", "anotacao"],
+  descricao: ["observacao", "obs", "detalhes", "nota", "anotacao", "observacoes"],
   progresso: ["percentual", "andamento", "conclusao"],
 };
 
 const DESPESA_SYNONYMS: Record<string, string[]> = {
-  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco"],
+  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr"],
   data_da_despesa: ["data", "dt", "datadespesa", "datadogasto", "datapagamento"],
   observacoes: ["observacao", "obs", "nota", "descricao", "comentario", "detalhes"],
   status: ["situacao", "estado", "confirmada", "pendente"],
@@ -273,8 +288,8 @@ function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]
 const ENTITY_LABELS: Record<ImportEntityType, { singular: string; plural: string; titlePlural: string; route: string; queryKey: string }> = {
   clientes: { singular: "cliente", plural: "clientes", titlePlural: "Clientes", route: "/clientes", queryKey: "clientes-list" },
   propriedades: { singular: "propriedade", plural: "propriedades", titlePlural: "Propriedades", route: "/clientes", queryKey: "propriedades" },
-  orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/servicos-orcamentos", queryKey: "orcamentos" },
-  servicos: { singular: "serviço", plural: "serviços", titlePlural: "Serviços", route: "/servicos", queryKey: "servicos" },
+  orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/orcamentos", queryKey: "orcamentos" },
+  servicos: { singular: "projeto", plural: "projetos", titlePlural: "Projetos", route: "/projetos", queryKey: "servicos" },
   despesas: { singular: "despesa", plural: "despesas", titlePlural: "Despesas", route: "/despesas", queryKey: "despesas" },
 };
 
@@ -360,7 +375,7 @@ export function SmartImporter({
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [skipErrors, setSkipErrors] = useState(false);
+  const [skipErrors, setSkipErrors] = useState(true);
   const [importResult, setImportResult] = useState<{
     success: number; errors: string[]; failedRows: Record<string, string>[];
   } | null>(null);
@@ -384,7 +399,7 @@ export function SmartImporter({
     setMappings({});
     setFileName("");
     setImportResult(null);
-    setSkipErrors(false);
+    setSkipErrors(true);
     setMatchConfidences({});
     setDetectedEntity(null);
     setDuplicateCount(0);
@@ -533,23 +548,51 @@ export function SmartImporter({
     setDuplicateCount(dupes.length);
   }, [entityType, allValidatedRows]);
 
-  // ─── Auto-linking ─────────────────────────────────────────────────
+  // ─── Auto-linking (with auto-create) ────────────────────────────────
 
   const linkToClients = useCallback(async (records: Record<string, any>[]): Promise<Record<string, any>[]> => {
-    if (entityType !== "propriedades" && entityType !== "servicos") return records;
+    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;
 
-    // Check if any record has a "cliente" column mapped
     const clienteHeader = headers.find(h => {
       const n = normalize(h);
-      return ["cliente", "nomecliente", "proprietario", "dono"].some(s => n === s || n.includes(s));
+      return ["cliente", "nomecliente", "proprietario", "dono", "nomedocliente", "clientenome"].some(s => n === s || n.includes(s));
     });
     if (!clienteHeader) return records;
 
     const { data: clientes } = await supabase.from("dim_cliente").select("id_cliente, nome");
-    if (!clientes?.length) return records;
-
-    const clienteMap = new Map(clientes.map(c => [c.nome?.toLowerCase(), c.id_cliente]));
+    const clienteMap = new Map((clientes || []).map(c => [c.nome?.toLowerCase(), c.id_cliente]));
     const clienteIdx = headers.indexOf(clienteHeader);
+
+    // Collect names that need to be created
+    const namesToCreate = new Set<string>();
+    for (let i = 0; i < records.length; i++) {
+      if (records[i].id_cliente) continue;
+      const rawRow = rawData[i];
+      const nome = rawRow?.[clienteIdx]?.toString().trim();
+      if (nome && !clienteMap.has(nome.toLowerCase())) {
+        namesToCreate.add(nome);
+      }
+    }
+
+    // Auto-create missing clients
+    if (namesToCreate.size > 0) {
+      const newClients = Array.from(namesToCreate).map(nome => ({ nome }));
+      try {
+        const result = await createClientesBatch(newClients);
+        if (result.success > 0) {
+          // Re-fetch to get the new IDs
+          const { data: updated } = await supabase.from("dim_cliente").select("id_cliente, nome");
+          if (updated) {
+            for (const c of updated) {
+              clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+            }
+          }
+          toast.success(`${result.success} cliente(s) criado(s) automaticamente`);
+        }
+      } catch (e) {
+        console.error("Erro ao criar clientes automaticamente:", e);
+      }
+    }
 
     return records.map((r, i) => {
       if (r.id_cliente) return r;
@@ -661,10 +704,10 @@ export function SmartImporter({
   const getNextStepTip = (): { text: string; route: string } | null => {
     switch (entityType) {
       case "clientes": return { text: "Próximo passo: vincule propriedades aos seus clientes", route: "/clientes" };
-      case "propriedades": return { text: "Próximo passo: crie serviços para suas propriedades", route: "/servicos" };
-      case "servicos": return { text: "Próximo passo: registre despesas dos seus serviços", route: "/despesas" };
+      case "propriedades": return { text: "Próximo passo: crie projetos para suas propriedades", route: "/projetos" };
+      case "servicos": return { text: "Próximo passo: registre despesas dos seus projetos", route: "/despesas" };
       case "despesas": return { text: "Próximo passo: confira o painel financeiro", route: "/financeiro" };
-      case "orcamentos": return { text: "Próximo passo: converta orçamentos em serviços", route: "/servicos-orcamentos" };
+      case "orcamentos": return { text: "Próximo passo: converta orçamentos em projetos", route: "/orcamentos" };
       default: return null;
     }
   };

@@ -548,23 +548,51 @@ export function SmartImporter({
     setDuplicateCount(dupes.length);
   }, [entityType, allValidatedRows]);
 
-  // ─── Auto-linking ─────────────────────────────────────────────────
+  // ─── Auto-linking (with auto-create) ────────────────────────────────
 
   const linkToClients = useCallback(async (records: Record<string, any>[]): Promise<Record<string, any>[]> => {
-    if (entityType !== "propriedades" && entityType !== "servicos") return records;
+    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;
 
-    // Check if any record has a "cliente" column mapped
     const clienteHeader = headers.find(h => {
       const n = normalize(h);
-      return ["cliente", "nomecliente", "proprietario", "dono"].some(s => n === s || n.includes(s));
+      return ["cliente", "nomecliente", "proprietario", "dono", "nomedocliente", "clientenome"].some(s => n === s || n.includes(s));
     });
     if (!clienteHeader) return records;
 
     const { data: clientes } = await supabase.from("dim_cliente").select("id_cliente, nome");
-    if (!clientes?.length) return records;
-
-    const clienteMap = new Map(clientes.map(c => [c.nome?.toLowerCase(), c.id_cliente]));
+    const clienteMap = new Map((clientes || []).map(c => [c.nome?.toLowerCase(), c.id_cliente]));
     const clienteIdx = headers.indexOf(clienteHeader);
+
+    // Collect names that need to be created
+    const namesToCreate = new Set<string>();
+    for (let i = 0; i < records.length; i++) {
+      if (records[i].id_cliente) continue;
+      const rawRow = rawData[i];
+      const nome = rawRow?.[clienteIdx]?.toString().trim();
+      if (nome && !clienteMap.has(nome.toLowerCase())) {
+        namesToCreate.add(nome);
+      }
+    }
+
+    // Auto-create missing clients
+    if (namesToCreate.size > 0) {
+      const newClients = Array.from(namesToCreate).map(nome => ({ nome }));
+      try {
+        const result = await createClientesBatch(newClients);
+        if (result.success > 0) {
+          // Re-fetch to get the new IDs
+          const { data: updated } = await supabase.from("dim_cliente").select("id_cliente, nome");
+          if (updated) {
+            for (const c of updated) {
+              clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+            }
+          }
+          toast.success(`${result.success} cliente(s) criado(s) automaticamente`);
+        }
+      } catch (e) {
+        console.error("Erro ao criar clientes automaticamente:", e);
+      }
+    }
 
     return records.map((r, i) => {
       if (r.id_cliente) return r;

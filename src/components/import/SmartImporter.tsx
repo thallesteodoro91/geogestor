@@ -399,7 +399,7 @@ export function SmartImporter({
     setMappings({});
     setFileName("");
     setImportResult(null);
-    setSkipErrors(false);
+    setSkipErrors(true);
     setMatchConfidences({});
     setDetectedEntity(null);
     setDuplicateCount(0);

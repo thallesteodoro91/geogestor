@@ -704,10 +704,10 @@ export function SmartImporter({
   const getNextStepTip = (): { text: string; route: string } | null => {
     switch (entityType) {
       case "clientes": return { text: "Próximo passo: vincule propriedades aos seus clientes", route: "/clientes" };
-      case "propriedades": return { text: "Próximo passo: crie serviços para suas propriedades", route: "/servicos" };
-      case "servicos": return { text: "Próximo passo: registre despesas dos seus serviços", route: "/despesas" };
+      case "propriedades": return { text: "Próximo passo: crie projetos para suas propriedades", route: "/projetos" };
+      case "servicos": return { text: "Próximo passo: registre despesas dos seus projetos", route: "/despesas" };
       case "despesas": return { text: "Próximo passo: confira o painel financeiro", route: "/financeiro" };
-      case "orcamentos": return { text: "Próximo passo: converta orçamentos em serviços", route: "/servicos-orcamentos" };
+      case "orcamentos": return { text: "Próximo passo: converta orçamentos em projetos", route: "/orcamentos" };
       default: return null;
     }
   };

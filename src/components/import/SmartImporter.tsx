@@ -71,16 +71,7 @@ function sanitizeCurrency(value: string): string {
   return v;
 }
 
-function sanitizeDigitsOnly(value: string): string {
-  return value.replace(/\D/g, "");
-}
-
-function sanitizePhone(value: string): string {
-  return formatPhoneNumber(sanitizeDigitsOnly(value));
-}
-
-function formatCPF(value: string): string {
-  const nums = sanitizeDigitsOnly(value);
+/* sanitizeDigitsOnly, sanitizePhone, formatCPF moved above */
   if (nums.length !== 11) return value;
   return `${nums.slice(0, 3)}.${nums.slice(3, 6)}.${nums.slice(6, 9)}-${nums.slice(9)}`;
 }

@@ -375,7 +375,7 @@ export function SmartImporter({
   const [mappings, setMappings] = useState<Record<string, string>>({});
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [skipErrors, setSkipErrors] = useState(false);
+  const [skipErrors, setSkipErrors] = useState(true);
   const [importResult, setImportResult] = useState<{
     success: number; errors: string[]; failedRows: Record<string, string>[];
   } | null>(null);

@@ -62,7 +62,13 @@ type Step = "upload" | "mapping" | "preview" | "importing" | "result";
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
 function sanitizeCurrency(value: string): string {
-  return value.replace(/R\$\s*/gi, "").replace(/\./g, "").replace(",", ".").trim();
+  // Handle Brazilian currency: R$ 1.500,00 → 1500.00
+  let v = value.replace(/R\$\s*/gi, "").trim();
+  // If has comma as decimal separator (Brazilian format)
+  if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
+    v = v.replace(/\./g, "").replace(",", ".");
+  }
+  return v;
 }
 
 function sanitizeDigitsOnly(value: string): string {
@@ -88,9 +94,14 @@ function formatCNPJ(value: string): string {
 function formatDate(value: string): string {
   const trimmed = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
-    const [d, m, y] = trimmed.split("/");
-    return `${y}-${m}-${d}`;
+  // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
+  const brMatch = trimmed.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
+  if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
+  // Excel serial number (days since 1900-01-01)
+  const num = parseFloat(trimmed);
+  if (!isNaN(num) && num > 30000 && num < 60000) {
+    const d = new Date(Date.UTC(1899, 11, 30 + num));
+    return d.toISOString().slice(0, 10);
   }
   return trimmed;
 }

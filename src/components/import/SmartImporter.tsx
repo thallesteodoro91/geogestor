@@ -153,8 +153,8 @@ const PROPRIEDADE_FIELDS: SystemField[] = [
   { key: "car", label: "CAR", required: false },
   { key: "ccir", label: "CCIR", required: false },
   { key: "itr", label: "ITR", required: false },
-  { key: "latitude", label: "Latitude", required: false, validate: validatePositiveNumber, type: "number" },
-  { key: "longitude", label: "Longitude", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "latitude", label: "Latitude", required: false, validate: validateLatitude, type: "number" },
+  { key: "longitude", label: "Longitude", required: false, validate: validateLongitude, type: "number" },
   { key: "anotacoes", label: "Anotações", required: false },
   { key: "observacoes", label: "Observações", required: false },
 ];

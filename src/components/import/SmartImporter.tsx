@@ -206,26 +206,26 @@ function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
 // ─── Entity-specific synonyms ──────────────────────────────────────────
 
 const CLIENTE_SYNONYMS: Record<string, string[]> = {
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato"],
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente"],
   cpf: ["documento", "cpfcnpj", "doc", "documentocliente"],
   cnpj: ["documento", "cpfcnpj", "inscricao", "cnpjcliente"],
-  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato"],
-  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel"],
+  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato", "telefone1", "tel1", "fone1"],
+  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel", "telefone2", "tel2"],
   email: ["correio", "mail", "emailcontato", "emailcliente", "correioeletronico"],
   endereco: ["local", "localizacao", "cidade", "rua", "logradouro", "end", "enderecocompleto", "morada"],
   categoria: ["tipo", "segmento", "classificacao", "tipocliente", "grupocliente"],
   origem: ["canal", "comoconheceu", "fonte", "indicacao", "prospeccao", "origemcliente"],
   situacao: ["status", "ativo", "estado", "statuscliente", "ativoinativo"],
   anotacoes: ["observacao", "obs", "nota", "comentario", "descricao", "notas", "observacoes"],
-  data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao", "datainicio", "criadoem"],
+  data_cadastro: ["data", "datacadastro", "cadastradoem", "dtcadastro", "datacriacao", "datainicio", "criadoem", "dt"],
   idade: ["age", "idadecliente"],
 };
 
 const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
-  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda"],
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
   municipio: ["cidade", "mun", "localidade"],
   cidade: ["municipio", "localidade"],
-  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare"],
+  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare", "ha"],
   tipo: ["tipoimovel", "tipopropriedade", "classificacao"],
   situacao: ["status", "estado", "situacaoimovel"],
   situacao_imovel: ["statusimovel", "condicao"],
@@ -235,13 +235,13 @@ const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
   itr: ["impostoterritoralrural", "impostoterritorial"],
   latitude: ["lat", "coordlat"],
   longitude: ["lng", "lon", "coordlng", "coordlon"],
-  anotacoes: ["observacao", "obs", "nota", "comentario", "notas"],
+  anotacoes: ["observacao", "obs", "nota", "comentario", "notas", "observacoes"],
   observacoes: ["observacao", "obs", "nota", "comentario", "notas", "anotacoes"],
 };
 
 const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
-  data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor"],
+  data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao", "dt"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit"],
   quantidade: ["qtd", "qtde", "quant", "qty"],
   desconto: ["desc", "descontos"],
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada"],
@@ -257,17 +257,17 @@ const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
 const SERVICO_SYNONYMS: Record<string, string[]> = {
   nome_do_servico: ["servico", "projeto", "nome", "titulo", "nomeservico", "nomeprojeto", "atividade"],
   categoria: ["tipo", "classificacao", "tiposervico", "area"],
-  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data"],
+  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data", "dt"],
   data_do_servico_fim: ["datafim", "termino", "prazo", "dtfim", "datatermino"],
   situacao_do_servico: ["status", "situacao", "estado", "andamento"],
-  receita_servico: ["receita", "valor", "faturamento", "preco"],
+  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr"],
   custo_servico: ["custo", "despesa", "gasto"],
-  descricao: ["observacao", "obs", "detalhes", "nota", "anotacao"],
+  descricao: ["observacao", "obs", "detalhes", "nota", "anotacao", "observacoes"],
   progresso: ["percentual", "andamento", "conclusao"],
 };
 
 const DESPESA_SYNONYMS: Record<string, string[]> = {
-  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco"],
+  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr"],
   data_da_despesa: ["data", "dt", "datadespesa", "datadogasto", "datapagamento"],
   observacoes: ["observacao", "obs", "nota", "descricao", "comentario", "detalhes"],
   status: ["situacao", "estado", "confirmada", "pendente"],

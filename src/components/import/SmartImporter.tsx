@@ -288,8 +288,8 @@ function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]
 const ENTITY_LABELS: Record<ImportEntityType, { singular: string; plural: string; titlePlural: string; route: string; queryKey: string }> = {
   clientes: { singular: "cliente", plural: "clientes", titlePlural: "Clientes", route: "/clientes", queryKey: "clientes-list" },
   propriedades: { singular: "propriedade", plural: "propriedades", titlePlural: "Propriedades", route: "/clientes", queryKey: "propriedades" },
-  orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/servicos-orcamentos", queryKey: "orcamentos" },
-  servicos: { singular: "serviço", plural: "serviços", titlePlural: "Serviços", route: "/servicos", queryKey: "servicos" },
+  orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/orcamentos", queryKey: "orcamentos" },
+  servicos: { singular: "projeto", plural: "projetos", titlePlural: "Projetos", route: "/projetos", queryKey: "servicos" },
   despesas: { singular: "despesa", plural: "despesas", titlePlural: "Despesas", route: "/despesas", queryKey: "despesas" },
 };
 

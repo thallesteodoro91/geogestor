@@ -169,8 +169,12 @@ export const CompromissoDialog = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.id_cliente || !formData.data_inicio) {
-      toast.error("Preencha os campos obrigatórios");
+    if (!formData.id_cliente) {
+      toast.error("Selecione um cliente para criar o orçamento");
+      return;
+    }
+    if (!formData.data_inicio) {
+      toast.error("Informe a data de início");
       return;
     }
 

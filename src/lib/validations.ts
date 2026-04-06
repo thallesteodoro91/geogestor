@@ -126,9 +126,8 @@ export const servicoSchema = z.object({
 export const orcamentoSchema = z.object({
   id_cliente: z
     .string()
-    .uuid({ message: "Cliente inválido" })
-    .optional()
-    .nullable(),
+    .uuid({ message: "Selecione um cliente para o orçamento" })
+    .min(1, { message: "Selecione um cliente para o orçamento" }),
   id_servico: z
     .string()
     .uuid({ message: "Serviço inválido" })

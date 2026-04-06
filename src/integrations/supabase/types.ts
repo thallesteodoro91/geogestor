@@ -896,7 +896,7 @@ export type Database = {
           desconto: number | null
           faturamento: boolean | null
           forma_de_pagamento: string | null
-          id_cliente: string | null
+          id_cliente: string
           id_data: string | null
           id_orcamento: string
           id_propriedade: string | null
@@ -933,7 +933,7 @@ export type Database = {
           desconto?: number | null
           faturamento?: boolean | null
           forma_de_pagamento?: string | null
-          id_cliente?: string | null
+          id_cliente: string
           id_data?: string | null
           id_orcamento?: string
           id_propriedade?: string | null
@@ -970,7 +970,7 @@ export type Database = {
           desconto?: number | null
           faturamento?: boolean | null
           forma_de_pagamento?: string | null
-          id_cliente?: string | null
+          id_cliente?: string
           id_data?: string | null
           id_orcamento?: string
           id_propriedade?: string | null

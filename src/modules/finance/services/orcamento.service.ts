@@ -9,7 +9,7 @@ import { syncEventToGoogle } from '@/services/google-calendar.service';
 
 export interface Orcamento {
   id_orcamento: string;
-  id_cliente?: string | null;
+  id_cliente: string;
   id_propriedade?: string | null;
   id_servico?: string | null;
   codigo_orcamento?: string | null;

@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search, AlertCircle, UserPlus } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +20,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
+import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
@@ -48,6 +50,7 @@ export default function Orcamentos() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
   const itemsPerPage = 15;
 
   const { data: orcamentos = [], isLoading } = useQuery({
@@ -110,7 +113,7 @@ export default function Orcamentos() {
       const receitaEsperada = valorTotal - valorImposto;
 
       const payload = {
-        id_cliente: data.id_cliente || null,
+        id_cliente: data.id_cliente,
         id_servico: data.id_servico || null,
         data_orcamento: data.data_orcamento,
         valor_unitario: parseFloat(data.valor_unitario),
@@ -188,9 +191,14 @@ export default function Orcamentos() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.id_cliente) {
+      toast.error("Selecione um cliente para o orçamento");
+      return;
+    }
+    
     try {
       const validatedData = orcamentoSchema.parse({
-        id_cliente: formData.id_cliente || null,
+        id_cliente: formData.id_cliente,
         id_servico: formData.id_servico || null,
         data_orcamento: formData.data_orcamento,
         valor_unitario: parseFloat(formData.valor_unitario),
@@ -326,6 +334,18 @@ export default function Orcamentos() {
                   <DialogTitle>{editingId ? "Editar" : "Novo"} Orçamento</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {clientes.length === 0 && (
+                    <Alert className="col-span-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>Cadastre um cliente antes de criar orçamentos.</span>
+                        <Button size="sm" variant="outline" type="button" onClick={() => setClienteDialogOpen(true)}>
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Criar cliente
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="cliente">Cliente *</Label>
@@ -540,6 +560,14 @@ export default function Orcamentos() {
             }
             setDeleteConfirmOpen(false);
             setDeleteTargetId(null);
+          }}
+        />
+        <ClienteDialog
+          open={clienteDialogOpen}
+          onOpenChange={setClienteDialogOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['clientes'] });
+            setClienteDialogOpen(false);
           }}
         />
       </div>

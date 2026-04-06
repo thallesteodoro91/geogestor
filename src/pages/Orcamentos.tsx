@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
+import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();

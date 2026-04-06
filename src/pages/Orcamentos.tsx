@@ -188,6 +188,11 @@ export default function Orcamentos() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!formData.id_cliente) {
+      toast.error("Selecione um cliente para o orçamento");
+      return;
+    }
+    
     try {
       const validatedData = orcamentoSchema.parse({
         id_cliente: formData.id_cliente,

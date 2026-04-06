@@ -37,7 +37,11 @@ export default function Clientes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("dim_cliente")
-        .select(`*, dim_propriedade(id_propriedade, nome_da_propriedade), fato_servico(id_servico, situacao_do_servico)`)
+        .select(`
+          id_cliente, nome, email, telefone, celular, cpf, cnpj, endereco, situacao, origem, categoria, anotacoes,
+          dim_propriedade!fk_propriedade_cliente(id_propriedade),
+          fato_servico!fk_servico_cliente(id_servico, situacao_do_servico)
+        `)
         .order("nome");
       if (error) throw error;
       return data || [];

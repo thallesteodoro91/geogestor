@@ -190,7 +190,7 @@ export default function Orcamentos() {
     
     try {
       const validatedData = orcamentoSchema.parse({
-        id_cliente: formData.id_cliente || null,
+        id_cliente: formData.id_cliente,
         id_servico: formData.id_servico || null,
         data_orcamento: formData.data_orcamento,
         valor_unitario: parseFloat(formData.valor_unitario),

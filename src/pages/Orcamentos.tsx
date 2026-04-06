@@ -334,6 +334,18 @@ export default function Orcamentos() {
                   <DialogTitle>{editingId ? "Editar" : "Novo"} Orçamento</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {clientes.length === 0 && (
+                    <Alert className="col-span-2">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription className="flex items-center justify-between">
+                        <span>Cadastre um cliente antes de criar orçamentos.</span>
+                        <Button size="sm" variant="outline" type="button" onClick={() => setClienteDialogOpen(true)}>
+                          <UserPlus className="h-4 w-4 mr-1" />
+                          Criar cliente
+                        </Button>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="cliente">Cliente *</Label>

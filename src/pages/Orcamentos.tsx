@@ -110,7 +110,7 @@ export default function Orcamentos() {
       const receitaEsperada = valorTotal - valorImposto;
 
       const payload = {
-        id_cliente: data.id_cliente || null,
+        id_cliente: data.id_cliente,
         id_servico: data.id_servico || null,
         data_orcamento: data.data_orcamento,
         valor_unitario: parseFloat(data.valor_unitario),

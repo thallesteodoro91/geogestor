@@ -50,6 +50,7 @@ export default function Orcamentos() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
   const itemsPerPage = 15;
 
   const { data: orcamentos = [], isLoading } = useQuery({

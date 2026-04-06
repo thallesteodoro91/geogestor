@@ -562,6 +562,14 @@ export default function Orcamentos() {
             setDeleteTargetId(null);
           }}
         />
+        <ClienteDialog
+          open={clienteDialogOpen}
+          onOpenChange={setClienteDialogOpen}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['clientes'] });
+            setClienteDialogOpen(false);
+          }}
+        />
       </div>
     </AppLayout>
   );

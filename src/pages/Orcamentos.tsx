@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search, AlertCircle, UserPlus } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

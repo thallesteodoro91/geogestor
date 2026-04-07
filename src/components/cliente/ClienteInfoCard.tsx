@@ -2,23 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Mail, Phone, MapPin, FileText, User, Building } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { getStatusClasses } from "@/lib/statusColors";
 
 interface ClienteInfoCardProps {
   cliente: Tables<"dim_cliente">;
 }
 
 export function ClienteInfoCard({ cliente }: ClienteInfoCardProps) {
-  const getSituacaoBadgeClass = () => {
-    switch(cliente.situacao) {
-      case 'Ativo':
-        return 'bg-green-500 hover:bg-green-600 text-white';
-      case 'Inativo':
-        return 'bg-yellow-500 hover:bg-yellow-600 text-white';
-      default:
-        return 'bg-muted';
-    }
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -27,7 +17,7 @@ export function ClienteInfoCard({ cliente }: ClienteInfoCardProps) {
             <User className="h-5 w-5" />
             {cliente.nome}
           </CardTitle>
-          <Badge className={getSituacaoBadgeClass()}>
+          <Badge className={getStatusClasses(cliente.situacao)}>
             {cliente.situacao || 'Não definido'}
           </Badge>
         </div>

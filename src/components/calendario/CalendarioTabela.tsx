@@ -15,8 +15,8 @@ import { ptBR } from "date-fns/locale";
 import { Eye, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS, getServiceStatusBadgeClasses } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION, getBudgetSituationBadgeClass } from "@/constants/budgetStatus";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { getStatusClasses } from "@/lib/statusColors";
 
 interface CalendarioTabelaProps {
   busca?: string;
@@ -82,10 +82,6 @@ export const CalendarioTabela = ({ busca = "", filtroTipo = "todos", filtroStatu
 
   const pagination = usePagination(eventosFiltrados, { initialPageSize: 20 });
 
-  const getStatusColor = (status: string, tipo: string) => {
-    return tipo === "orcamento" ? getBudgetSituationBadgeClass(status) : getServiceStatusBadgeClasses(status);
-  };
-
   const getTipoIcon = (tipo: string) => tipo === "orcamento" ? "💰" : "🛠️";
 
   const exportCSV = () => {
@@ -134,7 +130,7 @@ export const CalendarioTabela = ({ busca = "", filtroTipo = "todos", filtroStatu
             {pagination.paginatedData.map((evento) => (
               <TableRow
                 key={evento.id}
-                className={cn("hover:bg-muted/50", evento.tipo === "servico" && "bg-[#246BCE]/5")}
+                className={cn("hover:bg-muted/50", evento.tipo === "servico" && "bg-blue-500/5 dark:bg-blue-500/10")}
                 title={evento.tipo === "servico" ? `${evento.cliente} • ${evento.propriedade} • ${evento.municipio}` : ""}
               >
                 <TableCell>
@@ -145,7 +141,7 @@ export const CalendarioTabela = ({ busca = "", filtroTipo = "todos", filtroStatu
                 <TableCell>{evento.propriedade}</TableCell>
                 <TableCell>{evento.municipio}</TableCell>
                 <TableCell>
-                  <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : getStatusColor(evento.status, evento.tipo)}>
+                  <Badge className={getStatusClasses(evento.status)}>
                     {getTipoIcon(evento.tipo)} {evento.status}
                   </Badge>
                 </TableCell>

@@ -10,8 +10,9 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, ChevronLeft, ChevronRight, Clock, MapPin, User, Briefcase, DollarSign, FileText } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS, getServiceStatusBadgeClasses, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION, getBudgetSituationBadgeClass, BUDGET_SITUATION_COLORS } from "@/constants/budgetStatus";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { getStatusClasses } from "@/lib/statusColors";
 
 interface CalendarioDiarioProps {
   busca?: string;
@@ -85,7 +86,6 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
     },
   });
 
-  // Apply filters
   const eventosFiltrados = eventos.filter((evento) => {
     const matchBusca = !busca || [evento.titulo, evento.cliente, evento.propriedade, evento.municipio].some(v => v.toLowerCase().includes(busca.toLowerCase()));
     const matchTipo = filtroTipo === "todos" || evento.tipo === filtroTipo;
@@ -93,23 +93,8 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
     return matchBusca && matchTipo && matchStatus;
   });
 
-  const getStatusConfig = (status: string, tipo: string) => {
-    const icon = 
-      status === SERVICE_STATUS.CONCLUIDO || status === BUDGET_SITUATION.APROVADO ? "✓" :
-      status === SERVICE_STATUS.CANCELADO || status === BUDGET_SITUATION.CANCELADO ? "✕" :
-      status === SERVICE_STATUS.EM_ANDAMENTO || status === SERVICE_STATUS.EM_REVISAO ? "⟳" : "⏱";
-    
-    const color = tipo === "orcamento" 
-      ? getBudgetSituationBadgeClass(status)
-      : getServiceStatusBadgeClasses(status);
-    
-    return { color, icon };
-  };
-
   const getCategoriaColor = (categoria: string, tipo: string) => {
-    // Serviços sempre têm cor azul #246BCE
-    if (tipo === "servico") return "border-l-[#246BCE]";
-    
+    if (tipo === "servico") return "border-l-blue-500";
     const catLower = categoria.toLowerCase();
     if (catLower.includes("topografia")) return "border-l-blue-500";
     if (catLower.includes("georreferenciamento")) return "border-l-emerald-500";
@@ -169,105 +154,102 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
             onAction={() => navigate("/servicos")}
           />
         ) : (
-          eventosFiltrados.map((evento) => {
-            const statusConfig = getStatusConfig(evento.status, evento.tipo);
-            return (
-              <Card
-                key={evento.id}
-                className={cn(
-                  "border-l-4 hover:shadow-lg transition-all cursor-pointer",
-                  getCategoriaColor(evento.categoria, evento.tipo)
-                )}
-                onClick={() => {
-                  const separatorIndex = evento.id.indexOf("-");
-                  const tipo = evento.id.substring(0, separatorIndex);
-                  const id = evento.id.substring(separatorIndex + 1);
-                  navigate(`/calendario/${tipo}/${id}`);
-                }}
-                title={`${evento.cliente} • ${evento.propriedade} • ${evento.municipio}`}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : statusConfig.color}>
-                          {statusConfig.icon} {evento.status}
-                        </Badge>
-                        <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-[#246BCE]/10 text-[#246BCE] border-[#246BCE]")}>
-                          {evento.tipo === "orcamento" ? (
-                            <>
-                              <FileText className="h-3 w-3" />
-                              Orçamento
-                            </>
-                          ) : (
-                            <>
-                              🛠️ Serviço
-                            </>
-                          )}
-                        </Badge>
-                        <Badge variant="secondary" className="gap-1">
-                          <Clock className="h-3 w-3" />
-                          {format(evento.hora, "HH:mm")}
-                        </Badge>
-                      </div>
-                      <CardTitle className="text-xl">
-                        {evento.tipo === "servico" && "🛠️ "}{evento.titulo}
-                      </CardTitle>
+          eventosFiltrados.map((evento) => (
+            <Card
+              key={evento.id}
+              className={cn(
+                "border-l-4 hover:shadow-lg transition-all cursor-pointer",
+                getCategoriaColor(evento.categoria, evento.tipo)
+              )}
+              onClick={() => {
+                const separatorIndex = evento.id.indexOf("-");
+                const tipo = evento.id.substring(0, separatorIndex);
+                const id = evento.id.substring(separatorIndex + 1);
+                navigate(`/calendario/${tipo}/${id}`);
+              }}
+              title={`${evento.cliente} • ${evento.propriedade} • ${evento.municipio}`}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <Badge className={getStatusClasses(evento.status)}>
+                        {evento.status}
+                      </Badge>
+                      <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30")}>
+                        {evento.tipo === "orcamento" ? (
+                          <>
+                            <FileText className="h-3 w-3" />
+                            Orçamento
+                          </>
+                        ) : (
+                          <>
+                            🛠️ Serviço
+                          </>
+                        )}
+                      </Badge>
+                      <Badge variant="secondary" className="gap-1">
+                        <Clock className="h-3 w-3" />
+                        {format(evento.hora, "HH:mm")}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-xl">
+                      {evento.tipo === "servico" && "🛠️ "}{evento.titulo}
+                    </CardTitle>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="bg-primary/10 p-2 rounded-lg">
+                      <User className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cliente</p>
+                      <p className="font-medium">{evento.cliente}</p>
+                      <p className="text-xs text-muted-foreground">{evento.clienteContato}</p>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="flex items-start gap-3">
-                      <div className="bg-primary/10 p-2 rounded-lg">
-                        <User className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Cliente</p>
-                        <p className="font-medium">{evento.cliente}</p>
-                        <p className="text-xs text-muted-foreground">{evento.clienteContato}</p>
-                      </div>
-                    </div>
 
-                    <div className="flex items-start gap-3">
-                      <div className="bg-emerald-500/10 p-2 rounded-lg">
-                        <Briefcase className="h-4 w-4 text-emerald-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Propriedade</p>
-                        <p className="font-medium">{evento.propriedade}</p>
-                      </div>
+                  <div className="flex items-start gap-3">
+                    <div className="bg-emerald-500/10 p-2 rounded-lg">
+                      <Briefcase className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="bg-blue-500/10 p-2 rounded-lg">
-                        <MapPin className="h-4 w-4 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Município</p>
-                        <p className="font-medium">{evento.municipio}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <div className="bg-amber-500/10 p-2 rounded-lg">
-                        <DollarSign className="h-4 w-4 text-amber-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Valor</p>
-                        <p className="font-medium">
-                          {new Intl.NumberFormat("pt-BR", {
-                            style: "currency",
-                            currency: "BRL",
-                          }).format(evento.valor)}
-                        </p>
-                      </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Propriedade</p>
+                      <p className="font-medium">{evento.propriedade}</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })
+
+                  <div className="flex items-start gap-3">
+                    <div className="bg-blue-500/10 p-2 rounded-lg">
+                      <MapPin className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Município</p>
+                      <p className="font-medium">{evento.municipio}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <div className="bg-amber-500/10 p-2 rounded-lg">
+                      <DollarSign className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Valor</p>
+                      <p className="font-medium">
+                        {new Intl.NumberFormat("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                        }).format(evento.valor)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
         )}
       </div>
     </div>

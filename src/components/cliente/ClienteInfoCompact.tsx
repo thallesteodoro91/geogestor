@@ -170,7 +170,7 @@ export function ClienteInfoCompact({
               </div>
               <span className="font-semibold text-base">{cliente.nome}</span>
             </div>
-            <Badge variant="outline" className={getSituacaoBadgeClass()}>
+            <Badge variant="outline" className={situacaoClasses}>
               {cliente.situacao || 'Não definido'}
             </Badge>
           </div>

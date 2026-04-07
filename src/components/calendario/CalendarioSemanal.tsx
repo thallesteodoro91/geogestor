@@ -10,8 +10,9 @@ import { ptBR } from "date-fns/locale";
 import { Calendar, MapPin, User, Briefcase, ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { SERVICE_STATUS, getServiceStatusBadgeClasses } from "@/constants/serviceStatus";
-import { BUDGET_SITUATION, getBudgetSituationBadgeClass } from "@/constants/budgetStatus";
+import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { getStatusClasses } from "@/lib/statusColors";
 
 interface CalendarioSemanalProps {
   busca?: string;
@@ -79,10 +80,6 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
     return matchBusca && matchTipo && matchStatus;
   });
 
-  const getStatusColor = (status: string, tipo: string) => {
-    return tipo === "orcamento" ? getBudgetSituationBadgeClass(status) : getServiceStatusBadgeClasses(status);
-  };
-
   const getTipoIcon = (tipo: string) => tipo === "orcamento" ? "💰" : "🛠️";
 
   return (
@@ -117,7 +114,7 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
             key={evento.id}
             className={cn(
               "p-6 hover:shadow-lg transition-shadow cursor-pointer",
-              evento.tipo === "servico" && "border-l-4 border-l-[#246BCE]"
+              evento.tipo === "servico" && "border-l-4 border-l-blue-500"
             )}
             onClick={() => {
               const separatorIndex = evento.id.indexOf("-");
@@ -130,10 +127,10 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
             <div className="flex items-start justify-between">
               <div className="space-y-3 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <Badge className={evento.tipo === "servico" ? "bg-[#246BCE] text-white" : getStatusColor(evento.status, evento.tipo)}>
+                  <Badge className={getStatusClasses(evento.status)}>
                     {evento.status}
                   </Badge>
-                  <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-[#246BCE]/10 text-[#246BCE] border-[#246BCE]")}>
+                  <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30")}>
                     {getTipoIcon(evento.tipo)} {evento.tipo === "orcamento" ? "Orçamento" : "Serviço"}
                   </Badge>
                   <Badge variant="secondary">{evento.categoria}</Badge>

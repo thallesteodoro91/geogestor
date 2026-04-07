@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, Phone, MapPin, FileText, User, StickyNote, SlidersHorizontal, ChevronRight, UserCircle, Users, Briefcase, Tractor, Building2, Factory, Landmark, Heart, Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star, Target, UserCog, Activity, PhoneCall, HelpCircle, RefreshCw } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { getStatusClasses } from "@/lib/statusColors";
 interface ClienteInfoCompactProps {
   cliente: Tables<"dim_cliente">;
   onOpenCentralControle?: () => void;

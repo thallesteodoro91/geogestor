@@ -127,7 +127,7 @@ All colors MUST be HSL.
     --secondary-foreground: 0 0% 98%;
 
     --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+    --muted-foreground: 0 0% 65%;
 
     --accent: 189 94% 43%;
     --accent-foreground: 0 0% 98%;
@@ -135,8 +135,8 @@ All colors MUST be HSL.
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
     --ring: 262 83% 65%;
     
     --success: 142 76% 56%;

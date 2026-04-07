@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Mail, Phone, MapPin, FileText, User, StickyNote, SlidersHorizontal, ChevronRight, UserCircle, Users, Briefcase, Tractor, Building2, Factory, Landmark, Heart, Globe, Share2, Megaphone, UserPlus, CalendarDays, MessageCircle, Search, Star, Target, UserCog, Activity, PhoneCall, HelpCircle, RefreshCw } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { getStatusClasses } from "@/lib/statusColors";
 interface ClienteInfoCompactProps {
   cliente: Tables<"dim_cliente">;
   onOpenCentralControle?: () => void;
@@ -149,16 +150,7 @@ export function ClienteInfoCompact({
   cliente,
   onOpenCentralControle
 }: ClienteInfoCompactProps) {
-  const getSituacaoBadgeClass = () => {
-    switch (cliente.situacao) {
-      case 'Ativo':
-        return 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30';
-      case 'Inativo':
-        return 'bg-red-500/15 text-red-600 border-red-500/30';
-      default:
-        return 'bg-amber-500/15 text-amber-600 border-amber-500/30';
-    }
-  };
+  const situacaoClasses = getStatusClasses(cliente.situacao);
   const getCategoriaConfig = (categoria: string | null) => {
     if (!categoria) return defaultConfig;
     return categoriaConfig[categoria] || defaultConfig;
@@ -178,7 +170,7 @@ export function ClienteInfoCompact({
               </div>
               <span className="font-semibold text-base">{cliente.nome}</span>
             </div>
-            <Badge variant="outline" className={getSituacaoBadgeClass()}>
+            <Badge variant="outline" className={situacaoClasses}>
               {cliente.situacao || 'Não definido'}
             </Badge>
           </div>

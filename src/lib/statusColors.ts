@@ -4,7 +4,7 @@
  * Verde (emerald) → Ativo, Concluído, Pago, Aprovado
  * Amarelo (amber) → Em Andamento, Pendente, Atenção
  * Vermelho (rose) → Atrasado, Cancelado, Inativo, Crítico
- * Azul (blue) → Planejado, Em Revisão
+ * Azul (blue) → Planejado, Em Revisão, Em Análise
  * Cinza (slate) → Indefinido, Neutro
  */
 
@@ -18,6 +18,7 @@ const STATUS_MAP: Record<string, StatusCategory> = {
   'Planejado': 'info',
   'Em Revisão': 'info',
   'Cancelado': 'danger',
+  'Agendado': 'info',
   // Clientes
   'Ativo': 'success',
   'Inativo': 'danger',
@@ -26,24 +27,31 @@ const STATUS_MAP: Record<string, StatusCategory> = {
   'Pago': 'success',
   'Parcial': 'warning',
   'Atrasado': 'danger',
+  // Orçamento situação
   'Aprovado': 'success',
   'Rejeitado': 'danger',
+  'Recusado': 'danger',
+  'Em Analise': 'info',
+  'Em Negociacao': 'warning',
+  // Despesas
+  'pendente': 'warning',
+  'confirmada': 'success',
   // Genéricos
   'Sim': 'success',
   'Não': 'neutral',
 };
 
 const CATEGORY_CLASSES: Record<StatusCategory, string> = {
-  success: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/25 border-transparent',
-  warning: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 border-transparent',
-  danger: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 hover:bg-rose-500/25 border-transparent',
-  info: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 hover:bg-blue-500/25 border-transparent',
+  success: 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 hover:bg-emerald-500/25 border-transparent',
+  warning: 'bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 hover:bg-amber-500/25 border-transparent',
+  danger: 'bg-rose-500/15 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400 hover:bg-rose-500/25 border-transparent',
+  info: 'bg-blue-500/15 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 hover:bg-blue-500/25 border-transparent',
   neutral: 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent',
 };
 
 /**
  * Retorna classes Tailwind para estilizar um Badge baseado no status textual.
- * Funciona para qualquer módulo (serviços, clientes, pagamentos, etc.)
+ * Funciona para qualquer módulo (serviços, clientes, pagamentos, orçamentos, etc.)
  */
 export function getStatusClasses(status: string | null | undefined): string {
   if (!status) return CATEGORY_CLASSES.neutral;

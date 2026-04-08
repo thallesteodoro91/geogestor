@@ -1,66 +1,64 @@
 
 
-## Plano: Progresso Inteligente com Contexto e Ações
+## Plano: Checklist de Projetos Evoluído para Ferramenta de Execução
 
 ### Diagnóstico
 
-O progresso atual é uma barra simples (`Progress value={servico.progresso}`) com um número `%`. Não comunica:
-- Se o projeto está atrasado ou no prazo
-- Quantas tarefas foram feitas vs total
-- Previsão de conclusão
-- Qual a próxima ação
+Existem dois sistemas de tarefas no SkyGeo com maturidades muito diferentes:
 
-O cálculo já é baseado em tarefas (`calcularProgressoServico`), mas a UI não mostra isso.
+1. **`ClienteTarefas`** (tarefas de cliente) — Já maduro: prioridade (baixa/média/alta/urgente), categoria com ícones, data de vencimento, responsável, observações, edição inline, confirmação de exclusão, timeline de eventos. Usa tabela `cliente_tarefas` com 16 colunas.
+
+2. **`TarefasList`** (tarefas de projeto) — Primitivo: apenas título + checkbox + deletar. Input de texto simples. Sem prioridade, sem prazo, sem responsável, sem categoria. Tabela `servico_tarefas` tem apenas 7 colunas (titulo, concluida, ordem).
+
+O problema central é que as tarefas de projeto — que são as mais operacionais e críticas — são as mais pobres em funcionalidade.
 
 ### Mudanças
 
-#### 1. Criar componente `ProjectProgressCard`
+#### 1. Migration: Expandir tabela `servico_tarefas`
 
-Novo componente que substitui o Card de progresso simples em `ServicoDetalhes.tsx`. Exibe:
+Adicionar colunas para paridade com `cliente_tarefas`:
+- `prioridade` (text, default 'media') — baixa, media, alta, urgente
+- `data_vencimento` (date, nullable)
+- `responsavel` (text, nullable) — nome do responsável
+- `categoria` (text, default 'geral')
+- `observacoes` (text, nullable)
 
-**Barra segmentada com contexto:**
-- Barra de progresso com cor dinâmica (verde = no prazo, amarelo = atenção, vermelho = atrasado)
-- `3 de 8 tarefas concluídas (37%)`
+#### 2. Atualizar service (`servico-tarefas.service.ts`)
 
-**Indicador de prazo:**
-- Calcula dias restantes vs % concluído
-- "No prazo — faltam 12 dias" (verde)
-- "Atenção — 60% do prazo usado, 30% concluído" (amarelo)  
-- "Atrasado — prazo venceu há 3 dias" (vermelho)
+Expandir interface `ServicoTarefa` com os novos campos. Nenhuma mudança nas queries — já usam `select('*')`.
 
-**Previsão de conclusão:**
-- Baseada na velocidade média de conclusão de tarefas (tarefas/dia desde o início)
-- "Previsão: 15 de maio" ou "Sem dados suficientes"
+#### 3. Reescrever `TarefasList` como ferramenta de execução
 
-**Próxima ação sugerida:**
-- Se 0 tarefas: "Adicione tarefas para acompanhar o progresso"
-- Se atrasado: "Priorize as tarefas pendentes para recuperar o prazo"
-- Se no prazo: "Continue no ritmo atual — próxima tarefa pendente"
-- Se concluído: "Projeto finalizado! Atualize o status para Concluído"
+Inspirado na `ClienteTarefas` já funcional:
 
-#### 2. Melhorar barra no Kanban
+- **Cada tarefa mostra:** checkbox + título + badge de prioridade (cor na borda esquerda) + badge de categoria + indicador de vencimento (ícone vermelho se atrasada, amarelo se próxima)
+- **Adicionar tarefa:** Substituir input simples por um formulário inline expandível com campos: título (obrigatório), prioridade (select), data de vencimento (date picker), responsável (text)
+- **Editar tarefa:** Dialog com todos os campos (como `EditarTarefaDialog` do cliente)
+- **Confirmar exclusão:** AlertDialog antes de deletar (como `ClienteTarefas`)
+- **Feedback visual:** Tarefas urgentes com `animate-pulse` na borda, concluídas com opacidade reduzida e line-through
 
-No `KanbanBoard.tsx`, a barra de 1.5px ganha cor contextual (verde/amarelo/vermelho) baseada no prazo, usando a mesma lógica.
+#### 4. Sugestões automáticas de tarefas
 
-#### 3. Passar dados de tarefas para o card
+Ao criar um projeto sem tarefas, exibir botão "Sugerir tarefas padrão" que adiciona uma lista predefinida baseada na categoria do serviço topográfico:
+- **Georreferenciamento:** Levantamento de campo, Processamento de dados, Confecção de planta, Protocolo SIGEF, Certificação INCRA
+- **Desmembramento:** Levantamento topográfico, Memorial descritivo, Aprovação prefeitura, Registro cartório
+- **Geral (fallback):** Planejamento, Execução de campo, Processamento, Entrega ao cliente
 
-Em `ServicoDetalhes.tsx`, buscar tarefas no nível da página (já faz via `TarefasList`) e passar contagem para o `ProjectProgressCard`.
+Estas são inseridas em batch via `createTarefa` com ordem sequencial.
 
 ### Detalhes técnicos
 
-- Lógica de "atrasado": `data_do_servico_fim < hoje && progresso < 100`
-- Lógica de "atenção": `% tempo decorrido > % progresso + 20pp`
-- Velocidade: `tarefas_concluidas / dias_desde_inicio`
-- Previsão: `hoje + (tarefas_pendentes / velocidade_diaria)`
+- Reutilizar os mesmos padrões visuais de `ClienteTarefas` (categoriaConfig, prioridadeConfig, getVencimentoStatus)
+- Extrair função `getVencimentoStatus` para um utilitário compartilhado se necessário
+- O `ProjectProgressCard` existente já calcula progresso baseado em tarefas — continua funcionando sem mudanças
 
-### Arquivos
+### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Criar | `src/components/servicos/ProjectProgressCard.tsx` |
-| Editar | `src/pages/ServicoDetalhes.tsx` (substituir card de progresso) |
-| Editar | `src/components/servicos/KanbanBoard.tsx` (cor contextual na barra) |
-| Editar | `src/components/servicos/index.ts` (exportar novo componente) |
+| Migration | `ALTER TABLE servico_tarefas ADD COLUMN prioridade, data_vencimento, responsavel, categoria, observacoes` |
+| Editar | `src/modules/operations/services/servico-tarefas.service.ts` (expandir interface) |
+| Reescrever | `src/components/servicos/TarefasList.tsx` (UI completa com prioridade, prazo, sugestões) |
 
-Nenhuma migração de banco necessária.
+Nenhum novo componente — reutiliza padrões existentes do `ClienteTarefas`.
 

@@ -11,6 +11,11 @@ export interface ServicoTarefa {
   titulo: string;
   concluida: boolean;
   ordem: number;
+  prioridade?: string;
+  data_vencimento?: string | null;
+  responsavel?: string | null;
+  categoria?: string;
+  observacoes?: string | null;
   created_at?: string;
   updated_at?: string;
   tenant_id?: string;

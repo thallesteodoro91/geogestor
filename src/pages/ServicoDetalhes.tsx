@@ -178,22 +178,12 @@ export default function ServicoDetalhes() {
         </div>
 
         {/* Progress */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Progresso do Projeto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4">
-              <Progress value={servico.progresso || 0} className="flex-1 h-3" />
-              <span className="text-2xl font-bold text-primary">
-                {servico.progresso || 0}%
-              </span>
-            </div>
-            {servico.descricao && (
-              <p className="mt-4 text-muted-foreground">{servico.descricao}</p>
-            )}
-          </CardContent>
-        </Card>
+        <ProjectProgressCard
+          servicoId={id!}
+          dataInicio={servico.data_do_servico_inicio}
+          dataFim={servico.data_do_servico_fim}
+          descricao={servico.descricao}
+        />
 
         {/* Tabs */}
         <Tabs defaultValue="tarefas" className="w-full">

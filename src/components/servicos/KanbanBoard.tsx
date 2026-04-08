@@ -129,7 +129,10 @@ export function KanbanBoard({ servicos }: KanbanBoardProps) {
                             )}
 
                             <div className="flex items-center gap-2">
-                              <Progress value={servico.progresso || 0} className="h-1.5 flex-1" />
+                              <Progress
+                                value={servico.progresso || 0}
+                                className={`h-1.5 flex-1 [&>div]:${getProgressColor(servico.progresso || 0, servico.data_do_servico_fim)}`}
+                              />
                               <span className="text-[10px] text-muted-foreground font-medium">
                                 {servico.progresso || 0}%
                               </span>

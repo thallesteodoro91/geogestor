@@ -11,6 +11,7 @@ import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { updateServico } from "@/modules/operations";
 import { SERVICE_STATUS, SERVICE_STATUS_COLORS } from "@/constants/serviceStatus";
+import { getProgressColor } from "./ProjectProgressCard";
 
 interface KanbanBoardProps {
   servicos: any[];

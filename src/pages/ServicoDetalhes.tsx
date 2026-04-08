@@ -25,7 +25,8 @@ import {
   EquipeList, 
   AnexosList, 
   EventosTimeline,
-  NovoServicoDialog 
+  NovoServicoDialog,
+  ProjectProgressCard 
 } from "@/components/servicos";
 import { fetchServicoById } from "@/modules/operations";
 import { SERVICE_STATUS, getStatusBadgeVariant, isServiceInProgress } from "@/constants/serviceStatus";

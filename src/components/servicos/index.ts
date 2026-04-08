@@ -4,3 +4,4 @@ export { AnexosList } from './AnexosList';
 export { EventosTimeline } from './EventosTimeline';
 export { NovoServicoDialog } from './NovoServicoDialog';
 export type { ServicoFormData } from './NovoServicoDialog';
+export { ProjectProgressCard, getProgressColor } from './ProjectProgressCard';

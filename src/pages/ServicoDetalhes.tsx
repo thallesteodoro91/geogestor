@@ -200,7 +200,7 @@ export default function ServicoDetalhes() {
                 <CardTitle>Checklist de Tarefas</CardTitle>
               </CardHeader>
               <CardContent>
-                <TarefasList servicoId={id!} />
+                <TarefasList servicoId={id!} categoriaServico={servico?.categoria || undefined} />
               </CardContent>
             </Card>
           </TabsContent>

@@ -1665,31 +1665,46 @@ export type Database = {
       }
       servico_tarefas: {
         Row: {
+          categoria: string | null
           concluida: boolean | null
           created_at: string | null
+          data_vencimento: string | null
           id_servico: string
           id_tarefa: string
+          observacoes: string | null
           ordem: number | null
+          prioridade: string | null
+          responsavel: string | null
           tenant_id: string | null
           titulo: string
           updated_at: string | null
         }
         Insert: {
+          categoria?: string | null
           concluida?: boolean | null
           created_at?: string | null
+          data_vencimento?: string | null
           id_servico: string
           id_tarefa?: string
+          observacoes?: string | null
           ordem?: number | null
+          prioridade?: string | null
+          responsavel?: string | null
           tenant_id?: string | null
           titulo: string
           updated_at?: string | null
         }
         Update: {
+          categoria?: string | null
           concluida?: boolean | null
           created_at?: string | null
+          data_vencimento?: string | null
           id_servico?: string
           id_tarefa?: string
+          observacoes?: string | null
           ordem?: number | null
+          prioridade?: string | null
+          responsavel?: string | null
           tenant_id?: string | null
           titulo?: string
           updated_at?: string | null

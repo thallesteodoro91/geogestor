@@ -304,7 +304,7 @@ export default function Orcamentos() {
             onSearchChange={(v) => { setSearchTerm(v); pagination.goToPage(1); }}
             searchPlaceholder="Buscar por cliente, serviço ou código..."
           >
-            <Select value={filtroSituacao} onValueChange={(v) => { setFiltroSituacao(v); pagination.onPageChange(1); }}>
+            <Select value={filtroSituacao} onValueChange={(v) => { setFiltroSituacao(v); pagination.goToPage(1); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Situação" />
               </SelectTrigger>

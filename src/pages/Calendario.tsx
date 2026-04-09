@@ -13,7 +13,6 @@ import { CalendarioTabela } from "@/components/calendario/CalendarioTabela";
 import { CompromissoDialog } from "@/components/calendario/CompromissoDialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
 import { Calendar, List, Table, CalendarDays, Plus, Briefcase, FileText } from "lucide-react";
 import { SERVICE_STATUS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION } from "@/constants/budgetStatus";
@@ -51,7 +50,7 @@ const Calendario = () => {
 
   return (
     <AppLayout>
-      <div className="container mx-auto p-6 max-w-7xl space-y-6">
+      <div className="space-y-6">
         <PageHeader title="Calendário de Atividades" subtitle="Gerencie orçamentos, serviços e compromissos em um só lugar">
           <Button onClick={() => setDialogOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
@@ -69,30 +68,28 @@ const Calendario = () => {
           />
         )}
 
-        <Card className="p-4">
-          <FilterBar searchValue={busca} onSearchChange={setBusca} searchPlaceholder="Buscar por cliente, serviço...">
-            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-              <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os Tipos</SelectItem>
-                <SelectItem value="orcamento">💰 Orçamentos</SelectItem>
-                <SelectItem value="servico">🛠️ Serviços</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os Status</SelectItem>
-                <SelectItem value="Pendente">Pendente</SelectItem>
-                <SelectItem value="Aprovado">Aprovado</SelectItem>
-                <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                <SelectItem value="Concluído">Concluído</SelectItem>
-                <SelectItem value="Cancelado">Cancelado</SelectItem>
-                <SelectItem value="Agendado">Agendado</SelectItem>
-              </SelectContent>
-            </Select>
-          </FilterBar>
-        </Card>
+        <FilterBar searchValue={busca} onSearchChange={setBusca} searchPlaceholder="Buscar por cliente, serviço...">
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Tipos</SelectItem>
+              <SelectItem value="orcamento">💰 Orçamentos</SelectItem>
+              <SelectItem value="servico">🛠️ Serviços</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Status</SelectItem>
+              <SelectItem value="Pendente">Pendente</SelectItem>
+              <SelectItem value="Aprovado">Aprovado</SelectItem>
+              <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+              <SelectItem value="Concluído">Concluído</SelectItem>
+              <SelectItem value="Cancelado">Cancelado</SelectItem>
+              <SelectItem value="Agendado">Agendado</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterBar>
 
         <Tabs defaultValue="mensal" className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">

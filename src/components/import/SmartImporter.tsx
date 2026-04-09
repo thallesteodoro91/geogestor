@@ -483,12 +483,24 @@ export function SmartImporter({
     } else if (ext === "xlsx" || ext === "xls") {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const wb = XLSX.read(e.target?.result, { type: "array" });
+        const wb = XLSX.read(e.target?.result, { type: "array", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
         if (data.length < 2) { toast.error("Planilha vazia ou sem dados suficientes."); return; }
-        const h = data[0].map((c) => (c ?? "").toString().trim());
-        processHeaders(h, data.slice(1).filter((r) => r.some((c) => c?.toString().trim())));
+        const h = data[0].map((c: any) => (c ?? "").toString().trim());
+        // Convert all cell values to strings, handling Date objects and numbers properly
+        const rows = data.slice(1)
+          .filter((r: any[]) => r.some((c: any) => c != null && c.toString().trim()))
+          .map((r: any[]) => r.map((c: any) => {
+            if (c == null) return "";
+            if (c instanceof Date) {
+              // Format Date objects to ISO string
+              if (isNaN(c.getTime())) return "";
+              return c.toISOString().slice(0, 10);
+            }
+            return c.toString();
+          }));
+        processHeaders(h, rows);
       };
       reader.readAsArrayBuffer(file);
     } else {

@@ -69,30 +69,28 @@ const Calendario = () => {
           />
         )}
 
-        <Card className="p-4">
-          <FilterBar searchValue={busca} onSearchChange={setBusca} searchPlaceholder="Buscar por cliente, serviço...">
-            <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-              <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os Tipos</SelectItem>
-                <SelectItem value="orcamento">💰 Orçamentos</SelectItem>
-                <SelectItem value="servico">🛠️ Serviços</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os Status</SelectItem>
-                <SelectItem value="Pendente">Pendente</SelectItem>
-                <SelectItem value="Aprovado">Aprovado</SelectItem>
-                <SelectItem value="Em Andamento">Em Andamento</SelectItem>
-                <SelectItem value="Concluído">Concluído</SelectItem>
-                <SelectItem value="Cancelado">Cancelado</SelectItem>
-                <SelectItem value="Agendado">Agendado</SelectItem>
-              </SelectContent>
-            </Select>
-          </FilterBar>
-        </Card>
+        <FilterBar searchValue={busca} onSearchChange={setBusca} searchPlaceholder="Buscar por cliente, serviço...">
+          <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+            <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Tipos</SelectItem>
+              <SelectItem value="orcamento">💰 Orçamentos</SelectItem>
+              <SelectItem value="servico">🛠️ Serviços</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+            <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os Status</SelectItem>
+              <SelectItem value="Pendente">Pendente</SelectItem>
+              <SelectItem value="Aprovado">Aprovado</SelectItem>
+              <SelectItem value="Em Andamento">Em Andamento</SelectItem>
+              <SelectItem value="Concluído">Concluído</SelectItem>
+              <SelectItem value="Cancelado">Cancelado</SelectItem>
+              <SelectItem value="Agendado">Agendado</SelectItem>
+            </SelectContent>
+          </Select>
+        </FilterBar>
 
         <Tabs defaultValue="mensal" className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">

@@ -982,25 +982,49 @@ export function SmartImporter({
                 </div>
               )}
 
-              {importResult.errors.length > 0 && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>{importResult.errors.length} erro(s) / linhas ignoradas</AlertTitle>
-                  <AlertDescription>
-                    <ScrollArea className="h-[150px] mt-2">
-                      <ul className="list-disc list-inside space-y-1">
-                        {importResult.errors.map((e, i) => <li key={i} className="text-sm">{e}</li>)}
-                      </ul>
-                    </ScrollArea>
-                    {importResult.failedRows.length > 0 && (
-                      <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Baixar linhas com erro (.csv)
-                      </Button>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
+              {importResult.errors.length > 0 && (() => {
+                // Group errors by type for better readability
+                const errorGroups: Record<string, number> = {};
+                for (const err of importResult.errors) {
+                  // Extract error type from message (e.g., "Data inválida", "Nome é obrigatório")
+                  const typeMatch = err.match(/:\s*(.+?)(?:,|$)/);
+                  const type = typeMatch?.[1]?.trim() || err;
+                  errorGroups[type] = (errorGroups[type] || 0) + 1;
+                }
+                const groupEntries = Object.entries(errorGroups).sort((a, b) => b[1] - a[1]);
+
+                return (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>{importResult.errors.length} erro(s) / linhas ignoradas</AlertTitle>
+                    <AlertDescription>
+                      {groupEntries.length > 1 && (
+                        <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                          {groupEntries.map(([type, count]) => (
+                            <Badge key={type} variant="outline" className="text-xs border-destructive/30">
+                              {count}x {type}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <ScrollArea className="h-[120px] mt-2">
+                        <ul className="list-disc list-inside space-y-1">
+                          {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
+                          {importResult.errors.length > 50 && (
+                            <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
+                          )}
+                        </ul>
+                      </ScrollArea>
+                      {importResult.failedRows.length > 0 && (
+                        <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Baixar linhas com erro (.csv)
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
 
               {/* Next step tip */}
               {importResult.success > 0 && (() => {

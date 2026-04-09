@@ -91,18 +91,35 @@ function formatCNPJ(value: string): string {
   return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}-${nums.slice(12)}`;
 }
 
+/**
+ * Converts any cell value to a proper ISO date string (YYYY-MM-DD).
+ * Handles: JS Date objects, ISO strings, BR format (DD/MM/YYYY), Excel serial numbers.
+ */
 function formatDate(value: string): string {
   const trimmed = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (!trimmed) return "";
+  // Already ISO format
+  if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(trimmed)) return trimmed.slice(0, 10);
   // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
   const brMatch = trimmed.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
   if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-  // Excel serial number (days since 1900-01-01)
-  const num = parseFloat(trimmed);
-  if (!isNaN(num) && num > 30000 && num < 60000) {
-    const d = new Date(Date.UTC(1899, 11, 30 + num));
-    return d.toISOString().slice(0, 10);
+  // mm/dd/yyyy (US format fallback — only if month <= 12)
+  const usMatch = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (usMatch) {
+    const m = parseInt(usMatch[1]), d = parseInt(usMatch[2]);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${usMatch[3]}-${usMatch[1].padStart(2, "0")}-${usMatch[2].padStart(2, "0")}`;
+    }
   }
+  // Excel serial number (days since 1899-12-30). Range covers ~1982 to ~2063.
+  const num = parseFloat(trimmed);
+  if (!isNaN(num) && num > 25000 && num < 60000) {
+    const d = new Date(Date.UTC(1899, 11, 30 + Math.round(num)));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  // Try native Date parse as last resort
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return trimmed;
 }
 
@@ -113,10 +130,20 @@ function validateCPF(v: string) { if (!v) return null; const len = sanitizeDigit
 function validateCNPJ(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 14 ? "CNPJ deve ter 14 dígitos" : null; }
 function validatePhone(v: string) { if (!v) return null; const n = sanitizeDigitsOnly(v).length; return n < 10 || n > 11 ? "Telefone deve ter 10 ou 11 dígitos" : null; }
 function validateAge(v: string) { if (!v) return null; const n = parseInt(v); return isNaN(n) || n < 0 || n > 150 ? "Idade inválida" : null; }
-function validateDate(v: string) { if (!v) return null; const f = formatDate(v); if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)"; return isNaN(new Date(f).getTime()) ? "Data inválida" : null; }
+function validateDate(v: string) {
+  if (!v) return null;
+  const f = formatDate(v);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)";
+  const d = new Date(f + "T00:00:00Z");
+  if (isNaN(d.getTime())) return "Data inválida";
+  // Sanity check: year between 1900 and 2100
+  const year = d.getUTCFullYear();
+  if (year < 1900 || year > 2100) return "Data fora do intervalo válido";
+  return null;
+}
 function validateNome(v: string) { if (!v?.trim()) return "Nome é obrigatório"; return v.trim().length < 2 ? "Nome muito curto" : null; }
-function validateNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) ? "Valor deve ser um número" : null; }
-function validatePositiveNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
+function validateNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) ? "Valor deve ser um número" : null; }
+function validatePositiveNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
 function validateLatitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -90 || n > 90 ? "Latitude deve estar entre -90 e 90" : null; }
 function validateLongitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -180 || n > 180 ? "Longitude deve estar entre -180 e 180" : null; }
 function validateRequiredNumber(v: string) { if (!v?.trim()) return "Valor é obrigatório"; const san = sanitizeCurrency(v); const n = parseFloat(san); if (isNaN(n)) return "Valor deve ser um número"; return n <= 0 ? "Valor deve ser maior que zero" : null; }
@@ -466,12 +493,24 @@ export function SmartImporter({
     } else if (ext === "xlsx" || ext === "xls") {
       const reader = new FileReader();
       reader.onload = (e) => {
-        const wb = XLSX.read(e.target?.result, { type: "array" });
+        const wb = XLSX.read(e.target?.result, { type: "array", cellDates: true });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
         if (data.length < 2) { toast.error("Planilha vazia ou sem dados suficientes."); return; }
-        const h = data[0].map((c) => (c ?? "").toString().trim());
-        processHeaders(h, data.slice(1).filter((r) => r.some((c) => c?.toString().trim())));
+        const h = data[0].map((c: any) => (c ?? "").toString().trim());
+        // Convert all cell values to strings, handling Date objects and numbers properly
+        const rows = data.slice(1)
+          .filter((r: any[]) => r.some((c: any) => c != null && c.toString().trim()))
+          .map((r: any[]) => r.map((c: any) => {
+            if (c == null) return "";
+            if (c instanceof Date) {
+              // Format Date objects to ISO string
+              if (isNaN(c.getTime())) return "";
+              return c.toISOString().slice(0, 10);
+            }
+            return c.toString();
+          }));
+        processHeaders(h, rows);
       };
       reader.readAsArrayBuffer(file);
     } else {
@@ -504,7 +543,13 @@ export function SmartImporter({
       const idx = headers.indexOf(mappings[field.key]);
       let val = idx >= 0 ? (row[idx] ?? "").toString().trim() : "";
       if (!val && defaultValues[field.key]) val = defaultValues[field.key].trim();
-      if (val && /R\$|,\d{2}$/.test(val)) val = sanitizeCurrency(val);
+      // Only apply currency sanitization on text that looks like Brazilian currency
+      // Skip if it's already a clean number (from Excel typed cells)
+      if (val && field.type === "number" && /[R$,]/.test(val)) {
+        val = sanitizeCurrency(val);
+      } else if (val && !field.type && /R\$|,\d{2}$/.test(val)) {
+        val = sanitizeCurrency(val);
+      }
       if (val && field.format) val = field.format(val);
       mapped[field.key] = val;
       if (field.validate) { const err = field.validate(val); if (err) errors[field.key] = err; }
@@ -947,25 +992,49 @@ export function SmartImporter({
                 </div>
               )}
 
-              {importResult.errors.length > 0 && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>{importResult.errors.length} erro(s) / linhas ignoradas</AlertTitle>
-                  <AlertDescription>
-                    <ScrollArea className="h-[150px] mt-2">
-                      <ul className="list-disc list-inside space-y-1">
-                        {importResult.errors.map((e, i) => <li key={i} className="text-sm">{e}</li>)}
-                      </ul>
-                    </ScrollArea>
-                    {importResult.failedRows.length > 0 && (
-                      <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
-                        <Download className="h-4 w-4 mr-2" />
-                        Baixar linhas com erro (.csv)
-                      </Button>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
+              {importResult.errors.length > 0 && (() => {
+                // Group errors by type for better readability
+                const errorGroups: Record<string, number> = {};
+                for (const err of importResult.errors) {
+                  // Extract error type from message (e.g., "Data inválida", "Nome é obrigatório")
+                  const typeMatch = err.match(/:\s*(.+?)(?:,|$)/);
+                  const type = typeMatch?.[1]?.trim() || err;
+                  errorGroups[type] = (errorGroups[type] || 0) + 1;
+                }
+                const groupEntries = Object.entries(errorGroups).sort((a, b) => b[1] - a[1]);
+
+                return (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>{importResult.errors.length} erro(s) / linhas ignoradas</AlertTitle>
+                    <AlertDescription>
+                      {groupEntries.length > 1 && (
+                        <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                          {groupEntries.map(([type, count]) => (
+                            <Badge key={type} variant="outline" className="text-xs border-destructive/30">
+                              {count}x {type}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <ScrollArea className="h-[120px] mt-2">
+                        <ul className="list-disc list-inside space-y-1">
+                          {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
+                          {importResult.errors.length > 50 && (
+                            <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
+                          )}
+                        </ul>
+                      </ScrollArea>
+                      {importResult.failedRows.length > 0 && (
+                        <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Baixar linhas com erro (.csv)
+                        </Button>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
 
               {/* Next step tip */}
               {importResult.success > 0 && (() => {

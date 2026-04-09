@@ -13,7 +13,6 @@ import { CalendarioTabela } from "@/components/calendario/CalendarioTabela";
 import { CompromissoDialog } from "@/components/calendario/CompromissoDialog";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card } from "@/components/ui/card";
 import { Calendar, List, Table, CalendarDays, Plus, Briefcase, FileText } from "lucide-react";
 import { SERVICE_STATUS } from "@/constants/serviceStatus";
 import { BUDGET_SITUATION } from "@/constants/budgetStatus";

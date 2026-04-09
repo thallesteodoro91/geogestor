@@ -91,18 +91,35 @@ function formatCNPJ(value: string): string {
   return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}-${nums.slice(12)}`;
 }
 
+/**
+ * Converts any cell value to a proper ISO date string (YYYY-MM-DD).
+ * Handles: JS Date objects, ISO strings, BR format (DD/MM/YYYY), Excel serial numbers.
+ */
 function formatDate(value: string): string {
   const trimmed = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  if (!trimmed) return "";
+  // Already ISO format
+  if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(trimmed)) return trimmed.slice(0, 10);
   // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
   const brMatch = trimmed.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
   if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-  // Excel serial number (days since 1900-01-01)
-  const num = parseFloat(trimmed);
-  if (!isNaN(num) && num > 30000 && num < 60000) {
-    const d = new Date(Date.UTC(1899, 11, 30 + num));
-    return d.toISOString().slice(0, 10);
+  // mm/dd/yyyy (US format fallback — only if month <= 12)
+  const usMatch = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (usMatch) {
+    const m = parseInt(usMatch[1]), d = parseInt(usMatch[2]);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${usMatch[3]}-${usMatch[1].padStart(2, "0")}-${usMatch[2].padStart(2, "0")}`;
+    }
   }
+  // Excel serial number (days since 1899-12-30). Range covers ~1982 to ~2063.
+  const num = parseFloat(trimmed);
+  if (!isNaN(num) && num > 25000 && num < 60000) {
+    const d = new Date(Date.UTC(1899, 11, 30 + Math.round(num)));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  // Try native Date parse as last resort
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return trimmed;
 }
 

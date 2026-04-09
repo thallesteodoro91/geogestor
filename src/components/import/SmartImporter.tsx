@@ -533,7 +533,13 @@ export function SmartImporter({
       const idx = headers.indexOf(mappings[field.key]);
       let val = idx >= 0 ? (row[idx] ?? "").toString().trim() : "";
       if (!val && defaultValues[field.key]) val = defaultValues[field.key].trim();
-      if (val && /R\$|,\d{2}$/.test(val)) val = sanitizeCurrency(val);
+      // Only apply currency sanitization on text that looks like Brazilian currency
+      // Skip if it's already a clean number (from Excel typed cells)
+      if (val && field.type === "number" && /[R$,]/.test(val)) {
+        val = sanitizeCurrency(val);
+      } else if (val && !field.type && /R\$|,\d{2}$/.test(val)) {
+        val = sanitizeCurrency(val);
+      }
       if (val && field.format) val = field.format(val);
       mapped[field.key] = val;
       if (field.validate) { const err = field.validate(val); if (err) errors[field.key] = err; }

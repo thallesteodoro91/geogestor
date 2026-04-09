@@ -130,10 +130,20 @@ function validateCPF(v: string) { if (!v) return null; const len = sanitizeDigit
 function validateCNPJ(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 14 ? "CNPJ deve ter 14 dígitos" : null; }
 function validatePhone(v: string) { if (!v) return null; const n = sanitizeDigitsOnly(v).length; return n < 10 || n > 11 ? "Telefone deve ter 10 ou 11 dígitos" : null; }
 function validateAge(v: string) { if (!v) return null; const n = parseInt(v); return isNaN(n) || n < 0 || n > 150 ? "Idade inválida" : null; }
-function validateDate(v: string) { if (!v) return null; const f = formatDate(v); if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)"; return isNaN(new Date(f).getTime()) ? "Data inválida" : null; }
+function validateDate(v: string) {
+  if (!v) return null;
+  const f = formatDate(v);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)";
+  const d = new Date(f + "T00:00:00Z");
+  if (isNaN(d.getTime())) return "Data inválida";
+  // Sanity check: year between 1900 and 2100
+  const year = d.getUTCFullYear();
+  if (year < 1900 || year > 2100) return "Data fora do intervalo válido";
+  return null;
+}
 function validateNome(v: string) { if (!v?.trim()) return "Nome é obrigatório"; return v.trim().length < 2 ? "Nome muito curto" : null; }
-function validateNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) ? "Valor deve ser um número" : null; }
-function validatePositiveNumber(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
+function validateNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) ? "Valor deve ser um número" : null; }
+function validatePositiveNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
 function validateLatitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -90 || n > 90 ? "Latitude deve estar entre -90 e 90" : null; }
 function validateLongitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -180 || n > 180 ? "Longitude deve estar entre -180 e 180" : null; }
 function validateRequiredNumber(v: string) { if (!v?.trim()) return "Valor é obrigatório"; const san = sanitizeCurrency(v); const n = parseFloat(san); if (isNaN(n)) return "Valor deve ser um número"; return n <= 0 ? "Valor deve ser maior que zero" : null; }

@@ -1,64 +1,54 @@
 
 
-## Plano: Checklist de Projetos Evoluído para Ferramenta de Execução
+## Plano: Elevar Todas as Telas ao Padrão do Design System
 
 ### Diagnóstico
 
-Existem dois sistemas de tarefas no SkyGeo com maturidades muito diferentes:
+Após auditoria de todas as páginas de execução, a maioria já segue o padrão: `PageHeader` + `ContextualKPIs` + `FilterBar` + `PageContent` + `EmptyState` + `TablePagination`. A exceção crítica é:
 
-1. **`ClienteTarefas`** (tarefas de cliente) — Já maduro: prioridade (baixa/média/alta/urgente), categoria com ícones, data de vencimento, responsável, observações, edição inline, confirmação de exclusão, timeline de eventos. Usa tabela `cliente_tarefas` com 16 colunas.
+1. **`Orcamentos.tsx`** — Não usa nenhum componente do design system. Header manual (`h1`), KPIs com `KPICard` (componente de dashboard, não de execução), busca manual com `Input`, paginação manual com botões Anterior/Próxima, Dialog embutido no CardHeader, badges de status sem `getStatusClasses`.
 
-2. **`TarefasList`** (tarefas de projeto) — Primitivo: apenas título + checkbox + deletar. Input de texto simples. Sem prioridade, sem prazo, sem responsável, sem categoria. Tabela `servico_tarefas` tem apenas 7 colunas (titulo, concluida, ordem).
-
-O problema central é que as tarefas de projeto — que são as mais operacionais e críticas — são as mais pobres em funcionalidade.
+2. **`Calendario.tsx`** — Problema menor: `container mx-auto p-6 max-w-7xl` duplica o padding do `AppLayout`, e FilterBar está dentro de um `Card` desnecessário.
 
 ### Mudanças
 
-#### 1. Migration: Expandir tabela `servico_tarefas`
+#### 1. Reescrever `Orcamentos.tsx` com design system
 
-Adicionar colunas para paridade com `cliente_tarefas`:
-- `prioridade` (text, default 'media') — baixa, media, alta, urgente
-- `data_vencimento` (date, nullable)
-- `responsavel` (text, nullable) — nome do responsável
-- `categoria` (text, default 'geral')
-- `observacoes` (text, nullable)
+Substituir por padrão idêntico a Clientes/Projetos/Despesas:
+- `PageHeader` com título "Orçamentos", subtítulo e botão "Novo Orçamento"
+- `ContextualKPIs` com 3 items (Total, Receita Esperada, Conversão) — usando ícones e formatação compacta, não KPICard
+- `PageContent` + `FilterBar` com busca e filtro de situação (Select)
+- `TablePagination` reutilizável (substituir paginação manual)
+- Badges com `getStatusClasses` (substituir lógica inline de variantes)
+- Dialog movido para fora do Card (padrão dos outros módulos)
+- `usePagination` hook (substituir cálculo manual)
+- `OnboardingPageBanner` para orçamentos
 
-#### 2. Atualizar service (`servico-tarefas.service.ts`)
+#### 2. Corrigir `Calendario.tsx`
 
-Expandir interface `ServicoTarefa` com os novos campos. Nenhuma mudança nas queries — já usam `select('*')`.
+- Remover `container mx-auto p-6 max-w-7xl` (AppLayout já faz isso)
+- Remover `Card` wrapper do FilterBar (outros módulos não usam)
 
-#### 3. Reescrever `TarefasList` como ferramenta de execução
+### Padrão de referência (Clientes/Projetos/Despesas)
 
-Inspirado na `ClienteTarefas` já funcional:
-
-- **Cada tarefa mostra:** checkbox + título + badge de prioridade (cor na borda esquerda) + badge de categoria + indicador de vencimento (ícone vermelho se atrasada, amarelo se próxima)
-- **Adicionar tarefa:** Substituir input simples por um formulário inline expandível com campos: título (obrigatório), prioridade (select), data de vencimento (date picker), responsável (text)
-- **Editar tarefa:** Dialog com todos os campos (como `EditarTarefaDialog` do cliente)
-- **Confirmar exclusão:** AlertDialog antes de deletar (como `ClienteTarefas`)
-- **Feedback visual:** Tarefas urgentes com `animate-pulse` na borda, concluídas com opacidade reduzida e line-through
-
-#### 4. Sugestões automáticas de tarefas
-
-Ao criar um projeto sem tarefas, exibir botão "Sugerir tarefas padrão" que adiciona uma lista predefinida baseada na categoria do serviço topográfico:
-- **Georreferenciamento:** Levantamento de campo, Processamento de dados, Confecção de planta, Protocolo SIGEF, Certificação INCRA
-- **Desmembramento:** Levantamento topográfico, Memorial descritivo, Aprovação prefeitura, Registro cartório
-- **Geral (fallback):** Planejamento, Execução de campo, Processamento, Entrega ao cliente
-
-Estas são inseridas em batch via `createTarefa` com ordem sequencial.
-
-### Detalhes técnicos
-
-- Reutilizar os mesmos padrões visuais de `ClienteTarefas` (categoriaConfig, prioridadeConfig, getVencimentoStatus)
-- Extrair função `getVencimentoStatus` para um utilitário compartilhado se necessário
-- O `ProjectProgressCard` existente já calcula progresso baseado em tarefas — continua funcionando sem mudanças
+```text
+AppLayout
+  └─ div.space-y-6
+       ├─ OnboardingPageBanner
+       ├─ PageHeader (título + subtítulo + CTA)
+       ├─ ContextualKPIs (2-3 métricas compactas)
+       └─ PageContent (título da lista)
+            ├─ FilterBar (busca + filtros)
+            ├─ EmptyState / FilterEmptyState
+            └─ Table + TablePagination
+```
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Migration | `ALTER TABLE servico_tarefas ADD COLUMN prioridade, data_vencimento, responsavel, categoria, observacoes` |
-| Editar | `src/modules/operations/services/servico-tarefas.service.ts` (expandir interface) |
-| Reescrever | `src/components/servicos/TarefasList.tsx` (UI completa com prioridade, prazo, sugestões) |
+| Reescrever | `src/pages/Orcamentos.tsx` (design system completo) |
+| Editar | `src/pages/Calendario.tsx` (remover padding e Card extra) |
 
-Nenhum novo componente — reutiliza padrões existentes do `ClienteTarefas`.
+Nenhuma migração de banco necessária.
 

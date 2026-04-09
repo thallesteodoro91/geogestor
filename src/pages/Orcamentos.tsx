@@ -253,11 +253,8 @@ export default function Orcamentos() {
   });
 
   // Pagination
-  const pagination = usePagination({ totalItems: filteredOrcamentos.length });
-  const paginatedOrcamentos = filteredOrcamentos.slice(
-    (pagination.currentPage - 1) * pagination.pageSize,
-    pagination.currentPage * pagination.pageSize
-  );
+  const pagination = usePagination(filteredOrcamentos);
+  const paginatedOrcamentos = pagination.paginatedData;
 
   // KPIs
   const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);

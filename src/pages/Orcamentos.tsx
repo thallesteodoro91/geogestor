@@ -394,12 +394,12 @@ export default function Orcamentos() {
                 endIndex={pagination.endIndex}
                 canGoNext={pagination.canGoNext}
                 canGoPrevious={pagination.canGoPrevious}
-                onPageChange={pagination.onPageChange}
-                onPageSizeChange={pagination.onPageSizeChange}
-                onFirstPage={pagination.onFirstPage}
-                onLastPage={pagination.onLastPage}
-                onNextPage={pagination.onNextPage}
-                onPreviousPage={pagination.onPreviousPage}
+                onPageChange={pagination.goToPage}
+                onPageSizeChange={pagination.setPageSize}
+                onFirstPage={pagination.goToFirstPage}
+                onLastPage={pagination.goToLastPage}
+                onNextPage={pagination.goToNextPage}
+                onPreviousPage={pagination.goToPreviousPage}
               />
             </>
           )}

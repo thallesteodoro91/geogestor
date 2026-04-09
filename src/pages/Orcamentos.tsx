@@ -269,7 +269,7 @@ export default function Orcamentos() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <OnboardingPageBanner modulo="orcamentos" />
+        <OnboardingPageBanner stepId="orcamento" />
 
         <PageHeader title="Orçamentos" subtitle="Gerencie propostas comerciais e acompanhe aprovações">
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2">

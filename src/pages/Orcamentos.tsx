@@ -40,7 +40,7 @@ export default function Orcamentos() {
     valor_unitario: "",
     quantidade: "1",
     desconto: "0",
-    situacao_do_pagamento: PAYMENT_STATUS.PENDENTE,
+    situacao_do_pagamento: PAYMENT_STATUS.PENDENTE as string,
     forma_de_pagamento: "",
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);

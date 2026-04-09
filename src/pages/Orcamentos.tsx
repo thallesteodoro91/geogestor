@@ -2,17 +2,21 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { ContextualKPIs } from "@/components/layout/ContextualKPIs";
+import { FilterBar } from "@/components/layout/FilterBar";
+import { PageContent } from "@/components/layout/PageContent";
+import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, Search, AlertCircle, UserPlus } from "lucide-react";
+import { Plus, Trash2, Edit, FileText, TrendingUp, Target, Download, AlertCircle, UserPlus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { KPICard } from "@/components/dashboard/KPICard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { orcamentoSchema } from "@/lib/validations";
 import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
@@ -21,22 +25,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
+import { getStatusClasses } from "@/lib/statusColors";
+import { usePagination } from "@/hooks/usePagination";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{
-    id_cliente: string;
-    id_servico: string;
-    data_orcamento: string;
-    valor_unitario: string;
-    quantidade: string;
-    desconto: string;
-    situacao_do_pagamento: string;
-    forma_de_pagamento: string;
-  }>({
+  const [formData, setFormData] = useState({
     id_cliente: "",
     id_servico: "",
     data_orcamento: new Date().toISOString().split('T')[0],
@@ -49,9 +46,8 @@ export default function Orcamentos() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [filtroSituacao, setFiltroSituacao] = useState("todos");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
-  const itemsPerPage = 15;
 
   const { data: orcamentos = [], isLoading } = useQuery({
     queryKey: ['orcamentos'],
@@ -190,12 +186,10 @@ export default function Orcamentos() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!formData.id_cliente) {
       toast.error("Selecione um cliente para o orçamento");
       return;
     }
-    
     try {
       const validatedData = orcamentoSchema.parse({
         id_cliente: formData.id_cliente,
@@ -206,7 +200,6 @@ export default function Orcamentos() {
         situacao_do_pagamento: formData.situacao_do_pagamento || null,
         forma_de_pagamento: formData.forma_de_pagamento || null,
       });
-      
       const dataToSubmit = {
         id_cliente: validatedData.id_cliente || "",
         id_servico: validatedData.id_servico || "",
@@ -217,7 +210,6 @@ export default function Orcamentos() {
         situacao_do_pagamento: validatedData.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE,
         forma_de_pagamento: validatedData.forma_de_pagamento || "",
       };
-      
       mutation.mutate(editingId ? { ...dataToSubmit, id_orcamento: editingId } : dataToSubmit);
     } catch (error: any) {
       if (error.errors) {
@@ -230,23 +222,13 @@ export default function Orcamentos() {
 
   const handleExportPDF = async (orcamento: any) => {
     setGeneratingPDF(orcamento.id_orcamento);
-
     try {
       const cliente = orcamento.dim_cliente || null;
       const servico = orcamento.fato_servico || null;
       const templateUrl = empresa?.template_orcamento_url || null;
       const config = (empresa?.template_config || null) as any;
       const empresaData = empresa ? { nome: empresa.nome } : null;
-
-      await generateOrcamentoPDF(
-        orcamento,
-        cliente,
-        servico,
-        templateUrl,
-        config,
-        empresaData
-      );
-
+      await generateOrcamentoPDF(orcamento, cliente, servico, templateUrl, config, empresaData);
       toast.success('PDF gerado com sucesso!');
     } catch (error: any) {
       console.error('Erro ao gerar PDF:', error);
@@ -256,259 +238,131 @@ export default function Orcamentos() {
     }
   };
 
-  // Filter orcamentos by search
+  // Filter
   const filteredOrcamentos = orcamentos.filter(orc => {
-    if (!searchTerm) return true;
-    const term = searchTerm.toLowerCase();
-    return (
-      orc.dim_cliente?.nome?.toLowerCase().includes(term) ||
-      orc.fato_servico?.nome_do_servico?.toLowerCase().includes(term) ||
-      orc.codigo_orcamento?.toLowerCase().includes(term) ||
-      orc.situacao_do_pagamento?.toLowerCase().includes(term)
-    );
+    const matchSearch = !searchTerm || [
+      orc.dim_cliente?.nome,
+      orc.fato_servico?.nome_do_servico,
+      orc.codigo_orcamento,
+      orc.situacao_do_pagamento,
+    ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    const matchSituacao = filtroSituacao === "todos" || orc.situacao_do_pagamento === filtroSituacao;
+
+    return matchSearch && matchSituacao;
   });
 
   // Pagination
-  const totalPages = Math.ceil(filteredOrcamentos.length / itemsPerPage);
+  const pagination = usePagination({ totalItems: filteredOrcamentos.length });
   const paginatedOrcamentos = filteredOrcamentos.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (pagination.currentPage - 1) * pagination.pageSize,
+    pagination.currentPage * pagination.pageSize
   );
 
+  // KPIs
   const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);
   const orcamentosConvertidos = orcamentos.filter(o => o.orcamento_convertido).length;
   const taxaConversao = orcamentos.length > 0 ? (orcamentosConvertidos / orcamentos.length * 100) : 0;
 
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setFiltroSituacao("todos");
+  };
+
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground">Orçamentos</h1>
-          <p className="text-muted-foreground">Gerencie todos os orçamentos e propostas</p>
-        </div>
+        <OnboardingPageBanner modulo="orcamentos" />
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <KPICard
-            title="Total de Orçamentos"
-            value={orcamentos.length.toString()}
-            icon={FileText}
-            iconColor="#6366f1"
-          />
-          <KPICard
-            title="Receita Esperada"
-            value={`R$ ${receitaEsperadaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-            icon={TrendingUp}
-            iconColor="#10b981"
-          />
-          <KPICard
-            title="Taxa de Conversão"
-            value={`${taxaConversao.toFixed(1)}%`}
-            icon={Target}
-            iconColor="#f59e0b"
-            change={`${orcamentosConvertidos} convertidos`}
-            changeType="positive"
-          />
-        </div>
+        <PageHeader title="Orçamentos" subtitle="Gerencie propostas comerciais e acompanhe aprovações">
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Orçamento
+          </Button>
+        </PageHeader>
 
-        <Card>
-          <CardHeader className="space-y-4">
-            <div className="flex flex-row items-center justify-between">
-              <CardTitle>Lista de Orçamentos</CardTitle>
-              <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Orçamento
-            </Button>
-            </div>
-            <div className="relative max-w-sm">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por cliente, serviço ou código..."
-                className="pl-9 h-9 text-sm"
-                value={searchTerm}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              />
-            </div>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>{editingId ? "Editar" : "Novo"} Orçamento</DialogTitle>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  {clientes.length === 0 && (
-                    <Alert className="col-span-2">
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription className="flex items-center justify-between">
-                        <span>Cadastre um cliente antes de criar orçamentos.</span>
-                        <Button size="sm" variant="outline" type="button" onClick={() => setClienteDialogOpen(true)}>
-                          <UserPlus className="h-4 w-4 mr-1" />
-                          Criar cliente
-                        </Button>
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="cliente">Cliente *</Label>
-                      <Select value={formData.id_cliente} onValueChange={(v) => setFormData({ ...formData, id_cliente: v })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {clientes.map((c) => (
-                            <SelectItem key={c.id_cliente} value={c.id_cliente}>
-                              {c.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="servico">Serviço</Label>
-                      <Select value={formData.id_servico} onValueChange={(v) => setFormData({ ...formData, id_servico: v })}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {servicos.map((s) => (
-                            <SelectItem key={s.id_servico} value={s.id_servico}>
-                              {s.nome_do_servico}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="data">Data *</Label>
-                      <Input
-                        id="data"
-                        type="date"
-                        value={formData.data_orcamento}
-                        onChange={(e) => setFormData({ ...formData, data_orcamento: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="valor">Valor Unitário *</Label>
-                      <Input
-                        id="valor"
-                        type="number"
-                        step="0.01"
-                        value={formData.valor_unitario}
-                        onChange={(e) => setFormData({ ...formData, valor_unitario: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="qtd">Quantidade *</Label>
-                      <Input
-                        id="qtd"
-                        type="number"
-                        value={formData.quantidade}
-                        onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="desconto">Desconto</Label>
-                      <Input
-                        id="desconto"
-                        type="number"
-                        step="0.01"
-                        value={formData.desconto}
-                        onChange={(e) => setFormData({ ...formData, desconto: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="situacao">Situação</Label>
-                      <Select value={formData.situacao_do_pagamento} onValueChange={(v) => setFormData({ ...formData, situacao_do_pagamento: v })}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PAYMENT_STATUS_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="forma">Forma de Pagamento</Label>
-                      <Input
-                        id="forma"
-                        value={formData.forma_de_pagamento}
-                        onChange={(e) => setFormData({ ...formData, forma_de_pagamento: e.target.value })}
-                        placeholder="Ex: PIX, Boleto, Cartão"
-                      />
-                    </div>
-                  </div>
-                  <div className="bg-muted/20 p-4 rounded-lg space-y-2">
-                    <p className="text-sm"><strong>Valor Total:</strong> R$ {((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    <p className="text-sm"><strong>Imposto (12%):</strong> R$ {(((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)) * 0.12).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    <p className="text-sm font-semibold"><strong>Receita Esperada:</strong> R$ {(((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)) * 0.88).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                  </div>
-                  <Button type="submit" className="w-full" disabled={mutation.isPending}>
-                    {mutation.isPending ? "Salvando..." : "Salvar"}
-                  </Button>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Serviço</TableHead>
-                  <TableHead>Receita Esperada</TableHead>
-                  <TableHead>Situação</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
+        <ContextualKPIs
+          items={[
+            { label: "Total de Orçamentos", value: orcamentos.length, icon: FileText },
+            {
+              label: "Receita Esperada",
+              value: `R$ ${receitaEsperadaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
+              icon: TrendingUp,
+              iconColor: "text-emerald-600",
+              iconBg: "bg-emerald-500/10",
+            },
+            {
+              label: "Taxa de Conversão",
+              value: `${taxaConversao.toFixed(0)}%`,
+              icon: Target,
+              iconColor: "text-amber-600",
+              iconBg: "bg-amber-500/10",
+            },
+          ]}
+        />
+
+        <PageContent title="Lista de Orçamentos">
+          <FilterBar
+            searchValue={searchTerm}
+            onSearchChange={(v) => { setSearchTerm(v); pagination.onPageChange(1); }}
+            searchPlaceholder="Buscar por cliente, serviço ou código..."
+          >
+            <Select value={filtroSituacao} onValueChange={(v) => { setFiltroSituacao(v); pagination.onPageChange(1); }}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Situação" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas as Situações</SelectItem>
+                {PAYMENT_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+
+          {isLoading ? (
+            <div className="text-center py-12 text-muted-foreground">Carregando...</div>
+          ) : filteredOrcamentos.length === 0 && !searchTerm && filtroSituacao === "todos" ? (
+            <EmptyState
+              icon={FileText}
+              title="Envie sua primeira proposta"
+              description="Crie orçamentos profissionais e acompanhe aprovações e pagamentos dos clientes."
+              actionLabel="+ Criar Orçamento"
+              onAction={() => { resetForm(); setIsDialogOpen(true); }}
+            />
+          ) : filteredOrcamentos.length === 0 ? (
+            <FilterEmptyState onClearFilters={handleClearFilters} />
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center">Carregando...</TableCell>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Serviço</TableHead>
+                    <TableHead>Receita Esperada</TableHead>
+                    <TableHead>Situação</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
-                ) : filteredOrcamentos.length === 0 && !searchTerm ? (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <EmptyState
-                        icon={FileText}
-                        title="Envie sua primeira proposta"
-                        description="Crie orçamentos profissionais e acompanhe aprovações e pagamentos dos clientes."
-                        actionLabel="+ Criar Orçamento"
-                        onAction={() => { resetForm(); setIsDialogOpen(true); }}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredOrcamentos.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <FilterEmptyState onClearFilters={() => setSearchTerm("")} />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedOrcamentos.map((orc) => (
+                </TableHeader>
+                <TableBody>
+                  {paginatedOrcamentos.map((orc) => (
                     <TableRow key={orc.id_orcamento}>
                       <TableCell>{new Date(orc.data_orcamento).toLocaleDateString('pt-BR')}</TableCell>
-                      <TableCell>{orc.dim_cliente?.nome || '-'}</TableCell>
+                      <TableCell className="font-medium">{orc.dim_cliente?.nome || '-'}</TableCell>
                       <TableCell>{orc.fato_servico?.nome_do_servico || '-'}</TableCell>
-                      <TableCell>R$ {(parseFloat(String(orc.receita_esperada)) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
                       <TableCell>
-                        <Badge variant={
-                          orc.situacao_do_pagamento === 'Pago' ? 'default' :
-                          orc.situacao_do_pagamento === 'Pendente' ? 'secondary' : 'destructive'
-                        }>
-                          {orc.situacao_do_pagamento}
+                        R$ {(parseFloat(String(orc.receita_esperada)) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusClasses(orc.situacao_do_pagamento)}>
+                          {orc.situacao_do_pagamento || 'Indefinido'}
                         </Badge>
                       </TableCell>
-                       <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => handleExportPDF(orc)}
                           disabled={generatingPDF === orc.id_orcamento}
                           title="Exportar PDF"
@@ -530,23 +384,115 @@ export default function Orcamentos() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                <p className="text-sm text-muted-foreground">
-                  {filteredOrcamentos.length} orçamento(s) • Página {currentPage} de {totalPages}
-                </p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)}>Anterior</Button>
-                  <Button variant="outline" size="sm" disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próxima</Button>
+                  ))}
+                </TableBody>
+              </Table>
+
+              <TablePagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                totalItems={filteredOrcamentos.length}
+                pageSize={pagination.pageSize}
+                startIndex={pagination.startIndex}
+                endIndex={pagination.endIndex}
+                canGoNext={pagination.canGoNext}
+                canGoPrevious={pagination.canGoPrevious}
+                onPageChange={pagination.onPageChange}
+                onPageSizeChange={pagination.onPageSizeChange}
+                onFirstPage={pagination.onFirstPage}
+                onLastPage={pagination.onLastPage}
+                onNextPage={pagination.onNextPage}
+                onPreviousPage={pagination.onPreviousPage}
+              />
+            </>
+          )}
+        </PageContent>
+
+        {/* Dialog fora do card — padrão do design system */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{editingId ? "Editar" : "Novo"} Orçamento</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {clientes.length === 0 && (
+                <Alert className="col-span-2">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>Cadastre um cliente antes de criar orçamentos.</span>
+                    <Button size="sm" variant="outline" type="button" onClick={() => setClienteDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-1" />
+                      Criar cliente
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cliente">Cliente *</Label>
+                  <Select value={formData.id_cliente} onValueChange={(v) => setFormData({ ...formData, id_cliente: v })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {clientes.map((c) => (
+                        <SelectItem key={c.id_cliente} value={c.id_cliente}>{c.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="servico">Serviço</Label>
+                  <Select value={formData.id_servico} onValueChange={(v) => setFormData({ ...formData, id_servico: v })}>
+                    <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                    <SelectContent>
+                      {servicos.map((s) => (
+                        <SelectItem key={s.id_servico} value={s.id_servico}>{s.nome_do_servico}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="data">Data *</Label>
+                  <Input id="data" type="date" value={formData.data_orcamento} onChange={(e) => setFormData({ ...formData, data_orcamento: e.target.value })} required />
+                </div>
+                <div>
+                  <Label htmlFor="valor">Valor Unitário *</Label>
+                  <Input id="valor" type="number" step="0.01" value={formData.valor_unitario} onChange={(e) => setFormData({ ...formData, valor_unitario: e.target.value })} required />
+                </div>
+                <div>
+                  <Label htmlFor="qtd">Quantidade *</Label>
+                  <Input id="qtd" type="number" value={formData.quantidade} onChange={(e) => setFormData({ ...formData, quantidade: e.target.value })} required />
+                </div>
+                <div>
+                  <Label htmlFor="desconto">Desconto</Label>
+                  <Input id="desconto" type="number" step="0.01" value={formData.desconto} onChange={(e) => setFormData({ ...formData, desconto: e.target.value })} />
+                </div>
+                <div>
+                  <Label htmlFor="situacao">Situação</Label>
+                  <Select value={formData.situacao_do_pagamento} onValueChange={(v) => setFormData({ ...formData, situacao_do_pagamento: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_STATUS_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="forma">Forma de Pagamento</Label>
+                  <Input id="forma" value={formData.forma_de_pagamento} onChange={(e) => setFormData({ ...formData, forma_de_pagamento: e.target.value })} placeholder="Ex: PIX, Boleto, Cartão" />
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <div className="bg-muted/20 p-4 rounded-lg space-y-2">
+                <p className="text-sm"><strong>Valor Total:</strong> R$ {((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm"><strong>Imposto (12%):</strong> R$ {(((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)) * 0.12).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                <p className="text-sm font-semibold"><strong>Receita Esperada:</strong> R$ {(((parseFloat(formData.valor_unitario) || 0) * (parseInt(formData.quantidade) || 1) - (parseFloat(formData.desconto) || 0)) * 0.88).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              </div>
+              <Button type="submit" className="w-full" disabled={mutation.isPending}>
+                {mutation.isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <ConfirmDialog
           open={deleteConfirmOpen}
@@ -555,9 +501,7 @@ export default function Orcamentos() {
           description="Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita."
           confirmLabel="Excluir"
           onConfirm={() => {
-            if (deleteTargetId) {
-              deleteMutation.mutate(deleteTargetId);
-            }
+            if (deleteTargetId) deleteMutation.mutate(deleteTargetId);
             setDeleteConfirmOpen(false);
             setDeleteTargetId(null);
           }}

@@ -51,7 +51,7 @@ const Calendario = () => {
 
   return (
     <AppLayout>
-      <div className="container mx-auto p-6 max-w-7xl space-y-6">
+      <div className="space-y-6">
         <PageHeader title="Calendário de Atividades" subtitle="Gerencie orçamentos, serviços e compromissos em um só lugar">
           <Button onClick={() => setDialogOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />

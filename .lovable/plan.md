@@ -1,54 +1,92 @@
 
 
-## Plano: Elevar Todas as Telas ao Padrão do Design System
+## Plano: Importador Inteligente — Tolerante, Transparente e Acionável
 
 ### Diagnóstico
 
-Após auditoria de todas as páginas de execução, a maioria já segue o padrão: `PageHeader` + `ContextualKPIs` + `FilterBar` + `PageContent` + `EmptyState` + `TablePagination`. A exceção crítica é:
+Após auditoria completa do `SmartImporter.tsx` (1093 linhas), identifiquei as causas raiz dos 429/629 erros:
 
-1. **`Orcamentos.tsx`** — Não usa nenhum componente do design system. Header manual (`h1`), KPIs com `KPICard` (componente de dashboard, não de execução), busca manual com `Input`, paginação manual com botões Anterior/Próxima, Dialog embutido no CardHeader, badges de status sem `getStatusClasses`.
-
-2. **`Calendario.tsx`** — Problema menor: `container mx-auto p-6 max-w-7xl` duplica o padding do `AppLayout`, e FilterBar está dentro de um `Card` desnecessário.
+1. **Validação rígida em campos opcionais**: Telefone com 8-9 dígitos (sem DDD) falha. CPF com 10 dígitos falha. Qualquer variação menor bloqueia a linha inteira.
+2. **Sem normalização antes da validação**: O sistema valida ANTES de limpar os dados. Ex: "123.456.789-0" (CPF com 10 dígitos após limpeza) não é corrigido.
+3. **Preview limitado a 10 linhas**: Com 429 erros, o usuário vê apenas 10 e não consegue entender o padrão.
+4. **Sem filtro de erros**: Não há como ver "só as linhas com erro" ou "só as válidas".
+5. **Mensagens sem sugestão de correção**: "CPF deve ter 11 dígitos" não diz o que fazer.
+6. **Sem auto-correção**: O sistema detecta o erro mas não tenta corrigir automaticamente.
 
 ### Mudanças
 
-#### 1. Reescrever `Orcamentos.tsx` com design system
+#### 1. Validação tolerante com auto-correção
 
-Substituir por padrão idêntico a Clientes/Projetos/Despesas:
-- `PageHeader` com título "Orçamentos", subtítulo e botão "Novo Orçamento"
-- `ContextualKPIs` com 3 items (Total, Receita Esperada, Conversão) — usando ícones e formatação compacta, não KPICard
-- `PageContent` + `FilterBar` com busca e filtro de situação (Select)
-- `TablePagination` reutilizável (substituir paginação manual)
-- Badges com `getStatusClasses` (substituir lógica inline de variantes)
-- Dialog movido para fora do Card (padrão dos outros módulos)
-- `usePagination` hook (substituir cálculo manual)
-- `OnboardingPageBanner` para orçamentos
+Reescrever validadores para serem tolerantes:
 
-#### 2. Corrigir `Calendario.tsx`
+- **Telefone**: Aceitar 8-11 dígitos. Se 8-9, tentar adicionar DDD padrão (ou simplesmente aceitar). Não bloquear por formatação.
+- **CPF**: Se tem 11 dígitos limpos, aceitar com ou sem máscara. Se tem menos, avisar mas NÃO bloquear (campo opcional).
+- **CNPJ**: Mesma lógica — aceitar variações de formatação.
+- **Campos opcionais com valor parcial**: Gerar WARNING (amarelo) em vez de ERROR (vermelho). Warnings não bloqueiam importação.
 
-- Remover `container mx-auto p-6 max-w-7xl` (AppLayout já faz isso)
-- Remover `Card` wrapper do FilterBar (outros módulos não usam)
-
-### Padrão de referência (Clientes/Projetos/Despesas)
-
-```text
-AppLayout
-  └─ div.space-y-6
-       ├─ OnboardingPageBanner
-       ├─ PageHeader (título + subtítulo + CTA)
-       ├─ ContextualKPIs (2-3 métricas compactas)
-       └─ PageContent (título da lista)
-            ├─ FilterBar (busca + filtros)
-            ├─ EmptyState / FilterEmptyState
-            └─ Table + TablePagination
+Novo tipo de validação:
+```typescript
+type ValidationSeverity = "error" | "warning";
+interface FieldValidation { message: string; severity: ValidationSeverity; suggestion?: string; }
 ```
+
+#### 2. Mensagens com contexto e sugestão
+
+Cada erro/warning inclui 3 partes:
+- **O que**: "CPF com 10 dígitos"
+- **Por que**: "CPF válido precisa de 11 dígitos"  
+- **Como corrigir**: "Verifique se não faltou um dígito. Valor recebido: 1234567890"
+
+Exemplos:
+| Antes | Depois |
+|-------|--------|
+| "CPF deve ter 11 dígitos" | "CPF com 10 dígitos — verifique se falta um número (recebido: 1234567890)" |
+| "Telefone deve ter 10 ou 11 dígitos" | "Telefone com 8 dígitos — provavelmente falta o DDD. Será importado mesmo assim." |
+| "Data inválida" | "Data não reconhecida: '31/13/2024' — mês 13 não existe" |
+| "Valor deve ser um número" | "Não foi possível converter 'abc' em número" |
+
+#### 3. Preview com filtro e paginação
+
+- **Filtro**: Botões "Todas", "Só válidas", "Só com erro", "Só com aviso"
+- **Paginação**: Mostrar 25 linhas por vez com navegação (em vez de apenas 10)
+- **Contador por tipo de erro**: Badge resumo no topo (ex: "15x CPF inválido, 8x telefone incompleto")
+- **Tooltip em cada célula com erro**: Hover mostra mensagem completa + sugestão
+
+#### 4. Auto-normalização agressiva
+
+Antes de validar, aplicar normalização inteligente:
+- Remover espaços, pontos, traços de CPF/CNPJ/telefone
+- Telefone com 8 dígitos: manter e marcar como warning
+- Valores monetários: detectar e limpar automaticamente (já existe, reforçar)
+- Datas: já funciona bem, manter
+
+#### 5. Warnings vs Errors
+
+- **Error** (vermelho, bloqueia): Campo obrigatório vazio, valor impossível de interpretar
+- **Warning** (amarelo, NÃO bloqueia): Formatação atípica, campo parcialmente preenchido, possível dado incompleto
+
+Na UI: linhas com apenas warnings são importáveis. Checkbox "Importar apenas as corretas" ignora errors mas aceita warnings.
+
+#### 6. Resumo de erros agrupado na tela de resultado
+
+Substituir lista genérica por resumo visual:
+- Tabela agrupada: Tipo de erro | Quantidade | Exemplo | Sugestão
+- Download CSV com coluna de erro detalhado por campo (já existe, melhorar)
+
+### Detalhes técnicos
+
+- `RowValidation.errors` muda de `Record<string, string>` para `Record<string, FieldValidation>`
+- Novo campo `warnings` em `RowValidation` para separar severity
+- `hasErrors` = tem pelo menos 1 error. `hasWarnings` = tem pelo menos 1 warning
+- `errorCount` conta apenas errors (não warnings)
+- Preview filter state: `"all" | "valid" | "errors" | "warnings"`
+- Paginação: `previewPage` state com 25 items/page
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Reescrever | `src/pages/Orcamentos.tsx` (design system completo) |
-| Editar | `src/pages/Calendario.tsx` (remover padding e Card extra) |
+| Reescrever | `src/components/import/SmartImporter.tsx` (validação, preview, resultado) |
 
-Nenhuma migração de banco necessária.
+Nenhum novo arquivo. Nenhuma migração. Apenas reescrita da lógica de validação e UI do preview/resultado.
 

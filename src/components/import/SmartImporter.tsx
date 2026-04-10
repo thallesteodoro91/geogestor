@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { createClientesBatch } from "@/modules/crm/services/cliente.service";
 import { createPropriedadesBatch } from "@/modules/crm/services/propriedade.service";
 import { createOrcamentosBatch } from "@/modules/finance/services/orcamento.service";
@@ -28,7 +29,7 @@ import * as XLSX from "xlsx";
 import {
   Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2,
   Eye, ArrowRight, ArrowLeft, Download, AlertTriangle, ShieldCheck,
-  Sparkles, ExternalLink, Copy,
+  Sparkles, ExternalLink, Copy, Info, Filter,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -42,29 +43,38 @@ interface SmartImporterProps {
   entityType?: ImportEntityType;
 }
 
+type ValidationSeverity = "error" | "warning";
+
+interface FieldValidation {
+  message: string;
+  severity: ValidationSeverity;
+  suggestion?: string;
+}
+
 interface SystemField {
   key: string;
   label: string;
   required: boolean;
   format?: (value: string) => string;
-  validate?: (value: string) => string | null;
+  validate?: (value: string) => FieldValidation | null;
   type?: "number" | "date" | "boolean" | "text";
 }
 
 interface RowValidation {
   row: Record<string, string>;
-  errors: Record<string, string>;
+  errors: Record<string, FieldValidation>;
+  warnings: Record<string, FieldValidation>;
   hasErrors: boolean;
+  hasWarnings: boolean;
 }
 
 type Step = "upload" | "mapping" | "preview" | "importing" | "result";
+type PreviewFilter = "all" | "valid" | "errors" | "warnings";
 
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
 function sanitizeCurrency(value: string): string {
-  // Handle Brazilian currency: R$ 1.500,00 → 1500.00
   let v = value.replace(/R\$\s*/gi, "").trim();
-  // If has comma as decimal separator (Brazilian format)
   if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
     v = v.replace(/\./g, "").replace(",", ".");
   }
@@ -91,19 +101,12 @@ function formatCNPJ(value: string): string {
   return `${nums.slice(0, 2)}.${nums.slice(2, 5)}.${nums.slice(5, 8)}/${nums.slice(8, 12)}-${nums.slice(12)}`;
 }
 
-/**
- * Converts any cell value to a proper ISO date string (YYYY-MM-DD).
- * Handles: JS Date objects, ISO strings, BR format (DD/MM/YYYY), Excel serial numbers.
- */
 function formatDate(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
-  // Already ISO format
   if (/^\d{4}-\d{2}-\d{2}(T.*)?$/.test(trimmed)) return trimmed.slice(0, 10);
-  // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy
   const brMatch = trimmed.match(/^(\d{2})[\/\-.](\d{2})[\/\-.](\d{4})$/);
   if (brMatch) return `${brMatch[3]}-${brMatch[2]}-${brMatch[1]}`;
-  // mm/dd/yyyy (US format fallback — only if month <= 12)
   const usMatch = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
   if (usMatch) {
     const m = parseInt(usMatch[1]), d = parseInt(usMatch[2]);
@@ -111,43 +114,161 @@ function formatDate(value: string): string {
       return `${usMatch[3]}-${usMatch[1].padStart(2, "0")}-${usMatch[2].padStart(2, "0")}`;
     }
   }
-  // Excel serial number (days since 1899-12-30). Range covers ~1982 to ~2063.
   const num = parseFloat(trimmed);
   if (!isNaN(num) && num > 25000 && num < 60000) {
     const d = new Date(Date.UTC(1899, 11, 30 + Math.round(num)));
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
-  // Try native Date parse as last resort
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
   return trimmed;
 }
 
-// ─── Validators ─────────────────────────────────────────────────────────
+// ─── Tolerant Validators ────────────────────────────────────────────────
 
-function validateEmail(v: string) { if (!v) return null; return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) ? null : "Email inválido"; }
-function validateCPF(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 11 ? "CPF deve ter 11 dígitos" : null; }
-function validateCNPJ(v: string) { if (!v) return null; const len = sanitizeDigitsOnly(v).length; return len > 0 && len !== 14 ? "CNPJ deve ter 14 dígitos" : null; }
-function validatePhone(v: string) { if (!v) return null; const n = sanitizeDigitsOnly(v).length; return n < 10 || n > 11 ? "Telefone deve ter 10 ou 11 dígitos" : null; }
-function validateAge(v: string) { if (!v) return null; const n = parseInt(v); return isNaN(n) || n < 0 || n > 150 ? "Idade inválida" : null; }
-function validateDate(v: string) {
+function validateEmail(v: string): FieldValidation | null {
   if (!v) return null;
-  const f = formatDate(v);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return "Data inválida (use DD/MM/AAAA ou AAAA-MM-DD)";
-  const d = new Date(f + "T00:00:00Z");
-  if (isNaN(d.getTime())) return "Data inválida";
-  // Sanity check: year between 1900 and 2100
-  const year = d.getUTCFullYear();
-  if (year < 1900 || year > 2100) return "Data fora do intervalo válido";
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return null;
+  return {
+    message: `Email inválido: "${v}"`,
+    severity: "warning",
+    suggestion: "Verifique se o email contém @ e um domínio válido (ex: nome@email.com)",
+  };
+}
+
+function validateCPF(v: string): FieldValidation | null {
+  if (!v) return null;
+  const digits = sanitizeDigitsOnly(v);
+  if (digits.length === 0) return null;
+  if (digits.length === 11) return null; // Valid
+  return {
+    message: `CPF com ${digits.length} dígitos`,
+    severity: "warning",
+    suggestion: `CPF válido precisa de 11 dígitos. Valor recebido: ${digits}. Verifique se não faltou um número.`,
+  };
+}
+
+function validateCNPJ(v: string): FieldValidation | null {
+  if (!v) return null;
+  const digits = sanitizeDigitsOnly(v);
+  if (digits.length === 0) return null;
+  if (digits.length === 14) return null;
+  return {
+    message: `CNPJ com ${digits.length} dígitos`,
+    severity: "warning",
+    suggestion: `CNPJ válido precisa de 14 dígitos. Valor recebido: ${digits}.`,
+  };
+}
+
+function validatePhone(v: string): FieldValidation | null {
+  if (!v) return null;
+  const digits = sanitizeDigitsOnly(v);
+  if (digits.length === 0) return null;
+  if (digits.length >= 10 && digits.length <= 11) return null; // Perfect
+  if (digits.length >= 8 && digits.length <= 9) {
+    return {
+      message: `Telefone com ${digits.length} dígitos — sem DDD`,
+      severity: "warning",
+      suggestion: `Provavelmente falta o código de área (DDD). Será importado mesmo assim.`,
+    };
+  }
+  if (digits.length < 8) {
+    return {
+      message: `Telefone muito curto (${digits.length} dígitos)`,
+      severity: "warning",
+      suggestion: `Telefone com menos de 8 dígitos. Valor recebido: ${digits}`,
+    };
+  }
+  return {
+    message: `Telefone com ${digits.length} dígitos`,
+    severity: "warning",
+    suggestion: `Número parece longo demais. Verifique se há dígitos extras.`,
+  };
+}
+
+function validateAge(v: string): FieldValidation | null {
+  if (!v) return null;
+  const n = parseInt(v);
+  if (isNaN(n)) return { message: `"${v}" não é uma idade válida`, severity: "warning", suggestion: "Informe um número inteiro" };
+  if (n < 0 || n > 150) return { message: `Idade ${n} fora do intervalo`, severity: "warning", suggestion: "Idade deve estar entre 0 e 150" };
   return null;
 }
-function validateNome(v: string) { if (!v?.trim()) return "Nome é obrigatório"; return v.trim().length < 2 ? "Nome muito curto" : null; }
-function validateNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) ? "Valor deve ser um número" : null; }
-function validatePositiveNumber(v: string) { if (!v) return null; const san = sanitizeCurrency(v); const n = parseFloat(san); return isNaN(n) || n < 0 ? "Valor deve ser um número positivo" : null; }
-function validateLatitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -90 || n > 90 ? "Latitude deve estar entre -90 e 90" : null; }
-function validateLongitude(v: string) { if (!v) return null; const n = parseFloat(v); return isNaN(n) || n < -180 || n > 180 ? "Longitude deve estar entre -180 e 180" : null; }
-function validateRequiredNumber(v: string) { if (!v?.trim()) return "Valor é obrigatório"; const san = sanitizeCurrency(v); const n = parseFloat(san); if (isNaN(n)) return "Valor deve ser um número"; return n <= 0 ? "Valor deve ser maior que zero" : null; }
 
+function validateDate(v: string): FieldValidation | null {
+  if (!v) return null;
+  const f = formatDate(v);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) {
+    return {
+      message: `Data não reconhecida: "${v}"`,
+      severity: "error",
+      suggestion: "Use o formato DD/MM/AAAA ou AAAA-MM-DD",
+    };
+  }
+  const d = new Date(f + "T00:00:00Z");
+  if (isNaN(d.getTime())) {
+    return { message: `Data inválida: "${v}"`, severity: "error", suggestion: "Verifique dia, mês e ano" };
+  }
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  if (year < 1900 || year > 2100) {
+    return { message: `Ano ${year} fora do intervalo`, severity: "error", suggestion: "Ano deve estar entre 1900 e 2100" };
+  }
+  // Check if the parsed date matches the input (catches things like month 13)
+  const parts = f.split("-");
+  if (parseInt(parts[1]) !== month || parseInt(parts[2]) !== day) {
+    return { message: `Data inválida: "${v}" (mês ou dia impossível)`, severity: "error", suggestion: "Verifique se mês e dia são válidos" };
+  }
+  return null;
+}
+
+function validateNome(v: string): FieldValidation | null {
+  if (!v?.trim()) return { message: "Nome é obrigatório", severity: "error", suggestion: "Preencha o nome do registro" };
+  if (v.trim().length < 2) return { message: "Nome muito curto", severity: "warning", suggestion: "Nome deve ter pelo menos 2 caracteres" };
+  return null;
+}
+
+function validateNumber(v: string): FieldValidation | null {
+  if (!v) return null;
+  const san = sanitizeCurrency(v);
+  const n = parseFloat(san);
+  if (isNaN(n)) return { message: `"${v}" não é um número válido`, severity: "warning", suggestion: "Remova caracteres especiais ou use formato numérico" };
+  return null;
+}
+
+function validatePositiveNumber(v: string): FieldValidation | null {
+  if (!v) return null;
+  const san = sanitizeCurrency(v);
+  const n = parseFloat(san);
+  if (isNaN(n)) return { message: `"${v}" não é um número válido`, severity: "warning", suggestion: "Use formato numérico (ex: 1500.00)" };
+  if (n < 0) return { message: `Valor negativo: ${n}`, severity: "warning", suggestion: "Verifique se o valor deveria ser positivo" };
+  return null;
+}
+
+function validateLatitude(v: string): FieldValidation | null {
+  if (!v) return null;
+  const n = parseFloat(v);
+  if (isNaN(n)) return { message: `"${v}" não é uma latitude válida`, severity: "warning", suggestion: "Use formato decimal (ex: -15.7942)" };
+  if (n < -90 || n > 90) return { message: `Latitude ${n} fora do intervalo`, severity: "error", suggestion: "Latitude deve estar entre -90 e 90" };
+  return null;
+}
+
+function validateLongitude(v: string): FieldValidation | null {
+  if (!v) return null;
+  const n = parseFloat(v);
+  if (isNaN(n)) return { message: `"${v}" não é uma longitude válida`, severity: "warning", suggestion: "Use formato decimal (ex: -49.2643)" };
+  if (n < -180 || n > 180) return { message: `Longitude ${n} fora do intervalo`, severity: "error", suggestion: "Longitude deve estar entre -180 e 180" };
+  return null;
+}
+
+function validateRequiredNumber(v: string): FieldValidation | null {
+  if (!v?.trim()) return { message: "Valor é obrigatório", severity: "error", suggestion: "Preencha o valor numérico" };
+  const san = sanitizeCurrency(v);
+  const n = parseFloat(san);
+  if (isNaN(n)) return { message: `"${v}" não é um número válido`, severity: "error", suggestion: "Use formato numérico (ex: 5000 ou 5000.00)" };
+  if (n <= 0) return { message: `Valor deve ser maior que zero (recebido: ${n})`, severity: "error", suggestion: "Informe um valor positivo" };
+  return null;
+}
 
 // ─── Entity-specific field definitions ─────────────────────────────────
 
@@ -380,14 +501,14 @@ const normalize = (s: string) =>
 
 type MatchConfidence = "exact" | "synonym" | "partial";
 
-// ─── Humanized step labels ─────────────────────────────────────────────
-
 const STEP_LABELS: Record<string, string> = {
   upload: "Enviar Arquivo",
   mapping: "Associar Colunas",
   preview: "Conferir Dados",
   result: "Resultado",
 };
+
+const PREVIEW_PAGE_SIZE = 25;
 
 // ─── Component ──────────────────────────────────────────────────────────
 
@@ -412,6 +533,8 @@ export function SmartImporter({
   const [entityType, setEntityType] = useState<ImportEntityType>(initialEntityType);
   const [detectedEntity, setDetectedEntity] = useState<{ entity: ImportEntityType; confidence: number } | null>(null);
   const [duplicateCount, setDuplicateCount] = useState(0);
+  const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("all");
+  const [previewPage, setPreviewPage] = useState(0);
 
   const SYSTEM_FIELDS = useMemo(() => getFieldsForEntity(entityType), [entityType]);
   const FIELD_SYNONYMS = useMemo(() => getSynonymsForEntity(entityType), [entityType]);
@@ -431,6 +554,8 @@ export function SmartImporter({
     setDetectedEntity(null);
     setDuplicateCount(0);
     setEntityType(initialEntityType);
+    setPreviewFilter("all");
+    setPreviewPage(0);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -461,11 +586,9 @@ export function SmartImporter({
     setHeaders(h);
     setRawData(data);
 
-    // Auto-detect entity type
     const detection = detectEntityType(h);
     setDetectedEntity(detection);
 
-    // Use detected entity if confidence > 40%
     const effectiveEntity = detection.confidence > 40 ? detection.entity : initialEntityType;
     setEntityType(effectiveEntity);
 
@@ -498,13 +621,11 @@ export function SmartImporter({
         const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
         if (data.length < 2) { toast.error("Planilha vazia ou sem dados suficientes."); return; }
         const h = data[0].map((c: any) => (c ?? "").toString().trim());
-        // Convert all cell values to strings, handling Date objects and numbers properly
         const rows = data.slice(1)
           .filter((r: any[]) => r.some((c: any) => c != null && c.toString().trim()))
           .map((r: any[]) => r.map((c: any) => {
             if (c == null) return "";
             if (c instanceof Date) {
-              // Format Date objects to ISO string
               if (isNaN(c.getTime())) return "";
               return c.toISOString().slice(0, 10);
             }
@@ -518,7 +639,6 @@ export function SmartImporter({
     }
   }, [processHeaders]);
 
-  // When entity type changes in mapping step, re-autoMap
   const handleEntityChange = (newEntity: ImportEntityType) => {
     setEntityType(newEntity);
     const fields = getFieldsForEntity(newEntity);
@@ -532,19 +652,20 @@ export function SmartImporter({
     if (file) processFile(file);
   }, [processFile]);
 
-  // ─── Validation engine ────────────────────────────────────────────
+  // ─── Validation engine (tolerant) ─────────────────────────────────
 
   const validateAndFormatRow = useCallback((row: string[]): RowValidation => {
     const mapped: Record<string, string> = {};
-    const errors: Record<string, string> = {};
+    const errors: Record<string, FieldValidation> = {};
+    const warnings: Record<string, FieldValidation> = {};
 
     for (const field of SYSTEM_FIELDS) {
       if (!mappings[field.key]) continue;
       const idx = headers.indexOf(mappings[field.key]);
       let val = idx >= 0 ? (row[idx] ?? "").toString().trim() : "";
       if (!val && defaultValues[field.key]) val = defaultValues[field.key].trim();
-      // Only apply currency sanitization on text that looks like Brazilian currency
-      // Skip if it's already a clean number (from Excel typed cells)
+
+      // Auto-normalize before validation
       if (val && field.type === "number" && /[R$,]/.test(val)) {
         val = sanitizeCurrency(val);
       } else if (val && !field.type && /R\$|,\d{2}$/.test(val)) {
@@ -552,24 +673,77 @@ export function SmartImporter({
       }
       if (val && field.format) val = field.format(val);
       mapped[field.key] = val;
-      if (field.validate) { const err = field.validate(val); if (err) errors[field.key] = err; }
-    }
 
-    for (const field of SYSTEM_FIELDS) {
-      if (field.required && mappings[field.key] && !mapped[field.key]?.trim() && !defaultValues[field.key]?.trim()) {
-        errors[field.key] = `${field.label} é obrigatório`;
+      if (field.validate) {
+        const result = field.validate(val);
+        if (result) {
+          if (result.severity === "error") {
+            errors[field.key] = result;
+          } else {
+            warnings[field.key] = result;
+          }
+        }
       }
     }
 
-    return { row: mapped, errors, hasErrors: Object.keys(errors).length > 0 };
+    // Check required fields
+    for (const field of SYSTEM_FIELDS) {
+      if (field.required && mappings[field.key] && !mapped[field.key]?.trim() && !defaultValues[field.key]?.trim()) {
+        errors[field.key] = {
+          message: `${field.label} é obrigatório`,
+          severity: "error",
+          suggestion: `Preencha o campo "${field.label}" na planilha ou defina um valor padrão no mapeamento.`,
+        };
+      }
+    }
+
+    return {
+      row: mapped,
+      errors,
+      warnings,
+      hasErrors: Object.keys(errors).length > 0,
+      hasWarnings: Object.keys(warnings).length > 0,
+    };
   }, [mappings, headers, defaultValues, SYSTEM_FIELDS]);
 
   const allValidatedRows = useMemo(() => rawData.map((row) => validateAndFormatRow(row)), [rawData, validateAndFormatRow]);
-  const previewValidations = useMemo(() => allValidatedRows.slice(0, 10), [allValidatedRows]);
   const errorCount = useMemo(() => allValidatedRows.filter((v) => v.hasErrors).length, [allValidatedRows]);
+  const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);
   const mappedFields = SYSTEM_FIELDS.filter((f) => mappings[f.key]);
   const canImport = skipErrors ? validCount > 0 : errorCount === 0;
+
+  // Filtered and paginated rows for preview
+  const filteredRows = useMemo(() => {
+    let filtered = allValidatedRows.map((v, i) => ({ ...v, originalIndex: i }));
+    switch (previewFilter) {
+      case "valid": filtered = filtered.filter(v => !v.hasErrors && !v.hasWarnings); break;
+      case "errors": filtered = filtered.filter(v => v.hasErrors); break;
+      case "warnings": filtered = filtered.filter(v => v.hasWarnings && !v.hasErrors); break;
+    }
+    return filtered;
+  }, [allValidatedRows, previewFilter]);
+
+  const totalPreviewPages = Math.ceil(filteredRows.length / PREVIEW_PAGE_SIZE);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice(previewPage * PREVIEW_PAGE_SIZE, (previewPage + 1) * PREVIEW_PAGE_SIZE),
+    [filteredRows, previewPage]
+  );
+
+  // Error summary grouped by type
+  const errorSummary = useMemo(() => {
+    const groups: Record<string, { count: number; severity: ValidationSeverity; example: string; suggestion: string }> = {};
+    for (const v of allValidatedRows) {
+      for (const fv of [...Object.values(v.errors), ...Object.values(v.warnings)]) {
+        const key = fv.message;
+        if (!groups[key]) {
+          groups[key] = { count: 0, severity: fv.severity, example: fv.message, suggestion: fv.suggestion || "" };
+        }
+        groups[key].count++;
+      }
+    }
+    return Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
+  }, [allValidatedRows]);
 
   // ─── Deduplication check ──────────────────────────────────────────
 
@@ -608,7 +782,6 @@ export function SmartImporter({
     const clienteMap = new Map((clientes || []).map(c => [c.nome?.toLowerCase(), c.id_cliente]));
     const clienteIdx = headers.indexOf(clienteHeader);
 
-    // Collect names that need to be created
     const namesToCreate = new Set<string>();
     for (let i = 0; i < records.length; i++) {
       if (records[i].id_cliente) continue;
@@ -619,13 +792,11 @@ export function SmartImporter({
       }
     }
 
-    // Auto-create missing clients
     if (namesToCreate.size > 0) {
       const newClients = Array.from(namesToCreate).map(nome => ({ nome }));
       try {
         const result = await createClientesBatch(newClients);
         if (result.success > 0) {
-          // Re-fetch to get the new IDs
           const { data: updated } = await supabase.from("dim_cliente").select("id_cliente, nome");
           if (updated) {
             for (const c of updated) {
@@ -671,10 +842,16 @@ export function SmartImporter({
 
       for (let i = 0; i < allValidatedRows.length; i++) {
         const validation = allValidatedRows[i];
+        // Only block on ERRORS, not warnings
         if (validation.hasErrors) {
           if (skipErrors) {
-            skippedErrors.push(`Linha ${i + 2}: ${Object.values(validation.errors).join(", ")}`);
-            failedRows.push({ ...validation.row, _erro: Object.values(validation.errors).join("; ") });
+            const errorMessages = Object.entries(validation.errors)
+              .map(([key, fv]) => {
+                const field = SYSTEM_FIELDS.find(f => f.key === key);
+                return `${field?.label || key}: ${fv.message}`;
+              });
+            skippedErrors.push(`Linha ${i + 2}: ${errorMessages.join(", ")}`);
+            failedRows.push({ ...validation.row, _erro: errorMessages.join("; ") });
             continue;
           }
         }
@@ -693,8 +870,6 @@ export function SmartImporter({
       }
 
       setImportProgress(20);
-
-      // Auto-link to clients
       recordsToInsert = await linkToClients(recordsToInsert);
       setImportProgress(40);
 
@@ -744,8 +919,6 @@ export function SmartImporter({
     URL.revokeObjectURL(url);
   };
 
-  // ─── Next step tips ──────────────────────────────────────────────
-
   const getNextStepTip = (): { text: string; route: string } | null => {
     switch (entityType) {
       case "clientes": return { text: "Próximo passo: vincule propriedades aos seus clientes", route: "/clientes" };
@@ -755,6 +928,58 @@ export function SmartImporter({
       case "orcamentos": return { text: "Próximo passo: converta orçamentos em projetos", route: "/orcamentos" };
       default: return null;
     }
+  };
+
+  // ─── Cell render helper ──────────────────────────────────────────
+
+  const renderCell = (v: RowValidation, fieldKey: string) => {
+    const error = v.errors[fieldKey];
+    const warning = v.warnings[fieldKey];
+    const issue = error || warning;
+    const value = v.row[fieldKey];
+
+    const cellClass = error
+      ? "text-destructive font-medium bg-destructive/5"
+      : warning
+      ? "text-amber-700 dark:text-amber-400 bg-amber-500/5"
+      : "";
+
+    const content = value ? (
+      <span>
+        {value}
+        {issue && (
+          <span className={`block text-xs font-normal ${error ? "text-destructive/80" : "text-amber-600 dark:text-amber-400"}`}>
+            {issue.message}
+          </span>
+        )}
+      </span>
+    ) : <span className="text-muted-foreground/50">—</span>;
+
+    if (!issue) {
+      return <TableCell key={fieldKey} className="max-w-[200px] truncate">{content}</TableCell>;
+    }
+
+    return (
+      <TableCell key={fieldKey} className={`max-w-[200px] truncate ${cellClass}`}>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="cursor-help">{content}</div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs">
+              <div className="space-y-1">
+                <p className="font-medium text-sm">
+                  {error ? "❌" : "⚠️"} {issue.message}
+                </p>
+                {issue.suggestion && (
+                  <p className="text-xs text-muted-foreground">💡 {issue.suggestion}</p>
+                )}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </TableCell>
+    );
   };
 
   // ─── Render ───────────────────────────────────────────────────────
@@ -810,7 +1035,6 @@ export function SmartImporter({
           {/* Step 2: Mapping */}
           {step === "mapping" && (
             <div className="space-y-4">
-              {/* Auto-detection banner */}
               {detectedEntity && detectedEntity.entity !== initialEntityType && detectedEntity.confidence > 40 && (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Sparkles className="h-4 w-4 text-primary" />
@@ -894,35 +1118,106 @@ export function SmartImporter({
                 </Alert>
               )}
 
-              {errorCount > 0 && (
+              {/* Summary banner */}
+              {errorCount > 0 ? (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>{errorCount} linha(s) com erro de {rawData.length}</AlertTitle>
-                  <AlertDescription className="flex items-center gap-4 mt-2">
-                    <span className="text-sm">Corrija os dados ou ative "Importar apenas as corretas".</span>
-                    <div className="flex items-center gap-2 shrink-0">
+                  <AlertTitle>{errorCount} linha(s) com erro — {validCount} importáveis</AlertTitle>
+                  <AlertDescription className="space-y-2">
+                    <p className="text-sm">Linhas com erro (vermelho) serão ignoradas. Linhas com aviso (amarelo) serão importadas normalmente.</p>
+                    <div className="flex items-center gap-2">
                       <Checkbox id="skip-errors" checked={skipErrors} onCheckedChange={(v) => setSkipErrors(!!v)} />
-                      <Label htmlFor="skip-errors" className="text-sm font-medium cursor-pointer whitespace-nowrap">Importar apenas as corretas</Label>
+                      <Label htmlFor="skip-errors" className="text-sm font-medium cursor-pointer">Importar apenas as corretas (pular erros)</Label>
                     </div>
                   </AlertDescription>
                 </Alert>
-              )}
-
-              {errorCount === 0 && (
+              ) : warningCount > 0 ? (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <Info className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">
+                    Todas as {rawData.length} linhas serão importadas — {warningCount} com avisos
+                  </AlertTitle>
+                  <AlertDescription className="text-amber-600 dark:text-amber-400">
+                    Os avisos indicam formatação atípica. Os dados serão importados mesmo assim.
+                  </AlertDescription>
+                </Alert>
+              ) : (
                 <Alert className="border-primary/30 bg-primary/5">
                   <CheckCircle2 className="h-4 w-4 text-primary" />
-                  <AlertTitle>Todas as {rawData.length} linhas estão válidas!</AlertTitle>
+                  <AlertTitle>Todas as {rawData.length} linhas estão perfeitas!</AlertTitle>
                   <AlertDescription>Confira os dados abaixo e clique em Importar.</AlertDescription>
                 </Alert>
               )}
 
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Badge variant="secondary">{validCount} válidas</Badge>
-                {errorCount > 0 && <Badge variant="destructive">{errorCount} com erro</Badge>}
-                <span className="ml-auto">Mostrando as primeiras {Math.min(10, allValidatedRows.length)} linhas</span>
+              {/* Error summary badges */}
+              {errorSummary.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {errorSummary.slice(0, 8).map(([msg, data]) => (
+                    <TooltipProvider key={msg}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs cursor-help ${
+                              data.severity === "error"
+                                ? "border-destructive/40 text-destructive"
+                                : "border-amber-500/40 text-amber-700 dark:text-amber-400"
+                            }`}
+                          >
+                            {data.count}x {msg}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="max-w-xs">
+                          <p className="text-xs">💡 {data.suggestion || "Verifique o dado na planilha original"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  ))}
+                  {errorSummary.length > 8 && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                      +{errorSummary.length - 8} tipos
+                    </Badge>
+                  )}
+                </div>
+              )}
+
+              {/* Filter + count bar */}
+              <div className="flex items-center gap-2 text-sm flex-wrap">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <Button
+                  size="sm" variant={previewFilter === "all" ? "default" : "outline"}
+                  className="h-7 text-xs" onClick={() => { setPreviewFilter("all"); setPreviewPage(0); }}
+                >
+                  Todas ({rawData.length})
+                </Button>
+                <Button
+                  size="sm" variant={previewFilter === "valid" ? "default" : "outline"}
+                  className="h-7 text-xs" onClick={() => { setPreviewFilter("valid"); setPreviewPage(0); }}
+                >
+                  ✓ Válidas ({validCount - warningCount})
+                </Button>
+                {warningCount > 0 && (
+                  <Button
+                    size="sm" variant={previewFilter === "warnings" ? "default" : "outline"}
+                    className="h-7 text-xs" onClick={() => { setPreviewFilter("warnings"); setPreviewPage(0); }}
+                  >
+                    ⚠ Avisos ({warningCount})
+                  </Button>
+                )}
+                {errorCount > 0 && (
+                  <Button
+                    size="sm" variant={previewFilter === "errors" ? "default" : "outline"}
+                    className="h-7 text-xs" onClick={() => { setPreviewFilter("errors"); setPreviewPage(0); }}
+                  >
+                    ✗ Erros ({errorCount})
+                  </Button>
+                )}
+                <span className="ml-auto text-muted-foreground text-xs">
+                  Pág {previewPage + 1} de {totalPreviewPages || 1} ({filteredRows.length} linhas)
+                </span>
               </div>
 
-              <ScrollArea className="h-[300px] border rounded-md">
+              <ScrollArea className="h-[280px] border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -932,28 +1227,61 @@ export function SmartImporter({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {previewValidations.map((v, i) => (
-                      <TableRow key={i} className={v.hasErrors ? "bg-destructive/10 hover:bg-destructive/15" : ""}>
-                        <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                        <TableCell>{v.hasErrors ? <AlertCircle className="h-4 w-4 text-destructive" /> : <CheckCircle2 className="h-4 w-4 text-primary" />}</TableCell>
-                        {mappedFields.map((f) => {
-                          const hasFieldError = !!v.errors[f.key];
-                          return (
-                            <TableCell key={f.key} className={`max-w-[200px] truncate ${hasFieldError ? "text-destructive font-medium" : ""}`} title={hasFieldError ? v.errors[f.key] : undefined}>
-                              {v.row[f.key] ? (
-                                <span>
-                                  {v.row[f.key]}
-                                  {hasFieldError && <span className="block text-xs text-destructive/80 font-normal">{v.errors[f.key]}</span>}
-                                </span>
-                              ) : <span className="text-muted-foreground/50">—</span>}
-                            </TableCell>
-                          );
-                        })}
+                    {paginatedRows.map((v) => (
+                      <TableRow
+                        key={v.originalIndex}
+                        className={
+                          v.hasErrors ? "bg-destructive/5 hover:bg-destructive/10"
+                          : v.hasWarnings ? "bg-amber-500/5 hover:bg-amber-500/10"
+                          : ""
+                        }
+                      >
+                        <TableCell className="text-muted-foreground text-xs">{v.originalIndex + 2}</TableCell>
+                        <TableCell>
+                          {v.hasErrors ? (
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          ) : v.hasWarnings ? (
+                            <AlertTriangle className="h-4 w-4 text-amber-500" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 text-primary" />
+                          )}
+                        </TableCell>
+                        {mappedFields.map((f) => renderCell(v, f.key))}
                       </TableRow>
                     ))}
+                    {paginatedRows.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={mappedFields.length + 2} className="text-center text-muted-foreground py-8">
+                          Nenhuma linha nesta categoria
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </ScrollArea>
+
+              {/* Pagination controls */}
+              {totalPreviewPages > 1 && (
+                <div className="flex items-center justify-center gap-2">
+                  <Button
+                    size="sm" variant="outline" className="h-7"
+                    disabled={previewPage === 0}
+                    onClick={() => setPreviewPage(p => p - 1)}
+                  >
+                    <ArrowLeft className="h-3 w-3" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground">
+                    {previewPage + 1} / {totalPreviewPages}
+                  </span>
+                  <Button
+                    size="sm" variant="outline" className="h-7"
+                    disabled={previewPage >= totalPreviewPages - 1}
+                    onClick={() => setPreviewPage(p => p + 1)}
+                  >
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -970,7 +1298,7 @@ export function SmartImporter({
             </div>
           )}
 
-          {/* Step 4: Result — Actionable */}
+          {/* Step 4: Result */}
           {step === "result" && importResult && (
             <div className="space-y-4">
               {importResult.success > 0 && (
@@ -992,51 +1320,53 @@ export function SmartImporter({
                 </div>
               )}
 
-              {importResult.errors.length > 0 && (() => {
-                // Group errors by type for better readability
-                const errorGroups: Record<string, number> = {};
-                for (const err of importResult.errors) {
-                  // Extract error type from message (e.g., "Data inválida", "Nome é obrigatório")
-                  const typeMatch = err.match(/:\s*(.+?)(?:,|$)/);
-                  const type = typeMatch?.[1]?.trim() || err;
-                  errorGroups[type] = (errorGroups[type] || 0) + 1;
-                }
-                const groupEntries = Object.entries(errorGroups).sort((a, b) => b[1] - a[1]);
+              {importResult.errors.length > 0 && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>{importResult.errors.length} linha(s) com erro — não importadas</AlertTitle>
+                  <AlertDescription>
+                    {/* Grouped error summary table */}
+                    {errorSummary.filter(([_, d]) => d.severity === "error").length > 0 && (
+                      <div className="mt-2 mb-3">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs h-8">Tipo de Erro</TableHead>
+                              <TableHead className="text-xs h-8 w-16">Qtd</TableHead>
+                              <TableHead className="text-xs h-8">Sugestão</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {errorSummary.filter(([_, d]) => d.severity === "error").slice(0, 10).map(([msg, data]) => (
+                              <TableRow key={msg}>
+                                <TableCell className="text-xs py-1.5">{msg}</TableCell>
+                                <TableCell className="text-xs py-1.5 font-medium">{data.count}</TableCell>
+                                <TableCell className="text-xs py-1.5 text-muted-foreground">{data.suggestion || "—"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
 
-                return (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertTitle>{importResult.errors.length} erro(s) / linhas ignoradas</AlertTitle>
-                    <AlertDescription>
-                      {groupEntries.length > 1 && (
-                        <div className="flex flex-wrap gap-2 mt-2 mb-3">
-                          {groupEntries.map(([type, count]) => (
-                            <Badge key={type} variant="outline" className="text-xs border-destructive/30">
-                              {count}x {type}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      <ScrollArea className="h-[120px] mt-2">
-                        <ul className="list-disc list-inside space-y-1">
-                          {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
-                          {importResult.errors.length > 50 && (
-                            <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
-                          )}
-                        </ul>
-                      </ScrollArea>
-                      {importResult.failedRows.length > 0 && (
-                        <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Baixar linhas com erro (.csv)
-                        </Button>
-                      )}
-                    </AlertDescription>
-                  </Alert>
-                );
-              })()}
+                    <ScrollArea className="h-[100px] mt-2">
+                      <ul className="list-disc list-inside space-y-1">
+                        {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
+                        {importResult.errors.length > 50 && (
+                          <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
+                        )}
+                      </ul>
+                    </ScrollArea>
+                    {importResult.failedRows.length > 0 && (
+                      <Button variant="outline" size="sm" className="mt-3" onClick={downloadFailedRows}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Baixar linhas com erro (.csv)
+                      </Button>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
 
-              {/* Next step tip */}
               {importResult.success > 0 && (() => {
                 const tip = getNextStepTip();
                 if (!tip) return null;
@@ -1063,8 +1393,10 @@ export function SmartImporter({
                 const missing = SYSTEM_FIELDS.filter((f) => f.required && !mappings[f.key] && !defaultValues[f.key]?.trim());
                 if (missing.length) { toast.error(`Associe ou preencha: ${missing.map((f) => f.label).join(", ")}`); return; }
                 checkDuplicates();
+                setPreviewFilter("all");
+                setPreviewPage(0);
                 setStep("preview");
-                toast.success(`${validCount} de ${rawData.length} linhas válidas`);
+                toast.success(`${validCount} de ${rawData.length} linhas importáveis${warningCount > 0 ? ` (${warningCount} com avisos)` : ""}`);
               }}>
                 <Eye className="h-4 w-4 mr-2" />
                 Conferir Dados

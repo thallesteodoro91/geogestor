@@ -389,10 +389,10 @@ const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
 
 const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
   data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao", "dt"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
   quantidade: ["qtd", "qtde", "quant", "qty"],
   desconto: ["desc", "descontos"],
-  receita_esperada: ["receita", "valortotal", "total", "receitaesperada"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "valortotalservico", "amount", "revenue", "precoservico", "valorcontrato"],
   situacao: ["status", "estado", "statusorcamento"],
   situacao_do_pagamento: ["pagamento", "statuspagamento", "situacaopagamento"],
   forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento"],
@@ -408,17 +408,18 @@ const SERVICO_SYNONYMS: Record<string, string[]> = {
   data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data", "dt"],
   data_do_servico_fim: ["datafim", "termino", "prazo", "dtfim", "datatermino"],
   situacao_do_servico: ["status", "situacao", "estado", "andamento"],
-  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr"],
+  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr", "valorservico", "amount", "revenue", "valorcontrato", "total"],
   custo_servico: ["custo", "despesa", "gasto"],
   descricao: ["observacao", "obs", "detalhes", "nota", "anotacao", "observacoes"],
   progresso: ["percentual", "andamento", "conclusao"],
 };
 
 const DESPESA_SYNONYMS: Record<string, string[]> = {
-  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr"],
+  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr", "amount", "expense", "pagamento", "valorpago", "despesa"],
   data_da_despesa: ["data", "dt", "datadespesa", "datadogasto", "datapagamento"],
   observacoes: ["observacao", "obs", "nota", "descricao", "comentario", "detalhes"],
   status: ["situacao", "estado", "confirmada", "pendente"],
+  _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {

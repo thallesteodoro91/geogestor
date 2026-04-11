@@ -907,6 +907,37 @@ export function SmartImporter({
 
       setImportProgress(20);
       recordsToInsert = await linkToClients(recordsToInsert);
+      setImportProgress(30);
+
+      // Auto-link expenses to expense types by category name
+      if (entityType === "despesas" && mappings["_categoria_lookup"]) {
+        try {
+          const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
+          if (tiposDespesa && tiposDespesa.length > 0) {
+            const tipoMap = new Map<string, string>();
+            for (const t of tiposDespesa) {
+              tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
+              if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
+            }
+            let linked = 0;
+            for (const rec of recordsToInsert) {
+              if (rec.id_tipodespesa) continue;
+              const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
+              const rowIdx = recordsToInsert.indexOf(rec);
+              const rawRow = rawData[allValidatedRows.findIndex((v, i) => !v.hasErrors && recordsToInsert.indexOf(rec) !== -1) || 0];
+              const catValue = rawRow?.[catIdx]?.toString().trim();
+              if (catValue) {
+                const id = tipoMap.get(normalize(catValue));
+                if (id) { rec.id_tipodespesa = id; linked++; }
+              }
+            }
+            if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+          }
+        } catch (e) {
+          console.warn("Erro ao vincular tipos de despesa:", e);
+        }
+      }
+
       setImportProgress(40);
 
       let result: { success: number; errors: string[] };
@@ -930,7 +961,9 @@ export function SmartImporter({
       });
 
       if (result.success > 0) {
-        [entityLabel.queryKey, "resource-counts"].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+        // Invalidate entity-specific + financial caches
+        [entityLabel.queryKey, "resource-counts", "kpis", "dashboard-metrics", "financial-data", "chart-data"]
+          .forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
         onSuccess?.();
       }
     } catch (err: any) {

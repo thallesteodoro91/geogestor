@@ -1,92 +1,98 @@
 
 
-## Plano: Importador Inteligente — Tolerante, Transparente e Acionável
+## Plano: Importação Financeiramente Inteligente
 
 ### Diagnóstico
 
-Após auditoria completa do `SmartImporter.tsx` (1093 linhas), identifiquei as causas raiz dos 429/629 erros:
+Após auditoria do fluxo completo (SmartImporter → batch services → KPI view), identifiquei 3 causas raiz:
 
-1. **Validação rígida em campos opcionais**: Telefone com 8-9 dígitos (sem DDD) falha. CPF com 10 dígitos falha. Qualquer variação menor bloqueia a linha inteira.
-2. **Sem normalização antes da validação**: O sistema valida ANTES de limpar os dados. Ex: "123.456.789-0" (CPF com 10 dígitos após limpeza) não é corrigido.
-3. **Preview limitado a 10 linhas**: Com 429 erros, o usuário vê apenas 10 e não consegue entender o padrão.
-4. **Sem filtro de erros**: Não há como ver "só as linhas com erro" ou "só as válidas".
-5. **Mensagens sem sugestão de correção**: "CPF deve ter 11 dígitos" não diz o que fazer.
-6. **Sem auto-correção**: O sistema detecta o erro mas não tenta corrigir automaticamente.
+1. **Orçamentos sem `receita_esperada`**: O campo `valor_unitario` é mapeado corretamente, mas `receita_esperada` (que alimenta `receita_total` nos KPIs) não é calculado automaticamente. O campo existe no formulário de importação mas é opcional — se o usuário não mapear, fica `null` e o KPI mostra R$ 0.
+
+2. **Despesas sem `id_tipodespesa`**: Sem vínculo ao tipo de despesa, a classificação FIXA/VARIAVEL não funciona. Custos variáveis ficam zerados nos KPIs.
+
+3. **Sem preview financeiro**: O usuário não vê o impacto dos dados importados antes de confirmar.
 
 ### Mudanças
 
-#### 1. Validação tolerante com auto-correção
+#### 1. Auto-cálculo de campos derivados no `handleImport`
 
-Reescrever validadores para serem tolerantes:
+Antes de enviar os records para o batch service, calcular automaticamente:
 
-- **Telefone**: Aceitar 8-11 dígitos. Se 8-9, tentar adicionar DDD padrão (ou simplesmente aceitar). Não bloquear por formatação.
-- **CPF**: Se tem 11 dígitos limpos, aceitar com ou sem máscara. Se tem menos, avisar mas NÃO bloquear (campo opcional).
-- **CNPJ**: Mesma lógica — aceitar variações de formatação.
-- **Campos opcionais com valor parcial**: Gerar WARNING (amarelo) em vez de ERROR (vermelho). Warnings não bloqueiam importação.
+**Orçamentos:**
+- `receita_esperada = (valor_unitario * quantidade) - desconto` (se não mapeado explicitamente)
+- `quantidade = 1` (se não mapeado — já existe)
+- `desconto = 0` (se não mapeado)
 
-Novo tipo de validação:
-```typescript
-type ValidationSeverity = "error" | "warning";
-interface FieldValidation { message: string; severity: ValidationSeverity; suggestion?: string; }
+**Serviços:**
+- Se `receita_servico` não foi mapeado mas existe coluna de valor, usar como receita
+
+#### 2. Vinculação inteligente de despesas a tipos existentes
+
+No `handleImport`, antes do batch insert:
+- Buscar `dim_tipodespesa` do tenant
+- Se a planilha tem coluna mapeada como "categoria" ou "tipo", tentar match por nome com os tipos existentes
+- Se encontrou match → setar `id_tipodespesa` automaticamente
+- Se não encontrou → importar sem vínculo (comportamento atual) mas mostrar warning
+
+Adicionar campo opcional nos `DESPESA_FIELDS`:
+- `categoria_despesa` (key: `_categoria_lookup`, label: "Categoria/Tipo de Despesa") — usado apenas para lookup, não inserido diretamente
+
+#### 3. Preview financeiro antes da importação
+
+Na tela de preview (step "preview"), adicionar um card de resumo financeiro acima da tabela:
+
+```text
+┌─────────────────────────────────────────────────┐
+│ 📊 Impacto Financeiro Estimado                  │
+│                                                  │
+│  Receita:  R$ 150.000,00  (12 orçamentos)       │
+│  Despesas: R$ 45.000,00   (28 registros)        │
+│  Lucro:    R$ 105.000,00                        │
+│                                                  │
+│  ⚠ 3 despesas sem categoria (serão importadas   │
+│    como "Sem classificação")                     │
+└─────────────────────────────────────────────────┘
 ```
 
-#### 2. Mensagens com contexto e sugestão
+Calculado a partir dos dados validados:
+- Orçamentos: soma de `receita_esperada` (calculada ou mapeada)
+- Despesas: soma de `valor_da_despesa`
+- Serviços: soma de `receita_servico`
 
-Cada erro/warning inclui 3 partes:
-- **O que**: "CPF com 10 dígitos"
-- **Por que**: "CPF válido precisa de 11 dígitos"  
-- **Como corrigir**: "Verifique se não faltou um dígito. Valor recebido: 1234567890"
+#### 4. Sinônimos financeiros expandidos
 
-Exemplos:
-| Antes | Depois |
-|-------|--------|
-| "CPF deve ter 11 dígitos" | "CPF com 10 dígitos — verifique se falta um número (recebido: 1234567890)" |
-| "Telefone deve ter 10 ou 11 dígitos" | "Telefone com 8 dígitos — provavelmente falta o DDD. Será importado mesmo assim." |
-| "Data inválida" | "Data não reconhecida: '31/13/2024' — mês 13 não existe" |
-| "Valor deve ser um número" | "Não foi possível converter 'abc' em número" |
+Adicionar sinônimos para melhor detecção de colunas de valor:
 
-#### 3. Preview com filtro e paginação
+**Orçamentos:**
+- `receita_esperada`: adicionar "faturamento", "valortotalservico", "amount", "revenue", "precoservico", "valorcontrato"
+- `valor_unitario`: adicionar "valorha", "valorhectare", "precoha"
 
-- **Filtro**: Botões "Todas", "Só válidas", "Só com erro", "Só com aviso"
-- **Paginação**: Mostrar 25 linhas por vez com navegação (em vez de apenas 10)
-- **Contador por tipo de erro**: Badge resumo no topo (ex: "15x CPF inválido, 8x telefone incompleto")
-- **Tooltip em cada célula com erro**: Hover mostra mensagem completa + sugestão
+**Despesas:**
+- `valor_da_despesa`: adicionar "amount", "expense", "pagamento", "valorpago", "despesa"
+- Novo campo lookup: `_categoria_lookup` com sinônimos "categoria", "tipo", "classificacao", "natureza", "grupo"
 
-#### 4. Auto-normalização agressiva
+**Serviços:**
+- `receita_servico`: adicionar "valorservico", "amount", "revenue", "valorcontrato", "total"
 
-Antes de validar, aplicar normalização inteligente:
-- Remover espaços, pontos, traços de CPF/CNPJ/telefone
-- Telefone com 8 dígitos: manter e marcar como warning
-- Valores monetários: detectar e limpar automaticamente (já existe, reforçar)
-- Datas: já funciona bem, manter
+#### 5. Invalidação de cache financeiro após importação
 
-#### 5. Warnings vs Errors
-
-- **Error** (vermelho, bloqueia): Campo obrigatório vazio, valor impossível de interpretar
-- **Warning** (amarelo, NÃO bloqueia): Formatação atípica, campo parcialmente preenchido, possível dado incompleto
-
-Na UI: linhas com apenas warnings são importáveis. Checkbox "Importar apenas as corretas" ignora errors mas aceita warnings.
-
-#### 6. Resumo de erros agrupado na tela de resultado
-
-Substituir lista genérica por resumo visual:
-- Tabela agrupada: Tipo de erro | Quantidade | Exemplo | Sugestão
-- Download CSV com coluna de erro detalhado por campo (já existe, melhorar)
+No `handleImport`, após sucesso, invalidar queries financeiras:
+```typescript
+["kpis", "dashboard-metrics", "financial-data", "chart-data"].forEach(key => 
+  queryClient.invalidateQueries({ queryKey: [key] })
+);
+```
 
 ### Detalhes técnicos
 
-- `RowValidation.errors` muda de `Record<string, string>` para `Record<string, FieldValidation>`
-- Novo campo `warnings` em `RowValidation` para separar severity
-- `hasErrors` = tem pelo menos 1 error. `hasWarnings` = tem pelo menos 1 warning
-- `errorCount` conta apenas errors (não warnings)
-- Preview filter state: `"all" | "valid" | "errors" | "warnings"`
-- Paginação: `previewPage` state com 25 items/page
+- Auto-cálculo no `handleImport`: após montar `record`, verificar se `entityType === "orcamentos"` e calcular `receita_esperada` se ausente
+- Lookup de `id_tipodespesa`: query única antes do batch, criar mapa `nome_normalizado → id`
+- Preview financeiro: componente inline no step "preview", calcula soma dos campos numéricos validados
+- Nenhuma migração necessária — todas as colunas já existem no banco
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Reescrever | `src/components/import/SmartImporter.tsx` (validação, preview, resultado) |
-
-Nenhum novo arquivo. Nenhuma migração. Apenas reescrita da lógica de validação e UI do preview/resultado.
+| Editar | `src/components/import/SmartImporter.tsx` (auto-cálculo, preview financeiro, sinônimos, cache) |
 

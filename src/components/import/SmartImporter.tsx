@@ -889,12 +889,18 @@ export function SmartImporter({
         const record: Record<string, any> = {};
         for (const field of SYSTEM_FIELDS) {
           if (!mappings[field.key]) continue;
+          if (field.key === "_categoria_lookup") continue; // lookup-only field, skip insert
           let val: any = validation.row[field.key];
           if (!val) { record[field.key] = null; continue; }
           if (field.type === "number") val = parseFloat(val) || null;
           record[field.key] = val;
         }
         if (entityType === "orcamentos" && !record.quantidade) record.quantidade = 1;
+        if (entityType === "orcamentos" && !record.receita_esperada && record.valor_unitario) {
+          const qty = record.quantidade || 1;
+          const desc = record.desconto || 0;
+          record.receita_esperada = (record.valor_unitario * qty) - desc;
+        }
         if (entityType === "despesas" && !record.status) record.status = "confirmada";
         recordsToInsert.push(record);
       }

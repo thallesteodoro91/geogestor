@@ -747,7 +747,35 @@ export function SmartImporter({
     return Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
   }, [allValidatedRows]);
 
-  // ─── Deduplication check ──────────────────────────────────────────
+  // ─── Financial preview ───────────────────────────────────────────────
+  const financialPreview = useMemo(() => {
+    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos") return null;
+    const validRows = allValidatedRows.filter(v => !v.hasErrors);
+    let receita = 0;
+    let despesas = 0;
+    let count = 0;
+
+    for (const v of validRows) {
+      if (entityType === "orcamentos") {
+        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
+        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
+        const qty = parseInt(v.row.quantidade || "1") || 1;
+        const desc = parseFloat(sanitizeCurrency(v.row.desconto || "0")) || 0;
+        const val = re > 0 ? re : (vu * qty) - desc;
+        if (val > 0) { receita += val; count++; }
+      } else if (entityType === "despesas") {
+        const val = parseFloat(sanitizeCurrency(v.row.valor_da_despesa || "")) || 0;
+        if (val > 0) { despesas += val; count++; }
+      } else if (entityType === "servicos") {
+        const val = parseFloat(sanitizeCurrency(v.row.receita_servico || "")) || 0;
+        if (val > 0) { receita += val; count++; }
+      }
+    }
+
+    if (receita === 0 && despesas === 0) return null;
+    return { receita, despesas, lucro: receita - despesas, count };
+  }, [allValidatedRows, entityType]);
+
 
   const checkDuplicates = useCallback(async () => {
     if (entityType !== "clientes" && entityType !== "servicos") return;

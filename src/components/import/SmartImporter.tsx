@@ -337,6 +337,7 @@ const SERVICO_FIELDS: SystemField[] = [
 const DESPESA_FIELDS: SystemField[] = [
   { key: "valor_da_despesa", label: "Valor da Despesa", required: true, validate: validateRequiredNumber, type: "number" },
   { key: "data_da_despesa", label: "Data da Despesa", required: true, format: formatDate, validate: validateDate, type: "date" },
+  { key: "_categoria_lookup", label: "Categoria/Tipo de Despesa", required: false },
   { key: "observacoes", label: "Observações", required: false },
   { key: "status", label: "Status", required: false },
 ];
@@ -389,10 +390,10 @@ const PROPRIEDADE_SYNONYMS: Record<string, string[]> = {
 
 const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
   data_orcamento: ["data", "dataorcamento", "dtorcamento", "dataemissao", "dt"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
   quantidade: ["qtd", "qtde", "quant", "qty"],
   desconto: ["desc", "descontos"],
-  receita_esperada: ["receita", "valortotal", "total", "receitaesperada"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "valortotalservico", "amount", "revenue", "precoservico", "valorcontrato"],
   situacao: ["status", "estado", "statusorcamento"],
   situacao_do_pagamento: ["pagamento", "statuspagamento", "situacaopagamento"],
   forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento"],
@@ -408,17 +409,18 @@ const SERVICO_SYNONYMS: Record<string, string[]> = {
   data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "data", "dt"],
   data_do_servico_fim: ["datafim", "termino", "prazo", "dtfim", "datatermino"],
   situacao_do_servico: ["status", "situacao", "estado", "andamento"],
-  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr"],
+  receita_servico: ["receita", "valor", "faturamento", "preco", "vlr", "valorservico", "amount", "revenue", "valorcontrato", "total"],
   custo_servico: ["custo", "despesa", "gasto"],
   descricao: ["observacao", "obs", "detalhes", "nota", "anotacao", "observacoes"],
   progresso: ["percentual", "andamento", "conclusao"],
 };
 
 const DESPESA_SYNONYMS: Record<string, string[]> = {
-  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr"],
+  valor_da_despesa: ["valor", "gasto", "custo", "montante", "total", "preco", "vlr", "amount", "expense", "pagamento", "valorpago", "despesa"],
   data_da_despesa: ["data", "dt", "datadespesa", "datadogasto", "datapagamento"],
   observacoes: ["observacao", "obs", "nota", "descricao", "comentario", "detalhes"],
   status: ["situacao", "estado", "confirmada", "pendente"],
+  _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
@@ -745,7 +747,35 @@ export function SmartImporter({
     return Object.entries(groups).sort((a, b) => b[1].count - a[1].count);
   }, [allValidatedRows]);
 
-  // ─── Deduplication check ──────────────────────────────────────────
+  // ─── Financial preview ───────────────────────────────────────────────
+  const financialPreview = useMemo(() => {
+    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos") return null;
+    const validRows = allValidatedRows.filter(v => !v.hasErrors);
+    let receita = 0;
+    let despesas = 0;
+    let count = 0;
+
+    for (const v of validRows) {
+      if (entityType === "orcamentos") {
+        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
+        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
+        const qty = parseInt(v.row.quantidade || "1") || 1;
+        const desc = parseFloat(sanitizeCurrency(v.row.desconto || "0")) || 0;
+        const val = re > 0 ? re : (vu * qty) - desc;
+        if (val > 0) { receita += val; count++; }
+      } else if (entityType === "despesas") {
+        const val = parseFloat(sanitizeCurrency(v.row.valor_da_despesa || "")) || 0;
+        if (val > 0) { despesas += val; count++; }
+      } else if (entityType === "servicos") {
+        const val = parseFloat(sanitizeCurrency(v.row.receita_servico || "")) || 0;
+        if (val > 0) { receita += val; count++; }
+      }
+    }
+
+    if (receita === 0 && despesas === 0) return null;
+    return { receita, despesas, lucro: receita - despesas, count };
+  }, [allValidatedRows, entityType]);
+
 
   const checkDuplicates = useCallback(async () => {
     if (entityType !== "clientes" && entityType !== "servicos") return;
@@ -859,18 +889,55 @@ export function SmartImporter({
         const record: Record<string, any> = {};
         for (const field of SYSTEM_FIELDS) {
           if (!mappings[field.key]) continue;
+          if (field.key === "_categoria_lookup") continue; // lookup-only field, skip insert
           let val: any = validation.row[field.key];
           if (!val) { record[field.key] = null; continue; }
           if (field.type === "number") val = parseFloat(val) || null;
           record[field.key] = val;
         }
         if (entityType === "orcamentos" && !record.quantidade) record.quantidade = 1;
+        if (entityType === "orcamentos" && !record.receita_esperada && record.valor_unitario) {
+          const qty = record.quantidade || 1;
+          const desc = record.desconto || 0;
+          record.receita_esperada = (record.valor_unitario * qty) - desc;
+        }
         if (entityType === "despesas" && !record.status) record.status = "confirmada";
         recordsToInsert.push(record);
       }
 
       setImportProgress(20);
       recordsToInsert = await linkToClients(recordsToInsert);
+      setImportProgress(30);
+
+      // Auto-link expenses to expense types by category name
+      if (entityType === "despesas" && mappings["_categoria_lookup"]) {
+        try {
+          const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
+          if (tiposDespesa && tiposDespesa.length > 0) {
+            const tipoMap = new Map<string, string>();
+            for (const t of tiposDespesa) {
+              tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
+              if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
+            }
+            let linked = 0;
+            for (const rec of recordsToInsert) {
+              if (rec.id_tipodespesa) continue;
+              const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
+              const rowIdx = recordsToInsert.indexOf(rec);
+              const rawRow = rawData[allValidatedRows.findIndex((v, i) => !v.hasErrors && recordsToInsert.indexOf(rec) !== -1) || 0];
+              const catValue = rawRow?.[catIdx]?.toString().trim();
+              if (catValue) {
+                const id = tipoMap.get(normalize(catValue));
+                if (id) { rec.id_tipodespesa = id; linked++; }
+              }
+            }
+            if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+          }
+        } catch (e) {
+          console.warn("Erro ao vincular tipos de despesa:", e);
+        }
+      }
+
       setImportProgress(40);
 
       let result: { success: number; errors: string[] };
@@ -894,7 +961,9 @@ export function SmartImporter({
       });
 
       if (result.success > 0) {
-        [entityLabel.queryKey, "resource-counts"].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+        // Invalidate entity-specific + financial caches
+        [entityLabel.queryKey, "resource-counts", "kpis", "dashboard-metrics", "financial-data", "chart-data"]
+          .forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
         onSuccess?.();
       }
     } catch (err: any) {
@@ -1117,8 +1186,45 @@ export function SmartImporter({
                   </AlertDescription>
                 </Alert>
               )}
+              {/* Financial preview card */}
+              {financialPreview && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-sm">Impacto Financeiro Estimado</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    {financialPreview.receita > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Receita</p>
+                        <p className="text-lg font-bold text-primary">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.receita)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
+                      </div>
+                    )}
+                    {financialPreview.despesas > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Despesas</p>
+                        <p className="text-lg font-bold text-destructive">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.despesas)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
+                      </div>
+                    )}
+                    {financialPreview.receita > 0 && financialPreview.despesas > 0 && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Lucro</p>
+                        <p className={`text-lg font-bold ${financialPreview.lucro >= 0 ? "text-primary" : "text-destructive"}`}>
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.lucro)}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
-              {/* Summary banner */}
+
               {errorCount > 0 ? (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />

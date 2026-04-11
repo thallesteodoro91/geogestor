@@ -337,6 +337,7 @@ const SERVICO_FIELDS: SystemField[] = [
 const DESPESA_FIELDS: SystemField[] = [
   { key: "valor_da_despesa", label: "Valor da Despesa", required: true, validate: validateRequiredNumber, type: "number" },
   { key: "data_da_despesa", label: "Data da Despesa", required: true, format: formatDate, validate: validateDate, type: "date" },
+  { key: "_categoria_lookup", label: "Categoria/Tipo de Despesa", required: false },
   { key: "observacoes", label: "Observações", required: false },
   { key: "status", label: "Status", required: false },
 ];

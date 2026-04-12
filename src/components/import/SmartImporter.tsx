@@ -1253,6 +1253,7 @@ export function SmartImporter({
                 </Alert>
               )}
 
+              <div className="flex items-center gap-3">
                 <Alert className="flex-1">
                   <FileSpreadsheet className="h-4 w-4" />
                   <AlertTitle>{fileName} — {rawData.length} linha(s) encontrada(s)</AlertTitle>

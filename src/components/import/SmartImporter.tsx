@@ -1216,7 +1216,43 @@ export function SmartImporter({
                 </Alert>
               )}
 
-              <div className="flex items-center gap-3">
+              {/* Low confidence: ask user to classify values */}
+              {detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
+                const n = normalize(h);
+                return ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price"].some(s => n.includes(s));
+              }) && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Detectamos valores monetários na sua planilha</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <p className="text-sm text-muted-foreground mb-3">Como deseja classificar esses valores?</p>
+                    <RadioGroup
+                      value={valueClassification || ""}
+                      onValueChange={(v) => {
+                        const val = v as "receita" | "despesa" | "ignorar";
+                        setValueClassification(val);
+                        if (val === "receita") handleEntityChange("orcamentos");
+                        else if (val === "despesa") handleEntityChange("despesas");
+                      }}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="receita" id="class-receita" />
+                        <Label htmlFor="class-receita" className="text-sm cursor-pointer">💰 Receita (criará orçamentos)</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="despesa" id="class-despesa" />
+                        <Label htmlFor="class-despesa" className="text-sm cursor-pointer">📉 Despesa (criará despesas)</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="ignorar" id="class-ignorar" />
+                        <Label htmlFor="class-ignorar" className="text-sm cursor-pointer">⏭️ Ignorar valores</Label>
+                      </div>
+                    </RadioGroup>
+                  </AlertDescription>
+                </Alert>
+              )}
+
                 <Alert className="flex-1">
                   <FileSpreadsheet className="h-4 w-4" />
                   <AlertTitle>{fileName} — {rawData.length} linha(s) encontrada(s)</AlertTitle>

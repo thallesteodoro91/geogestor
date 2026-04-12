@@ -876,15 +876,24 @@ export function SmartImporter({
     setStep("importing");
     setIsLoading(true);
     setImportProgress(0);
+    setImportWarnings([]);
 
     try {
+      // Snapshot KPIs before import
+      try {
+        const { data: snapData } = await supabase.rpc('calcular_kpis_v2');
+        if (snapData && snapData.length > 0) setKpiSnapshot(snapData[0]);
+      } catch (e) {
+        console.warn("Could not snapshot KPIs:", e);
+      }
+
       const skippedErrors: string[] = [];
       let recordsToInsert: Record<string, any>[] = [];
       const failedRows: Record<string, string>[] = [];
+      const warnings: string[] = [];
 
       for (let i = 0; i < allValidatedRows.length; i++) {
         const validation = allValidatedRows[i];
-        // Only block on ERRORS, not warnings
         if (validation.hasErrors) {
           if (skipErrors) {
             const errorMessages = Object.entries(validation.errors)
@@ -901,7 +910,7 @@ export function SmartImporter({
         const record: Record<string, any> = {};
         for (const field of SYSTEM_FIELDS) {
           if (!mappings[field.key]) continue;
-          if (field.key === "_categoria_lookup") continue; // lookup-only field, skip insert
+          if (field.key === "_categoria_lookup") continue;
           let val: any = validation.row[field.key];
           if (!val) { record[field.key] = null; continue; }
           if (field.type === "number") val = parseFloat(val) || null;
@@ -921,32 +930,106 @@ export function SmartImporter({
       recordsToInsert = await linkToClients(recordsToInsert);
       setImportProgress(30);
 
-      // Auto-link expenses to expense types by category name
-      if (entityType === "despesas" && mappings["_categoria_lookup"]) {
-        try {
-          const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
-          if (tiposDespesa && tiposDespesa.length > 0) {
-            const tipoMap = new Map<string, string>();
-            for (const t of tiposDespesa) {
-              tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
-              if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
-            }
-            let linked = 0;
-            for (const rec of recordsToInsert) {
-              if (rec.id_tipodespesa) continue;
-              const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
-              const rowIdx = recordsToInsert.indexOf(rec);
-              const rawRow = rawData[allValidatedRows.findIndex((v, i) => !v.hasErrors && recordsToInsert.indexOf(rec) !== -1) || 0];
-              const catValue = rawRow?.[catIdx]?.toString().trim();
-              if (catValue) {
-                const id = tipoMap.get(normalize(catValue));
-                if (id) { rec.id_tipodespesa = id; linked++; }
+      // === FALLBACK: id_cliente for orcamentos ===
+      if (entityType === "orcamentos") {
+        const orphanCount = recordsToInsert.filter(r => !r.id_cliente).length;
+        if (orphanCount > 0) {
+          try {
+            // Try to find or create "Cliente Importação"
+            const { data: existingClient } = await supabase
+              .from("dim_cliente")
+              .select("id_cliente")
+              .eq("nome", "Cliente Importação")
+              .maybeSingle();
+
+            let fallbackClientId = existingClient?.id_cliente;
+
+            if (!fallbackClientId) {
+              const result = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
+              if (result.success > 0) {
+                const { data: newClient } = await supabase
+                  .from("dim_cliente")
+                  .select("id_cliente")
+                  .eq("nome", "Cliente Importação")
+                  .maybeSingle();
+                fallbackClientId = newClient?.id_cliente;
               }
             }
-            if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+
+            if (fallbackClientId) {
+              for (const rec of recordsToInsert) {
+                if (!rec.id_cliente) rec.id_cliente = fallbackClientId;
+              }
+              warnings.push(`${orphanCount} orçamento(s) vinculado(s) ao cliente "Cliente Importação". Edite-os para associar ao cliente correto.`);
+            }
+          } catch (e) {
+            console.warn("Erro ao criar cliente fallback:", e);
           }
-        } catch (e) {
-          console.warn("Erro ao vincular tipos de despesa:", e);
+        }
+      }
+
+      // === FALLBACK: id_tipodespesa for despesas ===
+      if (entityType === "despesas") {
+        // Auto-link by category name first
+        if (mappings["_categoria_lookup"]) {
+          try {
+            const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
+            if (tiposDespesa && tiposDespesa.length > 0) {
+              const tipoMap = new Map<string, string>();
+              for (const t of tiposDespesa) {
+                tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
+                if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
+              }
+              let linked = 0;
+              for (let i = 0; i < recordsToInsert.length; i++) {
+                const rec = recordsToInsert[i];
+                if (rec.id_tipodespesa) continue;
+                const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
+                const validIdx = allValidatedRows.findIndex((v, vi) => !v.hasErrors && i < recordsToInsert.length);
+                const rawRow = rawData[validIdx >= 0 ? validIdx : i];
+                const catValue = rawRow?.[catIdx]?.toString().trim();
+                if (catValue) {
+                  const id = tipoMap.get(normalize(catValue));
+                  if (id) { rec.id_tipodespesa = id; linked++; }
+                }
+              }
+              if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+            }
+          } catch (e) {
+            console.warn("Erro ao vincular tipos de despesa:", e);
+          }
+        }
+
+        // Now handle orphan despesas without id_tipodespesa
+        const orphanDespesas = recordsToInsert.filter(r => !r.id_tipodespesa).length;
+        if (orphanDespesas > 0) {
+          try {
+            const { data: existingType } = await supabase
+              .from("dim_tipodespesa")
+              .select("id_tipodespesa")
+              .eq("categoria", "Sem classificação")
+              .maybeSingle();
+
+            let fallbackTypeId = existingType?.id_tipodespesa;
+
+            if (!fallbackTypeId) {
+              const { data: newType } = await supabase
+                .from("dim_tipodespesa")
+                .insert({ categoria: "Sem classificação", classificacao: "VARIAVEL", descricao: "Criado automaticamente pela importação" })
+                .select("id_tipodespesa")
+                .single();
+              fallbackTypeId = newType?.id_tipodespesa;
+            }
+
+            if (fallbackTypeId) {
+              for (const rec of recordsToInsert) {
+                if (!rec.id_tipodespesa) rec.id_tipodespesa = fallbackTypeId;
+              }
+              warnings.push(`${orphanDespesas} despesa(s) classificada(s) como "Sem classificação". Edite em Cadastros > Tipos de Despesa.`);
+            }
+          } catch (e) {
+            console.warn("Erro ao criar tipo de despesa fallback:", e);
+          }
         }
       }
 
@@ -964,6 +1047,7 @@ export function SmartImporter({
       setImportProgress(90);
       const allErrors = [...skippedErrors, ...result.errors];
       setImportResult({ success: result.success, errors: allErrors, failedRows });
+      setImportWarnings(warnings);
       setStep("result");
       setImportProgress(100);
 
@@ -973,9 +1057,10 @@ export function SmartImporter({
       });
 
       if (result.success > 0) {
-        // Invalidate entity-specific + financial caches
-        [entityLabel.queryKey, "resource-counts", "kpis", "dashboard-metrics", "financial-data", "chart-data"]
-          .forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+        // Invalidate all caches with full refetch
+        await queryClient.invalidateQueries({ refetchType: 'all' });
+        // Also refetch KPIs explicitly for the verification panel
+        setTimeout(() => refetchKpis(), 1500);
         onSuccess?.();
       }
     } catch (err: any) {

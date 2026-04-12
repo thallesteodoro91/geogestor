@@ -29,8 +29,11 @@ import * as XLSX from "xlsx";
 import {
   Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2,
   Eye, ArrowRight, ArrowLeft, Download, AlertTriangle, ShieldCheck,
-  Sparkles, ExternalLink, Copy, Info, Filter,
+  Sparkles, ExternalLink, Copy, Info, Filter, TrendingUp, TrendingDown,
 } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import type { KPIData } from "@/domain/types/kpi.types";
+import { useKPIs } from "@/hooks/useKPIs";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

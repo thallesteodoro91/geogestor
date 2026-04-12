@@ -1551,6 +1551,73 @@ export function SmartImporter({
                 </Alert>
               )}
 
+              {/* Import warnings */}
+              {importWarnings.length > 0 && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Avisos da importação</AlertTitle>
+                  <AlertDescription>
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {importWarnings.map((w, i) => <li key={i} className="text-sm text-amber-600 dark:text-amber-400">{w}</li>)}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Financial Verification Panel */}
+              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos") && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-sm">Verificação Financeira</span>
+                  </div>
+                  {currentKpis ? (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Receita Total</p>
+                        <p className="text-lg font-bold text-primary">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.receita_total || 0)}
+                        </p>
+                        {kpiSnapshot && (
+                          <p className={`text-xs ${(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) ? "text-emerald-600" : "text-muted-foreground"}`}>
+                            {(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && <TrendingUp className="h-3 w-3 inline mr-1" />}
+                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.receita_total || 0)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Despesas</p>
+                        <p className="text-lg font-bold text-destructive">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.total_despesas || 0)}
+                        </p>
+                        {kpiSnapshot && (
+                          <p className={`text-xs ${(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) ? "text-amber-600" : "text-muted-foreground"}`}>
+                            {(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) && <TrendingDown className="h-3 w-3 inline mr-1" />}
+                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.total_despesas || 0)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Lucro Líquido</p>
+                        <p className={`text-lg font-bold ${(currentKpis.lucro_liquido || 0) >= 0 ? "text-primary" : "text-destructive"}`}>
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.lucro_liquido || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center">Carregando KPIs atualizados...</p>
+                  )}
+                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && (
+                    <Alert className="mt-3 border-amber-500/30 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-sm text-amber-600 dark:text-amber-400">
+                        Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              )}
+
               {importResult.success > 0 && (
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" onClick={() => { onOpenChange(false); navigate(entityLabel.route); }}>

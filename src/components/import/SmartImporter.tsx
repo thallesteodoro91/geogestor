@@ -567,6 +567,9 @@ export function SmartImporter({
     setEntityType(initialEntityType);
     setPreviewFilter("all");
     setPreviewPage(0);
+    setKpiSnapshot(null);
+    setValueClassification(null);
+    setImportWarnings([]);
   };
 
   // ─── File processing ───────────────────────────────────────────────

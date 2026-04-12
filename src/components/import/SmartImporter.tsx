@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -29,8 +29,11 @@ import * as XLSX from "xlsx";
 import {
   Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Loader2,
   Eye, ArrowRight, ArrowLeft, Download, AlertTriangle, ShieldCheck,
-  Sparkles, ExternalLink, Copy, Info, Filter,
+  Sparkles, ExternalLink, Copy, Info, Filter, TrendingUp, TrendingDown,
 } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import type { KPIData } from "@/domain/types/kpi.types";
+import { useKPIs } from "@/hooks/useKPIs";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -537,6 +540,12 @@ export function SmartImporter({
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("all");
   const [previewPage, setPreviewPage] = useState(0);
+  const [kpiSnapshot, setKpiSnapshot] = useState<KPIData | null>(null);
+  const [valueClassification, setValueClassification] = useState<"receita" | "despesa" | "ignorar" | null>(null);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+
+  // KPI hook for post-import verification
+  const { data: currentKpis, refetch: refetchKpis } = useKPIs();
 
   const SYSTEM_FIELDS = useMemo(() => getFieldsForEntity(entityType), [entityType]);
   const FIELD_SYNONYMS = useMemo(() => getSynonymsForEntity(entityType), [entityType]);
@@ -558,6 +567,9 @@ export function SmartImporter({
     setEntityType(initialEntityType);
     setPreviewFilter("all");
     setPreviewPage(0);
+    setKpiSnapshot(null);
+    setValueClassification(null);
+    setImportWarnings([]);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -864,15 +876,24 @@ export function SmartImporter({
     setStep("importing");
     setIsLoading(true);
     setImportProgress(0);
+    setImportWarnings([]);
 
     try {
+      // Snapshot KPIs before import
+      try {
+        const { data: snapData } = await supabase.rpc('calcular_kpis_v2');
+        if (snapData && snapData.length > 0) setKpiSnapshot(snapData[0]);
+      } catch (e) {
+        console.warn("Could not snapshot KPIs:", e);
+      }
+
       const skippedErrors: string[] = [];
       let recordsToInsert: Record<string, any>[] = [];
       const failedRows: Record<string, string>[] = [];
+      const warnings: string[] = [];
 
       for (let i = 0; i < allValidatedRows.length; i++) {
         const validation = allValidatedRows[i];
-        // Only block on ERRORS, not warnings
         if (validation.hasErrors) {
           if (skipErrors) {
             const errorMessages = Object.entries(validation.errors)
@@ -889,7 +910,7 @@ export function SmartImporter({
         const record: Record<string, any> = {};
         for (const field of SYSTEM_FIELDS) {
           if (!mappings[field.key]) continue;
-          if (field.key === "_categoria_lookup") continue; // lookup-only field, skip insert
+          if (field.key === "_categoria_lookup") continue;
           let val: any = validation.row[field.key];
           if (!val) { record[field.key] = null; continue; }
           if (field.type === "number") val = parseFloat(val) || null;
@@ -909,32 +930,106 @@ export function SmartImporter({
       recordsToInsert = await linkToClients(recordsToInsert);
       setImportProgress(30);
 
-      // Auto-link expenses to expense types by category name
-      if (entityType === "despesas" && mappings["_categoria_lookup"]) {
-        try {
-          const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
-          if (tiposDespesa && tiposDespesa.length > 0) {
-            const tipoMap = new Map<string, string>();
-            for (const t of tiposDespesa) {
-              tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
-              if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
-            }
-            let linked = 0;
-            for (const rec of recordsToInsert) {
-              if (rec.id_tipodespesa) continue;
-              const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
-              const rowIdx = recordsToInsert.indexOf(rec);
-              const rawRow = rawData[allValidatedRows.findIndex((v, i) => !v.hasErrors && recordsToInsert.indexOf(rec) !== -1) || 0];
-              const catValue = rawRow?.[catIdx]?.toString().trim();
-              if (catValue) {
-                const id = tipoMap.get(normalize(catValue));
-                if (id) { rec.id_tipodespesa = id; linked++; }
+      // === FALLBACK: id_cliente for orcamentos ===
+      if (entityType === "orcamentos") {
+        const orphanCount = recordsToInsert.filter(r => !r.id_cliente).length;
+        if (orphanCount > 0) {
+          try {
+            // Try to find or create "Cliente Importação"
+            const { data: existingClient } = await supabase
+              .from("dim_cliente")
+              .select("id_cliente")
+              .eq("nome", "Cliente Importação")
+              .maybeSingle();
+
+            let fallbackClientId = existingClient?.id_cliente;
+
+            if (!fallbackClientId) {
+              const result = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
+              if (result.success > 0) {
+                const { data: newClient } = await supabase
+                  .from("dim_cliente")
+                  .select("id_cliente")
+                  .eq("nome", "Cliente Importação")
+                  .maybeSingle();
+                fallbackClientId = newClient?.id_cliente;
               }
             }
-            if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+
+            if (fallbackClientId) {
+              for (const rec of recordsToInsert) {
+                if (!rec.id_cliente) rec.id_cliente = fallbackClientId;
+              }
+              warnings.push(`${orphanCount} orçamento(s) vinculado(s) ao cliente "Cliente Importação". Edite-os para associar ao cliente correto.`);
+            }
+          } catch (e) {
+            console.warn("Erro ao criar cliente fallback:", e);
           }
-        } catch (e) {
-          console.warn("Erro ao vincular tipos de despesa:", e);
+        }
+      }
+
+      // === FALLBACK: id_tipodespesa for despesas ===
+      if (entityType === "despesas") {
+        // Auto-link by category name first
+        if (mappings["_categoria_lookup"]) {
+          try {
+            const { data: tiposDespesa } = await supabase.from("dim_tipodespesa").select("id_tipodespesa, categoria, subcategoria");
+            if (tiposDespesa && tiposDespesa.length > 0) {
+              const tipoMap = new Map<string, string>();
+              for (const t of tiposDespesa) {
+                tipoMap.set(normalize(t.categoria), t.id_tipodespesa);
+                if (t.subcategoria) tipoMap.set(normalize(t.subcategoria), t.id_tipodespesa);
+              }
+              let linked = 0;
+              for (let i = 0; i < recordsToInsert.length; i++) {
+                const rec = recordsToInsert[i];
+                if (rec.id_tipodespesa) continue;
+                const catIdx = headers.indexOf(mappings["_categoria_lookup"]);
+                const validIdx = allValidatedRows.findIndex((v, vi) => !v.hasErrors && i < recordsToInsert.length);
+                const rawRow = rawData[validIdx >= 0 ? validIdx : i];
+                const catValue = rawRow?.[catIdx]?.toString().trim();
+                if (catValue) {
+                  const id = tipoMap.get(normalize(catValue));
+                  if (id) { rec.id_tipodespesa = id; linked++; }
+                }
+              }
+              if (linked > 0) toast.success(`${linked} despesa(s) vinculada(s) automaticamente a tipos existentes`);
+            }
+          } catch (e) {
+            console.warn("Erro ao vincular tipos de despesa:", e);
+          }
+        }
+
+        // Now handle orphan despesas without id_tipodespesa
+        const orphanDespesas = recordsToInsert.filter(r => !r.id_tipodespesa).length;
+        if (orphanDespesas > 0) {
+          try {
+            const { data: existingType } = await supabase
+              .from("dim_tipodespesa")
+              .select("id_tipodespesa")
+              .eq("categoria", "Sem classificação")
+              .maybeSingle();
+
+            let fallbackTypeId = existingType?.id_tipodespesa;
+
+            if (!fallbackTypeId) {
+              const { data: newType } = await supabase
+                .from("dim_tipodespesa")
+                .insert({ categoria: "Sem classificação", classificacao: "VARIAVEL", descricao: "Criado automaticamente pela importação" })
+                .select("id_tipodespesa")
+                .single();
+              fallbackTypeId = newType?.id_tipodespesa;
+            }
+
+            if (fallbackTypeId) {
+              for (const rec of recordsToInsert) {
+                if (!rec.id_tipodespesa) rec.id_tipodespesa = fallbackTypeId;
+              }
+              warnings.push(`${orphanDespesas} despesa(s) classificada(s) como "Sem classificação". Edite em Cadastros > Tipos de Despesa.`);
+            }
+          } catch (e) {
+            console.warn("Erro ao criar tipo de despesa fallback:", e);
+          }
         }
       }
 
@@ -952,6 +1047,7 @@ export function SmartImporter({
       setImportProgress(90);
       const allErrors = [...skippedErrors, ...result.errors];
       setImportResult({ success: result.success, errors: allErrors, failedRows });
+      setImportWarnings(warnings);
       setStep("result");
       setImportProgress(100);
 
@@ -961,9 +1057,10 @@ export function SmartImporter({
       });
 
       if (result.success > 0) {
-        // Invalidate entity-specific + financial caches
-        [entityLabel.queryKey, "resource-counts", "kpis", "dashboard-metrics", "financial-data", "chart-data"]
-          .forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+        // Invalidate all caches with full refetch
+        await queryClient.invalidateQueries({ refetchType: 'all' });
+        // Also refetch KPIs explicitly for the verification panel
+        setTimeout(() => refetchKpis(), 1500);
         onSuccess?.();
       }
     } catch (err: any) {
@@ -1115,6 +1212,43 @@ export function SmartImporter({
                         Usar {ENTITY_LABELS[detectedEntity.entity].titlePlural}
                       </Button>
                     )}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Low confidence: ask user to classify values */}
+              {detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
+                const n = normalize(h);
+                return ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price"].some(s => n.includes(s));
+              }) && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Detectamos valores monetários na sua planilha</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <p className="text-sm text-muted-foreground mb-3">Como deseja classificar esses valores?</p>
+                    <RadioGroup
+                      value={valueClassification || ""}
+                      onValueChange={(v) => {
+                        const val = v as "receita" | "despesa" | "ignorar";
+                        setValueClassification(val);
+                        if (val === "receita") handleEntityChange("orcamentos");
+                        else if (val === "despesa") handleEntityChange("despesas");
+                      }}
+                      className="flex gap-4"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="receita" id="class-receita" />
+                        <Label htmlFor="class-receita" className="text-sm cursor-pointer">💰 Receita (criará orçamentos)</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="despesa" id="class-despesa" />
+                        <Label htmlFor="class-despesa" className="text-sm cursor-pointer">📉 Despesa (criará despesas)</Label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="ignorar" id="class-ignorar" />
+                        <Label htmlFor="class-ignorar" className="text-sm cursor-pointer">⏭️ Ignorar valores</Label>
+                      </div>
+                    </RadioGroup>
                   </AlertDescription>
                 </Alert>
               )}
@@ -1415,6 +1549,73 @@ export function SmartImporter({
                     {importResult.success} {entityLabel.singular}(s) importado(s) com sucesso.
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {/* Import warnings */}
+              {importWarnings.length > 0 && (
+                <Alert className="border-amber-500/30 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Avisos da importação</AlertTitle>
+                  <AlertDescription>
+                    <ul className="list-disc list-inside space-y-1 mt-1">
+                      {importWarnings.map((w, i) => <li key={i} className="text-sm text-amber-600 dark:text-amber-400">{w}</li>)}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Financial Verification Panel */}
+              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos") && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    <span className="font-medium text-sm">Verificação Financeira</span>
+                  </div>
+                  {currentKpis ? (
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Receita Total</p>
+                        <p className="text-lg font-bold text-primary">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.receita_total || 0)}
+                        </p>
+                        {kpiSnapshot && (
+                          <p className={`text-xs ${(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) ? "text-emerald-600" : "text-muted-foreground"}`}>
+                            {(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && <TrendingUp className="h-3 w-3 inline mr-1" />}
+                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.receita_total || 0)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Despesas</p>
+                        <p className="text-lg font-bold text-destructive">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.total_despesas || 0)}
+                        </p>
+                        {kpiSnapshot && (
+                          <p className={`text-xs ${(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) ? "text-amber-600" : "text-muted-foreground"}`}>
+                            {(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) && <TrendingDown className="h-3 w-3 inline mr-1" />}
+                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.total_despesas || 0)}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Lucro Líquido</p>
+                        <p className={`text-lg font-bold ${(currentKpis.lucro_liquido || 0) >= 0 ? "text-primary" : "text-destructive"}`}>
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.lucro_liquido || 0)}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center">Carregando KPIs atualizados...</p>
+                  )}
+                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && (
+                    <Alert className="mt-3 border-amber-500/30 bg-amber-500/5">
+                      <AlertTriangle className="h-4 w-4 text-amber-600" />
+                      <AlertDescription className="text-sm text-amber-600 dark:text-amber-400">
+                        Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
               )}
 
               {importResult.success > 0 && (

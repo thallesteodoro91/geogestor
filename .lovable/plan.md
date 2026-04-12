@@ -1,98 +1,77 @@
 
 
-## Plano: Importação Financeiramente Inteligente
+## Plano: Importação com Interpretação Financeira Completa
 
 ### Diagnóstico
 
-Após auditoria do fluxo completo (SmartImporter → batch services → KPI view), identifiquei 3 causas raiz:
+O SmartImporter já possui boa mecânica de importação por entidade (clientes, orçamentos, despesas, serviços), mas o problema real é: **o usuário importa UMA planilha genérica com dados mistos** (clientes + valores + datas) e o sistema trata como uma única entidade. O resultado é que valores monetários entram como texto em campos de cliente, ou orçamentos são criados sem `id_cliente` (campo obrigatório na view de KPIs que calcula receita).
 
-1. **Orçamentos sem `receita_esperada`**: O campo `valor_unitario` é mapeado corretamente, mas `receita_esperada` (que alimenta `receita_total` nos KPIs) não é calculado automaticamente. O campo existe no formulário de importação mas é opcional — se o usuário não mapear, fica `null` e o KPI mostra R$ 0.
-
-2. **Despesas sem `id_tipodespesa`**: Sem vínculo ao tipo de despesa, a classificação FIXA/VARIAVEL não funciona. Custos variáveis ficam zerados nos KPIs.
-
-3. **Sem preview financeiro**: O usuário não vê o impacto dos dados importados antes de confirmar.
+Causas raiz específicas dos KPIs zerados:
+1. **`fato_orcamento.receita_esperada`** é o campo que alimenta `receita_total` na view `vw_kpis_financeiros`. Se o orçamento não tem `id_cliente` (obrigatório no schema), o INSERT falha silenciosamente via RLS.
+2. **Orçamentos importados sem `id_cliente`**: O auto-link só funciona se a planilha tem coluna de cliente E o campo está mapeado. Se o usuário importa apenas valores, não há vínculo.
+3. **Despesas sem `id_tipodespesa`**: Classificação FIXA/VARIAVEL não funciona, então custos variáveis ficam zerados.
+4. **Sem painel pós-importação**: O usuário não vê se os dados realmente alimentaram os KPIs.
 
 ### Mudanças
 
-#### 1. Auto-cálculo de campos derivados no `handleImport`
+#### 1. Tela de resultado com painel de verificação financeira
 
-Antes de enviar os records para o batch service, calcular automaticamente:
+Após importação bem-sucedida, adicionar um card de "Verificação Financeira" que consulta os KPIs em tempo real e mostra:
+- Receita Total atualizada
+- Total de Despesas atualizada  
+- Lucro Líquido
+- Comparação "antes vs depois" (usando snapshot pré-importação)
 
-**Orçamentos:**
-- `receita_esperada = (valor_unitario * quantidade) - desconto` (se não mapeado explicitamente)
-- `quantidade = 1` (se não mapeado — já existe)
-- `desconto = 0` (se não mapeado)
+Se KPIs continuam zerados após importar, mostrar alerta: "⚠ Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria."
 
-**Serviços:**
-- Se `receita_servico` não foi mapeado mas existe coluna de valor, usar como receita
+#### 2. Fallback inteligente para `id_cliente` em orçamentos
 
-#### 2. Vinculação inteligente de despesas a tipos existentes
+Se `entityType === "orcamentos"` e nenhum `id_cliente` foi vinculado (nem por mapeamento nem por auto-link):
+- Buscar empresa principal do tenant (`dim_empresa`)
+- Criar um cliente genérico "Cliente Importação" (se não existir)
+- Vincular todos os orçamentos sem cliente a esse cliente
+- Mostrar warning: "X orçamentos vinculados ao cliente 'Cliente Importação'. Edite-os para associar ao cliente correto."
 
-No `handleImport`, antes do batch insert:
-- Buscar `dim_tipodespesa` do tenant
-- Se a planilha tem coluna mapeada como "categoria" ou "tipo", tentar match por nome com os tipos existentes
-- Se encontrou match → setar `id_tipodespesa` automaticamente
-- Se não encontrou → importar sem vínculo (comportamento atual) mas mostrar warning
+Isso garante que o INSERT não falhe por falta de `id_cliente` (campo NOT NULL no schema).
 
-Adicionar campo opcional nos `DESPESA_FIELDS`:
-- `categoria_despesa` (key: `_categoria_lookup`, label: "Categoria/Tipo de Despesa") — usado apenas para lookup, não inserido diretamente
+#### 3. Auto-classificação de despesas sem tipo
 
-#### 3. Preview financeiro antes da importação
+Se `entityType === "despesas"` e registros ficam sem `id_tipodespesa`:
+- Buscar se existe tipo "Sem classificação" no tenant
+- Se não existir, criar automaticamente com classificação "VARIAVEL"
+- Vincular despesas órfãs a esse tipo
+- Warning: "X despesas classificadas como 'Sem classificação'. Edite-as em Cadastros > Tipos de Despesa."
 
-Na tela de preview (step "preview"), adicionar um card de resumo financeiro acima da tabela:
+#### 4. Snapshot de KPIs pré-importação
 
-```text
-┌─────────────────────────────────────────────────┐
-│ 📊 Impacto Financeiro Estimado                  │
-│                                                  │
-│  Receita:  R$ 150.000,00  (12 orçamentos)       │
-│  Despesas: R$ 45.000,00   (28 registros)        │
-│  Lucro:    R$ 105.000,00                        │
-│                                                  │
-│  ⚠ 3 despesas sem categoria (serão importadas   │
-│    como "Sem classificação")                     │
-└─────────────────────────────────────────────────┘
-```
+Antes de iniciar a importação (`handleImport`), capturar os KPIs atuais via `supabase.rpc('calcular_kpis_v2')`. Após a importação, refetch e comparar. Mostrar delta no painel de resultado.
 
-Calculado a partir dos dados validados:
-- Orçamentos: soma de `receita_esperada` (calculada ou mapeada)
-- Despesas: soma de `valor_da_despesa`
-- Serviços: soma de `receita_servico`
+#### 5. Importação de planilha genérica com detecção multi-entidade
 
-#### 4. Sinônimos financeiros expandidos
+Quando o auto-detect tem confiança < 40% e a planilha tem colunas de valor + nome:
+- Mostrar prompt de classificação: "Detectamos valores monetários. Como classificar?"
+  - ( ) Receita (criará orçamentos)
+  - ( ) Despesa (criará despesas)
+  - ( ) Ignorar valores
+- Usar a resposta para criar a entidade correta automaticamente
 
-Adicionar sinônimos para melhor detecção de colunas de valor:
+#### 6. Garantir invalidação de cache com delay
 
-**Orçamentos:**
-- `receita_esperada`: adicionar "faturamento", "valortotalservico", "amount", "revenue", "precoservico", "valorcontrato"
-- `valor_unitario`: adicionar "valorha", "valorhectare", "precoha"
-
-**Despesas:**
-- `valor_da_despesa`: adicionar "amount", "expense", "pagamento", "valorpago", "despesa"
-- Novo campo lookup: `_categoria_lookup` com sinônimos "categoria", "tipo", "classificacao", "natureza", "grupo"
-
-**Serviços:**
-- `receita_servico`: adicionar "valorservico", "amount", "revenue", "valorcontrato", "total"
-
-#### 5. Invalidação de cache financeiro após importação
-
-No `handleImport`, após sucesso, invalidar queries financeiras:
-```typescript
-["kpis", "dashboard-metrics", "financial-data", "chart-data"].forEach(key => 
-  queryClient.invalidateQueries({ queryKey: [key] })
-);
-```
+Após importação, adicionar `await queryClient.invalidateQueries()` com `refetchType: 'all'` para forçar refresh imediato dos KPIs na tela.
 
 ### Detalhes técnicos
 
-- Auto-cálculo no `handleImport`: após montar `record`, verificar se `entityType === "orcamentos"` e calcular `receita_esperada` se ausente
-- Lookup de `id_tipodespesa`: query única antes do batch, criar mapa `nome_normalizado → id`
-- Preview financeiro: componente inline no step "preview", calcula soma dos campos numéricos validados
-- Nenhuma migração necessária — todas as colunas já existem no banco
+- Snapshot KPI: `useState<KPIData | null>(null)` capturado no início do `handleImport`
+- Fallback cliente: query `dim_cliente` por nome "Cliente Importação", upsert se não existir
+- Fallback tipo despesa: query `dim_tipodespesa` por categoria "Sem classificação", upsert se não existir
+- Painel verificação: componente inline no step "result", usa `useKPIs()` hook com `refetchInterval: 2000` temporário
+- Prompt classificação: radio group no step "mapping" quando confidence < 40%
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Editar | `src/components/import/SmartImporter.tsx` (auto-cálculo, preview financeiro, sinônimos, cache) |
+| Editar | `src/components/import/SmartImporter.tsx` (fallbacks, painel verificação, prompt classificação) |
+
+Nenhuma migração necessária — todas as tabelas e colunas já existem.
 

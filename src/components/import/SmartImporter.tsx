@@ -540,6 +540,12 @@ export function SmartImporter({
   const [duplicateCount, setDuplicateCount] = useState(0);
   const [previewFilter, setPreviewFilter] = useState<PreviewFilter>("all");
   const [previewPage, setPreviewPage] = useState(0);
+  const [kpiSnapshot, setKpiSnapshot] = useState<KPIData | null>(null);
+  const [valueClassification, setValueClassification] = useState<"receita" | "despesa" | "ignorar" | null>(null);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+
+  // KPI hook for post-import verification
+  const { data: currentKpis, refetch: refetchKpis } = useKPIs();
 
   const SYSTEM_FIELDS = useMemo(() => getFieldsForEntity(entityType), [entityType]);
   const FIELD_SYNONYMS = useMemo(() => getSynonymsForEntity(entityType), [entityType]);

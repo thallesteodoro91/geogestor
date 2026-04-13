@@ -370,7 +370,7 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
-// COMPLETO_SYNONYMS is defined after entity-specific synonyms below
+
 
 function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
   switch (entity) {

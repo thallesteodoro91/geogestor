@@ -813,7 +813,7 @@ export function SmartImporter({
 
   // ─── Financial preview ───────────────────────────────────────────────
   const financialPreview = useMemo(() => {
-    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos") return null;
+    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos" && entityType !== "completo") return null;
     const validRows = allValidatedRows.filter(v => !v.hasErrors);
     let receita = 0;
     let despesas = 0;

@@ -1095,12 +1095,182 @@ export function SmartImporter({
       setImportProgress(40);
 
       let result: { success: number; errors: string[] };
-      switch (entityType) {
-        case "propriedades": result = await createPropriedadesBatch(recordsToInsert as any); break;
-        case "orcamentos": result = await createOrcamentosBatch(recordsToInsert as any); break;
-        case "servicos": result = await createServicosBatch(recordsToInsert as any); break;
-        case "despesas": result = await createDespesasBatch(recordsToInsert as any); break;
-        default: result = await createClientesBatch(recordsToInsert as any); break;
+
+      if (entityType === "completo") {
+        // ─── COMPOSITE IMPORT PIPELINE ────────────────────────────
+        result = { success: 0, errors: [] };
+        const clienteMap = new Map<string, string>(); // normalized name → id
+        const propMap = new Map<string, string>(); // "clienteId|propName" → id
+        let totalCreated = 0;
+        const compositeStats = { clientes: 0, propriedades: 0, servicos: 0, orcamentos: 0, despesas: 0 };
+
+        // Step 1: Deduplicate and create clients
+        setImportProgress(45);
+        const uniqueClientes = new Map<string, Record<string, any>>();
+        for (const rec of recordsToInsert) {
+          const nome = rec.nome?.trim();
+          if (!nome) continue;
+          const key = nome.toLowerCase();
+          if (!uniqueClientes.has(key)) {
+            uniqueClientes.set(key, {
+              nome, cpf: rec.cpf || null, telefone: rec.telefone || null,
+              email: rec.email || null, endereco: rec.endereco || null,
+            });
+          }
+        }
+
+        // Check existing clients first
+        const { data: existingClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+        for (const c of (existingClients || [])) {
+          clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+        }
+
+        // Create only new clients
+        const newClients = Array.from(uniqueClientes.entries())
+          .filter(([key]) => !clienteMap.has(key))
+          .map(([, data]) => data);
+
+        if (newClients.length > 0) {
+          const cRes = await createClientesBatch(newClients as any);
+          compositeStats.clientes = cRes.success;
+          result.errors.push(...cRes.errors);
+          // Refresh map
+          const { data: updatedClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+          for (const c of (updatedClients || [])) {
+            clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+          }
+        }
+        compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
+
+        // Step 2: Create properties
+        setImportProgress(55);
+        const uniqueProps = new Map<string, Record<string, any>>();
+        for (const rec of recordsToInsert) {
+          const propName = rec.nome_da_propriedade?.trim();
+          if (!propName) continue;
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const key = `${clienteId || "none"}|${propName.toLowerCase()}`;
+          if (!uniqueProps.has(key)) {
+            uniqueProps.set(key, {
+              nome_da_propriedade: propName,
+              municipio: rec.municipio || null,
+              area_ha: rec.area_ha ? parseFloat(rec.area_ha) || null : null,
+              id_cliente: clienteId || null,
+            });
+          }
+        }
+
+        if (uniqueProps.size > 0) {
+          const propRecords = Array.from(uniqueProps.values());
+          const pRes = await createPropriedadesBatch(propRecords as any);
+          compositeStats.propriedades = pRes.success;
+          result.errors.push(...pRes.errors);
+          // Build prop map
+          const { data: allProps } = await supabase.from("dim_propriedade").select("id_propriedade, nome_da_propriedade, id_cliente");
+          for (const p of (allProps || [])) {
+            propMap.set(`${p.id_cliente || "none"}|${p.nome_da_propriedade?.toLowerCase()}`, p.id_propriedade);
+          }
+        }
+
+        // Step 3: Create services
+        setImportProgress(65);
+        const servicoMap = new Map<string, string>(); // "nome|clienteId" → id
+        const uniqueServicos: Record<string, any>[] = [];
+        const servicoKeys = new Set<string>();
+
+        for (const rec of recordsToInsert) {
+          const servicoNome = rec.nome_do_servico?.trim() || (rec.valor_unitario || rec.receita_esperada ? "Serviço Importado" : null);
+          if (!servicoNome) continue;
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
+          const key = `${servicoNome.toLowerCase()}|${clienteId || "none"}`;
+          if (!servicoKeys.has(key)) {
+            servicoKeys.add(key);
+            uniqueServicos.push({
+              nome_do_servico: servicoNome,
+              categoria: rec.categoria || null,
+              situacao_do_servico: rec.situacao_do_servico || "Pendente",
+              data_do_servico_inicio: rec.data_do_servico_inicio || null,
+              receita_servico: rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) || 0 : (rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) || 0 : 0),
+              custo_servico: rec.custo_servico ? parseFloat(sanitizeCurrency(rec.custo_servico)) || 0 : 0,
+              id_cliente: clienteId || null,
+              id_propriedade: propId || null,
+            });
+          }
+        }
+
+        if (uniqueServicos.length > 0) {
+          const sRes = await createServicosBatch(uniqueServicos as any);
+          compositeStats.servicos = sRes.success;
+          result.errors.push(...sRes.errors);
+          // Build servico map
+          const { data: allServicos } = await supabase.from("fato_servico").select("id_servico, nome_do_servico, id_cliente");
+          for (const s of (allServicos || [])) {
+            servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}`, s.id_servico);
+          }
+        }
+
+        // Step 4: Create financial records (orçamentos)
+        setImportProgress(80);
+        const orcamentos: Record<string, any>[] = [];
+        for (const rec of recordsToInsert) {
+          const valorUnit = rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) : null;
+          const receitaEsperada = rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) : null;
+          if (!valorUnit && !receitaEsperada) continue;
+
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
+          const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
+          const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
+
+          if (!clienteId) continue; // orçamentos require id_cliente
+
+          const vu = valorUnit || receitaEsperada || 0;
+          orcamentos.push({
+            id_cliente: clienteId,
+            id_propriedade: propId || null,
+            id_servico: servicoId || null,
+            data_orcamento: rec.data_orcamento || rec.data_do_servico_inicio || new Date().toISOString().slice(0, 10),
+            valor_unitario: vu,
+            quantidade: 1,
+            receita_esperada: receitaEsperada || vu,
+          });
+        }
+
+        if (orcamentos.length > 0) {
+          const oRes = await createOrcamentosBatch(orcamentos as any);
+          compositeStats.orcamentos = oRes.success;
+          result.errors.push(...oRes.errors);
+        }
+
+        totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;
+        result.success = totalCreated;
+
+        // Build composite warnings summary
+        const parts: string[] = [];
+        if (compositeStats.clientes > 0) parts.push(`${compositeStats.clientes} cliente(s)`);
+        if (compositeStats.propriedades > 0) parts.push(`${compositeStats.propriedades} propriedade(s)`);
+        if (compositeStats.servicos > 0) parts.push(`${compositeStats.servicos} projeto(s)`);
+        if (compositeStats.orcamentos > 0) parts.push(`${compositeStats.orcamentos} orçamento(s)`);
+        if (parts.length > 0) warnings.push(`Criados: ${parts.join(", ")}`);
+
+        const totalReceita = orcamentos.reduce((s, o) => s + (o.receita_esperada || 0), 0);
+        if (totalReceita > 0) {
+          warnings.push(`R$ ${new Intl.NumberFormat("pt-BR").format(totalReceita)} em receita importada`);
+        }
+      } else {
+        switch (entityType) {
+          case "propriedades": result = await createPropriedadesBatch(recordsToInsert as any); break;
+          case "orcamentos": result = await createOrcamentosBatch(recordsToInsert as any); break;
+          case "servicos": result = await createServicosBatch(recordsToInsert as any); break;
+          case "despesas": result = await createDespesasBatch(recordsToInsert as any); break;
+          default: result = await createClientesBatch(recordsToInsert as any); break;
+        }
       }
 
       setImportProgress(90);

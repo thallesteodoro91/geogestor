@@ -851,8 +851,8 @@ export function SmartImporter({
   const checkDuplicates = useCallback(async () => {
     if (entityType !== "clientes" && entityType !== "servicos" && entityType !== "completo") return;
 
-    const nameField = entityType === "clientes" ? "nome" : "nome_do_servico";
-    const table = entityType === "clientes" ? "dim_cliente" : "fato_servico";
+    const nameField = (entityType === "clientes" || entityType === "completo") ? "nome" : "nome_do_servico";
+    const table = (entityType === "clientes" || entityType === "completo") ? "dim_cliente" : "fato_servico";
     const names = allValidatedRows
       .filter(v => !v.hasErrors)
       .map(v => v.row[nameField]?.trim().toLowerCase())

@@ -1321,6 +1321,7 @@ export function SmartImporter({
       case "servicos": return { text: "Próximo passo: registre despesas dos seus projetos", route: "/despesas" };
       case "despesas": return { text: "Próximo passo: confira o painel financeiro", route: "/financeiro" };
       case "orcamentos": return { text: "Próximo passo: converta orçamentos em projetos", route: "/orcamentos" };
+      case "completo": return { text: "Seus dados foram importados! Confira o painel financeiro", route: "/financeiro" };
       default: return null;
     }
   };

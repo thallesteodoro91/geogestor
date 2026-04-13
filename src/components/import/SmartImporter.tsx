@@ -370,18 +370,7 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
-const COMPLETO_SYNONYMS: Record<string, string[]> = {
-  ...CLIENTE_SYNONYMS,
-  ...PROPRIEDADE_SYNONYMS,
-  ...SERVICO_SYNONYMS,
-  ...ORCAMENTO_SYNONYMS,
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
-  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
-  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
-  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
-  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
-};
+// COMPLETO_SYNONYMS is defined after entity-specific synonyms below
 
 function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
   switch (entity) {

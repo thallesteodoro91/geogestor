@@ -495,7 +495,7 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_\s\-.*]/g, "");
   const normalized = fileHeaders.map(norm);
 
-  const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0 };
+  const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0, completo: 0 };
   const entities: ImportEntityType[] = ["clientes", "propriedades", "orcamentos", "servicos", "despesas"];
 
   for (const entity of entities) {
@@ -517,7 +517,15 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const best = sorted[0];
   const maxScore = scores[best];
   const totalPossible = getFieldsForEntity(best).length * 3;
-  return { entity: best, confidence: totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0 };
+  const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
+
+  // Detect "completo" when 3+ entity types score high
+  const highScoring = entities.filter(e => scores[e] >= 4);
+  if (highScoring.length >= 3) {
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
+  }
+
+  return { entity: best, confidence };
 }
 
 // ─── Template downloads ────────────────────────────────────────────────
@@ -531,6 +539,7 @@ function downloadEntityTemplate(entity: ImportEntityType) {
     clientes: ["João da Silva", "123.456.789-00", "", "(62) 3333-4444", "(62) 99999-8888", "joao@email.com", "Rua das Flores, 123", "Produtor Rural", "Indicação", "Ativo", "Cliente fiel", "2024-01-15", "45"],
     servicos: ["Levantamento Topográfico", "Topografia", "2024-01-15", "2024-02-15", "Em Andamento", "5000.00", "2000.00", "Serviço de campo", "50"],
     despesas: ["1500.00", "2024-01-20", "Combustível para campo", "confirmada"],
+    completo: ["João da Silva", "123.456.789-00", "(62) 99999-8888", "joao@email.com", "Rua das Flores", "Fazenda Boa Vista", "Goiânia", "150.5", "Levantamento Topográfico", "Topografia", "Em Andamento", "2024-01-15", "5000.00", "5000.00", "2000.00", "2024-01-15"],
   };
   const csvContent = [headers.join(";"), (exampleRows[entity] || []).join(";")].join("\n");
   const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });

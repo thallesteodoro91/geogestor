@@ -1491,6 +1491,7 @@ export function SmartImporter({
                 <Select value={entityType} onValueChange={(v) => handleEntityChange(v as ImportEntityType)}>
                   <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="completo">📊 Importação Completa</SelectItem>
                     <SelectItem value="clientes">Clientes</SelectItem>
                     <SelectItem value="propriedades">Propriedades</SelectItem>
                     <SelectItem value="orcamentos">Orçamentos</SelectItem>

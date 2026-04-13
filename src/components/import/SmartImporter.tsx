@@ -833,6 +833,13 @@ export function SmartImporter({
       } else if (entityType === "servicos") {
         const val = parseFloat(sanitizeCurrency(v.row.receita_servico || "")) || 0;
         if (val > 0) { receita += val; count++; }
+      } else if (entityType === "completo") {
+        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
+        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
+        const cs = parseFloat(sanitizeCurrency(v.row.custo_servico || "")) || 0;
+        const val = re > 0 ? re : vu;
+        if (val > 0) { receita += val; count++; }
+        if (cs > 0) { despesas += cs; }
       }
     }
 

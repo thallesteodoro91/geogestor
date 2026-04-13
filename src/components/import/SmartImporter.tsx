@@ -345,12 +345,51 @@ const DESPESA_FIELDS: SystemField[] = [
   { key: "status", label: "Status", required: false },
 ];
 
+// ─── Completo fields (composite import) ────────────────────────────────
+
+const COMPLETO_FIELDS: SystemField[] = [
+  // Cliente
+  { key: "nome", label: "👤 Cliente - Nome", required: true, validate: validateNome },
+  { key: "cpf", label: "👤 Cliente - CPF", required: false, format: formatCPF, validate: validateCPF },
+  { key: "telefone", label: "👤 Cliente - Telefone", required: false, format: sanitizePhone, validate: validatePhone },
+  { key: "email", label: "👤 Cliente - Email", required: false, validate: validateEmail },
+  { key: "endereco", label: "👤 Cliente - Endereço", required: false },
+  // Propriedade
+  { key: "nome_da_propriedade", label: "🏡 Propriedade - Nome", required: false, validate: (v) => v ? validateNome(v) : null },
+  { key: "municipio", label: "🏡 Propriedade - Município", required: false },
+  { key: "area_ha", label: "🏡 Propriedade - Área (ha)", required: false, validate: validatePositiveNumber, type: "number" },
+  // Projeto
+  { key: "nome_do_servico", label: "📋 Projeto - Nome", required: false, validate: (v) => v ? validateNome(v) : null },
+  { key: "categoria", label: "📋 Projeto - Categoria", required: false },
+  { key: "situacao_do_servico", label: "📋 Projeto - Situação", required: false },
+  { key: "data_do_servico_inicio", label: "📋 Projeto - Data Início", required: false, format: formatDate, validate: validateDate, type: "date" },
+  // Financeiro
+  { key: "valor_unitario", label: "💰 Financeiro - Valor", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "custo_servico", label: "💰 Financeiro - Custo", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
+];
+
+const COMPLETO_SYNONYMS: Record<string, string[]> = {
+  ...CLIENTE_SYNONYMS,
+  ...PROPRIEDADE_SYNONYMS,
+  ...SERVICO_SYNONYMS,
+  ...ORCAMENTO_SYNONYMS,
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
+  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
+  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
+};
+
 function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
   switch (entity) {
     case "propriedades": return PROPRIEDADE_FIELDS;
     case "orcamentos": return ORCAMENTO_FIELDS;
     case "servicos": return SERVICO_FIELDS;
     case "despesas": return DESPESA_FIELDS;
+    case "completo": return COMPLETO_FIELDS;
     default: return CLIENTE_FIELDS;
   }
 }

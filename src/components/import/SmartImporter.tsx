@@ -486,6 +486,7 @@ const ENTITY_LABELS: Record<ImportEntityType, { singular: string; plural: string
   orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/orcamentos", queryKey: "orcamentos" },
   servicos: { singular: "projeto", plural: "projetos", titlePlural: "Projetos", route: "/projetos", queryKey: "servicos" },
   despesas: { singular: "despesa", plural: "despesas", titlePlural: "Despesas", route: "/despesas", queryKey: "despesas" },
+  completo: { singular: "registro", plural: "registros", titlePlural: "Importação Completa", route: "/financeiro", queryKey: "completo" },
 };
 
 // ─── Auto-detection ────────────────────────────────────────────────────

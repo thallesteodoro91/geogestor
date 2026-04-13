@@ -37,7 +37,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-export type ImportEntityType = "clientes" | "propriedades" | "orcamentos" | "servicos" | "despesas";
+export type ImportEntityType = "clientes" | "propriedades" | "orcamentos" | "servicos" | "despesas" | "completo";
 
 interface SmartImporterProps {
   open: boolean;

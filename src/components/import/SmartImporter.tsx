@@ -37,7 +37,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
-export type ImportEntityType = "clientes" | "propriedades" | "orcamentos" | "servicos" | "despesas";
+export type ImportEntityType = "clientes" | "propriedades" | "orcamentos" | "servicos" | "despesas" | "completo";
 
 interface SmartImporterProps {
   open: boolean;
@@ -345,12 +345,40 @@ const DESPESA_FIELDS: SystemField[] = [
   { key: "status", label: "Status", required: false },
 ];
 
+// ─── Completo fields (composite import) ────────────────────────────────
+
+const COMPLETO_FIELDS: SystemField[] = [
+  // Cliente
+  { key: "nome", label: "👤 Cliente - Nome", required: true, validate: validateNome },
+  { key: "cpf", label: "👤 Cliente - CPF", required: false, format: formatCPF, validate: validateCPF },
+  { key: "telefone", label: "👤 Cliente - Telefone", required: false, format: sanitizePhone, validate: validatePhone },
+  { key: "email", label: "👤 Cliente - Email", required: false, validate: validateEmail },
+  { key: "endereco", label: "👤 Cliente - Endereço", required: false },
+  // Propriedade
+  { key: "nome_da_propriedade", label: "🏡 Propriedade - Nome", required: false, validate: (v) => v ? validateNome(v) : null },
+  { key: "municipio", label: "🏡 Propriedade - Município", required: false },
+  { key: "area_ha", label: "🏡 Propriedade - Área (ha)", required: false, validate: validatePositiveNumber, type: "number" },
+  // Projeto
+  { key: "nome_do_servico", label: "📋 Projeto - Nome", required: false, validate: (v) => v ? validateNome(v) : null },
+  { key: "categoria", label: "📋 Projeto - Categoria", required: false },
+  { key: "situacao_do_servico", label: "📋 Projeto - Situação", required: false },
+  { key: "data_do_servico_inicio", label: "📋 Projeto - Data Início", required: false, format: formatDate, validate: validateDate, type: "date" },
+  // Financeiro
+  { key: "valor_unitario", label: "💰 Financeiro - Valor", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "custo_servico", label: "💰 Financeiro - Custo", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
+];
+
+
+
 function getFieldsForEntity(entity: ImportEntityType): SystemField[] {
   switch (entity) {
     case "propriedades": return PROPRIEDADE_FIELDS;
     case "orcamentos": return ORCAMENTO_FIELDS;
     case "servicos": return SERVICO_FIELDS;
     case "despesas": return DESPESA_FIELDS;
+    case "completo": return COMPLETO_FIELDS;
     default: return CLIENTE_FIELDS;
   }
 }
@@ -426,12 +454,26 @@ const DESPESA_SYNONYMS: Record<string, string[]> = {
   _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
+const COMPLETO_SYNONYMS: Record<string, string[]> = {
+  ...CLIENTE_SYNONYMS,
+  ...PROPRIEDADE_SYNONYMS,
+  ...SERVICO_SYNONYMS,
+  ...ORCAMENTO_SYNONYMS,
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
+  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
+  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
+};
+
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
   switch (entity) {
     case "propriedades": return PROPRIEDADE_SYNONYMS;
     case "orcamentos": return ORCAMENTO_SYNONYMS;
     case "servicos": return SERVICO_SYNONYMS;
     case "despesas": return DESPESA_SYNONYMS;
+    case "completo": return COMPLETO_SYNONYMS;
     default: return CLIENTE_SYNONYMS;
   }
 }
@@ -444,6 +486,7 @@ const ENTITY_LABELS: Record<ImportEntityType, { singular: string; plural: string
   orcamentos: { singular: "orçamento", plural: "orçamentos", titlePlural: "Orçamentos", route: "/orcamentos", queryKey: "orcamentos" },
   servicos: { singular: "projeto", plural: "projetos", titlePlural: "Projetos", route: "/projetos", queryKey: "servicos" },
   despesas: { singular: "despesa", plural: "despesas", titlePlural: "Despesas", route: "/despesas", queryKey: "despesas" },
+  completo: { singular: "registro", plural: "registros", titlePlural: "Importação Completa", route: "/financeiro", queryKey: "completo" },
 };
 
 // ─── Auto-detection ────────────────────────────────────────────────────
@@ -452,7 +495,7 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_\s\-.*]/g, "");
   const normalized = fileHeaders.map(norm);
 
-  const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0 };
+  const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0, completo: 0 };
   const entities: ImportEntityType[] = ["clientes", "propriedades", "orcamentos", "servicos", "despesas"];
 
   for (const entity of entities) {
@@ -474,7 +517,15 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const best = sorted[0];
   const maxScore = scores[best];
   const totalPossible = getFieldsForEntity(best).length * 3;
-  return { entity: best, confidence: totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0 };
+  const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
+
+  // Detect "completo" when 3+ entity types score high
+  const highScoring = entities.filter(e => scores[e] >= 4);
+  if (highScoring.length >= 3) {
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
+  }
+
+  return { entity: best, confidence };
 }
 
 // ─── Template downloads ────────────────────────────────────────────────
@@ -488,6 +539,7 @@ function downloadEntityTemplate(entity: ImportEntityType) {
     clientes: ["João da Silva", "123.456.789-00", "", "(62) 3333-4444", "(62) 99999-8888", "joao@email.com", "Rua das Flores, 123", "Produtor Rural", "Indicação", "Ativo", "Cliente fiel", "2024-01-15", "45"],
     servicos: ["Levantamento Topográfico", "Topografia", "2024-01-15", "2024-02-15", "Em Andamento", "5000.00", "2000.00", "Serviço de campo", "50"],
     despesas: ["1500.00", "2024-01-20", "Combustível para campo", "confirmada"],
+    completo: ["João da Silva", "123.456.789-00", "(62) 99999-8888", "joao@email.com", "Rua das Flores", "Fazenda Boa Vista", "Goiânia", "150.5", "Levantamento Topográfico", "Topografia", "Em Andamento", "2024-01-15", "5000.00", "5000.00", "2000.00", "2024-01-15"],
   };
   const csvContent = [headers.join(";"), (exampleRows[entity] || []).join(";")].join("\n");
   const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
@@ -761,7 +813,7 @@ export function SmartImporter({
 
   // ─── Financial preview ───────────────────────────────────────────────
   const financialPreview = useMemo(() => {
-    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos") return null;
+    if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos" && entityType !== "completo") return null;
     const validRows = allValidatedRows.filter(v => !v.hasErrors);
     let receita = 0;
     let despesas = 0;
@@ -781,6 +833,13 @@ export function SmartImporter({
       } else if (entityType === "servicos") {
         const val = parseFloat(sanitizeCurrency(v.row.receita_servico || "")) || 0;
         if (val > 0) { receita += val; count++; }
+      } else if (entityType === "completo") {
+        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
+        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
+        const cs = parseFloat(sanitizeCurrency(v.row.custo_servico || "")) || 0;
+        const val = re > 0 ? re : vu;
+        if (val > 0) { receita += val; count++; }
+        if (cs > 0) { despesas += cs; }
       }
     }
 
@@ -790,10 +849,10 @@ export function SmartImporter({
 
 
   const checkDuplicates = useCallback(async () => {
-    if (entityType !== "clientes" && entityType !== "servicos") return;
+    if (entityType !== "clientes" && entityType !== "servicos" && entityType !== "completo") return;
 
-    const nameField = entityType === "clientes" ? "nome" : "nome_do_servico";
-    const table = entityType === "clientes" ? "dim_cliente" : "fato_servico";
+    const nameField = (entityType === "clientes" || entityType === "completo") ? "nome" : "nome_do_servico";
+    const table = (entityType === "clientes" || entityType === "completo") ? "dim_cliente" : "fato_servico";
     const names = allValidatedRows
       .filter(v => !v.hasErrors)
       .map(v => v.row[nameField]?.trim().toLowerCase())
@@ -1036,12 +1095,182 @@ export function SmartImporter({
       setImportProgress(40);
 
       let result: { success: number; errors: string[] };
-      switch (entityType) {
-        case "propriedades": result = await createPropriedadesBatch(recordsToInsert as any); break;
-        case "orcamentos": result = await createOrcamentosBatch(recordsToInsert as any); break;
-        case "servicos": result = await createServicosBatch(recordsToInsert as any); break;
-        case "despesas": result = await createDespesasBatch(recordsToInsert as any); break;
-        default: result = await createClientesBatch(recordsToInsert as any); break;
+
+      if (entityType === "completo") {
+        // ─── COMPOSITE IMPORT PIPELINE ────────────────────────────
+        result = { success: 0, errors: [] };
+        const clienteMap = new Map<string, string>(); // normalized name → id
+        const propMap = new Map<string, string>(); // "clienteId|propName" → id
+        let totalCreated = 0;
+        const compositeStats = { clientes: 0, propriedades: 0, servicos: 0, orcamentos: 0, despesas: 0 };
+
+        // Step 1: Deduplicate and create clients
+        setImportProgress(45);
+        const uniqueClientes = new Map<string, Record<string, any>>();
+        for (const rec of recordsToInsert) {
+          const nome = rec.nome?.trim();
+          if (!nome) continue;
+          const key = nome.toLowerCase();
+          if (!uniqueClientes.has(key)) {
+            uniqueClientes.set(key, {
+              nome, cpf: rec.cpf || null, telefone: rec.telefone || null,
+              email: rec.email || null, endereco: rec.endereco || null,
+            });
+          }
+        }
+
+        // Check existing clients first
+        const { data: existingClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+        for (const c of (existingClients || [])) {
+          clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+        }
+
+        // Create only new clients
+        const newClients = Array.from(uniqueClientes.entries())
+          .filter(([key]) => !clienteMap.has(key))
+          .map(([, data]) => data);
+
+        if (newClients.length > 0) {
+          const cRes = await createClientesBatch(newClients as any);
+          compositeStats.clientes = cRes.success;
+          result.errors.push(...cRes.errors);
+          // Refresh map
+          const { data: updatedClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+          for (const c of (updatedClients || [])) {
+            clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+          }
+        }
+        compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
+
+        // Step 2: Create properties
+        setImportProgress(55);
+        const uniqueProps = new Map<string, Record<string, any>>();
+        for (const rec of recordsToInsert) {
+          const propName = rec.nome_da_propriedade?.trim();
+          if (!propName) continue;
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const key = `${clienteId || "none"}|${propName.toLowerCase()}`;
+          if (!uniqueProps.has(key)) {
+            uniqueProps.set(key, {
+              nome_da_propriedade: propName,
+              municipio: rec.municipio || null,
+              area_ha: rec.area_ha ? parseFloat(rec.area_ha) || null : null,
+              id_cliente: clienteId || null,
+            });
+          }
+        }
+
+        if (uniqueProps.size > 0) {
+          const propRecords = Array.from(uniqueProps.values());
+          const pRes = await createPropriedadesBatch(propRecords as any);
+          compositeStats.propriedades = pRes.success;
+          result.errors.push(...pRes.errors);
+          // Build prop map
+          const { data: allProps } = await supabase.from("dim_propriedade").select("id_propriedade, nome_da_propriedade, id_cliente");
+          for (const p of (allProps || [])) {
+            propMap.set(`${p.id_cliente || "none"}|${p.nome_da_propriedade?.toLowerCase()}`, p.id_propriedade);
+          }
+        }
+
+        // Step 3: Create services
+        setImportProgress(65);
+        const servicoMap = new Map<string, string>(); // "nome|clienteId" → id
+        const uniqueServicos: Record<string, any>[] = [];
+        const servicoKeys = new Set<string>();
+
+        for (const rec of recordsToInsert) {
+          const servicoNome = rec.nome_do_servico?.trim() || (rec.valor_unitario || rec.receita_esperada ? "Serviço Importado" : null);
+          if (!servicoNome) continue;
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
+          const key = `${servicoNome.toLowerCase()}|${clienteId || "none"}`;
+          if (!servicoKeys.has(key)) {
+            servicoKeys.add(key);
+            uniqueServicos.push({
+              nome_do_servico: servicoNome,
+              categoria: rec.categoria || null,
+              situacao_do_servico: rec.situacao_do_servico || "Pendente",
+              data_do_servico_inicio: rec.data_do_servico_inicio || null,
+              receita_servico: rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) || 0 : (rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) || 0 : 0),
+              custo_servico: rec.custo_servico ? parseFloat(sanitizeCurrency(rec.custo_servico)) || 0 : 0,
+              id_cliente: clienteId || null,
+              id_propriedade: propId || null,
+            });
+          }
+        }
+
+        if (uniqueServicos.length > 0) {
+          const sRes = await createServicosBatch(uniqueServicos as any);
+          compositeStats.servicos = sRes.success;
+          result.errors.push(...sRes.errors);
+          // Build servico map
+          const { data: allServicos } = await supabase.from("fato_servico").select("id_servico, nome_do_servico, id_cliente");
+          for (const s of (allServicos || [])) {
+            servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}`, s.id_servico);
+          }
+        }
+
+        // Step 4: Create financial records (orçamentos)
+        setImportProgress(80);
+        const orcamentos: Record<string, any>[] = [];
+        for (const rec of recordsToInsert) {
+          const valorUnit = rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) : null;
+          const receitaEsperada = rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) : null;
+          if (!valorUnit && !receitaEsperada) continue;
+
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
+          const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
+          const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
+
+          if (!clienteId) continue; // orçamentos require id_cliente
+
+          const vu = valorUnit || receitaEsperada || 0;
+          orcamentos.push({
+            id_cliente: clienteId,
+            id_propriedade: propId || null,
+            id_servico: servicoId || null,
+            data_orcamento: rec.data_orcamento || rec.data_do_servico_inicio || new Date().toISOString().slice(0, 10),
+            valor_unitario: vu,
+            quantidade: 1,
+            receita_esperada: receitaEsperada || vu,
+          });
+        }
+
+        if (orcamentos.length > 0) {
+          const oRes = await createOrcamentosBatch(orcamentos as any);
+          compositeStats.orcamentos = oRes.success;
+          result.errors.push(...oRes.errors);
+        }
+
+        totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;
+        result.success = totalCreated;
+
+        // Build composite warnings summary
+        const parts: string[] = [];
+        if (compositeStats.clientes > 0) parts.push(`${compositeStats.clientes} cliente(s)`);
+        if (compositeStats.propriedades > 0) parts.push(`${compositeStats.propriedades} propriedade(s)`);
+        if (compositeStats.servicos > 0) parts.push(`${compositeStats.servicos} projeto(s)`);
+        if (compositeStats.orcamentos > 0) parts.push(`${compositeStats.orcamentos} orçamento(s)`);
+        if (parts.length > 0) warnings.push(`Criados: ${parts.join(", ")}`);
+
+        const totalReceita = orcamentos.reduce((s, o) => s + (o.receita_esperada || 0), 0);
+        if (totalReceita > 0) {
+          warnings.push(`R$ ${new Intl.NumberFormat("pt-BR").format(totalReceita)} em receita importada`);
+        }
+      } else {
+        switch (entityType) {
+          case "propriedades": result = await createPropriedadesBatch(recordsToInsert as any); break;
+          case "orcamentos": result = await createOrcamentosBatch(recordsToInsert as any); break;
+          case "servicos": result = await createServicosBatch(recordsToInsert as any); break;
+          case "despesas": result = await createDespesasBatch(recordsToInsert as any); break;
+          default: result = await createClientesBatch(recordsToInsert as any); break;
+        }
       }
 
       setImportProgress(90);
@@ -1092,6 +1321,7 @@ export function SmartImporter({
       case "servicos": return { text: "Próximo passo: registre despesas dos seus projetos", route: "/despesas" };
       case "despesas": return { text: "Próximo passo: confira o painel financeiro", route: "/financeiro" };
       case "orcamentos": return { text: "Próximo passo: converta orçamentos em projetos", route: "/orcamentos" };
+      case "completo": return { text: "Seus dados foram importados! Confira o painel financeiro", route: "/financeiro" };
       default: return null;
     }
   };
@@ -1262,6 +1492,7 @@ export function SmartImporter({
                 <Select value={entityType} onValueChange={(v) => handleEntityChange(v as ImportEntityType)}>
                   <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="completo">📊 Importação Completa</SelectItem>
                     <SelectItem value="clientes">Clientes</SelectItem>
                     <SelectItem value="propriedades">Propriedades</SelectItem>
                     <SelectItem value="orcamentos">Orçamentos</SelectItem>
@@ -1565,7 +1796,7 @@ export function SmartImporter({
               )}
 
               {/* Financial Verification Panel */}
-              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos") && (
+              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos" || entityType === "completo") && (
                 <div className="rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="h-4 w-4 text-primary" />

@@ -1,77 +1,87 @@
 
 
-## Plano: Importação com Interpretação Financeira Completa
+## Plano: Importação Composta — Uma Linha = Múltiplas Entidades
 
 ### Diagnóstico
 
-O SmartImporter já possui boa mecânica de importação por entidade (clientes, orçamentos, despesas, serviços), mas o problema real é: **o usuário importa UMA planilha genérica com dados mistos** (clientes + valores + datas) e o sistema trata como uma única entidade. O resultado é que valores monetários entram como texto em campos de cliente, ou orçamentos são criados sem `id_cliente` (campo obrigatório na view de KPIs que calcula receita).
+O SmartImporter atual opera em modo **single-entity**: o usuário escolhe "Clientes" ou "Orçamentos" e cada linha cria apenas esse tipo de registro. Quando a planilha do usuário contém dados mistos (nome do cliente + propriedade + serviço + valor), apenas UMA entidade é criada e todo o restante é descartado.
 
-Causas raiz específicas dos KPIs zerados:
-1. **`fato_orcamento.receita_esperada`** é o campo que alimenta `receita_total` na view `vw_kpis_financeiros`. Se o orçamento não tem `id_cliente` (obrigatório no schema), o INSERT falha silenciosamente via RLS.
-2. **Orçamentos importados sem `id_cliente`**: O auto-link só funciona se a planilha tem coluna de cliente E o campo está mapeado. Se o usuário importa apenas valores, não há vínculo.
-3. **Despesas sem `id_tipodespesa`**: Classificação FIXA/VARIAVEL não funciona, então custos variáveis ficam zerados.
-4. **Sem painel pós-importação**: O usuário não vê se os dados realmente alimentaram os KPIs.
+O problema é estrutural: não existe um `entityType = "completo"` que interprete cada linha como uma entidade composta.
 
 ### Mudanças
 
-#### 1. Tela de resultado com painel de verificação financeira
+#### 1. Novo tipo de entidade: "completo" (Importação Completa)
 
-Após importação bem-sucedida, adicionar um card de "Verificação Financeira" que consulta os KPIs em tempo real e mostra:
-- Receita Total atualizada
-- Total de Despesas atualizada  
-- Lucro Líquido
-- Comparação "antes vs depois" (usando snapshot pré-importação)
+Adicionar `"completo"` ao `ImportEntityType`. Quando selecionado (ou auto-detectado quando a planilha tem colunas de múltiplas entidades), cada linha é processada como:
 
-Se KPIs continuam zerados após importar, mostrar alerta: "⚠ Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria."
+```text
+Linha da planilha
+  ├─ dim_cliente      (nome, cpf, telefone, email)
+  ├─ dim_propriedade  (nome, município, área) → vinculada ao cliente
+  ├─ fato_servico     (nome do serviço, status) → vinculado ao cliente + propriedade
+  └─ fato_orcamento   (valor, data) → vinculado ao cliente + propriedade + serviço
+      ou fato_despesas (valor, data) → vinculado ao serviço
+```
 
-#### 2. Fallback inteligente para `id_cliente` em orçamentos
+#### 2. Campo de mapeamento unificado (COMPLETO_FIELDS)
 
-Se `entityType === "orcamentos"` e nenhum `id_cliente` foi vinculado (nem por mapeamento nem por auto-link):
-- Buscar empresa principal do tenant (`dim_empresa`)
-- Criar um cliente genérico "Cliente Importação" (se não existir)
-- Vincular todos os orçamentos sem cliente a esse cliente
-- Mostrar warning: "X orçamentos vinculados ao cliente 'Cliente Importação'. Edite-os para associar ao cliente correto."
+Criar um `COMPLETO_FIELDS` que agrupa campos de todas as entidades com prefixo visual:
 
-Isso garante que o INSERT não falhe por falta de `id_cliente` (campo NOT NULL no schema).
+- **Cliente**: nome, cpf, telefone, email, endereco
+- **Propriedade**: nome_da_propriedade, municipio, area_ha
+- **Projeto**: nome_do_servico, categoria, situacao_do_servico
+- **Financeiro**: valor_unitario, receita_esperada, data_orcamento, custo_servico
 
-#### 3. Auto-classificação de despesas sem tipo
+Com sinônimos unificados (`COMPLETO_SYNONYMS`) que combinam todos os sinônimos existentes.
 
-Se `entityType === "despesas"` e registros ficam sem `id_tipodespesa`:
-- Buscar se existe tipo "Sem classificação" no tenant
-- Se não existir, criar automaticamente com classificação "VARIAVEL"
-- Vincular despesas órfãs a esse tipo
-- Warning: "X despesas classificadas como 'Sem classificação'. Edite-as em Cadastros > Tipos de Despesa."
+#### 3. Pipeline de importação composta no `handleImport`
 
-#### 4. Snapshot de KPIs pré-importação
+Quando `entityType === "completo"`:
 
-Antes de iniciar a importação (`handleImport`), capturar os KPIs atuais via `supabase.rpc('calcular_kpis_v2')`. Após a importação, refetch e comparar. Mostrar delta no painel de resultado.
+1. **Deduplicar clientes**: Agrupar linhas por nome de cliente. Criar cada cliente UMA vez.
+2. **Criar propriedades**: Para cada combinação única (cliente + nome_propriedade), criar propriedade vinculada.
+3. **Criar serviços**: Para cada linha com nome_do_servico, criar serviço vinculado ao cliente + propriedade.
+4. **Criar registros financeiros**: Se há valor monetário, criar orçamento (receita) ou despesa conforme classificação.
 
-#### 5. Importação de planilha genérica com detecção multi-entidade
+Pipeline sequencial com Maps de deduplicação:
+```text
+Map<nome_cliente, id_cliente>
+Map<nome_cliente+nome_prop, id_propriedade>
+Map<nome_servico+id_cliente, id_servico>
+```
 
-Quando o auto-detect tem confiança < 40% e a planilha tem colunas de valor + nome:
-- Mostrar prompt de classificação: "Detectamos valores monetários. Como classificar?"
-  - ( ) Receita (criará orçamentos)
-  - ( ) Despesa (criará despesas)
-  - ( ) Ignorar valores
-- Usar a resposta para criar a entidade correta automaticamente
+#### 4. Auto-detecção melhorada
 
-#### 6. Garantir invalidação de cache com delay
+Modificar `detectEntityType` para retornar `"completo"` quando a planilha pontua alto em 3+ entidades diferentes (ex: tem colunas de cliente E propriedade E valor).
 
-Após importação, adicionar `await queryClient.invalidateQueries()` com `refetchType: 'all'` para forçar refresh imediato dos KPIs na tela.
+#### 5. Resumo pós-importação expandido
+
+Na tela de resultado, mostrar resumo completo:
+- X clientes criados/reutilizados
+- X propriedades criadas
+- X projetos criados
+- R$ X em receita importada
+- R$ X em despesas importadas
+
+#### 6. Tratamento de dados incompletos
+
+Se uma linha tem cliente mas não tem propriedade → criar apenas cliente.
+Se uma linha tem valor mas não tem nome de serviço → criar serviço genérico "Serviço Importado".
+Nunca descartar valores financeiros.
 
 ### Detalhes técnicos
 
-- Snapshot KPI: `useState<KPIData | null>(null)` capturado no início do `handleImport`
-- Fallback cliente: query `dim_cliente` por nome "Cliente Importação", upsert se não existir
-- Fallback tipo despesa: query `dim_tipodespesa` por categoria "Sem classificação", upsert se não existir
-- Painel verificação: componente inline no step "result", usa `useKPIs()` hook com `refetchInterval: 2000` temporário
-- Prompt classificação: radio group no step "mapping" quando confidence < 40%
+- `ImportEntityType` passa de union de 5 para 6 valores (adiciona `"completo"`)
+- `COMPLETO_FIELDS` combina subconjuntos das 4 entidades, sem duplicar campos ambíguos
+- Pipeline usa `createClientesBatch` → `createPropriedadesBatch` → `createServicosBatch` → `createOrcamentosBatch` em sequência
+- Deduplicação por nome normalizado (lowercase + trim) antes de inserir
+- Fallbacks existentes (Cliente Importação, Sem classificação) continuam funcionando como última linha de defesa
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Editar | `src/components/import/SmartImporter.tsx` (fallbacks, painel verificação, prompt classificação) |
+| Editar | `src/components/import/SmartImporter.tsx` (novo entityType "completo", pipeline composta, detecção, resumo) |
 
-Nenhuma migração necessária — todas as tabelas e colunas já existem.
+Nenhuma migração necessária.
 

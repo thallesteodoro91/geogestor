@@ -454,12 +454,26 @@ const DESPESA_SYNONYMS: Record<string, string[]> = {
   _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
+const COMPLETO_SYNONYMS: Record<string, string[]> = {
+  ...CLIENTE_SYNONYMS,
+  ...PROPRIEDADE_SYNONYMS,
+  ...SERVICO_SYNONYMS,
+  ...ORCAMENTO_SYNONYMS,
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
+  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
+  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
+  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
+};
+
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
   switch (entity) {
     case "propriedades": return PROPRIEDADE_SYNONYMS;
     case "orcamentos": return ORCAMENTO_SYNONYMS;
     case "servicos": return SERVICO_SYNONYMS;
     case "despesas": return DESPESA_SYNONYMS;
+    case "completo": return COMPLETO_SYNONYMS;
     default: return CLIENTE_SYNONYMS;
   }
 }

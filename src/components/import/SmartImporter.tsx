@@ -18,6 +18,7 @@ import { createPropriedadesBatch } from "@/modules/crm/services/propriedade.serv
 import { createOrcamentosBatch } from "@/modules/finance/services/orcamento.service";
 import { createServicosBatch } from "@/modules/operations/services/servico.service";
 import { createDespesasBatch } from "@/modules/finance/services/despesa.service";
+import { createTipoDespesa } from "@/modules/operations/services/tipodespesa.service";
 import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { supabase } from "@/integrations/supabase/client";
@@ -76,12 +77,24 @@ type PreviewFilter = "all" | "valid" | "errors" | "warnings";
 
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
-function sanitizeCurrency(value: string): string {
-  let v = value.replace(/R\$\s*/gi, "").trim();
+function sanitizeCurrency(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
+
+  let v = String(value).replace(/R\$\s*/gi, "").trim();
+  if (!v) return "";
   if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
     v = v.replace(/\./g, "").replace(",", ".");
   }
   return v;
+}
+
+function parseNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+
+  const parsed = parseFloat(sanitizeCurrency(value));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function sanitizeDigitsOnly(value: string): string {
@@ -667,6 +680,49 @@ export function SmartImporter({
 
   const [detectedFinancialInClientes, setDetectedFinancialInClientes] = useState(false);
 
+  const ensureFallbackClientId = useCallback(async () => {
+    const { data: existingClient } = await supabase
+      .from("dim_cliente")
+      .select("id_cliente")
+      .eq("nome", "Cliente Importação")
+      .maybeSingle();
+
+    if (existingClient?.id_cliente) return existingClient.id_cliente;
+
+    const result = await createClientesBatch([
+      { nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" },
+    ]);
+
+    if (result.success <= 0) return null;
+
+    const { data: newClient } = await supabase
+      .from("dim_cliente")
+      .select("id_cliente")
+      .eq("nome", "Cliente Importação")
+      .maybeSingle();
+
+    return newClient?.id_cliente || null;
+  }, []);
+
+  const ensureFallbackTipoDespesaId = useCallback(async () => {
+    const { data: existingType } = await supabase
+      .from("dim_tipodespesa")
+      .select("id_tipodespesa")
+      .eq("categoria", "Sem classificação")
+      .maybeSingle();
+
+    if (existingType?.id_tipodespesa) return existingType.id_tipodespesa;
+
+    const { data: newType, error } = await createTipoDespesa({
+      categoria: "Sem classificação",
+      classificacao: "VARIAVEL",
+      descricao: "Criado automaticamente pela importação",
+    });
+
+    if (error) throw error;
+    return newType?.id_tipodespesa || null;
+  }, []);
+
   const processHeaders = useCallback((h: string[], data: string[][]) => {
     setHeaders(h);
     setRawData(data);
@@ -847,22 +903,22 @@ export function SmartImporter({
 
     for (const v of validRows) {
       if (entityType === "orcamentos") {
-        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
-        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
+        const re = parseNullableNumber(v.row.receita_esperada) || 0;
+        const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const qty = parseInt(v.row.quantidade || "1") || 1;
-        const desc = parseFloat(sanitizeCurrency(v.row.desconto || "0")) || 0;
+        const desc = parseNullableNumber(v.row.desconto) || 0;
         const val = re > 0 ? re : (vu * qty) - desc;
         if (val > 0) { receita += val; count++; }
       } else if (entityType === "despesas") {
-        const val = parseFloat(sanitizeCurrency(v.row.valor_da_despesa || "")) || 0;
+        const val = parseNullableNumber(v.row.valor_da_despesa) || 0;
         if (val > 0) { despesas += val; count++; }
       } else if (entityType === "servicos") {
-        const val = parseFloat(sanitizeCurrency(v.row.receita_servico || "")) || 0;
+        const val = parseNullableNumber(v.row.receita_servico) || 0;
         if (val > 0) { receita += val; count++; }
       } else if (entityType === "completo") {
-        const re = parseFloat(sanitizeCurrency(v.row.receita_esperada || "")) || 0;
-        const vu = parseFloat(sanitizeCurrency(v.row.valor_unitario || "")) || 0;
-        const cs = parseFloat(sanitizeCurrency(v.row.custo_servico || "")) || 0;
+        const re = parseNullableNumber(v.row.receita_esperada) || 0;
+        const vu = parseNullableNumber(v.row.valor_unitario) || 0;
+        const cs = parseNullableNumber(v.row.custo_servico) || 0;
         const val = re > 0 ? re : vu;
         if (val > 0) { receita += val; count++; }
         if (cs > 0) { despesas += cs; }
@@ -998,7 +1054,7 @@ export function SmartImporter({
           if (field.key === "_categoria_lookup") continue;
           let val: any = validation.row[field.key];
           if (!val) { record[field.key] = null; continue; }
-          if (field.type === "number") val = parseFloat(val) || null;
+          if (field.type === "number") val = parseNullableNumber(val);
           record[field.key] = val;
         }
         if (entityType === "orcamentos" && !record.quantidade) record.quantidade = 1;
@@ -1020,26 +1076,7 @@ export function SmartImporter({
         const orphanCount = recordsToInsert.filter(r => !r.id_cliente).length;
         if (orphanCount > 0) {
           try {
-            // Try to find or create "Cliente Importação"
-            const { data: existingClient } = await supabase
-              .from("dim_cliente")
-              .select("id_cliente")
-              .eq("nome", "Cliente Importação")
-              .maybeSingle();
-
-            let fallbackClientId = existingClient?.id_cliente;
-
-            if (!fallbackClientId) {
-              const result = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
-              if (result.success > 0) {
-                const { data: newClient } = await supabase
-                  .from("dim_cliente")
-                  .select("id_cliente")
-                  .eq("nome", "Cliente Importação")
-                  .maybeSingle();
-                fallbackClientId = newClient?.id_cliente;
-              }
-            }
+            const fallbackClientId = await ensureFallbackClientId();
 
             if (fallbackClientId) {
               for (const rec of recordsToInsert) {
@@ -1089,22 +1126,7 @@ export function SmartImporter({
         const orphanDespesas = recordsToInsert.filter(r => !r.id_tipodespesa).length;
         if (orphanDespesas > 0) {
           try {
-            const { data: existingType } = await supabase
-              .from("dim_tipodespesa")
-              .select("id_tipodespesa")
-              .eq("categoria", "Sem classificação")
-              .maybeSingle();
-
-            let fallbackTypeId = existingType?.id_tipodespesa;
-
-            if (!fallbackTypeId) {
-              const { data: newType } = await supabase
-                .from("dim_tipodespesa")
-                .insert({ categoria: "Sem classificação", classificacao: "VARIAVEL", descricao: "Criado automaticamente pela importação" })
-                .select("id_tipodespesa")
-                .single();
-              fallbackTypeId = newType?.id_tipodespesa;
-            }
+            const fallbackTypeId = await ensureFallbackTipoDespesaId();
 
             if (fallbackTypeId) {
               for (const rec of recordsToInsert) {
@@ -1181,7 +1203,7 @@ export function SmartImporter({
             uniqueProps.set(key, {
               nome_da_propriedade: propName,
               municipio: rec.municipio || null,
-              area_ha: rec.area_ha ? parseFloat(rec.area_ha) || null : null,
+                area_ha: parseNullableNumber(rec.area_ha),
               id_cliente: clienteId || null,
             });
           }
@@ -1215,13 +1237,15 @@ export function SmartImporter({
           const key = `${servicoNome.toLowerCase()}|${clienteId || "none"}`;
           if (!servicoKeys.has(key)) {
             servicoKeys.add(key);
+            const receitaServico = parseNullableNumber(rec.receita_esperada) ?? parseNullableNumber(rec.valor_unitario) ?? 0;
+            const custoServico = parseNullableNumber(rec.custo_servico) ?? 0;
             uniqueServicos.push({
               nome_do_servico: servicoNome,
               categoria: rec.categoria || null,
               situacao_do_servico: rec.situacao_do_servico || "Pendente",
               data_do_servico_inicio: rec.data_do_servico_inicio || null,
-              receita_servico: rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) || 0 : (rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) || 0 : 0),
-              custo_servico: rec.custo_servico ? parseFloat(sanitizeCurrency(rec.custo_servico)) || 0 : 0,
+              receita_servico: receitaServico,
+              custo_servico: custoServico,
               id_cliente: clienteId || null,
               id_propriedade: propId || null,
             });
@@ -1242,10 +1266,11 @@ export function SmartImporter({
         // Step 4: Create financial records (orçamentos)
         setImportProgress(80);
         const orcamentos: Record<string, any>[] = [];
+        let completeFallbackWarningAdded = false;
         for (const rec of recordsToInsert) {
-          const valorUnit = rec.valor_unitario ? parseFloat(sanitizeCurrency(rec.valor_unitario)) : null;
-          const receitaEsperada = rec.receita_esperada ? parseFloat(sanitizeCurrency(rec.receita_esperada)) : null;
-          if (!valorUnit && !receitaEsperada) continue;
+          const valorUnit = parseNullableNumber(rec.valor_unitario);
+          const receitaEsperada = parseNullableNumber(rec.receita_esperada);
+          if (valorUnit === null && receitaEsperada === null) continue;
 
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
@@ -1258,22 +1283,11 @@ export function SmartImporter({
           let finalClienteId = clienteId;
           if (!finalClienteId) {
             try {
-              const { data: existingFallback } = await supabase
-                .from("dim_cliente")
-                .select("id_cliente")
-                .eq("nome", "Cliente Importação")
-                .maybeSingle();
-              finalClienteId = existingFallback?.id_cliente;
-              if (!finalClienteId) {
-                const fbResult = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
-                if (fbResult.success > 0) {
-                  const { data: newFb } = await supabase.from("dim_cliente").select("id_cliente").eq("nome", "Cliente Importação").maybeSingle();
-                  finalClienteId = newFb?.id_cliente;
-                }
-              }
-              if (finalClienteId) {
+              finalClienteId = await ensureFallbackClientId();
+              if (finalClienteId && !completeFallbackWarningAdded) {
                 clienteMap.set("cliente importação", finalClienteId);
                 warnings.push('Registros sem cliente foram vinculados a "Cliente Importação".');
+                completeFallbackWarningAdded = true;
               }
             } catch (e) {
               console.warn("Erro ao criar cliente fallback no completo:", e);
@@ -1344,6 +1358,7 @@ export function SmartImporter({
         onSuccess?.();
       }
     } catch (err: any) {
+      console.error("[SmartImporter] Erro na importação:", err);
       toast.error(`Erro: ${err.message}`);
       setStep("preview");
     } finally {

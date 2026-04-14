@@ -519,10 +519,17 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const totalPossible = getFieldsForEntity(best).length * 3;
   const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
 
-  // Detect "completo" when 3+ entity types score high
-  const highScoring = entities.filter(e => scores[e] >= 4);
-  if (highScoring.length >= 3) {
+  // Detect "completo" when 2+ entity types score well AND at least one is financial
+  const highScoring = entities.filter(e => scores[e] >= 3);
+  const hasFinancialEntity = highScoring.some(e => e === "orcamentos" || e === "despesas");
+  if (highScoring.length >= 2 && hasFinancialEntity) {
     return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
+  }
+  // Also detect completo when financial headers exist alongside client data
+  const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
+  const hasFinancialHeaders = normalized.some(h => financialSynonyms.some(s => h.includes(s)));
+  if (hasFinancialHeaders && highScoring.length >= 2) {
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(85, confidence + 15) };
   }
 
   return { entity: best, confidence };
@@ -622,6 +629,7 @@ export function SmartImporter({
     setKpiSnapshot(null);
     setValueClassification(null);
     setImportWarnings([]);
+    setDetectedFinancialInClientes(false);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -648,6 +656,17 @@ export function SmartImporter({
     setMatchConfidences(confidences);
   }, []);
 
+  // Check if headers contain financial columns
+  const hasFinancialColumns = useCallback((fileHeaders: string[]) => {
+    const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
+    return fileHeaders.some(h => {
+      const n = normalize(h);
+      return financialSynonyms.some(s => n.includes(s));
+    });
+  }, []);
+
+  const [detectedFinancialInClientes, setDetectedFinancialInClientes] = useState(false);
+
   const processHeaders = useCallback((h: string[], data: string[][]) => {
     setHeaders(h);
     setRawData(data);
@@ -658,11 +677,18 @@ export function SmartImporter({
     const effectiveEntity = detection.confidence > 40 ? detection.entity : initialEntityType;
     setEntityType(effectiveEntity);
 
+    // If detected as "clientes" but has financial columns, flag it
+    if (effectiveEntity === "clientes" && hasFinancialColumns(h)) {
+      setDetectedFinancialInClientes(true);
+    } else {
+      setDetectedFinancialInClientes(false);
+    }
+
     const fields = getFieldsForEntity(effectiveEntity);
     const synonyms = getSynonymsForEntity(effectiveEntity);
     autoMap(h, fields, synonyms);
     setStep("mapping");
-  }, [initialEntityType, autoMap]);
+  }, [initialEntityType, autoMap, hasFinancialColumns]);
 
   const processFile = useCallback((file: File) => {
     setFileName(file.name);
@@ -871,7 +897,7 @@ export function SmartImporter({
   // ─── Auto-linking (with auto-create) ────────────────────────────────
 
   const linkToClients = useCallback(async (records: Record<string, any>[]): Promise<Record<string, any>[]> => {
-    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;
+    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos" && entityType !== "completo") return records;
 
     const clienteHeader = headers.find(h => {
       const n = normalize(h);
@@ -1228,11 +1254,36 @@ export function SmartImporter({
           const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
           const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
 
-          if (!clienteId) continue; // orçamentos require id_cliente
+          // Fallback: use or create "Cliente Importação" if no client found
+          let finalClienteId = clienteId;
+          if (!finalClienteId) {
+            try {
+              const { data: existingFallback } = await supabase
+                .from("dim_cliente")
+                .select("id_cliente")
+                .eq("nome", "Cliente Importação")
+                .maybeSingle();
+              finalClienteId = existingFallback?.id_cliente;
+              if (!finalClienteId) {
+                const fbResult = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
+                if (fbResult.success > 0) {
+                  const { data: newFb } = await supabase.from("dim_cliente").select("id_cliente").eq("nome", "Cliente Importação").maybeSingle();
+                  finalClienteId = newFb?.id_cliente;
+                }
+              }
+              if (finalClienteId) {
+                clienteMap.set("cliente importação", finalClienteId);
+                warnings.push('Registros sem cliente foram vinculados a "Cliente Importação".');
+              }
+            } catch (e) {
+              console.warn("Erro ao criar cliente fallback no completo:", e);
+            }
+          }
+          if (!finalClienteId) continue; // skip only if fallback also failed
 
           const vu = valorUnit || receitaEsperada || 0;
           orcamentos.push({
-            id_cliente: clienteId,
+            id_cliente: finalClienteId,
             id_propriedade: propId || null,
             id_servico: servicoId || null,
             data_orcamento: rec.data_orcamento || rec.data_do_servico_inicio || new Date().toISOString().slice(0, 10),
@@ -1446,8 +1497,26 @@ export function SmartImporter({
                 </Alert>
               )}
 
+              {/* Alert: financial columns detected but importing as clientes */}
+              {detectedFinancialInClientes && entityType === "clientes" && (
+                <Alert className="border-destructive/30 bg-destructive/5">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <AlertTitle>⚠️ Colunas financeiras detectadas mas modo "Clientes" selecionado</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Sua planilha contém colunas de valores monetários (valor, receita, custo, etc.) que serão <strong>ignoradas</strong> no modo Clientes.
+                      Para importar os dados financeiros, use "Importação Completa".
+                    </p>
+                    <Button size="sm" variant="default" onClick={() => handleEntityChange("completo")}>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Usar Importação Completa
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Low confidence: ask user to classify values */}
-              {detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
+              {!detectedFinancialInClientes && detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
                 const n = normalize(h);
                 return ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price"].some(s => n.includes(s));
               }) && (
@@ -1796,7 +1865,7 @@ export function SmartImporter({
               )}
 
               {/* Financial Verification Panel */}
-              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos" || entityType === "completo") && (
+              {importResult.success > 0 && (
                 <div className="rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="h-4 w-4 text-primary" />
@@ -1838,11 +1907,23 @@ export function SmartImporter({
                   ) : (
                     <p className="text-sm text-muted-foreground text-center">Carregando KPIs atualizados...</p>
                   )}
-                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && (
-                    <Alert className="mt-3 border-amber-500/30 bg-amber-500/5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <AlertDescription className="text-sm text-amber-600 dark:text-amber-400">
-                        Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria.
+                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && importResult.success > 0 && (
+                    <Alert variant="destructive" className="mt-3">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>KPIs permanecem zerados</AlertTitle>
+                      <AlertDescription className="text-sm">
+                        Os valores importados não estão refletidos nos KPIs.
+                        {entityType === "clientes" && " Causa provável: dados foram importados como clientes sem registros financeiros."}
+                        {entityType !== "completo" && entityType !== "orcamentos" && entityType !== "despesas" && (
+                          <Button size="sm" variant="outline" className="ml-2 mt-1" onClick={() => {
+                            reset();
+                            setEntityType("completo");
+                            setStep("upload");
+                          }}>
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Reimportar como Importação Completa
+                          </Button>
+                        )}
                       </AlertDescription>
                     </Alert>
                   )}

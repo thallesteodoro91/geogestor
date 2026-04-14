@@ -1282,7 +1282,7 @@ export function SmartImporter({
 
           const vu = valorUnit || receitaEsperada || 0;
           orcamentos.push({
-            id_cliente: clienteId,
+            id_cliente: finalClienteId,
             id_propriedade: propId || null,
             id_servico: servicoId || null,
             data_orcamento: rec.data_orcamento || rec.data_do_servico_inicio || new Date().toISOString().slice(0, 10),

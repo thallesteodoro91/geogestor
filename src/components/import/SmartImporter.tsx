@@ -1865,7 +1865,7 @@ export function SmartImporter({
               )}
 
               {/* Financial Verification Panel */}
-              {importResult.success > 0 && (entityType === "orcamentos" || entityType === "despesas" || entityType === "servicos" || entityType === "completo") && (
+              {importResult.success > 0 && (
                 <div className="rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck className="h-4 w-4 text-primary" />

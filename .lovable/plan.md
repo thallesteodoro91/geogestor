@@ -1,87 +1,62 @@
 
 
-## Plano: Importação Composta — Uma Linha = Múltiplas Entidades
+## Plano: Diagnóstico e Correção da Integração Financeira na Importação
 
 ### Diagnóstico
 
-O SmartImporter atual opera em modo **single-entity**: o usuário escolhe "Clientes" ou "Orçamentos" e cada linha cria apenas esse tipo de registro. Quando a planilha do usuário contém dados mistos (nome do cliente + propriedade + serviço + valor), apenas UMA entidade é criada e todo o restante é descartado.
+Após auditoria completa do código e banco de dados, confirmei que:
 
-O problema é estrutural: não existe um `entityType = "completo"` que interprete cada linha como uma entidade composta.
+- **73 clientes existem** no banco, mas **0 orçamentos, 0 despesas, 0 serviços**
+- O KPI view (`vw_kpis_financeiros`) calcula `receita_total` a partir de `fato_orcamento.receita_esperada` — sem orçamentos, receita = R$ 0
+
+**Causas raiz identificadas:**
+
+1. **Auto-detecção escolhe "clientes" quando a planilha tem nome + valor**: O scoring privilegia a entidade com mais campos matched. Como CLIENTE_FIELDS tem 13 campos (nome, cpf, telefone, email, etc.) e colunas como "nome", "telefone" são comuns, "clientes" ganha sempre. O modo "completo" só ativa quando 3+ entidades pontuam >= 4, o que raramente ocorre.
+
+2. **Importação como "clientes" ignora colunas financeiras**: CLIENTE_FIELDS não inclui nenhum campo monetário. Colunas como "valor", "receita", "custo" são completamente descartadas.
+
+3. **`linkToClients` exclui o modo "completo"** (linha 874): `if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;` — o completo nunca passa por auto-link.
+
+4. **No pipeline "completo", linha 1231**: `if (!clienteId) continue;` silenciosamente descarta orçamentos sem vínculo de cliente, em vez de usar o fallback "Cliente Importação".
 
 ### Mudanças
 
-#### 1. Novo tipo de entidade: "completo" (Importação Completa)
+#### 1. Auto-detecção mais agressiva para "completo"
 
-Adicionar `"completo"` ao `ImportEntityType`. Quando selecionado (ou auto-detectado quando a planilha tem colunas de múltiplas entidades), cada linha é processada como:
+Reduzir threshold de 3 entidades com score >= 4 para **2 entidades com score >= 3, sendo pelo menos uma financeira** (orcamentos ou despesas). Isso garante que uma planilha com "nome" + "valor" já acione o modo completo.
 
-```text
-Linha da planilha
-  ├─ dim_cliente      (nome, cpf, telefone, email)
-  ├─ dim_propriedade  (nome, município, área) → vinculada ao cliente
-  ├─ fato_servico     (nome do serviço, status) → vinculado ao cliente + propriedade
-  └─ fato_orcamento   (valor, data) → vinculado ao cliente + propriedade + serviço
-      ou fato_despesas (valor, data) → vinculado ao serviço
-```
+#### 2. Detecção de colunas financeiras no modo "clientes"
 
-#### 2. Campo de mapeamento unificado (COMPLETO_FIELDS)
+Após auto-detect retornar "clientes", verificar se existem headers que matcham sinônimos financeiros (valor, receita, custo, total, preço, faturamento). Se sim, mostrar um **alerta proativo** sugerindo trocar para "Importação Completa" ou, no mínimo, para "Orçamentos".
 
-Criar um `COMPLETO_FIELDS` que agrupa campos de todas as entidades com prefixo visual:
+#### 3. Fallback de `id_cliente` no pipeline "completo"
 
-- **Cliente**: nome, cpf, telefone, email, endereco
-- **Propriedade**: nome_da_propriedade, municipio, area_ha
-- **Projeto**: nome_do_servico, categoria, situacao_do_servico
-- **Financeiro**: valor_unitario, receita_esperada, data_orcamento, custo_servico
+Na step 4 do pipeline completo (linha 1231), em vez de `if (!clienteId) continue;`, usar o mesmo fallback "Cliente Importação" que já existe para o modo "orcamentos". Assim nenhum valor financeiro é descartado.
 
-Com sinônimos unificados (`COMPLETO_SYNONYMS`) que combinam todos os sinônimos existentes.
+#### 4. Incluir "completo" no `linkToClients`
 
-#### 3. Pipeline de importação composta no `handleImport`
+Adicionar `entityType === "completo"` à condição da linha 874 para que o auto-link de clientes funcione também no modo completo.
 
-Quando `entityType === "completo"`:
+#### 5. Alerta pós-importação quando KPIs permanecem zerados
 
-1. **Deduplicar clientes**: Agrupar linhas por nome de cliente. Criar cada cliente UMA vez.
-2. **Criar propriedades**: Para cada combinação única (cliente + nome_propriedade), criar propriedade vinculada.
-3. **Criar serviços**: Para cada linha com nome_do_servico, criar serviço vinculado ao cliente + propriedade.
-4. **Criar registros financeiros**: Se há valor monetário, criar orçamento (receita) ou despesa conforme classificação.
+Se após a importação os KPIs continuam com receita_total = 0 mas registros foram criados, mostrar alerta vermelho explicando: "Os valores importados não estão refletidos nos KPIs. Causa provável: dados foram importados como clientes sem registros financeiros. Reimporte selecionando 'Importação Completa'."
 
-Pipeline sequencial com Maps de deduplicação:
-```text
-Map<nome_cliente, id_cliente>
-Map<nome_cliente+nome_prop, id_propriedade>
-Map<nome_servico+id_cliente, id_servico>
-```
+#### 6. Botão "Reimportar como Completo" na tela de resultado
 
-#### 4. Auto-detecção melhorada
-
-Modificar `detectEntityType` para retornar `"completo"` quando a planilha pontua alto em 3+ entidades diferentes (ex: tem colunas de cliente E propriedade E valor).
-
-#### 5. Resumo pós-importação expandido
-
-Na tela de resultado, mostrar resumo completo:
-- X clientes criados/reutilizados
-- X propriedades criadas
-- X projetos criados
-- R$ X em receita importada
-- R$ X em despesas importadas
-
-#### 6. Tratamento de dados incompletos
-
-Se uma linha tem cliente mas não tem propriedade → criar apenas cliente.
-Se uma linha tem valor mas não tem nome de serviço → criar serviço genérico "Serviço Importado".
-Nunca descartar valores financeiros.
+Quando a importação de clientes detecta que havia colunas financeiras não mapeadas, adicionar botão de ação rápida para reimportar o mesmo arquivo no modo "completo".
 
 ### Detalhes técnicos
 
-- `ImportEntityType` passa de union de 5 para 6 valores (adiciona `"completo"`)
-- `COMPLETO_FIELDS` combina subconjuntos das 4 entidades, sem duplicar campos ambíguos
-- Pipeline usa `createClientesBatch` → `createPropriedadesBatch` → `createServicosBatch` → `createOrcamentosBatch` em sequência
-- Deduplicação por nome normalizado (lowercase + trim) antes de inserir
-- Fallbacks existentes (Cliente Importação, Sem classificação) continuam funcionando como última linha de defesa
+- `detectEntityType`: adicionar check `hasFinancialHeaders` que verifica se headers matcham sinônimos de valor/receita/custo. Se `hasFinancialHeaders && highScoring.length >= 2`, retornar "completo"
+- Pipeline completo step 4: substituir `if (!clienteId) continue;` por buscar/criar "Cliente Importação" (reutilizar lógica das linhas 996-1026)
+- `linkToClients` linha 874: adicionar `|| entityType === "completo"` (embora no completo o pipeline já crie clientes, isso é uma rede de segurança)
+- Alerta: componente condicional no step "result" que compara `kpiSnapshot` com `currentKpis`
 
 ### Resumo de arquivos
 
 | Ação | Arquivo |
 |------|---------|
-| Editar | `src/components/import/SmartImporter.tsx` (novo entityType "completo", pipeline composta, detecção, resumo) |
+| Editar | `src/components/import/SmartImporter.tsx` (detecção, fallbacks, alertas) |
 
 Nenhuma migração necessária.
 

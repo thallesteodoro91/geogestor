@@ -519,10 +519,17 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const totalPossible = getFieldsForEntity(best).length * 3;
   const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
 
-  // Detect "completo" when 3+ entity types score high
-  const highScoring = entities.filter(e => scores[e] >= 4);
-  if (highScoring.length >= 3) {
+  // Detect "completo" when 2+ entity types score well AND at least one is financial
+  const highScoring = entities.filter(e => scores[e] >= 3);
+  const hasFinancialEntity = highScoring.some(e => e === "orcamentos" || e === "despesas");
+  if (highScoring.length >= 2 && hasFinancialEntity) {
     return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
+  }
+  // Also detect completo when financial headers exist alongside client data
+  const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
+  const hasFinancialHeaders = normalized.some(h => financialSynonyms.some(s => h.includes(s)));
+  if (hasFinancialHeaders && highScoring.length >= 2) {
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(85, confidence + 15) };
   }
 
   return { entity: best, confidence };
@@ -648,6 +655,17 @@ export function SmartImporter({
     setMatchConfidences(confidences);
   }, []);
 
+  // Check if headers contain financial columns
+  const hasFinancialColumns = useCallback((fileHeaders: string[]) => {
+    const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
+    return fileHeaders.some(h => {
+      const n = normalize(h);
+      return financialSynonyms.some(s => n.includes(s));
+    });
+  }, []);
+
+  const [detectedFinancialInClientes, setDetectedFinancialInClientes] = useState(false);
+
   const processHeaders = useCallback((h: string[], data: string[][]) => {
     setHeaders(h);
     setRawData(data);
@@ -658,11 +676,18 @@ export function SmartImporter({
     const effectiveEntity = detection.confidence > 40 ? detection.entity : initialEntityType;
     setEntityType(effectiveEntity);
 
+    // If detected as "clientes" but has financial columns, flag it
+    if (effectiveEntity === "clientes" && hasFinancialColumns(h)) {
+      setDetectedFinancialInClientes(true);
+    } else {
+      setDetectedFinancialInClientes(false);
+    }
+
     const fields = getFieldsForEntity(effectiveEntity);
     const synonyms = getSynonymsForEntity(effectiveEntity);
     autoMap(h, fields, synonyms);
     setStep("mapping");
-  }, [initialEntityType, autoMap]);
+  }, [initialEntityType, autoMap, hasFinancialColumns]);
 
   const processFile = useCallback((file: File) => {
     setFileName(file.name);
@@ -871,7 +896,7 @@ export function SmartImporter({
   // ─── Auto-linking (with auto-create) ────────────────────────────────
 
   const linkToClients = useCallback(async (records: Record<string, any>[]): Promise<Record<string, any>[]> => {
-    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;
+    if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos" && entityType !== "completo") return records;
 
     const clienteHeader = headers.find(h => {
       const n = normalize(h);
@@ -1228,7 +1253,32 @@ export function SmartImporter({
           const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
           const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
 
-          if (!clienteId) continue; // orçamentos require id_cliente
+          // Fallback: use or create "Cliente Importação" if no client found
+          let finalClienteId = clienteId;
+          if (!finalClienteId) {
+            try {
+              const { data: existingFallback } = await supabase
+                .from("dim_cliente")
+                .select("id_cliente")
+                .eq("nome", "Cliente Importação")
+                .maybeSingle();
+              finalClienteId = existingFallback?.id_cliente;
+              if (!finalClienteId) {
+                const fbResult = await createClientesBatch([{ nome: "Cliente Importação", categoria: "Importação", situacao: "Ativo" }]);
+                if (fbResult.success > 0) {
+                  const { data: newFb } = await supabase.from("dim_cliente").select("id_cliente").eq("nome", "Cliente Importação").maybeSingle();
+                  finalClienteId = newFb?.id_cliente;
+                }
+              }
+              if (finalClienteId) {
+                clienteMap.set("cliente importação", finalClienteId);
+                warnings.push('Registros sem cliente foram vinculados a "Cliente Importação".');
+              }
+            } catch (e) {
+              console.warn("Erro ao criar cliente fallback no completo:", e);
+            }
+          }
+          if (!finalClienteId) continue; // skip only if fallback also failed
 
           const vu = valorUnit || receitaEsperada || 0;
           orcamentos.push({

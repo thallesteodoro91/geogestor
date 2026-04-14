@@ -1496,8 +1496,26 @@ export function SmartImporter({
                 </Alert>
               )}
 
+              {/* Alert: financial columns detected but importing as clientes */}
+              {detectedFinancialInClientes && entityType === "clientes" && (
+                <Alert className="border-destructive/30 bg-destructive/5">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <AlertTitle>⚠️ Colunas financeiras detectadas mas modo "Clientes" selecionado</AlertTitle>
+                  <AlertDescription className="mt-2">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      Sua planilha contém colunas de valores monetários (valor, receita, custo, etc.) que serão <strong>ignoradas</strong> no modo Clientes.
+                      Para importar os dados financeiros, use "Importação Completa".
+                    </p>
+                    <Button size="sm" variant="default" onClick={() => handleEntityChange("completo")}>
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Usar Importação Completa
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {/* Low confidence: ask user to classify values */}
-              {detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
+              {!detectedFinancialInClientes && detectedEntity && detectedEntity.confidence <= 40 && headers.some(h => {
                 const n = normalize(h);
                 return ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price"].some(s => n.includes(s));
               }) && (

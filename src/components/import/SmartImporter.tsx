@@ -629,6 +629,7 @@ export function SmartImporter({
     setKpiSnapshot(null);
     setValueClassification(null);
     setImportWarnings([]);
+    setDetectedFinancialInClientes(false);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -1906,11 +1907,23 @@ export function SmartImporter({
                   ) : (
                     <p className="text-sm text-muted-foreground text-center">Carregando KPIs atualizados...</p>
                   )}
-                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && (
-                    <Alert className="mt-3 border-amber-500/30 bg-amber-500/5">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <AlertDescription className="text-sm text-amber-600 dark:text-amber-400">
-                        Os valores importados ainda não estão refletidos nos KPIs. Possíveis causas: orçamentos sem cliente vinculado, despesas sem categoria.
+                  {currentKpis && (currentKpis.receita_total || 0) === 0 && (currentKpis.total_despesas || 0) === 0 && importResult.success > 0 && (
+                    <Alert variant="destructive" className="mt-3">
+                      <AlertTriangle className="h-4 w-4" />
+                      <AlertTitle>KPIs permanecem zerados</AlertTitle>
+                      <AlertDescription className="text-sm">
+                        Os valores importados não estão refletidos nos KPIs.
+                        {entityType === "clientes" && " Causa provável: dados foram importados como clientes sem registros financeiros."}
+                        {entityType !== "completo" && entityType !== "orcamentos" && entityType !== "despesas" && (
+                          <Button size="sm" variant="outline" className="ml-2 mt-1" onClick={() => {
+                            reset();
+                            setEntityType("completo");
+                            setStep("upload");
+                          }}>
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Reimportar como Importação Completa
+                          </Button>
+                        )}
                       </AlertDescription>
                     </Alert>
                   )}

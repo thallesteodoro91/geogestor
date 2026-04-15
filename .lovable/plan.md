@@ -1,62 +1,77 @@
 
 
-## Plano: Diagnóstico e Correção da Integração Financeira na Importação
+## Avaliação Critica do GeoGestor — Perspectiva de Cliente
 
-### Diagnóstico
+Avaliei o sistema completo: código, banco de dados, arquitetura, navegação, UX e fluxos. Seguem os problemas organizados por severidade.
 
-Após auditoria completa do código e banco de dados, confirmei que:
+---
 
-- **73 clientes existem** no banco, mas **0 orçamentos, 0 despesas, 0 serviços**
-- O KPI view (`vw_kpis_financeiros`) calcula `receita_total` a partir de `fato_orcamento.receita_esperada` — sem orçamentos, receita = R$ 0
+### SEVERIDADE CRITICA (Bloqueia uso real)
 
-**Causas raiz identificadas:**
+**1. Importação NÃO gera dados financeiros**
+O banco tem 73 clientes, 144 propriedades, mas **0 orçamentos, 0 despesas, 0 serviços**. Isso significa que TODAS as importações até agora criaram apenas clientes/propriedades. O pipeline "completo" foi implementado no código, mas claramente não está funcionando na prática — os dados financeiros não chegam às tabelas `fato_orcamento` e `fato_despesas`. Resultado: **todos os KPIs, dashboards e relatórios mostram R$ 0,00**. O sistema parece vazio para o usuário apesar de ter dados importados.
 
-1. **Auto-detecção escolhe "clientes" quando a planilha tem nome + valor**: O scoring privilegia a entidade com mais campos matched. Como CLIENTE_FIELDS tem 13 campos (nome, cpf, telefone, email, etc.) e colunas como "nome", "telefone" são comuns, "clientes" ganha sempre. O modo "completo" só ativa quando 3+ entidades pontuam >= 4, o que raramente ocorre.
+**2. Página de Importação hardcoded como "clientes"**
+`src/pages/ImportacaoDados.tsx` passa `entityType="clientes"` fixo para o SmartImporter. Mesmo que o auto-detect tente mudar para "completo", o componente é inicializado como clientes. O usuário que acessa a página dedicada de importação sempre começa no modo errado.
 
-2. **Importação como "clientes" ignora colunas financeiras**: CLIENTE_FIELDS não inclui nenhum campo monetário. Colunas como "valor", "receita", "custo" são completamente descartadas.
+**3. Dashboard 360 (/) vs Dashboard Executivo (/financeiro) — confusão**
+A rota `/` renderiza `GestaoEmpresa` (Dashboard 360). Existe também `/dashboard-financeiro` e a rota `/financeiro` que fazem coisas similares. Três dashboards diferentes, todos mostrando KPIs zerados. Um cliente novo fica perdido.
 
-3. **`linkToClients` exclui o modo "completo"** (linha 874): `if (entityType !== "propriedades" && entityType !== "servicos" && entityType !== "orcamentos") return records;` — o completo nunca passa por auto-link.
+---
 
-4. **No pipeline "completo", linha 1231**: `if (!clienteId) continue;` silenciosamente descarta orçamentos sem vínculo de cliente, em vez de usar o fallback "Cliente Importação".
+### SEVERIDADE ALTA (Prejudica experiência)
 
-### Mudanças
+**4. Sidebar ainda mostra "SkyGeo" como fallback**
+Linha 105 do Sidebar: `{tenant?.name || 'SkyGeo'}`. O brand é GeoGestor, mas se o tenant não carregar, o nome antigo aparece.
 
-#### 1. Auto-detecção mais agressiva para "completo"
+**5. Sem validação de dados obrigatórios na importação**
+O campo `id_cliente` é NOT NULL em `fato_orcamento`. Se o pipeline falha ao vincular um cliente, o INSERT silenciosamente falha via RLS e o usuário não recebe feedback.
 
-Reduzir threshold de 3 entidades com score >= 4 para **2 entidades com score >= 3, sendo pelo menos uma financeira** (orcamentos ou despesas). Isso garante que uma planilha com "nome" + "valor" já acione o modo completo.
+**6. Zero feedback visual quando importação "funciona" mas não gera impacto**
+O painel de verificação financeira pós-importação foi implementado, mas se todas as inserções falharam silenciosamente, mostra "0 → 0" e o usuário não entende.
 
-#### 2. Detecção de colunas financeiras no modo "clientes"
+**7. Onboarding não guia para importação completa**
+O `OnboardingChecklist` tem steps genéricos mas não ensina o usuário a importar uma planilha financeira completa. Para um SaaS de gestão, o primeiro valor percebido deveria ser: "importe seus dados e veja seus KPIs".
 
-Após auto-detect retornar "clientes", verificar se existem headers que matcham sinônimos financeiros (valor, receita, custo, total, preço, faturamento). Se sim, mostrar um **alerta proativo** sugerindo trocar para "Importação Completa" ou, no mínimo, para "Orçamentos".
+**8. Mobile (393px viewport)**: o menu hamburger funciona, mas os KPI cards e tabelas transbordam horizontalmente. A tabela de clientes com 7 colunas não é usável em mobile.
 
-#### 3. Fallback de `id_cliente` no pipeline "completo"
+---
 
-Na step 4 do pipeline completo (linha 1231), em vez de `if (!clienteId) continue;`, usar o mesmo fallback "Cliente Importação" que já existe para o modo "orcamentos". Assim nenhum valor financeiro é descartado.
+### SEVERIDADE MEDIA (Oportunidades de melhoria)
 
-#### 4. Incluir "completo" no `linkToClients`
+**9. Auth: `LAST_USER_KEY = "skygeo_last_user"`** — nome antigo no localStorage.
 
-Adicionar `entityType === "completo"` à condição da linha 874 para que o auto-link de clientes funcione também no modo completo.
+**10. Sem busca global / command palette**
+O sistema tem 15+ páginas. Não há uma forma rápida de navegar (Ctrl+K). Para um SaaS profissional, isso é esperado.
 
-#### 5. Alerta pós-importação quando KPIs permanecem zerados
+**11. Dashboard sem "estado vazio" humanizado**
+Quando KPIs estão zerados, o Dashboard 360 mostra "R$ 0,00" em todos os cards com variação "--". Deveria mostrar um estado vazio dedicado: "Comece importando seus dados" com CTA direto para importação.
 
-Se após a importação os KPIs continuam com receita_total = 0 mas registros foram criados, mostrar alerta vermelho explicando: "Os valores importados não estão refletidos nos KPIs. Causa provável: dados foram importados como clientes sem registros financeiros. Reimporte selecionando 'Importação Completa'."
+**12. Duplicação de lógica de KPIs**
+`src/services/kpi.service.ts` e `src/modules/finance/services/kpi.service.ts` têm funções similares (`fetchKPIs`, `getDefaultKPIs`, `fetchClienteKPIs`). Manutenção duplicada.
 
-#### 6. Botão "Reimportar como Completo" na tela de resultado
+**13. Filtros globais no Dashboard não conectados**
+Os filtros em `Dashboard.tsx` são capturados no state mas nunca passados aos queries de KPIs. O usuário muda filtros e nada acontece.
 
-Quando a importação de clientes detecta que havia colunas financeiras não mapeadas, adicionar botão de ação rápida para reimportar o mesmo arquivo no modo "completo".
+**14. Sem export de dados**
+O sistema importa, mas não exporta. Não há botão "Exportar CSV" em nenhuma tabela. Para gestores, isso é essencial.
 
-### Detalhes técnicos
+**15. CalendarioDetalhes, DashboardFinanceiro, Financeiro, Operacional** — múltiplas páginas que competem pelo mesmo espaço. A IA de negócio sugere consolidar.
 
-- `detectEntityType`: adicionar check `hasFinancialHeaders` que verifica se headers matcham sinônimos de valor/receita/custo. Se `hasFinancialHeaders && highScoring.length >= 2`, retornar "completo"
-- Pipeline completo step 4: substituir `if (!clienteId) continue;` por buscar/criar "Cliente Importação" (reutilizar lógica das linhas 996-1026)
-- `linkToClients` linha 874: adicionar `|| entityType === "completo"` (embora no completo o pipeline já crie clientes, isso é uma rede de segurança)
-- Alerta: componente condicional no step "result" que compara `kpiSnapshot` com `currentKpis`
+---
 
-### Resumo de arquivos
+### PLANO DE AÇÃO PRIORITÁRIO
 
-| Ação | Arquivo |
-|------|---------|
-| Editar | `src/components/import/SmartImporter.tsx` (detecção, fallbacks, alertas) |
+Proponho executar as seguintes correções, em ordem:
+
+| # | Correção | Arquivo |
+|---|----------|---------|
+| 1 | **Importação page: remover entityType hardcoded**, deixar auto-detect decidir | `src/pages/ImportacaoDados.tsx` |
+| 2 | **Dashboard: estado vazio quando KPIs = 0**, com CTA "Importar dados" | `src/pages/GestaoEmpresa.tsx` |
+| 3 | **Sidebar: trocar fallback "SkyGeo" → "GeoGestor"** | `src/components/layout/Sidebar.tsx` |
+| 4 | **Auth localStorage key**: renomear para `geogestor_last_user` | `src/pages/Auth.tsx` |
+| 5 | **Filtros globais do Dashboard**: conectar ao hook de KPIs ou remover | `src/pages/Dashboard.tsx` |
+| 6 | **Mobile responsive**: adicionar scroll horizontal nas tabelas e stack vertical nos KPIs | Múltiplos |
 
 Nenhuma migração necessária.
 

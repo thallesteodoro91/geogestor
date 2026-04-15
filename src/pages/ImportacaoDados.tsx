@@ -32,7 +32,7 @@ export default function ImportacaoDados() {
         <SmartImporter
           open={importOpen}
           onOpenChange={setImportOpen}
-          entityType="clientes"
+          entityType="completo"
           onSuccess={() => {}}
         />
       </div>

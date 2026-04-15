@@ -14,6 +14,7 @@ import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
 import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
 import { NextActions } from "@/components/dashboard/NextActions";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   Banknote, CircleDollarSign, Percent, FileText,
   TrendingUp, HeartPulse, Bot,
   Briefcase, CheckCircle2, BarChart3, DollarSign,
+  Upload,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/plan/TrialBanner";
@@ -115,6 +117,18 @@ const GestaoEmpresa = () => {
 
         <TrialBanner />
         <OnboardingChecklist />
+
+        {/* Estado vazio — sem dados financeiros */}
+        {!isLoading && kpis && (kpis.receita_total === 0 && kpis.total_orcamentos === 0 && kpis.total_servicos === 0) && (
+          <EmptyState
+            icon={Upload}
+            title="Seus dashboards estão vazios"
+            description="Importe sua planilha com dados de clientes, serviços e valores para ver seus KPIs, gráficos e relatórios automaticamente preenchidos."
+            actionLabel="Importar Planilha"
+            onAction={() => navigate("/importacao")}
+            tip="Aceita CSV, XLS e XLSX — o sistema detecta automaticamente clientes, propriedades, serviços, orçamentos e despesas."
+          />
+        )}
         
 
         {/* Alertas + Ações */}

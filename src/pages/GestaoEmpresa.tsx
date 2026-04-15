@@ -117,6 +117,18 @@ const GestaoEmpresa = () => {
 
         <TrialBanner />
         <OnboardingChecklist />
+
+        {/* Estado vazio — sem dados financeiros */}
+        {!isLoading && kpis && (kpis.receita_total === 0 && kpis.total_orcamentos === 0 && kpis.total_servicos === 0) && (
+          <EmptyState
+            icon={Upload}
+            title="Seus dashboards estão vazios"
+            description="Importe sua planilha com dados de clientes, serviços e valores para ver seus KPIs, gráficos e relatórios automaticamente preenchidos."
+            actionLabel="Importar Planilha"
+            onAction={() => navigate("/importacao")}
+            tip="Aceita CSV, XLS e XLSX — o sistema detecta automaticamente clientes, propriedades, serviços, orçamentos e despesas."
+          />
+        )}
         
 
         {/* Alertas + Ações */}

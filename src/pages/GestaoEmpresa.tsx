@@ -14,6 +14,7 @@ import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
 import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
 import { NextActions } from "@/components/dashboard/NextActions";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
+import { EmptyState } from "@/components/ui/empty-state";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ import {
   Banknote, CircleDollarSign, Percent, FileText,
   TrendingUp, HeartPulse, Bot,
   Briefcase, CheckCircle2, BarChart3, DollarSign,
+  Upload,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/plan/TrialBanner";

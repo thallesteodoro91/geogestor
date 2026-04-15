@@ -17,7 +17,7 @@ interface LastUser {
   avatarUrl?: string;
 }
 
-const LAST_USER_KEY = "skygeo_last_user";
+const LAST_USER_KEY = "geogestor_last_user";
 
 export default function Auth() {
   const navigate = useNavigate();

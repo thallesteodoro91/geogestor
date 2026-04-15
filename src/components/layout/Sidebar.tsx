@@ -98,11 +98,11 @@ export const Sidebar = ({ className, onNavigate }: SidebarProps) => {
           <div className="flex h-16 shrink-0 items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-secondary">
               <span className="text-lg font-heading font-bold text-primary-foreground">
-                {tenant ? getInitials(tenant.name) : 'SG'}
+                {tenant ? getInitials(tenant.name) : 'GG'}
               </span>
             </div>
             <div>
-              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'SkyGeo'}</h1>
+              <h1 className="text-xl font-heading font-bold text-foreground">{tenant?.name || 'GeoGestor'}</h1>
               <p className="text-xs text-muted-foreground">Gestão para Topografia</p>
             </div>
           </div>

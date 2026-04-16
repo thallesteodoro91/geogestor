@@ -1324,7 +1324,7 @@ export function SmartImporter({
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
           const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
           const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
-          const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
+          const servicoNome = rec.nome_do_servico?.trim() || rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade?.trim()}` : rec.nome?.trim() ? `Serviço - ${rec.nome?.trim()}` : "Serviço Importado";
           const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
 
           // Fallback: use or create "Cliente Importação" if no client found

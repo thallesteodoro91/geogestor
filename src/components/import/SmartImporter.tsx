@@ -1266,7 +1266,10 @@ export function SmartImporter({
         const servicoKeys = new Set<string>();
 
         for (const rec of recordsToInsert) {
-          const servicoNome = rec.nome_do_servico?.trim() || (rec.valor_unitario || rec.receita_esperada ? "Serviço Importado" : null);
+          const servicoNome = rec.nome_do_servico?.trim() 
+            || (rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade.trim()}` : null)
+            || (rec.nome?.trim() ? `Serviço - ${rec.nome.trim()}` : null)
+            || ((rec.valor_unitario || rec.receita_esperada) ? "Serviço Importado" : null);
           if (!servicoNome) continue;
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;

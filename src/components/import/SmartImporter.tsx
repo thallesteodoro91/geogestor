@@ -467,17 +467,30 @@ const DESPESA_SYNONYMS: Record<string, string[]> = {
   _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
+// COMPLETO_SYNONYMS: manually written to avoid spread conflicts.
+// Each key has UNIQUE synonyms that don't overlap across entities.
 const COMPLETO_SYNONYMS: Record<string, string[]> = {
-  ...CLIENTE_SYNONYMS,
-  ...PROPRIEDADE_SYNONYMS,
-  ...SERVICO_SYNONYMS,
-  ...ORCAMENTO_SYNONYMS,
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
-  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
-  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
-  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
-  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
+  // ── Cliente ──
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono", "contratante", "nomeproprietario", "responsavel"],
+  cpf: ["documento", "cpfcnpj", "doc", "documentocliente", "cpfcliente"],
+  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato", "telefone1", "tel1", "fone1"],
+  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel", "telefone2", "tel2"],
+  email: ["correio", "mail", "emailcontato", "emailcliente", "correioeletronico"],
+  endereco: ["local", "localizacao", "rua", "logradouro", "end", "enderecocompleto", "morada"],
+  // ── Propriedade (sinônimos SEM conflito com cliente) ──
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno", "nomefazenda", "nomedoimovel"],
+  municipio: ["cidade", "mun", "localidade", "municipiopropriedade"],
+  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare", "ha"],
+  // ── Projeto / Serviço ──
+  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho", "tiposervico"],
+  categoria: ["tipo", "segmento", "classificacao", "tipoatividade", "areaservico"],
+  situacao_do_servico: ["status", "situacao", "estado", "andamento", "statusservico", "statusdoservico"],
+  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "datacomecar"],
+  // ── Financeiro (prioridade alta — sinônimos únicos) ──
+  valor_unitario: ["valorunit", "preco", "precounitario", "vlrunit", "valorha", "valorhectare", "precoha", "valorservico"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
+  custo_servico: ["custo", "despesa", "gasto", "custoservico", "custototal", "custooperacional"],
+  data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {

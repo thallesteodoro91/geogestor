@@ -1306,6 +1306,9 @@ export function SmartImporter({
           for (const s of (allServicos || [])) {
             servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}`, s.id_servico);
           }
+          console.log(`[SmartImporter] Step 3 - Serviços: ${sRes.success} criados, ${sRes.errors.length} erros`);
+        } else {
+          console.log(`[SmartImporter] Step 3 - Serviços: nenhum serviço para criar`);
         }
 
         // Step 4: Create financial records (orçamentos)

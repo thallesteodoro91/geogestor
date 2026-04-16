@@ -1355,10 +1355,12 @@ export function SmartImporter({
           });
         }
 
+        console.log(`[SmartImporter] Step 4 - Orçamentos a criar: ${orcamentos.length}`);
         if (orcamentos.length > 0) {
           const oRes = await createOrcamentosBatch(orcamentos as any);
           compositeStats.orcamentos = oRes.success;
           result.errors.push(...oRes.errors);
+          console.log(`[SmartImporter] Step 4 - Orçamentos: ${oRes.success} criados, ${oRes.errors.length} erros`, oRes.errors.slice(0, 3));
         }
 
         totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;

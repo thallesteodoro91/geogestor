@@ -864,9 +864,17 @@ export function SmartImporter({
       }
     }
 
-    // Check required fields
+    // Check required fields — with fallback for "nome" in completo mode
     for (const field of SYSTEM_FIELDS) {
       if (field.required && mappings[field.key] && !mapped[field.key]?.trim() && !defaultValues[field.key]?.trim()) {
+        // In "completo" mode, if "nome" (client name) is missing, use property name as fallback
+        if (entityType === "completo" && field.key === "nome") {
+          const propName = mapped["nome_da_propriedade"]?.trim();
+          if (propName) {
+            mapped["nome"] = `Cliente - ${propName}`;
+            continue; // Don't mark as error
+          }
+        }
         errors[field.key] = {
           message: `${field.label} é obrigatório`,
           severity: "error",

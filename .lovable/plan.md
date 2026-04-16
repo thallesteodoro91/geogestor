@@ -1,77 +1,70 @@
 
 
-## Avaliação Critica do GeoGestor — Perspectiva de Cliente
+## Plano: Refatoração Completa do Sistema de Importação
 
-Avaliei o sistema completo: código, banco de dados, arquitetura, navegação, UX e fluxos. Seguem os problemas organizados por severidade.
+### Diagnóstico Confirmado
 
----
+Banco de dados: **73 clientes, 144 propriedades, 0 serviços, 0 orçamentos, 0 despesas**. KPIs = R$ 0,00.
 
-### SEVERIDADE CRITICA (Bloqueia uso real)
+O código do pipeline "completo" existe e parece correto em teoria, mas falha na prática porque:
 
-**1. Importação NÃO gera dados financeiros**
-O banco tem 73 clientes, 144 propriedades, mas **0 orçamentos, 0 despesas, 0 serviços**. Isso significa que TODAS as importações até agora criaram apenas clientes/propriedades. O pipeline "completo" foi implementado no código, mas claramente não está funcionando na prática — os dados financeiros não chegam às tabelas `fato_orcamento` e `fato_despesas`. Resultado: **todos os KPIs, dashboards e relatórios mostram R$ 0,00**. O sistema parece vazio para o usuário apesar de ter dados importados.
+1. **Conflito de sinônimos no auto-map**: `COMPLETO_SYNONYMS` usa spread de 4 objetos (`...CLIENTE_SYNONYMS, ...PROPRIEDADE_SYNONYMS, ...SERVICO_SYNONYMS, ...ORCAMENTO_SYNONYMS`). Chaves duplicadas se sobrescrevem silenciosamente. Por exemplo, `situacao` existe em CLIENTE, PROPRIEDADE e SERVICO — apenas a última sobrevive. Mais crítico: campos como `endereco` em CLIENTE_SYNONYMS tem sinônimo "cidade" que conflita com `cidade` em PROPRIEDADE_SYNONYMS. O resultado é mapeamentos errados.
 
-**2. Página de Importação hardcoded como "clientes"**
-`src/pages/ImportacaoDados.tsx` passa `entityType="clientes"` fixo para o SmartImporter. Mesmo que o auto-detect tente mudar para "completo", o componente é inicializado como clientes. O usuário que acessa a página dedicada de importação sempre começa no modo errado.
+2. **Auto-map greedy**: O `autoMap` atribui o primeiro header que faz match. Se "valor" casa com `valor_unitario`, ele não fica disponível para `receita_esperada`. Mas se a planilha tem UMA coluna "valor", precisa ser mapeada ao campo correto — hoje pode mapear para o campo errado.
 
-**3. Dashboard 360 (/) vs Dashboard Executivo (/financeiro) — confusão**
-A rota `/` renderiza `GestaoEmpresa` (Dashboard 360). Existe também `/dashboard-financeiro` e a rota `/financeiro` que fazem coisas similares. Três dashboards diferentes, todos mostrando KPIs zerados. Um cliente novo fica perdido.
+3. **`nome` é required mas o matching é ambíguo**: Em COMPLETO_SYNONYMS, `nome` tem sinônimos como "cliente", "contato". Mas se o header da planilha é "Nome do Cliente", o normalize resulta em "nomedocliente" que precisa match exato com o sinônimo. Se não encontrar, a linha inteira é marcada como erro e descartada.
 
----
+4. **Valores financeiros parseados como null**: Se `sanitizeCurrency` recebe "R$ 5.000,00" de uma célula XLSX já processada pelo XLSX.utils como número (5000), funciona. Mas se chega como string "5000.00" sem vírgula, o regex de detecção `/\d\.\d{3}/` não ativa e o valor é tratado corretamente. O problema real é quando o XLSX parser entrega a célula como `undefined` ou string vazia para campos numéricos.
 
-### SEVERIDADE ALTA (Prejudica experiência)
+### Mudanças Propostas
 
-**4. Sidebar ainda mostra "SkyGeo" como fallback**
-Linha 105 do Sidebar: `{tenant?.name || 'SkyGeo'}`. O brand é GeoGestor, mas se o tenant não carregar, o nome antigo aparece.
+#### 1. Refatorar COMPLETO_SYNONYMS sem spread conflitante
 
-**5. Sem validação de dados obrigatórios na importação**
-O campo `id_cliente` é NOT NULL em `fato_orcamento`. Se o pipeline falha ao vincular um cliente, o INSERT silenciosamente falha via RLS e o usuário não recebe feedback.
+Reescrever `COMPLETO_SYNONYMS` manualmente sem `...spread`, garantindo que cada campo tem sinônimos únicos e não-conflitantes. Adicionar sinônimos compostos reais do mundo do agro/topografia brasileiro:
+- `nome`: "cliente", "proprietario", "nomedocliente", "nomeproprietario", "contratante"
+- `nome_da_propriedade`: "propriedade", "fazenda", "imovel", "nomeimovel", "nomefazenda"  
+- `valor_unitario`: "valor", "vlr", "preco", "valorunitario", "valorha"
+- `receita_esperada`: "receita", "valortotal", "total", "faturamento", "valorcontrato"
 
-**6. Zero feedback visual quando importação "funciona" mas não gera impacto**
-O painel de verificação financeira pós-importação foi implementado, mas se todas as inserções falharam silenciosamente, mostra "0 → 0" e o usuário não entende.
+Eliminar ambiguidades onde "cidade" pode casar com campo de cliente OU propriedade.
 
-**7. Onboarding não guia para importação completa**
-O `OnboardingChecklist` tem steps genéricos mas não ensina o usuário a importar uma planilha financeira completa. Para um SaaS de gestão, o primeiro valor percebido deveria ser: "importe seus dados e veja seus KPIs".
+#### 2. Auto-map com prioridade de entidade
 
-**8. Mobile (393px viewport)**: o menu hamburger funciona, mas os KPI cards e tabelas transbordam horizontalmente. A tabela de clientes com 7 colunas não é usável em mobile.
+Modificar `autoMap` para que, no modo "completo", headers ambíguos (ex: "cidade") priorizem a entidade mais específica (propriedade > cliente). Implementar um sistema de peso onde campos financeiros têm prioridade sobre campos textuais quando o header contém keywords monetários.
 
----
+#### 3. Relaxar validação do campo `nome` em "completo"
 
-### SEVERIDADE MEDIA (Oportunidades de melhoria)
+Se `nome` não tem match, mas a planilha tem uma coluna "proprietario" ou "contratante", o sinônimo deve cobrir. Caso nenhum match exista, usar o nome da propriedade ou gerar "Cliente [nome_propriedade]" automaticamente como fallback — não descartar a linha.
 
-**9. Auth: `LAST_USER_KEY = "skygeo_last_user"`** — nome antigo no localStorage.
+#### 4. Pipeline de importação com logging detalhado
 
-**10. Sem busca global / command palette**
-O sistema tem 15+ páginas. Não há uma forma rápida de navegar (Ctrl+K). Para um SaaS profissional, isso é esperado.
+Adicionar `console.log` em cada step do pipeline (clientes, propriedades, serviços, orçamentos) mostrando exatamente quantos registros tentam ser inseridos e quantos falharam, com o erro específico. Mostrar esses logs no painel de resultado como "Debug da Importação".
 
-**11. Dashboard sem "estado vazio" humanizado**
-Quando KPIs estão zerados, o Dashboard 360 mostra "R$ 0,00" em todos os cards com variação "--". Deveria mostrar um estado vazio dedicado: "Comece importando seus dados" com CTA direto para importação.
+#### 5. Painel de resultado expandido (nível premium)
 
-**12. Duplicação de lógica de KPIs**
-`src/services/kpi.service.ts` e `src/modules/finance/services/kpi.service.ts` têm funções similares (`fetchKPIs`, `getDefaultKPIs`, `fetchClienteKPIs`). Manutenção duplicada.
+Redesenhar o step "result" com:
+- **Resumo visual**: Cards com ícones mostrando X clientes, X propriedades, X projetos, R$ X receita, R$ X despesas
+- **Tabela de debug**: Valores classificados como receita vs despesa vs não classificados
+- **Before/After KPIs**: Já existe mas melhorar com destaque visual quando valores mudam
+- **CTA claro**: "Ir para Dashboard" como botão principal
 
-**13. Filtros globais no Dashboard não conectados**
-Os filtros em `Dashboard.tsx` são capturados no state mas nunca passados aos queries de KPIs. O usuário muda filtros e nada acontece.
+#### 6. Detecção forçada para "completo"
 
-**14. Sem export de dados**
-O sistema importa, mas não exporta. Não há botão "Exportar CSV" em nenhuma tabela. Para gestores, isso é essencial.
+Se a planilha tem **qualquer** header financeiro (valor, receita, custo, total, preço, faturamento) E pelo menos um header de nome/cliente, forçar modo "completo" independente do scoring. O threshold atual (2 entidades ≥3) é muito restritivo.
 
-**15. CalendarioDetalhes, DashboardFinanceiro, Financeiro, Operacional** — múltiplas páginas que competem pelo mesmo espaço. A IA de negócio sugere consolidar.
+#### 7. Fallback para linhas sem serviço
 
----
+Se uma linha tem valor monetário mas nenhum nome de serviço mapeado, criar serviço com nome "Serviço - [nome_propriedade]" ou "Serviço - [nome_cliente]" em vez do genérico "Serviço Importado".
 
-### PLANO DE AÇÃO PRIORITÁRIO
+### Detalhes técnicos
 
-Proponho executar as seguintes correções, em ordem:
+- Arquivo principal: `src/components/import/SmartImporter.tsx`
+- Reescrever `COMPLETO_SYNONYMS` (~20 linhas)
+- Modificar `detectEntityType` (~10 linhas)
+- Modificar `autoMap` para prioridade (~15 linhas)
+- Expandir pipeline logging no `handleImport` (~20 linhas)
+- Redesenhar resultado no render (~60 linhas)
+- Fallback `nome` no validate (~10 linhas)
 
-| # | Correção | Arquivo |
-|---|----------|---------|
-| 1 | **Importação page: remover entityType hardcoded**, deixar auto-detect decidir | `src/pages/ImportacaoDados.tsx` |
-| 2 | **Dashboard: estado vazio quando KPIs = 0**, com CTA "Importar dados" | `src/pages/GestaoEmpresa.tsx` |
-| 3 | **Sidebar: trocar fallback "SkyGeo" → "GeoGestor"** | `src/components/layout/Sidebar.tsx` |
-| 4 | **Auth localStorage key**: renomear para `geogestor_last_user` | `src/pages/Auth.tsx` |
-| 5 | **Filtros globais do Dashboard**: conectar ao hook de KPIs ou remover | `src/pages/Dashboard.tsx` |
-| 6 | **Mobile responsive**: adicionar scroll horizontal nas tabelas e stack vertical nos KPIs | Múltiplos |
-
-Nenhuma migração necessária.
+Nenhuma migração necessária — o modelo de dados (dim_cliente, dim_propriedade, fato_servico, fato_orcamento, fato_despesas) já é correto e suporta todas as relações descritas.
 

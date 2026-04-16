@@ -636,6 +636,7 @@ export function SmartImporter({
   const [kpiSnapshot, setKpiSnapshot] = useState<KPIData | null>(null);
   const [valueClassification, setValueClassification] = useState<"receita" | "despesa" | "ignorar" | null>(null);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [compositeStatsResult, setCompositeStatsResult] = useState<{ clientes: number; propriedades: number; servicos: number; orcamentos: number; despesas: number } | null>(null);
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();

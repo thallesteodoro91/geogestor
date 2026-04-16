@@ -1226,8 +1226,10 @@ export function SmartImporter({
           for (const c of (updatedClients || [])) {
             clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
           }
+          console.log(`[SmartImporter] Step 1 - Clientes: ${cRes.success} criados, ${cRes.errors.length} erros`);
         }
         compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
+        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos, ${newClients.length} novos)`);
 
         // Step 2: Create properties
         setImportProgress(55);

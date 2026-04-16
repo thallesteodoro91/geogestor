@@ -1915,16 +1915,35 @@ export function SmartImporter({
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <AlertTitle className="text-emerald-600 dark:text-emerald-400">Importação Concluída!</AlertTitle>
                   <AlertDescription className="text-emerald-700 dark:text-emerald-300">
-                    {importResult.success} {entityLabel.singular}(s) importado(s) com sucesso.
+                    {importResult.success} registro(s) importado(s) com sucesso.
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {/* Composite stats cards (premium) */}
+              {compositeStatsResult && entityType === "completo" && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {[
+                    { label: "Clientes", value: compositeStatsResult.clientes, icon: "👤" },
+                    { label: "Propriedades", value: compositeStatsResult.propriedades, icon: "🏡" },
+                    { label: "Projetos", value: compositeStatsResult.servicos, icon: "📋" },
+                    { label: "Orçamentos", value: compositeStatsResult.orcamentos, icon: "💰" },
+                    { label: "Despesas", value: compositeStatsResult.despesas, icon: "📉" },
+                  ].map(({ label, value, icon }) => (
+                    <div key={label} className="rounded-lg border bg-card p-3 text-center">
+                      <p className="text-lg">{icon}</p>
+                      <p className="text-2xl font-bold text-foreground">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
+                </div>
               )}
 
               {/* Import warnings */}
               {importWarnings.length > 0 && (
                 <Alert className="border-amber-500/30 bg-amber-500/5">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <AlertTitle className="text-amber-700 dark:text-amber-300">Avisos da importação</AlertTitle>
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Detalhes da importação</AlertTitle>
                   <AlertDescription>
                     <ul className="list-disc list-inside space-y-1 mt-1">
                       {importWarnings.map((w, i) => <li key={i} className="text-sm text-amber-600 dark:text-amber-400">{w}</li>)}
@@ -1947,10 +1966,10 @@ export function SmartImporter({
                         <p className="text-lg font-bold text-primary">
                           {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.receita_total || 0)}
                         </p>
-                        {kpiSnapshot && (
-                          <p className={`text-xs ${(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) ? "text-emerald-600" : "text-muted-foreground"}`}>
-                            {(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && <TrendingUp className="h-3 w-3 inline mr-1" />}
-                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.receita_total || 0)}
+                        {kpiSnapshot && (currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && (
+                          <p className="text-xs text-emerald-600">
+                            <TrendingUp className="h-3 w-3 inline mr-1" />
+                            +{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((currentKpis.receita_total || 0) - (kpiSnapshot.receita_total || 0))}
                           </p>
                         )}
                       </div>
@@ -1959,12 +1978,6 @@ export function SmartImporter({
                         <p className="text-lg font-bold text-destructive">
                           {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.total_despesas || 0)}
                         </p>
-                        {kpiSnapshot && (
-                          <p className={`text-xs ${(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) ? "text-amber-600" : "text-muted-foreground"}`}>
-                            {(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) && <TrendingDown className="h-3 w-3 inline mr-1" />}
-                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.total_despesas || 0)}
-                          </p>
-                        )}
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Lucro Líquido</p>
@@ -1981,29 +1994,23 @@ export function SmartImporter({
                       <AlertTriangle className="h-4 w-4" />
                       <AlertTitle>KPIs permanecem zerados</AlertTitle>
                       <AlertDescription className="text-sm">
-                        Os valores importados não estão refletidos nos KPIs.
-                        {entityType === "clientes" && " Causa provável: dados foram importados como clientes sem registros financeiros."}
-                        {entityType !== "completo" && entityType !== "orcamentos" && entityType !== "despesas" && (
-                          <Button size="sm" variant="outline" className="ml-2 mt-1" onClick={() => {
-                            reset();
-                            setEntityType("completo");
-                            setStep("upload");
-                          }}>
-                            <Sparkles className="h-3 w-3 mr-1" />
-                            Reimportar como Importação Completa
-                          </Button>
-                        )}
+                        Os valores importados ainda não foram refletidos nos KPIs. Aguarde alguns segundos e recarregue, ou reimporte usando "Importação Completa".
                       </AlertDescription>
                     </Alert>
                   )}
                 </div>
               )}
 
+              {/* Primary CTA */}
               {importResult.success > 0 && (
                 <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => { onOpenChange(false); navigate("/"); }}>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Ir para Dashboard
+                  </Button>
                   <Button variant="outline" onClick={() => { onOpenChange(false); navigate(entityLabel.route); }}>
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Ver {entityLabel.titlePlural} importados
+                    Ver {entityLabel.titlePlural}
                   </Button>
                 </div>
               )}
@@ -2013,35 +2020,11 @@ export function SmartImporter({
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>{importResult.errors.length} linha(s) com erro — não importadas</AlertTitle>
                   <AlertDescription>
-                    {/* Grouped error summary table */}
-                    {errorSummary.filter(([_, d]) => d.severity === "error").length > 0 && (
-                      <div className="mt-2 mb-3">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs h-8">Tipo de Erro</TableHead>
-                              <TableHead className="text-xs h-8 w-16">Qtd</TableHead>
-                              <TableHead className="text-xs h-8">Sugestão</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {errorSummary.filter(([_, d]) => d.severity === "error").slice(0, 10).map(([msg, data]) => (
-                              <TableRow key={msg}>
-                                <TableCell className="text-xs py-1.5">{msg}</TableCell>
-                                <TableCell className="text-xs py-1.5 font-medium">{data.count}</TableCell>
-                                <TableCell className="text-xs py-1.5 text-muted-foreground">{data.suggestion || "—"}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    <ScrollArea className="h-[100px] mt-2">
+                    <ScrollArea className="h-[80px] mt-2">
                       <ul className="list-disc list-inside space-y-1">
-                        {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
-                        {importResult.errors.length > 50 && (
-                          <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
+                        {importResult.errors.slice(0, 30).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
+                        {importResult.errors.length > 30 && (
+                          <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 30} erro(s)</li>
                         )}
                       </ul>
                     </ScrollArea>
@@ -2054,20 +2037,6 @@ export function SmartImporter({
                   </AlertDescription>
                 </Alert>
               )}
-
-              {importResult.success > 0 && (() => {
-                const tip = getNextStepTip();
-                if (!tip) return null;
-                return (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                    <p className="text-sm text-muted-foreground">{tip.text}</p>
-                    <Button variant="ghost" size="sm" className="ml-auto shrink-0" onClick={() => { onOpenChange(false); navigate(tip.route); }}>
-                      Ir agora <ArrowRight className="h-3 w-3 ml-1" />
-                    </Button>
-                  </div>
-                );
-              })()}
             </div>
           )}
         </div>

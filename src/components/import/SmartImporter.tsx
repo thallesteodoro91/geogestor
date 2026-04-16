@@ -1367,6 +1367,8 @@ export function SmartImporter({
         totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;
         result.success = totalCreated;
 
+        setCompositeStatsResult({ ...compositeStats });
+        console.log("[SmartImporter] Pipeline finalizado:", compositeStats);
         // Build composite warnings summary
         const parts: string[] = [];
         if (compositeStats.clientes > 0) parts.push(`${compositeStats.clientes} cliente(s)`);

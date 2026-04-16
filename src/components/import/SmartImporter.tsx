@@ -521,6 +521,21 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_\s\-.*]/g, "");
   const normalized = fileHeaders.map(norm);
 
+  // PRIORITY CHECK: If financial + client/property headers exist → force "completo"
+  const financialKeywords = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto", "lucro"];
+  const clientKeywords = ["cliente", "nome", "proprietario", "contratante", "razaosocial", "dono", "responsavel"];
+  const propertyKeywords = ["propriedade", "fazenda", "imovel", "sitio", "chacara", "gleba", "terreno"];
+
+  const hasFinancial = normalized.some(h => financialKeywords.some(k => h.includes(k)));
+  const hasClient = normalized.some(h => clientKeywords.some(k => h.includes(k)));
+  const hasProperty = normalized.some(h => propertyKeywords.some(k => h.includes(k)));
+
+  // Force completo when we have financial data + at least client or property
+  if (hasFinancial && (hasClient || hasProperty)) {
+    const matchCount = [hasFinancial, hasClient, hasProperty].filter(Boolean).length;
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(95, 60 + matchCount * 10) };
+  }
+
   const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0, completo: 0 };
   const entities: ImportEntityType[] = ["clientes", "propriedades", "orcamentos", "servicos", "despesas"];
 
@@ -545,17 +560,10 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const totalPossible = getFieldsForEntity(best).length * 3;
   const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
 
-  // Detect "completo" when 2+ entity types score well AND at least one is financial
+  // Detect "completo" when 2+ entity types score ≥3
   const highScoring = entities.filter(e => scores[e] >= 3);
-  const hasFinancialEntity = highScoring.some(e => e === "orcamentos" || e === "despesas");
-  if (highScoring.length >= 2 && hasFinancialEntity) {
+  if (highScoring.length >= 2) {
     return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
-  }
-  // Also detect completo when financial headers exist alongside client data
-  const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
-  const hasFinancialHeaders = normalized.some(h => financialSynonyms.some(s => h.includes(s)));
-  if (hasFinancialHeaders && highScoring.length >= 2) {
-    return { entity: "completo" as ImportEntityType, confidence: Math.min(85, confidence + 15) };
   }
 
   return { entity: best, confidence };

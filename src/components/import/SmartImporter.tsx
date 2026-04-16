@@ -1260,6 +1260,7 @@ export function SmartImporter({
           for (const p of (allProps || [])) {
             propMap.set(`${p.id_cliente || "none"}|${p.nome_da_propriedade?.toLowerCase()}`, p.id_propriedade);
           }
+          console.log(`[SmartImporter] Step 2 - Propriedades: ${pRes.success} criadas, ${pRes.errors.length} erros`);
         }
 
         // Step 3: Create services

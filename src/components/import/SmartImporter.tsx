@@ -665,6 +665,7 @@ export function SmartImporter({
     setValueClassification(null);
     setImportWarnings([]);
     setDetectedFinancialInClientes(false);
+    setCompositeStatsResult(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────

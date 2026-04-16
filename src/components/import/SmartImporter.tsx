@@ -467,17 +467,30 @@ const DESPESA_SYNONYMS: Record<string, string[]> = {
   _categoria_lookup: ["categoria", "tipo", "classificacao", "natureza", "grupo", "tipodespesa", "categoriadespesa"],
 };
 
+// COMPLETO_SYNONYMS: manually written to avoid spread conflicts.
+// Each key has UNIQUE synonyms that don't overlap across entities.
 const COMPLETO_SYNONYMS: Record<string, string[]> = {
-  ...CLIENTE_SYNONYMS,
-  ...PROPRIEDADE_SYNONYMS,
-  ...SERVICO_SYNONYMS,
-  ...ORCAMENTO_SYNONYMS,
-  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono"],
-  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno"],
-  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho"],
-  valor_unitario: ["valorunit", "preco", "valorservico", "precounitario", "valor", "vlr", "vlrunit", "valorha", "valorhectare", "precoha"],
-  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato"],
-  custo_servico: ["custo", "despesa", "gasto", "custoservico"],
+  // ── Cliente ──
+  nome: ["cliente", "razaosocial", "nomecompleto", "nomerazao", "contato", "nomefantasia", "razao", "nomecontato", "nomecliente", "clientenome", "nomedocliente", "proprietario", "dono", "contratante", "nomeproprietario", "responsavel"],
+  cpf: ["documento", "cpfcnpj", "doc", "documentocliente", "cpfcliente"],
+  telefone: ["fone", "tel", "fixo", "telefonecontato", "telefonefixo", "fonecontato", "telefone1", "tel1", "fone1"],
+  celular: ["whatsapp", "zap", "mobile", "cel", "telefonemovil", "celularcontato", "wpp", "telefonemovel", "telefone2", "tel2"],
+  email: ["correio", "mail", "emailcontato", "emailcliente", "correioeletronico"],
+  endereco: ["local", "localizacao", "rua", "logradouro", "end", "enderecocompleto", "morada"],
+  // ── Propriedade (sinônimos SEM conflito com cliente) ──
+  nome_da_propriedade: ["propriedade", "fazenda", "sitio", "chacara", "lote", "imovel", "nomepropriedade", "nomeimovel", "nomefazenda", "prop", "gleba", "terreno", "nomefazenda", "nomedoimovel"],
+  municipio: ["cidade", "mun", "localidade", "municipiopropriedade"],
+  area_ha: ["area", "areaha", "hectares", "tamanho", "areahectare", "ha"],
+  // ── Projeto / Serviço ──
+  nome_do_servico: ["servico", "projeto", "titulo", "nomeservico", "nomeprojeto", "atividade", "trabalho", "tiposervico"],
+  categoria: ["tipo", "segmento", "classificacao", "tipoatividade", "areaservico"],
+  situacao_do_servico: ["status", "situacao", "estado", "andamento", "statusservico", "statusdoservico"],
+  data_do_servico_inicio: ["datainicio", "inicio", "dtinicio", "datacomecar"],
+  // ── Financeiro (prioridade alta — sinônimos únicos) ──
+  valor_unitario: ["valorunit", "preco", "precounitario", "vlrunit", "valorha", "valorhectare", "precoha", "valorservico"],
+  receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
+  custo_servico: ["custo", "despesa", "gasto", "custoservico", "custototal", "custooperacional"],
+  data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
@@ -508,6 +521,21 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_\s\-.*]/g, "");
   const normalized = fileHeaders.map(norm);
 
+  // PRIORITY CHECK: If financial + client/property headers exist → force "completo"
+  const financialKeywords = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto", "lucro"];
+  const clientKeywords = ["cliente", "nome", "proprietario", "contratante", "razaosocial", "dono", "responsavel"];
+  const propertyKeywords = ["propriedade", "fazenda", "imovel", "sitio", "chacara", "gleba", "terreno"];
+
+  const hasFinancial = normalized.some(h => financialKeywords.some(k => h.includes(k)));
+  const hasClient = normalized.some(h => clientKeywords.some(k => h.includes(k)));
+  const hasProperty = normalized.some(h => propertyKeywords.some(k => h.includes(k)));
+
+  // Force completo when we have financial data + at least client or property
+  if (hasFinancial && (hasClient || hasProperty)) {
+    const matchCount = [hasFinancial, hasClient, hasProperty].filter(Boolean).length;
+    return { entity: "completo" as ImportEntityType, confidence: Math.min(95, 60 + matchCount * 10) };
+  }
+
   const scores: Record<ImportEntityType, number> = { clientes: 0, propriedades: 0, orcamentos: 0, servicos: 0, despesas: 0, completo: 0 };
   const entities: ImportEntityType[] = ["clientes", "propriedades", "orcamentos", "servicos", "despesas"];
 
@@ -532,17 +560,10 @@ function detectEntityType(fileHeaders: string[]): { entity: ImportEntityType; co
   const totalPossible = getFieldsForEntity(best).length * 3;
   const confidence = totalPossible > 0 ? Math.round((maxScore / totalPossible) * 100) : 0;
 
-  // Detect "completo" when 2+ entity types score well AND at least one is financial
+  // Detect "completo" when 2+ entity types score ≥3
   const highScoring = entities.filter(e => scores[e] >= 3);
-  const hasFinancialEntity = highScoring.some(e => e === "orcamentos" || e === "despesas");
-  if (highScoring.length >= 2 && hasFinancialEntity) {
+  if (highScoring.length >= 2) {
     return { entity: "completo" as ImportEntityType, confidence: Math.min(90, confidence + 20) };
-  }
-  // Also detect completo when financial headers exist alongside client data
-  const financialSynonyms = ["valor", "preco", "custo", "total", "receita", "faturamento", "amount", "vlr", "price", "revenue", "despesa", "gasto"];
-  const hasFinancialHeaders = normalized.some(h => financialSynonyms.some(s => h.includes(s)));
-  if (hasFinancialHeaders && highScoring.length >= 2) {
-    return { entity: "completo" as ImportEntityType, confidence: Math.min(85, confidence + 15) };
   }
 
   return { entity: best, confidence };
@@ -615,6 +636,7 @@ export function SmartImporter({
   const [kpiSnapshot, setKpiSnapshot] = useState<KPIData | null>(null);
   const [valueClassification, setValueClassification] = useState<"receita" | "despesa" | "ignorar" | null>(null);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const [compositeStatsResult, setCompositeStatsResult] = useState<{ clientes: number; propriedades: number; servicos: number; orcamentos: number; despesas: number } | null>(null);
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();
@@ -643,6 +665,7 @@ export function SmartImporter({
     setValueClassification(null);
     setImportWarnings([]);
     setDetectedFinancialInClientes(false);
+    setCompositeStatsResult(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -650,20 +673,29 @@ export function SmartImporter({
   const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>) => {
     const newMappings: Record<string, string> = {};
     const confidences: Record<string, MatchConfidence> = {};
+    const usedHeaders = new Set<string>(); // Prevent double-mapping
 
-    for (const field of fields) {
+    // Sort fields: required first, then financial fields (higher priority)
+    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "data_orcamento"]);
+    const sortedFields = [...fields].sort((a, b) => {
+      if (a.required !== b.required) return a.required ? -1 : 1;
+      if (financialKeys.has(a.key) !== financialKeys.has(b.key)) return financialKeys.has(a.key) ? -1 : 1;
+      return 0;
+    });
+
+    for (const field of sortedFields) {
       const b = normalize(field.key);
       const c = normalize(field.label);
 
-      let match = fileHeaders.find((h) => { const a = normalize(h); return a === b || a === c; });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "exact"; continue; }
+      let match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return a === b || a === c; })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "exact"; usedHeaders.add(match); continue; }
 
       const syns = synonyms[field.key] || [];
-      match = fileHeaders.find((h) => { const a = normalize(h); return syns.some((syn) => a === syn || a.includes(syn) || syn.includes(a)); });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "synonym"; continue; }
+      match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return syns.some((syn) => a === syn || a.includes(syn) || syn.includes(a)); })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "synonym"; usedHeaders.add(match); continue; }
 
-      match = fileHeaders.find((h) => { const a = normalize(h); return a.includes(b) || b.includes(a) || a.includes(c) || c.includes(a); });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "partial"; }
+      match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return a.includes(b) || b.includes(a) || a.includes(c) || c.includes(a); })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "partial"; usedHeaders.add(match); }
     }
     setMappings(newMappings);
     setMatchConfidences(confidences);
@@ -834,9 +866,17 @@ export function SmartImporter({
       }
     }
 
-    // Check required fields
+    // Check required fields — with fallback for "nome" in completo mode
     for (const field of SYSTEM_FIELDS) {
       if (field.required && mappings[field.key] && !mapped[field.key]?.trim() && !defaultValues[field.key]?.trim()) {
+        // In "completo" mode, if "nome" (client name) is missing, use property name as fallback
+        if (entityType === "completo" && field.key === "nome") {
+          const propName = mapped["nome_da_propriedade"]?.trim();
+          if (propName) {
+            mapped["nome"] = `Cliente - ${propName}`;
+            continue; // Don't mark as error
+          }
+        }
         errors[field.key] = {
           message: `${field.label} é obrigatório`,
           severity: "error",
@@ -1146,6 +1186,7 @@ export function SmartImporter({
 
       if (entityType === "completo") {
         // ─── COMPOSITE IMPORT PIPELINE ────────────────────────────
+        console.log("[SmartImporter] Pipeline completo iniciado. Registros a processar:", recordsToInsert.length);
         result = { success: 0, errors: [] };
         const clienteMap = new Map<string, string>(); // normalized name → id
         const propMap = new Map<string, string>(); // "clienteId|propName" → id
@@ -1187,8 +1228,10 @@ export function SmartImporter({
           for (const c of (updatedClients || [])) {
             clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
           }
+          console.log(`[SmartImporter] Step 1 - Clientes: ${cRes.success} criados, ${cRes.errors.length} erros`);
         }
         compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
+        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos, ${newClients.length} novos)`);
 
         // Step 2: Create properties
         setImportProgress(55);
@@ -1219,6 +1262,7 @@ export function SmartImporter({
           for (const p of (allProps || [])) {
             propMap.set(`${p.id_cliente || "none"}|${p.nome_da_propriedade?.toLowerCase()}`, p.id_propriedade);
           }
+          console.log(`[SmartImporter] Step 2 - Propriedades: ${pRes.success} criadas, ${pRes.errors.length} erros`);
         }
 
         // Step 3: Create services
@@ -1228,7 +1272,10 @@ export function SmartImporter({
         const servicoKeys = new Set<string>();
 
         for (const rec of recordsToInsert) {
-          const servicoNome = rec.nome_do_servico?.trim() || (rec.valor_unitario || rec.receita_esperada ? "Serviço Importado" : null);
+          const servicoNome = rec.nome_do_servico?.trim() 
+            || (rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade.trim()}` : null)
+            || (rec.nome?.trim() ? `Serviço - ${rec.nome.trim()}` : null)
+            || ((rec.valor_unitario || rec.receita_esperada) ? "Serviço Importado" : null);
           if (!servicoNome) continue;
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
@@ -1261,6 +1308,9 @@ export function SmartImporter({
           for (const s of (allServicos || [])) {
             servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}`, s.id_servico);
           }
+          console.log(`[SmartImporter] Step 3 - Serviços: ${sRes.success} criados, ${sRes.errors.length} erros`);
+        } else {
+          console.log(`[SmartImporter] Step 3 - Serviços: nenhum serviço para criar`);
         }
 
         // Step 4: Create financial records (orçamentos)
@@ -1276,7 +1326,7 @@ export function SmartImporter({
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
           const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
           const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
-          const servicoNome = rec.nome_do_servico?.trim() || "Serviço Importado";
+          const servicoNome = rec.nome_do_servico?.trim() || rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade?.trim()}` : rec.nome?.trim() ? `Serviço - ${rec.nome?.trim()}` : "Serviço Importado";
           const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
 
           // Fallback: use or create "Cliente Importação" if no client found
@@ -1307,15 +1357,19 @@ export function SmartImporter({
           });
         }
 
+        console.log(`[SmartImporter] Step 4 - Orçamentos a criar: ${orcamentos.length}`);
         if (orcamentos.length > 0) {
           const oRes = await createOrcamentosBatch(orcamentos as any);
           compositeStats.orcamentos = oRes.success;
           result.errors.push(...oRes.errors);
+          console.log(`[SmartImporter] Step 4 - Orçamentos: ${oRes.success} criados, ${oRes.errors.length} erros`, oRes.errors.slice(0, 3));
         }
 
         totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;
         result.success = totalCreated;
 
+        setCompositeStatsResult({ ...compositeStats });
+        console.log("[SmartImporter] Pipeline finalizado:", compositeStats);
         // Build composite warnings summary
         const parts: string[] = [];
         if (compositeStats.clientes > 0) parts.push(`${compositeStats.clientes} cliente(s)`);
@@ -1861,16 +1915,35 @@ export function SmartImporter({
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <AlertTitle className="text-emerald-600 dark:text-emerald-400">Importação Concluída!</AlertTitle>
                   <AlertDescription className="text-emerald-700 dark:text-emerald-300">
-                    {importResult.success} {entityLabel.singular}(s) importado(s) com sucesso.
+                    {importResult.success} registro(s) importado(s) com sucesso.
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {/* Composite stats cards (premium) */}
+              {compositeStatsResult && entityType === "completo" && (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  {[
+                    { label: "Clientes", value: compositeStatsResult.clientes, icon: "👤" },
+                    { label: "Propriedades", value: compositeStatsResult.propriedades, icon: "🏡" },
+                    { label: "Projetos", value: compositeStatsResult.servicos, icon: "📋" },
+                    { label: "Orçamentos", value: compositeStatsResult.orcamentos, icon: "💰" },
+                    { label: "Despesas", value: compositeStatsResult.despesas, icon: "📉" },
+                  ].map(({ label, value, icon }) => (
+                    <div key={label} className="rounded-lg border bg-card p-3 text-center">
+                      <p className="text-lg">{icon}</p>
+                      <p className="text-2xl font-bold text-foreground">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
+                </div>
               )}
 
               {/* Import warnings */}
               {importWarnings.length > 0 && (
                 <Alert className="border-amber-500/30 bg-amber-500/5">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />
-                  <AlertTitle className="text-amber-700 dark:text-amber-300">Avisos da importação</AlertTitle>
+                  <AlertTitle className="text-amber-700 dark:text-amber-300">Detalhes da importação</AlertTitle>
                   <AlertDescription>
                     <ul className="list-disc list-inside space-y-1 mt-1">
                       {importWarnings.map((w, i) => <li key={i} className="text-sm text-amber-600 dark:text-amber-400">{w}</li>)}
@@ -1893,10 +1966,10 @@ export function SmartImporter({
                         <p className="text-lg font-bold text-primary">
                           {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.receita_total || 0)}
                         </p>
-                        {kpiSnapshot && (
-                          <p className={`text-xs ${(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) ? "text-emerald-600" : "text-muted-foreground"}`}>
-                            {(currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && <TrendingUp className="h-3 w-3 inline mr-1" />}
-                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.receita_total || 0)}
+                        {kpiSnapshot && (currentKpis.receita_total || 0) > (kpiSnapshot.receita_total || 0) && (
+                          <p className="text-xs text-emerald-600">
+                            <TrendingUp className="h-3 w-3 inline mr-1" />
+                            +{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format((currentKpis.receita_total || 0) - (kpiSnapshot.receita_total || 0))}
                           </p>
                         )}
                       </div>
@@ -1905,12 +1978,6 @@ export function SmartImporter({
                         <p className="text-lg font-bold text-destructive">
                           {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(currentKpis.total_despesas || 0)}
                         </p>
-                        {kpiSnapshot && (
-                          <p className={`text-xs ${(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) ? "text-amber-600" : "text-muted-foreground"}`}>
-                            {(currentKpis.total_despesas || 0) > (kpiSnapshot.total_despesas || 0) && <TrendingDown className="h-3 w-3 inline mr-1" />}
-                            Antes: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(kpiSnapshot.total_despesas || 0)}
-                          </p>
-                        )}
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Lucro Líquido</p>
@@ -1927,29 +1994,23 @@ export function SmartImporter({
                       <AlertTriangle className="h-4 w-4" />
                       <AlertTitle>KPIs permanecem zerados</AlertTitle>
                       <AlertDescription className="text-sm">
-                        Os valores importados não estão refletidos nos KPIs.
-                        {entityType === "clientes" && " Causa provável: dados foram importados como clientes sem registros financeiros."}
-                        {entityType !== "completo" && entityType !== "orcamentos" && entityType !== "despesas" && (
-                          <Button size="sm" variant="outline" className="ml-2 mt-1" onClick={() => {
-                            reset();
-                            setEntityType("completo");
-                            setStep("upload");
-                          }}>
-                            <Sparkles className="h-3 w-3 mr-1" />
-                            Reimportar como Importação Completa
-                          </Button>
-                        )}
+                        Os valores importados ainda não foram refletidos nos KPIs. Aguarde alguns segundos e recarregue, ou reimporte usando "Importação Completa".
                       </AlertDescription>
                     </Alert>
                   )}
                 </div>
               )}
 
+              {/* Primary CTA */}
               {importResult.success > 0 && (
                 <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => { onOpenChange(false); navigate("/"); }}>
+                    <TrendingUp className="h-4 w-4 mr-2" />
+                    Ir para Dashboard
+                  </Button>
                   <Button variant="outline" onClick={() => { onOpenChange(false); navigate(entityLabel.route); }}>
                     <ExternalLink className="h-4 w-4 mr-2" />
-                    Ver {entityLabel.titlePlural} importados
+                    Ver {entityLabel.titlePlural}
                   </Button>
                 </div>
               )}
@@ -1959,35 +2020,11 @@ export function SmartImporter({
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>{importResult.errors.length} linha(s) com erro — não importadas</AlertTitle>
                   <AlertDescription>
-                    {/* Grouped error summary table */}
-                    {errorSummary.filter(([_, d]) => d.severity === "error").length > 0 && (
-                      <div className="mt-2 mb-3">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="text-xs h-8">Tipo de Erro</TableHead>
-                              <TableHead className="text-xs h-8 w-16">Qtd</TableHead>
-                              <TableHead className="text-xs h-8">Sugestão</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {errorSummary.filter(([_, d]) => d.severity === "error").slice(0, 10).map(([msg, data]) => (
-                              <TableRow key={msg}>
-                                <TableCell className="text-xs py-1.5">{msg}</TableCell>
-                                <TableCell className="text-xs py-1.5 font-medium">{data.count}</TableCell>
-                                <TableCell className="text-xs py-1.5 text-muted-foreground">{data.suggestion || "—"}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    )}
-
-                    <ScrollArea className="h-[100px] mt-2">
+                    <ScrollArea className="h-[80px] mt-2">
                       <ul className="list-disc list-inside space-y-1">
-                        {importResult.errors.slice(0, 50).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
-                        {importResult.errors.length > 50 && (
-                          <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 50} erro(s)</li>
+                        {importResult.errors.slice(0, 30).map((e, i) => <li key={i} className="text-sm">{e}</li>)}
+                        {importResult.errors.length > 30 && (
+                          <li className="text-sm text-muted-foreground">... e mais {importResult.errors.length - 30} erro(s)</li>
                         )}
                       </ul>
                     </ScrollArea>
@@ -2000,20 +2037,6 @@ export function SmartImporter({
                   </AlertDescription>
                 </Alert>
               )}
-
-              {importResult.success > 0 && (() => {
-                const tip = getNextStepTip();
-                if (!tip) return null;
-                return (
-                  <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                    <Sparkles className="h-4 w-4 text-primary shrink-0" />
-                    <p className="text-sm text-muted-foreground">{tip.text}</p>
-                    <Button variant="ghost" size="sm" className="ml-auto shrink-0" onClick={() => { onOpenChange(false); navigate(tip.route); }}>
-                      Ir agora <ArrowRight className="h-3 w-3 ml-1" />
-                    </Button>
-                  </div>
-                );
-              })()}
             </div>
           )}
         </div>

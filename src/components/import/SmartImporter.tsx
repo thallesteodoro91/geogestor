@@ -671,20 +671,29 @@ export function SmartImporter({
   const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>) => {
     const newMappings: Record<string, string> = {};
     const confidences: Record<string, MatchConfidence> = {};
+    const usedHeaders = new Set<string>(); // Prevent double-mapping
 
-    for (const field of fields) {
+    // Sort fields: required first, then financial fields (higher priority)
+    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "data_orcamento"]);
+    const sortedFields = [...fields].sort((a, b) => {
+      if (a.required !== b.required) return a.required ? -1 : 1;
+      if (financialKeys.has(a.key) !== financialKeys.has(b.key)) return financialKeys.has(a.key) ? -1 : 1;
+      return 0;
+    });
+
+    for (const field of sortedFields) {
       const b = normalize(field.key);
       const c = normalize(field.label);
 
-      let match = fileHeaders.find((h) => { const a = normalize(h); return a === b || a === c; });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "exact"; continue; }
+      let match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return a === b || a === c; })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "exact"; usedHeaders.add(match); continue; }
 
       const syns = synonyms[field.key] || [];
-      match = fileHeaders.find((h) => { const a = normalize(h); return syns.some((syn) => a === syn || a.includes(syn) || syn.includes(a)); });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "synonym"; continue; }
+      match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return syns.some((syn) => a === syn || a.includes(syn) || syn.includes(a)); })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "synonym"; usedHeaders.add(match); continue; }
 
-      match = fileHeaders.find((h) => { const a = normalize(h); return a.includes(b) || b.includes(a) || a.includes(c) || c.includes(a); });
-      if (match) { newMappings[field.key] = match; confidences[field.key] = "partial"; }
+      match = fileHeaders.find((h) => !usedHeaders.has(h) && (() => { const a = normalize(h); return a.includes(b) || b.includes(a) || a.includes(c) || c.includes(a); })());
+      if (match) { newMappings[field.key] = match; confidences[field.key] = "partial"; usedHeaders.add(match); }
     }
     setMappings(newMappings);
     setMatchConfidences(confidences);

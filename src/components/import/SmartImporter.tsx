@@ -1184,6 +1184,7 @@ export function SmartImporter({
 
       if (entityType === "completo") {
         // ─── COMPOSITE IMPORT PIPELINE ────────────────────────────
+        console.log("[SmartImporter] Pipeline completo iniciado. Registros a processar:", recordsToInsert.length);
         result = { success: 0, errors: [] };
         const clienteMap = new Map<string, string>(); // normalized name → id
         const propMap = new Map<string, string>(); // "clienteId|propName" → id

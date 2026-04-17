@@ -1275,96 +1275,156 @@ export function SmartImporter({
           console.log(`[SmartImporter] Step 2 - Propriedades: ${pRes.success} criadas, ${pRes.errors.length} erros`);
         }
 
-        // Step 3: Create services
+        // ─── Debug stats tracking ─────────────────────────────────
+        const debug = {
+          totalRows: recordsToInsert.length,
+          rowsWithValue: 0,
+          receitaCount: 0,
+          receitaSum: 0,
+          despesaCount: 0,
+          despesaSum: 0,
+          discardedReasons: new Map<string, number>(),
+        };
+        const addDiscard = (reason: string) => {
+          debug.discardedReasons.set(reason, (debug.discardedReasons.get(reason) || 0) + 1);
+        };
+
+        // Helper: resolve servico name with consistent fallbacks (used in Steps 3 & 4)
+        const resolveServicoName = (rec: any): string => {
+          const explicit = rec.nome_do_servico?.trim();
+          if (explicit) return explicit;
+          const propName = rec.nome_da_propriedade?.trim();
+          if (propName) return `Serviço - ${propName}`;
+          const cliName = rec.nome?.trim();
+          if (cliName) return `Serviço - ${cliName}`;
+          return "Serviço Importado";
+        };
+
+        // Helper: resolve cliente id with fallback creation
+        let completeFallbackWarningAdded = false;
+        const resolveClienteId = async (rec: any): Promise<string | null> => {
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          let cid = clienteNome ? clienteMap.get(clienteNome) : null;
+          if (!cid) {
+            try {
+              cid = await ensureFallbackClientId();
+              if (cid && !completeFallbackWarningAdded) {
+                clienteMap.set("cliente importação", cid);
+                warnings.push('Registros sem cliente foram vinculados a "Cliente Importação".');
+                completeFallbackWarningAdded = true;
+              }
+            } catch (e) {
+              console.warn("[SmartImporter] Erro ao criar cliente fallback:", e);
+            }
+          }
+          return cid || null;
+        };
+
+        const todayISO = new Date().toISOString().slice(0, 10);
+
+        // Step 3: Create services — ONE service per row that has financial value
         setImportProgress(65);
         const servicoMap = new Map<string, string>(); // "nome|clienteId" → id
         const uniqueServicos: Record<string, any>[] = [];
         const servicoKeys = new Set<string>();
 
         for (const rec of recordsToInsert) {
-          const servicoNome = rec.nome_do_servico?.trim() 
-            || (rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade.trim()}` : null)
-            || (rec.nome?.trim() ? `Serviço - ${rec.nome.trim()}` : null)
-            || ((rec.valor_unitario || rec.receita_esperada) ? "Serviço Importado" : null);
-          if (!servicoNome) continue;
+          const valorUnit = parseNullableNumber(rec.valor_unitario);
+          const receitaEsperada = parseNullableNumber(rec.receita_esperada);
+          const custoServico = parseNullableNumber(rec.custo_servico);
+          const hasValue = (valorUnit ?? 0) > 0 || (receitaEsperada ?? 0) > 0 || (custoServico ?? 0) > 0;
+
+          // Skip rows without ANY financial value AND without explicit service name
+          if (!hasValue && !rec.nome_do_servico?.trim()) continue;
+
+          const servicoNome = resolveServicoName(rec);
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
           const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
           const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
-          const key = `${servicoNome.toLowerCase()}|${clienteId || "none"}`;
-          if (!servicoKeys.has(key)) {
-            servicoKeys.add(key);
-            const receitaServico = parseNullableNumber(rec.receita_esperada) ?? parseNullableNumber(rec.valor_unitario) ?? 0;
-            const custoServico = parseNullableNumber(rec.custo_servico) ?? 0;
-            uniqueServicos.push({
-              nome_do_servico: servicoNome,
-              categoria: rec.categoria || null,
-              situacao_do_servico: rec.situacao_do_servico || "Pendente",
-              data_do_servico_inicio: rec.data_do_servico_inicio || null,
-              receita_servico: receitaServico,
-              custo_servico: custoServico,
-              id_cliente: clienteId || null,
-              id_propriedade: propId || null,
-            });
-          }
+          const key = `${servicoNome.toLowerCase()}|${clienteId || "none"}|${propId || "none"}`;
+          if (servicoKeys.has(key)) continue;
+          servicoKeys.add(key);
+
+          const receita = receitaEsperada ?? valorUnit ?? 0;
+          uniqueServicos.push({
+            nome_do_servico: servicoNome,
+            categoria: rec.categoria || null,
+            situacao_do_servico: rec.situacao_do_servico || "Pendente",
+            data_do_servico_inicio: rec.data_do_servico_inicio || null,
+            receita_servico: receita,
+            custo_servico: custoServico ?? 0,
+            id_cliente: clienteId || null,
+            id_propriedade: propId || null,
+          });
         }
 
         if (uniqueServicos.length > 0) {
           const sRes = await createServicosBatch(uniqueServicos as any);
           compositeStats.servicos = sRes.success;
           result.errors.push(...sRes.errors);
-          // Build servico map
-          const { data: allServicos } = await supabase.from("fato_servico").select("id_servico, nome_do_servico, id_cliente");
+          const { data: allServicos } = await supabase.from("fato_servico").select("id_servico, nome_do_servico, id_cliente, id_propriedade");
           for (const s of (allServicos || [])) {
+            servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}|${s.id_propriedade || "none"}`, s.id_servico);
+            // Also index without propId for fallback lookup
             servicoMap.set(`${s.nome_do_servico?.toLowerCase()}|${s.id_cliente || "none"}`, s.id_servico);
           }
-          console.log(`[SmartImporter] Step 3 - Serviços: ${sRes.success} criados, ${sRes.errors.length} erros`);
+          console.log(`[SmartImporter] Step 3 - Serviços: ${sRes.success}/${uniqueServicos.length} criados, ${sRes.errors.length} erros`, sRes.errors.slice(0, 3));
         } else {
           console.log(`[SmartImporter] Step 3 - Serviços: nenhum serviço para criar`);
         }
 
-        // Step 4: Create financial records (orçamentos)
-        setImportProgress(80);
+        // Step 4: Create budgets (orçamentos) — for every row with monetary receita
+        setImportProgress(78);
         const orcamentos: Record<string, any>[] = [];
-        let completeFallbackWarningAdded = false;
         for (const rec of recordsToInsert) {
           const valorUnit = parseNullableNumber(rec.valor_unitario);
           const receitaEsperada = parseNullableNumber(rec.receita_esperada);
-          if (valorUnit === null && receitaEsperada === null) continue;
+          const hasReceita = (valorUnit ?? 0) > 0 || (receitaEsperada ?? 0) > 0;
 
-          const clienteNome = rec.nome?.trim()?.toLowerCase();
-          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
-          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
-          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
-          const servicoNome = rec.nome_do_servico?.trim() || rec.nome_da_propriedade?.trim() ? `Serviço - ${rec.nome_da_propriedade?.trim()}` : rec.nome?.trim() ? `Serviço - ${rec.nome?.trim()}` : "Serviço Importado";
-          const servicoId = servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) || null;
-
-          // Fallback: use or create "Cliente Importação" if no client found
-          let finalClienteId = clienteId;
-          if (!finalClienteId) {
-            try {
-              finalClienteId = await ensureFallbackClientId();
-              if (finalClienteId && !completeFallbackWarningAdded) {
-                clienteMap.set("cliente importação", finalClienteId);
-                warnings.push('Registros sem cliente foram vinculados a "Cliente Importação".');
-                completeFallbackWarningAdded = true;
-              }
-            } catch (e) {
-              console.warn("Erro ao criar cliente fallback no completo:", e);
+          if (!hasReceita) {
+            // Only count discard for rows that ostensibly should be financial
+            if (rec.custo_servico) {
+              // It's a despesa-only row, not discarded
             }
+            continue;
           }
-          if (!finalClienteId) continue; // skip only if fallback also failed
+          debug.rowsWithValue++;
 
-          const vu = valorUnit || receitaEsperada || 0;
+          const finalClienteId = await resolveClienteId(rec);
+          if (!finalClienteId) {
+            addDiscard("sem cliente (fallback falhou)");
+            continue;
+          }
+
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${finalClienteId}|${propName}`) || propMap.get(`none|${propName}`) : null;
+          const servicoNome = resolveServicoName(rec);
+          const servicoId =
+            servicoMap.get(`${servicoNome.toLowerCase()}|${finalClienteId}|${propId || "none"}`) ||
+            servicoMap.get(`${servicoNome.toLowerCase()}|${finalClienteId}`) ||
+            null;
+
+          const vu = valorUnit ?? receitaEsperada ?? 0;
+          const re = receitaEsperada ?? vu;
+
+          // Validate date — fallback to today if missing/invalid
+          let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dataOrc)) dataOrc = todayISO;
+
           orcamentos.push({
             id_cliente: finalClienteId,
             id_propriedade: propId || null,
             id_servico: servicoId || null,
-            data_orcamento: rec.data_orcamento || rec.data_do_servico_inicio || new Date().toISOString().slice(0, 10),
+            data_orcamento: dataOrc,
             valor_unitario: vu,
             quantidade: 1,
-            receita_esperada: receitaEsperada || vu,
+            receita_esperada: re,
+            orcamento_convertido: true,
+            situacao: "Aprovado",
           });
+          debug.receitaCount++;
+          debug.receitaSum += re;
         }
 
         console.log(`[SmartImporter] Step 4 - Orçamentos a criar: ${orcamentos.length}`);
@@ -1372,25 +1432,76 @@ export function SmartImporter({
           const oRes = await createOrcamentosBatch(orcamentos as any);
           compositeStats.orcamentos = oRes.success;
           result.errors.push(...oRes.errors);
-          console.log(`[SmartImporter] Step 4 - Orçamentos: ${oRes.success} criados, ${oRes.errors.length} erros`, oRes.errors.slice(0, 3));
+          console.log(`[SmartImporter] Step 4 - Orçamentos: ${oRes.success}/${orcamentos.length} criados, ${oRes.errors.length} erros`, oRes.errors.slice(0, 3));
         }
 
-        totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos;
+        // Step 5: Create expenses (despesas) — for every row with custo_servico > 0
+        setImportProgress(88);
+        const despesas: Record<string, any>[] = [];
+        for (const rec of recordsToInsert) {
+          const custo = parseNullableNumber(rec.custo_servico);
+          if (!custo || custo <= 0) continue;
+
+          const clienteNome = rec.nome?.trim()?.toLowerCase();
+          const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
+          const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+          const propId = propName ? propMap.get(`${clienteId || "none"}|${propName}`) : null;
+          const servicoNome = resolveServicoName(rec);
+          const servicoId =
+            servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}|${propId || "none"}`) ||
+            servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) ||
+            null;
+
+          let dataDesp = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDesp)) dataDesp = todayISO;
+
+          despesas.push({
+            id_servico: servicoId || null,
+            data_da_despesa: dataDesp,
+            valor_da_despesa: custo,
+            observacoes: `Importado: ${servicoNome}`,
+            status: "confirmada",
+          });
+          debug.despesaCount++;
+          debug.despesaSum += custo;
+        }
+
+        console.log(`[SmartImporter] Step 5 - Despesas a criar: ${despesas.length}`);
+        if (despesas.length > 0) {
+          const dRes = await createDespesasBatch(despesas as any);
+          compositeStats.despesas = dRes.success;
+          result.errors.push(...dRes.errors);
+          console.log(`[SmartImporter] Step 5 - Despesas: ${dRes.success}/${despesas.length} criadas, ${dRes.errors.length} erros`, dRes.errors.slice(0, 3));
+        }
+
+        totalCreated = compositeStats.clientes + compositeStats.propriedades + compositeStats.servicos + compositeStats.orcamentos + compositeStats.despesas;
         result.success = totalCreated;
 
         setCompositeStatsResult({ ...compositeStats });
-        console.log("[SmartImporter] Pipeline finalizado:", compositeStats);
-        // Build composite warnings summary
+        setDebugStats({
+          totalRows: debug.totalRows,
+          rowsWithValue: debug.rowsWithValue,
+          receitaCount: debug.receitaCount,
+          receitaSum: debug.receitaSum,
+          despesaCount: debug.despesaCount,
+          despesaSum: debug.despesaSum,
+          discarded: Array.from(debug.discardedReasons.entries()).map(([reason, count]) => ({ reason, count })),
+        });
+        console.log("[SmartImporter] Pipeline finalizado:", compositeStats, debug);
+
         const parts: string[] = [];
         if (compositeStats.clientes > 0) parts.push(`${compositeStats.clientes} cliente(s)`);
         if (compositeStats.propriedades > 0) parts.push(`${compositeStats.propriedades} propriedade(s)`);
         if (compositeStats.servicos > 0) parts.push(`${compositeStats.servicos} projeto(s)`);
         if (compositeStats.orcamentos > 0) parts.push(`${compositeStats.orcamentos} orçamento(s)`);
+        if (compositeStats.despesas > 0) parts.push(`${compositeStats.despesas} despesa(s)`);
         if (parts.length > 0) warnings.push(`Criados: ${parts.join(", ")}`);
 
-        const totalReceita = orcamentos.reduce((s, o) => s + (o.receita_esperada || 0), 0);
-        if (totalReceita > 0) {
-          warnings.push(`R$ ${new Intl.NumberFormat("pt-BR").format(totalReceita)} em receita importada`);
+        if (debug.receitaSum > 0) {
+          warnings.push(`R$ ${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2 }).format(debug.receitaSum)} em receita importada`);
+        }
+        if (debug.despesaSum > 0) {
+          warnings.push(`R$ ${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2 }).format(debug.despesaSum)} em despesas importadas`);
         }
       } else {
         switch (entityType) {

@@ -2060,7 +2060,47 @@ export function SmartImporter({
                 </div>
               )}
 
-              {/* Import warnings */}
+              {/* Debug panel — financial classification breakdown */}
+              {debugStats && entityType === "completo" && (
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium text-sm">Debug da Importação</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Linhas processadas</p>
+                      <p className="font-bold">{debugStats.totalRows}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Com valor financeiro</p>
+                      <p className="font-bold">{debugStats.rowsWithValue}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Receitas classificadas</p>
+                      <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                        {debugStats.receitaCount} · {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(debugStats.receitaSum)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Despesas classificadas</p>
+                      <p className="font-bold text-destructive">
+                        {debugStats.despesaCount} · {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(debugStats.despesaSum)}
+                      </p>
+                    </div>
+                  </div>
+                  {debugStats.discarded.length > 0 && (
+                    <div className="pt-2 border-t border-border">
+                      <p className="text-xs text-muted-foreground mb-1">Linhas descartadas:</p>
+                      <ul className="text-xs space-y-0.5">
+                        {debugStats.discarded.map((d, i) => (
+                          <li key={i} className="text-amber-600 dark:text-amber-400">• {d.reason}: {d.count}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
               {importWarnings.length > 0 && (
                 <Alert className="border-amber-500/30 bg-amber-500/5">
                   <AlertTriangle className="h-4 w-4 text-amber-600" />

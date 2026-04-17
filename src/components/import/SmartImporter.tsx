@@ -637,6 +637,15 @@ export function SmartImporter({
   const [valueClassification, setValueClassification] = useState<"receita" | "despesa" | "ignorar" | null>(null);
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [compositeStatsResult, setCompositeStatsResult] = useState<{ clientes: number; propriedades: number; servicos: number; orcamentos: number; despesas: number } | null>(null);
+  const [debugStats, setDebugStats] = useState<{
+    totalRows: number;
+    rowsWithValue: number;
+    receitaCount: number;
+    receitaSum: number;
+    despesaCount: number;
+    despesaSum: number;
+    discarded: { reason: string; count: number }[];
+  } | null>(null);
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();

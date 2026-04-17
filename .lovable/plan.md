@@ -1,70 +1,81 @@
 
 
-## Plano: Refatoração Completa do Sistema de Importação
+## Plano: Correção Definitiva do Fluxo Importação → KPIs
 
-### Diagnóstico Confirmado
+### Diagnóstico Crítico (confirmado via análise)
 
-Banco de dados: **73 clientes, 144 propriedades, 0 serviços, 0 orçamentos, 0 despesas**. KPIs = R$ 0,00.
+O banco tem **73 clientes, 144 propriedades, mas 0 orçamentos/0 despesas/0 serviços**. Isso prova que NENHUMA importação anterior conseguiu inserir dados financeiros, apesar das tentativas de correção. Causas raízes confirmadas:
 
-O código do pipeline "completo" existe e parece correto em teoria, mas falha na prática porque:
+**1. Pipeline "completo" silenciosamente descarta linhas financeiras**
+No `SmartImporter.tsx`, mesmo com fallbacks implementados, o pipeline tem múltiplos pontos de falha silenciosa:
+- Linha de propriedade sem `nome_da_propriedade` é descartada (mas deveria gerar fallback "Propriedade - [Cliente]")
+- Linha de orçamento sem `id_servico` válido é aceita, mas o trigger `auto_criar_servico_ao_converter_orcamento` só roda quando `orcamento_convertido = true` — ou seja, nenhum serviço é criado a partir de orçamentos importados
+- `receita_esperada` é calculado apenas se `valor_unitario` for válido; se a planilha tem só "Total" ou "Receita", esse valor não é mapeado para `receita_esperada` diretamente
 
-1. **Conflito de sinônimos no auto-map**: `COMPLETO_SYNONYMS` usa spread de 4 objetos (`...CLIENTE_SYNONYMS, ...PROPRIEDADE_SYNONYMS, ...SERVICO_SYNONYMS, ...ORCAMENTO_SYNONYMS`). Chaves duplicadas se sobrescrevem silenciosamente. Por exemplo, `situacao` existe em CLIENTE, PROPRIEDADE e SERVICO — apenas a última sobrevive. Mais crítico: campos como `endereco` em CLIENTE_SYNONYMS tem sinônimo "cidade" que conflita com `cidade` em PROPRIEDADE_SYNONYMS. O resultado é mapeamentos errados.
+**2. KPI view depende de `data_orcamento` no ano corrente**
+A view `vw_kpis_financeiros` (e `get_financial_dashboard_metrics`) filtra por período. Se a planilha importada tem datas de 2023/2024, KPIs do ano corrente (2026) ficam zerados mesmo com dados inseridos corretamente.
 
-2. **Auto-map greedy**: O `autoMap` atribui o primeiro header que faz match. Se "valor" casa com `valor_unitario`, ele não fica disponível para `receita_esperada`. Mas se a planilha tem UMA coluna "valor", precisa ser mapeada ao campo correto — hoje pode mapear para o campo errado.
+**3. Sem registro de erros visível ao usuário**
+Quando RLS bloqueia INSERT (ex: `tenant_id` ausente, `id_cliente` NULL em fato_orcamento), o erro é capturado mas não mostrado de forma actionável.
 
-3. **`nome` é required mas o matching é ambíguo**: Em COMPLETO_SYNONYMS, `nome` tem sinônimos como "cliente", "contato". Mas se o header da planilha é "Nome do Cliente", o normalize resulta em "nomedocliente" que precisa match exato com o sinônimo. Se não encontrar, a linha inteira é marcada como erro e descartada.
+### Mudanças (escopo restrito a importação + KPIs)
 
-4. **Valores financeiros parseados como null**: Se `sanitizeCurrency` recebe "R$ 5.000,00" de uma célula XLSX já processada pelo XLSX.utils como número (5000), funciona. Mas se chega como string "5000.00" sem vírgula, o regex de detecção `/\d\.\d{3}/` não ativa e o valor é tratado corretamente. O problema real é quando o XLSX parser entrega a célula como `undefined` ou string vazia para campos numéricos.
+#### 1. Pipeline robusto sem descarte silencioso
 
-### Mudanças Propostas
+No `SmartImporter.tsx`, refatorar o pipeline "completo" para que **CADA linha com valor monetário** garantidamente gere a cadeia: Cliente → Propriedade → Serviço → Orçamento + Despesa.
 
-#### 1. Refatorar COMPLETO_SYNONYMS sem spread conflitante
+- **Cliente**: se `nome` ausente, usar "Cliente - [propriedade]" ou "Cliente Importação #N"
+- **Propriedade**: se `nome_da_propriedade` ausente mas há cliente, criar "Propriedade - [cliente]"
+- **Serviço**: SEMPRE criar um `fato_servico` para cada linha com valor (não depender do trigger). Nome: coluna mapeada OU "Serviço - [propriedade]" OU "Serviço Importado #N"
+- **Orçamento**: vincular ao serviço criado, com `orcamento_convertido = true` e `data_orcamento` = data da linha OU `CURRENT_DATE` como fallback
+- **Despesa**: se houver coluna de custo, criar `fato_despesas` vinculada ao serviço
 
-Reescrever `COMPLETO_SYNONYMS` manualmente sem `...spread`, garantindo que cada campo tem sinônimos únicos e não-conflitantes. Adicionar sinônimos compostos reais do mundo do agro/topografia brasileiro:
-- `nome`: "cliente", "proprietario", "nomedocliente", "nomeproprietario", "contratante"
-- `nome_da_propriedade`: "propriedade", "fazenda", "imovel", "nomeimovel", "nomefazenda"  
-- `valor_unitario`: "valor", "vlr", "preco", "valorunitario", "valorha"
-- `receita_esperada`: "receita", "valortotal", "total", "faturamento", "valorcontrato"
+#### 2. Mapeamento financeiro ampliado
 
-Eliminar ambiguidades onde "cidade" pode casar com campo de cliente OU propriedade.
+Aceitar "valor", "total", "receita", "faturamento" como sinônimos diretos de `receita_esperada` (não só `valor_unitario`). Se ambos existirem, `receita_esperada` ganha precedência. Se só houver `valor_unitario` + `quantidade`, calcular `receita = valor * qtd`.
 
-#### 2. Auto-map com prioridade de entidade
+#### 3. Conversão monetária à prova de erros
 
-Modificar `autoMap` para que, no modo "completo", headers ambíguos (ex: "cidade") priorizem a entidade mais específica (propriedade > cliente). Implementar um sistema de peso onde campos financeiros têm prioridade sobre campos textuais quando o header contém keywords monetários.
+Centralizar `parseMonetaryValue(raw)` que aceita:
+- Números puros (5000)
+- Strings BR ("R$ 5.000,00", "5.000,00")
+- Strings US ("5,000.00", "5000.00")
+- Vazios/null → retorna `null` (não 0, para não poluir cálculos)
 
-#### 3. Relaxar validação do campo `nome` em "completo"
+Aplicar em TODAS as colunas financeiras antes de inserir.
 
-Se `nome` não tem match, mas a planilha tem uma coluna "proprietario" ou "contratante", o sinônimo deve cobrir. Caso nenhum match exista, usar o nome da propriedade ou gerar "Cliente [nome_propriedade]" automaticamente como fallback — não descartar a linha.
+#### 4. Data de orçamento sempre válida
 
-#### 4. Pipeline de importação com logging detalhado
+Se a planilha não tem coluna de data ou a data é inválida, usar `new Date().toISOString().split('T')[0]` (hoje). Isso garante que o orçamento aparece no período corrente dos KPIs.
 
-Adicionar `console.log` em cada step do pipeline (clientes, propriedades, serviços, orçamentos) mostrando exatamente quantos registros tentam ser inseridos e quantos falharam, com o erro específico. Mostrar esses logs no painel de resultado como "Debug da Importação".
+#### 5. Painel de debug pós-importação
 
-#### 5. Painel de resultado expandido (nível premium)
+Após importação, mostrar tabela com:
+- Total de linhas processadas
+- Linhas com valor financeiro detectado
+- Receitas criadas (count + soma R$)
+- Despesas criadas (count + soma R$)
+- Linhas descartadas (com motivo: "sem cliente", "sem valor", etc)
+- Erros de INSERT (mensagem RLS/SQL exata)
 
-Redesenhar o step "result" com:
-- **Resumo visual**: Cards com ícones mostrando X clientes, X propriedades, X projetos, R$ X receita, R$ X despesas
-- **Tabela de debug**: Valores classificados como receita vs despesa vs não classificados
-- **Before/After KPIs**: Já existe mas melhorar com destaque visual quando valores mudam
-- **CTA claro**: "Ir para Dashboard" como botão principal
+#### 6. Validação imediata dos KPIs
 
-#### 6. Detecção forçada para "completo"
+Após importação bem-sucedida, fazer query direta a `calcular_kpis_v2` e comparar com snapshot anterior. Mostrar:
+- Receita Total: R$ X → R$ Y (variação +R$ Z)
+- Despesas: R$ X → R$ Y
+- Lucro Líquido: R$ X → R$ Y
 
-Se a planilha tem **qualquer** header financeiro (valor, receita, custo, total, preço, faturamento) E pelo menos um header de nome/cliente, forçar modo "completo" independente do scoring. O threshold atual (2 entidades ≥3) é muito restritivo.
+Se receita pós-importação continua 0 mas linhas com valor foram detectadas, mostrar alerta vermelho com diagnóstico específico ("dados podem ter datas fora do período corrente — mude o filtro de ano").
 
-#### 7. Fallback para linhas sem serviço
+### Arquivos a editar
 
-Se uma linha tem valor monetário mas nenhum nome de serviço mapeado, criar serviço com nome "Serviço - [nome_propriedade]" ou "Serviço - [nome_cliente]" em vez do genérico "Serviço Importado".
+| Arquivo | Mudança |
+|---------|---------|
+| `src/components/import/SmartImporter.tsx` | Refatorar pipeline "completo": forçar criação de serviço para cada linha financeira, ampliar mapeamento de receita, fallback de data, parseMonetaryValue centralizado, painel debug expandido |
 
-### Detalhes técnicos
+Sem migrações de banco. Schema atual já suporta todo o fluxo.
 
-- Arquivo principal: `src/components/import/SmartImporter.tsx`
-- Reescrever `COMPLETO_SYNONYMS` (~20 linhas)
-- Modificar `detectEntityType` (~10 linhas)
-- Modificar `autoMap` para prioridade (~15 linhas)
-- Expandir pipeline logging no `handleImport` (~20 linhas)
-- Redesenhar resultado no render (~60 linhas)
-- Fallback `nome` no validate (~10 linhas)
+### Princípio de garantia
 
-Nenhuma migração necessária — o modelo de dados (dim_cliente, dim_propriedade, fato_servico, fato_orcamento, fato_despesas) já é correto e suporta todas as relações descritas.
+Cada linha da planilha com qualquer valor monetário > 0 **DEVE** resultar em pelo menos: 1 cliente + 1 propriedade + 1 serviço + 1 orçamento. Se algum step falha, o erro é capturado e exibido — nunca silenciado.
 

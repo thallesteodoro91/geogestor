@@ -108,6 +108,9 @@ export default function Orcamentos() {
       const valorImposto = valorTotal * 0.12;
       const receitaEsperada = valorTotal - valorImposto;
 
+      const { requireTenantId } = await import('@/services/supabase.service');
+      const tenantId = await requireTenantId();
+
       const payload = {
         id_cliente: data.id_cliente,
         id_servico: data.id_servico || null,
@@ -120,6 +123,7 @@ export default function Orcamentos() {
         receita_esperada_imposto: receitaEsperada,
         situacao_do_pagamento: data.situacao_do_pagamento,
         forma_de_pagamento: data.forma_de_pagamento || null,
+        tenant_id: tenantId,
       };
 
       if (data.id_orcamento) {
@@ -129,7 +133,7 @@ export default function Orcamentos() {
           .eq('id_orcamento', data.id_orcamento);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('fato_orcamento').insert(payload);
+        const { error } = await supabase.from('fato_orcamento').insert([payload]);
         if (error) throw error;
       }
     },

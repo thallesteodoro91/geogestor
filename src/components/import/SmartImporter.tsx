@@ -1090,6 +1090,12 @@ export function SmartImporter({
     setIsLoading(true);
     setImportProgress(0);
     setImportWarnings([]);
+    setValidationReport(null);
+
+    // Capture timestamp BEFORE any insert — used to filter what THIS batch created
+    const batchStartTime = new Date().toISOString();
+    // Track discarded rows with explanations for the validation report
+    const discardedRowsLog: { line: number; reason: string }[] = [];
 
     try {
       // Snapshot KPIs before import

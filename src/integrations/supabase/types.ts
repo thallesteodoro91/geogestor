@@ -70,7 +70,7 @@ export type Database = {
           id_servico: string | null
           manual: boolean | null
           metadata: Json | null
-          tenant_id: string | null
+          tenant_id: string
           tipo: string
           titulo: string
         }
@@ -85,7 +85,7 @@ export type Database = {
           id_servico?: string | null
           manual?: boolean | null
           metadata?: Json | null
-          tenant_id?: string | null
+          tenant_id: string
           tipo: string
           titulo: string
         }
@@ -100,7 +100,7 @@ export type Database = {
           id_servico?: string | null
           manual?: boolean | null
           metadata?: Json | null
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string
           titulo?: string
         }
@@ -171,7 +171,7 @@ export type Database = {
           ordem: number | null
           prioridade: string | null
           responsavel: string | null
-          tenant_id: string | null
+          tenant_id: string
           titulo: string
           updated_at: string | null
         }
@@ -189,7 +189,7 @@ export type Database = {
           ordem?: number | null
           prioridade?: string | null
           responsavel?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           titulo: string
           updated_at?: string | null
         }
@@ -207,7 +207,7 @@ export type Database = {
           ordem?: number | null
           prioridade?: string | null
           responsavel?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           titulo?: string
           updated_at?: string | null
         }
@@ -269,7 +269,7 @@ export type Database = {
           descricao: string | null
           id_categoria_despesa: string
           nome: string
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -277,7 +277,7 @@ export type Database = {
           descricao?: string | null
           id_categoria_despesa?: string
           nome: string
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -285,7 +285,7 @@ export type Database = {
           descricao?: string | null
           id_categoria_despesa?: string
           nome?: string
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -307,7 +307,7 @@ export type Database = {
           icone: string | null
           id_categoria: string
           nome: string
-          tenant_id: string | null
+          tenant_id: string
           tipo: string
         }
         Insert: {
@@ -318,7 +318,7 @@ export type Database = {
           icone?: string | null
           id_categoria?: string
           nome: string
-          tenant_id?: string | null
+          tenant_id: string
           tipo: string
         }
         Update: {
@@ -329,7 +329,7 @@ export type Database = {
           icone?: string | null
           id_categoria?: string
           nome?: string
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string
         }
         Relationships: [
@@ -348,7 +348,7 @@ export type Database = {
           descricao: string | null
           id_categoria: string
           nome: string
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -356,7 +356,7 @@ export type Database = {
           descricao?: string | null
           id_categoria?: string
           nome: string
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -364,7 +364,7 @@ export type Database = {
           descricao?: string | null
           id_categoria?: string
           nome?: string
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -394,7 +394,7 @@ export type Database = {
           origem: string | null
           situacao: string | null
           telefone: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -413,7 +413,7 @@ export type Database = {
           origem?: string | null
           situacao?: string | null
           telefone?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -432,7 +432,7 @@ export type Database = {
           origem?: string | null
           situacao?: string | null
           telefone?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -490,7 +490,7 @@ export type Database = {
           receita: number | null
           template_config: Json | null
           template_orcamento_url: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -507,7 +507,7 @@ export type Database = {
           receita?: number | null
           template_config?: Json | null
           template_orcamento_url?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -524,7 +524,7 @@ export type Database = {
           receita?: number | null
           template_config?: Json | null
           template_orcamento_url?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -561,7 +561,7 @@ export type Database = {
           possui_memorial_descritivo: string | null
           situacao: string | null
           situacao_imovel: string | null
-          tenant_id: string | null
+          tenant_id: string
           tipo: string | null
           tipo_de_documento: string | null
           updated_at: string | null
@@ -590,7 +590,7 @@ export type Database = {
           possui_memorial_descritivo?: string | null
           situacao?: string | null
           situacao_imovel?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           tipo?: string | null
           tipo_de_documento?: string | null
           updated_at?: string | null
@@ -619,7 +619,7 @@ export type Database = {
           possui_memorial_descritivo?: string | null
           situacao?: string | null
           situacao_imovel?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string | null
           tipo_de_documento?: string | null
           updated_at?: string | null
@@ -658,7 +658,7 @@ export type Database = {
           id_categoria_despesa: string | null
           id_tipodespesa: string
           subcategoria: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -669,7 +669,7 @@ export type Database = {
           id_categoria_despesa?: string | null
           id_tipodespesa?: string
           subcategoria?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -680,7 +680,7 @@ export type Database = {
           id_categoria_despesa?: string | null
           id_tipodespesa?: string
           subcategoria?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -716,7 +716,7 @@ export type Database = {
           id_categoria: string | null
           id_tiposervico: string
           nome: string
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
           valor_sugerido: number | null
         }
@@ -728,7 +728,7 @@ export type Database = {
           id_categoria?: string | null
           id_tiposervico?: string
           nome: string
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
           valor_sugerido?: number | null
         }
@@ -740,7 +740,7 @@ export type Database = {
           id_categoria?: string | null
           id_tiposervico?: string
           nome?: string
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
           valor_sugerido?: number | null
         }
@@ -779,7 +779,7 @@ export type Database = {
           id_tipodespesa: string | null
           observacoes: string | null
           status: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
           valor_da_despesa: number
         }
@@ -793,7 +793,7 @@ export type Database = {
           id_tipodespesa?: string | null
           observacoes?: string | null
           status?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
           valor_da_despesa: number
         }
@@ -807,7 +807,7 @@ export type Database = {
           id_tipodespesa?: string | null
           observacoes?: string | null
           status?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
           valor_da_despesa?: number
         }
@@ -818,34 +818,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "dim_data"
             referencedColumns: ["id_data"]
-          },
-          {
-            foreignKeyName: "fato_despesas_id_orcamento_fkey"
-            columns: ["id_orcamento"]
-            isOneToOne: false
-            referencedRelation: "fato_orcamento"
-            referencedColumns: ["id_orcamento"]
-          },
-          {
-            foreignKeyName: "fato_despesas_id_orcamento_fkey"
-            columns: ["id_orcamento"]
-            isOneToOne: false
-            referencedRelation: "vw_alertas_financeiros"
-            referencedColumns: ["id_orcamento"]
-          },
-          {
-            foreignKeyName: "fato_despesas_id_servico_fkey"
-            columns: ["id_servico"]
-            isOneToOne: false
-            referencedRelation: "fato_servico"
-            referencedColumns: ["id_servico"]
-          },
-          {
-            foreignKeyName: "fato_despesas_id_tipodespesa_fkey"
-            columns: ["id_tipodespesa"]
-            isOneToOne: false
-            referencedRelation: "dim_tipodespesa"
-            referencedColumns: ["id_tipodespesa"]
           },
           {
             foreignKeyName: "fato_despesas_tenant_id_fkey"
@@ -916,7 +888,7 @@ export type Database = {
           receita_realizada: number | null
           situacao: string | null
           situacao_do_pagamento: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
           valor_faturado: number | null
           valor_imposto: number | null
@@ -953,7 +925,7 @@ export type Database = {
           receita_realizada?: number | null
           situacao?: string | null
           situacao_do_pagamento?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
           valor_faturado?: number | null
           valor_imposto?: number | null
@@ -990,7 +962,7 @@ export type Database = {
           receita_realizada?: number | null
           situacao?: string | null
           situacao_do_pagamento?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
           valor_faturado?: number | null
           valor_imposto?: number | null
@@ -998,32 +970,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "fato_orcamento_id_cliente_fkey"
-            columns: ["id_cliente"]
-            isOneToOne: false
-            referencedRelation: "dim_cliente"
-            referencedColumns: ["id_cliente"]
-          },
-          {
             foreignKeyName: "fato_orcamento_id_data_fkey"
             columns: ["id_data"]
             isOneToOne: false
             referencedRelation: "dim_data"
             referencedColumns: ["id_data"]
-          },
-          {
-            foreignKeyName: "fato_orcamento_id_propriedade_fkey"
-            columns: ["id_propriedade"]
-            isOneToOne: false
-            referencedRelation: "dim_propriedade"
-            referencedColumns: ["id_propriedade"]
-          },
-          {
-            foreignKeyName: "fato_orcamento_id_servico_fkey"
-            columns: ["id_servico"]
-            isOneToOne: false
-            referencedRelation: "fato_servico"
-            referencedColumns: ["id_servico"]
           },
           {
             foreignKeyName: "fato_orcamento_tenant_id_fkey"
@@ -1063,7 +1014,7 @@ export type Database = {
           id_orcamento: string | null
           id_servico: string | null
           quantidade: number
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
           valor_mao_obra: number | null
           valor_unitario: number
@@ -1075,7 +1026,7 @@ export type Database = {
           id_orcamento?: string | null
           id_servico?: string | null
           quantidade?: number
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
           valor_mao_obra?: number | null
           valor_unitario: number
@@ -1087,33 +1038,12 @@ export type Database = {
           id_orcamento?: string | null
           id_servico?: string | null
           quantidade?: number
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
           valor_mao_obra?: number | null
           valor_unitario?: number
         }
         Relationships: [
-          {
-            foreignKeyName: "fato_orcamento_itens_id_orcamento_fkey"
-            columns: ["id_orcamento"]
-            isOneToOne: false
-            referencedRelation: "fato_orcamento"
-            referencedColumns: ["id_orcamento"]
-          },
-          {
-            foreignKeyName: "fato_orcamento_itens_id_orcamento_fkey"
-            columns: ["id_orcamento"]
-            isOneToOne: false
-            referencedRelation: "vw_alertas_financeiros"
-            referencedColumns: ["id_orcamento"]
-          },
-          {
-            foreignKeyName: "fato_orcamento_itens_id_servico_fkey"
-            columns: ["id_servico"]
-            isOneToOne: false
-            referencedRelation: "dim_tiposervico"
-            referencedColumns: ["id_tiposervico"]
-          },
           {
             foreignKeyName: "fk_orcamento_itens_orcamento"
             columns: ["id_orcamento"]
@@ -1156,7 +1086,7 @@ export type Database = {
           progresso: number | null
           receita_servico: number | null
           situacao_do_servico: string | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -1177,7 +1107,7 @@ export type Database = {
           progresso?: number | null
           receita_servico?: number | null
           situacao_do_servico?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -1198,37 +1128,16 @@ export type Database = {
           progresso?: number | null
           receita_servico?: number | null
           situacao_do_servico?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "fato_servico_id_cliente_fkey"
-            columns: ["id_cliente"]
-            isOneToOne: false
-            referencedRelation: "dim_cliente"
-            referencedColumns: ["id_cliente"]
-          },
           {
             foreignKeyName: "fato_servico_id_data_fkey"
             columns: ["id_data"]
             isOneToOne: false
             referencedRelation: "dim_data"
             referencedColumns: ["id_data"]
-          },
-          {
-            foreignKeyName: "fato_servico_id_empresa_fkey"
-            columns: ["id_empresa"]
-            isOneToOne: false
-            referencedRelation: "dim_empresa"
-            referencedColumns: ["id_empresa"]
-          },
-          {
-            foreignKeyName: "fato_servico_id_propriedade_fkey"
-            columns: ["id_propriedade"]
-            isOneToOne: false
-            referencedRelation: "dim_propriedade"
-            referencedColumns: ["id_propriedade"]
           },
           {
             foreignKeyName: "fato_servico_tenant_id_fkey"
@@ -1392,7 +1301,7 @@ export type Database = {
           link: string | null
           mensagem: string
           prioridade: string | null
-          tenant_id: string | null
+          tenant_id: string
           tipo: string
           titulo: string
         }
@@ -1404,7 +1313,7 @@ export type Database = {
           link?: string | null
           mensagem: string
           prioridade?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           tipo: string
           titulo: string
         }
@@ -1416,7 +1325,7 @@ export type Database = {
           link?: string | null
           mensagem?: string
           prioridade?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string
           titulo?: string
         }
@@ -1981,21 +1890,6 @@ export type Database = {
       }
     }
     Functions: {
-      calcular_kpis: {
-        Args: never
-        Returns: {
-          lucro_bruto: number
-          lucro_liquido: number
-          margem_bruta: number
-          margem_liquida: number
-          receita_total: number
-          servicos_concluidos: number
-          taxa_conversao: number
-          ticket_medio: number
-          total_despesas: number
-          total_servicos: number
-        }[]
-      }
       calcular_kpis_v2: {
         Args: never
         Returns: {
@@ -2075,6 +1969,7 @@ export type Database = {
         Returns: boolean
       }
       limpar_notificacoes_antigas: { Args: never; Returns: undefined }
+      purge_old_audit_logs: { Args: never; Returns: number }
       verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {

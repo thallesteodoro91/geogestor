@@ -697,6 +697,7 @@ export function SmartImporter({
     setDetectedFinancialInClientes(false);
     setCompositeStatsResult(null);
     setDebugStats(null);
+    setValidationReport(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────

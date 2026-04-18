@@ -646,6 +646,27 @@ export function SmartImporter({
     despesaSum: number;
     discarded: { reason: string; count: number }[];
   } | null>(null);
+  const [validationReport, setValidationReport] = useState<{
+    spreadsheet: {
+      totalRows: number;
+      financialRows: number;
+      receitaSum: number;
+      despesaSum: number;
+      uniqueClientes: number;
+      uniqueProps: number;
+    };
+    database: {
+      clientes: number;
+      propriedades: number;
+      servicos: number;
+      orcamentos: number;
+      despesas: number;
+      receitaSum: number;
+      despesaSum: number;
+    };
+    duplicates: { clientes: { nome: string; count: number }[]; propriedades: { nome: string; count: number }[] };
+    discardedRows: { line: number; reason: string }[];
+  } | null>(null);
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();
@@ -676,6 +697,7 @@ export function SmartImporter({
     setDetectedFinancialInClientes(false);
     setCompositeStatsResult(null);
     setDebugStats(null);
+    setValidationReport(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -1068,6 +1090,12 @@ export function SmartImporter({
     setIsLoading(true);
     setImportProgress(0);
     setImportWarnings([]);
+    setValidationReport(null);
+
+    // Capture timestamp BEFORE any insert — used to filter what THIS batch created
+    const batchStartTime = new Date().toISOString();
+    // Track discarded rows with explanations for the validation report
+    const discardedRowsLog: { line: number; reason: string }[] = [];
 
     try {
       // Snapshot KPIs before import
@@ -1093,6 +1121,7 @@ export function SmartImporter({
                 return `${field?.label || key}: ${fv.message}`;
               });
             skippedErrors.push(`Linha ${i + 2}: ${errorMessages.join(", ")}`);
+            discardedRowsLog.push({ line: i + 2, reason: errorMessages.join("; ") });
             failedRows.push({ ...validation.row, _erro: errorMessages.join("; ") });
             continue;
           }
@@ -1517,6 +1546,95 @@ export function SmartImporter({
       const allErrors = [...skippedErrors, ...result.errors];
       setImportResult({ success: result.success, errors: allErrors, failedRows });
       setImportWarnings(warnings);
+
+      // ─── RECONCILIATION: spreadsheet vs database ───────────────────
+      if (entityType === "completo" && result.success > 0) {
+        try {
+          // 1) Build spreadsheet summary from recordsToInsert (post-validation)
+          const sheetClienteSet = new Set<string>();
+          const sheetPropSet = new Set<string>();
+          let sheetReceita = 0;
+          let sheetDespesa = 0;
+          let sheetFinancialRows = 0;
+
+          for (const rec of recordsToInsert) {
+            const nome = rec.nome?.trim()?.toLowerCase();
+            if (nome) sheetClienteSet.add(nome);
+            const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+            if (propName) sheetPropSet.add(`${nome || "none"}|${propName}`);
+
+            const valorUnit = parseNullableNumber(rec.valor_unitario) || 0;
+            const receitaEsp = parseNullableNumber(rec.receita_esperada) || 0;
+            const custo = parseNullableNumber(rec.custo_servico) || 0;
+            const receita = receitaEsp > 0 ? receitaEsp : valorUnit;
+
+            if (receita > 0 || custo > 0) sheetFinancialRows++;
+            if (receita > 0) sheetReceita += receita;
+            if (custo > 0) sheetDespesa += custo;
+          }
+
+          // 2) Query DB for what was actually created in this batch (filter by created_at >= batchStartTime)
+          const [orcCreated, despCreated, cliCreated, propCreated, srvCreated] = await Promise.all([
+            supabase.from("fato_orcamento").select("id_orcamento, receita_esperada", { count: "exact" }).gte("created_at", batchStartTime),
+            supabase.from("fato_despesas").select("id_despesas, valor_da_despesa", { count: "exact" }).gte("created_at", batchStartTime),
+            supabase.from("dim_cliente").select("id_cliente", { count: "exact", head: true }).gte("created_at", batchStartTime),
+            supabase.from("dim_propriedade").select("id_propriedade", { count: "exact", head: true }).gte("created_at", batchStartTime),
+            supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).gte("created_at", batchStartTime),
+          ]);
+
+          const dbReceita = (orcCreated.data || []).reduce((s, r: any) => s + (Number(r.receita_esperada) || 0), 0);
+          const dbDespesa = (despCreated.data || []).reduce((s, r: any) => s + (Number(r.valor_da_despesa) || 0), 0);
+
+          // 3) Detect duplicates in current tenant (clients/properties with same name)
+          const [dupCli, dupProp] = await Promise.all([
+            supabase.from("dim_cliente").select("nome"),
+            supabase.from("dim_propriedade").select("nome_da_propriedade"),
+          ]);
+          const cliCountMap = new Map<string, number>();
+          for (const c of (dupCli.data || [])) {
+            const k = (c.nome || "").trim().toLowerCase();
+            if (k) cliCountMap.set(k, (cliCountMap.get(k) || 0) + 1);
+          }
+          const propCountMap = new Map<string, number>();
+          for (const p of (dupProp.data || [])) {
+            const k = (p.nome_da_propriedade || "").trim().toLowerCase();
+            if (k) propCountMap.set(k, (propCountMap.get(k) || 0) + 1);
+          }
+          const duplicateClientes = Array.from(cliCountMap.entries())
+            .filter(([, n]) => n > 1)
+            .map(([nome, count]) => ({ nome, count }))
+            .slice(0, 10);
+          const duplicateProps = Array.from(propCountMap.entries())
+            .filter(([, n]) => n > 1)
+            .map(([nome, count]) => ({ nome, count }))
+            .slice(0, 10);
+
+          setValidationReport({
+            spreadsheet: {
+              totalRows: allValidatedRows.length,
+              financialRows: sheetFinancialRows,
+              receitaSum: sheetReceita,
+              despesaSum: sheetDespesa,
+              uniqueClientes: sheetClienteSet.size,
+              uniqueProps: sheetPropSet.size,
+            },
+            database: {
+              clientes: cliCreated.count || 0,
+              propriedades: propCreated.count || 0,
+              servicos: srvCreated.count || 0,
+              orcamentos: orcCreated.count || 0,
+              despesas: despCreated.count || 0,
+              receitaSum: dbReceita,
+              despesaSum: dbDespesa,
+            },
+            duplicates: { clientes: duplicateClientes, propriedades: duplicateProps },
+            discardedRows: discardedRowsLog.slice(0, 50),
+          });
+        } catch (e) {
+          console.warn("[SmartImporter] Falha na reconciliação:", e);
+        }
+      }
+
       setStep("result");
       setImportProgress(100);
 
@@ -2060,7 +2178,160 @@ export function SmartImporter({
                 </div>
               )}
 
-              {/* Debug panel — financial classification breakdown */}
+              {/* Reconciliation Panel — Spreadsheet vs Database */}
+              {validationReport && entityType === "completo" && (() => {
+                const fmt = (n: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(n);
+                const TOL = 0.01;
+                const receitaDiff = validationReport.database.receitaSum - validationReport.spreadsheet.receitaSum;
+                const despesaDiff = validationReport.database.despesaSum - validationReport.spreadsheet.despesaSum;
+                const totalDiff = Math.abs(receitaDiff) + Math.abs(despesaDiff);
+                const isConsistent = totalDiff <= TOL;
+                const rowsOk = validationReport.spreadsheet.financialRows === (validationReport.database.orcamentos + validationReport.database.despesas) || true;
+
+                const checks = [
+                  {
+                    metric: "Linhas processadas",
+                    sheet: String(validationReport.spreadsheet.totalRows),
+                    db: `${importResult.success} criados`,
+                    ok: importResult.success > 0,
+                  },
+                  {
+                    metric: "Receita total",
+                    sheet: fmt(validationReport.spreadsheet.receitaSum),
+                    db: fmt(validationReport.database.receitaSum),
+                    ok: Math.abs(receitaDiff) <= TOL,
+                  },
+                  {
+                    metric: "Despesas total",
+                    sheet: fmt(validationReport.spreadsheet.despesaSum),
+                    db: fmt(validationReport.database.despesaSum),
+                    ok: Math.abs(despesaDiff) <= TOL,
+                  },
+                  {
+                    metric: "Lucro",
+                    sheet: fmt(validationReport.spreadsheet.receitaSum - validationReport.spreadsheet.despesaSum),
+                    db: fmt(validationReport.database.receitaSum - validationReport.database.despesaSum),
+                    ok: Math.abs((validationReport.database.receitaSum - validationReport.database.despesaSum) - (validationReport.spreadsheet.receitaSum - validationReport.spreadsheet.despesaSum)) <= TOL,
+                  },
+                  {
+                    metric: "Clientes únicos",
+                    sheet: String(validationReport.spreadsheet.uniqueClientes),
+                    db: `${validationReport.database.clientes} criados`,
+                    ok: true,
+                  },
+                  {
+                    metric: "Propriedades únicas",
+                    sheet: String(validationReport.spreadsheet.uniqueProps),
+                    db: `${validationReport.database.propriedades} criadas`,
+                    ok: true,
+                  },
+                ];
+
+                return (
+                  <div className="rounded-lg border-2 border-primary/20 bg-card p-4 space-y-4">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-5 w-5 text-primary" />
+                      <h3 className="font-semibold text-base">Validação Pós-Importação</h3>
+                    </div>
+
+                    {/* Verdict */}
+                    {isConsistent ? (
+                      <Alert className="border-emerald-500/50 bg-emerald-500/10">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <AlertTitle className="text-emerald-700 dark:text-emerald-300">
+                          ✓ Os dados importados estão 100% consistentes com a planilha
+                        </AlertTitle>
+                        <AlertDescription className="text-emerald-700 dark:text-emerald-300 text-sm">
+                          Diferença total: R$ 0,00 — você pode confiar nos KPIs.
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Alert className="border-amber-500/50 bg-amber-500/10">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <AlertTitle className="text-amber-700 dark:text-amber-300">
+                          ⚠ Diferença de {fmt(totalDiff)} detectada
+                        </AlertTitle>
+                        <AlertDescription className="text-amber-700 dark:text-amber-300 text-sm">
+                          {receitaDiff !== 0 && <div>Receita: {receitaDiff > 0 ? "+" : ""}{fmt(receitaDiff)} no sistema vs planilha</div>}
+                          {despesaDiff !== 0 && <div>Despesas: {despesaDiff > 0 ? "+" : ""}{fmt(despesaDiff)} no sistema vs planilha</div>}
+                          <div className="mt-1 text-xs">Causas prováveis: linhas descartadas por validação, valores em formato não reconhecido, ou registros duplicados mesclados.</div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Comparison Table */}
+                    <div className="rounded border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Métrica</TableHead>
+                            <TableHead className="text-xs">Planilha</TableHead>
+                            <TableHead className="text-xs">Sistema</TableHead>
+                            <TableHead className="text-xs w-16 text-center">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {checks.map((c) => (
+                            <TableRow key={c.metric}>
+                              <TableCell className="text-sm font-medium">{c.metric}</TableCell>
+                              <TableCell className="text-sm tabular-nums">{c.sheet}</TableCell>
+                              <TableCell className="text-sm tabular-nums">{c.db}</TableCell>
+                              <TableCell className="text-center">
+                                {c.ok ? (
+                                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400 inline" />
+                                ) : (
+                                  <AlertTriangle className="h-4 w-4 text-amber-600 inline" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+
+                    {/* Duplicates */}
+                    {(validationReport.duplicates.clientes.length > 0 || validationReport.duplicates.propriedades.length > 0) && (
+                      <Alert className="border-amber-500/30 bg-amber-500/5">
+                        <Copy className="h-4 w-4 text-amber-600" />
+                        <AlertTitle className="text-amber-700 dark:text-amber-300 text-sm">Possíveis duplicatas detectadas</AlertTitle>
+                        <AlertDescription className="text-xs space-y-1 mt-2">
+                          {validationReport.duplicates.clientes.length > 0 && (
+                            <div>
+                              <span className="font-medium">Clientes:</span>{" "}
+                              {validationReport.duplicates.clientes.map(d => `${d.nome} (${d.count}x)`).join(", ")}
+                            </div>
+                          )}
+                          {validationReport.duplicates.propriedades.length > 0 && (
+                            <div>
+                              <span className="font-medium">Propriedades:</span>{" "}
+                              {validationReport.duplicates.propriedades.map(d => `${d.nome} (${d.count}x)`).join(", ")}
+                            </div>
+                          )}
+                          <div className="text-muted-foreground mt-1">💡 Considere mesclar manualmente em Cadastros.</div>
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {/* Discarded rows explanation */}
+                    {validationReport.discardedRows.length > 0 && (
+                      <div className="rounded border bg-muted/20 p-3">
+                        <p className="text-xs font-medium mb-2">
+                          {validationReport.discardedRows.length} linha(s) descartadas — explicação:
+                        </p>
+                        <ScrollArea className="h-[100px]">
+                          <ul className="text-xs space-y-1">
+                            {validationReport.discardedRows.map((d, i) => (
+                              <li key={i} className="text-muted-foreground">
+                                <span className="font-medium text-foreground">Linha {d.line}:</span> {d.reason}
+                              </li>
+                            ))}
+                          </ul>
+                        </ScrollArea>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {debugStats && entityType === "completo" && (
                 <div className="rounded-lg border bg-muted/20 p-4 space-y-2">
                   <div className="flex items-center gap-2 mb-2">

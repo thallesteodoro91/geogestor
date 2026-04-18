@@ -1121,6 +1121,7 @@ export function SmartImporter({
                 return `${field?.label || key}: ${fv.message}`;
               });
             skippedErrors.push(`Linha ${i + 2}: ${errorMessages.join(", ")}`);
+            discardedRowsLog.push({ line: i + 2, reason: errorMessages.join("; ") });
             failedRows.push({ ...validation.row, _erro: errorMessages.join("; ") });
             continue;
           }

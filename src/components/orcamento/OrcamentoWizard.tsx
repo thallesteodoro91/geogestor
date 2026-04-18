@@ -315,6 +315,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     }
 
     try {
+      const { requireTenantId } = await import('@/services/supabase.service');
+      const tenantId = await requireTenantId();
       const { data: newProp, error } = await supabase
         .from('dim_propriedade')
         .insert([{
@@ -322,7 +324,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
           id_cliente: clienteId || null,
           area_ha: data.area_ha ? Number(data.area_ha) : null,
           cidade: data.cidade || null,
-          observacoes: data.observacoes || null
+          observacoes: data.observacoes || null,
+          tenant_id: tenantId,
         }])
         .select()
         .single();

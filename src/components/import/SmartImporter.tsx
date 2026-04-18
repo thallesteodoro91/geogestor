@@ -646,6 +646,27 @@ export function SmartImporter({
     despesaSum: number;
     discarded: { reason: string; count: number }[];
   } | null>(null);
+  const [validationReport, setValidationReport] = useState<{
+    spreadsheet: {
+      totalRows: number;
+      financialRows: number;
+      receitaSum: number;
+      despesaSum: number;
+      uniqueClientes: number;
+      uniqueProps: number;
+    };
+    database: {
+      clientes: number;
+      propriedades: number;
+      servicos: number;
+      orcamentos: number;
+      despesas: number;
+      receitaSum: number;
+      despesaSum: number;
+    };
+    duplicates: { clientes: { nome: string; count: number }[]; propriedades: { nome: string; count: number }[] };
+    discardedRows: { line: number; reason: string }[];
+  } | null>(null);
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();

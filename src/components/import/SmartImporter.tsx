@@ -1546,6 +1546,95 @@ export function SmartImporter({
       const allErrors = [...skippedErrors, ...result.errors];
       setImportResult({ success: result.success, errors: allErrors, failedRows });
       setImportWarnings(warnings);
+
+      // ─── RECONCILIATION: spreadsheet vs database ───────────────────
+      if (entityType === "completo" && result.success > 0) {
+        try {
+          // 1) Build spreadsheet summary from recordsToInsert (post-validation)
+          const sheetClienteSet = new Set<string>();
+          const sheetPropSet = new Set<string>();
+          let sheetReceita = 0;
+          let sheetDespesa = 0;
+          let sheetFinancialRows = 0;
+
+          for (const rec of recordsToInsert) {
+            const nome = rec.nome?.trim()?.toLowerCase();
+            if (nome) sheetClienteSet.add(nome);
+            const propName = rec.nome_da_propriedade?.trim()?.toLowerCase();
+            if (propName) sheetPropSet.add(`${nome || "none"}|${propName}`);
+
+            const valorUnit = parseNullableNumber(rec.valor_unitario) || 0;
+            const receitaEsp = parseNullableNumber(rec.receita_esperada) || 0;
+            const custo = parseNullableNumber(rec.custo_servico) || 0;
+            const receita = receitaEsp > 0 ? receitaEsp : valorUnit;
+
+            if (receita > 0 || custo > 0) sheetFinancialRows++;
+            if (receita > 0) sheetReceita += receita;
+            if (custo > 0) sheetDespesa += custo;
+          }
+
+          // 2) Query DB for what was actually created in this batch (filter by created_at >= batchStartTime)
+          const [orcCreated, despCreated, cliCreated, propCreated, srvCreated] = await Promise.all([
+            supabase.from("fato_orcamento").select("id_orcamento, receita_esperada", { count: "exact" }).gte("created_at", batchStartTime),
+            supabase.from("fato_despesas").select("id_despesas, valor_da_despesa", { count: "exact" }).gte("created_at", batchStartTime),
+            supabase.from("dim_cliente").select("id_cliente", { count: "exact", head: true }).gte("created_at", batchStartTime),
+            supabase.from("dim_propriedade").select("id_propriedade", { count: "exact", head: true }).gte("created_at", batchStartTime),
+            supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }).gte("created_at", batchStartTime),
+          ]);
+
+          const dbReceita = (orcCreated.data || []).reduce((s, r: any) => s + (Number(r.receita_esperada) || 0), 0);
+          const dbDespesa = (despCreated.data || []).reduce((s, r: any) => s + (Number(r.valor_da_despesa) || 0), 0);
+
+          // 3) Detect duplicates in current tenant (clients/properties with same name)
+          const [dupCli, dupProp] = await Promise.all([
+            supabase.from("dim_cliente").select("nome"),
+            supabase.from("dim_propriedade").select("nome_da_propriedade"),
+          ]);
+          const cliCountMap = new Map<string, number>();
+          for (const c of (dupCli.data || [])) {
+            const k = (c.nome || "").trim().toLowerCase();
+            if (k) cliCountMap.set(k, (cliCountMap.get(k) || 0) + 1);
+          }
+          const propCountMap = new Map<string, number>();
+          for (const p of (dupProp.data || [])) {
+            const k = (p.nome_da_propriedade || "").trim().toLowerCase();
+            if (k) propCountMap.set(k, (propCountMap.get(k) || 0) + 1);
+          }
+          const duplicateClientes = Array.from(cliCountMap.entries())
+            .filter(([, n]) => n > 1)
+            .map(([nome, count]) => ({ nome, count }))
+            .slice(0, 10);
+          const duplicateProps = Array.from(propCountMap.entries())
+            .filter(([, n]) => n > 1)
+            .map(([nome, count]) => ({ nome, count }))
+            .slice(0, 10);
+
+          setValidationReport({
+            spreadsheet: {
+              totalRows: allValidatedRows.length,
+              financialRows: sheetFinancialRows,
+              receitaSum: sheetReceita,
+              despesaSum: sheetDespesa,
+              uniqueClientes: sheetClienteSet.size,
+              uniqueProps: sheetPropSet.size,
+            },
+            database: {
+              clientes: cliCreated.count || 0,
+              propriedades: propCreated.count || 0,
+              servicos: srvCreated.count || 0,
+              orcamentos: orcCreated.count || 0,
+              despesas: despCreated.count || 0,
+              receitaSum: dbReceita,
+              despesaSum: dbDespesa,
+            },
+            duplicates: { clientes: duplicateClientes, propriedades: duplicateProps },
+            discardedRows: discardedRowsLog.slice(0, 50),
+          });
+        } catch (e) {
+          console.warn("[SmartImporter] Falha na reconciliação:", e);
+        }
+      }
+
       setStep("result");
       setImportProgress(100);
 

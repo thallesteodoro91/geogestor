@@ -1,86 +1,113 @@
 
-The user wants a post-import validation system that compares spreadsheet input vs database output, detects discrepancies (missing values, duplicates, sum mismatches), and reports back with actionable explanations.
 
-Looking at current code: SmartImporter already has `debugStats` tracking (rows processed, revenues classified, expenses classified) and a "Before/After KPIs" comparison. What's missing:
-1. Pre-import baseline of the SPREADSHEET itself (sum of all monetary cells, count of rows with financial data)
-2. Post-import database verification (query what was actually inserted in this batch)
-3. Reconciliation panel comparing spreadsheet totals vs database totals
-4. Duplicate detection (clients/properties created with same name)
-5. Clear "100% consistent" or "discrepancy of R$ X" verdict
+User wants an "Insights Engine" that turns raw data into prioritized, human-language actions on the dashboard. Let me check what exists already.
 
-Scope: enhance SmartImporter only. No DB migration needed.
+Existing relevant components I already know:
+- `AIInsightsCard.tsx` — calls `ai-insights` edge function (LLM-based, slow, generic)
+- `CriticalAlerts.tsx` — already shows overdue payments, delayed services, negative margin
+- `NextActions.tsx` — already shows "Aprovar X orçamentos", "Atualizar X serviços", "Cobrar X pagamentos"
+- `ActionableInsight.tsx` — card component with priority badge + CTA (perfect base)
+- `GestaoEmpresa.tsx` — main dashboard (where insights should go on top)
+- `StoryCard.tsx` — narrative card
+- `useKPIs`, `useKPIVariation`, `useDashboardMetrics` — data sources
 
-## Plano: Sistema de Validação Pós-Importação
+So a lot exists but it's scattered, not prioritized, and the AI card is slow/generic. The plan is to build a deterministic rule-based insights engine (fast, no LLM) that consolidates everything into ONE prioritized "What to do today" hub at the top of the dashboard.
 
-### O que existe hoje
-- `debugStats` rastreia linhas processadas e valores classificados durante a importação
-- Comparação Before/After de KPIs gerais (mas pega TODO o tenant, não só o que foi importado)
+Plan should be concise.
 
-### O que falta (núcleo do plano)
+## Plano: Motor de Insights Acionáveis (O que fazer hoje)
 
-**1. Snapshot da planilha ANTES de importar** (`spreadsheetSummary`)
-Calcular antes de chamar `handleImport`:
-- Total de linhas com dado financeiro (qualquer valor > 0)
-- Soma de receitas detectadas (campos: receita_esperada, valor_unitario × quantidade, valor_total, faturamento)
-- Soma de despesas detectadas (custo_servico, valor_da_despesa)
-- Soma total monetária (receitas + despesas)
-- Contagem de clientes únicos (por nome normalizado)
-- Contagem de propriedades únicas (por nome+cliente)
+### Diagnóstico
+Já existem peças soltas no dashboard (`AIInsightsCard`, `CriticalAlerts`, `NextActions`, `ActionableInsight`), mas:
+- estão espalhadas e competem por atenção
+- `AIInsightsCard` depende de LLM (lento, genérico, custo)
+- nenhuma é **priorizada por impacto financeiro**
+- linguagem ainda é técnica em vários pontos ("Margem negativa", "Taxa de conversão")
 
-**2. Snapshot do banco APÓS importar** (`databaseSummary`)
-Após `handleImport` concluir, query direta filtrando pelos IDs criados nesta sessão:
-```sql
-SELECT 
-  COUNT(*) as orcamentos_criados,
-  SUM(receita_esperada) as receita_total
-FROM fato_orcamento WHERE id_orcamento IN (...ids criados...)
+### O que vou construir
+
+**1. Hook `useActionableInsights`** (novo, determinístico, sem LLM)
+Roda em paralelo várias queries leves e gera array de insights tipados:
+
+```ts
+type Insight = {
+  id: string;
+  severity: "urgent" | "opportunity" | "attention";
+  title: string;          // linguagem humana, sem jargão
+  explanation: string;    // 1 frase: o que e por quê
+  impact: string;         // "R$ 12.500 em risco" / "R$ 8.300 a receber"
+  impactValue: number;    // p/ ordenação
+  ctaLabel: string;
+  ctaHref: string;
+  icon: LucideIcon;
+}
 ```
-Mesmo para `fato_despesas` e `fato_servico`. Guardar arrays de IDs criados em cada step do pipeline.
 
-**3. Painel de Reconciliação** (novo step `validation` antes de `result`)
-Tabela visual com 3 colunas: Métrica | Planilha | Sistema | Status
+**Regras detectadas (todas com query SQL simples):**
 
-| Métrica | Planilha | Sistema | Status |
-|---|---|---|---|
-| Linhas processadas | 73 | 73 | ✓ |
-| Receita total | R$ 145.000 | R$ 145.000 | ✓ |
-| Despesas total | R$ 38.500 | R$ 38.500 | ✓ |
-| Clientes criados | 73 únicos | 73 | ✓ |
-| Propriedades | 73 | 73 | ✓ |
+| Tipo | Regra | Mensagem (exemplo) |
+|---|---|---|
+| 🔴 Urgente | Pagamentos vencidos | "3 pagamentos atrasados — R$ 12.500 a receber" |
+| 🔴 Urgente | Serviço com prejuízo (custo > receita) | "O serviço X está dando prejuízo de R$ 2.300" |
+| 🔴 Urgente | Lucro caiu >20% vs mês anterior | "Seu lucro caiu 28% este mês" |
+| 🟡 Atenção | Orçamentos pendentes >7 dias | "5 orçamentos esperando resposta há mais de 1 semana" |
+| 🟡 Atenção | Serviços atrasados (data_fim passou, status ≠ Concluído) | "2 projetos passaram do prazo" |
+| 🟡 Atenção | Clientes sem projeto há >90 dias | "12 clientes sem nenhum projeto ativo" |
+| 🟡 Atenção | Custos subiram >15% vs mês anterior | "Suas despesas subiram 22% este mês" |
+| 🟢 Oportunidade | Top 3 clientes por receita | "João Silva é seu cliente mais rentável (R$ 45k)" |
+| 🟢 Oportunidade | Serviço mais lucrativo do mês | "Topografia gerou R$ 18k este mês — foque aqui" |
+| 🟢 Oportunidade | Crescimento de receita >10% | "Sua receita cresceu 18% — ótimo momento" |
 
-Tolerância: diferença ≤ R$ 0,01 = ✓ (arredondamento). Diferença maior = ⚠ com valor exato.
+**Ordenação:** urgentes primeiro (por valor R$ desc), depois atenção (por impactValue desc), depois oportunidades (top 2). Limitar a **5–7 insights** no total para não poluir.
 
-**4. Detecção de duplicatas**
-Query pós-importação:
-```sql
-SELECT nome, COUNT(*) FROM dim_cliente 
-WHERE tenant_id = X 
-GROUP BY nome HAVING COUNT(*) > 1
+**2. Componente `TodayActionsHub.tsx`** (novo)
+Bloco principal no topo do dashboard, substitui visualmente `CriticalAlerts` + `NextActions` + `AIInsightsCard`:
+
 ```
-Mostrar lista se houver, com sugestão "Considere mesclar manualmente".
+┌─────────────────────────────────────────────┐
+│ 🎯 O que você deve fazer hoje              │
+├─────────────────────────────────────────────┤
+│ 🔴 3 pagamentos atrasados                   │
+│    R$ 12.500 a receber → [Cobrar agora]    │
+│ 🔴 Serviço Topografia X com prejuízo        │
+│    -R$ 2.300 → [Revisar custos]            │
+│ 🟡 5 orçamentos sem resposta há 7+ dias     │
+│    R$ 38.000 em pipeline → [Ver orçamentos]│
+│ 🟢 João Silva é seu cliente top do mês     │
+│    R$ 45k → [Ver oportunidades]            │
+└─────────────────────────────────────────────┘
+```
 
-**5. Veredicto Final** (no topo do painel)
-- **Tudo bate**: badge verde grande "✓ Os dados importados estão 100% consistentes com a planilha"
-- **Diferença detectada**: badge âmbar "⚠ Diferença de R$ X detectada — veja detalhes abaixo" + lista de causas prováveis (linhas descartadas por validação, valores em formato não reconhecido, duplicatas mescladas)
+Cada linha usa o `ActionableInsight` já existente (ou um Compact variant) com:
+- ícone + cor por severity
+- título humano (1 linha)
+- linha de impacto em destaque (R$)
+- botão CTA que navega direto
 
-**6. Explicação de erros**
-Para cada linha descartada (já temos `debugStats.linhasDescartadas`), mostrar a razão exata e sugestão:
-- "Linha 47: sem cliente nem propriedade → adicione coluna 'Nome' ou 'Propriedade'"
-- "Linha 89: valor R$ ABC não numérico → verifique formatação de célula"
+**3. Integração no `GestaoEmpresa.tsx`**
+- Mover `TodayActionsHub` para **logo abaixo do título** (acima dos KPIs)
+- Remover `CriticalAlerts` e `NextActions` do topo (consolidados no hub)
+- Manter `AIInsightsCard` mais abaixo como "Análise IA aprofundada" (opcional, secundário)
+- Estado vazio: se nenhum insight, mostrar mensagem positiva "Tudo sob controle hoje 👍"
 
-### Detalhes técnicos
+**4. Linguagem humanizada**
+Substituir em todo o motor:
+- "Margem negativa" → "Está dando prejuízo"
+- "Taxa de conversão" → "% de orçamentos aprovados"
+- "Inadimplência" → "Pagamentos atrasados"
+- "Pipeline" → "em negociação"
+- Sempre incluir valor em R$ quando possível
 
-Arquivo único a editar: **`src/components/import/SmartImporter.tsx`**
+### Arquivos
 
-Mudanças:
-- Adicionar função `calculateSpreadsheetSummary(rawData, mappings)` chamada no step `preview` antes de `handleImport`
-- No `handleImport`, capturar `id_orcamento`, `id_despesas`, `id_servico` retornados de cada INSERT em arrays
-- Após pipeline, fazer queries de reconciliação no Supabase com os IDs capturados
-- Criar novo state `validationReport` com os summaries e o veredicto
-- Adicionar novo step `validation` no enum `Step` (entre `importing` e `result`)
-- Renderizar painel de reconciliação com tabela comparativa, lista de duplicatas e veredicto
+| Arquivo | Mudança |
+|---|---|
+| `src/hooks/useActionableInsights.ts` | **Novo** — motor de regras com queries Supabase |
+| `src/components/dashboard/TodayActionsHub.tsx` | **Novo** — UI do hub priorizado |
+| `src/pages/GestaoEmpresa.tsx` | Substituir bloco superior pelo `TodayActionsHub` |
 
-Sem migrações. Sem mudanças em outros arquivos.
+Sem migrações. Sem LLM. Tudo determinístico, rápido (queries paralelas, cache 2min via React Query).
 
-### Princípio de confiança garantida
-Toda importação termina com UM número claro: "Diferença = R$ 0,00" ou "Diferença = R$ X". O usuário sabe exatamente se pode confiar nos KPIs.
+### Princípio de entrega
+Ao abrir o dashboard, o usuário vê **no máximo 5 ações** ordenadas por impacto, em linguagem humana, com botão direto — e pensa "agora sei o que fazer".
+

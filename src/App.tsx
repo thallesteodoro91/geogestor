@@ -35,6 +35,7 @@ const ImportacaoDados = lazy(() => import("./pages/ImportacaoDados"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
+const Perfil = lazy(() => import("./pages/Perfil"));
 
 const queryClient = new QueryClient();
 
@@ -75,6 +76,7 @@ const App = () => {
                     <Route path="/despesas" element={<ProtectedRoute><Despesas /></ProtectedRoute>} />
                     <Route path="/cadastros" element={<ProtectedRoute><Cadastros /></ProtectedRoute>} />
                     <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+                    <Route path="/perfil" element={<ProtectedRoute><Perfil /></ProtectedRoute>} />
                     <Route path="/importacao" element={<ProtectedRoute><ImportacaoDados /></ProtectedRoute>} />
                     <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />

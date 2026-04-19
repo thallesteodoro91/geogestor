@@ -6,10 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Bell, Palette, Database, Info, FileText, Upload, Trash2, AlertTriangle, ShieldAlert, PartyPopper, X, FileSpreadsheet } from "lucide-react";
+import { Database, Info, FileText, Upload, Trash2, AlertTriangle, PartyPopper, X, ArrowRight } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -18,10 +16,7 @@ import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { useUserRole } from "@/hooks/useUserRole";
 import { TeamManagementSection } from "@/components/team";
-import { AvatarUpload } from "@/components/settings/AvatarUpload";
 import { getCurrentTenantId } from "@/services/supabase.service";
-import { useTheme } from "next-themes";
-import { SmartImporter, ImportEntityType } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
 
@@ -33,17 +28,13 @@ export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
-  const { theme, setTheme } = useTheme();
-  const { tenant, refetchTenant } = useTenant();
+  const { refetchTenant } = useTenant();
   const { refetch: refetchStripe } = useStripeSubscription();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(false);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
-  const [userName, setUserName] = useState("");
-  const [userEmail, setUserEmail] = useState("");
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
-  const [smartImportOpen, setSmartImportOpen] = useState(false);
-  const [smartImportEntity, setSmartImportEntity] = useState<ImportEntityType>("clientes");
 
   // Detectar checkout=success, sincronizar com Stripe e atualizar status da assinatura
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { Settings, LogOut, Shield, HelpCircle } from "lucide-react";
+import { Settings, LogOut, Shield, HelpCircle, User, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -39,12 +39,8 @@ export const UserMenu = () => {
   };
 
   const getInitials = () => {
-    if (profile?.full_name) {
-      return profile.full_name.substring(0, 2).toUpperCase();
-    }
-    if (user?.email) {
-      return user.email.substring(0, 2).toUpperCase();
-    }
+    if (profile?.full_name) return profile.full_name.substring(0, 2).toUpperCase();
+    if (user?.email) return user.email.substring(0, 2).toUpperCase();
     return "US";
   };
 
@@ -60,19 +56,30 @@ export const UserMenu = () => {
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56 bg-popover">
+      <DropdownMenuContent align="end" className="w-60 bg-popover">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">Minha Conta</p>
+            <p className="text-sm font-medium leading-none truncate">
+              {profile?.full_name || "Minha Conta"}
+            </p>
             <p className="text-xs leading-none text-muted-foreground truncate">
               {user?.email}
             </p>
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate("/perfil")}>
+          <User className="mr-2 h-4 w-4" />
+          <span>Meu Perfil</span>
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/perfil#notificacoes")}>
+          <Bell className="mr-2 h-4 w-4" />
+          <span>Minhas Notificações</span>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
           <Settings className="mr-2 h-4 w-4" />
-          <span>Configurações</span>
+          <span>Configurações da Empresa</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/ajuda")}>
           <HelpCircle className="mr-2 h-4 w-4" />

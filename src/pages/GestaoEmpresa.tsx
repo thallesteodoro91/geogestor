@@ -11,8 +11,7 @@ import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
 import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
-import { CriticalAlerts } from "@/components/dashboard/CriticalAlerts";
-import { NextActions } from "@/components/dashboard/NextActions";
+import { TodayActionsHub } from "@/components/dashboard/TodayActionsHub";
 import { OnboardingChecklist } from "@/components/onboarding/OnboardingChecklist";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -131,17 +130,8 @@ const GestaoEmpresa = () => {
         )}
         
 
-        {/* Alertas + Ações */}
-        <div className="space-y-3">
-          <div className="space-y-1">
-            <h2 className="text-xl font-heading font-semibold text-foreground">O que precisa da sua atenção</h2>
-            <p className="text-sm text-muted-foreground">Alertas críticos e ações recomendadas</p>
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <CriticalAlerts />
-            <NextActions />
-          </div>
-        </div>
+        {/* Hub de Ações Prioritárias */}
+        <TodayActionsHub />
 
         {/* KPIs Essenciais */}
         <div className="space-y-3 animate-fade-in">

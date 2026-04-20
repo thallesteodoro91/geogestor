@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,9 @@ import {
   Loader2,
   Crown,
   ExternalLink,
+  ShieldCheck,
+  Zap,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -89,11 +92,26 @@ const allFeatures = [
 
 export default function Assinatura() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();
   const stripeStatus = useStripeSubscription();
+
+  // Compra cancelada — feedback empático
+  useEffect(() => {
+    if (searchParams.get("checkout") === "canceled") {
+      toast("Compra cancelada — seus dados estão salvos", {
+        description: "Quando quiser, você pode escolher um plano novamente.",
+        icon: "ℹ️",
+      });
+      setSearchParams((prev) => {
+        prev.delete("checkout");
+        return prev;
+      });
+    }
+  }, []);
 
   const isActiveSubscriber = stripeStatus.subscribed || 
     (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
@@ -131,7 +149,17 @@ export default function Assinatura() {
         throw new Error(error?.message || "Erro ao criar sessão de pagamento");
       }
 
-      window.open(data.url, "_blank");
+      // Mobile: redirect na mesma aba evita perder contexto.
+      // Desktop: nova aba mantém o app aberto.
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+      if (isMobile) {
+        window.location.href = data.url;
+      } else {
+        window.open(data.url, "_blank");
+        toast.success("Abrimos o pagamento em uma nova aba", {
+          description: "Conclua a compra para liberar o acesso completo.",
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro inesperado";
       toast.error("Erro ao iniciar pagamento", { description: msg });
@@ -223,6 +251,22 @@ export default function Assinatura() {
           <div className="text-center space-y-2">
             <h2 className="text-2xl font-bold">Escolha o plano ideal para você</h2>
             <p className="text-muted-foreground">Todos os planos incluem acesso completo a todas as funcionalidades</p>
+          </div>
+
+          {/* Trust signals row */}
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Pagamento 100% seguro</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <XCircle className="h-4 w-4 text-emerald-500" />
+              <span>Cancele quando quiser</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Zap className="h-4 w-4 text-emerald-500" />
+              <span>Acesso imediato</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -325,8 +369,17 @@ export default function Assinatura() {
                           ) : (
                             <Sparkles className="h-4 w-4 mr-1" />
                           )}
-                          {loadingPlan === plan.id ? "Aguarde..." : isActiveSubscriber ? "Trocar Plano" : "Assinar Agora"}
+                          {loadingPlan === plan.id
+                            ? "Aguarde..."
+                            : isActiveSubscriber
+                              ? "Trocar Plano"
+                              : `Assinar — R$ ${plan.perMonth}/mês`}
                         </Button>
+                      )}
+                      {!isCurrentPlan && (
+                        <p className="text-[11px] text-center text-muted-foreground mt-2">
+                          Sem fidelidade · Cancele em 1 clique
+                        </p>
                       )}
                     </div>
                   </div>
@@ -346,6 +399,19 @@ export default function Assinatura() {
                 <span>{f}</span>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Garantia */}
+        <section className="max-w-2xl mx-auto">
+          <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-2">
+            <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-emerald-500/10">
+              <ShieldCheck className="h-6 w-6 text-emerald-500" />
+            </div>
+            <h3 className="text-lg font-bold">Garantia de 7 dias</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Não gostou? Cancele em até 7 dias e não cobramos nada. Sem perguntas, sem burocracia.
+            </p>
           </div>
         </section>
 

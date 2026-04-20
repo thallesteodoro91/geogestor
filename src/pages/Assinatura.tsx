@@ -369,8 +369,17 @@ export default function Assinatura() {
                           ) : (
                             <Sparkles className="h-4 w-4 mr-1" />
                           )}
-                          {loadingPlan === plan.id ? "Aguarde..." : isActiveSubscriber ? "Trocar Plano" : "Assinar Agora"}
+                          {loadingPlan === plan.id
+                            ? "Aguarde..."
+                            : isActiveSubscriber
+                              ? "Trocar Plano"
+                              : `Assinar — R$ ${plan.perMonth}/mês`}
                         </Button>
+                      )}
+                      {!isCurrentPlan && (
+                        <p className="text-[11px] text-center text-muted-foreground mt-2">
+                          Sem fidelidade · Cancele em 1 clique
+                        </p>
                       )}
                     </div>
                   </div>
@@ -390,6 +399,19 @@ export default function Assinatura() {
                 <span>{f}</span>
               </div>
             ))}
+          </div>
+        </section>
+
+        {/* Garantia */}
+        <section className="max-w-2xl mx-auto">
+          <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-2">
+            <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-emerald-500/10">
+              <ShieldCheck className="h-6 w-6 text-emerald-500" />
+            </div>
+            <h3 className="text-lg font-bold">Garantia de 7 dias</h3>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              Não gostou? Cancele em até 7 dias e não cobramos nada. Sem perguntas, sem burocracia.
+            </p>
           </div>
         </section>
 

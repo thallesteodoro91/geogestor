@@ -76,8 +76,10 @@ serve(async (req) => {
       customer_email: customerId ? undefined : user.email,
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
-      success_url: `${origin}/configuracoes?checkout=success`,
-      cancel_url: `${origin}/assinatura?checkout=canceled`,
+      allow_promotion_codes: true,
+      billing_address_collection: "auto",
+      success_url: `${origin}/checkout-sucesso?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/checkout-cancelado`,
     });
 
     return new Response(JSON.stringify({ url: session.url }), {

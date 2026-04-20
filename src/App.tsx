@@ -29,6 +29,8 @@ const CalendarioDetalhes = lazy(() => import("./pages/CalendarioDetalhes"));
 const AceitarConvite = lazy(() => import("./pages/AceitarConvite"));
 const AuditLogs = lazy(() => import("./pages/AuditLogs"));
 const Assinatura = lazy(() => import("./pages/Assinatura"));
+const CheckoutSucesso = lazy(() => import("./pages/CheckoutSucesso"));
+const CheckoutCancelado = lazy(() => import("./pages/CheckoutCancelado"));
 const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
 const Ajuda = lazy(() => import("./pages/Ajuda"));
 const ImportacaoDados = lazy(() => import("./pages/ImportacaoDados"));
@@ -82,6 +84,8 @@ const App = () => {
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />
                     <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />
                     <Route path="/assinatura" element={<Assinatura />} />
+                    <Route path="/checkout-sucesso" element={<ProtectedRoute><CheckoutSucesso /></ProtectedRoute>} />
+                    <Route path="/checkout-cancelado" element={<CheckoutCancelado />} />
                     <Route path="/politica-de-privacidade" element={<PoliticaPrivacidade />} />
                     {/* Redirects from old routes */}
                     <Route path="/servicos" element={<Navigate to="/projetos" replace />} />

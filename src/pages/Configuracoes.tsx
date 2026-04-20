@@ -1,13 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Database, Info, FileText, Upload, Trash2, AlertTriangle, PartyPopper, X, ArrowRight } from "lucide-react";
+import { Database, Info, FileText, Upload, Trash2, AlertTriangle, ArrowRight } from "lucide-react";
 import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -27,25 +27,9 @@ export default function Configuracoes() {
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
   const { isAdmin } = useUserRole();
   const queryClient = useQueryClient();
-  const { refetchTenant } = useTenant();
-  const { refetch: refetchStripe } = useStripeSubscription();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [showCheckoutSuccess, setShowCheckoutSuccess] = useState(false);
   const [uploadingTemplate, setUploadingTemplate] = useState(false);
   const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (searchParams.get("checkout") === "success") {
-      setShowCheckoutSuccess(true);
-      refetchStripe();
-      refetchTenant();
-      setSearchParams((prev) => {
-        prev.delete("checkout");
-        return prev;
-      });
-    }
-  }, []);
 
   const { data: empresa } = useQuery({
     queryKey: ["empresa-config"],
@@ -158,28 +142,6 @@ export default function Configuracoes() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        {showCheckoutSuccess && (
-          <div className="relative flex items-start gap-4 rounded-2xl border border-success/30 bg-success/10 p-5 shadow-sm">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/20">
-              <PartyPopper className="h-5 w-5 text-success" />
-            </div>
-            <div className="flex-1 space-y-1">
-              <p className="font-semibold text-success">Bem-vindo ao GeoGestor Premium! 🎉</p>
-              <p className="text-sm text-success/80">
-                Sua assinatura foi ativada com sucesso. Todos os recursos premium já estão disponíveis para você.
-              </p>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0 text-success hover:bg-success/10"
-              onClick={() => setShowCheckoutSuccess(false)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        )}
-
         <div>
           <h1 className="text-4xl font-heading font-bold text-foreground">Configurações da Empresa</h1>
           <p className="text-muted-foreground mt-2">Gerencie sua empresa, equipe, plano e integrações</p>

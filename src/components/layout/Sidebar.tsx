@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, LogOut, Bot, CalendarDays, Shield, ClipboardList, HelpCircle, Settings, TrendingUp, Upload } from "lucide-react";
+import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, LogOut, Bot, CalendarDays, Shield, ClipboardList, TrendingUp, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";
@@ -53,9 +53,6 @@ const navigationSections = [
     bgColor: "bg-gray-500/10",
     items: [
       { name: "Cadastros", href: "/cadastros", icon: Settings },
-      { name: "Importação de Dados", href: "/importacao", icon: Upload },
-      { name: "Configurações", href: "/configuracoes", icon: Settings },
-      { name: "Central de Ajuda", href: "/ajuda", icon: HelpCircle },
       { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
     ]
   }

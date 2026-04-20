@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -92,11 +92,29 @@ const allFeatures = [
 
 export default function Assinatura() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedPlan, setSelectedPlan] = useState("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();
   const stripeStatus = useStripeSubscription();
+
+  // Compra cancelada — feedback empático
+  useEffect(() => {
+    if (searchParams.get("checkout") === "canceled") {
+      toast("Compra cancelada — seus dados estão salvos", {
+        description: "Quando quiser, você pode escolher um plano novamente.",
+        icon: "ℹ️",
+      });
+      setSearchParams((prev) => {
+        prev.delete("checkout");
+        return prev;
+      });
+    }
+  }, []);
+
+  const isActiveSubscriber = stripeStatus.subscribed || 
+    (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
 
   const isActiveSubscriber = stripeStatus.subscribed || 
     (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');

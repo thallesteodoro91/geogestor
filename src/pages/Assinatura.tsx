@@ -253,6 +253,22 @@ export default function Assinatura() {
             <p className="text-muted-foreground">Todos os planos incluem acesso completo a todas as funcionalidades</p>
           </div>
 
+          {/* Trust signals row */}
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+              <span>Pagamento 100% seguro</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <XCircle className="h-4 w-4 text-emerald-500" />
+              <span>Cancele quando quiser</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Zap className="h-4 w-4 text-emerald-500" />
+              <span>Acesso imediato</span>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {plans.map((plan) => {
               const isSelected = selectedPlan === plan.id;

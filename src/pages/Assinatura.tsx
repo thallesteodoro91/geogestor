@@ -116,9 +116,6 @@ export default function Assinatura() {
   const isActiveSubscriber = stripeStatus.subscribed || 
     (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
 
-  const isActiveSubscriber = stripeStatus.subscribed || 
-    (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
-
   const handleOpenPortal = async () => {
     setPortalLoading(true);
     try {

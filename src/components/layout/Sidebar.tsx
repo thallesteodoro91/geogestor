@@ -1,4 +1,4 @@
-import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, LogOut, Bot, CalendarDays, Shield, ClipboardList, HelpCircle, Settings, TrendingUp, Upload } from "lucide-react";
+import { LayoutDashboard, DollarSign, Users, FileText, Receipt, Briefcase, LogOut, Bot, CalendarDays, Shield, ClipboardList, TrendingUp, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavLink } from "@/components/NavLink";
 import { Button } from "@/components/ui/button";

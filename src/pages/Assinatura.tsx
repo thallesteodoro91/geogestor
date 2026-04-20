@@ -17,6 +17,9 @@ import {
   Loader2,
   Crown,
   ExternalLink,
+  ShieldCheck,
+  Zap,
+  XCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
@@ -131,7 +134,17 @@ export default function Assinatura() {
         throw new Error(error?.message || "Erro ao criar sessão de pagamento");
       }
 
-      window.open(data.url, "_blank");
+      // Mobile: redirect na mesma aba evita perder contexto.
+      // Desktop: nova aba mantém o app aberto.
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+      if (isMobile) {
+        window.location.href = data.url;
+      } else {
+        window.open(data.url, "_blank");
+        toast.success("Abrimos o pagamento em uma nova aba", {
+          description: "Conclua a compra para liberar o acesso completo.",
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro inesperado";
       toast.error("Erro ao iniciar pagamento", { description: msg });

@@ -19,8 +19,6 @@ import { TeamManagementSection } from "@/components/team";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteAllCompanyData } from "@/services/reset-company-data.service";
-import { useTenant } from "@/contexts/TenantContext";
-import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 import { GoogleCalendarCard } from "@/components/settings/GoogleCalendarCard";
 
 export default function Configuracoes() {

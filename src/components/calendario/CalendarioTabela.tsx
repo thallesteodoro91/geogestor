@@ -130,7 +130,7 @@ export const CalendarioTabela = ({ busca = "", filtroTipo = "todos", filtroStatu
             {pagination.paginatedData.map((evento) => (
               <TableRow
                 key={evento.id}
-                className={cn("hover:bg-muted/50", evento.tipo === "servico" && "bg-blue-500/5 dark:bg-blue-500/10")}
+                className={cn("hover:bg-muted/50", evento.tipo === "servico" && "bg-primary/5")}
                 title={evento.tipo === "servico" ? `${evento.cliente} • ${evento.propriedade} • ${evento.municipio}` : ""}
               >
                 <TableCell>

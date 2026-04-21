@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
@@ -77,23 +78,13 @@ const DashboardFinanceiro = () => {
   return (
     <AppLayout>
       <div className={sectionSpacing}>
-        {/* Header with Controls */}
-        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
-              Dashboard Financeiro
-            </h1>
-            <p className="text-sm md:text-base text-muted-foreground">
-              Análise contábil detalhada e performance financeira
-            </p>
-          </div>
-          
-          {/* Chart Controls */}
-          <nav className="flex items-center gap-2" aria-label="Controles de visualização">
-            <TimeGranularityControl size="sm" />
-            <DensityToggle />
-          </nav>
-        </header>
+        <PageHeader
+          title="Dashboard Financeiro"
+          subtitle="Análise contábil detalhada e performance financeira"
+        >
+          <TimeGranularityControl size="sm" />
+          <DensityToggle />
+        </PageHeader>
 
         {/* Main KPIs Section - First in DOM for accessibility */}
         <section aria-labelledby="kpis-heading" role="region">
@@ -112,7 +103,7 @@ const DashboardFinanceiro = () => {
                   title="Receita Bruta"
                   value={formatCurrency(metrics?.receita_total || 0)}
                   icon={DollarSign}
-                  iconColor="#6366f1"
+                  iconTone="primary"
                   changeType="neutral"
                   description="Faturamento total antes de impostos e deduções."
                   calculation="Σ valor de todos os orçamentos faturados"
@@ -122,7 +113,7 @@ const DashboardFinanceiro = () => {
                   title="Receita Líquida"
                   value={formatCurrency(derivedKPIs?.receita_liquida || 0)}
                   icon={DollarSign}
-                  iconColor="#3b82f6"
+                  iconTone="info"
                   changeType="neutral"
                   description="Receita após dedução de impostos."
                   calculation="Receita Bruta - Impostos"
@@ -132,7 +123,7 @@ const DashboardFinanceiro = () => {
                   title="Margem Contribuição"
                   value={formatPercent(derivedKPIs?.margem_contribuicao_percent || 0)}
                   icon={Target}
-                  iconColor="#8b5cf6"
+                  iconTone="primary"
                   changeType="positive"
                   description="Percentual da receita disponível para cobrir custos fixos e gerar lucro."
                   calculation="(Receita Líquida - Custos Variáveis) / Receita Líquida × 100"
@@ -142,7 +133,7 @@ const DashboardFinanceiro = () => {
                   title="Ponto de Equilíbrio"
                   value={formatCurrency(derivedKPIs?.ponto_equilibrio_receita || 0)}
                   icon={AlertCircle}
-                  iconColor="#f59e0b"
+                  iconTone="warning"
                   changeType="neutral"
                   description="Receita mínima necessária para cobrir todos os custos."
                   calculation="Custos Fixos / Margem de Contribuição (%)"

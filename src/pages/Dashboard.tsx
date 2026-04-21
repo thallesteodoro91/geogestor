@@ -12,6 +12,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { GeoBot } from "@/components/dashboard/GeoBot";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { 
   Banknote, 
   TrendingUp, 
@@ -64,11 +65,10 @@ const Dashboard = () => {
   return (
     <AppLayout>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard Executivo</h1>
-          <p className="text-base text-muted-foreground">Visão geral da performance da empresa</p>
-        </div>
+        <PageHeader
+          title="Dashboard Executivo"
+          subtitle="Visão geral da performance da empresa"
+        />
 
         {/* Filtros Globais */}
         <GlobalFilters
@@ -97,7 +97,7 @@ const Dashboard = () => {
               title="Receita Total"
               value={isLoading ? "..." : `R$ ${(kpis?.receita_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Banknote}
-              iconColor="#6366f1"
+              iconTone="primary"
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
               description="Soma de toda receita gerada no período a partir de orçamentos e serviços."
@@ -107,7 +107,7 @@ const Dashboard = () => {
               title="Lucro Líquido"
               value={isLoading ? "..." : `R$ ${(kpis?.lucro_liquido || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={CircleDollarSign}
-              iconColor="#10b981"
+              iconTone="success"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
               description="Resultado final após dedução de impostos, custos e despesas."
@@ -117,7 +117,7 @@ const Dashboard = () => {
               title="Margem Líquida"
               value={isLoading ? "..." : `${(kpis?.margem_liquida_percent || 0).toFixed(1)}%`}
               icon={Percent}
-              iconColor="#06b6d4"
+              iconTone="info"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_liquida_percent) : "--"}
               changeType={kpiVariation?.variations.margem_liquida_percent >= 0 ? "positive" : "negative"}
               description="Percentual de lucro líquido sobre a receita total."
@@ -127,7 +127,7 @@ const Dashboard = () => {
               title="Total de Despesas"
               value={isLoading ? "..." : `R$ ${(kpis?.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingDown}
-              iconColor="#f43f5e"
+              iconTone="danger"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_despesas) : "--"}
               changeType={kpiVariation?.variations.total_despesas <= 0 ? "positive" : "negative"}
               description="Soma de todas as despesas operacionais no período."
@@ -159,7 +159,7 @@ const Dashboard = () => {
               title="Margem Bruta"
               value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}
               icon={Percent}
-              iconColor="#8b5cf6"
+              iconTone="primary"
               change={kpiVariation ? formatVariation(kpiVariation.variations.margem_bruta_percent) : "--"}
               changeType={kpiVariation?.variations.margem_bruta_percent >= 0 ? "positive" : "negative"}
               description="Rentabilidade antes das despesas fixas."
@@ -169,7 +169,7 @@ const Dashboard = () => {
               title="Taxa Conversão"
               value={`${(kpis?.taxa_conversao_percent || 0).toFixed(1)}%`}
               icon={Target}
-              iconColor="#f59e0b"
+              iconTone="warning"
               change={kpiVariation ? formatVariation(kpiVariation.variations.taxa_conversao_percent) : "--"}
               changeType={kpiVariation?.variations.taxa_conversao_percent >= 0 ? "positive" : "negative"}
               description="Percentual de orçamentos convertidos em serviços."
@@ -179,7 +179,7 @@ const Dashboard = () => {
               title="Ticket Médio"
               value={`R$ ${(kpis?.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={Receipt}
-              iconColor="#3b82f6"
+              iconTone="info"
               change={kpiVariation ? formatVariation(kpiVariation.variations.ticket_medio) : "--"}
               changeType={kpiVariation?.variations.ticket_medio >= 0 ? "positive" : "negative"}
               description="Valor médio de receita por serviço realizado."
@@ -189,7 +189,7 @@ const Dashboard = () => {
               title="Lucro Bruto"
               value={`R$ ${(kpis?.lucro_bruto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
               icon={TrendingUp}
-              iconColor="#22c55e"
+              iconTone="success"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_bruto) : "--"}
               changeType={kpiVariation?.variations.lucro_bruto >= 0 ? "positive" : "negative"}
               description="Receita menos custos diretos dos serviços."
@@ -199,7 +199,7 @@ const Dashboard = () => {
               title="Serviços"
               value={String(kpis?.total_servicos || 0)}
               icon={ClipboardList}
-              iconColor="#64748b"
+              iconTone="neutral"
               change={kpiVariation ? formatVariation(kpiVariation.variations.total_servicos, false, true) : "--"}
               changeType={kpiVariation?.variations.total_servicos >= 0 ? "positive" : "negative"}
               description="Total de serviços cadastrados no período."
@@ -209,7 +209,7 @@ const Dashboard = () => {
               title="Concluídos"
               value={String(kpis?.servicos_concluidos || 0)}
               icon={ClipboardCheck}
-              iconColor="#14b8a6"
+              iconTone="success"
               change={kpiVariation ? formatVariation(kpiVariation.variations.servicos_concluidos, false, true) : "--"}
               changeType={kpiVariation?.variations.servicos_concluidos >= 0 ? "positive" : "negative"}
               description="Serviços finalizados com sucesso."

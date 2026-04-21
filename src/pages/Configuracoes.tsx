@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { User, Building2, Bell, Plug } from "lucide-react";
@@ -33,10 +34,10 @@ export default function Configuracoes() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Configurações</h1>
-          <p className="text-muted-foreground mt-2">Gerencie sua conta, empresa, notificações e integrações</p>
-        </div>
+        <PageHeader
+          title="Configurações"
+          subtitle="Gerencie sua conta, empresa, notificações e integrações"
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {isMobile ? (

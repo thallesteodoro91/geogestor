@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { ChartTitle } from "@/components/charts/ChartTitle";
 import { SmartCategoryChart } from "@/components/charts/SmartCategoryChart";
@@ -56,10 +57,10 @@ const Financeiro = () => {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <header>
-          <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground">Gestão Financeira</h1>
-          <p className="text-muted-foreground mt-2">Análise detalhada de receitas, custos e lucratividade</p>
-        </header>
+        <PageHeader
+          title="Gestão Financeira"
+          subtitle="Análise detalhada de receitas, custos e lucratividade"
+        />
 
         <Tabs defaultValue="dre" className="space-y-6">
           <TabsList className="grid w-full max-w-md grid-cols-3">

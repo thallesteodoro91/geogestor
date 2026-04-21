@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Building2, Wrench, FileText, DollarSign } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface ClienteKPIsProps {
   kpis: {
@@ -33,22 +34,19 @@ export function ClienteKPIs({ kpis, isLoading }: ClienteKPIsProps) {
       title: "Propriedades",
       value: kpis.totalPropriedades,
       icon: Building2,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
+      tone: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
     },
     {
       title: "Serviços Realizados",
       value: `${kpis.servicosRealizados}/${kpis.totalServicos}`,
       icon: Wrench,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
+      tone: "bg-success/10 text-success",
     },
     {
       title: "Orçamentos",
       value: kpis.orcamentosEmitidos,
       icon: FileText,
-      color: "text-yellow-600",
-      bgColor: "bg-yellow-50",
+      tone: "bg-warning/15 text-warning",
     },
     {
       title: "Receita Total",
@@ -57,8 +55,7 @@ export function ClienteKPIs({ kpis, isLoading }: ClienteKPIsProps) {
         currency: 'BRL',
       }).format(kpis.receitaTotal),
       icon: DollarSign,
-      color: "text-emerald-600",
-      bgColor: "bg-emerald-50",
+      tone: "bg-success/10 text-success",
     },
   ];
 
@@ -72,8 +69,8 @@ export function ClienteKPIs({ kpis, isLoading }: ClienteKPIsProps) {
                 <p className="text-sm text-muted-foreground">{kpi.title}</p>
                 <p className="text-2xl font-bold mt-1">{kpi.value}</p>
               </div>
-              <div className={`p-3 rounded-lg ${kpi.bgColor}`}>
-                <kpi.icon className={`h-6 w-6 ${kpi.color}`} />
+              <div className={cn("p-3 rounded-lg", kpi.tone)}>
+                <kpi.icon className="h-6 w-6" />
               </div>
             </div>
           </CardContent>

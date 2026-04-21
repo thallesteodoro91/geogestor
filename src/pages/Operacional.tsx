@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
@@ -143,13 +144,12 @@ export default function Operacional() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-4xl font-heading font-bold text-foreground">Gestão Operacional</h1>
-            <p className="text-muted-foreground mt-2">Análise de produtividade, tempo e eficiência operacional</p>
-          </div>
+        <PageHeader
+          title="Gestão Operacional"
+          subtitle="Análise de produtividade, tempo e eficiência operacional"
+        >
           <TimeGranularityControl />
-        </div>
+        </PageHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {isLoading ? (
@@ -164,7 +164,7 @@ export default function Operacional() {
                 title="Tempo Médio Conclusão"
                 value={`${metrics?.kpis.tempoMedioDias || 0} dias`}
                 icon={Clock}
-                iconColor="#f59e0b"
+                iconTone="warning"
                 description="Média de dias entre início e conclusão dos serviços."
                 calculation="Σ (Data Fim - Data Início) / Nº Serviços Concluídos"
               />
@@ -172,7 +172,7 @@ export default function Operacional() {
                 title="Produtividade"
                 value={`${metrics?.kpis.produtividade || 0}%`}
                 icon={TrendingUp}
-                iconColor="#10b981"
+                iconTone="success"
                 description="Percentual de serviços concluídos sobre o total."
                 calculation="(Serviços Concluídos / Total de Serviços) × 100"
               />
@@ -180,7 +180,7 @@ export default function Operacional() {
                 title="Ticket Médio"
                 value={`R$ ${(metrics?.kpis.ticketMedio || 0).toLocaleString('pt-BR')}`}
                 icon={DollarSign}
-                iconColor="#3b82f6"
+                iconTone="info"
                 description="Valor médio de receita por serviço realizado."
                 calculation="Receita Total / Nº de Serviços"
               />

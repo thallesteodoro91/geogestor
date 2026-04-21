@@ -142,6 +142,9 @@ All colors MUST be HSL.
     --success: 142 76% 56%;
     --success-foreground: 0 0% 98%;
     
+    --warning: 38 92% 60%;
+    --warning-foreground: 0 0% 10%;
+    
     /* Semantic Chart Tokens - Refined Palette */
     --chart-primary: 239 84% 72%;      /* Indigo-400 (mais claro) */
     --chart-secondary: 189 94% 43%;    /* Cyan (mantém) */

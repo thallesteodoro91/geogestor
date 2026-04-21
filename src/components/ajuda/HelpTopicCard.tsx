@@ -74,9 +74,9 @@ export function HelpTopicCard({ topic, searchQuery = "" }: HelpTopicCardProps) {
       {topic.tips && topic.tips.length > 0 && (
         <div className="space-y-1.5">
           {topic.tips.map((tip, i) => (
-            <div key={i} className="flex items-start gap-2 rounded-md bg-emerald-500/10 border border-emerald-500/20 p-2.5">
-              <Lightbulb className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-              <span className="text-xs text-emerald-800 dark:text-emerald-300">
+            <div key={i} className="flex items-start gap-2 rounded-md bg-success/10 border border-success/20 p-2.5">
+              <Lightbulb className="h-4 w-4 text-success shrink-0 mt-0.5" />
+              <span className="text-xs text-foreground/80">
                 <strong>Dica:</strong> {renderText(tip, searchQuery)}
               </span>
             </div>
@@ -87,9 +87,9 @@ export function HelpTopicCard({ topic, searchQuery = "" }: HelpTopicCardProps) {
       {topic.warnings && topic.warnings.length > 0 && (
         <div className="space-y-1.5">
           {topic.warnings.map((warning, i) => (
-            <div key={i} className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/20 p-2.5">
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-              <span className="text-xs text-amber-800 dark:text-amber-300">
+            <div key={i} className="flex items-start gap-2 rounded-md bg-warning/15 border border-warning/30 p-2.5">
+              <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+              <span className="text-xs text-foreground/80">
                 <strong>Atenção:</strong> {renderText(warning, searchQuery)}
               </span>
             </div>

@@ -164,7 +164,7 @@ export default function Operacional() {
                 title="Tempo Médio Conclusão"
                 value={`${metrics?.kpis.tempoMedioDias || 0} dias`}
                 icon={Clock}
-                iconColor="#f59e0b"
+                iconTone="warning"
                 description="Média de dias entre início e conclusão dos serviços."
                 calculation="Σ (Data Fim - Data Início) / Nº Serviços Concluídos"
               />
@@ -172,7 +172,7 @@ export default function Operacional() {
                 title="Produtividade"
                 value={`${metrics?.kpis.produtividade || 0}%`}
                 icon={TrendingUp}
-                iconColor="#10b981"
+                iconTone="success"
                 description="Percentual de serviços concluídos sobre o total."
                 calculation="(Serviços Concluídos / Total de Serviços) × 100"
               />
@@ -180,7 +180,7 @@ export default function Operacional() {
                 title="Ticket Médio"
                 value={`R$ ${(metrics?.kpis.ticketMedio || 0).toLocaleString('pt-BR')}`}
                 icon={DollarSign}
-                iconColor="#3b82f6"
+                iconTone="info"
                 description="Valor médio de receita por serviço realizado."
                 calculation="Receita Total / Nº de Serviços"
               />

@@ -1,102 +1,113 @@
 
 
-## Plano: Hub Único de Configurações com Abas
+## Plano: Padronização de Design System (Padrão Dashboard 360)
 
-### Diagnóstico
+### Diagnóstico do estado atual
 
-Hoje há **duas páginas separadas** que confundem o usuário:
+Auditei o código e encontrei **4 categorias de inconsistência**:
 
-| Página | Conteúdo atual | Problema |
-|---|---|---|
-| `/perfil` | Dados pessoais, avatar, tema, notificações de pagamento | Mistura conta pessoal com config de empresa (notificações ficam em settings do tenant, não do usuário) |
-| `/configuracoes` | Empresa, plano, equipe, template PDF, Google Calendar, importação, zona de perigo, "info do sistema" | Lista vertical sem hierarquia — tudo aparece de uma vez, sem foco |
+**1. Cabeçalhos de página fragmentados** — Existe `PageHeader.tsx` mas só 8 páginas usam. **11 páginas** desenham `<h1>` manual com tamanhos/espaçamentos diferentes (`text-3xl`, `text-4xl`, com/sem subtítulo, ações em posições diferentes):
+- Dashboard, DashboardFinanceiro, Financeiro, GestaoEmpresa, Operacional, RelatorioExecutivo, ServicoDetalhes, ClienteDetalhes, Configuracoes, Ajuda, Assinatura
 
-**Duplicações detectadas:**
-- "Tema" no Perfil + ThemeToggle no header → duplicado
-- "Importação" como atalho em Configurações + item no UserMenu (já removemos do sidebar) → atalho em Configurações vira ruído
-- "Informações do Sistema" em Configurações é um card vazio que só repete contagens já mostradas no PlanInfoCard
+**2. Cores hardcoded fora do design system** — **123 ocorrências** de `bg-{cor}-{n}` e **186 ocorrências** de `text-{cor}-{n}` ou hex `#`:
+- KPICards usam hex inline: `iconColor="#6366f1"`, `"#10b981"`, etc. (Dashboard, GestaoEmpresa, Operacional)
+- `ClienteInfoCompact` define paletas locais para categorias/origens com 13+ cores diferentes (`text-blue-600`, `text-violet-600`...) que **não respeitam dark mode** (sem variantes `dark:`)
+- Componentes de calendário usam `bg-blue-500/15 text-blue-700` direto (não passa pelo `statusColors.ts`)
+- `bg-yellow-200`, `bg-green-50`, `bg-red-500/10` espalhados — quebram em dark mode
 
-**No UserMenu (avatar):** "Meu Perfil" e "Minhas Notificações" → ambos vão para `/perfil`. Item duplicado sem motivo.
+**3. Status com sistemas paralelos**:
+- Existe `src/lib/statusColors.ts` (categorias semânticas: success/warning/danger/info/neutral) ✅
+- Existe `src/constants/serviceStatus.ts` com cores HSL próprias e classes diferentes ❌ duplicação
+- Existe `src/constants/budgetStatus.ts` com mais um sistema de cores ❌ duplicação
+- Componentes individuais ainda definem badges inline ignorando os 3 sistemas
 
-### Nova arquitetura
+**4. Microcomponentes inconsistentes**:
+- `PageContent` envolve tudo num `Card` — algumas páginas usam, outras não
+- `FilterBar` existe mas várias páginas montam filtros à mão
+- KPI: convivem `KPICard` (com hex) e `ContextualKPIs` (com tokens) — visual diferente
 
-**Uma única página `/configuracoes` com 4 abas verticais (sidebar interna em desktop, dropdown em mobile):**
+### O que vou construir
 
-```
-/configuracoes
-├── 👤 Conta              ← prioridade 1 (mais usado)
-├── 🏢 Empresa            ← prioridade 2 (admins)
-├── 🔔 Notificações       ← prioridade 3
-└── 🔌 Integrações        ← prioridade 4
-```
+**FASE 1 — Tokens & Design System (`src/index.css`, `tailwind.config.ts`)**
+- Adicionar tokens semânticos faltantes para o **dark mode** (atualmente `--warning` não está definido em `.dark`)
+- Criar tokens semânticos de **categoria** (substituem as 13 cores locais de ClienteInfoCompact):
+  - `--cat-person`, `--cat-company`, `--cat-rural`, `--cat-gov`, `--cat-ngo`, `--cat-partner` — versões light/dark
+- Garantir **contraste AA** em dark mode revisando `--muted-foreground`, `--success`, `--destructive`
+- Documentar paleta no topo do `index.css`
 
-**Aba 👤 Conta** (todo usuário)
-- Avatar (AvatarUpload)
-- Nome completo, e-mail
-- Botão "Alterar senha" (envia link via `supabase.auth.resetPasswordForEmail`)
-- Preferências: Tema (claro/escuro/sistema)
+**FASE 2 — `KPICard` sem hex (`src/components/dashboard/KPICard.tsx`)**
+- Substituir prop `iconColor: string` (hex) por `iconTone: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'neutral'`
+- Manter retrocompatibilidade: se `iconColor` ainda vier hex, mapeia para tom mais próximo
+- Atualizar **Dashboard, DashboardFinanceiro, GestaoEmpresa, Operacional** para usar tons semânticos
+- Resultado: cores reagem a tema e ficam consistentes
 
-**Aba 🏢 Empresa** (somente admin — não-admin vê estado read-only)
-- Nome da empresa, identificador (slug)
-- Plano atual + uso de recursos (PlanInfoCard)
-- Equipe (TeamManagementSection)
-- Template de orçamento PDF
-- **Zona de perigo** (excluir todos os dados) — colapsável no rodapé
+**FASE 3 — Unificar sistema de status**
+- Estender `src/lib/statusColors.ts` para ser **a única fonte de verdade**
+- Refatorar `serviceStatus.ts` e `budgetStatus.ts` para reexportar/delegar a `statusColors.ts` (sem quebrar imports existentes)
+- Remover cores hex inline; manter apenas constantes de valores (`'Pendente'`, `'Aprovado'`, etc.)
+- Substituir badges manuais (`bg-blue-500/15 text-blue-700`) em CalendarioDiario/Semanal/Tabela e ClienteCentralControle pelo helper `getStatusClasses()`
 
-**Aba 🔔 Notificações** (todo usuário, mas algumas são tenant-level só para admin)
-- **Alertas de pagamento** (toggle, antecedência, frequência) — admin
-- **Canais:** sistema (sempre on), e-mail (toggle por tipo) — futuro
-- **Tipos de alerta** (lista clara com toggles individuais):
-  - Pagamentos próximos do vencimento
-  - Pagamentos vencidos
-  - Novos orçamentos / conversões
-  - Tarefas atribuídas a mim
+**FASE 4 — Padronizar `PageHeader` em todas as páginas**
 
-**Aba 🔌 Integrações** (admin)
-- Google Calendar (GoogleCalendarCard)
-- Importação de dados → botão grande "Abrir Importador" → `/importacao`
+Aplicar `<PageHeader title subtitle>{actions}</PageHeader>` nas 11 páginas que ainda usam `<h1>` manual. Padrão único:
+- **Título**: `text-3xl font-heading font-bold` (já no PageHeader)
+- **Subtítulo**: opcional, `text-muted-foreground`
+- **Ações**: à direita (sm+) / abaixo (mobile)
 
-### Mudanças no UserMenu (avatar)
+GestaoEmpresa mantém o cabeçalho personalizado ("Bom dia, Fulano! 👋") mas **usando os mesmos tamanhos** do PageHeader para harmonia.
 
-Remover item duplicado. Estrutura final:
-```
-[Nome do usuário]
-[email]
-─────────────
-⚙️  Configurações       → /configuracoes (abre na aba Conta)
-🛡️  Política de Privacidade
-❓ Central de Ajuda
-─────────────
-🚪 Sair
-```
+**FASE 5 — Refatorar `ClienteInfoCompact` (caso mais grave)**
+- Trocar paletas locais de categoria/origem por tokens semânticos via mapping helper
+- Ícones mantidos; cores passam por `text-{semantic}` com variantes `dark:`
+- Mesma técnica para `ClienteCentralControle` e `ClienteKPIs`
 
-Removidos: "Meu Perfil" e "Minhas Notificações" (agora são abas dentro de Configurações).
+**FASE 6 — Auditoria de dark mode**
+Varrer e corrigir os padrões problemáticos:
+- `bg-{cor}-50` → `bg-{cor}-500/10` (funciona em ambos os modos)
+- `text-{cor}-600` sem `dark:` → adicionar `dark:text-{cor}-400`
+- Backgrounds `bg-yellow-200` (HelpTopicCard) → `bg-warning/15`
 
-### Mudanças nas rotas
+**FASE 7 — Documentação viva**
+Criar `mem://style/design-system-v2` registrando:
+- Tokens disponíveis e seu propósito semântico
+- Componentes "blessed" (PageHeader, FilterBar, KPICard, statusColors)
+- Regra: **proibido** novos `bg-{cor}-{n}` — sempre usar tokens
 
-- `/perfil` → redirect 301 para `/configuracoes?tab=conta`
-- `/configuracoes` → suporta query `?tab=conta|empresa|notificacoes|integracoes` (deep link a partir de qualquer lugar)
-
-### Arquivos
+### Arquivos afetados
 
 | Arquivo | Mudança |
 |---|---|
-| `src/pages/Configuracoes.tsx` | **Reescrita completa** — Tabs com 4 abas, lê `?tab=` da URL |
-| `src/pages/Perfil.tsx` | **Deletar** (conteúdo vai para aba Conta) |
-| `src/components/settings/AccountTab.tsx` | **Novo** — avatar, nome, email, senha, tema |
-| `src/components/settings/CompanyTab.tsx` | **Novo** — empresa + plano + equipe + template + zona de perigo |
-| `src/components/settings/NotificationsTab.tsx` | **Novo** — toggles de alertas (extraído de Perfil.tsx + expandido com tipos) |
-| `src/components/settings/IntegrationsTab.tsx` | **Novo** — Google Calendar + atalho importação |
-| `src/components/layout/UserMenu.tsx` | Remover "Meu Perfil" e "Minhas Notificações"; manter "Configurações" |
-| `src/App.tsx` | Adicionar redirect `/perfil` → `/configuracoes?tab=conta` |
+| `src/index.css` | Tokens dark mode completos, novos tokens de categoria, comentários de uso |
+| `src/lib/statusColors.ts` | Estendido para categorias e mais status; única fonte de verdade |
+| `src/constants/serviceStatus.ts` | Delegar para statusColors; remover cores duplicadas |
+| `src/constants/budgetStatus.ts` | Delegar para statusColors; remover cores duplicadas |
+| `src/components/dashboard/KPICard.tsx` | Nova prop `iconTone` semântico; deprecar `iconColor` hex |
+| `src/components/layout/PageHeader.tsx` | Pequenos ajustes (suporte a breadcrumb opcional) |
+| `src/pages/Dashboard.tsx` | PageHeader + iconTone |
+| `src/pages/DashboardFinanceiro.tsx` | PageHeader + iconTone |
+| `src/pages/Financeiro.tsx` | PageHeader |
+| `src/pages/GestaoEmpresa.tsx` | iconTone (mantém saudação custom) |
+| `src/pages/Operacional.tsx` | PageHeader + iconTone |
+| `src/pages/RelatorioExecutivo.tsx` | PageHeader |
+| `src/pages/ServicoDetalhes.tsx` | PageHeader (com breadcrumb) |
+| `src/pages/ClienteDetalhes.tsx` | PageHeader (com breadcrumb) |
+| `src/pages/Configuracoes.tsx` | PageHeader |
+| `src/pages/Ajuda.tsx` | PageHeader |
+| `src/pages/Assinatura.tsx` | PageHeader |
+| `src/components/cliente/ClienteInfoCompact.tsx` | Tokens semânticos com dark mode |
+| `src/components/cliente/ClienteCentralControle.tsx` | Tokens via statusColors |
+| `src/components/cliente/ClienteKPIs.tsx` | Tokens semânticos |
+| `src/components/calendario/CalendarioDiario.tsx` | getStatusClasses |
+| `src/components/calendario/CalendarioSemanal.tsx` | getStatusClasses |
+| `src/components/calendario/CalendarioTabela.tsx` | getStatusClasses |
+| `src/components/ajuda/HelpTopicCard.tsx` | Tokens warning/success |
 
-Sem migrações. Sem mudanças de schema. Reorganização de UI puramente.
+Sem migrações. Sem mudança de schema. Sem novos pacotes.
 
 ### Princípio
-- **Conta** = "Eu" (o que muda só pra mim)
-- **Empresa** = "Nós" (o que muda pra todos do tenant)
-- **Notificações** = "O que o sistema me avisa"
-- **Integrações** = "Como o sistema fala com o mundo"
-
-Cada coisa em UM lugar. Sem duplicação. Sem dúvida.
+- **Uma única paleta** = `index.css` define, todos consomem via tokens
+- **Um único PageHeader** = mesma altura, mesmo lugar para CTAs
+- **Um único sistema de status** = `statusColors.ts` é a fonte
+- **Dark mode obrigatório** = toda cor tem variante testada
+- Nenhuma tela deve "parecer inferior" ao Dashboard 360 — todas usam os mesmos blocos de construção
 

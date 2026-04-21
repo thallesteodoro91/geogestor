@@ -3,13 +3,17 @@ import { cn } from "@/lib/utils";
 import { LucideIcon, TrendingUp, TrendingDown, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+export type IconTone = "primary" | "success" | "warning" | "danger" | "info" | "neutral" | "accent";
+
 interface KPICardProps {
   title: string;
   value: string;
   change?: string;
   changeType?: "positive" | "negative" | "neutral";
   icon: LucideIcon;
-  /** Hex color for the icon, e.g. "#6366f1" */
+  /** Semantic icon tone — preferred over iconColor */
+  iconTone?: IconTone;
+  /** @deprecated Use iconTone instead. Hex strings are mapped to nearest tone. */
   iconColor?: string;
   /** Description shown in the info tooltip */
   description?: string;
@@ -17,7 +21,46 @@ interface KPICardProps {
   calculation?: string;
 }
 
-export const KPICard = ({ title, value, change, changeType = "neutral", icon: Icon, iconColor, description, calculation }: KPICardProps) => {
+/** Semantic-token icon background+text classes (theme & dark-mode aware) */
+const TONE_CLASSES: Record<IconTone, string> = {
+  primary: "bg-primary/10 text-primary",
+  success: "bg-success/10 text-success",
+  warning: "bg-warning/15 text-warning",
+  danger: "bg-destructive/10 text-destructive",
+  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  accent: "bg-accent/10 text-accent",
+  neutral: "bg-muted text-muted-foreground",
+};
+
+/** Map legacy hex iconColor → nearest semantic tone (back-compat) */
+function hexToTone(hex: string): IconTone {
+  const h = hex.toLowerCase().replace(/\s/g, "");
+  // Greens
+  if (["#10b981", "#22c55e", "#14b8a6", "#16a34a", "#059669"].includes(h)) return "success";
+  // Reds / rose
+  if (["#f43f5e", "#ef4444", "#dc2626", "#e11d48"].includes(h)) return "danger";
+  // Amber / yellow
+  if (["#f59e0b", "#eab308", "#facc15", "#fbbf24"].includes(h)) return "warning";
+  // Blues / cyan
+  if (["#3b82f6", "#2563eb", "#06b6d4", "#0891b2", "#0284c7"].includes(h)) return "info";
+  // Purples / indigos
+  if (["#6366f1", "#8b5cf6", "#a855f7", "#7c3aed", "#4f46e5"].includes(h)) return "primary";
+  // Slate / gray
+  if (["#64748b", "#475569", "#94a3b8", "#6b7280"].includes(h)) return "neutral";
+  return "primary";
+}
+
+export const KPICard = ({
+  title,
+  value,
+  change,
+  changeType = "neutral",
+  icon: Icon,
+  iconTone,
+  iconColor,
+  description,
+  calculation,
+}: KPICardProps) => {
   const cleanChange = change?.replace(/^[+-]\s*/, '');
 
   const hoverClass =
@@ -25,8 +68,9 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
     changeType === "negative" ? "interactive-lift-negative" :
     "interactive-lift";
 
-  
-  
+  // Resolve tone: explicit iconTone wins; else map hex; else default primary
+  const resolvedTone: IconTone = iconTone ?? (iconColor ? hexToTone(iconColor) : "primary");
+
   return (
     <Card className={cn(
       "relative overflow-hidden bg-card border-border/50",
@@ -35,13 +79,12 @@ export const KPICard = ({ title, value, change, changeType = "neutral", icon: Ic
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
           <div
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-            style={iconColor
-              ? { backgroundColor: `${iconColor}1a`, color: iconColor }
-              : undefined
-            }
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+              TONE_CLASSES[resolvedTone]
+            )}
           >
-            <Icon className={cn("h-5 w-5", !iconColor && "text-muted-foreground")} style={iconColor ? { color: iconColor } : undefined} />
+            <Icon className="h-5 w-5" />
           </div>
           
           <div className="space-y-1.5 flex-1 min-w-0">

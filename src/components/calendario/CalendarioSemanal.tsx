@@ -130,7 +130,7 @@ export const CalendarioSemanal = ({ busca = "", filtroTipo = "todos", filtroStat
                   <Badge className={getStatusClasses(evento.status)}>
                     {evento.status}
                   </Badge>
-                  <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30")}>
+                  <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && getStatusClasses("Em Revisão"))}>
                     {getTipoIcon(evento.tipo)} {evento.tipo === "orcamento" ? "Orçamento" : "Serviço"}
                   </Badge>
                   <Badge variant="secondary">{evento.categoria}</Badge>

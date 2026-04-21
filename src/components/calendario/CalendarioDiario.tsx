@@ -176,7 +176,7 @@ export const CalendarioDiario = ({ busca = "", filtroTipo = "todos", filtroStatu
                       <Badge className={getStatusClasses(evento.status)}>
                         {evento.status}
                       </Badge>
-                      <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30")}>
+                      <Badge variant="outline" className={cn("gap-1", evento.tipo === "servico" && getStatusClasses("Em Revisão"))}>
                         {evento.tipo === "orcamento" ? (
                           <>
                             <FileText className="h-3 w-3" />

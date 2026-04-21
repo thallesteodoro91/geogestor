@@ -1,4 +1,4 @@
-import { Settings, LogOut, Shield, HelpCircle, User, Bell } from "lucide-react";
+import { Settings, LogOut, Shield, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -68,18 +68,9 @@ export const UserMenu = () => {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/perfil")}>
-          <User className="mr-2 h-4 w-4" />
-          <span>Meu Perfil</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => navigate("/perfil#notificacoes")}>
-          <Bell className="mr-2 h-4 w-4" />
-          <span>Minhas Notificações</span>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => navigate("/configuracoes")}>
+        <DropdownMenuItem onClick={() => navigate("/configuracoes?tab=conta")}>
           <Settings className="mr-2 h-4 w-4" />
-          <span>Configurações da Empresa</span>
+          <span>Configurações</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate("/ajuda")}>
           <HelpCircle className="mr-2 h-4 w-4" />

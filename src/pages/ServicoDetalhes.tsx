@@ -34,13 +34,13 @@ import { SERVICE_STATUS, getStatusBadgeVariant, isServiceInProgress } from "@/co
 const getStatusIcon = (status: string) => {
   switch (status) {
     case SERVICE_STATUS.CONCLUIDO:
-      return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      return <CheckCircle2 className="h-5 w-5 text-success" />;
     case SERVICE_STATUS.EM_ANDAMENTO:
     case SERVICE_STATUS.EM_REVISAO:
-      return <Clock className="h-5 w-5 text-amber-500" />;
+      return <Clock className="h-5 w-5 text-warning" />;
     case SERVICE_STATUS.PENDENTE:
     default:
-      return <AlertCircle className="h-5 w-5 text-red-500" />;
+      return <AlertCircle className="h-5 w-5 text-destructive" />;
   }
 };
 

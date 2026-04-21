@@ -1,330 +1,97 @@
-import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Database, Info, FileText, Upload, Trash2, AlertTriangle, ArrowRight } from "lucide-react";
-import { PdfThumbnail } from "@/components/ui/pdf-thumbnail";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
-import { TenantSettingsCard } from "@/components/plan/TenantSettingsCard";
-import { PlanInfoCard } from "@/components/plan/PlanInfoCard";
-import { useResourceCounts } from "@/hooks/useResourceCounts";
-import { useUserRole } from "@/hooks/useUserRole";
-import { TeamManagementSection } from "@/components/team";
-import { getCurrentTenantId } from "@/services/supabase.service";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { deleteAllCompanyData } from "@/services/reset-company-data.service";
-import { GoogleCalendarCard } from "@/components/settings/GoogleCalendarCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { User, Building2, Bell, Plug } from "lucide-react";
+import { AccountTab } from "@/components/settings/AccountTab";
+import { CompanyTab } from "@/components/settings/CompanyTab";
+import { NotificationsTab } from "@/components/settings/NotificationsTab";
+import { IntegrationsTab } from "@/components/settings/IntegrationsTab";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+const TABS = [
+  { value: "conta", label: "Conta", icon: User, description: "Seus dados pessoais e preferências" },
+  { value: "empresa", label: "Empresa", icon: Building2, description: "Dados da empresa, plano e equipe" },
+  { value: "notificacoes", label: "Notificações", icon: Bell, description: "Alertas e canais de entrega" },
+  { value: "integracoes", label: "Integrações", icon: Plug, description: "Google Calendar e importação" },
+] as const;
+
+type TabValue = typeof TABS[number]["value"];
 
 export default function Configuracoes() {
-  const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
-  const { isAdmin } = useUserRole();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  const [uploadingTemplate, setUploadingTemplate] = useState(false);
-  const [deleteAllDataDialogOpen, setDeleteAllDataDialogOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+  const tabParam = searchParams.get("tab") as TabValue | null;
+  const activeTab: TabValue = TABS.some((t) => t.value === tabParam) ? (tabParam as TabValue) : "conta";
 
-  const { data: empresa } = useQuery({
-    queryKey: ["empresa-config"],
-    queryFn: async () => {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) return null;
-      const { data, error } = await supabase
-        .from("dim_empresa")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) {
-        const { data: tenant } = await supabase
-          .from("tenants")
-          .select("name")
-          .eq("id", tenantId)
-          .single();
-        const { data: newEmpresa, error: createError } = await supabase
-          .from("dim_empresa")
-          .insert({ nome: tenant?.name || "Minha Empresa", tenant_id: tenantId })
-          .select()
-          .single();
-        if (createError) throw createError;
-        return newEmpresa;
-      }
-      return data;
-    },
-  });
-
-  const updateEmpresaMutation = useMutation({
-    mutationFn: async (updates: any) => {
-      if (!empresa?.id_empresa) throw new Error("Empresa não encontrada");
-      const { error } = await supabase
-        .from("dim_empresa")
-        .update(updates)
-        .eq("id_empresa", empresa.id_empresa);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["empresa-config"] });
-      toast.success("Configurações atualizadas!");
-    },
-    onError: (error: any) => {
-      toast.error(`Erro: ${error.message}`);
-    },
-  });
-
-  const deleteAllDataMutation = useMutation({
-    mutationFn: async () => {
-      const tenantId = await getCurrentTenantId();
-      if (!tenantId) throw new Error("Tenant não identificado");
-      return deleteAllCompanyData(tenantId);
-    },
-    onSuccess: (result) => {
-      if (result.success) {
-        ["clientes", "propriedades", "servicos", "orcamentos", "despesas", "notificacoes", "dashboard", "kpis", "eventos", "tarefas"].forEach(
-          (key) => queryClient.invalidateQueries({ queryKey: [key] })
-        );
-        toast.success(`Dados excluídos com sucesso! ${result.totalExcluido} registros removidos.`);
-      } else {
-        throw new Error(result.error || "Erro ao excluir dados");
-      }
-    },
-    onError: (error: any) => {
-      toast.error(`Erro ao excluir dados: ${error.message}`);
-    },
-  });
-
-  const handleTemplateUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (file.type !== "application/pdf") {
-      toast.error("Apenas arquivos PDF são permitidos");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Arquivo muito grande. Máximo: 5MB");
-      return;
-    }
-    setUploadingTemplate(true);
-    try {
-      const fileName = `template-orcamento-${Date.now()}.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("empresa-assets")
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from("empresa-assets").getPublicUrl(fileName);
-      await updateEmpresaMutation.mutateAsync({ template_orcamento_url: publicUrl });
-      toast.success("Template carregado com sucesso!");
-    } catch (error: any) {
-      toast.error(`Erro ao fazer upload: ${error.message}`);
-    } finally {
-      setUploadingTemplate(false);
-    }
+  const setActiveTab = (value: string) => {
+    setSearchParams({ tab: value }, { replace: true });
   };
 
-  const handleRemoveTemplate = async () => {
-    if (!empresa?.template_orcamento_url) return;
-    try {
-      const fileName = empresa.template_orcamento_url.split("/").pop();
-      if (fileName) await supabase.storage.from("empresa-assets").remove([fileName]);
-      await updateEmpresaMutation.mutateAsync({ template_orcamento_url: null });
-      toast.success("Template removido!");
-    } catch (error: any) {
-      toast.error(`Erro ao remover: ${error.message}`);
-    }
-  };
+  const currentTabMeta = TABS.find((t) => t.value === activeTab)!;
 
   return (
     <AppLayout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Configurações da Empresa</h1>
-          <p className="text-muted-foreground mt-2">Gerencie sua empresa, equipe, plano e integrações</p>
+          <h1 className="text-4xl font-heading font-bold text-foreground">Configurações</h1>
+          <p className="text-muted-foreground mt-2">Gerencie sua conta, empresa, notificações e integrações</p>
         </div>
 
-        <div className="grid gap-6">
-          <TenantSettingsCard />
-
-          <PlanInfoCard
-            clientsCount={clientsCount}
-            propertiesCount={propertiesCount}
-            usersCount={usersCount}
-          />
-
-          <TeamManagementSection />
-
-          {/* Template de Orçamento */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-primary" />
-                <CardTitle>Template de Orçamento</CardTitle>
-              </div>
-              <CardDescription>Faça upload do seu PDF personalizado para gerar orçamentos</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {empresa?.template_orcamento_url ? (
-                <div className="flex items-start gap-4 p-4 border rounded-lg bg-muted/20">
-                  <a
-                    href={empresa.template_orcamento_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="relative flex-shrink-0 rounded-md border bg-background overflow-hidden group hover:ring-2 hover:ring-primary transition-all"
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {isMobile ? (
+            <div className="space-y-2">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TABS.map((tab) => (
+                    <SelectItem key={tab.value} value={tab.value}>
+                      <div className="flex items-center gap-2">
+                        <tab.icon className="h-4 w-4" />
+                        <span>{tab.label}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground px-1">{currentTabMeta.description}</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-[240px_1fr] gap-6 items-start">
+              <TabsList className="flex flex-col h-auto bg-card border p-1.5 gap-1 sticky top-4">
+                {TABS.map((tab) => (
+                  <TabsTrigger
+                    key={tab.value}
+                    value={tab.value}
+                    className="w-full justify-start gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
                   >
-                    <PdfThumbnail url={empresa.template_orcamento_url} width={128} />
-                  </a>
-                  <div className="flex-1 space-y-3">
-                    <div>
-                      <p className="text-sm font-medium">Template PDF Configurado</p>
-                      <p className="text-xs text-muted-foreground">Pronto para gerar orçamentos personalizados</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" asChild>
-                        <a href={empresa.template_orcamento_url} target="_blank" rel="noopener noreferrer">
-                          <FileText className="h-4 w-4 mr-2" />
-                          Visualizar
-                        </a>
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRemoveTemplate}
-                        disabled={updateEmpresaMutation.isPending}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Remover
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label htmlFor="template-upload">Upload do Template PDF</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="template-upload"
-                      type="file"
-                      accept="application/pdf"
-                      onChange={handleTemplateUpload}
-                      disabled={uploadingTemplate}
-                      className="cursor-pointer"
-                    />
-                    <Button
-                      variant="outline"
-                      disabled={uploadingTemplate}
-                      onClick={() => document.getElementById("template-upload")?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      {uploadingTemplate ? "Enviando..." : "Enviar"}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Formato: PDF | Tamanho máximo: 5MB</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    <tab.icon className="h-4 w-4" />
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-          {/* Google Calendar */}
-          <GoogleCalendarCard />
-
-          {/* Importação de Dados (atalho) */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Database className="h-5 w-5 text-primary" />
-                <CardTitle>Importação de Dados</CardTitle>
+              <div>
+                <TabsContent value="conta" className="mt-0"><AccountTab /></TabsContent>
+                <TabsContent value="empresa" className="mt-0"><CompanyTab /></TabsContent>
+                <TabsContent value="notificacoes" className="mt-0"><NotificationsTab /></TabsContent>
+                <TabsContent value="integracoes" className="mt-0"><IntegrationsTab /></TabsContent>
               </div>
-              <CardDescription>Importe planilhas (CSV, XLS, XLSX) com detecção automática</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => navigate("/importacao")}>
-                Ir para Importação
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Zona de Perigo */}
-          {isAdmin && (
-            <Card className="border-destructive/40">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-destructive" />
-                  <CardTitle>Zona de Perigo</CardTitle>
-                </div>
-                <CardDescription>Ações irreversíveis sobre os dados da empresa</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Exclua todos os dados operacionais para começar do zero. Esta ação é irreversível.
-                </p>
-                <Button
-                  variant="destructive"
-                  onClick={() => setDeleteAllDataDialogOpen(true)}
-                  disabled={deleteAllDataMutation.isPending}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  {deleteAllDataMutation.isPending ? "Excluindo..." : "Excluir Todos os Dados"}
-                </Button>
-              </CardContent>
-            </Card>
+            </div>
           )}
 
-          {/* Informações do Sistema */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Info className="h-5 w-5 text-primary" />
-                <CardTitle>Informações do Sistema</CardTitle>
-              </div>
-              <CardDescription>GeoGestor — Plataforma de Gestão para Topografia</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm font-medium">Sistema</span>
-                <span className="text-sm text-muted-foreground">GeoGestor</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between">
-                <span className="text-sm font-medium">Clientes</span>
-                <span className="text-sm text-muted-foreground">{clientsCount} registros</span>
-              </div>
-              <Separator />
-              <div className="flex justify-between">
-                <span className="text-sm font-medium">Propriedades</span>
-                <span className="text-sm text-muted-foreground">{propertiesCount} registros</span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+          {isMobile && (
+            <div className="mt-4">
+              <TabsContent value="conta" className="mt-0"><AccountTab /></TabsContent>
+              <TabsContent value="empresa" className="mt-0"><CompanyTab /></TabsContent>
+              <TabsContent value="notificacoes" className="mt-0"><NotificationsTab /></TabsContent>
+              <TabsContent value="integracoes" className="mt-0"><IntegrationsTab /></TabsContent>
+            </div>
+          )}
+        </Tabs>
       </div>
-
-      <ConfirmDialog
-        open={deleteAllDataDialogOpen}
-        onOpenChange={setDeleteAllDataDialogOpen}
-        title="⚠️ Excluir Todos os Dados"
-        description="ATENÇÃO: Esta ação é irreversível!
-
-Serão excluídos permanentemente:
-• Todos os clientes
-• Todas as propriedades  
-• Todos os serviços e orçamentos
-• Todas as despesas
-• Todos os eventos e tarefas
-
-Os tipos de serviço, tipos de despesa e configurações da empresa serão mantidos."
-        confirmLabel="Excluir Tudo"
-        cancelLabel="Cancelar"
-        variant="destructive"
-        onConfirm={() => {
-          deleteAllDataMutation.mutate();
-          setDeleteAllDataDialogOpen(false);
-        }}
-      />
     </AppLayout>
   );
 }

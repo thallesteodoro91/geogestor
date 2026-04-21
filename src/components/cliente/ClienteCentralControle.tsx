@@ -62,8 +62,8 @@ export function ClienteCentralControle({
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-500/10">
-                <ListTodo className="h-5 w-5 text-red-500" />
+              <div className="p-2 rounded-lg bg-destructive/10">
+                <ListTodo className="h-5 w-5 text-destructive" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{tarefasPendentes || 0}</p>
@@ -77,7 +77,7 @@ export function ClienteCentralControle({
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-500/10">
-                <Wrench className="h-5 w-5 text-blue-500" />
+                <Wrench className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{servicosAtivos}</p>
@@ -90,8 +90,8 @@ export function ClienteCentralControle({
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-green-500/10">
-                <ClipboardList className="h-5 w-5 text-green-500" />
+              <div className="p-2 rounded-lg bg-success/10">
+                <ClipboardList className="h-5 w-5 text-success" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{propriedades.length}</p>
@@ -104,8 +104,8 @@ export function ClienteCentralControle({
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <Clock className="h-5 w-5 text-purple-500" />
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Clock className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-2xl font-bold">{servicos.length}</p>

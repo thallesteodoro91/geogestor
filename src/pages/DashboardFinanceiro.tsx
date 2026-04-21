@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { GaugeChart } from "@/components/charts/GaugeChart";
@@ -77,23 +78,13 @@ const DashboardFinanceiro = () => {
   return (
     <AppLayout>
       <div className={sectionSpacing}>
-        {/* Header with Controls */}
-        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
-              Dashboard Financeiro
-            </h1>
-            <p className="text-sm md:text-base text-muted-foreground">
-              Análise contábil detalhada e performance financeira
-            </p>
-          </div>
-          
-          {/* Chart Controls */}
-          <nav className="flex items-center gap-2" aria-label="Controles de visualização">
-            <TimeGranularityControl size="sm" />
-            <DensityToggle />
-          </nav>
-        </header>
+        <PageHeader
+          title="Dashboard Financeiro"
+          subtitle="Análise contábil detalhada e performance financeira"
+        >
+          <TimeGranularityControl size="sm" />
+          <DensityToggle />
+        </PageHeader>
 
         {/* Main KPIs Section - First in DOM for accessibility */}
         <section aria-labelledby="kpis-heading" role="region">

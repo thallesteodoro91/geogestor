@@ -86,14 +86,16 @@ const Ajuda = () => {
     <AppLayout>
       <div className="container mx-auto max-w-4xl space-y-6">
         {/* Header */}
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <BookOpen className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Central de Ajuda</h1>
+        <div className="flex items-center gap-3">
+          <BookOpen className="h-8 w-8 text-primary shrink-0" />
+          <div>
+            <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">
+              Central de Ajuda
+            </h1>
+            <p className="text-muted-foreground">
+              Guia completo do GeoGestor. Encontre respostas rápidas para qualquer funcionalidade.
+            </p>
           </div>
-          <p className="text-muted-foreground">
-            Guia completo do GeoGestor. Encontre respostas rápidas para qualquer funcionalidade.
-          </p>
         </div>
 
         {/* Search */}

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { StoryCard } from "@/components/dashboard/StoryCard";
@@ -143,13 +144,12 @@ export default function Operacional() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-4xl font-heading font-bold text-foreground">Gestão Operacional</h1>
-            <p className="text-muted-foreground mt-2">Análise de produtividade, tempo e eficiência operacional</p>
-          </div>
+        <PageHeader
+          title="Gestão Operacional"
+          subtitle="Análise de produtividade, tempo e eficiência operacional"
+        >
           <TimeGranularityControl />
-        </div>
+        </PageHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {isLoading ? (

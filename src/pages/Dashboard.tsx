@@ -12,6 +12,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { useKPIVariation, formatVariation } from "@/hooks/useKPIVariation";
 import { GeoBot } from "@/components/dashboard/GeoBot";
 import { AlertasFinanceiros } from "@/components/dashboard/AlertasFinanceiros";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { 
   Banknote, 
   TrendingUp, 
@@ -64,11 +65,10 @@ const Dashboard = () => {
   return (
     <AppLayout>
       <div className="space-y-8">
-        {/* Header */}
-        <div className="space-y-2">
-          <h1 className="text-4xl font-heading font-bold text-foreground tracking-tight">Dashboard Executivo</h1>
-          <p className="text-base text-muted-foreground">Visão geral da performance da empresa</p>
-        </div>
+        <PageHeader
+          title="Dashboard Executivo"
+          subtitle="Visão geral da performance da empresa"
+        />
 
         {/* Filtros Globais */}
         <GlobalFilters

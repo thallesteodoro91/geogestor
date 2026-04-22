@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -25,50 +26,53 @@ import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 
+const benefitToneClasses = {
+  success: "text-success bg-success/10",
+  info: "text-info bg-info/10",
+  warning: "text-warning bg-warning/10",
+  primary: "text-primary bg-primary/10",
+  accent: "text-accent bg-accent/10",
+  danger: "text-destructive bg-destructive/10",
+} as const;
+
 const benefits = [
   {
     icon: DollarSign,
     title: "Gestão Financeira Completa",
     description: "Dashboards, KPIs, orçamentos e controle total de receitas e despesas em tempo real.",
-    color: "text-emerald-500",
-    bg: "bg-emerald-500/10",
+    tone: "success",
   },
   {
     icon: Globe,
     title: "Mapas via Satélite Ilimitados",
     description: "Visualize propriedades com camadas geográficas, KML e análise territorial avançada.",
-    color: "text-blue-500",
-    bg: "bg-blue-500/10",
+    tone: "info",
   },
   {
     icon: FileText,
     title: "Geração de Orçamentos PDF",
     description: "Crie orçamentos profissionais com sua marca em poucos cliques.",
-    color: "text-amber-500",
-    bg: "bg-amber-500/10",
+    tone: "warning",
   },
   {
     icon: Headphones,
     title: "Suporte Prioritário",
     description: "Atendimento dedicado com tempo de resposta reduzido e acompanhamento personalizado.",
-    color: "text-purple-500",
-    bg: "bg-purple-500/10",
+    tone: "primary",
   },
   {
     icon: WifiOff,
     title: "Acesso Offline — App",
     description: "Continue trabalhando mesmo sem internet. Seus dados sincronizam automaticamente.",
-    color: "text-cyan-500",
-    bg: "bg-cyan-500/10",
+    tone: "accent",
   },
   {
     icon: Users,
     title: "Multi-usuários",
     description: "Adicione sua equipe com permissões personalizadas e colabore em tempo real.",
-    color: "text-rose-500",
-    bg: "bg-rose-500/10",
+    tone: "danger",
   },
-];
+] as const;
 
 const plans = [
   { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês", discount: null, savings: null, priceId: "price_1T2DaxK3j5PLJZVV2QghyqC5" },
@@ -181,17 +185,11 @@ export default function Assinatura() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-12 md:px-8 md:py-20 space-y-16">
-        {/* Hero */}
-        <section className="text-center space-y-4 max-w-3xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
-            Desbloqueie todo o potencial do{" "}
-            <span className="bg-gradient-to-r from-purple-500 to-pink-500 bg-clip-text text-transparent">
-              GeoGestor
-            </span>
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Automatize sua gestão rural, aumente a produtividade da equipe e tome decisões baseadas em dados — tudo em uma única plataforma.
-          </p>
+        <section className="max-w-3xl mx-auto">
+          <PageHeader
+            title="Assinatura"
+            subtitle="Escolha o plano ideal para manter sua operação, equipe e inteligência de gestão em um único lugar."
+          />
         </section>
 
         {/* Active Subscription Banner */}
@@ -235,8 +233,8 @@ export default function Assinatura() {
                 className="hover:scale-[1.02] hover:shadow-lg transition-all duration-200 cursor-default"
               >
                 <CardContent className="p-6 space-y-3">
-                  <div className={`inline-flex items-center justify-center h-12 w-12 rounded-xl ${b.bg}`}>
-                    <b.icon className={`h-6 w-6 ${b.color}`} />
+                  <div className={`inline-flex items-center justify-center h-12 w-12 rounded-xl ${benefitToneClasses[b.tone]}`}>
+                    <b.icon className="h-6 w-6" />
                   </div>
                   <h3 className="font-semibold text-lg">{b.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{b.description}</p>

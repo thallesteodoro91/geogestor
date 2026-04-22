@@ -2,6 +2,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -97,28 +98,18 @@ const CalendarioDetalhes = () => {
   return (
     <AppLayout>
       <div className="container mx-auto p-6 max-w-5xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        <PageHeader
+          title={isOrcamento ? (detalhes as any).servico?.nome_do_servico : (detalhes as any).nome_do_servico}
+          subtitle={`${isOrcamento ? "Orçamento" : "Serviço"} #${id?.slice(0, 8)}`}
+        >
           <Button variant="ghost" onClick={() => navigate("/calendario")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+            <ArrowLeft className="mr-2 h-4 w-4" />
             Voltar ao Calendário
           </Button>
           <Badge className={getStatusBadgeClass()}>
             {status || BUDGET_SITUATION.PENDENTE}
           </Badge>
-        </div>
-
-        {/* Título */}
-        <div>
-          <h1 className="text-3xl font-bold mb-2">
-            {isOrcamento 
-              ? (detalhes as any).servico?.nome_do_servico 
-              : (detalhes as any).nome_do_servico}
-          </h1>
-          <p className="text-muted-foreground">
-            {isOrcamento ? "Orçamento" : "Serviço"} #{id?.slice(0, 8)}
-          </p>
-        </div>
+        </PageHeader>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Informações Principais */}

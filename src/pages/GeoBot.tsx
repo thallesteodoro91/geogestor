@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { GeoBot } from "@/components/dashboard/GeoBot";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { useKPIs } from "@/hooks/useKPIs";
 
 const CONTEXT_PROMPTS: Record<string, string> = {
@@ -17,13 +18,11 @@ const GeoBotPage = () => {
 
   return (
     <AppLayout>
-      <div className="container mx-auto p-6 max-w-7xl">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">GeoBot - Consultor Financeiro</h1>
-          <p className="text-muted-foreground">
-            Seu assistente inteligente para análises financeiras e operacionais
-          </p>
-        </div>
+      <div className="container mx-auto max-w-7xl space-y-6 p-6">
+        <PageHeader
+          title="GeoBot - Consultor Financeiro"
+          subtitle="Seu assistente inteligente para análises financeiras e operacionais"
+        />
         
         <div className="max-w-4xl mx-auto">
           <GeoBot kpis={kpis} initialPrompt={contextParam ? CONTEXT_PROMPTS[contextParam] : undefined} />

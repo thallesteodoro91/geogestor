@@ -27,7 +27,7 @@ const TONE_CLASSES: Record<IconTone, string> = {
   success: "bg-success/10 text-success",
   warning: "bg-warning/15 text-warning",
   danger: "bg-destructive/10 text-destructive",
-  info: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  info: "bg-info/10 text-info",
   accent: "bg-accent/10 text-accent",
   neutral: "bg-muted text-muted-foreground",
 };

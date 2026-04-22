@@ -102,23 +102,23 @@ export default function ClienteDetalhes() {
           title={cliente.nome}
           subtitle="Visualize propriedades, projetos, finanças e a central de controle do relacionamento."
         >
-          <Button variant="ghost" size="sm" onClick={() => navigate('/clientes')}>
+          <Button variant="ghost" size="sm" className="shrink-0" onClick={() => navigate('/clientes')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setClienteDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
             Editar
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setPropriedadeDialogOpen(true)}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setPropriedadeDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Propriedade
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setServicoDialogOpen(true)}>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setServicoDialogOpen(true)}>
             <Wrench className="h-4 w-4 mr-2" />
             Serviço
           </Button>
-          <Button size="sm" onClick={() => setOrcamentoDialogOpen(true)}>
+          <Button size="sm" className="shrink-0" onClick={() => setOrcamentoDialogOpen(true)}>
             <FileText className="h-4 w-4 mr-2" />
             Orçamento
           </Button>

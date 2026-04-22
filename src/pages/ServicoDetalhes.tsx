@@ -103,12 +103,12 @@ export default function ServicoDetalhes() {
             variant="ghost"
             size="sm"
             onClick={() => navigate("/projetos")}
-            className="gap-2"
+            className="shrink-0"
           >
             <ArrowLeft className="h-4 w-4" />
             Voltar
           </Button>
-          <Button onClick={() => setIsEditDialogOpen(true)}>
+          <Button className="shrink-0" onClick={() => setIsEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
             Editar Projeto
           </Button>

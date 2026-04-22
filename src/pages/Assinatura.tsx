@@ -350,11 +350,7 @@ export default function Assinatura() {
                         </Button>
                       ) : (
                         <Button
-                          className={`w-full mt-auto ${
-                            isBest
-                              ? "border-0 bg-primary text-primary-foreground hover:bg-primary/90"
-                              : ""
-                          }`}
+                          className="mt-auto w-full"
                           variant={isBest ? "default" : "outline"}
                           disabled={loadingPlan === plan.id}
                           onClick={(e) => {
@@ -464,11 +460,7 @@ export default function Assinatura() {
               Abrir Portal de Gerenciamento
             </Button>
           ) : (
-            <Button
-              size="lg"
-              className="border-0 bg-primary px-10 text-base text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
-              onClick={() => handleSubscribe("anual", "Anual")}
-            >
+            <Button size="lg" className="px-10 text-base" onClick={() => handleSubscribe("anual", "Anual")}>
               <Sparkles className="h-5 w-5 mr-2" />
               Começar Agora com Melhor Valor
             </Button>

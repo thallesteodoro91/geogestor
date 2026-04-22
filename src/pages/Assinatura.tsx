@@ -173,7 +173,7 @@ export default function Assinatura() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50/50 to-pink-50/50 dark:from-purple-950/20 dark:to-pink-950/20">
+    <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b">
         <div className="max-w-6xl mx-auto flex items-center gap-3 px-4 py-3">
@@ -195,10 +195,10 @@ export default function Assinatura() {
         {/* Active Subscription Banner */}
         {isActiveSubscriber && (
           <section className="max-w-3xl mx-auto">
-            <Card className="border-emerald-500/30 bg-emerald-500/5">
+            <Card className="border-success/30 bg-success/5">
               <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-4">
-                <div className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-emerald-500/10 shrink-0">
-                  <Crown className="h-6 w-6 text-emerald-500" />
+                <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success/10">
+                  <Crown className="h-6 w-6 text-success" />
                 </div>
                 <div className="flex-1 text-center sm:text-left">
                   <p className="font-semibold text-lg">Você já possui uma assinatura ativa!</p>
@@ -277,14 +277,14 @@ export default function Assinatura() {
                 <div key={plan.id} className="flex flex-col">
                   {isCurrentPlan ? (
                     <div className="flex justify-center mb-0">
-                      <Badge className="bg-emerald-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md rounded-b-none rounded-t-xl">
+                      <Badge className="rounded-b-none rounded-t-xl border-0 bg-success px-3 py-1 text-xs font-semibold text-success-foreground shadow-md">
                         <Crown className="h-3 w-3 mr-1" />
                         Seu Plano Atual
                       </Badge>
                     </div>
                   ) : isBest ? (
                     <div className="flex justify-center mb-0">
-                      <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 px-3 py-1 text-xs font-semibold shadow-md rounded-b-none rounded-t-xl">
+                      <Badge className="rounded-b-none rounded-t-xl border-0 bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md">
                         Melhor Valor
                       </Badge>
                     </div>
@@ -295,11 +295,11 @@ export default function Assinatura() {
                     onClick={() => setSelectedPlan(plan.id)}
                     className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 flex-1 ${
                       isCurrentPlan
-                        ? "bg-emerald-500 shadow-xl shadow-emerald-500/20 rounded-t-none"
+                        ? "bg-success shadow-xl shadow-success/20 rounded-t-none"
                         : isBest
-                          ? "bg-gradient-to-br from-purple-500 to-pink-500 shadow-xl shadow-purple-500/20 rounded-t-none"
+                          ? "bg-primary shadow-xl shadow-primary/20 rounded-t-none"
                           : isSelected
-                            ? "bg-gradient-to-br from-purple-400/60 to-pink-400/60"
+                            ? "bg-primary/40"
                             : "bg-border"
                     }`}
                   >
@@ -311,7 +311,7 @@ export default function Assinatura() {
                       </div>
 
                       {plan.discount && (
-                        <span className="inline-flex items-center self-start text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-0.5 mb-2">
+                          <span className="mb-2 inline-flex items-center self-start rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
                           {plan.discount}
                         </span>
                       )}
@@ -352,7 +352,7 @@ export default function Assinatura() {
                         <Button
                           className={`w-full mt-auto ${
                             isBest
-                              ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90 border-0"
+                              ? "border-0 bg-primary text-primary-foreground hover:bg-primary/90"
                               : ""
                           }`}
                           variant={isBest ? "default" : "outline"}
@@ -393,7 +393,7 @@ export default function Assinatura() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
             {allFeatures.map((f) => (
               <div key={f} className="flex items-center gap-2 text-sm text-muted-foreground py-1">
-                <Check className="h-4 w-4 text-emerald-500 shrink-0" />
+                <Check className="h-4 w-4 text-success shrink-0" />
                 <span>{f}</span>
               </div>
             ))}
@@ -402,9 +402,9 @@ export default function Assinatura() {
 
         {/* Garantia */}
         <section className="max-w-2xl mx-auto">
-          <div className="rounded-2xl border-2 border-emerald-500/30 bg-emerald-500/5 p-6 text-center space-y-2">
-            <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-emerald-500/10">
-              <ShieldCheck className="h-6 w-6 text-emerald-500" />
+          <div className="space-y-2 rounded-2xl border-2 border-success/30 bg-success/5 p-6 text-center">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+              <ShieldCheck className="h-6 w-6 text-success" />
             </div>
             <h3 className="text-lg font-bold">Garantia de 7 dias</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
@@ -466,7 +466,7 @@ export default function Assinatura() {
           ) : (
             <Button
               size="lg"
-              className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-10 text-base hover:opacity-90 border-0 shadow-lg shadow-purple-500/25"
+              className="border-0 bg-primary px-10 text-base text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90"
               onClick={() => handleSubscribe("anual", "Anual")}
             >
               <Sparkles className="h-5 w-5 mr-2" />

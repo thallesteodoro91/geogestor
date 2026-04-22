@@ -196,9 +196,9 @@ export default function ServicosOrcamentos() {
         </FilterBar>
 
         {filtroAtivo && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
-            <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-            <p className="text-sm text-blue-700 dark:text-blue-300">
+          <div className="flex items-center gap-2 rounded-lg border border-info/20 bg-info/10 p-3">
+            <Info className="h-4 w-4 text-info flex-shrink-0" />
+            <p className="text-sm text-info">
               KPIs filtrados pelo período ({dataInicio ? format(dataInicio, "dd/MM/yyyy") : "início"} - {dataFim ? format(dataFim, "dd/MM/yyyy") : "atual"}).
             </p>
           </div>

@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/contexts/TenantContext';
 import { useUserRole } from '@/hooks/useUserRole';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -104,13 +105,10 @@ export default function AuditLogs() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Shield className="h-8 w-8 text-primary" />
-            Logs de Auditoria
-          </h1>
-          <p className="text-muted-foreground">Rastreabilidade de ações críticas do sistema</p>
-        </div>
+        <PageHeader
+          title="Logs de Auditoria"
+          subtitle="Rastreabilidade de ações críticas do sistema"
+        />
 
         <Card>
           <CardContent className="pt-6">

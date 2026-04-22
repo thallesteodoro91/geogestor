@@ -1,4 +1,5 @@
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { StoryCard } from "@/components/dashboard/StoryCard";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -48,10 +49,10 @@ export default function Planejamento() {
   return (
     <AppLayout>
       <div className="space-y-8">
-        <div>
-          <h1 className="text-4xl font-heading font-bold text-foreground">Planejamento Estratégico</h1>
-          <p className="text-muted-foreground mt-2">Orçamento, metas e análise de viabilidade financeira</p>
-        </div>
+        <PageHeader
+          title="Planejamento Estratégico"
+          subtitle="Orçamento, metas e análise de viabilidade financeira"
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <KPICard

@@ -28,6 +28,39 @@ export const SERVICE_STATUS_OPTIONS = [
   { value: SERVICE_STATUS.CONCLUIDO, label: 'Concluído' },
 ] as const;
 
+export const SERVICE_STATUS_COLORS = {
+  CONCLUIDO: {
+    bg: getStatusColor(SERVICE_STATUS.CONCLUIDO),
+    bgHover: getStatusColor(SERVICE_STATUS.CONCLUIDO),
+    text: 'white',
+  },
+  EM_ANDAMENTO: {
+    bg: getStatusColor(SERVICE_STATUS.EM_ANDAMENTO),
+    bgHover: getStatusColor(SERVICE_STATUS.EM_ANDAMENTO),
+    text: 'white',
+  },
+  EM_REVISAO: {
+    bg: getStatusColor(SERVICE_STATUS.EM_REVISAO),
+    bgHover: getStatusColor(SERVICE_STATUS.EM_REVISAO),
+    text: 'white',
+  },
+  PENDENTE: {
+    bg: getStatusColor(SERVICE_STATUS.PENDENTE),
+    bgHover: getStatusColor(SERVICE_STATUS.PENDENTE),
+    text: 'black',
+  },
+  PLANEJADO: {
+    bg: getStatusColor(SERVICE_STATUS.PLANEJADO),
+    bgHover: getStatusColor(SERVICE_STATUS.PLANEJADO),
+    text: 'white',
+  },
+  CANCELADO: {
+    bg: getStatusColor(SERVICE_STATUS.CANCELADO),
+    bgHover: getStatusColor(SERVICE_STATUS.CANCELADO),
+    text: 'white',
+  },
+} as const;
+
 // Status para calendário (inclui Planejado)
 export const CALENDAR_STATUS_OPTIONS = [
   { value: SERVICE_STATUS.PLANEJADO, label: 'Planejado' },

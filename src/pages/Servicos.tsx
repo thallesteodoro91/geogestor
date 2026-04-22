@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 import {
   SERVICE_STATUS,
   SERVICE_STATUS_FILTER_OPTIONS,
-  getStatusBadgeVariant,
+  getServiceStatusBadgeClasses,
   isServiceInProgress,
 } from "@/constants/serviceStatus";
 
@@ -227,7 +227,7 @@ export default function Servicos() {
                         <TableCell>{servico.dim_cliente?.nome || "-"}</TableCell>
                         <TableCell>{servico.dim_propriedade?.nome_da_propriedade || "-"}</TableCell>
                         <TableCell>
-                          <Badge variant={getStatusBadgeVariant(servico.situacao_do_servico)}>{servico.situacao_do_servico || "Pendente"}</Badge>
+                          <Badge className={getServiceStatusBadgeClasses(servico.situacao_do_servico)}>{servico.situacao_do_servico || "Pendente"}</Badge>
                         </TableCell>
                         <TableCell>{formatDate(servico.data_do_servico_inicio)}</TableCell>
                         <TableCell>{formatDate(servico.data_do_servico_fim)}</TableCell>

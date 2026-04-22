@@ -10,6 +10,8 @@
 
 export type StatusCategory = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
+export type StatusBadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+
 const STATUS_MAP: Record<string, StatusCategory> = {
   // Serviços
   'Concluído': 'success',
@@ -49,6 +51,22 @@ const CATEGORY_CLASSES: Record<StatusCategory, string> = {
   neutral: 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent',
 };
 
+const CATEGORY_VARIANTS: Record<StatusCategory, StatusBadgeVariant> = {
+  success: 'default',
+  warning: 'secondary',
+  danger: 'destructive',
+  info: 'outline',
+  neutral: 'secondary',
+};
+
+const CATEGORY_COLORS: Record<StatusCategory, string> = {
+  success: 'hsl(var(--success))',
+  warning: 'hsl(var(--warning))',
+  danger: 'hsl(var(--destructive))',
+  info: 'hsl(var(--info))',
+  neutral: 'hsl(var(--muted))',
+};
+
 /**
  * Retorna classes Tailwind para estilizar um Badge baseado no status textual.
  * Funciona para qualquer módulo (serviços, clientes, pagamentos, orçamentos, etc.)
@@ -65,4 +83,12 @@ export function getStatusClasses(status: string | null | undefined): string {
 export function getStatusCategory(status: string | null | undefined): StatusCategory {
   if (!status) return 'neutral';
   return STATUS_MAP[status] || 'neutral';
+}
+
+export function getStatusBadgeVariant(status: string | null | undefined): StatusBadgeVariant {
+  return CATEGORY_VARIANTS[getStatusCategory(status)];
+}
+
+export function getStatusColor(status: string | null | undefined): string {
+  return CATEGORY_COLORS[getStatusCategory(status)];
 }

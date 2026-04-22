@@ -14,6 +14,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,8 @@ import {
   ProjectProgressCard 
 } from "@/components/servicos";
 import { fetchServicoById } from "@/modules/operations";
-import { SERVICE_STATUS, getStatusBadgeVariant, isServiceInProgress } from "@/constants/serviceStatus";
+import { SERVICE_STATUS, isServiceInProgress } from "@/constants/serviceStatus";
+import { getStatusClasses } from "@/lib/statusColors";
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -96,37 +98,30 @@ export default function ServicoDetalhes() {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div className="space-y-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/projetos")}
-              className="mb-2"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar
-            </Button>
-            <div className="flex items-center gap-3">
-              {getStatusIcon(servico.situacao_do_servico || "Pendente")}
-              <h1 className="text-3xl font-heading font-bold text-foreground">
-                {servico.nome_do_servico}
-              </h1>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-              <Badge variant={getStatusBadgeVariant(servico.situacao_do_servico || "Pendente")}>
-                {servico.situacao_do_servico || "Pendente"}
-              </Badge>
-              {servico.categoria && (
-                <Badge variant="outline">{servico.categoria}</Badge>
-              )}
-            </div>
-          </div>
+        <PageHeader title={servico.nome_do_servico} subtitle="Acompanhe o status, equipe, cronograma e progresso da execução.">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/projetos")}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </Button>
           <Button onClick={() => setIsEditDialogOpen(true)}>
             <Edit className="h-4 w-4 mr-2" />
             Editar Projeto
           </Button>
+        </PageHeader>
+
+        <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+          <div className="flex items-center gap-2">
+            {getStatusIcon(servico.situacao_do_servico || "Pendente")}
+            <Badge className={getStatusClasses(servico.situacao_do_servico || "Pendente")}>
+              {servico.situacao_do_servico || "Pendente"}
+            </Badge>
+          </div>
+          {servico.categoria && <Badge variant="outline">{servico.categoria}</Badge>}
         </div>
 
         {/* Info Cards */}

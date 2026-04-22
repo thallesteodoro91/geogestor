@@ -8,6 +8,7 @@ import { formatarMoeda, formatarPercentual } from "@/core/finance";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { RelatorioPaginatedTable } from "@/components/relatorio/RelatorioPaginatedTable";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
@@ -125,7 +126,7 @@ const RelatorioExecutivo = () => {
 
   return (
     <AppLayout>
-      <div className="relatorio-executivo-container">
+        <div className="relatorio-executivo-container">
         {/* Controls - hidden on print */}
         <div className="flex flex-col gap-3 mb-6 print:hidden">
           <div className="flex items-center justify-between">
@@ -153,6 +154,11 @@ const RelatorioExecutivo = () => {
               </Button>
             </div>
           </div>
+
+          <PageHeader
+            title="Relatório Executivo"
+            subtitle="Resumo financeiro, comercial e operacional do período selecionado."
+          />
 
           {/* Date range filters */}
           <div className="flex items-center gap-2 flex-wrap">

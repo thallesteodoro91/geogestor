@@ -3,6 +3,8 @@
  * Use estas constantes em todo o código para evitar inconsistências
  */
 
+import { getStatusClasses, getStatusColor } from "@/lib/statusColors";
+
 // Status de pagamento do orçamento
 export const PAYMENT_STATUS = {
   PENDENTE: 'Pendente',
@@ -77,23 +79,23 @@ export type ExpenseStatus = typeof EXPENSE_STATUS[keyof typeof EXPENSE_STATUS];
 
 export const PAYMENT_STATUS_COLORS = {
   PAGO: {
-    bg: 'hsl(142,76%,36%)',
-    bgHover: 'hsl(142,76%,30%)',
+    bg: getStatusColor(PAYMENT_STATUS.PAGO),
+    bgHover: getStatusColor(PAYMENT_STATUS.PAGO),
     text: 'white',
   },
   PENDENTE: {
-    bg: 'hsl(48,96%,53%)',
-    bgHover: 'hsl(48,96%,45%)',
+    bg: getStatusColor(PAYMENT_STATUS.PENDENTE),
+    bgHover: getStatusColor(PAYMENT_STATUS.PENDENTE),
     text: 'black',
   },
   PARCIAL: {
-    bg: 'hsl(217,91%,60%)',
-    bgHover: 'hsl(217,91%,55%)',
+    bg: getStatusColor(PAYMENT_STATUS.PARCIAL),
+    bgHover: getStatusColor(PAYMENT_STATUS.PARCIAL),
     text: 'white',
   },
   CANCELADO: {
-    bg: 'hsl(0,100%,50%)',
-    bgHover: 'hsl(0,100%,45%)',
+    bg: getStatusColor(PAYMENT_STATUS.CANCELADO),
+    bgHover: getStatusColor(PAYMENT_STATUS.CANCELADO),
     text: 'white',
   },
 } as const;
@@ -128,33 +130,33 @@ export const PAYMENT_METHOD_COLORS = {
 
 export const BUDGET_SITUATION_COLORS = {
   EM_ANALISE: {
-    bg: 'hsl(217,91%,60%)',
-    bgHover: 'hsl(217,91%,55%)',
+    bg: getStatusColor(BUDGET_SITUATION.EM_ANALISE),
+    bgHover: getStatusColor(BUDGET_SITUATION.EM_ANALISE),
     text: 'white',
   },
   EM_NEGOCIACAO: {
-    bg: 'hsl(173,80%,45%)',
-    bgHover: 'hsl(173,80%,40%)',
+    bg: 'hsl(var(--accent))',
+    bgHover: 'hsl(var(--accent))',
     text: 'white',
   },
   APROVADO: {
-    bg: 'hsl(142,76%,36%)',
-    bgHover: 'hsl(142,76%,30%)',
+    bg: getStatusColor(BUDGET_SITUATION.APROVADO),
+    bgHover: getStatusColor(BUDGET_SITUATION.APROVADO),
     text: 'white',
   },
   RECUSADO: {
-    bg: 'hsl(0,100%,50%)',
-    bgHover: 'hsl(0,100%,45%)',
+    bg: getStatusColor(BUDGET_SITUATION.RECUSADO),
+    bgHover: getStatusColor(BUDGET_SITUATION.RECUSADO),
     text: 'white',
   },
   PENDENTE: {
-    bg: 'hsl(48,96%,53%)',
-    bgHover: 'hsl(48,96%,45%)',
+    bg: getStatusColor(BUDGET_SITUATION.PENDENTE),
+    bgHover: getStatusColor(BUDGET_SITUATION.PENDENTE),
     text: 'black',
   },
   CANCELADO: {
-    bg: 'hsl(0,100%,50%)',
-    bgHover: 'hsl(0,100%,45%)',
+    bg: getStatusColor(BUDGET_SITUATION.CANCELADO),
+    bgHover: getStatusColor(BUDGET_SITUATION.CANCELADO),
     text: 'white',
   },
 } as const;
@@ -178,38 +180,16 @@ export const isExpenseConfirmed = (status: string | null | undefined): boolean =
  * @param status - O status do pagamento
  * @returns String com classes Tailwind para background, hover e texto
  */
-export const getPaymentStatusBadgeClass = (status: string | null | undefined): string => {
-  switch (status) {
-    case PAYMENT_STATUS.PAGO:
-      return `bg-[${PAYMENT_STATUS_COLORS.PAGO.bg}] text-${PAYMENT_STATUS_COLORS.PAGO.text} hover:bg-[${PAYMENT_STATUS_COLORS.PAGO.bgHover}]`;
-    case PAYMENT_STATUS.CANCELADO:
-      return `bg-[${PAYMENT_STATUS_COLORS.CANCELADO.bg}] text-${PAYMENT_STATUS_COLORS.CANCELADO.text} hover:bg-[${PAYMENT_STATUS_COLORS.CANCELADO.bgHover}]`;
-    case PAYMENT_STATUS.PARCIAL:
-      return `bg-[${PAYMENT_STATUS_COLORS.PARCIAL.bg}] text-${PAYMENT_STATUS_COLORS.PARCIAL.text} hover:bg-[${PAYMENT_STATUS_COLORS.PARCIAL.bgHover}]`;
-    case PAYMENT_STATUS.PENDENTE:
-    default:
-      return `bg-[${PAYMENT_STATUS_COLORS.PENDENTE.bg}] text-${PAYMENT_STATUS_COLORS.PENDENTE.text} hover:bg-[${PAYMENT_STATUS_COLORS.PENDENTE.bgHover}]`;
-  }
-};
+export const getPaymentStatusBadgeClass = (status: string | null | undefined): string =>
+  getStatusClasses(status);
 
 /**
  * Retorna a cor HSL de fundo para um status de pagamento
  * @param status - O status do pagamento
  * @returns String HSL da cor de fundo
  */
-export const getPaymentStatusColor = (status: string | null | undefined): string => {
-  switch (status) {
-    case PAYMENT_STATUS.PAGO:
-      return PAYMENT_STATUS_COLORS.PAGO.bg;
-    case PAYMENT_STATUS.CANCELADO:
-      return PAYMENT_STATUS_COLORS.CANCELADO.bg;
-    case PAYMENT_STATUS.PARCIAL:
-      return PAYMENT_STATUS_COLORS.PARCIAL.bg;
-    case PAYMENT_STATUS.PENDENTE:
-    default:
-      return PAYMENT_STATUS_COLORS.PENDENTE.bg;
-  }
-};
+export const getPaymentStatusColor = (status: string | null | undefined): string =>
+  getStatusColor(status);
 
 /**
  * Retorna classes Tailwind HSL para estilização de badges de forma de pagamento
@@ -261,21 +241,11 @@ export const getPaymentMethodColor = (method: string | null | undefined): string
  * @returns String com classes Tailwind para background, hover e texto
  */
 export const getBudgetSituationBadgeClass = (situation: string | null | undefined): string => {
-  switch (situation) {
-    case BUDGET_SITUATION.EM_ANALISE:
-      return `bg-[${BUDGET_SITUATION_COLORS.EM_ANALISE.bg}] text-${BUDGET_SITUATION_COLORS.EM_ANALISE.text} hover:bg-[${BUDGET_SITUATION_COLORS.EM_ANALISE.bgHover}]`;
-    case BUDGET_SITUATION.EM_NEGOCIACAO:
-      return `bg-[${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bg}] text-${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.text} hover:bg-[${BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bgHover}]`;
-    case BUDGET_SITUATION.APROVADO:
-      return `bg-[${BUDGET_SITUATION_COLORS.APROVADO.bg}] text-${BUDGET_SITUATION_COLORS.APROVADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.APROVADO.bgHover}]`;
-    case BUDGET_SITUATION.RECUSADO:
-      return `bg-[${BUDGET_SITUATION_COLORS.RECUSADO.bg}] text-${BUDGET_SITUATION_COLORS.RECUSADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.RECUSADO.bgHover}]`;
-    case BUDGET_SITUATION.CANCELADO:
-      return `bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bg}] text-${BUDGET_SITUATION_COLORS.CANCELADO.text} hover:bg-[${BUDGET_SITUATION_COLORS.CANCELADO.bgHover}]`;
-    case BUDGET_SITUATION.PENDENTE:
-    default:
-      return `bg-[${BUDGET_SITUATION_COLORS.PENDENTE.bg}] text-${BUDGET_SITUATION_COLORS.PENDENTE.text} hover:bg-[${BUDGET_SITUATION_COLORS.PENDENTE.bgHover}]`;
+  if (situation === BUDGET_SITUATION.EM_NEGOCIACAO) {
+    return 'bg-accent/10 text-accent hover:bg-accent/15 border-transparent';
   }
+
+  return getStatusClasses(situation);
 };
 
 /**
@@ -283,23 +253,8 @@ export const getBudgetSituationBadgeClass = (situation: string | null | undefine
  * @param situation - A situação do orçamento
  * @returns String HSL da cor de fundo
  */
-export const getBudgetSituationColor = (situation: string | null | undefined): string => {
-  switch (situation) {
-    case BUDGET_SITUATION.EM_ANALISE:
-      return BUDGET_SITUATION_COLORS.EM_ANALISE.bg;
-    case BUDGET_SITUATION.EM_NEGOCIACAO:
-      return BUDGET_SITUATION_COLORS.EM_NEGOCIACAO.bg;
-    case BUDGET_SITUATION.APROVADO:
-      return BUDGET_SITUATION_COLORS.APROVADO.bg;
-    case BUDGET_SITUATION.RECUSADO:
-      return BUDGET_SITUATION_COLORS.RECUSADO.bg;
-    case BUDGET_SITUATION.CANCELADO:
-      return BUDGET_SITUATION_COLORS.CANCELADO.bg;
-    case BUDGET_SITUATION.PENDENTE:
-    default:
-      return BUDGET_SITUATION_COLORS.PENDENTE.bg;
-  }
-};
+export const getBudgetSituationColor = (situation: string | null | undefined): string =>
+  situation === BUDGET_SITUATION.EM_NEGOCIACAO ? 'hsl(var(--accent))' : getStatusColor(situation);
 
 // Helper para verificar se orçamento está aprovado
 export const isBudgetApproved = (situation: string | null | undefined): boolean => {

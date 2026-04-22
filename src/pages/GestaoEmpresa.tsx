@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { TrialBanner } from "@/components/plan/TrialBanner";
 import { useNavigate } from "react-router-dom";
+import { PageHeader } from "@/components/layout/PageHeader";
 
 const GestaoEmpresa = () => {
   const { user } = useAuth();
@@ -100,19 +101,15 @@ const GestaoEmpresa = () => {
   return (
     <AppLayout>
       <div className="space-y-6">
-        {/* Header Personalizado */}
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl md:text-4xl font-heading font-bold text-foreground tracking-tight">
-              {getGreeting()}{firstName ? `, ${firstName}` : ""}! 👋
-            </h1>
-            <p className="text-base text-muted-foreground">Aqui está o que precisa da sua atenção hoje</p>
-          </div>
+        <PageHeader
+          title={`${getGreeting()}${firstName ? `, ${firstName}` : ""}! 👋`}
+          subtitle="Aqui está o que precisa da sua atenção hoje"
+        >
           <Button variant="outline" className="gap-2 shrink-0" onClick={() => navigate("/geobot")}>
             <Bot className="h-4 w-4" />
             Consultar GeoBot
           </Button>
-        </div>
+        </PageHeader>
 
         <TrialBanner />
         <OnboardingChecklist />

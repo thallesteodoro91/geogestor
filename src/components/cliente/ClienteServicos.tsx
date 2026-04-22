@@ -4,7 +4,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Wrench } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { SERVICE_STATUS, getStatusBadgeVariant } from "@/constants/serviceStatus";
+import { SERVICE_STATUS, getServiceStatusBadgeClasses } from "@/constants/serviceStatus";
 
 interface ClienteServicosProps {
   servicos: any[];
@@ -55,7 +55,7 @@ export function ClienteServicos({ servicos }: ClienteServicosProps) {
                 : '-'}
             </TableCell>
             <TableCell>
-              <Badge variant={getStatusBadgeVariant(servico.situacao_do_servico)}>
+              <Badge className={getServiceStatusBadgeClasses(servico.situacao_do_servico)}>
                 {servico.situacao_do_servico || SERVICE_STATUS.PENDENTE}
               </Badge>
             </TableCell>

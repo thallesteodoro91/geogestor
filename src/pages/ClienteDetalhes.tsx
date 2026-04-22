@@ -24,6 +24,7 @@ import { PropriedadeDialog } from "@/components/cadastros/PropriedadeDialog";
 import { ServicoDialog } from "@/components/cadastros/ServicoDialog";
 import { OrcamentoDialog } from "@/components/cadastros/OrcamentoDialog";
 import { useState, useRef } from "react";
+import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -97,31 +98,31 @@ export default function ClienteDetalhes() {
           </BreadcrumbList>
         </Breadcrumb>
 
-        {/* Header with Actions */}
-        <div className="flex items-center justify-between">
+        <PageHeader
+          title={cliente.nome}
+          subtitle="Visualize propriedades, projetos, finanças e a central de controle do relacionamento."
+        >
           <Button variant="ghost" size="sm" onClick={() => navigate('/clientes')}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Editar
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setPropriedadeDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Propriedade
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setServicoDialogOpen(true)}>
-              <Wrench className="h-4 w-4 mr-2" />
-              Serviço
-            </Button>
-            <Button size="sm" onClick={() => setOrcamentoDialogOpen(true)}>
-              <FileText className="h-4 w-4 mr-2" />
-              Orçamento
-            </Button>
-          </div>
-        </div>
+          <Button variant="outline" size="sm" onClick={() => setClienteDialogOpen(true)}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPropriedadeDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Propriedade
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setServicoDialogOpen(true)}>
+            <Wrench className="h-4 w-4 mr-2" />
+            Serviço
+          </Button>
+          <Button size="sm" onClick={() => setOrcamentoDialogOpen(true)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Orçamento
+          </Button>
+        </PageHeader>
 
         {/* Main Layout: Map + Client Info */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

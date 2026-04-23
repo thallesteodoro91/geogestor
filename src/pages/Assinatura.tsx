@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,24 +7,74 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import {
   ArrowLeft,
-  DollarSign,
-  Globe,
-  FileText,
-  Headphones,
-  WifiOff,
-  Users,
   Check,
-  Sparkles,
-  Loader2,
   Crown,
   ExternalLink,
+  FileText,
+  Globe,
+  Headphones,
+  Loader2,
   ShieldCheck,
-  Zap,
+  Sparkles,
+  Users,
+  Wallet,
+  WifiOff,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+
+const MONTHLY_PRICE = 97;
+const YEARLY_PRICE = 970;
+const YEARLY_EQUIVALENT = 81;
+const YEARLY_SAVINGS = 194;
+
+const valueProps = [
+  "Mais clareza para decidir com dashboards e indicadores em um só lugar",
+  "Menos tempo perdido na operação com clientes, equipe e tarefas centralizados",
+  "Tudo integrado para você parar de depender de planilhas soltas e retrabalho",
+] as const;
+
+const benefits = [
+  {
+    icon: Wallet,
+    title: "Financeiro sem improviso",
+    description: "Acompanhe receitas, despesas, margem e previsões com segurança para decidir mais rápido.",
+    tone: "success",
+  },
+  {
+    icon: Globe,
+    title: "Operação e mapas no mesmo fluxo",
+    description: "Gerencie propriedades, KML e execução de serviços sem trocar de ferramenta o dia inteiro.",
+    tone: "info",
+  },
+  {
+    icon: FileText,
+    title: "Orçamentos profissionais em minutos",
+    description: "Envie propostas com aparência profissional e transforme negociação em fechamento com mais agilidade.",
+    tone: "warning",
+  },
+  {
+    icon: Headphones,
+    title: "Suporte que acelera sua equipe",
+    description: "Conte com atendimento prioritário para implementar, ajustar e manter a operação rodando.",
+    tone: "primary",
+  },
+  {
+    icon: WifiOff,
+    title: "Acesso mesmo no campo",
+    description: "Continue trabalhando quando a internet oscilar e sincronize tudo assim que voltar a conexão.",
+    tone: "accent",
+  },
+  {
+    icon: Users,
+    title: "Equipe alinhada no mesmo sistema",
+    description: "Compartilhe contexto, acompanhe atividades e reduza ruído entre quem vende, planeja e executa.",
+    tone: "danger",
+  },
+] as const;
 
 const benefitToneClasses = {
   success: "text-success bg-success/10",
@@ -35,75 +85,78 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-const benefits = [
+const plans = [
   {
-    icon: DollarSign,
-    title: "Gestão Financeira Completa",
-    description: "Dashboards, KPIs, orçamentos e controle total de receitas e despesas em tempo real.",
-    tone: "success",
+    id: "mensal",
+    label: "Plano Mensal",
+    headline: `R$ ${MONTHLY_PRICE}/mês`,
+    description: "Para começar com flexibilidade e acesso completo desde o primeiro dia.",
+    kicker: "Sem compromisso anual",
+    secondary: "Cobrança mensal recorrente",
+    cta: "Começar agora",
+    priceId: "price_1T2DaxK3j5PLJZVV2QghyqC5",
+    features: ["Acesso completo", "Sem contrato", "Cancele quando quiser"],
   },
   {
-    icon: Globe,
-    title: "Mapas via Satélite Ilimitados",
-    description: "Visualize propriedades com camadas geográficas, KML e análise territorial avançada.",
-    tone: "info",
-  },
-  {
-    icon: FileText,
-    title: "Geração de Orçamentos PDF",
-    description: "Crie orçamentos profissionais com sua marca em poucos cliques.",
-    tone: "warning",
-  },
-  {
-    icon: Headphones,
-    title: "Suporte Prioritário",
-    description: "Atendimento dedicado com tempo de resposta reduzido e acompanhamento personalizado.",
-    tone: "primary",
-  },
-  {
-    icon: WifiOff,
-    title: "Acesso Offline — App",
-    description: "Continue trabalhando mesmo sem internet. Seus dados sincronizam automaticamente.",
-    tone: "accent",
-  },
-  {
-    icon: Users,
-    title: "Multi-usuários",
-    description: "Adicione sua equipe com permissões personalizadas e colabore em tempo real.",
-    tone: "danger",
+    id: "anual",
+    label: "Plano Anual",
+    headline: `R$ ${YEARLY_PRICE}/ano`,
+    description: "A forma mais rápida de decidir com clareza e pagar menos pelo acesso completo.",
+    kicker: "2 meses grátis",
+    secondary: `Equivalente a R$ ${YEARLY_EQUIVALENT}/mês`,
+    savings: `Economize R$ ${YEARLY_SAVINGS} por ano em relação ao mensal`,
+    cta: "Começar com desconto",
+    priceId: "price_1TPMGBK3j5PLJZVVFGcr8tdf",
+    best: true,
+    features: ["Mais escolhido", "Melhor custo-benefício", "Acesso completo imediato"],
   },
 ] as const;
 
-const plans = [
-  { id: "mensal", label: "Mensal", price: 97, total: 97, perMonth: 97, period: "/mês", discount: null, savings: null, priceId: "price_1T2DaxK3j5PLJZVV2QghyqC5" },
-  { id: "trimestral", label: "Trimestral", price: 86, total: 260, perMonth: 86, period: "/mês", discount: "Economize 11%", savings: null, priceId: "price_1T2DbOK3j5PLJZVV2o5aMbqN" },
-  { id: "semestral", label: "Semestral", price: 80, total: 480, perMonth: 80, period: "/mês", discount: "Economize 18%", savings: null, priceId: "price_1T2DbfK3j5PLJZVV9qD9q5F6" },
-  { id: "anual", label: "Anual", price: 70, total: 840, perMonth: 70, period: "/mês", discount: "Economize 28%", savings: "vs R$97/mês no plano mensal — você economiza R$324/ano", best: true, priceId: "price_1T2DbzK3j5PLJZVVbM9rKysr" },
-];
+const includedItems = [
+  "Dashboard financeiro e operacional completos",
+  "Gestão de clientes, propriedades e equipe",
+  "GeoBot IA e calendário integrado",
+  "Orçamentos em PDF e relatórios executivos",
+  "Mapas KML/KMZ e acompanhamento centralizado",
+  "Suporte prioritário e acesso imediato",
+] as const;
 
-const allFeatures = [
-  "Dashboard Financeiro completo",
-  "Dashboard Operacional",
-  "GeoBot IA — Assistente inteligente",
-  "Calendário de compromissos",
-  "Gestão de clientes e propriedades",
-  "Orçamentos em PDF",
-  "Importe os mapas das propriedades (KML/KMZ)",
-  "Relatórios e exportações",
-  "Equipe multi-usuário",
-  "Suporte prioritário",
-];
+const trustItems = [
+  { icon: ShieldCheck, label: "Pagamento 100% seguro" },
+  { icon: XCircle, label: "Cancele quando quiser" },
+  { icon: Zap, label: "Acesso imediato" },
+] as const;
+
+const riskItems = ["Cancele quando quiser", "Sem contrato", "Acesso imediato"] as const;
+
+const faqItems = [
+  {
+    q: "Posso cancelar a qualquer momento?",
+    a: "Sim. Você pode cancelar quando quiser, sem multa nem burocracia. Seu acesso continua até o fim do período já pago.",
+  },
+  {
+    q: "Existe teste antes de assinar?",
+    a: "Sim. Você pode experimentar o sistema por 7 dias com acesso completo e decidir com segurança antes de contratar.",
+  },
+  {
+    q: "O que muda entre mensal e anual?",
+    a: "As funcionalidades são as mesmas. A diferença é que o anual reduz o custo total e deixa a decisão mais simples para quem já quer consolidar a operação.",
+  },
+  {
+    q: "Meu acesso libera na hora?",
+    a: "Sim. Assim que o pagamento é confirmado, o acesso é liberado imediatamente e seus dados continuam disponíveis no sistema.",
+  },
+] as const;
 
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPlan, setSelectedPlan] = useState("anual");
+  const [selectedPlan, setSelectedPlan] = useState<(typeof plans)[number]["id"]>("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();
   const stripeStatus = useStripeSubscription();
 
-  // Compra cancelada — feedback empático
   useEffect(() => {
     if (searchParams.get("checkout") === "canceled") {
       toast("Compra cancelada — seus dados estão salvos", {
@@ -115,10 +168,10 @@ export default function Assinatura() {
         return prev;
       });
     }
-  }, []);
+  }, [searchParams, setSearchParams]);
 
-  const isActiveSubscriber = stripeStatus.subscribed || 
-    (subscription?.status === 'active' && subscription?.plan?.slug !== 'owner');
+  const isActiveSubscriber = stripeStatus.subscribed ||
+    (subscription?.status === "active" && subscription?.plan?.slug !== "owner");
 
   const handleOpenPortal = async () => {
     setPortalLoading(true);
@@ -134,7 +187,7 @@ export default function Assinatura() {
     }
   };
 
-  const handleSubscribe = async (planId: string, planLabel: string) => {
+  const handleSubscribe = async (planId: string) => {
     setLoadingPlan(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -153,8 +206,6 @@ export default function Assinatura() {
         throw new Error(error?.message || "Erro ao criar sessão de pagamento");
       }
 
-      // Mobile: redirect na mesma aba evita perder contexto.
-      // Desktop: nova aba mantém o app aberto.
       const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
       if (isMobile) {
         window.location.href = data.url;
@@ -174,297 +225,341 @@ export default function Assinatura() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="sticky top-0 z-10 backdrop-blur-md bg-background/80 border-b">
-        <div className="max-w-6xl mx-auto flex items-center gap-3 px-4 py-3">
+      <div className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <Button variant="ghost" size="icon" onClick={() => navigate("/configuracoes")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <span className="font-medium text-sm text-muted-foreground">Voltar às Configurações</span>
+          <span className="text-sm font-medium text-muted-foreground">Voltar às Configurações</span>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-12 md:px-8 md:py-20 space-y-16">
-        <section className="max-w-3xl mx-auto">
+      <div className="mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 md:px-8 md:py-16">
+        <section className="mx-auto flex max-w-5xl flex-col gap-8">
           <PageHeader
             title="Assinatura"
-            subtitle="Escolha o plano ideal para manter sua operação, equipe e inteligência de gestão em um único lugar."
+            subtitle="Escolha em segundos o plano que mantém sua operação, equipe e gestão financeira no controle."
           />
-        </section>
 
-        {/* Active Subscription Banner */}
-        {isActiveSubscriber && (
-          <section className="max-w-3xl mx-auto">
-            <Card className="border-success/30 bg-success/5">
-              <CardContent className="p-6 flex flex-col sm:flex-row items-center gap-4">
-                <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-success/10">
-                  <Crown className="h-6 w-6 text-success" />
-                </div>
-                <div className="flex-1 text-center sm:text-left">
-                  <p className="font-semibold text-lg">Você já possui uma assinatura ativa!</p>
-                  <p className="text-sm text-muted-foreground">
-                    Para gerenciar sua assinatura, alterar método de pagamento ou cancelar, acesse o portal de gerenciamento.
+          <div className="grid gap-6 rounded-lg border border-border/80 bg-card/70 p-6 shadow-sm lg:grid-cols-[1.15fr_0.85fr] lg:p-8">
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                  Oferta simples, sem confusão
+                </Badge>
+                <div className="space-y-2">
+                  <h2 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+                    Tenha controle total do seu negócio em um único lugar
+                  </h2>
+                  <p className="max-w-2xl text-base leading-relaxed text-muted-foreground md:text-lg">
+                    Organize financeiro, operação, clientes e equipe sem planilhas soltas, retrabalho ou perda de contexto.
                   </p>
                 </div>
-                <Button
-                  onClick={handleOpenPortal}
-                  disabled={portalLoading}
-                  className="shrink-0"
-                >
-                  {portalLoading ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                  )}
-                  Gerenciar Assinatura
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                {valueProps.map((item) => (
+                  <div key={item} className="rounded-md border border-border/70 bg-background/60 p-4">
+                    <div className="mb-3 inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <Check className="h-4 w-4" />
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground">{item}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                {trustItems.map((item) => (
+                  <div key={item.label} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-2">
+                    <item.icon className="h-4 w-4 text-success" />
+                    <span>{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Card className="border-primary/25 bg-primary/5 shadow-sm">
+              <CardContent className="flex h-full flex-col gap-5 p-6">
+                <div className="space-y-2">
+                  <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
+                  <h3 className="text-xl font-semibold text-foreground">Plano Anual</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Menor custo mensal, decisão mais simples e tudo o que você precisa para operar com confiança.
+                  </p>
+                </div>
+
+                <div className="space-y-3 rounded-md border border-primary/20 bg-background/80 p-5">
+                  <div className="flex items-end gap-2">
+                    <span className="text-4xl font-bold text-foreground">R$ {YEARLY_PRICE}</span>
+                    <span className="pb-1 text-sm text-muted-foreground">/ano</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge className="bg-success text-success-foreground">2 meses grátis</Badge>
+                    <Badge variant="outline" className="border-border text-foreground">Equivalente a R$ {YEARLY_EQUIVALENT}/mês</Badge>
+                  </div>
+                  <p className="text-sm font-medium text-success">Economize R$ {YEARLY_SAVINGS} por ano em relação ao plano mensal.</p>
+                </div>
+
+                {isActiveSubscriber && stripeStatus.price_id === "price_1TPMGBK3j5PLJZVVFGcr8tdf" ? (
+                  <Button onClick={handleOpenPortal} disabled={portalLoading}>
+                    {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                    Gerenciar assinatura
+                  </Button>
+                ) : (
+                  <Button onClick={() => handleSubscribe("anual")} disabled={loadingPlan === "anual"}>
+                    {loadingPlan === "anual" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                    Começar com desconto
+                  </Button>
+                )}
+
+                <div className="grid gap-2 text-sm text-muted-foreground">
+                  {riskItems.map((item) => (
+                    <div key={item} className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-success" />
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        {isActiveSubscriber && (
+          <section className="mx-auto w-full max-w-4xl">
+            <Card className="border-success/30 bg-success/5">
+              <CardContent className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center">
+                <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-success/10">
+                  <Crown className="h-6 w-6 text-success" />
+                </div>
+                <div className="flex-1 space-y-1">
+                  <p className="text-lg font-semibold text-foreground">Você já possui uma assinatura ativa</p>
+                  <p className="text-sm text-muted-foreground">
+                    Para alterar pagamento, trocar plano ou cancelar, use o portal de gerenciamento.
+                  </p>
+                </div>
+                <Button onClick={handleOpenPortal} disabled={portalLoading} className="shrink-0">
+                  {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  Gerenciar assinatura
                 </Button>
               </CardContent>
             </Card>
           </section>
         )}
 
-        {/* Benefits Grid */}
-        <section className="space-y-8">
-          <h2 className="text-2xl font-bold text-center">Tudo que você precisa em um só lugar</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {benefits.map((b) => (
-              <Card
-                key={b.title}
-                className="hover:scale-[1.02] hover:shadow-lg transition-all duration-200 cursor-default"
-              >
-                <CardContent className="p-6 space-y-3">
-                  <div className={`inline-flex items-center justify-center h-12 w-12 rounded-xl ${benefitToneClasses[b.tone]}`}>
-                    <b.icon className="h-6 w-6" />
+        <section className="mx-auto w-full max-w-5xl space-y-6">
+          <div className="space-y-2 text-center">
+            <h2 className="text-3xl font-bold text-foreground">Escolha sem dúvida, com clareza total de valor</h2>
+            <p className="text-base text-muted-foreground">
+              Duas opções, mesmo acesso completo e uma decisão fácil em menos de 5 segundos.
+            </p>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            {plans.map((plan) => {
+              const isSelected = selectedPlan === plan.id;
+              const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === plan.priceId;
+              const isLoading = loadingPlan === plan.id;
+
+              return (
+                <Card
+                  key={plan.id}
+                  className={`relative border transition-all duration-200 ${
+                    plan.best
+                      ? "border-primary shadow-sm shadow-primary/15"
+                      : isSelected
+                        ? "border-primary/50"
+                        : "border-border"
+                  } ${isCurrentPlan ? "border-success shadow-sm shadow-success/15" : ""}`}
+                  onClick={() => setSelectedPlan(plan.id)}
+                >
+                  <CardContent className="flex h-full flex-col gap-6 p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-2xl font-semibold text-foreground">{plan.label}</h3>
+                          {isCurrentPlan ? (
+                            <Badge className="bg-success text-success-foreground">Seu plano atual</Badge>
+                          ) : plan.best ? (
+                            <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
+                          ) : null}
+                        </div>
+                        <p className="text-sm leading-relaxed text-muted-foreground">{plan.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 rounded-md border border-border/70 bg-background/70 p-5">
+                      <div className="flex items-end gap-2">
+                        <span className="text-4xl font-bold text-foreground">{plan.headline.replace('/ano','').replace('/mês','')}</span>
+                        <span className="pb-1 text-sm text-muted-foreground">
+                          {plan.id === "anual" ? "/ano" : "/mês"}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant={plan.best ? "default" : "outline"} className={plan.best ? "bg-success text-success-foreground" : "border-border text-foreground"}>
+                          {plan.kicker}
+                        </Badge>
+                        <Badge variant="outline" className="border-border text-foreground">
+                          {plan.secondary}
+                        </Badge>
+                      </div>
+                      {"savings" in plan && plan.savings ? (
+                        <p className="text-sm font-medium text-success">{plan.savings}</p>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2">
+                      {plan.features.map((feature) => (
+                        <div key={feature} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-success" />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {isCurrentPlan ? (
+                      <Button
+                        variant="outline"
+                        className="mt-auto"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleOpenPortal();
+                        }}
+                        disabled={portalLoading}
+                      >
+                        {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                        Gerenciar assinatura
+                      </Button>
+                    ) : (
+                      <Button
+                        variant={plan.best ? "default" : "outline"}
+                        className="mt-auto"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleSubscribe(plan.id);
+                        }}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        {plan.cta}
+                      </Button>
+                    )}
+
+                    {!isCurrentPlan ? (
+                      <p className="text-center text-xs text-muted-foreground">
+                        Cancele quando quiser · Sem contrato · Acesso imediato
+                      </p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-5xl space-y-6">
+          <div className="space-y-2 text-center">
+            <h2 className="text-3xl font-bold text-foreground">Resultados reais, não só funcionalidades</h2>
+            <p className="text-base text-muted-foreground">
+              Tudo o que você precisa para ter controle, velocidade e previsibilidade na gestão.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {benefits.map((benefit) => (
+              <Card key={benefit.title} className="border-border/80 bg-card/70">
+                <CardContent className="space-y-4 p-6">
+                  <div className={`inline-flex h-11 w-11 items-center justify-center rounded-md ${benefitToneClasses[benefit.tone]}`}>
+                    <benefit.icon className="h-5 w-5" />
                   </div>
-                  <h3 className="font-semibold text-lg">{b.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{b.description}</p>
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-semibold text-foreground">{benefit.title}</h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{benefit.description}</p>
+                  </div>
                 </CardContent>
               </Card>
             ))}
           </div>
         </section>
 
-        {/* Pricing */}
-        <section className="space-y-8">
-          <div className="text-center space-y-2">
-            <h2 className="text-2xl font-bold">Escolha o plano ideal para você</h2>
-            <p className="text-muted-foreground">Todos os planos incluem acesso completo a todas as funcionalidades</p>
-          </div>
-
-          {/* Trust signals row */}
-          <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <ShieldCheck className="h-4 w-4 text-emerald-500" />
-              <span>Pagamento 100% seguro</span>
+        <section className="mx-auto w-full max-w-4xl rounded-lg border border-border/80 bg-muted/30 p-6 md:p-8">
+          <div className="space-y-5">
+            <div className="space-y-2 text-center">
+              <h3 className="text-2xl font-semibold text-foreground">Incluído em qualquer plano</h3>
+              <p className="text-sm text-muted-foreground">Você não perde funcionalidade escolhendo mensal ou anual. A diferença é só o melhor custo total.</p>
             </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <XCircle className="h-4 w-4 text-emerald-500" />
-              <span>Cancele quando quiser</span>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Zap className="h-4 w-4 text-emerald-500" />
-              <span>Acesso imediato</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {plans.map((plan) => {
-              const isSelected = selectedPlan === plan.id;
-              const isBest = plan.best;
-              const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === plan.priceId;
-
-              return (
-                <div key={plan.id} className="flex flex-col">
-                  {isCurrentPlan ? (
-                    <div className="flex justify-center mb-0">
-                      <Badge className="rounded-b-none rounded-t-xl border-0 bg-success px-3 py-1 text-xs font-semibold text-success-foreground shadow-md">
-                        <Crown className="h-3 w-3 mr-1" />
-                        Seu Plano Atual
-                      </Badge>
-                    </div>
-                  ) : isBest ? (
-                    <div className="flex justify-center mb-0">
-                      <Badge className="rounded-b-none rounded-t-xl border-0 bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground shadow-md">
-                        Melhor Valor
-                      </Badge>
-                    </div>
-                  ) : (
-                    <div className="h-6" />
-                  )}
-                  <div
-                    onClick={() => setSelectedPlan(plan.id)}
-                    className={`relative rounded-2xl p-[1px] cursor-pointer transition-all duration-200 flex-1 ${
-                      isCurrentPlan
-                        ? "bg-success shadow-xl shadow-success/20 rounded-t-none"
-                        : isBest
-                          ? "bg-primary shadow-xl shadow-primary/20 rounded-t-none"
-                          : isSelected
-                            ? "bg-primary/40"
-                            : "bg-border"
-                    }`}
-                  >
-                    <div className="rounded-[15px] bg-card/80 backdrop-blur-xl p-6 h-full flex flex-col">
-                      <p className="font-semibold text-lg">{plan.label}</p>
-                      <div className="mt-4 mb-1">
-                        <span className="text-4xl font-extrabold">R$ {plan.perMonth}</span>
-                        <span className="text-muted-foreground text-sm">{plan.period}</span>
-                      </div>
-
-                      {plan.discount && (
-                          <span className="mb-2 inline-flex items-center self-start rounded-full bg-success/10 px-2 py-0.5 text-xs font-semibold text-success">
-                          {plan.discount}
-                        </span>
-                      )}
-
-                      {plan.total !== plan.perMonth && (
-                        <p className="text-xs text-muted-foreground mb-1">
-                          Total: R$ {plan.total}
-                        </p>
-                      )}
-
-                      {plan.savings && (
-                        <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
-                          {plan.savings}
-                        </p>
-                      )}
-
-                      {!plan.discount && !plan.savings && <div className="mb-4" />}
-                      {plan.discount && !plan.savings && <div className="mb-2" />}
-
-                      {isCurrentPlan ? (
-                        <Button
-                          className="w-full mt-auto"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenPortal();
-                          }}
-                          disabled={portalLoading}
-                        >
-                          {portalLoading ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                          )}
-                          Gerenciar Assinatura
-                        </Button>
-                      ) : (
-                        <Button
-                          className="mt-auto w-full"
-                          variant={isBest ? "default" : "outline"}
-                          disabled={loadingPlan === plan.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSubscribe(plan.id, plan.label);
-                          }}
-                        >
-                          {loadingPlan === plan.id ? (
-                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                          ) : (
-                            <Sparkles className="h-4 w-4 mr-1" />
-                          )}
-                          {loadingPlan === plan.id
-                            ? "Aguarde..."
-                            : isActiveSubscriber
-                              ? "Trocar Plano"
-                              : `Assinar — R$ ${plan.perMonth}/mês`}
-                        </Button>
-                      )}
-                      {!isCurrentPlan && (
-                        <p className="text-[11px] text-center text-muted-foreground mt-2">
-                          Sem fidelidade · Cancele em 1 clique
-                        </p>
-                      )}
-                    </div>
-                  </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {includedItems.map((item) => (
+                <div key={item} className="flex items-start gap-2 rounded-md border border-border/60 bg-background/60 p-4 text-sm text-foreground">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                  <span>{item}</span>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* Feature list */}
-        <section className="max-w-2xl mx-auto bg-muted/30 rounded-2xl p-8 space-y-4">
-          <h3 className="text-lg font-semibold text-center">Incluso em todos os planos</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
-            {allFeatures.map((f) => (
-              <div key={f} className="flex items-center gap-2 text-sm text-muted-foreground py-1">
-                <Check className="h-4 w-4 text-success shrink-0" />
-                <span>{f}</span>
+        <section className="mx-auto w-full max-w-3xl">
+          <Card className="border-success/30 bg-success/5">
+            <CardContent className="space-y-4 p-8 text-center">
+              <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
+                <ShieldCheck className="h-6 w-6 text-success" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-semibold text-foreground">Risco quase zero para começar</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  Você entra com acesso imediato, sem contrato e com liberdade para cancelar quando quiser. Se não fizer sentido, seus dados continuam salvos.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-3 text-sm text-foreground">
+                {riskItems.map((item) => (
+                  <div key={item} className="inline-flex items-center gap-2 rounded-full border border-success/20 bg-background/80 px-3 py-2">
+                    <Check className="h-4 w-4 text-success" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section className="mx-auto w-full max-w-3xl space-y-4">
+          <h3 className="text-center text-2xl font-semibold text-foreground">Perguntas frequentes</h3>
+          <div className="space-y-3">
+            {faqItems.map((item) => (
+              <div key={item.q} className="rounded-md border border-border/70 bg-card/70 p-5">
+                <p className="text-sm font-semibold text-foreground">{item.q}</p>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.a}</p>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Garantia */}
-        <section className="max-w-2xl mx-auto">
-          <div className="space-y-2 rounded-2xl border-2 border-success/30 bg-success/5 p-6 text-center">
-            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-              <ShieldCheck className="h-6 w-6 text-success" />
-            </div>
-            <h3 className="text-lg font-bold">Garantia de 7 dias</h3>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Não gostou? Cancele em até 7 dias e não cobramos nada. Sem perguntas, sem burocracia.
+        <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-2 text-center">
+          <div className="space-y-1">
+            <p className="text-lg font-semibold text-foreground">
+              {isActiveSubscriber ? "Precisa ajustar sua assinatura?" : "Pronto para decidir com clareza total?"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {isActiveSubscriber
+                ? "Gerencie cobrança, forma de pagamento e plano atual em poucos cliques."
+                : "Escolha uma das duas opções e comece agora, sem dúvida e sem confusão."}
             </p>
           </div>
-        </section>
 
-        {/* FAQ */}
-        <section className="max-w-2xl mx-auto space-y-4">
-          <h3 className="text-lg font-semibold text-center">Perguntas Frequentes</h3>
-          <div className="space-y-3">
-            {[
-              {
-                q: "Posso cancelar a qualquer momento?",
-                a: "Sim. Você pode cancelar sua assinatura quando quiser, sem multas ou burocracia. O acesso continua até o fim do período já pago.",
-              },
-              {
-                q: "Há período de teste gratuito?",
-                a: "Oferecemos 7 dias de avaliação gratuita com acesso completo a todas as funcionalidades. Após o período, escolha um dos planos pagos para continuar usando.",
-              },
-              {
-                q: "Quais formas de pagamento são aceitas?",
-                a: "Aceitamos cartões de crédito (Visa, Mastercard, Elo, American Express), Pix e boleto bancário.",
-              },
-              {
-                q: "Posso mudar de plano depois?",
-                a: "Sim. Você pode fazer upgrade ou downgrade do seu plano a qualquer momento. O valor é ajustado proporcionalmente.",
-              },
-              {
-                q: "Os dados da minha empresa ficam seguros?",
-                a: "Absolutamente. Todos os dados são armazenados com criptografia e backups automáticos. Você é o único proprietário das suas informações.",
-              },
-            ].map((item) => (
-              <div key={item.q} className="bg-muted/30 rounded-xl p-5 space-y-2">
-                <p className="font-semibold text-sm">{item.q}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Final CTA */}
-        <section className="text-center space-y-4 py-8">
-          <p className="text-muted-foreground text-base">
-            {isActiveSubscriber ? "Precisa de ajuda com sua assinatura?" : "Pronto para transformar sua gestão rural?"}
-          </p>
           {isActiveSubscriber ? (
-            <Button
-              size="lg"
-              variant="outline"
-              className="px-10 text-base"
-              onClick={handleOpenPortal}
-              disabled={portalLoading}
-            >
-              {portalLoading ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <ExternalLink className="h-5 w-5 mr-2" />}
-              Abrir Portal de Gerenciamento
+            <Button size="lg" variant="outline" onClick={handleOpenPortal} disabled={portalLoading}>
+              {portalLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
+              Gerenciar assinatura
             </Button>
           ) : (
-            <Button size="lg" className="px-10 text-base" onClick={() => handleSubscribe("anual", "Anual")}>
-              <Sparkles className="h-5 w-5 mr-2" />
-              Começar Agora com Melhor Valor
+            <Button size="lg" onClick={() => handleSubscribe(selectedPlan)} disabled={loadingPlan === selectedPlan}>
+              {loadingPlan === selectedPlan ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
+              {selectedPlan === "anual" ? "Começar com desconto" : "Começar agora"}
             </Button>
           )}
+
+          <p className="text-xs text-muted-foreground">Cancele quando quiser · Sem contrato · Acesso imediato</p>
         </section>
       </div>
     </div>

@@ -25,9 +25,7 @@ const corsHeaders = {
 
 const PRICE_IDS: Record<string, string> = {
   mensal:      "price_1T2DaxK3j5PLJZVV2QghyqC5",
-  trimestral:  "price_1T2DbOK3j5PLJZVV2o5aMbqN",
-  semestral:   "price_1T2DbfK3j5PLJZVV9qD9q5F6",
-  anual:       "price_1T2DbzK3j5PLJZVVbM9rKysr",
+  anual:       "price_1TPMGBK3j5PLJZVVFGcr8tdf",
 };
 
 serve(async (req) => {

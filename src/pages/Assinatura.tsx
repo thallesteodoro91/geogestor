@@ -85,7 +85,21 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-const plans = [
+type Plan = {
+  id: "mensal" | "anual";
+  label: string;
+  headline: string;
+  description: string;
+  kicker: string;
+  secondary: string;
+  savings?: string;
+  cta: string;
+  priceId: string;
+  best?: boolean;
+  features: readonly string[];
+};
+
+const plans: readonly Plan[] = [
   {
     id: "mensal",
     label: "Plano Mensal",
@@ -151,7 +165,7 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPlan, setSelectedPlan] = useState<(typeof plans)[number]["id"]>("anual");
+  const [selectedPlan, setSelectedPlan] = useState<Plan["id"]>("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();
@@ -338,10 +352,16 @@ export default function Assinatura() {
                     Para alterar pagamento, trocar plano ou cancelar, use o portal de gerenciamento.
                   </p>
                 </div>
-                <Button onClick={handleOpenPortal} disabled={portalLoading} className="shrink-0">
-                  {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                  Gerenciar assinatura
-                </Button>
+                <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                  <Button variant="outline" onClick={() => navigate("/faturas")}>
+                    <FileText className="h-4 w-4" />
+                    Ver faturas
+                  </Button>
+                  <Button onClick={handleOpenPortal} disabled={portalLoading}>
+                    {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                    Gerenciar assinatura
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </section>

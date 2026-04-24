@@ -169,7 +169,7 @@ export default function Faturas() {
 
         <PageHeader
           title="Faturas e pagamentos"
-          description="Acompanhe o histórico completo das suas cobranças, baixe recibos e visualize o status de cada fatura."
+          subtitle="Acompanhe o histórico completo das suas cobranças, baixe recibos e visualize o status de cada fatura."
         />
 
         {/* Resumo */}

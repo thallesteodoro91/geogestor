@@ -197,6 +197,16 @@ export default function Faturas() {
     .filter((inv) => inv.status === "paid")
     .reduce((sum, inv) => sum + inv.amount_paid, 0);
 
+  const topOpenInvoiceId = useMemo(() => {
+    const openInvoices = filteredInvoices.filter(
+      (inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void",
+    );
+    if (openInvoices.length === 0) return null;
+    return openInvoices.reduce((top, inv) =>
+      inv.amount_remaining > top.amount_remaining ? inv : top,
+    ).id;
+  }, [filteredInvoices]);
+
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
         day: "2-digit",

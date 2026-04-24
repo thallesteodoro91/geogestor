@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   ArrowLeft,
   Download,
   ExternalLink,
@@ -24,6 +25,9 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface Invoice {
   id: string;
@@ -192,6 +196,16 @@ export default function Faturas() {
   const totalPago = invoices
     .filter((inv) => inv.status === "paid")
     .reduce((sum, inv) => sum + inv.amount_paid, 0);
+
+  const topOpenInvoiceId = useMemo(() => {
+    const openInvoices = filteredInvoices.filter(
+      (inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void",
+    );
+    if (openInvoices.length === 0) return null;
+    return openInvoices.reduce((top, inv) =>
+      inv.amount_remaining > top.amount_remaining ? inv : top,
+    ).id;
+  }, [filteredInvoices]);
 
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
@@ -382,79 +396,114 @@ export default function Faturas() {
                 />
               </div>
             ) : (
-              <ul className="divide-y divide-border">
-                {filteredInvoices.map((inv) => {
-                  const status = inv.status ?? "draft";
-                  const cfg = statusConfig[status];
-                  return (
-                    <li key={inv.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex min-w-0 flex-1 items-start gap-4">
-                        <div className="rounded-lg bg-muted p-2 text-muted-foreground">
-                          <FileText className="h-5 w-5" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="font-medium text-foreground">
-                              {inv.number ?? `Fatura ${inv.id.slice(-8)}`}
-                            </p>
-                            <Badge variant={cfg.variant} className={cfg.className}>
-                              {cfg.label}
-                            </Badge>
-                          </div>
-                          <p className="mt-0.5 text-sm text-muted-foreground">
-                            {inv.description ?? (inv.interval === "year" ? "Plano Anual" : inv.interval === "month" ? "Plano Mensal" : "Cobrança recorrente")}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Emitida em {formatDate(inv.created)}
-                            {inv.period_start && inv.period_end ? (
-                              <> · Período {formatDate(inv.period_start)} – {formatDate(inv.period_end)}</>
-                            ) : null}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-4 sm:gap-6">
-                        <div className="text-right">
-                          <p className="text-base font-semibold text-foreground">
-                            {formatCurrency(inv.total, inv.currency)}
-                          </p>
-                          {!inv.paid && inv.amount_remaining > 0 && (
-                            <p className="text-xs text-warning">
-                              {formatCurrency(inv.amount_remaining, inv.currency)} em aberto
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex gap-1">
-                          {inv.invoice_pdf && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              asChild
-                              title="Baixar PDF"
-                            >
-                              <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer">
-                                <Download className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
-                          {inv.hosted_invoice_url && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              asChild
-                              title="Abrir fatura"
-                            >
-                              <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+              <TooltipProvider delayDuration={200}>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="min-w-[220px]">Fatura</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Emissão</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Valor pago</TableHead>
+                        <TableHead className="text-right">Valor em aberto</TableHead>
+                        <TableHead className="w-[100px] text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredInvoices.map((inv) => {
+                        const status = inv.status ?? "draft";
+                        const cfg = statusConfig[status];
+                        const isHighlighted = inv.id === topOpenInvoiceId;
+                        const hasOpenAmount = !inv.paid && inv.amount_remaining > 0;
+                        return (
+                          <TableRow
+                            key={inv.id}
+                            className={cn(
+                              isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
+                            )}
+                          >
+                            <TableCell>
+                              <div className="flex items-start gap-3">
+                                <div className="rounded-md bg-muted p-1.5 text-muted-foreground">
+                                  <FileText className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="font-medium text-foreground">
+                                    {inv.number ?? `Fatura ${inv.id.slice(-8)}`}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {inv.description ?? (inv.interval === "year" ? "Plano Anual" : inv.interval === "month" ? "Plano Mensal" : "Cobrança recorrente")}
+                                  </p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1.5">
+                                <Badge variant={cfg.variant} className={cfg.className}>
+                                  {cfg.label}
+                                </Badge>
+                                {isHighlighted && (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <AlertCircle className="h-3.5 w-3.5 text-warning" />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      Maior fatura em aberto — priorize o pagamento
+                                    </TooltipContent>
+                                  </Tooltip>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                              {formatDate(inv.created)}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold whitespace-nowrap">
+                              {formatCurrency(inv.total, inv.currency)}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              {inv.amount_paid > 0 ? (
+                                <span className="text-success font-medium">
+                                  {formatCurrency(inv.amount_paid, inv.currency)}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                              {hasOpenAmount ? (
+                                <span className={cn("font-medium", isHighlighted ? "text-warning font-semibold" : "text-warning")}>
+                                  {formatCurrency(inv.amount_remaining, inv.currency)}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex justify-end gap-1">
+                                {inv.invoice_pdf && (
+                                  <Button variant="ghost" size="icon" asChild title="Baixar PDF">
+                                    <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer">
+                                      <Download className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                )}
+                                {inv.hosted_invoice_url && (
+                                  <Button variant="ghost" size="icon" asChild title="Abrir fatura">
+                                    <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TooltipProvider>
             )}
           </CardContent>
         </Card>

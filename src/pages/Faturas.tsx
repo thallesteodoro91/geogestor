@@ -79,9 +79,10 @@ export default function Faturas() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("date_desc");
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
+    const filtered = invoices.filter((inv) => {
       if (statusFilter !== "all") {
         if (statusFilter === "paid" && inv.status !== "paid") return false;
         if (statusFilter === "open" && inv.status !== "open") return false;
@@ -97,7 +98,25 @@ export default function Faturas() {
       }
       return true;
     });
-  }, [invoices, statusFilter, dataInicio, dataFim]);
+
+    const sorted = [...filtered];
+    switch (sortBy) {
+      case "date_asc":
+        sorted.sort((a, b) => a.created - b.created);
+        break;
+      case "amount_desc":
+        sorted.sort((a, b) => b.total - a.total);
+        break;
+      case "amount_asc":
+        sorted.sort((a, b) => a.total - b.total);
+        break;
+      case "date_desc":
+      default:
+        sorted.sort((a, b) => b.created - a.created);
+        break;
+    }
+    return sorted;
+  }, [invoices, statusFilter, dataInicio, dataFim, sortBy]);
 
   const activeFilters =
     (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);
@@ -259,7 +278,7 @@ export default function Faturas() {
         {/* Filtros */}
         <Card>
           <CardContent className="p-4">
-            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:items-end">
               <div className="space-y-1.5">
                 <Label htmlFor="filtro-status" className="text-xs">Status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -293,6 +312,20 @@ export default function Faturas() {
                   onChange={(e) => setDataFim(e.target.value)}
                   className="h-9"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-ordem" className="text-xs">Ordenar por</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger id="filtro-ordem" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date_desc">Data (mais recentes)</SelectItem>
+                    <SelectItem value="date_asc">Data (mais antigas)</SelectItem>
+                    <SelectItem value="amount_desc">Valor (maior)</SelectItem>
+                    <SelectItem value="amount_asc">Valor (menor)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {activeFilters > 0 && (
                 <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1.5 h-9">

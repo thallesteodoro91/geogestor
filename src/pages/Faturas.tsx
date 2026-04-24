@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -72,6 +76,37 @@ export default function Faturas() {
   const [refreshing, setRefreshing] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dataInicio, setDataInicio] = useState<string>("");
+  const [dataFim, setDataFim] = useState<string>("");
+
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      if (statusFilter !== "all") {
+        if (statusFilter === "paid" && inv.status !== "paid") return false;
+        if (statusFilter === "open" && inv.status !== "open") return false;
+        if (statusFilter === "void" && inv.status !== "void") return false;
+      }
+      if (dataInicio) {
+        const inicioTs = new Date(dataInicio + "T00:00:00").getTime() / 1000;
+        if (inv.created < inicioTs) return false;
+      }
+      if (dataFim) {
+        const fimTs = new Date(dataFim + "T23:59:59").getTime() / 1000;
+        if (inv.created > fimTs) return false;
+      }
+      return true;
+    });
+  }, [invoices, statusFilter, dataInicio, dataFim]);
+
+  const activeFilters =
+    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);
+
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setDataInicio("");
+    setDataFim("");
+  };
 
   const loadInvoices = async () => {
     setError(null);
@@ -221,6 +256,59 @@ export default function Faturas() {
           </Card>
         </div>
 
+        {/* Filtros */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-status" className="text-xs">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="filtro-status" className="h-9">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                    <SelectItem value="open">Aberto</SelectItem>
+                    <SelectItem value="void">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-inicio" className="text-xs">Data início</Label>
+                <Input
+                  id="filtro-inicio"
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-fim" className="text-xs">Data fim</Label>
+                <Input
+                  id="filtro-fim"
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              {activeFilters > 0 && (
+                <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1.5 h-9">
+                  <X className="h-3.5 w-3.5" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+            {activeFilters > 0 && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Mostrando {filteredInvoices.length} de {invoices.length} faturas
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Lista */}
         <Card>
           <CardContent className="p-0">
@@ -250,9 +338,19 @@ export default function Faturas() {
                   onAction={() => navigate("/assinatura")}
                 />
               </div>
+            ) : filteredInvoices.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  icon={Receipt}
+                  title="Nenhuma fatura para os filtros aplicados"
+                  description="Tente ajustar o status ou o intervalo de datas."
+                  actionLabel="Limpar filtros"
+                  onAction={clearFilters}
+                />
+              </div>
             ) : (
               <ul className="divide-y divide-border">
-                {invoices.map((inv) => {
+                {filteredInvoices.map((inv) => {
                   const status = inv.status ?? "draft";
                   const cfg = statusConfig[status];
                   return (

@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 import { toast } from "sonner";
 import {
+  AlertCircle,
   ArrowLeft,
   Download,
   ExternalLink,
@@ -24,6 +25,9 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 interface Invoice {
   id: string;

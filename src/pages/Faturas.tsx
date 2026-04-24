@@ -278,7 +278,7 @@ export default function Faturas() {
         {/* Filtros */}
         <Card>
           <CardContent className="p-4">
-            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] sm:items-end">
               <div className="space-y-1.5">
                 <Label htmlFor="filtro-status" className="text-xs">Status</Label>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -312,6 +312,20 @@ export default function Faturas() {
                   onChange={(e) => setDataFim(e.target.value)}
                   className="h-9"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-ordem" className="text-xs">Ordenar por</Label>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger id="filtro-ordem" className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date_desc">Data (mais recentes)</SelectItem>
+                    <SelectItem value="date_asc">Data (mais antigas)</SelectItem>
+                    <SelectItem value="amount_desc">Valor (maior)</SelectItem>
+                    <SelectItem value="amount_asc">Valor (menor)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               {activeFilters > 0 && (
                 <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1.5 h-9">

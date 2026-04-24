@@ -107,6 +107,8 @@ export default function Faturas() {
     setDataInicio("");
     setDataFim("");
   };
+
+  const loadInvoices = async () => {
     setError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();

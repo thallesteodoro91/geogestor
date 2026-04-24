@@ -236,7 +236,8 @@ export default function Faturas() {
                   icon={Receipt}
                   title="Não foi possível carregar as faturas"
                   description={error}
-                  action={{ label: "Tentar novamente", onClick: handleRefresh }}
+                  actionLabel="Tentar novamente"
+                  onAction={handleRefresh}
                 />
               </div>
             ) : invoices.length === 0 ? (
@@ -245,7 +246,8 @@ export default function Faturas() {
                   icon={Receipt}
                   title="Nenhuma fatura encontrada"
                   description="Quando você assinar um plano, suas faturas aparecerão aqui automaticamente."
-                  action={{ label: "Ver planos", onClick: () => navigate("/assinatura") }}
+                  actionLabel="Ver planos"
+                  onAction={() => navigate("/assinatura")}
                 />
               </div>
             ) : (

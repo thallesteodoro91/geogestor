@@ -256,6 +256,59 @@ export default function Faturas() {
           </Card>
         </div>
 
+        {/* Filtros */}
+        <Card>
+          <CardContent className="p-4">
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-status" className="text-xs">Status</Label>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger id="filtro-status" className="h-9">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="paid">Pago</SelectItem>
+                    <SelectItem value="open">Aberto</SelectItem>
+                    <SelectItem value="void">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-inicio" className="text-xs">Data início</Label>
+                <Input
+                  id="filtro-inicio"
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="filtro-fim" className="text-xs">Data fim</Label>
+                <Input
+                  id="filtro-fim"
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              {activeFilters > 0 && (
+                <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1.5 h-9">
+                  <X className="h-3.5 w-3.5" />
+                  Limpar
+                </Button>
+              )}
+            </div>
+            {activeFilters > 0 && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Mostrando {filteredInvoices.length} de {invoices.length} faturas
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Lista */}
         <Card>
           <CardContent className="p-0">

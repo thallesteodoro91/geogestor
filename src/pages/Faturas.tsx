@@ -338,9 +338,21 @@ export default function Faturas() {
                   onAction={() => navigate("/assinatura")}
                 />
               </div>
+            ) : filteredInvoices.length === 0 ? (
+              <div className="p-6">
+                <EmptyState
+                  icon={Receipt}
+                  title="Nenhuma fatura para os filtros aplicados"
+                  description="Tente ajustar o status ou o intervalo de datas."
+                  actionLabel="Limpar filtros"
+                  onAction={clearFilters}
+                />
+              </div>
             ) : (
               <ul className="divide-y divide-border">
-                {invoices.map((inv) => {
+                {filteredInvoices.map((inv) => {
+                  const status = inv.status ?? "draft";
+                  const cfg = statusConfig[status];
                   const status = inv.status ?? "draft";
                   const cfg = statusConfig[status];
                   return (

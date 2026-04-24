@@ -79,9 +79,10 @@ export default function Faturas() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
+  const [sortBy, setSortBy] = useState<string>("date_desc");
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
+    const filtered = invoices.filter((inv) => {
       if (statusFilter !== "all") {
         if (statusFilter === "paid" && inv.status !== "paid") return false;
         if (statusFilter === "open" && inv.status !== "open") return false;
@@ -97,7 +98,25 @@ export default function Faturas() {
       }
       return true;
     });
-  }, [invoices, statusFilter, dataInicio, dataFim]);
+
+    const sorted = [...filtered];
+    switch (sortBy) {
+      case "date_asc":
+        sorted.sort((a, b) => a.created - b.created);
+        break;
+      case "amount_desc":
+        sorted.sort((a, b) => b.total - a.total);
+        break;
+      case "amount_asc":
+        sorted.sort((a, b) => a.total - b.total);
+        break;
+      case "date_desc":
+      default:
+        sorted.sort((a, b) => b.created - a.created);
+        break;
+    }
+    return sorted;
+  }, [invoices, statusFilter, dataInicio, dataFim, sortBy]);
 
   const activeFilters =
     (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);

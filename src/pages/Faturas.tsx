@@ -76,8 +76,37 @@ export default function Faturas() {
   const [refreshing, setRefreshing] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dataInicio, setDataInicio] = useState<string>("");
+  const [dataFim, setDataFim] = useState<string>("");
 
-  const loadInvoices = async () => {
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      if (statusFilter !== "all") {
+        if (statusFilter === "paid" && inv.status !== "paid") return false;
+        if (statusFilter === "open" && inv.status !== "open") return false;
+        if (statusFilter === "void" && inv.status !== "void") return false;
+      }
+      if (dataInicio) {
+        const inicioTs = new Date(dataInicio + "T00:00:00").getTime() / 1000;
+        if (inv.created < inicioTs) return false;
+      }
+      if (dataFim) {
+        const fimTs = new Date(dataFim + "T23:59:59").getTime() / 1000;
+        if (inv.created > fimTs) return false;
+      }
+      return true;
+    });
+  }, [invoices, statusFilter, dataInicio, dataFim]);
+
+  const activeFilters =
+    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);
+
+  const clearFilters = () => {
+    setStatusFilter("all");
+    setDataInicio("");
+    setDataFim("");
+  };
     setError(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();

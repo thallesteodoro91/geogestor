@@ -353,8 +353,6 @@ export default function Faturas() {
                 {filteredInvoices.map((inv) => {
                   const status = inv.status ?? "draft";
                   const cfg = statusConfig[status];
-                  const status = inv.status ?? "draft";
-                  const cfg = statusConfig[status];
                   return (
                     <li key={inv.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex min-w-0 flex-1 items-start gap-4">

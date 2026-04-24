@@ -85,7 +85,21 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-const plans = [
+type Plan = {
+  id: "mensal" | "anual";
+  label: string;
+  headline: string;
+  description: string;
+  kicker: string;
+  secondary: string;
+  savings?: string;
+  cta: string;
+  priceId: string;
+  best?: boolean;
+  features: readonly string[];
+};
+
+const plans: readonly Plan[] = [
   {
     id: "mensal",
     label: "Plano Mensal",

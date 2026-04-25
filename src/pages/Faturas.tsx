@@ -112,6 +112,15 @@ export default function Faturas() {
     toast.success(valor > 0 ? "Limite salvo" : "Limite desativado");
   };
 
+  const redefinirLimite = () => {
+    setLimiteEmAberto(0);
+    setLimiteInput("");
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("faturas:limiteEmAberto");
+    }
+    toast.success("Limite redefinido");
+  };
+
   const filteredInvoices = useMemo(() => {
     const filtered = invoices.filter((inv) => {
       if (apenasEmAberto) {
@@ -464,9 +473,14 @@ export default function Faturas() {
                                 className="h-9"
                               />
                             </div>
-                            <Button size="sm" onClick={salvarLimite} className="w-full">
-                              Salvar
-                            </Button>
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={salvarLimite} className="flex-1">
+                                Salvar
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={redefinirLimite} className="flex-1">
+                                Redefinir
+                              </Button>
+                            </div>
                           </div>
                         </PopoverContent>
                       </Popover>

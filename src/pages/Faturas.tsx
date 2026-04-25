@@ -212,6 +212,18 @@ export default function Faturas() {
     ).id;
   }, [filteredInvoices]);
 
+  const filteredSummary = useMemo(() => {
+    const openInvoices = filteredInvoices.filter(
+      (inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void",
+    );
+    return {
+      totalPago: filteredInvoices.reduce((sum, inv) => sum + inv.amount_paid, 0),
+      totalEmAberto: openInvoices.reduce((sum, inv) => sum + inv.amount_remaining, 0),
+      quantidadeEmAberto: openInvoices.length,
+      currency: filteredInvoices[0]?.currency ?? invoices[0]?.currency ?? "brl",
+    };
+  }, [filteredInvoices, invoices]);
+
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
         day: "2-digit",

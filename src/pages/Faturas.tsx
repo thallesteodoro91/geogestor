@@ -84,9 +84,13 @@ export default function Faturas() {
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date_desc");
+  const [apenasEmAberto, setApenasEmAberto] = useState<boolean>(false);
 
   const filteredInvoices = useMemo(() => {
     const filtered = invoices.filter((inv) => {
+      if (apenasEmAberto) {
+        if (inv.paid || inv.amount_remaining <= 0 || inv.status === "void") return false;
+      }
       if (statusFilter !== "all") {
         if (statusFilter === "paid" && inv.status !== "paid") return false;
         if (statusFilter === "open" && inv.status !== "open") return false;
@@ -120,15 +124,16 @@ export default function Faturas() {
         break;
     }
     return sorted;
-  }, [invoices, statusFilter, dataInicio, dataFim, sortBy]);
+  }, [invoices, statusFilter, dataInicio, dataFim, sortBy, apenasEmAberto]);
 
   const activeFilters =
-    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);
+    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0) + (apenasEmAberto ? 1 : 0);
 
   const clearFilters = () => {
     setStatusFilter("all");
     setDataInicio("");
     setDataFim("");
+    setApenasEmAberto(false);
   };
 
   const loadInvoices = async () => {
@@ -347,6 +352,18 @@ export default function Faturas() {
                   Limpar
                 </Button>
               )}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={apenasEmAberto ? "default" : "outline"}
+                size="sm"
+                onClick={() => setApenasEmAberto((v) => !v)}
+                className="gap-1.5 h-8"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                Apenas em aberto
+              </Button>
             </div>
             {activeFilters > 0 && (
               <p className="mt-3 text-xs text-muted-foreground">

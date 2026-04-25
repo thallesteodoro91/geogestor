@@ -353,6 +353,18 @@ export default function Faturas() {
                 </Button>
               )}
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant={apenasEmAberto ? "default" : "outline"}
+                size="sm"
+                onClick={() => setApenasEmAberto((v) => !v)}
+                className="gap-1.5 h-8"
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                Apenas em aberto
+              </Button>
+            </div>
             {activeFilters > 0 && (
               <p className="mt-3 text-xs text-muted-foreground">
                 Mostrando {filteredInvoices.length} de {invoices.length} faturas

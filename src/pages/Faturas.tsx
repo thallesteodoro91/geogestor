@@ -124,15 +124,16 @@ export default function Faturas() {
         break;
     }
     return sorted;
-  }, [invoices, statusFilter, dataInicio, dataFim, sortBy]);
+  }, [invoices, statusFilter, dataInicio, dataFim, sortBy, apenasEmAberto]);
 
   const activeFilters =
-    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0);
+    (statusFilter !== "all" ? 1 : 0) + (dataInicio ? 1 : 0) + (dataFim ? 1 : 0) + (apenasEmAberto ? 1 : 0);
 
   const clearFilters = () => {
     setStatusFilter("all");
     setDataInicio("");
     setDataFim("");
+    setApenasEmAberto(false);
   };
 
   const loadInvoices = async () => {

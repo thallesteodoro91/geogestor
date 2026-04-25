@@ -84,9 +84,13 @@ export default function Faturas() {
   const [dataInicio, setDataInicio] = useState<string>("");
   const [dataFim, setDataFim] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date_desc");
+  const [apenasEmAberto, setApenasEmAberto] = useState<boolean>(false);
 
   const filteredInvoices = useMemo(() => {
     const filtered = invoices.filter((inv) => {
+      if (apenasEmAberto) {
+        if (inv.paid || inv.amount_remaining <= 0 || inv.status === "void") return false;
+      }
       if (statusFilter !== "all") {
         if (statusFilter === "paid" && inv.status !== "paid") return false;
         if (statusFilter === "open" && inv.status !== "open") return false;

@@ -385,6 +385,36 @@ export default function Faturas() {
           </CardContent>
         </Card>
 
+        {/* Resumo filtrado */}
+        {!loading && !error && filteredInvoices.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total pago {activeFilters > 0 ? "(filtrado)" : ""}</p>
+                <p className="mt-1 text-xl font-semibold text-success">
+                  {formatCurrency(filteredSummary.totalPago, filteredSummary.currency)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}</p>
+                <p className="mt-1 text-xl font-semibold text-warning">
+                  {formatCurrency(filteredSummary.totalEmAberto, filteredSummary.currency)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Faturas em aberto</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {filteredSummary.quantidadeEmAberto}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Lista */}
         <Card>
           <CardContent className="p-0">

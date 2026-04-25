@@ -212,6 +212,18 @@ export default function Faturas() {
     ).id;
   }, [filteredInvoices]);
 
+  const filteredSummary = useMemo(() => {
+    const openInvoices = filteredInvoices.filter(
+      (inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void",
+    );
+    return {
+      totalPago: filteredInvoices.reduce((sum, inv) => sum + inv.amount_paid, 0),
+      totalEmAberto: openInvoices.reduce((sum, inv) => sum + inv.amount_remaining, 0),
+      quantidadeEmAberto: openInvoices.length,
+      currency: filteredInvoices[0]?.currency ?? invoices[0]?.currency ?? "brl",
+    };
+  }, [filteredInvoices, invoices]);
+
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
         day: "2-digit",
@@ -372,6 +384,36 @@ export default function Faturas() {
             )}
           </CardContent>
         </Card>
+
+        {/* Resumo filtrado */}
+        {!loading && !error && filteredInvoices.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total pago {activeFilters > 0 ? "(filtrado)" : ""}</p>
+                <p className="mt-1 text-xl font-semibold text-success">
+                  {formatCurrency(filteredSummary.totalPago, filteredSummary.currency)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}</p>
+                <p className="mt-1 text-xl font-semibold text-warning">
+                  {formatCurrency(filteredSummary.totalEmAberto, filteredSummary.currency)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Faturas em aberto</p>
+                <p className="mt-1 text-xl font-semibold text-foreground">
+                  {filteredSummary.quantidadeEmAberto}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Lista */}
         <Card>

@@ -87,6 +87,30 @@ export default function Faturas() {
   const [dataFim, setDataFim] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date_desc");
   const [apenasEmAberto, setApenasEmAberto] = useState<boolean>(false);
+  const [limiteEmAberto, setLimiteEmAberto] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const stored = window.localStorage.getItem("faturas:limiteEmAberto");
+    const parsed = stored ? Number(stored) : 0;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+  });
+  const [limiteInput, setLimiteInput] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    const stored = window.localStorage.getItem("faturas:limiteEmAberto");
+    return stored && Number(stored) > 0 ? stored : "";
+  });
+
+  const salvarLimite = () => {
+    const valor = Number(limiteInput);
+    if (!Number.isFinite(valor) || valor < 0) {
+      toast.error("Informe um valor válido em reais (ex: 500)");
+      return;
+    }
+    setLimiteEmAberto(valor);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("faturas:limiteEmAberto", String(valor));
+    }
+    toast.success(valor > 0 ? "Limite salvo" : "Limite desativado");
+  };
 
   const filteredInvoices = useMemo(() => {
     const filtered = invoices.filter((inv) => {

@@ -16,6 +16,7 @@ import { useStripeSubscription } from "@/hooks/useStripeSubscription";
 import { toast } from "sonner";
 import {
   AlertCircle,
+  AlertTriangle,
   ArrowLeft,
   Download,
   ExternalLink,
@@ -25,6 +26,7 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";

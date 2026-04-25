@@ -422,14 +422,73 @@ export default function Faturas() {
                 </p>
               </CardContent>
             </Card>
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-xs text-muted-foreground">Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}</p>
-                <p className="mt-1 text-xl font-semibold text-warning">
-                  {formatCurrency(filteredSummary.totalEmAberto, filteredSummary.currency)}
-                </p>
-              </CardContent>
-            </Card>
+            {(() => {
+              const limiteMinor = limiteEmAberto * 100;
+              const excedeu = limiteEmAberto > 0 && filteredSummary.totalEmAberto > limiteMinor;
+              return (
+                <Card className={cn(excedeu && "border-destructive bg-destructive/5")}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}
+                      </p>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Configurar limite de alerta"
+                            aria-label="Configurar limite de alerta"
+                          >
+                            <Settings className="h-3.5 w-3.5" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-72">
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-sm font-medium">Limite de alerta</p>
+                              <p className="text-xs text-muted-foreground">
+                                Quando o total em aberto ultrapassar esse valor (R$), o card ficará destacado em vermelho.
+                              </p>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label htmlFor="limite-aberto" className="text-xs">Valor em R$ (0 desativa)</Label>
+                              <Input
+                                id="limite-aberto"
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Ex: 500"
+                                value={limiteInput}
+                                onChange={(e) => setLimiteInput(e.target.value)}
+                                className="h-9"
+                              />
+                            </div>
+                            <Button size="sm" onClick={salvarLimite} className="w-full">
+                              Salvar
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                    <p className={cn("mt-1 text-xl font-semibold", excedeu ? "text-destructive" : "text-warning")}>
+                      {formatCurrency(filteredSummary.totalEmAberto, filteredSummary.currency)}
+                    </p>
+                    {excedeu && (
+                      <p className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Acima do limite de {formatCurrency(limiteMinor, filteredSummary.currency)}
+                      </p>
+                    )}
+                    {!excedeu && limiteEmAberto > 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Limite: {formatCurrency(limiteMinor, filteredSummary.currency)}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs text-muted-foreground">Faturas em aberto</p>

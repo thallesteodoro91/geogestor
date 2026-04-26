@@ -544,6 +544,9 @@ export default function Faturas() {
                                 onChange={(e) => setLimiteInput(e.target.value)}
                                 className="h-9"
                               />
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
+                              </p>
                             </div>
                             <div className="flex gap-2">
                               <Button size="sm" onClick={salvarLimite} className="flex-1">

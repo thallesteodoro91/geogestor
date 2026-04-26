@@ -101,6 +101,13 @@ export default function Faturas() {
     return stored && Number(stored) > 0 ? stored : "";
   });
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
+  const [pulseFlag, setPulseFlag] = useState<{ key: number; mode: "on" | "off" } | null>(null);
+
+  useEffect(() => {
+    if (!pulseFlag) return;
+    const t = setTimeout(() => setPulseFlag(null), 1600);
+    return () => clearTimeout(t);
+  }, [pulseFlag]);
 
   const salvarLimite = () => {
     const valor = Number(limiteInput);
@@ -108,15 +115,18 @@ export default function Faturas() {
       toast.error("Informe um valor válido em reais (ex: 500)");
       return;
     }
+    const anterior = limiteEmAberto;
     setLimiteEmAberto(valor);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:limiteEmAberto", String(valor));
     }
     if (valor > 0) {
+      setPulseFlag({ key: Date.now(), mode: "on" });
       toast.success("Destaque ativado", {
         description: `Faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")} ficarão destacadas em vermelho.`,
       });
     } else {
+      setPulseFlag({ key: Date.now(), mode: anterior > 0 ? "off" : "on" });
       toast.success("Destaque desativado", {
         description: "Nenhuma fatura será destacada em vermelho até você definir um valor maior que 0.",
       });

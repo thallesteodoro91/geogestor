@@ -486,7 +486,33 @@ export default function Faturas() {
                               </span>
                             </div>
                             <div className="space-y-1.5">
-                              <Label htmlFor="limite-aberto" className="text-xs">Valor em R$ (0 desativa)</Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <Label htmlFor="limite-aberto" className="text-xs">Valor em R$ (0 desativa)</Label>
+                                {(() => {
+                                  const parsed = Number(limiteInput);
+                                  const ativo = limiteInput !== "" && Number.isFinite(parsed) && parsed > 0;
+                                  return (
+                                    <Badge
+                                      variant="outline"
+                                      className={cn(
+                                        "h-5 px-1.5 text-[10px] font-medium",
+                                        ativo
+                                          ? "border-success/40 bg-success/10 text-success"
+                                          : "border-muted bg-muted/40 text-muted-foreground"
+                                      )}
+                                    >
+                                      <span
+                                        className={cn(
+                                          "mr-1 h-1.5 w-1.5 rounded-full",
+                                          ativo ? "bg-success" : "bg-muted-foreground/60"
+                                        )}
+                                        aria-hidden="true"
+                                      />
+                                      {ativo ? "Ativo" : "Desativado"}
+                                    </Badge>
+                                  );
+                                })()}
+                              </div>
                               <Input
                                 id="limite-aberto"
                                 type="number"

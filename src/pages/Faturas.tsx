@@ -27,6 +27,7 @@ import {
   Settings,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -98,6 +99,7 @@ export default function Faturas() {
     const stored = window.localStorage.getItem("faturas:limiteEmAberto");
     return stored && Number(stored) > 0 ? stored : "";
   });
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   const salvarLimite = () => {
     const valor = Number(limiteInput);
@@ -477,7 +479,13 @@ export default function Faturas() {
                               <Button size="sm" onClick={salvarLimite} className="flex-1">
                                 Salvar
                               </Button>
-                              <Button size="sm" variant="outline" onClick={redefinirLimite} className="flex-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfirmResetOpen(true)}
+                                disabled={limiteEmAberto === 0 && !limiteInput}
+                                className="flex-1"
+                              >
                                 Redefinir
                               </Button>
                             </div>
@@ -666,6 +674,19 @@ export default function Faturas() {
           </CardContent>
         </Card>
       </div>
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onOpenChange={setConfirmResetOpen}
+        title="Redefinir limite de alerta?"
+        description="O limite de Total em aberto será definido como 0 (alerta desativado) e o valor salvo nas preferências será apagado. Esta ação não pode ser desfeita."
+        confirmLabel="Redefinir"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          redefinirLimite();
+          setConfirmResetOpen(false);
+        }}
+      />
     </AppLayout>
   );
 }

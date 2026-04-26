@@ -479,7 +479,13 @@ export default function Faturas() {
                               <Button size="sm" onClick={salvarLimite} className="flex-1">
                                 Salvar
                               </Button>
-                              <Button size="sm" variant="outline" onClick={redefinirLimite} className="flex-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setConfirmResetOpen(true)}
+                                disabled={limiteEmAberto === 0 && !limiteInput}
+                                className="flex-1"
+                              >
                                 Redefinir
                               </Button>
                             </div>

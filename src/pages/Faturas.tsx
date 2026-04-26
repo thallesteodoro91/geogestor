@@ -99,6 +99,7 @@ export default function Faturas() {
     const stored = window.localStorage.getItem("faturas:limiteEmAberto");
     return stored && Number(stored) > 0 ? stored : "";
   });
+  const [confirmResetOpen, setConfirmResetOpen] = useState(false);
 
   const salvarLimite = () => {
     const valor = Number(limiteInput);

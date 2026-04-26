@@ -114,7 +114,7 @@ export default function Faturas() {
     }
     if (valor > 0) {
       toast.success("Destaque ativado", {
-        description: `Faturas em aberto acima de ${formatCurrency(valor)} ficarão destacadas em vermelho.`,
+        description: `Faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")} ficarão destacadas em vermelho.`,
       });
     } else {
       toast.success("Destaque desativado", {

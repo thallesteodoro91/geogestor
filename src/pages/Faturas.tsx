@@ -674,6 +674,19 @@ export default function Faturas() {
           </CardContent>
         </Card>
       </div>
+      <ConfirmDialog
+        open={confirmResetOpen}
+        onOpenChange={setConfirmResetOpen}
+        title="Redefinir limite de alerta?"
+        description="O limite de Total em aberto será definido como 0 (alerta desativado) e o valor salvo nas preferências será apagado. Esta ação não pode ser desfeita."
+        confirmLabel="Redefinir"
+        cancelLabel="Cancelar"
+        variant="destructive"
+        onConfirm={() => {
+          redefinirLimite();
+          setConfirmResetOpen(false);
+        }}
+      />
     </AppLayout>
   );
 }

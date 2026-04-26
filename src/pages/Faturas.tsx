@@ -120,7 +120,9 @@ export default function Faturas() {
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("faturas:limiteEmAberto");
     }
-    toast.success("Limite redefinido");
+    toast.success("Limite redefinido", {
+      description: "O alerta foi desativado e o valor salvo nas preferências foi apagado.",
+    });
   };
 
   const filteredInvoices = useMemo(() => {

@@ -458,7 +458,12 @@ export default function Faturas() {
               const limiteMinor = limiteEmAberto * 100;
               const excedeu = limiteEmAberto > 0 && filteredSummary.totalEmAberto > limiteMinor;
               return (
-                <Card className={cn(excedeu && "border-destructive bg-destructive/5")}>
+                <Card className={cn(
+                  excedeu && "border-destructive bg-destructive/5",
+                  pulseFlag && "animate-pulse",
+                  pulseFlag?.mode === "on" && "ring-2 ring-destructive/60",
+                  pulseFlag?.mode === "off" && "ring-2 ring-muted-foreground/40",
+                )}>
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-xs text-muted-foreground">

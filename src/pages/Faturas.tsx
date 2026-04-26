@@ -678,6 +678,9 @@ export default function Faturas() {
                             key={inv.id}
                             className={cn(
                               isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
+                              pulseFlag && hasOpenAmount && "animate-pulse",
+                              pulseFlag?.mode === "on" && hasOpenAmount && "ring-2 ring-inset ring-destructive/60",
+                              pulseFlag?.mode === "off" && hasOpenAmount && "ring-2 ring-inset ring-muted-foreground/40",
                             )}
                           >
                             <TableCell>

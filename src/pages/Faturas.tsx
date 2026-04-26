@@ -464,6 +464,27 @@ export default function Faturas() {
                                 Quando o total em aberto ultrapassar esse valor (R$), o card ficará destacado em vermelho.
                               </p>
                             </div>
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs",
+                                limiteEmAberto > 0
+                                  ? "border-success/30 bg-success/5 text-success"
+                                  : "border-muted bg-muted/40 text-muted-foreground"
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  "h-2 w-2 shrink-0 rounded-full",
+                                  limiteEmAberto > 0 ? "bg-success" : "bg-muted-foreground/60"
+                                )}
+                                aria-hidden="true"
+                              />
+                              <span className="font-medium">
+                                {limiteEmAberto > 0
+                                  ? `Alerta ativo · Limite atual: R$ ${limiteEmAberto.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                  : "Alerta desativado (limite em 0)"}
+                              </span>
+                            </div>
                             <div className="space-y-1.5">
                               <Label htmlFor="limite-aberto" className="text-xs">Valor em R$ (0 desativa)</Label>
                               <Input

@@ -112,7 +112,15 @@ export default function Faturas() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:limiteEmAberto", String(valor));
     }
-    toast.success(valor > 0 ? "Limite salvo" : "Limite desativado");
+    if (valor > 0) {
+      toast.success("Destaque ativado", {
+        description: `Faturas em aberto acima de ${formatCurrency(valor)} ficarão destacadas em vermelho.`,
+      });
+    } else {
+      toast.success("Destaque desativado", {
+        description: "Nenhuma fatura será destacada em vermelho até você definir um valor maior que 0.",
+      });
+    }
   };
 
   const redefinirLimite = () => {

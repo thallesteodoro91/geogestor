@@ -493,24 +493,44 @@ export default function Faturas() {
                                   const parsed = Number(limiteInput);
                                   const ativo = limiteInput !== "" && Number.isFinite(parsed) && parsed > 0;
                                   return (
-                                    <Badge
-                                      variant="outline"
-                                      className={cn(
-                                        "h-5 px-1.5 text-[10px] font-medium",
-                                        ativo
-                                          ? "border-success/40 bg-success/10 text-success"
-                                          : "border-muted bg-muted/40 text-muted-foreground"
-                                      )}
-                                    >
-                                      <span
+                                    <div className="flex items-center gap-1">
+                                      <Badge
+                                        variant="outline"
                                         className={cn(
-                                          "mr-1 h-1.5 w-1.5 rounded-full",
-                                          ativo ? "bg-success" : "bg-muted-foreground/60"
+                                          "h-5 px-1.5 text-[10px] font-medium",
+                                          ativo
+                                            ? "border-success/40 bg-success/10 text-success"
+                                            : "border-muted bg-muted/40 text-muted-foreground"
                                         )}
-                                        aria-hidden="true"
-                                      />
-                                      {ativo ? "Ativo" : "Desativado"}
-                                    </Badge>
+                                      >
+                                        <span
+                                          className={cn(
+                                            "mr-1 h-1.5 w-1.5 rounded-full",
+                                            ativo ? "bg-success" : "bg-muted-foreground/60"
+                                          )}
+                                          aria-hidden="true"
+                                        />
+                                        {ativo ? "Ativo" : "Desativado"}
+                                      </Badge>
+                                      <TooltipProvider delayDuration={150}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <button
+                                              type="button"
+                                              className="text-muted-foreground hover:text-foreground transition-colors"
+                                              aria-label="Como o status afeta o destaque das faturas"
+                                            >
+                                              <HelpCircle className="h-3.5 w-3.5" />
+                                            </button>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                            {ativo
+                                              ? "Quando Ativo, faturas com Total em aberto acima do limite serão destacadas em vermelho na lista após salvar."
+                                              : "Quando Desativado (limite 0), nenhuma fatura será destacada por valor em aberto. Defina um valor maior que 0 para ativar o alerta visual."}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
                                   );
                                 })()}
                               </div>

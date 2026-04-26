@@ -523,10 +523,10 @@ export default function Faturas() {
                                               <HelpCircle className="h-3.5 w-3.5" />
                                             </button>
                                           </TooltipTrigger>
-                                          <TooltipContent side="top" className="max-w-[240px] text-xs">
+                                          <TooltipContent side="top" className="max-w-[260px] text-xs leading-relaxed">
                                             {ativo
-                                              ? "Quando Ativo, faturas com Total em aberto acima do limite serão destacadas em vermelho na lista após salvar."
-                                              : "Quando Desativado (limite 0), nenhuma fatura será destacada por valor em aberto. Defina um valor maior que 0 para ativar o alerta visual."}
+                                              ? "Agora: nada muda na lista enquanto você não clicar em Salvar. Depois de salvar: as faturas com valor em aberto acima desse limite ficam destacadas em vermelho para chamar sua atenção."
+                                              : "Agora: o destaque das faturas continua como está até você salvar. Depois de salvar com 0: nenhuma fatura será destacada pelo valor em aberto. Coloque um valor maior que 0 para ligar o destaque."}
                                           </TooltipContent>
                                         </Tooltip>
                                       </TooltipProvider>

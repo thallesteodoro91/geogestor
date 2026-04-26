@@ -21,6 +21,7 @@ import {
   Download,
   ExternalLink,
   FileText,
+  HelpCircle,
   Loader2,
   Receipt,
   RefreshCw,

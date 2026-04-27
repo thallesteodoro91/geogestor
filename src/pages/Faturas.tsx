@@ -617,6 +617,7 @@ export default function Faturas() {
                                 disabled={limiteEmAberto === 0}
                                 aria-label="Destacar apenas faturas acima do limite"
                               />
+                            </div>
                             <div className="flex gap-2">
                               <Button size="sm" onClick={salvarLimite} className="flex-1">
                                 Salvar

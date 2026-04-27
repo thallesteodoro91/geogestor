@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 interface Invoice {
@@ -102,6 +103,30 @@ export default function Faturas() {
   });
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [pulseFlag, setPulseFlag] = useState<{ key: number; mode: "on" | "off" } | null>(null);
+  const [somenteAcimaLimite, setSomenteAcimaLimite] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
+  });
+
+  const toggleSomenteAcimaLimite = (next: boolean) => {
+    setSomenteAcimaLimite(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("faturas:somenteAcimaLimite", next ? "1" : "0");
+    }
+    if (limiteEmAberto > 0) {
+      setPulseFlag({ key: Date.now(), mode: next ? "on" : "off" });
+      toast.success(
+        next ? "Destacando apenas acima do limite" : "Destacando todas as faturas em aberto",
+        {
+          description: next
+            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")} ficarão destacadas.`
+            : "Todas as faturas com valor em aberto ficarão destacadas quando o limite for ultrapassado.",
+        },
+      );
+    } else {
+      toast.message("Defina um limite maior que 0 para ativar o destaque.");
+    }
+  };
 
   useEffect(() => {
     if (!pulseFlag) return;
@@ -571,6 +596,28 @@ export default function Faturas() {
                                 Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
                               </p>
                             </div>
+                            <div className={cn(
+                              "flex items-start justify-between gap-3 rounded-md border p-2.5",
+                              limiteEmAberto > 0 ? "border-border bg-muted/30" : "border-dashed border-muted bg-muted/20 opacity-70"
+                            )}>
+                              <div className="space-y-0.5 min-w-0">
+                                <Label htmlFor="somente-acima" className="text-xs font-medium cursor-pointer">
+                                  Destacar apenas acima do limite
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground leading-snug">
+                                  {somenteAcimaLimite
+                                    ? "Só as faturas com valor em aberto acima do limite serão destacadas."
+                                    : "Todas as faturas em aberto são destacadas quando o limite é ultrapassado."}
+                                </p>
+                              </div>
+                              <Switch
+                                id="somente-acima"
+                                checked={somenteAcimaLimite}
+                                onCheckedChange={toggleSomenteAcimaLimite}
+                                disabled={limiteEmAberto === 0}
+                                aria-label="Destacar apenas faturas acima do limite"
+                              />
+                            </div>
                             <div className="flex gap-2">
                               <Button size="sm" onClick={salvarLimite} className="flex-1">
                                 Salvar
@@ -678,14 +725,19 @@ export default function Faturas() {
                         const cfg = statusConfig[status];
                         const isHighlighted = inv.id === topOpenInvoiceId;
                         const hasOpenAmount = !inv.paid && inv.amount_remaining > 0;
+                        const exceedsLimit =
+                          hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
+                        const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
+                        const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
                         return (
                           <TableRow
                             key={inv.id}
                             className={cn(
                               isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
-                              pulseFlag && hasOpenAmount && "animate-pulse",
-                              pulseFlag?.mode === "on" && hasOpenAmount && "ring-2 ring-inset ring-destructive/60",
-                              pulseFlag?.mode === "off" && hasOpenAmount && "ring-2 ring-inset ring-muted-foreground/40",
+                              persistentExceeds && "border-l-4 border-l-destructive bg-destructive/5",
+                              pulseFlag && eligibleForHighlight && "animate-pulse",
+                              pulseFlag?.mode === "on" && eligibleForHighlight && "ring-2 ring-inset ring-destructive/60",
+                              pulseFlag?.mode === "off" && eligibleForHighlight && "ring-2 ring-inset ring-muted-foreground/40",
                             )}
                           >
                             <TableCell>

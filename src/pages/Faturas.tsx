@@ -109,29 +109,36 @@ export default function Faturas() {
     return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
   });
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Prévia não persistida — separada do limite salvo (limiteEmAberto)
+  const [limitePrevia, setLimitePrevia] = useState<number | null>(null);
 
+  // Limite efetivo aplicado nos cálculos (prévia tem precedência sobre o salvo)
+  const limiteEfetivo = limitePrevia ?? limiteEmAberto;
+
+  // Prévia "ao digitar" (mostrada no popover) — só ativa se popover aberto
   const previewLimite = useMemo(() => {
     if (!previewOpen) return null;
     const trimmed = limiteInput.trim();
     if (trimmed === "") return null;
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed) || parsed < 0) return null;
-    if (parsed === limiteEmAberto) return null;
+    if (parsed === limiteEfetivo) return null;
     return parsed;
-  }, [previewOpen, limiteInput, limiteEmAberto]);
+  }, [previewOpen, limiteInput, limiteEfetivo]);
 
   const toggleSomenteAcimaLimite = (next: boolean) => {
     setSomenteAcimaLimite(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:somenteAcimaLimite", next ? "1" : "0");
     }
-    if (limiteEmAberto > 0) {
+    if (limiteEfetivo > 0) {
       setPulseFlag({ key: Date.now(), mode: next ? "on" : "off" });
+      const moeda = filteredSummary.currency || "brl";
       toast.success(
         next ? "Destacando apenas acima do limite" : "Destacando todas as faturas em aberto",
         {
           description: next
-            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")} ficarão destacadas.`
+            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEfetivo * 100, moeda)} ficarão destacadas.`
             : "Todas as faturas com valor em aberto ficarão destacadas quando o limite for ultrapassado.",
         },
       );
@@ -154,20 +161,30 @@ export default function Faturas() {
     }
     const anterior = limiteEmAberto;
     setLimiteEmAberto(valor);
+    setLimitePrevia(null); // descartar prévia ao salvar
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:limiteEmAberto", String(valor));
     }
+    const moeda = filteredSummary.currency || "brl";
     if (valor > 0) {
       setPulseFlag({ key: Date.now(), mode: "on" });
       toast.success("Destaque ativado", {
-        description: `Faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")} ficarão destacadas em vermelho.`,
+        description: `Faturas com valor em aberto acima de ${formatCurrency(valor * 100, moeda)} ficarão destacadas em vermelho.`,
       });
     } else {
+      // valor === 0 → também desliga o switch para evitar estado fantasma
+      if (somenteAcimaLimite) {
+        setSomenteAcimaLimite(false);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("faturas:somenteAcimaLimite", "0");
+        }
+      }
       setPulseFlag({ key: Date.now(), mode: anterior > 0 ? "off" : "on" });
       toast.success("Destaque desativado", {
         description: "Nenhuma fatura será destacada em vermelho até você definir um valor maior que 0.",
       });
     }
+    setPreviewOpen(false);
   };
 
   const aplicarPrevia = () => {
@@ -181,26 +198,42 @@ export default function Faturas() {
       toast.error("Informe um valor válido em reais (ex: 500)");
       return;
     }
-    if (valor === limiteEmAberto) {
-      toast.message("Este já é o limite atual.", {
+    if (valor === limiteEfetivo) {
+      toast.message("Este já é o limite atualmente aplicado.", {
         description: "Altere o valor para ver uma prévia diferente.",
       });
       return;
     }
-    const anterior = limiteEmAberto;
-    setLimiteEmAberto(valor);
+    setLimitePrevia(valor);
+    const anterior = limiteEfetivo;
     setPulseFlag({ key: Date.now(), mode: valor > 0 ? "on" : anterior > 0 ? "off" : "on" });
+    const moeda = filteredSummary.currency || "brl";
     toast.success("Prévia aplicada", {
       description:
         valor > 0
-          ? `Destaque temporário ativo para faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")}. Clique em Salvar para manter.`
+          ? `Destaque temporário ativo para faturas com valor em aberto acima de ${formatCurrency(valor * 100, moeda)}. Clique em Salvar para manter.`
           : "Destaque temporariamente desativado. Clique em Salvar para manter.",
+    });
+  };
+
+  const descartarPrevia = () => {
+    setLimitePrevia(null);
+    setLimiteInput(limiteEmAberto > 0 ? String(limiteEmAberto) : "");
+    toast.message("Prévia descartada.", {
+      description: "Voltamos ao limite salvo nas preferências.",
     });
   };
 
   const redefinirLimite = () => {
     setLimiteEmAberto(0);
+    setLimitePrevia(null);
     setLimiteInput("");
+    if (somenteAcimaLimite) {
+      setSomenteAcimaLimite(false);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("faturas:somenteAcimaLimite", "0");
+      }
+    }
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("faturas:limiteEmAberto");
     }

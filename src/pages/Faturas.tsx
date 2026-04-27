@@ -725,14 +725,19 @@ export default function Faturas() {
                         const cfg = statusConfig[status];
                         const isHighlighted = inv.id === topOpenInvoiceId;
                         const hasOpenAmount = !inv.paid && inv.amount_remaining > 0;
+                        const exceedsLimit =
+                          hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
+                        const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
+                        const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
                         return (
                           <TableRow
                             key={inv.id}
                             className={cn(
                               isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
-                              pulseFlag && hasOpenAmount && "animate-pulse",
-                              pulseFlag?.mode === "on" && hasOpenAmount && "ring-2 ring-inset ring-destructive/60",
-                              pulseFlag?.mode === "off" && hasOpenAmount && "ring-2 ring-inset ring-muted-foreground/40",
+                              persistentExceeds && "border-l-4 border-l-destructive bg-destructive/5",
+                              pulseFlag && eligibleForHighlight && "animate-pulse",
+                              pulseFlag?.mode === "on" && eligibleForHighlight && "ring-2 ring-inset ring-destructive/60",
+                              pulseFlag?.mode === "off" && eligibleForHighlight && "ring-2 ring-inset ring-muted-foreground/40",
                             )}
                           >
                             <TableCell>

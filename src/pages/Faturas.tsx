@@ -763,7 +763,7 @@ export default function Faturas() {
                                 onClick={aplicarPrevia}
                                 disabled={
                                   limiteInput.trim() === "" ||
-                                  Number(limiteInput) === limiteEmAberto
+                                  Number(limiteInput) === limiteEfetivo
                                 }
                                 className="flex-1 min-w-[88px]"
                                 title="Aplica o valor digitado imediatamente na lista, sem salvar nas preferências"
@@ -774,11 +774,21 @@ export default function Faturas() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setConfirmResetOpen(true)}
-                                disabled={limiteEmAberto === 0 && !limiteInput}
+                                disabled={limiteEmAberto === 0 && !limiteInput && limitePrevia === null}
                                 className="flex-1 min-w-[88px]"
                               >
                                 Redefinir
                               </Button>
+                            </div>
+                            <div className="border-t pt-2 text-[11px] text-muted-foreground leading-snug">
+                              {limiteEmAberto > 0 ? (
+                                <>
+                                  Atualmente destacando: <strong className="text-foreground">{destacadasAgora}</strong>{" "}
+                                  fatura{destacadasAgora === 1 ? "" : "s"} em vermelho.
+                                </>
+                              ) : (
+                                <>Nenhuma fatura está sendo destacada (limite salvo em 0).</>
+                              )}
                             </div>
                           </div>
                         </PopoverContent>

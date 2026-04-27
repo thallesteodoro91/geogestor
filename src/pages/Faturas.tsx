@@ -804,10 +804,46 @@ export default function Faturas() {
                         Acima do limite de {formatCurrency(limiteMinor, filteredSummary.currency)}
                       </p>
                     )}
-                    {!excedeu && limiteEmAberto > 0 && (
+                    {!excedeu && limiteEfetivo > 0 && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Limite: {formatCurrency(limiteMinor, filteredSummary.currency)}
                       </p>
+                    )}
+                    {previaAtiva && (
+                      <div className="mt-2 flex items-start gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-2">
+                        <Eye className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-[11px] leading-snug text-foreground">
+                            Visualizando prévia: limite temporário de{" "}
+                            <strong>{formatCurrency((limitePrevia ?? 0) * 100, filteredSummary.currency || "brl")}</strong>.
+                            Salve para manter ou descarte para voltar ao limite anterior
+                            ({limiteEmAberto > 0
+                              ? formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")
+                              : "desativado"}).
+                          </p>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-6 px-2 text-[11px]"
+                              onClick={() => {
+                                setLimiteInput(String(limitePrevia));
+                                salvarLimite();
+                              }}
+                            >
+                              Salvar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[11px]"
+                              onClick={descartarPrevia}
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </CardContent>
                 </Card>

@@ -380,6 +380,31 @@ export default function Faturas() {
     };
   }, [filteredInvoices, invoices]);
 
+  // Sugestão de limite: mediana dos valores em aberto, em R$, arredondada a múltiplos de 50
+  const limiteSugerido = useMemo(() => {
+    const abertos = filteredInvoices
+      .filter((inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void")
+      .map((inv) => inv.amount_remaining / 100);
+    if (abertos.length === 0) return 0;
+    const sorted = [...abertos].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const mediana = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    const arredondado = Math.round(mediana / 50) * 50;
+    return arredondado > 0 ? arredondado : 50;
+  }, [filteredInvoices]);
+
+  // Quantas faturas estão sendo destacadas AGORA (com o limite salvo, ignorando prévia)
+  const destacadasAgora = useMemo(() => {
+    if (limiteEmAberto <= 0) return 0;
+    const limiteMinor = limiteEmAberto * 100;
+    return filteredInvoices.filter((inv) => {
+      const aberta = !inv.paid && inv.amount_remaining > 0 && inv.status !== "void";
+      if (!aberta) return false;
+      if (somenteAcimaLimite) return inv.amount_remaining > limiteMinor;
+      return filteredSummary.totalEmAberto > limiteMinor;
+    }).length;
+  }, [filteredInvoices, limiteEmAberto, somenteAcimaLimite, filteredSummary.totalEmAberto]);
+
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
         day: "2-digit",

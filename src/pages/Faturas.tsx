@@ -107,6 +107,17 @@ export default function Faturas() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
   });
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const previewLimite = useMemo(() => {
+    if (!previewOpen) return null;
+    const trimmed = limiteInput.trim();
+    if (trimmed === "") return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    if (parsed === limiteEmAberto) return null;
+    return parsed;
+  }, [previewOpen, limiteInput, limiteEmAberto]);
 
   const toggleSomenteAcimaLimite = (next: boolean) => {
     setSomenteAcimaLimite(next);

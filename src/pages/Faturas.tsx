@@ -596,6 +596,27 @@ export default function Faturas() {
                                 Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
                               </p>
                             </div>
+                            <div className={cn(
+                              "flex items-start justify-between gap-3 rounded-md border p-2.5",
+                              limiteEmAberto > 0 ? "border-border bg-muted/30" : "border-dashed border-muted bg-muted/20 opacity-70"
+                            )}>
+                              <div className="space-y-0.5 min-w-0">
+                                <Label htmlFor="somente-acima" className="text-xs font-medium cursor-pointer">
+                                  Destacar apenas acima do limite
+                                </Label>
+                                <p className="text-[11px] text-muted-foreground leading-snug">
+                                  {somenteAcimaLimite
+                                    ? "Só as faturas com valor em aberto acima do limite serão destacadas."
+                                    : "Todas as faturas em aberto são destacadas quando o limite é ultrapassado."}
+                                </p>
+                              </div>
+                              <Switch
+                                id="somente-acima"
+                                checked={somenteAcimaLimite}
+                                onCheckedChange={toggleSomenteAcimaLimite}
+                                disabled={limiteEmAberto === 0}
+                                aria-label="Destacar apenas faturas acima do limite"
+                              />
                             <div className="flex gap-2">
                               <Button size="sm" onClick={salvarLimite} className="flex-1">
                                 Salvar

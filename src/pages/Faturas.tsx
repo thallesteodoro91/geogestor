@@ -169,6 +169,34 @@ export default function Faturas() {
     }
   };
 
+  const aplicarPrevia = () => {
+    const trimmed = limiteInput.trim();
+    if (trimmed === "") {
+      toast.error("Informe um valor para pré-visualizar.");
+      return;
+    }
+    const valor = Number(trimmed);
+    if (!Number.isFinite(valor) || valor < 0) {
+      toast.error("Informe um valor válido em reais (ex: 500)");
+      return;
+    }
+    if (valor === limiteEmAberto) {
+      toast.message("Este já é o limite atual.", {
+        description: "Altere o valor para ver uma prévia diferente.",
+      });
+      return;
+    }
+    const anterior = limiteEmAberto;
+    setLimiteEmAberto(valor);
+    setPulseFlag({ key: Date.now(), mode: valor > 0 ? "on" : anterior > 0 ? "off" : "on" });
+    toast.success("Prévia aplicada", {
+      description:
+        valor > 0
+          ? `Destaque temporário ativo para faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")}. Clique em Salvar para manter.`
+          : "Destaque temporariamente desativado. Clique em Salvar para manter.",
+    });
+  };
+
   const redefinirLimite = () => {
     setLimiteEmAberto(0);
     setLimiteInput("");

@@ -761,12 +761,19 @@ export default function Faturas() {
                           hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
                         const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
                         const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
+                        const previewMatches =
+                          previewLimite !== null &&
+                          previewLimite > 0 &&
+                          hasOpenAmount &&
+                          inv.status !== "void" &&
+                          inv.amount_remaining > previewLimite * 100;
                         return (
                           <TableRow
                             key={inv.id}
                             className={cn(
                               isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
                               persistentExceeds && "border-l-4 border-l-destructive bg-destructive/5",
+                              previewMatches && "ring-2 ring-inset ring-destructive/50 ring-offset-0 bg-destructive/5",
                               pulseFlag && eligibleForHighlight && "animate-pulse",
                               pulseFlag?.mode === "on" && eligibleForHighlight && "ring-2 ring-inset ring-destructive/60",
                               pulseFlag?.mode === "off" && eligibleForHighlight && "ring-2 ring-inset ring-muted-foreground/40",

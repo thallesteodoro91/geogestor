@@ -688,10 +688,26 @@ export default function Faturas() {
                                 placeholder="Ex: 500"
                                 value={limiteInput}
                                 onChange={(e) => setLimiteInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    salvarLimite();
+                                  }
+                                }}
                                 className="h-9"
                               />
+                              {limiteSugerido > 0 && Number(limiteInput) !== limiteSugerido && (
+                                <button
+                                  type="button"
+                                  onClick={() => setLimiteInput(String(limiteSugerido))}
+                                  className="text-[11px] text-primary hover:underline text-left"
+                                >
+                                  💡 Sugerido: R$ {limiteSugerido.toLocaleString("pt-BR")}{" "}
+                                  <span className="text-muted-foreground">(baseado nas suas faturas em aberto)</span>
+                                </button>
+                              )}
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
+                                Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas com valor em aberto acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
                               </p>
                               {previewLimite !== null && (() => {
                                 const previewMinor = previewLimite * 100;
@@ -707,7 +723,7 @@ export default function Faturas() {
                                     {previewLimite === 0 ? (
                                       <>Prévia: salvar com 0 desativa o destaque — nenhuma fatura ficaria marcada.</>
                                     ) : matches.length === 0 ? (
-                                      <>Prévia: nenhuma fatura em aberto acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}.</>
+                                      <>Prévia: nenhuma fatura com valor em aberto acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}.</>
                                     ) : (
                                       <>Prévia: <strong>{matches.length}</strong> fatura{matches.length === 1 ? "" : "s"} ficaria{matches.length === 1 ? "" : "m"} destacada{matches.length === 1 ? "" : "s"} (acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}).</>
                                     )}

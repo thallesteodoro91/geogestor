@@ -505,7 +505,7 @@ export default function Faturas() {
                       <p className="text-xs text-muted-foreground">
                         Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}
                       </p>
-                      <Popover>
+                      <Popover onOpenChange={setPreviewOpen}>
                         <PopoverTrigger asChild>
                           <button
                             type="button"

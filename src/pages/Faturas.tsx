@@ -107,6 +107,17 @@ export default function Faturas() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
   });
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const previewLimite = useMemo(() => {
+    if (!previewOpen) return null;
+    const trimmed = limiteInput.trim();
+    if (trimmed === "") return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    if (parsed === limiteEmAberto) return null;
+    return parsed;
+  }, [previewOpen, limiteInput, limiteEmAberto]);
 
   const toggleSomenteAcimaLimite = (next: boolean) => {
     setSomenteAcimaLimite(next);
@@ -494,7 +505,7 @@ export default function Faturas() {
                       <p className="text-xs text-muted-foreground">
                         Total em aberto {activeFilters > 0 ? "(filtrado)" : ""}
                       </p>
-                      <Popover>
+                      <Popover onOpenChange={setPreviewOpen}>
                         <PopoverTrigger asChild>
                           <button
                             type="button"
@@ -595,6 +606,27 @@ export default function Faturas() {
                               <p className="text-xs text-muted-foreground leading-relaxed">
                                 Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
                               </p>
+                              {previewLimite !== null && (() => {
+                                const previewMinor = previewLimite * 100;
+                                const matches = filteredInvoices.filter(
+                                  (inv) =>
+                                    !inv.paid &&
+                                    inv.amount_remaining > 0 &&
+                                    inv.status !== "void" &&
+                                    (previewLimite === 0 ? false : inv.amount_remaining > previewMinor),
+                                );
+                                return (
+                                  <div className="rounded-md border border-dashed border-destructive/40 bg-destructive/5 px-2.5 py-1.5 text-[11px] leading-snug text-destructive">
+                                    {previewLimite === 0 ? (
+                                      <>Prévia: salvar com 0 desativa o destaque — nenhuma fatura ficaria marcada.</>
+                                    ) : matches.length === 0 ? (
+                                      <>Prévia: nenhuma fatura em aberto acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}.</>
+                                    ) : (
+                                      <>Prévia: <strong>{matches.length}</strong> fatura{matches.length === 1 ? "" : "s"} ficaria{matches.length === 1 ? "" : "m"} destacada{matches.length === 1 ? "" : "s"} (acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}).</>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <div className={cn(
                               "flex items-start justify-between gap-3 rounded-md border p-2.5",
@@ -729,12 +761,19 @@ export default function Faturas() {
                           hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
                         const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
                         const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
+                        const previewMatches =
+                          previewLimite !== null &&
+                          previewLimite > 0 &&
+                          hasOpenAmount &&
+                          inv.status !== "void" &&
+                          inv.amount_remaining > previewLimite * 100;
                         return (
                           <TableRow
                             key={inv.id}
                             className={cn(
                               isHighlighted && "bg-warning/5 hover:bg-warning/10 border-l-4 border-l-warning",
                               persistentExceeds && "border-l-4 border-l-destructive bg-destructive/5",
+                              previewMatches && "ring-2 ring-inset ring-destructive/50 ring-offset-0 bg-destructive/5",
                               pulseFlag && eligibleForHighlight && "animate-pulse",
                               pulseFlag?.mode === "on" && eligibleForHighlight && "ring-2 ring-inset ring-destructive/60",
                               pulseFlag?.mode === "off" && eligibleForHighlight && "ring-2 ring-inset ring-muted-foreground/40",

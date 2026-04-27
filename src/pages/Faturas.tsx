@@ -578,8 +578,9 @@ export default function Faturas() {
               </CardContent>
             </Card>
             {(() => {
-              const limiteMinor = limiteEmAberto * 100;
-              const excedeu = limiteEmAberto > 0 && filteredSummary.totalEmAberto > limiteMinor;
+              const limiteMinor = limiteEfetivo * 100;
+              const excedeu = limiteEfetivo > 0 && filteredSummary.totalEmAberto > limiteMinor;
+              const previaAtiva = limitePrevia !== null;
               return (
                 <Card className={cn(
                   excedeu && "border-destructive bg-destructive/5",

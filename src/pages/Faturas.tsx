@@ -169,6 +169,34 @@ export default function Faturas() {
     }
   };
 
+  const aplicarPrevia = () => {
+    const trimmed = limiteInput.trim();
+    if (trimmed === "") {
+      toast.error("Informe um valor para pré-visualizar.");
+      return;
+    }
+    const valor = Number(trimmed);
+    if (!Number.isFinite(valor) || valor < 0) {
+      toast.error("Informe um valor válido em reais (ex: 500)");
+      return;
+    }
+    if (valor === limiteEmAberto) {
+      toast.message("Este já é o limite atual.", {
+        description: "Altere o valor para ver uma prévia diferente.",
+      });
+      return;
+    }
+    const anterior = limiteEmAberto;
+    setLimiteEmAberto(valor);
+    setPulseFlag({ key: Date.now(), mode: valor > 0 ? "on" : anterior > 0 ? "off" : "on" });
+    toast.success("Prévia aplicada", {
+      description:
+        valor > 0
+          ? `Destaque temporário ativo para faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")}. Clique em Salvar para manter.`
+          : "Destaque temporariamente desativado. Clique em Salvar para manter.",
+    });
+  };
+
   const redefinirLimite = () => {
     setLimiteEmAberto(0);
     setLimiteInput("");
@@ -650,16 +678,29 @@ export default function Faturas() {
                                 aria-label="Destacar apenas faturas acima do limite"
                               />
                             </div>
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={salvarLimite} className="flex-1">
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" onClick={salvarLimite} className="flex-1 min-w-[88px]">
                                 Salvar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={aplicarPrevia}
+                                disabled={
+                                  limiteInput.trim() === "" ||
+                                  Number(limiteInput) === limiteEmAberto
+                                }
+                                className="flex-1 min-w-[88px]"
+                                title="Aplica o valor digitado imediatamente na lista, sem salvar nas preferências"
+                              >
+                                Aplicar prévia
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setConfirmResetOpen(true)}
                                 disabled={limiteEmAberto === 0 && !limiteInput}
-                                className="flex-1"
+                                className="flex-1 min-w-[88px]"
                               >
                                 Redefinir
                               </Button>

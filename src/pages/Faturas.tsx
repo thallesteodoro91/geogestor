@@ -921,10 +921,12 @@ export default function Faturas() {
                         const isHighlighted = inv.id === topOpenInvoiceId;
                         const hasOpenAmount = !inv.paid && inv.amount_remaining > 0;
                         const exceedsLimit =
-                          hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
+                          hasOpenAmount && limiteEfetivo > 0 && inv.amount_remaining > limiteEfetivo * 100;
                         const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
-                        const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
+                        const persistentExceeds = exceedsLimit && limiteEfetivo > 0;
+                        // Pulse tem precedência sobre preview para evitar colisão de ring-2 ring-inset
                         const previewMatches =
+                          !pulseFlag &&
                           previewLimite !== null &&
                           previewLimite > 0 &&
                           hasOpenAmount &&

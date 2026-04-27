@@ -102,6 +102,30 @@ export default function Faturas() {
   });
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [pulseFlag, setPulseFlag] = useState<{ key: number; mode: "on" | "off" } | null>(null);
+  const [somenteAcimaLimite, setSomenteAcimaLimite] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
+  });
+
+  const toggleSomenteAcimaLimite = (next: boolean) => {
+    setSomenteAcimaLimite(next);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("faturas:somenteAcimaLimite", next ? "1" : "0");
+    }
+    if (limiteEmAberto > 0) {
+      setPulseFlag({ key: Date.now(), mode: next ? "on" : "off" });
+      toast.success(
+        next ? "Destacando apenas acima do limite" : "Destacando todas as faturas em aberto",
+        {
+          description: next
+            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")} ficarão destacadas.`
+            : "Todas as faturas com valor em aberto ficarão destacadas quando o limite for ultrapassado.",
+        },
+      );
+    } else {
+      toast.message("Defina um limite maior que 0 para ativar o destaque.");
+    }
+  };
 
   useEffect(() => {
     if (!pulseFlag) return;

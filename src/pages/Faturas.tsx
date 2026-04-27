@@ -678,16 +678,29 @@ export default function Faturas() {
                                 aria-label="Destacar apenas faturas acima do limite"
                               />
                             </div>
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={salvarLimite} className="flex-1">
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" onClick={salvarLimite} className="flex-1 min-w-[88px]">
                                 Salvar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={aplicarPrevia}
+                                disabled={
+                                  limiteInput.trim() === "" ||
+                                  Number(limiteInput) === limiteEmAberto
+                                }
+                                className="flex-1 min-w-[88px]"
+                                title="Aplica o valor digitado imediatamente na lista, sem salvar nas preferências"
+                              >
+                                Aplicar prévia
                               </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setConfirmResetOpen(true)}
                                 disabled={limiteEmAberto === 0 && !limiteInput}
-                                className="flex-1"
+                                className="flex-1 min-w-[88px]"
                               >
                                 Redefinir
                               </Button>

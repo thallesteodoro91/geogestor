@@ -20,6 +20,7 @@ import {
   ArrowLeft,
   Download,
   ExternalLink,
+  Eye,
   FileText,
   HelpCircle,
   Loader2,
@@ -108,29 +109,36 @@ export default function Faturas() {
     return window.localStorage.getItem("faturas:somenteAcimaLimite") === "1";
   });
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Prévia não persistida — separada do limite salvo (limiteEmAberto)
+  const [limitePrevia, setLimitePrevia] = useState<number | null>(null);
 
+  // Limite efetivo aplicado nos cálculos (prévia tem precedência sobre o salvo)
+  const limiteEfetivo = limitePrevia ?? limiteEmAberto;
+
+  // Prévia "ao digitar" (mostrada no popover) — só ativa se popover aberto
   const previewLimite = useMemo(() => {
     if (!previewOpen) return null;
     const trimmed = limiteInput.trim();
     if (trimmed === "") return null;
     const parsed = Number(trimmed);
     if (!Number.isFinite(parsed) || parsed < 0) return null;
-    if (parsed === limiteEmAberto) return null;
+    if (parsed === limiteEfetivo) return null;
     return parsed;
-  }, [previewOpen, limiteInput, limiteEmAberto]);
+  }, [previewOpen, limiteInput, limiteEfetivo]);
 
   const toggleSomenteAcimaLimite = (next: boolean) => {
     setSomenteAcimaLimite(next);
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:somenteAcimaLimite", next ? "1" : "0");
     }
-    if (limiteEmAberto > 0) {
+    if (limiteEfetivo > 0) {
       setPulseFlag({ key: Date.now(), mode: next ? "on" : "off" });
+      const moeda = filteredSummary.currency || "brl";
       toast.success(
         next ? "Destacando apenas acima do limite" : "Destacando todas as faturas em aberto",
         {
           description: next
-            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")} ficarão destacadas.`
+            ? `Somente faturas com valor em aberto acima de ${formatCurrency(limiteEfetivo * 100, moeda)} ficarão destacadas.`
             : "Todas as faturas com valor em aberto ficarão destacadas quando o limite for ultrapassado.",
         },
       );
@@ -153,20 +161,30 @@ export default function Faturas() {
     }
     const anterior = limiteEmAberto;
     setLimiteEmAberto(valor);
+    setLimitePrevia(null); // descartar prévia ao salvar
     if (typeof window !== "undefined") {
       window.localStorage.setItem("faturas:limiteEmAberto", String(valor));
     }
+    const moeda = filteredSummary.currency || "brl";
     if (valor > 0) {
       setPulseFlag({ key: Date.now(), mode: "on" });
       toast.success("Destaque ativado", {
-        description: `Faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")} ficarão destacadas em vermelho.`,
+        description: `Faturas com valor em aberto acima de ${formatCurrency(valor * 100, moeda)} ficarão destacadas em vermelho.`,
       });
     } else {
+      // valor === 0 → também desliga o switch para evitar estado fantasma
+      if (somenteAcimaLimite) {
+        setSomenteAcimaLimite(false);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem("faturas:somenteAcimaLimite", "0");
+        }
+      }
       setPulseFlag({ key: Date.now(), mode: anterior > 0 ? "off" : "on" });
       toast.success("Destaque desativado", {
         description: "Nenhuma fatura será destacada em vermelho até você definir um valor maior que 0.",
       });
     }
+    setPreviewOpen(false);
   };
 
   const aplicarPrevia = () => {
@@ -180,26 +198,42 @@ export default function Faturas() {
       toast.error("Informe um valor válido em reais (ex: 500)");
       return;
     }
-    if (valor === limiteEmAberto) {
-      toast.message("Este já é o limite atual.", {
+    if (valor === limiteEfetivo) {
+      toast.message("Este já é o limite atualmente aplicado.", {
         description: "Altere o valor para ver uma prévia diferente.",
       });
       return;
     }
-    const anterior = limiteEmAberto;
-    setLimiteEmAberto(valor);
+    setLimitePrevia(valor);
+    const anterior = limiteEfetivo;
     setPulseFlag({ key: Date.now(), mode: valor > 0 ? "on" : anterior > 0 ? "off" : "on" });
+    const moeda = filteredSummary.currency || "brl";
     toast.success("Prévia aplicada", {
       description:
         valor > 0
-          ? `Destaque temporário ativo para faturas em aberto acima de ${formatCurrency(valor * 100, filteredSummary.currency || "brl")}. Clique em Salvar para manter.`
+          ? `Destaque temporário ativo para faturas com valor em aberto acima de ${formatCurrency(valor * 100, moeda)}. Clique em Salvar para manter.`
           : "Destaque temporariamente desativado. Clique em Salvar para manter.",
+    });
+  };
+
+  const descartarPrevia = () => {
+    setLimitePrevia(null);
+    setLimiteInput(limiteEmAberto > 0 ? String(limiteEmAberto) : "");
+    toast.message("Prévia descartada.", {
+      description: "Voltamos ao limite salvo nas preferências.",
     });
   };
 
   const redefinirLimite = () => {
     setLimiteEmAberto(0);
+    setLimitePrevia(null);
     setLimiteInput("");
+    if (somenteAcimaLimite) {
+      setSomenteAcimaLimite(false);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("faturas:somenteAcimaLimite", "0");
+      }
+    }
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("faturas:limiteEmAberto");
     }
@@ -345,6 +379,31 @@ export default function Faturas() {
       currency: filteredInvoices[0]?.currency ?? invoices[0]?.currency ?? "brl",
     };
   }, [filteredInvoices, invoices]);
+
+  // Sugestão de limite: mediana dos valores em aberto, em R$, arredondada a múltiplos de 50
+  const limiteSugerido = useMemo(() => {
+    const abertos = filteredInvoices
+      .filter((inv) => !inv.paid && inv.amount_remaining > 0 && inv.status !== "void")
+      .map((inv) => inv.amount_remaining / 100);
+    if (abertos.length === 0) return 0;
+    const sorted = [...abertos].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const mediana = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    const arredondado = Math.round(mediana / 50) * 50;
+    return arredondado > 0 ? arredondado : 50;
+  }, [filteredInvoices]);
+
+  // Quantas faturas estão sendo destacadas AGORA (com o limite salvo, ignorando prévia)
+  const destacadasAgora = useMemo(() => {
+    if (limiteEmAberto <= 0) return 0;
+    const limiteMinor = limiteEmAberto * 100;
+    return filteredInvoices.filter((inv) => {
+      const aberta = !inv.paid && inv.amount_remaining > 0 && inv.status !== "void";
+      if (!aberta) return false;
+      if (somenteAcimaLimite) return inv.amount_remaining > limiteMinor;
+      return filteredSummary.totalEmAberto > limiteMinor;
+    }).length;
+  }, [filteredInvoices, limiteEmAberto, somenteAcimaLimite, filteredSummary.totalEmAberto]);
 
   const proximaCobranca = stripe.subscription_end
     ? new Date(stripe.subscription_end).toLocaleDateString("pt-BR", {
@@ -519,8 +578,9 @@ export default function Faturas() {
               </CardContent>
             </Card>
             {(() => {
-              const limiteMinor = limiteEmAberto * 100;
-              const excedeu = limiteEmAberto > 0 && filteredSummary.totalEmAberto > limiteMinor;
+              const limiteMinor = limiteEfetivo * 100;
+              const excedeu = limiteEfetivo > 0 && filteredSummary.totalEmAberto > limiteMinor;
+              const previaAtiva = limitePrevia !== null;
               return (
                 <Card className={cn(
                   excedeu && "border-destructive bg-destructive/5",
@@ -629,10 +689,26 @@ export default function Faturas() {
                                 placeholder="Ex: 500"
                                 value={limiteInput}
                                 onChange={(e) => setLimiteInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    salvarLimite();
+                                  }
+                                }}
                                 className="h-9"
                               />
+                              {limiteSugerido > 0 && Number(limiteInput) !== limiteSugerido && (
+                                <button
+                                  type="button"
+                                  onClick={() => setLimiteInput(String(limiteSugerido))}
+                                  className="text-[11px] text-primary hover:underline text-left"
+                                >
+                                  💡 Sugerido: R$ {limiteSugerido.toLocaleString("pt-BR")}{" "}
+                                  <span className="text-muted-foreground">(baseado nas suas faturas em aberto)</span>
+                                </button>
+                              )}
                               <p className="text-xs text-muted-foreground leading-relaxed">
-                                Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
+                                Enquanto você não clicar em Salvar, nada muda na lista. Depois de salvar, faturas com valor em aberto acima desse valor ficam destacadas em vermelho — e usar 0 desliga esse destaque.
                               </p>
                               {previewLimite !== null && (() => {
                                 const previewMinor = previewLimite * 100;
@@ -648,7 +724,7 @@ export default function Faturas() {
                                     {previewLimite === 0 ? (
                                       <>Prévia: salvar com 0 desativa o destaque — nenhuma fatura ficaria marcada.</>
                                     ) : matches.length === 0 ? (
-                                      <>Prévia: nenhuma fatura em aberto acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}.</>
+                                      <>Prévia: nenhuma fatura com valor em aberto acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}.</>
                                     ) : (
                                       <>Prévia: <strong>{matches.length}</strong> fatura{matches.length === 1 ? "" : "s"} ficaria{matches.length === 1 ? "" : "m"} destacada{matches.length === 1 ? "" : "s"} (acima de {formatCurrency(previewMinor, filteredSummary.currency || "brl")}).</>
                                     )}
@@ -688,7 +764,7 @@ export default function Faturas() {
                                 onClick={aplicarPrevia}
                                 disabled={
                                   limiteInput.trim() === "" ||
-                                  Number(limiteInput) === limiteEmAberto
+                                  Number(limiteInput) === limiteEfetivo
                                 }
                                 className="flex-1 min-w-[88px]"
                                 title="Aplica o valor digitado imediatamente na lista, sem salvar nas preferências"
@@ -699,11 +775,21 @@ export default function Faturas() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => setConfirmResetOpen(true)}
-                                disabled={limiteEmAberto === 0 && !limiteInput}
+                                disabled={limiteEmAberto === 0 && !limiteInput && limitePrevia === null}
                                 className="flex-1 min-w-[88px]"
                               >
                                 Redefinir
                               </Button>
+                            </div>
+                            <div className="border-t pt-2 text-[11px] text-muted-foreground leading-snug">
+                              {limiteEmAberto > 0 ? (
+                                <>
+                                  Atualmente destacando: <strong className="text-foreground">{destacadasAgora}</strong>{" "}
+                                  fatura{destacadasAgora === 1 ? "" : "s"} em vermelho.
+                                </>
+                              ) : (
+                                <>Nenhuma fatura está sendo destacada (limite salvo em 0).</>
+                              )}
                             </div>
                           </div>
                         </PopoverContent>
@@ -718,10 +804,46 @@ export default function Faturas() {
                         Acima do limite de {formatCurrency(limiteMinor, filteredSummary.currency)}
                       </p>
                     )}
-                    {!excedeu && limiteEmAberto > 0 && (
+                    {!excedeu && limiteEfetivo > 0 && (
                       <p className="mt-1 text-xs text-muted-foreground">
                         Limite: {formatCurrency(limiteMinor, filteredSummary.currency)}
                       </p>
+                    )}
+                    {previaAtiva && (
+                      <div className="mt-2 flex items-start gap-2 rounded-md border border-dashed border-primary/40 bg-primary/5 p-2">
+                        <Eye className="h-3.5 w-3.5 shrink-0 mt-0.5 text-primary" />
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-[11px] leading-snug text-foreground">
+                            Visualizando prévia: limite temporário de{" "}
+                            <strong>{formatCurrency((limitePrevia ?? 0) * 100, filteredSummary.currency || "brl")}</strong>.
+                            Salve para manter ou descarte para voltar ao limite anterior
+                            ({limiteEmAberto > 0
+                              ? formatCurrency(limiteEmAberto * 100, filteredSummary.currency || "brl")
+                              : "desativado"}).
+                          </p>
+                          <div className="flex gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-6 px-2 text-[11px]"
+                              onClick={() => {
+                                setLimiteInput(String(limitePrevia));
+                                salvarLimite();
+                              }}
+                            >
+                              Salvar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 px-2 text-[11px]"
+                              onClick={descartarPrevia}
+                            >
+                              Descartar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </CardContent>
                 </Card>
@@ -799,10 +921,12 @@ export default function Faturas() {
                         const isHighlighted = inv.id === topOpenInvoiceId;
                         const hasOpenAmount = !inv.paid && inv.amount_remaining > 0;
                         const exceedsLimit =
-                          hasOpenAmount && limiteEmAberto > 0 && inv.amount_remaining > limiteEmAberto * 100;
+                          hasOpenAmount && limiteEfetivo > 0 && inv.amount_remaining > limiteEfetivo * 100;
                         const eligibleForHighlight = somenteAcimaLimite ? exceedsLimit : hasOpenAmount;
-                        const persistentExceeds = exceedsLimit && limiteEmAberto > 0;
+                        const persistentExceeds = exceedsLimit && limiteEfetivo > 0;
+                        // Pulse tem precedência sobre preview para evitar colisão de ring-2 ring-inset
                         const previewMatches =
+                          !pulseFlag &&
                           previewLimite !== null &&
                           previewLimite > 0 &&
                           hasOpenAmount &&

@@ -294,37 +294,98 @@ export default function Assinatura() {
 
             <Card className="border-primary/25 bg-primary/5 shadow-sm">
               <CardContent className="flex h-full flex-col gap-5 p-6">
-                <div className="space-y-2">
-                  <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
-                  <h3 className="text-xl font-semibold text-foreground">Plano Anual</h3>
+                <div className="space-y-3">
+                  <div className="inline-flex rounded-md border border-border bg-background/80 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan("anual")}
+                      className={`relative rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedPlan === "anual"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Anual
+                      <span className="ml-1.5 rounded bg-success/20 px-1 py-0.5 text-[10px] font-semibold text-success">
+                        -17%
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlan("mensal")}
+                      className={`rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                        selectedPlan === "mensal"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      Mensal
+                    </button>
+                  </div>
+                  {selectedPlan === "anual" ? (
+                    <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-border text-foreground">Sem compromisso anual</Badge>
+                  )}
+                  <h3 className="text-xl font-semibold text-foreground">
+                    {selectedPlan === "anual" ? "Plano Anual" : "Plano Mensal"}
+                  </h3>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Menor custo mensal, decisão mais simples e tudo o que você precisa para operar com confiança.
+                    {selectedPlan === "anual"
+                      ? "Menor custo mensal, decisão mais simples e tudo o que você precisa para operar com confiança."
+                      : "Comece com flexibilidade total e acesso completo desde o primeiro dia."}
                   </p>
                 </div>
 
                 <div className="space-y-3 rounded-md border border-primary/20 bg-background/80 p-5">
                   <div className="flex items-end gap-2">
-                    <span className="text-4xl font-bold text-foreground">R$ {YEARLY_PRICE}</span>
-                    <span className="pb-1 text-sm text-muted-foreground">/ano</span>
+                    <span className="text-4xl font-bold text-foreground">
+                      R$ {selectedPlan === "anual" ? YEARLY_PRICE : MONTHLY_PRICE}
+                    </span>
+                    <span className="pb-1 text-sm text-muted-foreground">
+                      {selectedPlan === "anual" ? "/ano" : "/mês"}
+                    </span>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Badge className="bg-success text-success-foreground">2 meses grátis</Badge>
-                    <Badge variant="outline" className="border-border text-foreground">Equivalente a R$ {YEARLY_EQUIVALENT}/mês</Badge>
-                  </div>
-                  <p className="text-sm font-medium text-success">Economize R$ {YEARLY_SAVINGS} por ano em relação ao plano mensal.</p>
+                  {selectedPlan === "anual" ? (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge className="bg-success text-success-foreground">2 meses grátis</Badge>
+                        <Badge variant="outline" className="border-border text-foreground">Equivalente a R$ {YEARLY_EQUIVALENT}/mês</Badge>
+                      </div>
+                      <p className="text-sm font-medium text-success">Economize R$ {YEARLY_SAVINGS} por ano em relação ao plano mensal.</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="border-border text-foreground">Cobrança mensal recorrente</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Quer pagar menos? O plano anual sai por R$ {YEARLY_EQUIVALENT}/mês (R$ {YEARLY_SAVINGS} de economia).
+                      </p>
+                    </>
+                  )}
                 </div>
 
-                {isActiveSubscriber && stripeStatus.price_id === "price_1TPMGBK3j5PLJZVVFGcr8tdf" ? (
-                  <Button onClick={handleOpenPortal} disabled={portalLoading}>
-                    {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                    Gerenciar assinatura
-                  </Button>
-                ) : (
-                  <Button onClick={() => handleSubscribe("anual")} disabled={loadingPlan === "anual"}>
-                    {loadingPlan === "anual" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                    Começar com desconto
-                  </Button>
-                )}
+                {(() => {
+                  const currentPriceId = selectedPlan === "anual"
+                    ? "price_1TPMGBK3j5PLJZVVFGcr8tdf"
+                    : "price_1T2DaxK3j5PLJZVV2QghyqC5";
+                  const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === currentPriceId;
+                  if (isCurrentPlan) {
+                    return (
+                      <Button onClick={handleOpenPortal} disabled={portalLoading}>
+                        {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                        Gerenciar assinatura
+                      </Button>
+                    );
+                  }
+                  return (
+                    <Button onClick={() => handleSubscribe(selectedPlan)} disabled={loadingPlan === selectedPlan}>
+                      {loadingPlan === selectedPlan ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {selectedPlan === "anual" ? "Começar com desconto" : "Começar agora"}
+                    </Button>
+                  );
+                })()}
 
                 <div className="grid gap-2 text-sm text-muted-foreground">
                   {riskItems.map((item) => (

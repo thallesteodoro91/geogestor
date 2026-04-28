@@ -126,18 +126,38 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
-  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
+  const VALID_OFERTAS = ["padrao", "premium"] as const;
+  type OfertaId = (typeof VALID_OFERTAS)[number];
+  const parseOferta = (raw: string | null): OfertaId =>
+    raw && (VALID_OFERTAS as readonly string[]).includes(raw) ? (raw as OfertaId) : "padrao";
 
-  const setSelectedPlan = (plan: PlanId) => {
-    setSelectedPlanState(plan);
+  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
+  const initialOferta: OfertaId = parseOferta(searchParams.get("oferta"));
+  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
+  const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(initialOferta);
+
+  const updateUrlParams = (next: { plano?: PlanId; oferta?: OfertaId }) => {
     setSearchParams(
       (prev) => {
-        prev.set("plano", plan);
+        if (next.plano) prev.set("plano", next.plano);
+        if (next.oferta) {
+          if (next.oferta === "padrao") prev.delete("oferta");
+          else prev.set("oferta", next.oferta);
+        }
         return prev;
       },
       { replace: true },
     );
+  };
+
+  const setSelectedPlan = (plan: PlanId) => {
+    setSelectedPlanState(plan);
+    updateUrlParams({ plano: plan });
+  };
+
+  const setSelectedOferta = (oferta: OfertaId) => {
+    setSelectedOfertaState(oferta);
+    updateUrlParams({ oferta });
   };
 
   // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
@@ -146,6 +166,8 @@ export default function Assinatura() {
     if (urlPlan === "mensal" || urlPlan === "anual") {
       setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
     }
+    const urlOferta = parseOferta(searchParams.get("oferta"));
+    setSelectedOfertaState((current) => (current !== urlOferta ? urlOferta : current));
   }, [searchParams]);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);

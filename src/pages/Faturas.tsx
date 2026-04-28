@@ -808,6 +808,26 @@ export default function Faturas() {
                     <p className={cn("mt-1 text-xl font-semibold", excedeu ? "text-destructive" : "text-warning")}>
                       {formatCurrency(filteredSummary.totalEmAberto, filteredSummary.currency)}
                     </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                      <span>
+                        <strong className="font-semibold text-foreground">{totalAbertas}</strong>{" "}
+                        {totalAbertas === 1 ? "fatura em aberto" : "faturas em aberto"}
+                      </span>
+                      {limiteEfetivo > 0 && (
+                        <>
+                          <span aria-hidden="true">·</span>
+                          <span>
+                            <strong className={cn("font-semibold", destacadas > 0 ? "text-destructive" : "text-foreground")}>
+                              {destacadas}
+                            </strong>{" "}
+                            {destacadas === 1 ? "destacada" : "destacadas"}
+                            {totalAbertas > 0 && (
+                              <span className="text-muted-foreground"> ({percentualDestacadas}%)</span>
+                            )}
+                          </span>
+                        </>
+                      )}
+                    </div>
                     {excedeu && (
                       <p className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5" />

@@ -581,6 +581,16 @@ export default function Faturas() {
               const limiteMinor = limiteEfetivo * 100;
               const excedeu = limiteEfetivo > 0 && filteredSummary.totalEmAberto > limiteMinor;
               const previaAtiva = limitePrevia !== null;
+              const openInvoicesList = filteredInvoices.filter(
+                (inv) => inv.status === "open" || inv.status === "uncollectible" || inv.amount_remaining > 0,
+              );
+              const totalAbertas = openInvoicesList.length;
+              const destacadas = limiteEfetivo > 0
+                ? openInvoicesList.filter((inv) => inv.amount_remaining > limiteMinor).length
+                : 0;
+              const percentualDestacadas = totalAbertas > 0
+                ? Math.round((destacadas / totalAbertas) * 100)
+                : 0;
               return (
                 <Card className={cn(
                   excedeu && "border-destructive bg-destructive/5",

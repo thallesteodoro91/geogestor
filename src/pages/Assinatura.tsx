@@ -126,15 +126,20 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const VALID_PLANOS = ["anual", "mensal"] as const;
   const VALID_OFERTAS = ["padrao", "premium"] as const;
   type OfertaId = (typeof VALID_OFERTAS)[number];
-  const parseOferta = (raw: string | null): OfertaId =>
-    raw && (VALID_OFERTAS as readonly string[]).includes(raw) ? (raw as OfertaId) : "padrao";
 
-  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
-  const initialOferta: OfertaId = parseOferta(searchParams.get("oferta"));
-  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
-  const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(initialOferta);
+  const isValidPlano = (raw: string | null): raw is PlanId =>
+    !!raw && (VALID_PLANOS as readonly string[]).includes(raw);
+  const isValidOferta = (raw: string | null): raw is OfertaId =>
+    !!raw && (VALID_OFERTAS as readonly string[]).includes(raw);
+
+  const parsePlano = (raw: string | null): PlanId => (isValidPlano(raw) ? raw : "anual");
+  const parseOferta = (raw: string | null): OfertaId => (isValidOferta(raw) ? raw : "padrao");
+
+  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(parsePlano(searchParams.get("plano")));
+  const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(parseOferta(searchParams.get("oferta")));
 
   const updateUrlParams = (next: { plano?: PlanId; oferta?: OfertaId }) => {
     setSearchParams(
@@ -160,12 +165,36 @@ export default function Assinatura() {
     updateUrlParams({ oferta });
   };
 
+  // Sanitiza parâmetros inválidos da URL na primeira carga
+  // (ex: ?oferta=hacker → cai para 'padrao' e o param é removido sem quebrar nada)
+  useEffect(() => {
+    const rawPlano = searchParams.get("plano");
+    const rawOferta = searchParams.get("oferta");
+    const planoInvalido = rawPlano !== null && !isValidPlano(rawPlano);
+    const ofertaInvalida = rawOferta !== null && !isValidOferta(rawOferta);
+
+    if (planoInvalido || ofertaInvalida) {
+      setSearchParams(
+        (prev) => {
+          if (planoInvalido) prev.delete("plano");
+          if (ofertaInvalida) prev.delete("oferta");
+          return prev;
+        },
+        { replace: true },
+      );
+      const partes = [
+        planoInvalido ? `plano "${rawPlano}"` : null,
+        ofertaInvalida ? `oferta "${rawOferta}"` : null,
+      ].filter(Boolean).join(" e ");
+      toast(`Parâmetro ${partes} não reconhecido — usando opção padrão.`, { icon: "ℹ️" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
   useEffect(() => {
-    const urlPlan = searchParams.get("plano");
-    if (urlPlan === "mensal" || urlPlan === "anual") {
-      setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
-    }
+    const urlPlan = parsePlano(searchParams.get("plano"));
+    setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
     const urlOferta = parseOferta(searchParams.get("oferta"));
     setSelectedOfertaState((current) => (current !== urlOferta ? urlOferta : current));
   }, [searchParams]);

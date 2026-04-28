@@ -215,7 +215,7 @@ export default function Assinatura() {
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId },
+        body: { planId, oferta: selectedOferta },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 

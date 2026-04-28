@@ -325,11 +325,19 @@ export default function Assinatura() {
                       Mensal
                     </button>
                   </div>
-                  {selectedPlan === "anual" ? (
-                    <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
-                  ) : (
-                    <Badge variant="outline" className="border-border text-foreground">Sem compromisso anual</Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedPlan === "anual" ? (
+                      <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-border text-foreground">Sem compromisso anual</Badge>
+                    )}
+                    {selectedOferta === "premium" && (
+                      <Badge className="bg-warning text-warning-foreground inline-flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Oferta premium
+                      </Badge>
+                    )}
+                  </div>
                   <h3 className="text-xl font-semibold text-foreground">
                     {selectedPlan === "anual" ? "Plano Anual" : "Plano Mensal"}
                   </h3>

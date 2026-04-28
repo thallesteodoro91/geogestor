@@ -126,7 +126,7 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPlan, setSelectedPlan] = useState<Plan["id"]>("anual");
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>("anual");
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();

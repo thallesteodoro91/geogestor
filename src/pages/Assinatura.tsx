@@ -85,46 +85,7 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-type Plan = {
-  id: "mensal" | "anual";
-  label: string;
-  headline: string;
-  description: string;
-  kicker: string;
-  secondary: string;
-  savings?: string;
-  cta: string;
-  priceId: string;
-  best?: boolean;
-  features: readonly string[];
-};
-
-const plans: readonly Plan[] = [
-  {
-    id: "mensal",
-    label: "Plano Mensal",
-    headline: `R$ ${MONTHLY_PRICE}/mês`,
-    description: "Para começar com flexibilidade e acesso completo desde o primeiro dia.",
-    kicker: "Sem compromisso anual",
-    secondary: "Cobrança mensal recorrente",
-    cta: "Começar agora",
-    priceId: "price_1T2DaxK3j5PLJZVV2QghyqC5",
-    features: ["Acesso completo", "Sem contrato", "Cancele quando quiser"],
-  },
-  {
-    id: "anual",
-    label: "Plano Anual",
-    headline: `R$ ${YEARLY_PRICE}/ano`,
-    description: "A forma mais rápida de decidir com clareza e pagar menos pelo acesso completo.",
-    kicker: "2 meses grátis",
-    secondary: `Equivalente a R$ ${YEARLY_EQUIVALENT}/mês`,
-    savings: `Economize R$ ${YEARLY_SAVINGS} por ano em relação ao mensal`,
-    cta: "Começar com desconto",
-    priceId: "price_1TPMGBK3j5PLJZVVFGcr8tdf",
-    best: true,
-    features: ["Mais escolhido", "Melhor custo-benefício", "Acesso completo imediato"],
-  },
-] as const;
+type PlanId = "mensal" | "anual";
 
 const includedItems = [
   "Dashboard financeiro e operacional completos",

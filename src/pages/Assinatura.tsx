@@ -126,18 +126,38 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
-  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
+  const VALID_OFERTAS = ["padrao", "premium"] as const;
+  type OfertaId = (typeof VALID_OFERTAS)[number];
+  const parseOferta = (raw: string | null): OfertaId =>
+    raw && (VALID_OFERTAS as readonly string[]).includes(raw) ? (raw as OfertaId) : "padrao";
 
-  const setSelectedPlan = (plan: PlanId) => {
-    setSelectedPlanState(plan);
+  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
+  const initialOferta: OfertaId = parseOferta(searchParams.get("oferta"));
+  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
+  const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(initialOferta);
+
+  const updateUrlParams = (next: { plano?: PlanId; oferta?: OfertaId }) => {
     setSearchParams(
       (prev) => {
-        prev.set("plano", plan);
+        if (next.plano) prev.set("plano", next.plano);
+        if (next.oferta) {
+          if (next.oferta === "padrao") prev.delete("oferta");
+          else prev.set("oferta", next.oferta);
+        }
         return prev;
       },
       { replace: true },
     );
+  };
+
+  const setSelectedPlan = (plan: PlanId) => {
+    setSelectedPlanState(plan);
+    updateUrlParams({ plano: plan });
+  };
+
+  const setSelectedOferta = (oferta: OfertaId) => {
+    setSelectedOfertaState(oferta);
+    updateUrlParams({ oferta });
   };
 
   // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
@@ -146,6 +166,8 @@ export default function Assinatura() {
     if (urlPlan === "mensal" || urlPlan === "anual") {
       setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
     }
+    const urlOferta = parseOferta(searchParams.get("oferta"));
+    setSelectedOfertaState((current) => (current !== urlOferta ? urlOferta : current));
   }, [searchParams]);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -193,7 +215,7 @@ export default function Assinatura() {
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId },
+        body: { planId, oferta: selectedOferta },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -303,11 +325,19 @@ export default function Assinatura() {
                       Mensal
                     </button>
                   </div>
-                  {selectedPlan === "anual" ? (
-                    <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
-                  ) : (
-                    <Badge variant="outline" className="border-border text-foreground">Sem compromisso anual</Badge>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {selectedPlan === "anual" ? (
+                      <Badge className="bg-primary text-primary-foreground">Mais escolhido</Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-border text-foreground">Sem compromisso anual</Badge>
+                    )}
+                    {selectedOferta === "premium" && (
+                      <Badge className="bg-warning text-warning-foreground inline-flex items-center gap-1">
+                        <Sparkles className="h-3 w-3" />
+                        Oferta premium
+                      </Badge>
+                    )}
+                  </div>
                   <h3 className="text-xl font-semibold text-foreground">
                     {selectedPlan === "anual" ? "Plano Anual" : "Plano Mensal"}
                   </h3>

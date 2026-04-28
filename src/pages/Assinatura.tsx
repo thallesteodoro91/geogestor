@@ -126,7 +126,27 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedPlan, setSelectedPlan] = useState<PlanId>("anual");
+  const initialPlan: PlanId = searchParams.get("plano") === "mensal" ? "mensal" : "anual";
+  const [selectedPlan, setSelectedPlanState] = useState<PlanId>(initialPlan);
+
+  const setSelectedPlan = (plan: PlanId) => {
+    setSelectedPlanState(plan);
+    setSearchParams(
+      (prev) => {
+        prev.set("plano", plan);
+        return prev;
+      },
+      { replace: true },
+    );
+  };
+
+  // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
+  useEffect(() => {
+    const urlPlan = searchParams.get("plano");
+    if (urlPlan === "mensal" || urlPlan === "anual") {
+      setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
+    }
+  }, [searchParams]);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const { subscription } = useTenant();

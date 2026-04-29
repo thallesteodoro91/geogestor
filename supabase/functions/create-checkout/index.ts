@@ -28,6 +28,11 @@ const PRICE_IDS: Record<string, string> = {
   anual:       "price_1TPMGBK3j5PLJZVVFGcr8tdf",
 };
 
+const VALID_OFERTAS = ["padrao", "premium"] as const;
+type OfertaId = (typeof VALID_OFERTAS)[number];
+const isValidOferta = (raw: unknown): raw is OfertaId =>
+  typeof raw === "string" && (VALID_OFERTAS as readonly string[]).includes(raw);
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

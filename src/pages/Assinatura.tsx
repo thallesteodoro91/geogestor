@@ -241,6 +241,16 @@ export default function Assinatura() {
   };
 
   const handleSubscribe = async (planId: string) => {
+    // Validação defensiva: garante que só enviamos valores reconhecidos ao backend,
+    // mesmo que o estado tenha sido influenciado por uma URL adulterada manualmente.
+    if (!isValidPlano(planId)) {
+      toast.error("Plano inválido", {
+        description: `O plano "${planId}" não é reconhecido. Selecione uma opção válida.`,
+      });
+      return;
+    }
+    const safeOferta: OfertaId = isValidOferta(selectedOferta) ? selectedOferta : "padrao";
+
     setLoadingPlan(planId);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -251,7 +261,7 @@ export default function Assinatura() {
       }
 
       const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { planId, oferta: selectedOferta },
+        body: { planId, oferta: safeOferta },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 

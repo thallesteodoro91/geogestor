@@ -33,25 +33,45 @@ type OfertaId = (typeof VALID_OFERTAS)[number];
 const isValidOferta = (raw: unknown): raw is OfertaId =>
   typeof raw === "string" && (VALID_OFERTAS as readonly string[]).includes(raw);
 
+// Helper de log estruturado para auditoria (filtrável nos logs por [CREATE-CHECKOUT])
+const logStep = (step: string, details?: Record<string, unknown>) => {
+  const payload = details ? ` ${JSON.stringify(details)}` : "";
+  console.log(`[CREATE-CHECKOUT] ${step}${payload}`);
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const requestId = crypto.randomUUID();
   const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   if (rateLimiter.isRateLimited(clientIP)) {
+    logStep("Rate limit atingido", { requestId, clientIP });
     return new Response(JSON.stringify({ error: "Muitas requisições. Tente novamente em breve." }),
       { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } });
   }
 
   try {
+    logStep("Início", { requestId, clientIP });
+
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("Usuário não autenticado");
 
     // Ler o body antes de qualquer operação async para não perder o stream
     const body = await req.json().catch(() => ({}));
-    const planId = typeof body?.planId === "string" ? body.planId : "";
-    const oferta: OfertaId = isValidOferta(body?.oferta) ? body.oferta : "padrao";
+    const rawPlanId = typeof body?.planId === "string" ? body.planId : "";
+    const rawOferta = body?.oferta;
+    const ofertaSanitizada: OfertaId = isValidOferta(rawOferta) ? rawOferta : "padrao";
+    const ofertaFoiSanitizada = rawOferta !== undefined && rawOferta !== ofertaSanitizada;
+
+    logStep("Payload recebido", {
+      requestId,
+      planId: rawPlanId,
+      ofertaRecebida: rawOferta ?? null,
+      ofertaUsada: ofertaSanitizada,
+      ofertaFoiSanitizada,
+    });
 
     // Criar client com Authorization header no global para que getUser() funcione corretamente
     const supabase = createClient(
@@ -62,9 +82,13 @@ serve(async (req) => {
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user?.email) throw new Error("Usuário não autenticado ou sem e-mail");
+    logStep("Usuário autenticado", { requestId, userId: user.id, email: user.email });
 
-    const priceId = PRICE_IDS[planId];
-    if (!priceId) throw new Error(`Plano inválido: ${planId}`);
+    const priceId = PRICE_IDS[rawPlanId];
+    if (!priceId) {
+      logStep("Plano inválido — abortando", { requestId, planId: rawPlanId });
+      throw new Error(`Plano inválido: ${rawPlanId}`);
+    }
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
@@ -73,8 +97,15 @@ serve(async (req) => {
     // Reusar customer existente se possível
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     const customerId = customers.data.length > 0 ? customers.data[0].id : undefined;
+    logStep("Customer Stripe resolvido", { requestId, customerId: customerId ?? "novo" });
 
     const origin = req.headers.get("origin") || "https://geogestor.lovable.app";
+    const metadata = {
+      plano: rawPlanId,
+      oferta: ofertaSanitizada,
+      user_id: user.id,
+      request_id: requestId,
+    };
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -85,17 +116,40 @@ serve(async (req) => {
       billing_address_collection: "auto",
       success_url: `${origin}/checkout-sucesso?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/checkout-cancelado`,
-      metadata: { plano: planId, oferta },
-      subscription_data: { metadata: { plano: planId, oferta } },
+      metadata,
+      subscription_data: { metadata },
     });
 
-    return new Response(JSON.stringify({ url: session.url }), {
+    // Confirmação pós-criação: relê metadados retornados pelo Stripe para garantir
+    // que chegaram corretamente (não confiamos só no payload enviado).
+    logStep("Sessão Stripe criada", {
+      requestId,
+      sessionId: session.id,
+      priceId,
+      metadataEnviado: metadata,
+      metadataRetornadoPeloStripe: session.metadata,
+      subscriptionMetadataRetornado: session.subscription_data?.metadata ?? null,
+    });
+
+    const metadadosOk =
+      session.metadata?.plano === metadata.plano &&
+      session.metadata?.oferta === metadata.oferta;
+    if (!metadadosOk) {
+      logStep("ALERTA: metadados retornados pelo Stripe divergem do enviado", {
+        requestId,
+        esperado: metadata,
+        recebido: session.metadata,
+      });
+    }
+
+    return new Response(JSON.stringify({ url: session.url, requestId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return new Response(JSON.stringify({ error: message }), {
+    logStep("ERRO", { requestId, message });
+    return new Response(JSON.stringify({ error: message, requestId }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 500,
     });

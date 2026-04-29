@@ -244,9 +244,17 @@ export default function Assinatura() {
     // Validação defensiva: garante que só enviamos valores reconhecidos ao backend,
     // mesmo que o estado tenha sido influenciado por uma URL adulterada manualmente.
     if (!isValidPlano(planId)) {
-      toast.error("Plano inválido", {
-        description: `O plano "${planId}" não é reconhecido. Selecione uma opção válida.`,
+      const planoExibido = planId?.trim() ? `"${planId}"` : "vazio";
+      toast.error(`Plano ${planoExibido} não é válido`, {
+        description: `Aceitamos apenas: ${VALID_PLANOS.join(" ou ")}. Toque em "Anual" ou "Mensal" acima para escolher novamente antes de continuar.`,
+        duration: 6000,
+        action: {
+          label: "Selecionar Anual",
+          onClick: () => setSelectedPlan("anual"),
+        },
       });
+      // Reseta para o padrão para que o próximo clique já parta de um estado válido
+      setSelectedPlan("anual");
       return;
     }
     const safeOferta: OfertaId = isValidOferta(selectedOferta) ? selectedOferta : "padrao";

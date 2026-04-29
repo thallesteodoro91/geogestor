@@ -165,8 +165,10 @@ export default function Assinatura() {
     updateUrlParams({ oferta });
   };
 
-  // Sanitiza parâmetros inválidos da URL na primeira carga
-  // (ex: ?oferta=hacker → cai para 'padrao' e o param é removido sem quebrar nada)
+  // Sanitiza parâmetros inválidos da URL sempre que ela mudar
+  // (cobre primeira carga, refresh com valores quebrados e navegação back/forward)
+  // Usamos uma ref para evitar repetir o mesmo toast para o mesmo par inválido.
+  const lastInvalidToastRef = useRef<string | null>(null);
   useEffect(() => {
     const rawPlano = searchParams.get("plano");
     const rawOferta = searchParams.get("oferta");
@@ -174,6 +176,7 @@ export default function Assinatura() {
     const ofertaInvalida = rawOferta !== null && !isValidOferta(rawOferta);
 
     if (planoInvalido || ofertaInvalida) {
+      const signature = `${planoInvalido ? rawPlano : ""}|${ofertaInvalida ? rawOferta : ""}`;
       setSearchParams(
         (prev) => {
           if (planoInvalido) prev.delete("plano");
@@ -182,20 +185,24 @@ export default function Assinatura() {
         },
         { replace: true },
       );
-      const partes = [
-        planoInvalido ? `plano "${rawPlano}"` : null,
-        ofertaInvalida ? `oferta "${rawOferta}"` : null,
-      ].filter(Boolean).join(" e ");
-      toast(`Parâmetro ${partes} não reconhecido — usando opção padrão.`, { icon: "ℹ️" });
+      if (lastInvalidToastRef.current !== signature) {
+        lastInvalidToastRef.current = signature;
+        const partes = [
+          planoInvalido ? `plano "${rawPlano}"` : null,
+          ofertaInvalida ? `oferta "${rawOferta}"` : null,
+        ].filter(Boolean).join(" e ");
+        toast(`Parâmetro ${partes} não reconhecido — usando opção padrão.`, { icon: "ℹ️" });
+      }
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
-  // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
-  useEffect(() => {
-    const urlPlan = parsePlano(searchParams.get("plano"));
+    // URL válida — limpa a assinatura para permitir avisar de novo se voltar a ficar inválida
+    lastInvalidToastRef.current = null;
+
+    // Sincroniza estado quando a URL muda externamente (ex: voltar/avançar do navegador)
+    const urlPlan = parsePlano(rawPlano);
     setSelectedPlanState((current) => (current !== urlPlan ? urlPlan : current));
-    const urlOferta = parseOferta(searchParams.get("oferta"));
+    const urlOferta = parseOferta(rawOferta);
     setSelectedOfertaState((current) => (current !== urlOferta ? urlOferta : current));
   }, [searchParams]);
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);

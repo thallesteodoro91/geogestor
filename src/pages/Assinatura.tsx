@@ -245,12 +245,38 @@ export default function Assinatura() {
     // mesmo que o estado tenha sido influenciado por uma URL adulterada manualmente.
     if (!isValidPlano(planId)) {
       const planoExibido = planId?.trim() ? `"${planId}"` : "vazio";
+      const auditEntry = {
+        event: "checkout_planId_rejeitado",
+        timestamp: new Date().toISOString(),
+        rejectedPlanId: planId ?? null,
+        rejectedPlanIdType: typeof planId,
+        validValues: [...VALID_PLANOS],
+        currentSelectedPlan: selectedPlan,
+        currentSelectedOferta: selectedOferta,
+        urlPlano: searchParams.get("plano"),
+        urlOferta: searchParams.get("oferta"),
+        url: typeof window !== "undefined" ? window.location.href : null,
+        userAction: "auto_reset_para_anual" as
+          | "auto_reset_para_anual"
+          | "usuario_clicou_selecionar_anual",
+      };
+      // Auditoria 1: registra rejeição no console (filtre por [AUDIT][CHECKOUT])
+      console.warn("[AUDIT][CHECKOUT] planId rejeitado", auditEntry);
+
       toast.error(`Plano ${planoExibido} não é válido`, {
         description: `Aceitamos apenas: ${VALID_PLANOS.join(" ou ")}. Toque em "Anual" ou "Mensal" acima para escolher novamente antes de continuar.`,
         duration: 6000,
         action: {
           label: "Selecionar Anual",
-          onClick: () => setSelectedPlan("anual"),
+          onClick: () => {
+            // Auditoria 2: registra ação tomada pelo usuário no toast
+            console.info("[AUDIT][CHECKOUT] Usuário clicou em 'Selecionar Anual' após rejeição", {
+              ...auditEntry,
+              userAction: "usuario_clicou_selecionar_anual",
+              clickedAt: new Date().toISOString(),
+            });
+            setSelectedPlan("anual");
+          },
         },
       });
       // Reseta para o padrão para que o próximo clique já parta de um estado válido

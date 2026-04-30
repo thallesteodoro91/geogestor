@@ -107,6 +107,44 @@ describe("Assinatura — URL adulterada manualmente", () => {
     expect(message).toMatch(/oferta "evil"/);
   });
 
+  it("trava o TEXTO EXATO do toast de URL inválida (mensagem + opções)", async () => {
+    renderWithUrl("/assinatura?plano=hacker&oferta=evil");
+
+    await waitFor(() => {
+      const found = toastMock.mock.calls.find(([msg]) =>
+        typeof msg === "string" && msg.includes("não reconhecido"),
+      );
+      expect(found).toBeTruthy();
+    });
+
+    const sanitizationCall = toastMock.mock.calls.find(([msg]) =>
+      typeof msg === "string" && msg.includes("não reconhecido"),
+    )!;
+
+    expect(sanitizationCall[0]).toBe(
+      'Parâmetro plano "hacker" e oferta "evil" não reconhecido — usando opção padrão.',
+    );
+    expect(sanitizationCall[1]).toEqual({ icon: "ℹ️" });
+  });
+
+  it("trava o TEXTO EXATO do toast de checkout cancelado (mensagem + descrição)", async () => {
+    renderWithUrl("/assinatura?checkout=canceled");
+
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalled();
+    });
+
+    const canceladoCall = toastMock.mock.calls.find(([msg]) =>
+      typeof msg === "string" && msg.includes("Compra cancelada"),
+    );
+    expect(canceladoCall).toBeTruthy();
+    expect(canceladoCall![0]).toBe("Compra cancelada — seus dados estão salvos");
+    expect(canceladoCall![1]).toEqual({
+      description: "Quando quiser, você pode escolher um plano novamente.",
+      icon: "ℹ️",
+    });
+  });
+
   it("não emite o toast informativo quando a URL é válida", async () => {
     renderWithUrl("/assinatura?plano=anual&oferta=premium");
 

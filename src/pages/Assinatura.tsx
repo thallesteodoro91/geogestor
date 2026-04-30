@@ -25,6 +25,19 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+import {
+  VALID_PLANOS,
+  VALID_OFERTAS,
+  isValidPlano,
+  isValidOferta,
+  parsePlano,
+  parseOferta,
+  buildCheckoutAuditEntry,
+  logCheckoutRejection,
+  logCheckoutRecoveryClick,
+  type PlanId as CheckoutPlanId,
+  type OfertaId,
+} from "@/lib/checkoutValidation";
 
 const MONTHLY_PRICE = 97;
 const YEARLY_PRICE = 970;
@@ -126,17 +139,6 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const VALID_PLANOS = ["anual", "mensal"] as const;
-  const VALID_OFERTAS = ["padrao", "premium"] as const;
-  type OfertaId = (typeof VALID_OFERTAS)[number];
-
-  const isValidPlano = (raw: string | null): raw is PlanId =>
-    !!raw && (VALID_PLANOS as readonly string[]).includes(raw);
-  const isValidOferta = (raw: string | null): raw is OfertaId =>
-    !!raw && (VALID_OFERTAS as readonly string[]).includes(raw);
-
-  const parsePlano = (raw: string | null): PlanId => (isValidPlano(raw) ? raw : "anual");
-  const parseOferta = (raw: string | null): OfertaId => (isValidOferta(raw) ? raw : "padrao");
 
   const [selectedPlan, setSelectedPlanState] = useState<PlanId>(parsePlano(searchParams.get("plano")));
   const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(parseOferta(searchParams.get("oferta")));

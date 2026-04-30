@@ -23,17 +23,17 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 // ---- Mocks ----
-const toastMock = Object.assign(
-  vi.fn(),
-  {
+const { toastMock } = vi.hoisted(() => {
+  const fn = Object.assign(vi.fn(), {
     error: vi.fn(),
     success: vi.fn(),
     info: vi.fn(),
     warning: vi.fn(),
     message: vi.fn(),
     dismiss: vi.fn(),
-  },
-);
+  });
+  return { toastMock: fn };
+});
 
 vi.mock("sonner", () => ({
   toast: toastMock,

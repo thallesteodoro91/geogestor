@@ -38,6 +38,11 @@ import {
   type PlanId as CheckoutPlanId,
   type OfertaId,
 } from "@/lib/checkoutValidation";
+import {
+  ASSINATURA_TOASTS,
+  formatPlanoExibido,
+  formatParamsInvalidos,
+} from "@/lib/assinaturaToasts";
 
 const MONTHLY_PRICE = 97;
 const YEARLY_PRICE = 970;
@@ -189,11 +194,11 @@ export default function Assinatura() {
       );
       if (lastInvalidToastRef.current !== signature) {
         lastInvalidToastRef.current = signature;
-        const partes = [
-          planoInvalido ? `plano "${rawPlano}"` : null,
-          ofertaInvalida ? `oferta "${rawOferta}"` : null,
-        ].filter(Boolean).join(" e ");
-        toast(`Parâmetro ${partes} não reconhecido — usando opção padrão.`, { icon: "ℹ️" });
+        const partes = formatParamsInvalidos({
+          planoInvalido: planoInvalido ? rawPlano : null,
+          ofertaInvalida: ofertaInvalida ? rawOferta : null,
+        });
+        toast(ASSINATURA_TOASTS.paramInvalido(partes), { icon: "ℹ️" });
       }
       return;
     }
@@ -214,8 +219,8 @@ export default function Assinatura() {
 
   useEffect(() => {
     if (searchParams.get("checkout") === "canceled") {
-      toast("Compra cancelada — seus dados estão salvos", {
-        description: "Quando quiser, você pode escolher um plano novamente.",
+      toast(ASSINATURA_TOASTS.checkoutCancelado.message, {
+        description: ASSINATURA_TOASTS.checkoutCancelado.description,
         icon: "ℹ️",
       });
       setSearchParams((prev) => {
@@ -236,7 +241,7 @@ export default function Assinatura() {
       window.open(data.url, "_blank");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro inesperado";
-      toast.error("Erro ao abrir portal de gerenciamento", { description: msg });
+      toast.error(ASSINATURA_TOASTS.erroPortal.message, { description: msg });
     } finally {
       setPortalLoading(false);
     }
@@ -246,7 +251,7 @@ export default function Assinatura() {
     // Validação defensiva: garante que só enviamos valores reconhecidos ao backend,
     // mesmo que o estado tenha sido influenciado por uma URL adulterada manualmente.
     if (!isValidPlano(planId)) {
-      const planoExibido = planId?.trim() ? `"${planId}"` : "vazio";
+      const planoExibido = formatPlanoExibido(planId);
       const auditEntry = buildCheckoutAuditEntry({
         rejectedPlanId: planId,
         currentSelectedPlan: selectedPlan,
@@ -258,11 +263,12 @@ export default function Assinatura() {
       // Auditoria 1: registra rejeição no console (filtre por [AUDIT][CHECKOUT])
       logCheckoutRejection(auditEntry);
 
-      toast.error(`Plano ${planoExibido} não é válido`, {
-        description: `Aceitamos apenas: ${VALID_PLANOS.join(" ou ")}. Toque em "Anual" ou "Mensal" acima para escolher novamente antes de continuar.`,
-        duration: 6000,
+      const copy = ASSINATURA_TOASTS.planoInvalido(planoExibido, VALID_PLANOS);
+      toast.error(copy.message, {
+        description: copy.description,
+        duration: copy.duration,
         action: {
-          label: "Selecionar Anual",
+          label: copy.actionLabel,
           onClick: () => {
             // Auditoria 2: registra ação tomada pelo usuário no toast
             logCheckoutRecoveryClick(auditEntry);
@@ -280,7 +286,7 @@ export default function Assinatura() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        toast.error("Faça login para assinar um plano.");
+        toast.error(ASSINATURA_TOASTS.semSessao);
         navigate("/auth");
         return;
       }
@@ -299,13 +305,13 @@ export default function Assinatura() {
         window.location.href = data.url;
       } else {
         window.open(data.url, "_blank");
-        toast.success("Abrimos o pagamento em uma nova aba", {
-          description: "Conclua a compra para liberar o acesso completo.",
+        toast.success(ASSINATURA_TOASTS.checkoutAberto.message, {
+          description: ASSINATURA_TOASTS.checkoutAberto.description,
         });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro inesperado";
-      toast.error("Erro ao iniciar pagamento", { description: msg });
+      toast.error(ASSINATURA_TOASTS.erroCheckout.message, { description: msg });
     } finally {
       setLoadingPlan(null);
     }

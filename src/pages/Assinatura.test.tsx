@@ -16,7 +16,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { Toaster } from "sonner";
 
 // ---- Mocks ----
 vi.mock("@/integrations/supabase/client", () => ({

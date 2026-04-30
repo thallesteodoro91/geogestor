@@ -186,3 +186,160 @@ describe("Assinatura — URL adulterada manualmente", () => {
     expect(auditInfos).toHaveLength(0);
   });
 });
+
+/**
+ * Garante que CADA cenário dispara exatamente N toasts esperados — nem mais,
+ * nem menos. Protege contra regressões em que um efeito acidental passe a
+ * disparar toasts duplicados ou em momentos errados.
+ *
+ * `totalToasts()` soma todas as variantes (toast(), toast.error, toast.success,
+ * toast.info, toast.warning, toast.message) — qualquer toast extra inflaciona
+ * a contagem e quebra o teste.
+ */
+function totalToasts(): number {
+  return (
+    toastMock.mock.calls.length +
+    toastMock.error.mock.calls.length +
+    toastMock.success.mock.calls.length +
+    toastMock.info.mock.calls.length +
+    toastMock.warning.mock.calls.length +
+    toastMock.message.mock.calls.length
+  );
+}
+
+function clearAllToastSpies() {
+  toastMock.mockClear();
+  toastMock.error.mockClear();
+  toastMock.success.mockClear();
+  toastMock.info.mockClear();
+  toastMock.warning.mockClear();
+  toastMock.message.mockClear();
+}
+
+describe("Assinatura — contagem de toasts por cenário (anti-regressão de fluxo)", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    clearAllToastSpies();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  it("URL limpa: NENHUM toast é disparado no carregamento", async () => {
+    renderWithUrl("/assinatura");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(totalToasts()).toBe(0);
+  });
+
+  it("URL válida (?plano=anual&oferta=premium): NENHUM toast é disparado", async () => {
+    renderWithUrl("/assinatura?plano=anual&oferta=premium");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(totalToasts()).toBe(0);
+  });
+
+  it("URL com plano inválido: dispara EXATAMENTE 1 toast (informativo) e nenhum erro/sucesso", async () => {
+    renderWithUrl("/assinatura?plano=hacker");
+
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledTimes(1);
+    });
+
+    // O único toast deve ser o informativo de sanitização.
+    expect(toastMock.mock.calls[0][0]).toContain("não reconhecido");
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(toastMock.info).not.toHaveBeenCalled();
+    expect(totalToasts()).toBe(1);
+  });
+
+  it("URL com ?checkout=canceled: dispara EXATAMENTE 1 toast informativo e nenhum erro", async () => {
+    renderWithUrl("/assinatura?checkout=canceled");
+
+    await waitFor(() => {
+      expect(toastMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(toastMock.mock.calls[0][0]).toBe(
+      "Compra cancelada — seus dados estão salvos",
+    );
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(totalToasts()).toBe(1);
+  });
+
+  it("URL inválida + checkout cancelado: dispara EXATAMENTE 2 toasts (um de cada) sem duplicação", async () => {
+    renderWithUrl("/assinatura?plano=hacker&checkout=canceled");
+
+    await waitFor(() => {
+      expect(toastMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // Aguarda eventuais re-renderizações encadeadas (sanitização da URL muda
+    // searchParams, o que poderia disparar o effect de "checkout=canceled" outra vez).
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const messages = toastMock.mock.calls.map((c) => c[0]);
+    const sanitizacao = messages.filter(
+      (m) => typeof m === "string" && m.includes("não reconhecido"),
+    );
+    const cancelamento = messages.filter(
+      (m) => typeof m === "string" && m.includes("Compra cancelada"),
+    );
+
+    expect(sanitizacao).toHaveLength(1);
+    expect(cancelamento).toHaveLength(1);
+    expect(toastMock.error).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(totalToasts()).toBe(2);
+  });
+
+  it("clique no CTA sem sessão: dispara EXATAMENTE 1 toast.error('Faça login...') e nenhum outro", async () => {
+    renderWithUrl("/assinatura");
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Sanity: nenhum toast no carregamento.
+    expect(totalToasts()).toBe(0);
+
+    // Clica no CTA principal (estado padrão = "anual" → "Começar com desconto").
+    const ctas = screen.getAllByRole("button", {
+      name: /começar com desconto/i,
+    });
+    await act(async () => {
+      fireEvent.click(ctas[0]);
+      // Aguarda o supabase.auth.getSession() (mockado) resolver.
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(toastMock.error).toHaveBeenCalledTimes(1);
+    });
+
+    expect(toastMock.error.mock.calls[0][0]).toBe(
+      "Faça login para assinar um plano.",
+    );
+    expect(toastMock).not.toHaveBeenCalled();
+    expect(toastMock.success).not.toHaveBeenCalled();
+    expect(totalToasts()).toBe(1);
+  });
+});
+

@@ -25,6 +25,19 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+import {
+  VALID_PLANOS,
+  VALID_OFERTAS,
+  isValidPlano,
+  isValidOferta,
+  parsePlano,
+  parseOferta,
+  buildCheckoutAuditEntry,
+  logCheckoutRejection,
+  logCheckoutRecoveryClick,
+  type PlanId as CheckoutPlanId,
+  type OfertaId,
+} from "@/lib/checkoutValidation";
 
 const MONTHLY_PRICE = 97;
 const YEARLY_PRICE = 970;
@@ -85,7 +98,7 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-type PlanId = "mensal" | "anual";
+type PlanId = CheckoutPlanId;
 
 const includedItems = [
   "Dashboard financeiro e operacional completos",
@@ -126,17 +139,6 @@ const faqItems = [
 export default function Assinatura() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const VALID_PLANOS = ["anual", "mensal"] as const;
-  const VALID_OFERTAS = ["padrao", "premium"] as const;
-  type OfertaId = (typeof VALID_OFERTAS)[number];
-
-  const isValidPlano = (raw: string | null): raw is PlanId =>
-    !!raw && (VALID_PLANOS as readonly string[]).includes(raw);
-  const isValidOferta = (raw: string | null): raw is OfertaId =>
-    !!raw && (VALID_OFERTAS as readonly string[]).includes(raw);
-
-  const parsePlano = (raw: string | null): PlanId => (isValidPlano(raw) ? raw : "anual");
-  const parseOferta = (raw: string | null): OfertaId => (isValidOferta(raw) ? raw : "padrao");
 
   const [selectedPlan, setSelectedPlanState] = useState<PlanId>(parsePlano(searchParams.get("plano")));
   const [selectedOferta, setSelectedOfertaState] = useState<OfertaId>(parseOferta(searchParams.get("oferta")));
@@ -245,23 +247,16 @@ export default function Assinatura() {
     // mesmo que o estado tenha sido influenciado por uma URL adulterada manualmente.
     if (!isValidPlano(planId)) {
       const planoExibido = planId?.trim() ? `"${planId}"` : "vazio";
-      const auditEntry = {
-        event: "checkout_planId_rejeitado",
-        timestamp: new Date().toISOString(),
-        rejectedPlanId: planId ?? null,
-        rejectedPlanIdType: typeof planId,
-        validValues: [...VALID_PLANOS],
+      const auditEntry = buildCheckoutAuditEntry({
+        rejectedPlanId: planId,
         currentSelectedPlan: selectedPlan,
         currentSelectedOferta: selectedOferta,
         urlPlano: searchParams.get("plano"),
         urlOferta: searchParams.get("oferta"),
         url: typeof window !== "undefined" ? window.location.href : null,
-        userAction: "auto_reset_para_anual" as
-          | "auto_reset_para_anual"
-          | "usuario_clicou_selecionar_anual",
-      };
+      });
       // Auditoria 1: registra rejeição no console (filtre por [AUDIT][CHECKOUT])
-      console.warn("[AUDIT][CHECKOUT] planId rejeitado", auditEntry);
+      logCheckoutRejection(auditEntry);
 
       toast.error(`Plano ${planoExibido} não é válido`, {
         description: `Aceitamos apenas: ${VALID_PLANOS.join(" ou ")}. Toque em "Anual" ou "Mensal" acima para escolher novamente antes de continuar.`,
@@ -270,11 +265,7 @@ export default function Assinatura() {
           label: "Selecionar Anual",
           onClick: () => {
             // Auditoria 2: registra ação tomada pelo usuário no toast
-            console.info("[AUDIT][CHECKOUT] Usuário clicou em 'Selecionar Anual' após rejeição", {
-              ...auditEntry,
-              userAction: "usuario_clicou_selecionar_anual",
-              clickedAt: new Date().toISOString(),
-            });
+            logCheckoutRecoveryClick(auditEntry);
             setSelectedPlan("anual");
           },
         },

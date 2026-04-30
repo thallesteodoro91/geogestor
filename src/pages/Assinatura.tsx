@@ -98,7 +98,7 @@ const benefitToneClasses = {
   danger: "text-destructive bg-destructive/10",
 } as const;
 
-type PlanId = "mensal" | "anual";
+type PlanId = CheckoutPlanId;
 
 const includedItems = [
   "Dashboard financeiro e operacional completos",

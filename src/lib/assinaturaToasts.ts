@@ -19,6 +19,24 @@ export const ASSINATURA_TOASTS = {
     description: "Quando quiser, você pode escolher um plano novamente.",
   } as const,
 
+  /** Toast de sucesso quando o checkout retorna com pagamento aprovado. */
+  checkoutApproved: {
+    message: "Pagamento aprovado — bem-vindo ao GeoGestor!",
+    description: "Seu acesso completo foi liberado. Bom trabalho!",
+  } as const,
+
+  /** Toast de erro quando o checkout retorna com pagamento recusado. */
+  checkoutFailed: {
+    message: "Pagamento recusado",
+    description: "Tente outro método de pagamento ou fale com seu banco.",
+  } as const,
+
+  /** Toast informativo quando o pagamento ainda está em processamento (boleto/pix). */
+  checkoutProcessing: {
+    message: "Pagamento em processamento",
+    description: "Avisaremos por e-mail assim que a confirmação chegar.",
+  } as const,
+
   /** Toast de erro quando o portal de gerenciamento falha. */
   erroPortal: {
     message: "Erro ao abrir portal de gerenciamento",

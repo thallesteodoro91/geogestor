@@ -518,3 +518,109 @@ describe("Assinatura — snapshots de copy por cenário (anti-regressão de text
   });
 });
 
+/**
+ * Snapshots por status do retorno do checkout (?checkout=approved|failed|processing|canceled).
+ * Cada cenário deve emitir EXATAMENTE 1 toast, com variante e copy específicos.
+ * Mudou o copy ou a variante? O snapshot quebra e força revisão consciente.
+ */
+describe("Assinatura — snapshots por status de checkout (approved/failed/processing/canceled)", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    clearAllToastSpies();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  it("?checkout=approved → toast.success com mensagem de boas-vindas", async () => {
+    renderWithUrl("/assinatura?checkout=approved");
+    await waitFor(() => expect(toastMock.success).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Pagamento aprovado — bem-vindo ao GeoGestor!",
+            {
+              "description": "Seu acesso completo foi liberado. Bom trabalho!",
+            },
+          ],
+          "variant": "success",
+        },
+      ]
+    `);
+  });
+
+  it("?checkout=failed → toast.error com instrução de tentar outro método", async () => {
+    renderWithUrl("/assinatura?checkout=failed");
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Pagamento recusado",
+            {
+              "description": "Tente outro método de pagamento ou fale com seu banco.",
+            },
+          ],
+          "variant": "error",
+        },
+      ]
+    `);
+  });
+
+  it("?checkout=processing → toast informativo (default) com ícone de relógio", async () => {
+    renderWithUrl("/assinatura?checkout=processing");
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Pagamento em processamento",
+            {
+              "description": "Avisaremos por e-mail assim que a confirmação chegar.",
+              "icon": "⏳",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("?checkout=canceled → toast informativo (default) com ícone de info (regressão)", async () => {
+    renderWithUrl("/assinatura?checkout=canceled");
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Compra cancelada — seus dados estão salvos",
+            {
+              "description": "Quando quiser, você pode escolher um plano novamente.",
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("?checkout=foobar (status desconhecido) → NENHUM toast é disparado", async () => {
+    renderWithUrl("/assinatura?checkout=foobar");
+    await act(async () => { await Promise.resolve(); });
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`[]`);
+  });
+});
+

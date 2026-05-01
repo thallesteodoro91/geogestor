@@ -218,11 +218,30 @@ export default function Assinatura() {
   const stripeStatus = useStripeSubscription();
 
   useEffect(() => {
-    if (searchParams.get("checkout") === "canceled") {
+    const status = searchParams.get("checkout");
+    if (!status) return;
+
+    if (status === "canceled") {
       toast(ASSINATURA_TOASTS.checkoutCancelado.message, {
         description: ASSINATURA_TOASTS.checkoutCancelado.description,
         icon: "ℹ️",
       });
+    } else if (status === "approved") {
+      toast.success(ASSINATURA_TOASTS.checkoutApproved.message, {
+        description: ASSINATURA_TOASTS.checkoutApproved.description,
+      });
+    } else if (status === "failed") {
+      toast.error(ASSINATURA_TOASTS.checkoutFailed.message, {
+        description: ASSINATURA_TOASTS.checkoutFailed.description,
+      });
+    } else if (status === "processing") {
+      toast(ASSINATURA_TOASTS.checkoutProcessing.message, {
+        description: ASSINATURA_TOASTS.checkoutProcessing.description,
+        icon: "⏳",
+      });
+    }
+
+    if (["canceled", "approved", "failed", "processing"].includes(status)) {
       setSearchParams((prev) => {
         prev.delete("checkout");
         return prev;

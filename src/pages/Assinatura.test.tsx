@@ -343,3 +343,178 @@ describe("Assinatura — contagem de toasts por cenário (anti-regressão de flu
   });
 });
 
+/**
+ * Snapshots por cenário: capturam variante (`default` / `error` / `success` / ...)
+ * + argumentos completos (mensagem + options) de CADA toast disparado, na ordem.
+ *
+ * Diferente da suite de contagem, aqui qualquer alteração de copy — mesmo mantendo
+ * o número de toasts — quebra o snapshot e força revisão consciente do texto.
+ *
+ * Para atualizar intencionalmente: rode `vitest -u` e revise o diff.
+ */
+type ToastEvent = { variant: string; args: unknown[] };
+
+function collectToastEvents(): ToastEvent[] {
+  const variants: Array<["default" | "error" | "success" | "info" | "warning" | "message", { mock: { calls: unknown[][] } }]> = [
+    ["default", toastMock as unknown as { mock: { calls: unknown[][] } }],
+    ["error", toastMock.error],
+    ["success", toastMock.success],
+    ["info", toastMock.info],
+    ["warning", toastMock.warning],
+    ["message", toastMock.message],
+  ];
+  const events: ToastEvent[] = [];
+  for (const [variant, spy] of variants) {
+    for (const args of spy.mock.calls) {
+      events.push({ variant, args });
+    }
+  }
+  return events;
+}
+
+describe("Assinatura — snapshots de copy por cenário (anti-regressão de texto)", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    clearAllToastSpies();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  it("URL limpa: snapshot vazio (nenhum toast)", async () => {
+    renderWithUrl("/assinatura");
+    await act(async () => { await Promise.resolve(); });
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`[]`);
+  });
+
+  it("URL válida (?plano=anual&oferta=premium): snapshot vazio", async () => {
+    renderWithUrl("/assinatura?plano=anual&oferta=premium");
+    await act(async () => { await Promise.resolve(); });
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`[]`);
+  });
+
+  it("URL com plano inválido: snapshot do toast informativo de sanitização", async () => {
+    renderWithUrl("/assinatura?plano=hacker");
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Parâmetro plano "hacker" não reconhecido — usando opção padrão.",
+            {
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("URL com plano + oferta inválidos: snapshot cita ambos no mesmo toast", async () => {
+    renderWithUrl("/assinatura?plano=hacker&oferta=evil");
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Parâmetro plano "hacker" e oferta "evil" não reconhecido — usando opção padrão.",
+            {
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("URL com ?checkout=canceled: snapshot do toast informativo de cancelamento", async () => {
+    renderWithUrl("/assinatura?checkout=canceled");
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Compra cancelada — seus dados estão salvos",
+            {
+              "description": "Quando quiser, você pode escolher um plano novamente.",
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("URL inválida + checkout cancelado: snapshot dos 2 toasts (sanitização + cancelamento)", async () => {
+    renderWithUrl("/assinatura?plano=hacker&checkout=canceled");
+
+    await waitFor(() => {
+      expect(toastMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    await act(async () => { await Promise.resolve(); });
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Parâmetro plano "hacker" não reconhecido — usando opção padrão.",
+            {
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+        {
+          "args": [
+            "Compra cancelada — seus dados estão salvos",
+            {
+              "description": "Quando quiser, você pode escolher um plano novamente.",
+              "icon": "ℹ️",
+            },
+          ],
+          "variant": "default",
+        },
+      ]
+    `);
+  });
+
+  it("clique no CTA sem sessão: snapshot do toast.error 'Faça login...'", async () => {
+    renderWithUrl("/assinatura");
+    await act(async () => { await Promise.resolve(); });
+
+    const ctas = screen.getAllByRole("button", { name: /começar com desconto/i });
+    await act(async () => {
+      fireEvent.click(ctas[0]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(toastMock.error).toHaveBeenCalled());
+
+    expect(collectToastEvents()).toMatchInlineSnapshot(`
+      [
+        {
+          "args": [
+            "Faça login para assinar um plano.",
+          ],
+          "variant": "error",
+        },
+      ]
+    `);
+  });
+});
+

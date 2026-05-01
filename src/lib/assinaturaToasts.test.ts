@@ -37,6 +37,27 @@ describe("ASSINATURA_TOASTS — texto exato (anti-regressão)", () => {
     });
   });
 
+  it("checkoutApproved: mensagem e descrição exatas", () => {
+    expect(ASSINATURA_TOASTS.checkoutApproved).toEqual({
+      message: "Pagamento aprovado — bem-vindo ao GeoGestor!",
+      description: "Seu acesso completo foi liberado. Bom trabalho!",
+    });
+  });
+
+  it("checkoutFailed: mensagem e descrição exatas", () => {
+    expect(ASSINATURA_TOASTS.checkoutFailed).toEqual({
+      message: "Pagamento recusado",
+      description: "Tente outro método de pagamento ou fale com seu banco.",
+    });
+  });
+
+  it("checkoutProcessing: mensagem e descrição exatas", () => {
+    expect(ASSINATURA_TOASTS.checkoutProcessing).toEqual({
+      message: "Pagamento em processamento",
+      description: "Avisaremos por e-mail assim que a confirmação chegar.",
+    });
+  });
+
   it("erroPortal: mensagem exata", () => {
     expect(ASSINATURA_TOASTS.erroPortal).toEqual({
       message: "Erro ao abrir portal de gerenciamento",

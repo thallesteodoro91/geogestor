@@ -712,3 +712,143 @@ describe("Assinatura — contrato (variant + icon) por status de checkout", () =
   });
 });
 
+/**
+ * Ordenação cronológica real dos toasts (cross-variant).
+ *
+ * `collectToastEvents` agrupa por variant — perde a ordem entre variants
+ * diferentes. Aqui usamos `invocationCallOrder` do vitest, que numera
+ * GLOBALMENTE cada chamada de qualquer spy, para reconstruir a sequência
+ * exata em que os toasts foram disparados.
+ */
+type OrderedToastEvent = ToastEvent & { order: number };
+
+function collectOrderedToastEvents(): OrderedToastEvent[] {
+  const spies: Array<[ToastEvent["variant"], { mock: { calls: unknown[][]; invocationCallOrder: number[] } }]> = [
+    ["default", toastMock as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+    ["error", toastMock.error as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+    ["success", toastMock.success as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+    ["info", toastMock.info as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+    ["warning", toastMock.warning as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+    ["message", toastMock.message as unknown as { mock: { calls: unknown[][]; invocationCallOrder: number[] } }],
+  ];
+  const events: OrderedToastEvent[] = [];
+  for (const [variant, spy] of spies) {
+    spy.mock.calls.forEach((args, i) => {
+      events.push({ variant, args, order: spy.mock.invocationCallOrder[i] });
+    });
+  }
+  return events.sort((a, b) => a.order - b.order);
+}
+
+/**
+ * Garante a ORDEM EXATA dos toasts quando dois efeitos disparam simultaneamente:
+ * sanitização da URL + status de checkout. Como ambos os useEffect são
+ * disparados na mesma fase de commit, a ordem é determinística e segue a
+ * ordem em que os efeitos estão declarados em `Assinatura.tsx`:
+ *   1º) sanitização (paramInvalido)
+ *   2º) feedback do status de checkout
+ *
+ * Qualquer reordenação acidental de useEffects (ou um efeito extra colado no meio)
+ * quebra esses testes.
+ */
+describe("Assinatura — ordem cronológica dos toasts em cenários combinados", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    clearAllToastSpies();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  /** Renderiza, espera 2 toasts e devolve a sequência ordenada como
+   *  pares `[variant, primeiroArg]` para asserts compactos. */
+  async function renderAndCollectSequence(url: string): Promise<Array<[string, unknown]>> {
+    renderWithUrl(url);
+    await waitFor(() => {
+      expect(collectOrderedToastEvents().length).toBeGreaterThanOrEqual(2);
+    });
+    await act(async () => { await Promise.resolve(); });
+    return collectOrderedToastEvents().map((e) => [e.variant, e.args[0]]);
+  }
+
+  it("plano inválido + checkout=approved → 1º sanitização (default), 2º success", async () => {
+    const seq = await renderAndCollectSequence(
+      "/assinatura?plano=hacker&checkout=approved",
+    );
+    expect(seq).toEqual([
+      ["default", 'Parâmetro plano "hacker" não reconhecido — usando opção padrão.'],
+      ["success", "Pagamento aprovado — bem-vindo ao GeoGestor!"],
+    ]);
+  });
+
+  it("plano inválido + checkout=failed → 1º sanitização (default), 2º error", async () => {
+    const seq = await renderAndCollectSequence(
+      "/assinatura?plano=hacker&checkout=failed",
+    );
+    expect(seq).toEqual([
+      ["default", 'Parâmetro plano "hacker" não reconhecido — usando opção padrão.'],
+      ["error", "Pagamento recusado"],
+    ]);
+  });
+
+  it("plano inválido + checkout=processing → 1º sanitização (default), 2º processing (default)", async () => {
+    const seq = await renderAndCollectSequence(
+      "/assinatura?plano=hacker&checkout=processing",
+    );
+    expect(seq).toEqual([
+      ["default", 'Parâmetro plano "hacker" não reconhecido — usando opção padrão.'],
+      ["default", "Pagamento em processamento"],
+    ]);
+  });
+
+  it("plano inválido + checkout=canceled → 1º sanitização (default), 2º canceled (default)", async () => {
+    const seq = await renderAndCollectSequence(
+      "/assinatura?plano=hacker&checkout=canceled",
+    );
+    expect(seq).toEqual([
+      ["default", 'Parâmetro plano "hacker" não reconhecido — usando opção padrão.'],
+      ["default", "Compra cancelada — seus dados estão salvos"],
+    ]);
+  });
+
+  it("plano + oferta inválidos + checkout=failed → 1 toast de sanitização (combinado) e DEPOIS o error", async () => {
+    const seq = await renderAndCollectSequence(
+      "/assinatura?plano=hacker&oferta=evil&checkout=failed",
+    );
+    expect(seq).toEqual([
+      [
+        "default",
+        'Parâmetro plano "hacker" e oferta "evil" não reconhecido — usando opção padrão.',
+      ],
+      ["error", "Pagamento recusado"],
+    ]);
+  });
+
+  it("matriz: para todo status válido, sanitização SEMPRE precede o feedback de checkout", async () => {
+    const matrix: Array<{ status: string; expectedVariant: string; expectedMsg: string }> = [
+      { status: "approved", expectedVariant: "success", expectedMsg: "Pagamento aprovado — bem-vindo ao GeoGestor!" },
+      { status: "failed", expectedVariant: "error", expectedMsg: "Pagamento recusado" },
+      { status: "processing", expectedVariant: "default", expectedMsg: "Pagamento em processamento" },
+      { status: "canceled", expectedVariant: "default", expectedMsg: "Compra cancelada — seus dados estão salvos" },
+    ];
+
+    for (const { status, expectedVariant, expectedMsg } of matrix) {
+      clearAllToastSpies();
+      const seq = await renderAndCollectSequence(
+        `/assinatura?plano=hacker&checkout=${status}`,
+      );
+      expect(seq).toHaveLength(2);
+      expect(seq[0][0]).toBe("default");
+      expect(seq[0][1]).toMatch(/não reconhecido/);
+      expect(seq[1][0]).toBe(expectedVariant);
+      expect(seq[1][1]).toBe(expectedMsg);
+    }
+  });
+});
+

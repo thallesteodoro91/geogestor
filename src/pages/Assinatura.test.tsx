@@ -624,3 +624,91 @@ describe("Assinatura — snapshots por status de checkout (approved/failed/proce
   });
 });
 
+/**
+ * Tabela canônica de (variant, icon) por status de checkout.
+ *
+ * Esses asserts isolam o CONTRATO VISUAL de cada status — independente do copy
+ * (mensagem/descrição). Se alguém trocar `toast.error(...)` por `toast(...)`,
+ * ou remover o `icon: "⏳"`, o teste correspondente falha mesmo que o texto
+ * permaneça idêntico.
+ *
+ * Regras travadas:
+ *  - approved   → variant="success", SEM icon (sonner aplica check verde nativo)
+ *  - failed     → variant="error",   SEM icon (sonner aplica X vermelho nativo)
+ *  - processing → variant="default", icon="⏳"
+ *  - canceled   → variant="default", icon="ℹ️"
+ */
+describe("Assinatura — contrato (variant + icon) por status de checkout", () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let infoSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+    clearAllToastSpies();
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  /** Espera EXATAMENTE 1 toast com a variant esperada e captura suas options. */
+  async function captureSingleToast(status: string, expectedVariant: ToastEvent["variant"]) {
+    renderWithUrl(`/assinatura?checkout=${status}`);
+
+    await waitFor(() => {
+      const events = collectToastEvents();
+      expect(events.length).toBeGreaterThanOrEqual(1);
+    });
+    // Aguarda re-renders encadeados pela limpeza da searchParam.
+    await act(async () => { await Promise.resolve(); });
+
+    const events = collectToastEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0].variant).toBe(expectedVariant);
+    return events[0].args[1] as Record<string, unknown> | undefined;
+  }
+
+  it("approved → variant=success, options SEM `icon` (usa o ícone nativo do sonner)", async () => {
+    const options = await captureSingleToast("approved", "success");
+    expect(options).toBeDefined();
+    expect(options).not.toHaveProperty("icon");
+  });
+
+  it("failed → variant=error, options SEM `icon` (usa o ícone nativo do sonner)", async () => {
+    const options = await captureSingleToast("failed", "error");
+    expect(options).toBeDefined();
+    expect(options).not.toHaveProperty("icon");
+  });
+
+  it("processing → variant=default, icon=⏳ (ampulheta)", async () => {
+    const options = await captureSingleToast("processing", "default");
+    expect(options?.icon).toBe("⏳");
+  });
+
+  it("canceled → variant=default, icon=ℹ️ (info)", async () => {
+    const options = await captureSingleToast("canceled", "default");
+    expect(options?.icon).toBe("ℹ️");
+  });
+
+  it("matriz completa: cada status mapeia EXATAMENTE para 1 par (variant, icon)", async () => {
+    const cases: Array<{
+      status: string;
+      variant: ToastEvent["variant"];
+      icon: string | undefined;
+    }> = [
+      { status: "approved", variant: "success", icon: undefined },
+      { status: "failed", variant: "error", icon: undefined },
+      { status: "processing", variant: "default", icon: "⏳" },
+      { status: "canceled", variant: "default", icon: "ℹ️" },
+    ];
+
+    for (const { status, variant, icon } of cases) {
+      clearAllToastSpies();
+      const options = await captureSingleToast(status, variant);
+      expect(options?.icon).toBe(icon);
+    }
+  });
+});
+

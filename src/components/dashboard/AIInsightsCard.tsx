@@ -123,15 +123,34 @@ export function AIInsightsCard() {
               <Button
                 size="sm"
                 variant="default"
-                onClick={() => {
-                  // Dispatch tracking event
+                onClick={async () => {
+                  // Resolve logged-in user (best-effort, non-blocking on failure)
+                  let userId: string | null = null;
+                  let userEmail: string | null = null;
+                  try {
+                    const { data: userData } = await supabase.auth.getUser();
+                    userId = userData.user?.id ?? null;
+                    userEmail = userData.user?.email ?? null;
+                  } catch {
+                    // ignore — tracking should never block the CTA
+                  }
+
+                  const now = new Date();
+                  const competencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
                   const detail = {
                     source: "AIInsightsCard",
                     reason: "PAYMENT_REQUIRED",
-                    timestamp: Date.now(),
+                    timestamp: now.getTime(),
+                    userId,
+                    userEmail,
+                    competencia, // YYYY-MM
+                    year: now.getFullYear(),
+                    month: now.getMonth() + 1,
+                    creditsRemaining: remaining,
+                    creditsRequired: required,
                   };
                   window.dispatchEvent(new CustomEvent("ai_credits_cta_clicked", { detail }));
-                  // Optional analytics hook (e.g. gtag/plausible) if available
                   const w = window as unknown as { gtag?: (...args: unknown[]) => void };
                   w.gtag?.("event", "ai_credits_cta_clicked", detail);
                   window.open(

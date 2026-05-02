@@ -21,7 +21,14 @@ export function AIInsightsCard() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai-insights");
       if (error) throw error;
-      return data as { insights?: Insight[]; kpis?: any; error?: string; message?: string };
+      return data as {
+        insights?: Insight[];
+        kpis?: any;
+        error?: string;
+        message?: string;
+        creditsRemaining?: number;
+        creditsRequired?: number;
+      };
     },
     staleTime: 1000 * 60 * 30, // 30 min
     retry: 1,
@@ -76,11 +83,43 @@ export function AIInsightsCard() {
             ))}
           </div>
         ) : isPaymentRequired ? (
+          (() => {
+            const remaining = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
+            const required = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
+            const missing =
+              remaining !== null && required !== null
+                ? Math.max(0, required - remaining)
+                : null;
+            return (
           <Alert className="border-amber-500/50 bg-amber-500/5">
             <CreditCard className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-sm font-semibold">Créditos de IA esgotados</AlertTitle>
             <AlertDescription className="text-xs space-y-3">
-              <p>Para continuar gerando insights automáticos, adicione créditos ao seu workspace.</p>
+              {missing !== null ? (
+                <p>
+                  Faltam <strong>{missing}</strong> crédito{missing === 1 ? "" : "s"} para gerar
+                  esta análise
+                  {required !== null && (
+                    <> (necessário: {required}, disponível: {remaining})</>
+                  )}
+                  .
+                </p>
+              ) : (
+                <p>Não há créditos suficientes no workspace para gerar esta análise.</p>
+              )}
+              <p className="text-muted-foreground">
+                Sem créditos, os seguintes recursos ficam indisponíveis:
+              </p>
+              <ul className="list-disc pl-4 text-muted-foreground space-y-0.5">
+                <li>Geração automática de insights financeiros no dashboard</li>
+                <li>Recomendações acionáveis baseadas nos seus KPIs</li>
+                <li>Respostas do assistente GeoBot</li>
+              </ul>
+              <p className="text-muted-foreground">
+                Ao clicar abaixo, você abre <strong>Settings → Workspace → Usage</strong> em uma
+                nova aba para revisar consumo e adicionar créditos. Sua sessão atual continua
+                ativa.
+              </p>
               <Button
                 size="sm"
                 variant="default"
@@ -108,6 +147,8 @@ export function AIInsightsCard() {
               </Button>
             </AlertDescription>
           </Alert>
+            );
+          })()
         ) : isRateLimited ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <AlertTriangle className="h-4 w-4" />

@@ -125,10 +125,39 @@ Retorne APENAS um array JSON válido, sem markdown, sem explicação adicional.`
       }
 
       if (aiResponse.status === 402) {
+        // Try to extract credit info from headers/body when the gateway provides it
+        const remainingHeader =
+          aiResponse.headers.get("x-credits-remaining") ??
+          aiResponse.headers.get("x-ratelimit-remaining-credits");
+        const requiredHeader =
+          aiResponse.headers.get("x-credits-required") ??
+          aiResponse.headers.get("x-ratelimit-required-credits");
+
+        let creditsRemaining: number | undefined =
+          remainingHeader !== null && !Number.isNaN(Number(remainingHeader))
+            ? Number(remainingHeader)
+            : undefined;
+        let creditsRequired: number | undefined =
+          requiredHeader !== null && !Number.isNaN(Number(requiredHeader))
+            ? Number(requiredHeader)
+            : undefined;
+
+        try {
+          const parsed = JSON.parse(errText);
+          if (typeof parsed?.credits_remaining === "number") creditsRemaining = parsed.credits_remaining;
+          if (typeof parsed?.credits_required === "number") creditsRequired = parsed.credits_required;
+          if (typeof parsed?.error?.credits_remaining === "number") creditsRemaining = parsed.error.credits_remaining;
+          if (typeof parsed?.error?.credits_required === "number") creditsRequired = parsed.error.credits_required;
+        } catch {
+          // body wasn't JSON — ignore
+        }
+
         return new Response(
           JSON.stringify({
             error: "PAYMENT_REQUIRED",
             message: "Créditos de IA esgotados. Adicione créditos em Settings → Workspace → Usage.",
+            creditsRemaining,
+            creditsRequired,
             insights: [],
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

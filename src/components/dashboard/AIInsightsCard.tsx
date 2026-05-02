@@ -75,7 +75,28 @@ export function AIInsightsCard() {
               </div>
             ))}
           </div>
-        ) : error ? (
+        ) : isPaymentRequired ? (
+          <Alert className="border-amber-500/50 bg-amber-500/5">
+            <CreditCard className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-sm font-semibold">Créditos de IA esgotados</AlertTitle>
+            <AlertDescription className="text-xs space-y-2">
+              <p>Para continuar gerando insights automáticos, adicione créditos ao seu workspace.</p>
+              <a
+                href="https://lovable.dev/settings/workspace/usage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+              >
+                Adicionar créditos em Settings → Workspace → Usage →
+              </a>
+            </AlertDescription>
+          </Alert>
+        ) : isRateLimited ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{data?.message || "Muitas requisições. Aguarde alguns instantes."}</span>
+          </div>
+        ) : error || isServiceError ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <AlertTriangle className="h-4 w-4" />
             <span>Não foi possível gerar insights. Tente novamente.</span>

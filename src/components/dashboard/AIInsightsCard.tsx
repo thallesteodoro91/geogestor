@@ -21,11 +21,15 @@ export function AIInsightsCard() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai-insights");
       if (error) throw error;
-      return data as { insights: Insight[]; kpis: any };
+      return data as { insights?: Insight[]; kpis?: any; error?: string; message?: string };
     },
     staleTime: 1000 * 60 * 30, // 30 min
     retry: 1,
   });
+
+  const isPaymentRequired = data?.error === "PAYMENT_REQUIRED";
+  const isRateLimited = data?.error === "RATE_LIMITED";
+  const isServiceError = data?.error === "AI_SERVICE_ERROR";
 
   const getIcon = (tipo: string) => {
     switch (tipo) {

@@ -111,8 +111,38 @@ Retorne APENAS um array JSON válido, sem markdown, sem explicação adicional.`
 
     if (!aiResponse.ok) {
       const errText = await aiResponse.text();
-      console.error("[AI-INSIGHTS] AI API error:", errText);
-      throw new Error(`AI API error: ${aiResponse.status}`);
+      console.error("[AI-INSIGHTS] AI API error:", aiResponse.status, errText);
+
+      if (aiResponse.status === 429) {
+        return new Response(
+          JSON.stringify({
+            error: "RATE_LIMITED",
+            message: "Muitas requisições. Tente novamente em instantes.",
+            insights: [],
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      if (aiResponse.status === 402) {
+        return new Response(
+          JSON.stringify({
+            error: "PAYMENT_REQUIRED",
+            message: "Créditos de IA esgotados. Adicione créditos em Settings → Workspace → Usage.",
+            insights: [],
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          error: "AI_SERVICE_ERROR",
+          message: "Não foi possível gerar insights no momento.",
+          insights: [],
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const aiResult = await aiResponse.json();

@@ -4,7 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle } from "lucide-react";
+import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, CreditCard } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface Insight {
@@ -20,11 +21,15 @@ export function AIInsightsCard() {
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai-insights");
       if (error) throw error;
-      return data as { insights: Insight[]; kpis: any };
+      return data as { insights?: Insight[]; kpis?: any; error?: string; message?: string };
     },
     staleTime: 1000 * 60 * 30, // 30 min
     retry: 1,
   });
+
+  const isPaymentRequired = data?.error === "PAYMENT_REQUIRED";
+  const isRateLimited = data?.error === "RATE_LIMITED";
+  const isServiceError = data?.error === "AI_SERVICE_ERROR";
 
   const getIcon = (tipo: string) => {
     switch (tipo) {
@@ -70,7 +75,28 @@ export function AIInsightsCard() {
               </div>
             ))}
           </div>
-        ) : error ? (
+        ) : isPaymentRequired ? (
+          <Alert className="border-amber-500/50 bg-amber-500/5">
+            <CreditCard className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-sm font-semibold">Créditos de IA esgotados</AlertTitle>
+            <AlertDescription className="text-xs space-y-2">
+              <p>Para continuar gerando insights automáticos, adicione créditos ao seu workspace.</p>
+              <a
+                href="https://lovable.dev/settings/workspace/usage"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+              >
+                Adicionar créditos em Settings → Workspace → Usage →
+              </a>
+            </AlertDescription>
+          </Alert>
+        ) : isRateLimited ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{data?.message || "Muitas requisições. Aguarde alguns instantes."}</span>
+          </div>
+        ) : error || isServiceError ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
             <AlertTriangle className="h-4 w-4" />
             <span>Não foi possível gerar insights. Tente novamente.</span>

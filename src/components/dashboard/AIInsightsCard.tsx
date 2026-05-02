@@ -79,16 +79,33 @@ export function AIInsightsCard() {
           <Alert className="border-amber-500/50 bg-amber-500/5">
             <CreditCard className="h-4 w-4 text-amber-600" />
             <AlertTitle className="text-sm font-semibold">Créditos de IA esgotados</AlertTitle>
-            <AlertDescription className="text-xs space-y-2">
+            <AlertDescription className="text-xs space-y-3">
               <p>Para continuar gerando insights automáticos, adicione créditos ao seu workspace.</p>
-              <a
-                href="https://lovable.dev/settings/workspace/usage"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => {
+                  // Dispatch tracking event
+                  const detail = {
+                    source: "AIInsightsCard",
+                    reason: "PAYMENT_REQUIRED",
+                    timestamp: Date.now(),
+                  };
+                  window.dispatchEvent(new CustomEvent("ai_credits_cta_clicked", { detail }));
+                  // Optional analytics hook (e.g. gtag/plausible) if available
+                  const w = window as unknown as { gtag?: (...args: unknown[]) => void };
+                  w.gtag?.("event", "ai_credits_cta_clicked", detail);
+                  window.open(
+                    "https://lovable.dev/settings/workspace/usage",
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
+                }}
+                className="gap-1"
               >
-                Adicionar créditos em Settings → Workspace → Usage →
-              </a>
+                <CreditCard className="h-3.5 w-3.5" />
+                Abrir Settings → Workspace → Usage
+              </Button>
             </AlertDescription>
           </Alert>
         ) : isRateLimited ? (

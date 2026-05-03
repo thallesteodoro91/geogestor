@@ -27,8 +27,9 @@ export function AIInsightsCard() {
         kpis?: any;
         error?: string;
         message?: string;
-        creditsRemaining?: number;
-        creditsRequired?: number;
+        creditsRemaining?: number | null;
+        creditsRequired?: number | null;
+        creditsInfoAvailable?: boolean;
       };
     },
     staleTime: 1000 * 60 * 30, // 30 min
@@ -104,6 +105,11 @@ export function AIInsightsCard() {
                     <> (necessário: {required}, disponível: {remaining})</>
                   )}
                   .
+                </p>
+              ) : data?.creditsInfoAvailable === false ? (
+                <p>
+                  Os créditos de IA do workspace acabaram. O provedor não retornou o saldo
+                  exato — abra <strong>Usage</strong> para conferir o consumo atual.
                 </p>
               ) : (
                 <p>Não há créditos suficientes no workspace para gerar esta análise.</p>

@@ -125,39 +125,78 @@ Retorne APENAS um array JSON válido, sem markdown, sem explicação adicional.`
       }
 
       if (aiResponse.status === 402) {
-        // Try to extract credit info from headers/body when the gateway provides it
-        const remainingHeader =
-          aiResponse.headers.get("x-credits-remaining") ??
-          aiResponse.headers.get("x-ratelimit-remaining-credits");
-        const requiredHeader =
-          aiResponse.headers.get("x-credits-required") ??
-          aiResponse.headers.get("x-ratelimit-required-credits");
+        // Log all response headers to help diagnose which credit headers
+        // (if any) the AI gateway returns. This makes the fallback path
+        // observable in production logs.
+        const allHeaders: Record<string, string> = {};
+        aiResponse.headers.forEach((v, k) => { allHeaders[k] = v; });
+        console.warn("[AI-INSIGHTS] 402 headers:", JSON.stringify(allHeaders));
+        console.warn("[AI-INSIGHTS] 402 body:", errText);
 
-        let creditsRemaining: number | undefined =
-          remainingHeader !== null && !Number.isNaN(Number(remainingHeader))
-            ? Number(remainingHeader)
-            : undefined;
-        let creditsRequired: number | undefined =
-          requiredHeader !== null && !Number.isNaN(Number(requiredHeader))
-            ? Number(requiredHeader)
-            : undefined;
+        const HEADER_KEYS_REMAINING = [
+          "x-credits-remaining",
+          "x-ratelimit-remaining-credits",
+          "x-ratelimit-remaining",
+          "x-credit-balance",
+        ];
+        const HEADER_KEYS_REQUIRED = [
+          "x-credits-required",
+          "x-ratelimit-required-credits",
+          "x-credits-cost",
+        ];
 
+        const readNumHeader = (keys: string[]): number | null => {
+          for (const k of keys) {
+            const raw = aiResponse.headers.get(k);
+            if (raw !== null && raw !== "" && !Number.isNaN(Number(raw))) {
+              return Number(raw);
+            }
+          }
+          return null;
+        };
+
+        let creditsRemaining: number | null = readNumHeader(HEADER_KEYS_REMAINING);
+        let creditsRequired: number | null = readNumHeader(HEADER_KEYS_REQUIRED);
+
+        // Body fallback (JSON shapes vary by provider)
         try {
           const parsed = JSON.parse(errText);
-          if (typeof parsed?.credits_remaining === "number") creditsRemaining = parsed.credits_remaining;
-          if (typeof parsed?.credits_required === "number") creditsRequired = parsed.credits_required;
-          if (typeof parsed?.error?.credits_remaining === "number") creditsRemaining = parsed.error.credits_remaining;
-          if (typeof parsed?.error?.credits_required === "number") creditsRequired = parsed.error.credits_required;
+          const candidatesRemaining = [
+            parsed?.credits_remaining,
+            parsed?.creditsRemaining,
+            parsed?.error?.credits_remaining,
+            parsed?.error?.creditsRemaining,
+            parsed?.error?.metadata?.credits_remaining,
+          ];
+          const candidatesRequired = [
+            parsed?.credits_required,
+            parsed?.creditsRequired,
+            parsed?.error?.credits_required,
+            parsed?.error?.creditsRequired,
+            parsed?.error?.metadata?.credits_required,
+          ];
+          for (const v of candidatesRemaining) {
+            if (typeof v === "number" && !Number.isNaN(v)) { creditsRemaining = v; break; }
+          }
+          for (const v of candidatesRequired) {
+            if (typeof v === "number" && !Number.isNaN(v)) { creditsRequired = v; break; }
+          }
         } catch {
           // body wasn't JSON — ignore
         }
 
+        const creditsInfoAvailable =
+          creditsRemaining !== null || creditsRequired !== null;
+
         return new Response(
           JSON.stringify({
             error: "PAYMENT_REQUIRED",
-            message: "Créditos de IA esgotados. Adicione créditos em Settings → Workspace → Usage.",
+            message: creditsInfoAvailable
+              ? "Créditos de IA esgotados. Adicione créditos em Settings → Workspace → Usage."
+              : "Créditos de IA esgotados. O provedor não informou o saldo exato — abra Settings → Workspace → Usage para conferir.",
             creditsRemaining,
             creditsRequired,
+            creditsInfoAvailable,
             insights: [],
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

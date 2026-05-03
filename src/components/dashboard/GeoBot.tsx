@@ -3,9 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Brain, Send, Loader2, TrendingUp, AlertCircle } from "lucide-react";
+import { Brain, Send, Loader2, TrendingUp, AlertCircle, CreditCard } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
 
 interface Message {
   role: "user" | "assistant";
@@ -26,6 +28,10 @@ export function GeoBot({ kpis, initialPrompt }: GeoBotProps) {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [paymentRequired, setPaymentRequired] = useState<{
+    remaining: number | null;
+    required: number | null;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -97,7 +103,19 @@ Pergunta do usuário: ${input}`
           throw new Error("Limite de requisições atingido. Tente novamente em alguns instantes.");
         }
         if (response.status === 402) {
-          throw new Error("Créditos de IA esgotados. Adicione mais créditos ao workspace.");
+          const parseNum = (v: string | null) =>
+            v !== null && !Number.isNaN(Number(v)) ? Number(v) : null;
+          setPaymentRequired({
+            remaining:
+              parseNum(response.headers.get("x-credits-remaining")) ??
+              parseNum(response.headers.get("x-ratelimit-remaining-credits")),
+            required:
+              parseNum(response.headers.get("x-credits-required")) ??
+              parseNum(response.headers.get("x-ratelimit-required-credits")),
+          });
+          // Remove placeholder user message bubble; show CTA instead
+          setMessages((prev) => prev.slice(0, -1));
+          return;
         }
         throw new Error("Erro ao processar sua mensagem.");
       }

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, CreditCard } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
 
 interface Insight {
   tipo: "positivo" | "negativo" | "neutro";
@@ -123,42 +124,13 @@ export function AIInsightsCard() {
               <Button
                 size="sm"
                 variant="default"
-                onClick={async () => {
-                  // Resolve logged-in user (best-effort, non-blocking on failure)
-                  let userId: string | null = null;
-                  let userEmail: string | null = null;
-                  try {
-                    const { data: userData } = await supabase.auth.getUser();
-                    userId = userData.user?.id ?? null;
-                    userEmail = userData.user?.email ?? null;
-                  } catch {
-                    // ignore — tracking should never block the CTA
-                  }
-
-                  const now = new Date();
-                  const competencia = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-
-                  const detail = {
+                onClick={() =>
+                  trackAiCreditsCtaClick({
                     source: "AIInsightsCard",
-                    reason: "PAYMENT_REQUIRED",
-                    timestamp: now.getTime(),
-                    userId,
-                    userEmail,
-                    competencia, // YYYY-MM
-                    year: now.getFullYear(),
-                    month: now.getMonth() + 1,
                     creditsRemaining: remaining,
                     creditsRequired: required,
-                  };
-                  window.dispatchEvent(new CustomEvent("ai_credits_cta_clicked", { detail }));
-                  const w = window as unknown as { gtag?: (...args: unknown[]) => void };
-                  w.gtag?.("event", "ai_credits_cta_clicked", detail);
-                  window.open(
-                    "https://lovable.dev/settings/workspace/usage",
-                    "_blank",
-                    "noopener,noreferrer"
-                  );
-                }}
+                  })
+                }
                 className="gap-1"
               >
                 <CreditCard className="h-3.5 w-3.5" />

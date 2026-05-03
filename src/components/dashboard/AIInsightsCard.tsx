@@ -106,6 +106,11 @@ export function AIInsightsCard() {
                   )}
                   .
                 </p>
+              ) : data?.creditsInfoAvailable === false ? (
+                <p>
+                  Os créditos de IA do workspace acabaram. O provedor não retornou o saldo
+                  exato — abra <strong>Usage</strong> para conferir o consumo atual.
+                </p>
               ) : (
                 <p>Não há créditos suficientes no workspace para gerar esta análise.</p>
               )}

@@ -27,8 +27,9 @@ export function AIInsightsCard() {
         kpis?: any;
         error?: string;
         message?: string;
-        creditsRemaining?: number;
-        creditsRequired?: number;
+        creditsRemaining?: number | null;
+        creditsRequired?: number | null;
+        creditsInfoAvailable?: boolean;
       };
     },
     staleTime: 1000 * 60 * 30, // 30 min

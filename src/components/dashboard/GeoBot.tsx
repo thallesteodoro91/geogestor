@@ -3,9 +3,11 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Brain, Send, Loader2, TrendingUp, AlertCircle } from "lucide-react";
+import { Brain, Send, Loader2, TrendingUp, AlertCircle, CreditCard } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
 
 interface Message {
   role: "user" | "assistant";
@@ -26,6 +28,10 @@ export function GeoBot({ kpis, initialPrompt }: GeoBotProps) {
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [paymentRequired, setPaymentRequired] = useState<{
+    remaining: number | null;
+    required: number | null;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
@@ -97,7 +103,19 @@ Pergunta do usuário: ${input}`
           throw new Error("Limite de requisições atingido. Tente novamente em alguns instantes.");
         }
         if (response.status === 402) {
-          throw new Error("Créditos de IA esgotados. Adicione mais créditos ao workspace.");
+          const parseNum = (v: string | null) =>
+            v !== null && !Number.isNaN(Number(v)) ? Number(v) : null;
+          setPaymentRequired({
+            remaining:
+              parseNum(response.headers.get("x-credits-remaining")) ??
+              parseNum(response.headers.get("x-ratelimit-remaining-credits")),
+            required:
+              parseNum(response.headers.get("x-credits-required")) ??
+              parseNum(response.headers.get("x-ratelimit-required-credits")),
+          });
+          // Remove placeholder user message bubble; show CTA instead
+          setMessages((prev) => prev.slice(0, -1));
+          return;
         }
         throw new Error("Erro ao processar sua mensagem.");
       }
@@ -218,6 +236,47 @@ Pergunta do usuário: ${input}`
           )}
         </div>
       </ScrollArea>
+
+      {/* Payment required CTA */}
+      {paymentRequired && (
+        <div className="px-4 pb-3">
+          <Alert className="border-amber-500/50 bg-amber-500/5">
+            <CreditCard className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-sm font-semibold">
+              Créditos de IA esgotados
+            </AlertTitle>
+            <AlertDescription className="text-xs space-y-2">
+              {paymentRequired.remaining !== null && paymentRequired.required !== null ? (
+                <p>
+                  Faltam{" "}
+                  <strong>
+                    {Math.max(0, paymentRequired.required - paymentRequired.remaining)}
+                  </strong>{" "}
+                  crédito(s) para responder (necessário: {paymentRequired.required},
+                  disponível: {paymentRequired.remaining}).
+                </p>
+              ) : (
+                <p>O GeoBot está indisponível até que créditos sejam adicionados.</p>
+              )}
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1"
+                onClick={() =>
+                  trackAiCreditsCtaClick({
+                    source: "GeoBot",
+                    creditsRemaining: paymentRequired.remaining,
+                    creditsRequired: paymentRequired.required,
+                  })
+                }
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Abrir Settings → Workspace → Usage
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Quick Questions */}
       {messages.length === 1 && (

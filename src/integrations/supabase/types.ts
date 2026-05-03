@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          competencia: string | null
+          created_at: string
+          event_name: string
+          id: string
+          metadata: Json
+          source: string | null
+          tenant_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          competencia?: string | null
+          created_at?: string
+          event_name: string
+          id?: string
+          metadata?: Json
+          source?: string | null
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          competencia?: string | null
+          created_at?: string
+          event_name?: string
+          id?: string
+          metadata?: Json
+          source?: string | null
+          tenant_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string

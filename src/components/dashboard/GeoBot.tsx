@@ -237,6 +237,47 @@ Pergunta do usuário: ${input}`
         </div>
       </ScrollArea>
 
+      {/* Payment required CTA */}
+      {paymentRequired && (
+        <div className="px-4 pb-3">
+          <Alert className="border-amber-500/50 bg-amber-500/5">
+            <CreditCard className="h-4 w-4 text-amber-600" />
+            <AlertTitle className="text-sm font-semibold">
+              Créditos de IA esgotados
+            </AlertTitle>
+            <AlertDescription className="text-xs space-y-2">
+              {paymentRequired.remaining !== null && paymentRequired.required !== null ? (
+                <p>
+                  Faltam{" "}
+                  <strong>
+                    {Math.max(0, paymentRequired.required - paymentRequired.remaining)}
+                  </strong>{" "}
+                  crédito(s) para responder (necessário: {paymentRequired.required},
+                  disponível: {paymentRequired.remaining}).
+                </p>
+              ) : (
+                <p>O GeoBot está indisponível até que créditos sejam adicionados.</p>
+              )}
+              <Button
+                size="sm"
+                variant="default"
+                className="gap-1"
+                onClick={() =>
+                  trackAiCreditsCtaClick({
+                    source: "GeoBot",
+                    creditsRemaining: paymentRequired.remaining,
+                    creditsRequired: paymentRequired.required,
+                  })
+                }
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Abrir Settings → Workspace → Usage
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       {/* Quick Questions */}
       {messages.length === 1 && (
         <div className="px-4 pb-3 space-y-2">

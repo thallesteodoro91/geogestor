@@ -62,14 +62,27 @@ export function AIInsightsCard() {
 
   // Auto-refetch when user returns to the tab after visiting Usage to top up credits.
   // Triggers only while in PAYMENT_REQUIRED state, with a small delay to let the
-  // provider's credit balance propagate.
+  // provider's credit balance propagate. User can disable via the cancel button.
   const autoRefetchTimer = useRef<number | null>(null);
+  const clearAutoRefetch = () => {
+    if (autoRefetchTimer.current) {
+      window.clearTimeout(autoRefetchTimer.current);
+      autoRefetchTimer.current = null;
+    }
+    setAutoReloadPending(false);
+  };
   useEffect(() => {
-    if (!isPaymentRequired) return;
+    if (!isPaymentRequired || autoReloadDisabled) {
+      clearAutoRefetch();
+      return;
+    }
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+      clearAutoRefetch();
+      setAutoReloadPending(true);
       autoRefetchTimer.current = window.setTimeout(() => {
+        autoRefetchTimer.current = null;
+        setAutoReloadPending(false);
         refetch();
       }, 3000);
     };
@@ -78,9 +91,9 @@ export function AIInsightsCard() {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleVisibility);
-      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+      clearAutoRefetch();
     };
-  }, [isPaymentRequired, refetch]);
+  }, [isPaymentRequired, autoReloadDisabled, refetch]);
 
 
   const remainingCredits = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;

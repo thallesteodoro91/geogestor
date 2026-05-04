@@ -41,7 +41,9 @@ export function AIInsightsCard() {
       const parsed = AIInsightsResponseSchema.safeParse(data);
       if (!parsed.success) {
         console.error("[AIInsightsCard] Schema inválido:", parsed.error.flatten());
-        throw new Error("Resposta da IA em formato inesperado");
+        const err = new Error("SCHEMA_INVALID");
+        (err as any).code = "SCHEMA_INVALID";
+        throw err;
       }
       return parsed.data;
     },
@@ -205,10 +207,31 @@ export function AIInsightsCard() {
             <AlertTriangle className="h-4 w-4" />
             <span>{data?.message || "Muitas requisições. Aguarde alguns instantes."}</span>
           </div>
-        ) : error || isServiceError ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+        ) : error && (error as any)?.message === "SCHEMA_INVALID" ? (
+          <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
-            <span>Não foi possível gerar insights. Tente novamente.</span>
+            <AlertTitle className="text-sm font-semibold">Formato de resposta inesperado</AlertTitle>
+            <AlertDescription className="text-xs space-y-2">
+              <p>
+                Recebemos os dados da IA, mas em um formato que não conseguimos interpretar.
+                Isso pode ser temporário. Tente novamente em alguns instantes.
+              </p>
+              <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-1">
+                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                Tentar novamente
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : error || isServiceError ? (
+          <div className="flex flex-col items-start gap-2 text-sm text-muted-foreground py-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              <span>Não foi possível gerar insights. Tente novamente.</span>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-1">
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Tentar novamente
+            </Button>
           </div>
         ) : data?.insights?.length ? (
           data.insights.map((insight, i) => (

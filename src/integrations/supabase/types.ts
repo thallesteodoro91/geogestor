@@ -14,6 +14,69 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_suggestions: {
+        Row: {
+          action_payload: Json
+          action_type: Database["public"]["Enums"]["ai_suggestion_action_type"]
+          applied_at: string | null
+          category: Database["public"]["Enums"]["ai_suggestion_category"]
+          created_at: string
+          created_by: string
+          depends_on: string[]
+          description: string
+          error_message: string | null
+          id: string
+          priority: number
+          rationale: string | null
+          rollback_data: Json | null
+          source: Database["public"]["Enums"]["ai_suggestion_source"]
+          status: Database["public"]["Enums"]["ai_suggestion_status"]
+          tenant_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          action_payload?: Json
+          action_type?: Database["public"]["Enums"]["ai_suggestion_action_type"]
+          applied_at?: string | null
+          category?: Database["public"]["Enums"]["ai_suggestion_category"]
+          created_at?: string
+          created_by: string
+          depends_on?: string[]
+          description: string
+          error_message?: string | null
+          id?: string
+          priority?: number
+          rationale?: string | null
+          rollback_data?: Json | null
+          source?: Database["public"]["Enums"]["ai_suggestion_source"]
+          status?: Database["public"]["Enums"]["ai_suggestion_status"]
+          tenant_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          action_payload?: Json
+          action_type?: Database["public"]["Enums"]["ai_suggestion_action_type"]
+          applied_at?: string | null
+          category?: Database["public"]["Enums"]["ai_suggestion_category"]
+          created_at?: string
+          created_by?: string
+          depends_on?: string[]
+          description?: string
+          error_message?: string | null
+          id?: string
+          priority?: number
+          rationale?: string | null
+          rollback_data?: Json | null
+          source?: Database["public"]["Enums"]["ai_suggestion_source"]
+          status?: Database["public"]["Enums"]["ai_suggestion_status"]
+          tenant_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       analytics_events: {
         Row: {
           competencia: string | null
@@ -2006,6 +2069,27 @@ export type Database = {
       verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {
+      ai_suggestion_action_type:
+        | "create_task"
+        | "update_status"
+        | "create_event"
+        | "send_notification"
+        | "update_setting"
+        | "noop_informational"
+      ai_suggestion_category:
+        | "erro"
+        | "teste"
+        | "fallback"
+        | "ux"
+        | "financeiro"
+        | "operacional"
+      ai_suggestion_source: "dashboard_insights" | "geobot_chat" | "manual"
+      ai_suggestion_status:
+        | "pending"
+        | "applied"
+        | "skipped"
+        | "failed"
+        | "rolled_back"
       app_role: "admin" | "user"
     }
     CompositeTypes: {
@@ -2134,6 +2218,30 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_suggestion_action_type: [
+        "create_task",
+        "update_status",
+        "create_event",
+        "send_notification",
+        "update_setting",
+        "noop_informational",
+      ],
+      ai_suggestion_category: [
+        "erro",
+        "teste",
+        "fallback",
+        "ux",
+        "financeiro",
+        "operacional",
+      ],
+      ai_suggestion_source: ["dashboard_insights", "geobot_chat", "manual"],
+      ai_suggestion_status: [
+        "pending",
+        "applied",
+        "skipped",
+        "failed",
+        "rolled_back",
+      ],
       app_role: ["admin", "user"],
     },
   },

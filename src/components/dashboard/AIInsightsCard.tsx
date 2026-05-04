@@ -58,6 +58,29 @@ export function AIInsightsCard() {
   const isSchemaInvalid = errMsg === "SCHEMA_INVALID";
   const isTimeout = /timeout|timed out|fetch failed|network/i.test(errMsg);
 
+  // Auto-refetch when user returns to the tab after visiting Usage to top up credits.
+  // Triggers only while in PAYMENT_REQUIRED state, with a small delay to let the
+  // provider's credit balance propagate.
+  const autoRefetchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isPaymentRequired) return;
+    const handleVisibility = () => {
+      if (document.visibilityState !== "visible") return;
+      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+      autoRefetchTimer.current = window.setTimeout(() => {
+        refetch();
+      }, 3000);
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleVisibility);
+      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+    };
+  }, [isPaymentRequired, refetch]);
+
+
   const remainingCredits = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
   const requiredCredits = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
   const missingCredits =

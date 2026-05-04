@@ -110,6 +110,22 @@ export function AIInsightsCard() {
                   )}
                   .
                 </p>
+              ) : partialInfo ? (
+                <p>
+                  Os créditos de IA do workspace acabaram. O provedor informou apenas{" "}
+                  {required !== null ? (
+                    <>
+                      o custo desta análise (<strong>{required}</strong> crédito
+                      {required === 1 ? "" : "s"}), mas não o saldo restante
+                    </>
+                  ) : (
+                    <>
+                      o saldo restante (<strong>{remaining}</strong> crédito
+                      {remaining === 1 ? "" : "s"}), mas não o custo desta análise
+                    </>
+                  )}
+                  . Abra <strong>Usage</strong> para conferir o consumo atual.
+                </p>
               ) : data?.creditsInfoAvailable === false ? (
                 <p>
                   Os créditos de IA do workspace acabaram. O provedor não retornou o saldo

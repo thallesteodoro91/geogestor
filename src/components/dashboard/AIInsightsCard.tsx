@@ -254,36 +254,13 @@ export function AIInsightsCard() {
             );
           })()
         ) : isRateLimited ? (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
-            <AlertTriangle className="h-4 w-4" />
-            <span>{data?.message || "Muitas requisições. Aguarde alguns instantes."}</span>
-          </div>
-        ) : error && (error as any)?.message === "SCHEMA_INVALID" ? (
-          <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle className="text-sm font-semibold">Formato de resposta inesperado</AlertTitle>
-            <AlertDescription className="text-xs space-y-2">
-              <p>
-                Recebemos os dados da IA, mas em um formato que não conseguimos interpretar.
-                Isso pode ser temporário. Tente novamente em alguns instantes.
-              </p>
-              <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-1">
-                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-                Tentar novamente
-              </Button>
-            </AlertDescription>
-          </Alert>
+          renderErrorState("rate")
+        ) : isSchemaInvalid ? (
+          renderErrorState("schema")
+        ) : isTimeout ? (
+          renderErrorState("timeout")
         ) : error || isServiceError ? (
-          <div className="flex flex-col items-start gap-2 text-sm text-muted-foreground py-4">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
-              <span>Não foi possível gerar insights. Tente novamente.</span>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching} className="gap-1">
-              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-              Tentar novamente
-            </Button>
-          </div>
+          renderErrorState("service")
         ) : data?.insights?.length ? (
           data.insights.map((insight, i) => (
             <div

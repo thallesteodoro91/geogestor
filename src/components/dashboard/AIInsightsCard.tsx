@@ -92,10 +92,21 @@ export function AIInsightsCard() {
       if (document.visibilityState !== "visible") return;
       clearAutoRefetch();
       setAutoReloadPending(true);
-      autoRefetchTimer.current = window.setTimeout(() => {
+      autoRefetchTimer.current = window.setTimeout(async () => {
         autoRefetchTimer.current = null;
         setAutoReloadPending(false);
-        refetch();
+        const tId = toast.loading("Recarregando insights de IA...");
+        try {
+          const res = await refetch();
+          if (res.error) throw res.error;
+          if (res.data?.error === "PAYMENT_REQUIRED") {
+            toast.warning("Ainda sem créditos suficientes", { id: tId });
+          } else {
+            toast.success("Insights atualizados", { id: tId });
+          }
+        } catch {
+          toast.error("Falha ao recarregar insights", { id: tId });
+        }
       }, 3000);
     };
     document.addEventListener("visibilitychange", handleVisibility);

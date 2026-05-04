@@ -33,6 +33,8 @@ export type AIInsightsResponse = z.infer<typeof AIInsightsResponseSchema>;
 
 export function AIInsightsCard() {
   const [batchOpen, setBatchOpen] = useState(false);
+  const [autoReloadDisabled, setAutoReloadDisabled] = useState(false);
+  const [autoReloadPending, setAutoReloadPending] = useState(false);
   const { data, isLoading, error, refetch, isFetching } = useQuery<AIInsightsResponse>({
     queryKey: ["ai-insights"],
     queryFn: async (): Promise<AIInsightsResponse> => {

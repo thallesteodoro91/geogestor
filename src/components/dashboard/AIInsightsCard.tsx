@@ -18,7 +18,7 @@ interface Insight {
 }
 
 export function AIInsightsCard() {
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
+  const [batchOpen, setBatchOpen] = useState(false);
     queryKey: ["ai-insights"],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("ai-insights");

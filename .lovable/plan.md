@@ -1,90 +1,123 @@
-## Contexto
 
-A página `/faturas` recebeu várias melhorias incrementais no popover de **Limite de alerta** do card “Total em aberto”. Antes de adicionar novidades, fiz uma releitura completa de `src/pages/Faturas.tsx` e identifiquei **conflitos reais entre as funcionalidades já existentes** e **lacunas de consistência** que precisam ser resolvidas para que o conjunto funcione sem erros. Este plano trata tudo de uma vez, na ordem certa (correções primeiro, melhorias depois).
+# Batch Apply de Sugestões de IA
+
+Criar um comando interno (`/batch-apply` no GeoBot + botão no `AIInsightsCard`) que coleta todas as sugestões pendentes geradas pela IA, ordena por dependência, aplica em sequência com diff consolidado, valida (build/lint/testes) e faz rollback parcial em caso de falha.
+
+## Antes de prosseguir — preciso confirmar 2 pontos
+
+Esta funcionalidade tem uma ambiguidade importante. As "sugestões da IA" hoje no projeto são **insights textuais consultivos** (campos `titulo`, `descricao`, `acao` em `AIInsightsCard` / `GeoBot`) — elas **não contêm patches de código nem mutações estruturadas** prontas para aplicar. Para que "aplicar em lote" faça sentido, precisamos definir o que é "aplicar".
+
+Vou apresentar duas leituras possíveis e seguir com a que faz mais sentido para um SaaS de gestão (Opção A), mas se for outra coisa (Opção B), reformulo o plano.
+
+- **Opção A — Sugestões de negócio dentro do GeoGestor** (o que o plano abaixo cobre):
+  Cada insight vira uma *ação executável* no domínio do app — ex.: "Reduzir despesa X em 10%" → cria tarefa; "Renegociar orçamento Y" → muda status; "Cobrar cliente Z" → gera evento. O batch apply aplica essas mutações de dados (não de código).
+
+- **Opção B — Aplicar patches de código gerados pela IA no repositório**:
+  Isso exigiria um pipeline de geração de patches, sandbox e CI próprios — fora do escopo de uma feature de produto e parcialmente sobreposto ao que o próprio Lovable já faz. Não recomendado dentro do app cliente.
+
+O plano abaixo assume **Opção A**. Confirme ou peça troca para B.
+
+## Escopo (Opção A)
+
+### 1. Modelo de dados
+Nova tabela `ai_suggestions` (multi-tenant, RLS por `tenant_id`):
+- `id`, `tenant_id`, `created_at`, `created_by`
+- `source` (`dashboard_insights` | `geobot_chat`)
+- `category` (`erro` | `teste` | `fallback` | `ux` | `financeiro` | `operacional`)
+- `priority` (int, derivada da categoria)
+- `title`, `description`, `rationale`
+- `action_type` (enum: `create_task` | `update_status` | `create_event` | `send_notification` | `update_setting` | `noop_informational`)
+- `action_payload` (jsonb tipado por `action_type`)
+- `depends_on` (uuid[]) — referências a outras sugestões
+- `status` (`pending` | `applied` | `skipped` | `failed` | `rolled_back`)
+- `applied_at`, `error_message`, `rollback_data` (jsonb com snapshot do estado anterior)
+
+A geração de insights (`supabase/functions/ai-insights/index.ts` e `geobot-chat`) passa a **persistir** cada sugestão estruturada em vez de só devolver texto, retornando também `suggestion_id`.
+
+### 2. Ordenação por dependência
+Antes de aplicar, calcular ordem topológica usando:
+1. `category` weight: `erro`(0) → `teste`(1) → `fallback`(2) → `ux`(3) → demais(4)
+2. `depends_on` (DAG; em ciclo, pular as cíclicas e marcar `skipped` com motivo)
+3. `priority` como desempate
+
+Função pura `orderSuggestions(suggestions): OrderedPlan` em `src/lib/aiBatchApply.ts` com testes unitários cobrindo: ordem por categoria, respeito de `depends_on`, detecção de ciclo, agrupamento de independentes.
+
+### 3. Edge function `apply-ai-suggestions`
+Nova função em `supabase/functions/apply-ai-suggestions/index.ts`:
+- Valida JWT + `tenant_id` do chamador
+- Recebe `{ suggestion_ids?: string[], dry_run?: boolean }` (sem ids = todas pendentes)
+- Carrega sugestões, ordena, e para cada uma:
+  1. Captura snapshot atual em `rollback_data` (linha afetada antes da mutação)
+  2. Executa a mutação dentro de transação por sugestão
+  3. Em sucesso → `status=applied`
+  4. Em erro → `status=failed`, registra `error_message`, **continua** (não derruba o lote inteiro)
+- Retorna `{ applied: [...], failed: [...], skipped: [...], diff }` onde `diff` é a lista consolidada de `{table, op, before, after}` para preview.
+- `dry_run=true` calcula o diff sem persistir.
+
+### 4. UI — Modo "Batch Apply"
+- Botão **"Aplicar todas as sugestões"** no `AIInsightsCard` e na página `GeoBot`.
+- Abre `BatchApplyDialog` (novo, em `src/components/dashboard/BatchApplyDialog.tsx`) com:
+  - Lista ordenada das sugestões pendentes, agrupadas por categoria
+  - Checkboxes para excluir individualmente do lote (limite de escopo)
+  - Botão **"Pré-visualizar diff"** → chama edge function com `dry_run=true` e mostra um resumo consolidado (tabela: ação, recurso, antes → depois)
+  - Botão **"Aplicar em lote"** → chama com `dry_run=false`, mostra progresso
+  - Resultado final com contadores `applied / failed / skipped` e botão **"Reverter aplicadas"** caso haja falhas (chama `rollback-ai-suggestions`)
+
+### 5. Rollback parcial
+- Edge function `rollback-ai-suggestions` recebe `suggestion_ids` e, para cada uma com `rollback_data`, restaura o snapshot e marca `status=rolled_back`.
+- Disparada automaticamente se o usuário confirmar no diálogo após falhas, ou manualmente da lista de sugestões aplicadas.
+
+### 6. Validação final automática
+Como não estamos editando código do app cliente em runtime, "build + lint + testes" não se aplica ao usuário final. A validação equivalente no domínio é:
+- **Pós-apply checks** rodados pela edge function:
+  - Re-executar os KPIs principais (`useKPIs`) e comparar invariantes (ex.: `receita >= 0`, somas batem, nenhum status inválido)
+  - Rodar o `linter` lógico de domínio (`src/core/finance.ts`) sobre os dados resultantes
+- Se algum invariante quebrar → rollback automático das sugestões da rodada e retorna erro estruturado para a UI.
+
+Para o **código** (build/lint/vitest), adicionar uma suíte de testes nova:
+- `src/lib/aiBatchApply.test.ts` (ordenação, ciclos, agrupamento)
+- `supabase/functions/apply-ai-suggestions/index_test.ts` (Deno test: dry_run, falha parcial, rollback automático em invariante quebrada)
+Esses são executados pelo CI normal do projeto (vitest + `supabase test_edge_functions`).
+
+### 7. Tracking
+Reusar `trackEvent` existente:
+- `ai_batch_apply_previewed` (com contagem por categoria)
+- `ai_batch_apply_executed` (com `applied/failed/skipped`)
+- `ai_batch_apply_rolled_back`
+
+## Detalhes técnicos
+
+- Migração SQL: criar `ai_suggestions` + enum `ai_suggestion_status` + RLS (`tenant_id = current_tenant_id()`).
+- `action_type` whitelist no servidor; payload validado com Zod por tipo.
+- Cada handler de `action_type` mora em um arquivo separado em `supabase/functions/apply-ai-suggestions/handlers/` (ex.: `createTask.ts`) com assinatura `(payload, ctx) => { before, after }` para uniformizar o snapshot.
+- Snapshots usam `select` explícito das colunas tocadas (sem `select('*')`, conforme padrão do projeto).
+- Concorrência: lock otimista — ao aplicar, comparar `updated_at` da linha alvo com o capturado no snapshot; mismatch → marca `skipped` com motivo `"recurso modificado externamente"`.
+- Limite de lote: máx. 50 sugestões por execução (configurável); acima disso a UI sugere dividir.
+
+## O que **não** será feito (fora de escopo)
+- Aplicar patches de código no repositório (Opção B acima).
+- Auto-merge de sugestões duplicadas — apenas detecção e marcação como `skipped:duplicate`.
+- Agendamento/cron — apenas execução sob demanda.
+
+## Arquivos previstos
+
+Novos:
+- `supabase/migrations/<timestamp>_ai_suggestions.sql`
+- `supabase/functions/apply-ai-suggestions/index.ts` (+ `handlers/*`, `index_test.ts`)
+- `supabase/functions/rollback-ai-suggestions/index.ts`
+- `src/lib/aiBatchApply.ts` + `.test.ts`
+- `src/components/dashboard/BatchApplyDialog.tsx`
+- `src/hooks/useAiSuggestions.ts`
+
+Editados:
+- `supabase/functions/ai-insights/index.ts` — persistir sugestões estruturadas
+- `supabase/functions/geobot-chat/index.ts` — idem
+- `src/components/dashboard/AIInsightsCard.tsx` — botão "Aplicar todas"
+- `src/components/dashboard/GeoBot.tsx` — botão "Aplicar todas"
 
 ---
 
-## 🔴 Prioridade 1 — Correções de bugs e conflitos (obrigatórias)
-
-### 1.1 `aplicarPrevia` está sobrescrevendo o limite salvo
-Hoje a função `aplicarPrevia` chama `setLimiteEmAberto(valor)` direto, igual ao `salvarLimite`. Isso cria três problemas:
-- O “Limite atual” mostrado no badge muda imediatamente, então o botão **“Aplicar prévia” fica desabilitado** logo após o clique (porque `Number(limiteInput) === limiteEmAberto`), confundindo o usuário.
-- O “Redefinir” passa a apagar a prévia como se fosse o valor salvo.
-- Recarregar a página descarta a “prévia” silenciosamente, sem aviso — o usuário acha que salvou.
-
-**Correção:** introduzir um estado separado `limitePrevia` (não persistido) e derivar o **limite efetivo** usado nos cálculos como `limitePrevia ?? limiteEmAberto`. `aplicarPrevia` passa a setar apenas `limitePrevia`. `salvarLimite` limpa `limitePrevia` e persiste em `limiteEmAberto`. `redefinirLimite` também limpa ambos.
-
-### 1.2 Banner visual quando há prévia ativa
-Como consequência de 1.1, adicionar um aviso discreto **abaixo do valor “Total em aberto”** quando `limitePrevia !== null`:
-> “Visualizando prévia (R$ X). [Salvar] [Descartar]”
-
-Botões inline para resolver a ambiguidade. “Descartar” limpa só a prévia.
-
-### 1.3 Switch “Destacar apenas acima do limite” não respeita a prévia
-A linha 803 calcula `eligibleForHighlight` usando `limiteEmAberto`. Após 1.1, isso passa a usar o **limite efetivo** (`limitePrevia ?? limiteEmAberto`) para que a prévia também respeite o switch.
-
-### 1.4 Conflito visual: `previewMatches` + `pulseFlag` aplicam dois `ring-2 ring-inset` na mesma linha
-Quando o usuário digita um valor (preview ativo) logo após salvar (pulse ativo), as duas regras Tailwind `ring-2 ring-inset` colidem na mesma `<TableRow>`. Resultado: o ring do pulse vence silenciosamente e o feedback de prévia some por ~1.6 s.
-
-**Correção:** dar precedência ao `pulseFlag` (já é o feedback mais recente do usuário) **suprimindo** `previewMatches` enquanto `pulseFlag` estiver ativo. Pequeno ajuste condicional no `cn()` da linha 817.
-
-### 1.5 `toast` em `toggleSomenteAcimaLimite` referencia `filteredSummary` antes da definição
-Linha 133 lê `filteredSummary.currency` dentro do handler. Isso funciona em runtime (closure tardia), mas o handler é definido **antes** de `filteredSummary` (linha 337), o que torna a leitura em React Strict Mode arriscada se o handler for chamado durante a primeira render via `onCheckedChange` controlado. Mover a leitura de moeda para dentro do callback usando o estado mais recente é seguro hoje, mas precisa ser blindado com fallback `"brl"` explícito (já existe parcialmente). Vou padronizar **todos** os usos de `filteredSummary.currency` em toasts/handlers para `filteredSummary.currency || "brl"`.
-
-### 1.6 Persistência do switch ignora o caso `limiteEmAberto = 0`
-Se o usuário desativa o limite (salva 0) com `somenteAcimaLimite = true`, o switch fica visualmente “ligado” mas inerte. Ao reativar o limite depois, o comportamento volta sem aviso — usuário esquece do estado.
-
-**Correção:** quando `salvarLimite` for chamado com `valor === 0`, **forçar** `somenteAcimaLimite = false` e persistir. O switch já está `disabled` quando limite é 0, então isso só formaliza o estado.
-
----
-
-## 🟡 Prioridade 2 — Melhorias de UX que fecham lacunas existentes
-
-### 2.1 Atalho “Usar valor sugerido” no popover
-Sugerir automaticamente um limite baseado nos dados reais: a **mediana** dos valores em aberto, arredondada para múltiplos de 50. Mostrar como botão pequeno acima do input:
-> 💡 Sugerido: R$ 350 *(baseado nas suas faturas em aberto)*
-
-Clica → preenche `limiteInput`. Não salva sozinho.
-
-### 2.2 Resumo do efeito atual no rodapé do popover
-Adicionar uma linha resumindo **o que está valendo agora na lista** (estado salvo, ignorando prévia):
-> Atualmente destacando: **3 faturas** em vermelho.
-
-Calculado a partir de `filteredInvoices` + `limiteEmAberto` + `somenteAcimaLimite`. Ajuda o usuário a confirmar antes de fechar o popover.
-
-### 2.3 Tecla Enter no input dispara “Salvar”
-Pequena melhoria de teclado: `onKeyDown` no `Input` chama `salvarLimite()` quando `Enter` é pressionado e o valor é válido.
-
-### 2.4 Fechar o popover automaticamente ao Salvar com sucesso
-Hoje o popover fica aberto após salvar. Adicionar `setPreviewOpen(false)` no fim de `salvarLimite` quando a operação for válida (não em erro). O toast já confirma a ação.
-
----
-
-## 🟢 Prioridade 3 — Polimento (sem risco, melhora coesão)
-
-### 3.1 Ícone visual no banner de prévia ativa
-Usar `Eye` (lucide) no banner de “Visualizando prévia” da seção 1.2 para reforçar que é apenas pré-visualização.
-
-### 3.2 Texto consistente “em aberto acima de X”
-Padronizar a frase usada em três lugares (toast de save, tooltip, banner de prévia, resumo do popover) para sempre dizer **“faturas com valor em aberto acima de R$ X”** — hoje varia entre “acima de”, “ultrapassar” e “excedem”.
-
----
-
-## Ordem de execução
-
-1. Refatorar estado: introduzir `limitePrevia` + `limiteEfetivo` (1.1, 1.3).
-2. Atualizar `aplicarPrevia`, `salvarLimite`, `redefinirLimite` (1.1, 1.6, 2.4).
-3. Adicionar banner de prévia ativa no card (1.2, 3.1).
-4. Ajustar `cn()` da `TableRow` para resolver colisão de `ring` (1.4).
-5. Padronizar fallback de moeda em handlers/toasts (1.5).
-6. Adicionar atalho “Sugerido” + resumo no popover (2.1, 2.2).
-7. Suportar Enter no input (2.3).
-8. Padronizar copy (3.2).
-
-## Arquivo afetado
-
-- `src/pages/Faturas.tsx` — todas as mudanças concentradas neste arquivo. Sem migrações, sem novos componentes, sem alterações em outras páginas.
-
-## Resultado esperado
-
-Ao final: o conjunto **status badge + tooltip + helper text + toast de confirmação + pulse + switch acima-do-limite + prévia ao digitar + botão “Aplicar prévia”** funciona de forma coesa, sem ambiguidade entre “prévia” e “salvo”, sem conflitos visuais, com feedback claro do que está valendo agora e do que vai mudar.
+**Para refinar antes de eu começar, responda:**
+1. Confirmar **Opção A** (mutações de domínio) ou pedir **Opção B** (patches de código)?
+2. Quer **preview de diff obrigatório** antes de qualquer aplicação, ou permitir "aplicar direto" para usuários com role admin?
+3. Limite de escopo: manter o teto de **50 sugestões/lote** ou outro número?

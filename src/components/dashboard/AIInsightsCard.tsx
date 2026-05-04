@@ -54,6 +54,57 @@ export function AIInsightsCard() {
   const isPaymentRequired = data?.error === "PAYMENT_REQUIRED";
   const isRateLimited = data?.error === "RATE_LIMITED";
   const isServiceError = data?.error === "AI_SERVICE_ERROR";
+  const errMsg = error instanceof Error ? error.message : "";
+  const isSchemaInvalid = errMsg === "SCHEMA_INVALID";
+  const isTimeout = /timeout|timed out|fetch failed|network/i.test(errMsg);
+
+  type ErrorKind = "schema" | "rate" | "timeout" | "service";
+  const ERROR_COPY: Record<ErrorKind, { title: string; description: string }> = {
+    schema: {
+      title: "Formato de resposta inesperado",
+      description:
+        "Recebemos os dados da IA, mas em um formato que não conseguimos interpretar. Isso pode ser temporário — tente novamente em alguns instantes.",
+    },
+    rate: {
+      title: "Muitas requisições",
+      description:
+        data?.message ||
+        "Atingimos o limite de requisições à IA por enquanto. Aguarde alguns instantes e tente novamente.",
+    },
+    timeout: {
+      title: "Tempo de resposta excedido",
+      description:
+        "A IA demorou demais para responder. Verifique sua conexão e tente novamente em alguns instantes.",
+    },
+    service: {
+      title: "Não foi possível gerar insights",
+      description:
+        "Ocorreu uma falha temporária ao consultar a IA. Tente novamente em alguns instantes.",
+    },
+  };
+
+  const renderErrorState = (kind: ErrorKind) => {
+    const copy = ERROR_COPY[kind];
+    return (
+      <Alert variant="destructive">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle className="text-sm font-semibold">{copy.title}</AlertTitle>
+        <AlertDescription className="text-xs space-y-2">
+          <p>{copy.description}</p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="gap-1"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            Tentar novamente
+          </Button>
+        </AlertDescription>
+      </Alert>
+    );
+  };
 
   const getIcon = (tipo: string) => {
     switch (tipo) {

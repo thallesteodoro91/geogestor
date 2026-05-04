@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { extractCreditsInfo } from "./credits.ts";
 
 class RateLimiter {
   private requests = new Map<string, { count: number; resetAt: number }>();

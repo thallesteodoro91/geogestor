@@ -189,6 +189,30 @@ export function AIInsightsCard() {
                 <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
                 Já atualizei meus créditos
               </Button>
+              {autoReloadDisabled ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setAutoReloadDisabled(false)}
+                  className="gap-1"
+                  title="Reativar recarga automática ao voltar à aba"
+                >
+                  Reativar recarga automática
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    clearAutoRefetch();
+                    setAutoReloadDisabled(true);
+                  }}
+                  className="gap-1"
+                  title="Não recarregar automaticamente ao voltar à aba"
+                >
+                  {autoReloadPending ? "Cancelar recarga automática" : "Desativar recarga automática"}
+                </Button>
+              )}
             </div>
           ) : (
             <Button

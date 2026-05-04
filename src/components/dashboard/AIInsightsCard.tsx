@@ -234,7 +234,14 @@ export function AIInsightsCard() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Manter desativada</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => setAutoReloadDisabled(false)}>
+                      <AlertDialogAction
+                        onClick={() => {
+                          setAutoReloadDisabled(false);
+                          toast.success("Recarga automática reativada", {
+                            description: "Recarregaremos o card alguns segundos após você voltar à aba.",
+                          });
+                        }}
+                      >
                         Reativar
                       </AlertDialogAction>
                     </AlertDialogFooter>

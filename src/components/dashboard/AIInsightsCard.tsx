@@ -200,18 +200,39 @@ export function AIInsightsCard() {
                   Reativar recarga automática
                 </Button>
               ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    clearAutoRefetch();
-                    setAutoReloadDisabled(true);
-                  }}
-                  className="gap-1"
-                  title="Não recarregar automaticamente ao voltar à aba"
-                >
-                  {autoReloadPending ? "Cancelar recarga automática" : "Desativar recarga automática"}
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1"
+                      title="Não recarregar automaticamente ao voltar à aba"
+                    >
+                      {autoReloadPending ? "Cancelar recarga automática" : "Desativar recarga automática"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Desativar recarga automática?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        O card deixará de recarregar sozinho ao voltar à aba. Você ainda poderá usar o botão
+                        "Já atualizei meus créditos" para recarregar manualmente, e poderá reativar a recarga
+                        automática a qualquer momento.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Manter ativa</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => {
+                          clearAutoRefetch();
+                          setAutoReloadDisabled(true);
+                        }}
+                      >
+                        Desativar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           ) : (

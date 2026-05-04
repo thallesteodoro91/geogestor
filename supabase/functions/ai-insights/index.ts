@@ -133,60 +133,8 @@ Retorne APENAS um array JSON válido, sem markdown, sem explicação adicional.`
         console.warn("[AI-INSIGHTS] 402 headers:", JSON.stringify(allHeaders));
         console.warn("[AI-INSIGHTS] 402 body:", errText);
 
-        const HEADER_KEYS_REMAINING = [
-          "x-credits-remaining",
-          "x-ratelimit-remaining-credits",
-          "x-ratelimit-remaining",
-          "x-credit-balance",
-        ];
-        const HEADER_KEYS_REQUIRED = [
-          "x-credits-required",
-          "x-ratelimit-required-credits",
-          "x-credits-cost",
-        ];
-
-        const readNumHeader = (keys: string[]): number | null => {
-          for (const k of keys) {
-            const raw = aiResponse.headers.get(k);
-            if (raw !== null && raw !== "" && !Number.isNaN(Number(raw))) {
-              return Number(raw);
-            }
-          }
-          return null;
-        };
-
-        let creditsRemaining: number | null = readNumHeader(HEADER_KEYS_REMAINING);
-        let creditsRequired: number | null = readNumHeader(HEADER_KEYS_REQUIRED);
-
-        // Body fallback (JSON shapes vary by provider)
-        try {
-          const parsed = JSON.parse(errText);
-          const candidatesRemaining = [
-            parsed?.credits_remaining,
-            parsed?.creditsRemaining,
-            parsed?.error?.credits_remaining,
-            parsed?.error?.creditsRemaining,
-            parsed?.error?.metadata?.credits_remaining,
-          ];
-          const candidatesRequired = [
-            parsed?.credits_required,
-            parsed?.creditsRequired,
-            parsed?.error?.credits_required,
-            parsed?.error?.creditsRequired,
-            parsed?.error?.metadata?.credits_required,
-          ];
-          for (const v of candidatesRemaining) {
-            if (typeof v === "number" && !Number.isNaN(v)) { creditsRemaining = v; break; }
-          }
-          for (const v of candidatesRequired) {
-            if (typeof v === "number" && !Number.isNaN(v)) { creditsRequired = v; break; }
-          }
-        } catch {
-          // body wasn't JSON — ignore
-        }
-
-        const creditsInfoAvailable =
-          creditsRemaining !== null || creditsRequired !== null;
+        const { creditsRemaining, creditsRequired, creditsInfoAvailable } =
+          extractCreditsInfo(aiResponse.headers, errText);
 
         return new Response(
           JSON.stringify({

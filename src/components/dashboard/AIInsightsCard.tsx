@@ -88,10 +88,14 @@ export function AIInsightsCard() {
           (() => {
             const remaining = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
             const required = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
+            const infoAvailable = data?.creditsInfoAvailable === true;
             const missing =
               remaining !== null && required !== null
                 ? Math.max(0, required - remaining)
                 : null;
+            // Partial info: provider returned one of the two values but not both
+            const partialInfo =
+              infoAvailable && (remaining === null || required === null);
             return (
           <Alert className="border-amber-500/50 bg-amber-500/5">
             <CreditCard className="h-4 w-4 text-amber-600" />

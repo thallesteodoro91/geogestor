@@ -130,6 +130,12 @@ export function AIInsightsCard() {
                   )}
                   . Abra <strong>Usage</strong> para conferir o consumo atual.
                 </p>
+              ) : infoAvailableButEmpty ? (
+                <p>
+                  Os créditos de IA do workspace acabaram. O provedor sinalizou falta de
+                  créditos, mas não informou nem o saldo nem o custo desta análise. Abra{" "}
+                  <strong>Usage</strong> para conferir o consumo atual.
+                </p>
               ) : data?.creditsInfoAvailable === false ? (
                 <p>
                   Os créditos de IA do workspace acabaram. O provedor não retornou o saldo

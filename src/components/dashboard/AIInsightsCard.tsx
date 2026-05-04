@@ -59,6 +59,7 @@ export function AIInsightsCard() {
   };
 
   return (
+    <>
     <Card className="border-primary/20">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -66,14 +67,24 @@ export function AIInsightsCard() {
             <Sparkles className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Insights com IA</CardTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-          >
-            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setBatchOpen(true)}
+              title="Aplicar todas as sugestões em lote"
+            >
+              <Wand2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">

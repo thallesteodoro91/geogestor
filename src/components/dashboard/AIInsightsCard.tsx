@@ -33,6 +33,8 @@ export type AIInsightsResponse = z.infer<typeof AIInsightsResponseSchema>;
 
 export function AIInsightsCard() {
   const [batchOpen, setBatchOpen] = useState(false);
+  const [autoReloadDisabled, setAutoReloadDisabled] = useState(false);
+  const [autoReloadPending, setAutoReloadPending] = useState(false);
   const { data, isLoading, error, refetch, isFetching } = useQuery<AIInsightsResponse>({
     queryKey: ["ai-insights"],
     queryFn: async (): Promise<AIInsightsResponse> => {
@@ -60,14 +62,27 @@ export function AIInsightsCard() {
 
   // Auto-refetch when user returns to the tab after visiting Usage to top up credits.
   // Triggers only while in PAYMENT_REQUIRED state, with a small delay to let the
-  // provider's credit balance propagate.
+  // provider's credit balance propagate. User can disable via the cancel button.
   const autoRefetchTimer = useRef<number | null>(null);
+  const clearAutoRefetch = () => {
+    if (autoRefetchTimer.current) {
+      window.clearTimeout(autoRefetchTimer.current);
+      autoRefetchTimer.current = null;
+    }
+    setAutoReloadPending(false);
+  };
   useEffect(() => {
-    if (!isPaymentRequired) return;
+    if (!isPaymentRequired || autoReloadDisabled) {
+      clearAutoRefetch();
+      return;
+    }
     const handleVisibility = () => {
       if (document.visibilityState !== "visible") return;
-      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+      clearAutoRefetch();
+      setAutoReloadPending(true);
       autoRefetchTimer.current = window.setTimeout(() => {
+        autoRefetchTimer.current = null;
+        setAutoReloadPending(false);
         refetch();
       }, 3000);
     };
@@ -76,9 +91,9 @@ export function AIInsightsCard() {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleVisibility);
-      if (autoRefetchTimer.current) window.clearTimeout(autoRefetchTimer.current);
+      clearAutoRefetch();
     };
-  }, [isPaymentRequired, refetch]);
+  }, [isPaymentRequired, autoReloadDisabled, refetch]);
 
 
   const remainingCredits = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
@@ -174,6 +189,30 @@ export function AIInsightsCard() {
                 <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
                 Já atualizei meus créditos
               </Button>
+              {autoReloadDisabled ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setAutoReloadDisabled(false)}
+                  className="gap-1"
+                  title="Reativar recarga automática ao voltar à aba"
+                >
+                  Reativar recarga automática
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    clearAutoRefetch();
+                    setAutoReloadDisabled(true);
+                  }}
+                  className="gap-1"
+                  title="Não recarregar automaticamente ao voltar à aba"
+                >
+                  {autoReloadPending ? "Cancelar recarga automática" : "Desativar recarga automática"}
+                </Button>
+              )}
             </div>
           ) : (
             <Button

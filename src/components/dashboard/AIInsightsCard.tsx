@@ -233,5 +233,7 @@ export function AIInsightsCard() {
         )}
       </CardContent>
     </Card>
+    <BatchApplyDialog open={batchOpen} onOpenChange={setBatchOpen} />
+    </>
   );
 }

@@ -124,21 +124,34 @@ export function AIInsightsCard() {
         <AlertDescription className="text-xs space-y-2">
           <p>{copy.description}</p>
           {isPayment ? (
-            <Button
-              size="sm"
-              variant="default"
-              onClick={() =>
-                trackAiCreditsCtaClick({
-                  source: "AIInsightsCard",
-                  creditsRemaining: remainingCredits,
-                  creditsRequired: requiredCredits,
-                })
-              }
-              className="gap-1"
-            >
-              <CreditCard className="h-3.5 w-3.5" />
-              Abrir Settings → Workspace → Usage
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() =>
+                  trackAiCreditsCtaClick({
+                    source: "AIInsightsCard",
+                    creditsRemaining: remainingCredits,
+                    creditsRequired: requiredCredits,
+                  })
+                }
+                className="gap-1"
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Abrir Settings → Workspace → Usage
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="gap-1"
+                title="Recarregar após adicionar créditos"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+                Já atualizei meus créditos
+              </Button>
+            </div>
           ) : (
             <Button
               size="sm"

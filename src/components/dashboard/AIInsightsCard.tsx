@@ -9,30 +9,41 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
 import { BatchApplyDialog } from "./BatchApplyDialog";
+import { z } from "zod";
 
-interface Insight {
-  tipo: "positivo" | "negativo" | "neutro";
-  titulo: string;
-  descricao: string;
-  acao: string;
-}
+const InsightSchema = z.object({
+  tipo: z.enum(["positivo", "negativo", "neutro"]),
+  titulo: z.string(),
+  descricao: z.string(),
+  acao: z.string(),
+});
+
+const AIInsightsResponseSchema = z.object({
+  insights: z.array(InsightSchema).optional().default([]),
+  kpis: z.unknown().optional(),
+  error: z.string().optional(),
+  message: z.string().optional(),
+  creditsRemaining: z.number().nullable().optional(),
+  creditsRequired: z.number().nullable().optional(),
+  creditsInfoAvailable: z.boolean().optional(),
+});
+
+export type Insight = z.infer<typeof InsightSchema>;
+export type AIInsightsResponse = z.infer<typeof AIInsightsResponseSchema>;
 
 export function AIInsightsCard() {
   const [batchOpen, setBatchOpen] = useState(false);
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery<AIInsightsResponse>({
     queryKey: ["ai-insights"],
-    queryFn: async () => {
+    queryFn: async (): Promise<AIInsightsResponse> => {
       const { data, error } = await supabase.functions.invoke("ai-insights");
       if (error) throw error;
-      return data as {
-        insights?: Insight[];
-        kpis?: any;
-        error?: string;
-        message?: string;
-        creditsRemaining?: number | null;
-        creditsRequired?: number | null;
-        creditsInfoAvailable?: boolean;
-      };
+      const parsed = AIInsightsResponseSchema.safeParse(data);
+      if (!parsed.success) {
+        console.error("[AIInsightsCard] Schema inválido:", parsed.error.flatten());
+        throw new Error("Resposta da IA em formato inesperado");
+      }
+      return parsed.data;
     },
     staleTime: 1000 * 60 * 30, // 30 min
     retry: 1,

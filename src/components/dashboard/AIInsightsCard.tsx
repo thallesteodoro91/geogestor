@@ -201,15 +201,33 @@ export function AIInsightsCard() {
                 Já atualizei meus créditos
               </Button>
               {autoReloadDisabled ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setAutoReloadDisabled(false)}
-                  className="gap-1"
-                  title="Reativar recarga automática ao voltar à aba"
-                >
-                  Reativar recarga automática
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1"
+                      title="Reativar recarga automática ao voltar à aba"
+                    >
+                      Reativar recarga automática
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reativar recarga automática?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        O card voltará a recarregar sozinho alguns segundos depois que você retornar à aba.
+                        Você poderá desativá-la novamente a qualquer momento.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Manter desativada</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => setAutoReloadDisabled(false)}>
+                        Reativar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               ) : (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>

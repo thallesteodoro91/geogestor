@@ -255,6 +255,16 @@ Pergunta do usuário: ${input}`
                   crédito(s) para responder (necessário: {paymentRequired.required},
                   disponível: {paymentRequired.remaining}).
                 </p>
+              ) : paymentRequired.required !== null ? (
+                <p>
+                  Custo desta resposta: <strong>{paymentRequired.required}</strong>{" "}
+                  crédito(s). Saldo atual indisponível — confira em <strong>Usage</strong>.
+                </p>
+              ) : paymentRequired.remaining !== null ? (
+                <p>
+                  Saldo atual: <strong>{paymentRequired.remaining}</strong> crédito(s),
+                  insuficiente para responder. Adicione créditos para continuar.
+                </p>
               ) : (
                 <p>O GeoBot está indisponível até que créditos sejam adicionados.</p>
               )}

@@ -58,7 +58,27 @@ export function AIInsightsCard() {
   const isSchemaInvalid = errMsg === "SCHEMA_INVALID";
   const isTimeout = /timeout|timed out|fetch failed|network/i.test(errMsg);
 
-  type ErrorKind = "schema" | "rate" | "timeout" | "service";
+  const remainingCredits = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
+  const requiredCredits = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
+  const missingCredits =
+    remainingCredits !== null && requiredCredits !== null
+      ? Math.max(0, requiredCredits - remainingCredits)
+      : null;
+
+  const paymentDescription = (() => {
+    if (missingCredits !== null) {
+      return `Faltam ${missingCredits} crédito${missingCredits === 1 ? "" : "s"} de IA para gerar esta análise (necessário: ${requiredCredits}, disponível: ${remainingCredits}). Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    if (requiredCredits !== null) {
+      return `Os créditos de IA do workspace acabaram. Esta análise custa ${requiredCredits} crédito${requiredCredits === 1 ? "" : "s"}. Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    if (remainingCredits !== null) {
+      return `Os créditos de IA do workspace acabaram (saldo: ${remainingCredits}). Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    return "Os créditos de IA do workspace acabaram. Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.";
+  })();
+
+  type ErrorKind = "schema" | "rate" | "timeout" | "service" | "payment";
   const ERROR_COPY: Record<ErrorKind, { title: string; description: string }> = {
     schema: {
       title: "Formato de resposta inesperado",
@@ -81,26 +101,56 @@ export function AIInsightsCard() {
       description:
         "Ocorreu uma falha temporária ao consultar a IA. Tente novamente em alguns instantes.",
     },
+    payment: {
+      title: "Créditos de IA esgotados",
+      description: paymentDescription,
+    },
   };
 
   const renderErrorState = (kind: ErrorKind) => {
     const copy = ERROR_COPY[kind];
+    const isPayment = kind === "payment";
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
+      <Alert
+        variant={isPayment ? "default" : "destructive"}
+        className={isPayment ? "border-amber-500/50 bg-amber-500/5" : undefined}
+      >
+        {isPayment ? (
+          <CreditCard className="h-4 w-4 text-amber-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4" />
+        )}
         <AlertTitle className="text-sm font-semibold">{copy.title}</AlertTitle>
         <AlertDescription className="text-xs space-y-2">
           <p>{copy.description}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="gap-1"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            Tentar novamente
-          </Button>
+          {isPayment ? (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() =>
+                trackAiCreditsCtaClick({
+                  source: "AIInsightsCard",
+                  creditsRemaining: remainingCredits,
+                  creditsRequired: requiredCredits,
+                })
+              }
+              className="gap-1"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              Abrir Settings → Workspace → Usage
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="gap-1"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Tentar novamente
+            </Button>
+          )}
         </AlertDescription>
       </Alert>
     );
@@ -162,97 +212,7 @@ export function AIInsightsCard() {
             ))}
           </div>
         ) : isPaymentRequired ? (
-          (() => {
-            const remaining = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
-            const required = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
-            const infoAvailable = data?.creditsInfoAvailable === true;
-            const missing =
-              remaining !== null && required !== null
-                ? Math.max(0, required - remaining)
-                : null;
-            // Partial info: provider returned exactly one of the two values
-            const partialInfo =
-              infoAvailable &&
-              ((remaining === null) !== (required === null));
-            // Flagged available but neither value present (inconsistent provider response)
-            const infoAvailableButEmpty =
-              infoAvailable && remaining === null && required === null;
-            return (
-          <Alert className="border-amber-500/50 bg-amber-500/5">
-            <CreditCard className="h-4 w-4 text-amber-600" />
-            <AlertTitle className="text-sm font-semibold">Créditos de IA esgotados</AlertTitle>
-            <AlertDescription className="text-xs space-y-3">
-              {missing !== null ? (
-                <p>
-                  Faltam <strong>{missing}</strong> crédito{missing === 1 ? "" : "s"} para gerar
-                  esta análise
-                  {required !== null && (
-                    <> (necessário: {required}, disponível: {remaining})</>
-                  )}
-                  .
-                </p>
-              ) : partialInfo ? (
-                <p>
-                  Os créditos de IA do workspace acabaram. O provedor informou apenas{" "}
-                  {required !== null ? (
-                    <>
-                      o custo desta análise (<strong>{required}</strong> crédito
-                      {required === 1 ? "" : "s"}), mas não o saldo restante
-                    </>
-                  ) : (
-                    <>
-                      o saldo restante (<strong>{remaining}</strong> crédito
-                      {remaining === 1 ? "" : "s"}), mas não o custo desta análise
-                    </>
-                  )}
-                  . Abra <strong>Usage</strong> para conferir o consumo atual.
-                </p>
-              ) : infoAvailableButEmpty ? (
-                <p>
-                  Os créditos de IA do workspace acabaram. O provedor sinalizou falta de
-                  créditos, mas não informou nem o saldo nem o custo desta análise. Abra{" "}
-                  <strong>Usage</strong> para conferir o consumo atual.
-                </p>
-              ) : data?.creditsInfoAvailable === false ? (
-                <p>
-                  Os créditos de IA do workspace acabaram. O provedor não retornou o saldo
-                  exato — abra <strong>Usage</strong> para conferir o consumo atual.
-                </p>
-              ) : (
-                <p>Não há créditos suficientes no workspace para gerar esta análise.</p>
-              )}
-              <p className="text-muted-foreground">
-                Sem créditos, os seguintes recursos ficam indisponíveis:
-              </p>
-              <ul className="list-disc pl-4 text-muted-foreground space-y-0.5">
-                <li>Geração automática de insights financeiros no dashboard</li>
-                <li>Recomendações acionáveis baseadas nos seus KPIs</li>
-                <li>Respostas do assistente GeoBot</li>
-              </ul>
-              <p className="text-muted-foreground">
-                Ao clicar abaixo, você abre <strong>Settings → Workspace → Usage</strong> em uma
-                nova aba para revisar consumo e adicionar créditos. Sua sessão atual continua
-                ativa.
-              </p>
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() =>
-                  trackAiCreditsCtaClick({
-                    source: "AIInsightsCard",
-                    creditsRemaining: remaining,
-                    creditsRequired: required,
-                  })
-                }
-                className="gap-1"
-              >
-                <CreditCard className="h-3.5 w-3.5" />
-                Abrir Settings → Workspace → Usage
-              </Button>
-            </AlertDescription>
-          </Alert>
-            );
-          })()
+          renderErrorState("payment")
         ) : isRateLimited ? (
           renderErrorState("rate")
         ) : isSchemaInvalid ? (

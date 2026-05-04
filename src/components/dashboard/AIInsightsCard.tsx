@@ -41,7 +41,9 @@ export function AIInsightsCard() {
       const parsed = AIInsightsResponseSchema.safeParse(data);
       if (!parsed.success) {
         console.error("[AIInsightsCard] Schema inválido:", parsed.error.flatten());
-        throw new Error("Resposta da IA em formato inesperado");
+        const err = new Error("SCHEMA_INVALID");
+        (err as any).code = "SCHEMA_INVALID";
+        throw err;
       }
       return parsed.data;
     },

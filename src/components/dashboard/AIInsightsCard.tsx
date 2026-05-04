@@ -93,9 +93,13 @@ export function AIInsightsCard() {
               remaining !== null && required !== null
                 ? Math.max(0, required - remaining)
                 : null;
-            // Partial info: provider returned one of the two values but not both
+            // Partial info: provider returned exactly one of the two values
             const partialInfo =
-              infoAvailable && (remaining === null || required === null);
+              infoAvailable &&
+              ((remaining === null) !== (required === null));
+            // Flagged available but neither value present (inconsistent provider response)
+            const infoAvailableButEmpty =
+              infoAvailable && remaining === null && required === null;
             return (
           <Alert className="border-amber-500/50 bg-amber-500/5">
             <CreditCard className="h-4 w-4 text-amber-600" />
@@ -125,6 +129,12 @@ export function AIInsightsCard() {
                     </>
                   )}
                   . Abra <strong>Usage</strong> para conferir o consumo atual.
+                </p>
+              ) : infoAvailableButEmpty ? (
+                <p>
+                  Os créditos de IA do workspace acabaram. O provedor sinalizou falta de
+                  créditos, mas não informou nem o saldo nem o custo desta análise. Abra{" "}
+                  <strong>Usage</strong> para conferir o consumo atual.
                 </p>
               ) : data?.creditsInfoAvailable === false ? (
                 <p>

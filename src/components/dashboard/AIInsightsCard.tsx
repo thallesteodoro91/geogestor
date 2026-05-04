@@ -58,7 +58,27 @@ export function AIInsightsCard() {
   const isSchemaInvalid = errMsg === "SCHEMA_INVALID";
   const isTimeout = /timeout|timed out|fetch failed|network/i.test(errMsg);
 
-  type ErrorKind = "schema" | "rate" | "timeout" | "service";
+  const remainingCredits = typeof data?.creditsRemaining === "number" ? data.creditsRemaining : null;
+  const requiredCredits = typeof data?.creditsRequired === "number" ? data.creditsRequired : null;
+  const missingCredits =
+    remainingCredits !== null && requiredCredits !== null
+      ? Math.max(0, requiredCredits - remainingCredits)
+      : null;
+
+  const paymentDescription = (() => {
+    if (missingCredits !== null) {
+      return `Faltam ${missingCredits} crédito${missingCredits === 1 ? "" : "s"} de IA para gerar esta análise (necessário: ${requiredCredits}, disponível: ${remainingCredits}). Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    if (requiredCredits !== null) {
+      return `Os créditos de IA do workspace acabaram. Esta análise custa ${requiredCredits} crédito${requiredCredits === 1 ? "" : "s"}. Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    if (remainingCredits !== null) {
+      return `Os créditos de IA do workspace acabaram (saldo: ${remainingCredits}). Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.`;
+    }
+    return "Os créditos de IA do workspace acabaram. Abra Settings → Workspace → Usage para revisar o consumo e adicionar créditos.";
+  })();
+
+  type ErrorKind = "schema" | "rate" | "timeout" | "service" | "payment";
   const ERROR_COPY: Record<ErrorKind, { title: string; description: string }> = {
     schema: {
       title: "Formato de resposta inesperado",
@@ -81,26 +101,56 @@ export function AIInsightsCard() {
       description:
         "Ocorreu uma falha temporária ao consultar a IA. Tente novamente em alguns instantes.",
     },
+    payment: {
+      title: "Créditos de IA esgotados",
+      description: paymentDescription,
+    },
   };
 
   const renderErrorState = (kind: ErrorKind) => {
     const copy = ERROR_COPY[kind];
+    const isPayment = kind === "payment";
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
+      <Alert
+        variant={isPayment ? "default" : "destructive"}
+        className={isPayment ? "border-amber-500/50 bg-amber-500/5" : undefined}
+      >
+        {isPayment ? (
+          <CreditCard className="h-4 w-4 text-amber-600" />
+        ) : (
+          <AlertTriangle className="h-4 w-4" />
+        )}
         <AlertTitle className="text-sm font-semibold">{copy.title}</AlertTitle>
         <AlertDescription className="text-xs space-y-2">
           <p>{copy.description}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => refetch()}
-            disabled={isFetching}
-            className="gap-1"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
-            Tentar novamente
-          </Button>
+          {isPayment ? (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={() =>
+                trackAiCreditsCtaClick({
+                  source: "AIInsightsCard",
+                  creditsRemaining: remainingCredits,
+                  creditsRequired: requiredCredits,
+                })
+              }
+              className="gap-1"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              Abrir Settings → Workspace → Usage
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              className="gap-1"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+              Tentar novamente
+            </Button>
+          )}
         </AlertDescription>
       </Alert>
     );

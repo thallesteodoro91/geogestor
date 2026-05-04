@@ -4,10 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, CreditCard } from "lucide-react";
+import { Sparkles, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, CreditCard, Wand2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
+import { BatchApplyDialog } from "./BatchApplyDialog";
 
 interface Insight {
   tipo: "positivo" | "negativo" | "neutro";
@@ -17,6 +18,7 @@ interface Insight {
 }
 
 export function AIInsightsCard() {
+  const [batchOpen, setBatchOpen] = useState(false);
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["ai-insights"],
     queryFn: async () => {
@@ -57,6 +59,7 @@ export function AIInsightsCard() {
   };
 
   return (
+    <>
     <Card className="border-primary/20">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
@@ -64,14 +67,24 @@ export function AIInsightsCard() {
             <Sparkles className="h-5 w-5 text-primary" />
             <CardTitle className="text-lg">Insights com IA</CardTitle>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-          >
-            <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setBatchOpen(true)}
+              title="Aplicar todas as sugestões em lote"
+            >
+              <Wand2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -220,5 +233,7 @@ export function AIInsightsCard() {
         )}
       </CardContent>
     </Card>
+    <BatchApplyDialog open={batchOpen} onOpenChange={setBatchOpen} />
+    </>
   );
 }

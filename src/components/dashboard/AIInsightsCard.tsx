@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { trackAiCreditsCtaClick } from "@/lib/aiCreditsTracking";
 import { BatchApplyDialog } from "./BatchApplyDialog";
 import { z } from "zod";
+import { toast } from "sonner";
 
 const InsightSchema = z.object({
   tipo: z.enum(["positivo", "negativo", "neutro"]),

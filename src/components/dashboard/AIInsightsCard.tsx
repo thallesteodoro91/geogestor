@@ -99,13 +99,42 @@ export function AIInsightsCard() {
         try {
           const res = await refetch();
           if (res.error) throw res.error;
-          if (res.data?.error === "PAYMENT_REQUIRED") {
+          const errCode = res.data?.error;
+          if (errCode === "PAYMENT_REQUIRED") {
             toast.warning("Ainda sem créditos suficientes", { id: tId });
+          } else if (errCode === "RATE_LIMITED") {
+            toast.warning("Muitas requisições à IA", {
+              id: tId,
+              description: "Aguarde alguns instantes antes de tentar novamente.",
+            });
+          } else if (errCode === "AI_SERVICE_ERROR") {
+            toast.error("Serviço de IA indisponível", {
+              id: tId,
+              description: "Não foi possível consultar a IA agora. Tente novamente em instantes.",
+            });
           } else {
             toast.success("Insights atualizados", { id: tId });
           }
-        } catch {
-          toast.error("Falha ao recarregar insights", { id: tId });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e ?? "");
+          const isNetwork = /fetch failed|network|networkerror|failed to fetch|load failed/i.test(msg);
+          const isTimeoutErr = /timeout|timed out|abort/i.test(msg);
+          if (isTimeoutErr) {
+            toast.error("Tempo de resposta excedido", {
+              id: tId,
+              description: "A IA demorou demais para responder. Tente novamente em instantes.",
+            });
+          } else if (isNetwork) {
+            toast.error("Sem conexão com o serviço de IA", {
+              id: tId,
+              description: "Verifique sua conexão de internet e tente novamente.",
+            });
+          } else {
+            toast.error("Falha ao recarregar insights", {
+              id: tId,
+              description: "Ocorreu um erro inesperado ao consultar a IA.",
+            });
+          }
         }
       }, 3000);
     };

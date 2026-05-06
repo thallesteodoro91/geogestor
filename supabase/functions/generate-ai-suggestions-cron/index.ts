@@ -127,6 +127,15 @@ serve(async (req) => {
       { auth: { persistSession: false } },
     );
 
+    // Bootstrap: ensure CRON_SECRET exists in vault so pg_cron can read it.
+    if (CRON_SECRET) {
+      try {
+        await admin.rpc("upsert_cron_secret", { p_value: CRON_SECRET });
+      } catch (e) {
+        console.warn("[generate-ai-suggestions-cron] vault bootstrap failed:", e instanceof Error ? e.message : String(e));
+      }
+    }
+
     // Eligible tenants: paid plan (slug != 'trial' optional) and status active/trialing.
     // Per user spec: only PAID plans → exclude trialing.
     const { data: subs, error: subErr } = await admin

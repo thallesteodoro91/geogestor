@@ -109,11 +109,25 @@ Responda APENAS com um array JSON válido. Cada item:
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth: shared secret OR service-role key
   const auth = req.headers.get("authorization") ?? "";
   const provided = auth.replace(/^Bearer\s+/i, "");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const ok = (CRON_SECRET && provided === CRON_SECRET) || (serviceKey && provided === serviceKey);
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    serviceKey,
+    { auth: { persistSession: false } },
+  );
+
+  // Lazy-load CRON_SECRET from vault
+  if (CACHED_CRON_SECRET === null) {
+    const { data } = await admin.rpc("get_cron_secret");
+    CACHED_CRON_SECRET = (data as string | null) ?? "";
+  }
+
+  const ok =
+    (CACHED_CRON_SECRET && provided === CACHED_CRON_SECRET) ||
+    (serviceKey && provided === serviceKey);
   if (!ok) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
@@ -122,20 +136,7 @@ serve(async (req) => {
   }
 
   try {
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      serviceKey,
-      { auth: { persistSession: false } },
-    );
 
-    // Bootstrap: ensure CRON_SECRET exists in vault so pg_cron can read it.
-    if (CRON_SECRET) {
-      try {
-        await admin.rpc("upsert_cron_secret", { p_value: CRON_SECRET });
-      } catch (e) {
-        console.warn("[generate-ai-suggestions-cron] vault bootstrap failed:", e instanceof Error ? e.message : String(e));
-      }
-    }
 
     // Eligible tenants: paid plan (slug != 'trial' optional) and status active/trialing.
     // Per user spec: only PAID plans → exclude trialing.

@@ -8,7 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+// CRON_SECRET fetched from vault on each cold start
+let CACHED_CRON_SECRET: string | null = null;
 
 interface SuggestionDraft {
   category: "erro" | "teste" | "fallback" | "ux" | "financeiro" | "operacional";
@@ -108,11 +109,25 @@ Responda APENAS com um array JSON válido. Cada item:
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  // Auth: shared secret OR service-role key
   const auth = req.headers.get("authorization") ?? "";
   const provided = auth.replace(/^Bearer\s+/i, "");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  const ok = (CRON_SECRET && provided === CRON_SECRET) || (serviceKey && provided === serviceKey);
+
+  const admin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    serviceKey,
+    { auth: { persistSession: false } },
+  );
+
+  // Lazy-load CRON_SECRET from vault
+  if (CACHED_CRON_SECRET === null) {
+    const { data } = await admin.rpc("get_cron_secret");
+    CACHED_CRON_SECRET = (data as string | null) ?? "";
+  }
+
+  const ok =
+    (CACHED_CRON_SECRET && provided === CACHED_CRON_SECRET) ||
+    (serviceKey && provided === serviceKey);
   if (!ok) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
@@ -121,11 +136,7 @@ serve(async (req) => {
   }
 
   try {
-    const admin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      serviceKey,
-      { auth: { persistSession: false } },
-    );
+
 
     // Eligible tenants: paid plan (slug != 'trial' optional) and status active/trialing.
     // Per user spec: only PAID plans → exclude trialing.

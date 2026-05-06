@@ -2029,6 +2029,7 @@ export type Database = {
         Args: { p_cliente_nome: string; p_tenant_id: string }
         Returns: string
       }
+      get_cron_secret: { Args: never; Returns: string }
       get_financial_dashboard_metrics: {
         Args: { p_data_fim?: string; p_data_inicio?: string }
         Returns: Json
@@ -2066,6 +2067,7 @@ export type Database = {
       }
       limpar_notificacoes_antigas: { Args: never; Returns: undefined }
       purge_old_audit_logs: { Args: never; Returns: number }
+      upsert_cron_secret: { Args: { p_value: string }; Returns: undefined }
       verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {

@@ -8,7 +8,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
+// CRON_SECRET fetched from vault on each cold start
+let CACHED_CRON_SECRET: string | null = null;
 
 interface SuggestionDraft {
   category: "erro" | "teste" | "fallback" | "ux" | "financeiro" | "operacional";

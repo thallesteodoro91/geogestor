@@ -2029,6 +2029,7 @@ export type Database = {
         Args: { p_cliente_nome: string; p_tenant_id: string }
         Returns: string
       }
+      get_cron_secret: { Args: never; Returns: string }
       get_financial_dashboard_metrics: {
         Args: { p_data_fim?: string; p_data_inicio?: string }
         Returns: Json

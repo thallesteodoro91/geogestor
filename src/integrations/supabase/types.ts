@@ -2066,6 +2066,7 @@ export type Database = {
       }
       limpar_notificacoes_antigas: { Args: never; Returns: undefined }
       purge_old_audit_logs: { Args: never; Returns: number }
+      upsert_cron_secret: { Args: { p_value: string }; Returns: undefined }
       verificar_pagamentos_pendentes: { Args: never; Returns: undefined }
     }
     Enums: {

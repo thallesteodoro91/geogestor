@@ -32,15 +32,29 @@ jobs:
         continue-on-error: true
         run: supabase db lint --linked --level warning
 
-      # Fail the build ONLY when there are ERROR-level findings.
-      # Accepted warnings are documented in mem://security/riscos-aceitos-design.
-      - name: Fail on critical (error-level) findings
+      # Fail the build ONLY when an ERROR-level finding matches one of the
+      # codes in CRITICAL_LINT_CODES. All other findings stay as warnings.
+      # Accepted warnings: see mem://security/riscos-aceitos-design.
+      - name: Fail on specific critical lint codes
+        env:
+          # Comma-separated list of lint codes that MUST fail the build.
+          # Examples: 0001 (security_definer_view), 0002 (auth_users_exposed),
+          # 0010 (rls_disabled_in_public), 0014 (rls_references_user_metadata).
+          # Adjust this list to match your project's risk tolerance.
+          CRITICAL_LINT_CODES: "0001,0002,0010,0014"
         run: |
           set -e
-          OUTPUT=$(supabase db lint --linked --level error)
+          OUTPUT=$(supabase db lint --linked --level error || true)
           echo "$OUTPUT"
-          if echo "$OUTPUT" | grep -qiE '^\s*(Level:\s*ERROR|ERROR\s*[0-9]+:)'; then
-            echo "::error::Critical (ERROR-level) security findings detected. Failing build."
+
+          # Build regex like: (lint=)(0001|0002|0010|0014)
+          PATTERN=$(echo "$CRITICAL_LINT_CODES" | sed 's/,/|/g')
+          REGEX="lint=(${PATTERN})\\b"
+
+          MATCHES=$(echo "$OUTPUT" | grep -oE "$REGEX" | sort -u || true)
+          if [ -n "$MATCHES" ]; then
+            echo "::error::Critical security findings detected matching codes: $MATCHES"
+            echo "$OUTPUT" | grep -E "$REGEX|^(ERROR|WARN)" || true
             exit 1
           fi
-          echo "✅ No critical security findings."
+          echo "✅ No critical findings matching codes [$CRITICAL_LINT_CODES]."

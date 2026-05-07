@@ -1,0 +1,46 @@
+name: Supabase Security Linter
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Run Supabase DB linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+
+      # Always print the full report for visibility (warnings + errors).
+      - name: Lint (report all levels)
+        continue-on-error: true
+        run: supabase db lint --linked --level warning
+
+      # Fail the build ONLY when there are ERROR-level findings.
+      # Accepted warnings are documented in mem://security/riscos-aceitos-design.
+      - name: Fail on critical (error-level) findings
+        run: |
+          set -e
+          OUTPUT=$(supabase db lint --linked --level error)
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qiE '^\s*(Level:\s*ERROR|ERROR\s*[0-9]+:)'; then
+            echo "::error::Critical (ERROR-level) security findings detected. Failing build."
+            exit 1
+          fi
+          echo "✅ No critical security findings."

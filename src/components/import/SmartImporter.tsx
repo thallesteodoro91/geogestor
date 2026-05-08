@@ -377,15 +377,6 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
-// Marker — replaced fields above ↑
-const _COMPLETO_FIELDS_REPLACED_MARKER = true;
-const _ORIGINAL_COMPLETO_LINES_TO_DROP = [
-  // The next 4 lines were the original financeiro entries; keep deletion below.
-];
-  { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
-  { key: "custo_servico", label: "💰 Financeiro - Custo", required: false, validate: validatePositiveNumber, type: "number" },
-  { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
-];
 
 
 

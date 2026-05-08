@@ -49,11 +49,27 @@ jobs:
           CRITICAL_LINT_CODES: ${{ github.event.inputs.critical_lint_codes || vars.CRITICAL_LINT_CODES || '0001,0002,0010,0014' }}
         run: |
           set -e
+
+          # Normalize input: trim spaces, drop empty entries, dedupe.
+          NORMALIZED=$(echo "$CRITICAL_LINT_CODES" \
+            | tr ',' '\n' \
+            | sed 's/[[:space:]]//g' \
+            | grep -v '^$' \
+            | sort -u \
+            | paste -sd ',' -)
+
+          if [ -z "$NORMALIZED" ]; then
+            echo "::warning::CRITICAL_LINT_CODES is empty after normalization — skipping critical-code gate."
+            exit 0
+          fi
+
+          echo "Using critical lint codes: [$NORMALIZED]"
+
           OUTPUT=$(supabase db lint --linked --level error || true)
           echo "$OUTPUT"
 
-          # Build regex like: (lint=)(0001|0002|0010|0014)
-          PATTERN=$(echo "$CRITICAL_LINT_CODES" | sed 's/,/|/g')
+          # Build regex like: lint=(0001|0002|0010|0014)
+          PATTERN=$(echo "$NORMALIZED" | sed 's/,/|/g')
           REGEX="lint=(${PATTERN})\\b"
 
           MATCHES=$(echo "$OUTPUT" | grep -oE "$REGEX" | sort -u || true)
@@ -62,4 +78,4 @@ jobs:
             echo "$OUTPUT" | grep -E "$REGEX|^(ERROR|WARN)" || true
             exit 1
           fi
-          echo "✅ No critical findings matching codes [$CRITICAL_LINT_CODES]."
+          echo "✅ No critical findings matching codes [$NORMALIZED]."

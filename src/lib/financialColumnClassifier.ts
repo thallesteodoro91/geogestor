@@ -55,7 +55,7 @@ const RULES: Rule[] = [
   { role: "receita_liquida", anyOf: ["receita liquida", "faturamento liquido", "net revenue"], weight: 100 },
 
   // === VALOR ORÇADO / PROPOSTA ===
-  { role: "valor_orcado", anyOf: ["valor orcado", "valor proposta", "valor do orcamento", "valor unitario", "preco unitario", "preco do servico", "valor do servico", "valor contrato", "valor total", "valor global"], weight: 80 },
+  { role: "valor_orcado", anyOf: ["valor orcado", "valor proposta", "valor do orcamento", "valor unitario", "preco unitario", "preco do servico", "valor do servico", "valor contrato", "valor total", "valor global"], weight: 98 },
   { role: "valor_orcado", anyOf: ["preco", "valor", "vlr", "amount", "price"], notAny: ["custo", "despesa", "gasto", "pago", "saida", "imposto", "lucro", "margem", "previs", "potenc"], weight: 50 },
 
   // === CUSTO (variável, ligado ao serviço) ===

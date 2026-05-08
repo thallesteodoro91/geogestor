@@ -484,7 +484,9 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   // ── Financeiro (prioridade alta — sinônimos únicos) ──
   valor_unitario: ["valorunit", "preco", "precounitario", "vlrunit", "valorha", "valorhectare", "precoha", "valorservico"],
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
-  custo_servico: ["custo", "despesa", "gasto", "custoservico", "custototal", "custooperacional"],
+  custo_servico: ["custo", "custoservico", "custototal", "custooperacional", "custoobra", "custodoservico", "custodaobra", "custodireto"],
+  valor_despesa: ["despesa", "despesas", "gasto", "gastos", "valorpago", "saida", "pagamento", "valordespesa", "despesaoperacional", "despesafixa"],
+  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
 };
 

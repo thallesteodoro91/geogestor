@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      critical_lint_codes:
+        description: "Comma-separated lint codes that MUST fail the build (e.g. 0001,0002,0010,0014)"
+        required: false
+        default: "0001,0002,0010,0014"
 
 jobs:
   lint:
@@ -41,7 +46,7 @@ jobs:
           # Examples: 0001 (security_definer_view), 0002 (auth_users_exposed),
           # 0010 (rls_disabled_in_public), 0014 (rls_references_user_metadata).
           # Adjust this list to match your project's risk tolerance.
-          CRITICAL_LINT_CODES: "0001,0002,0010,0014"
+          CRITICAL_LINT_CODES: ${{ github.event.inputs.critical_lint_codes || vars.CRITICAL_LINT_CODES || '0001,0002,0010,0014' }}
         run: |
           set -e
           OUTPUT=$(supabase db lint --linked --level error || true)

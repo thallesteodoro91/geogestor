@@ -1466,9 +1466,34 @@ export function SmartImporter({
         // Step 5: Create expenses (despesas) — for every row with custo_servico > 0
         setImportProgress(88);
         const despesas: Record<string, any>[] = [];
+
+        // Helper: ensure tipo_despesa exists for a free-text category, classified VARIAVEL/FIXA
+        const tipoDespesaCache = new Map<string, string>();
+        const ensureTipoDespesa = async (catLabel: string | null): Promise<string | null> => {
+          const key = (catLabel || "Geral").trim();
+          if (!key) return null;
+          if (tipoDespesaCache.has(key.toLowerCase())) return tipoDespesaCache.get(key.toLowerCase())!;
+          const { data: existing } = await supabase
+            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key).maybeSingle();
+          if (existing?.id_tipodespesa) {
+            tipoDespesaCache.set(key.toLowerCase(), existing.id_tipodespesa);
+            return existing.id_tipodespesa;
+          }
+          const classificacao = classifyExpenseCategory(key);
+          const { data: created } = await createTipoDespesa({
+            categoria: key, classificacao, descricao: "Criado pela importação inteligente",
+          });
+          if (created?.id_tipodespesa) {
+            tipoDespesaCache.set(key.toLowerCase(), created.id_tipodespesa);
+            return created.id_tipodespesa;
+          }
+          return null;
+        };
+
         for (const rec of recordsToInsert) {
           const custo = parseNullableNumber(rec.custo_servico);
-          if (!custo || custo <= 0) continue;
+          const despOp = parseNullableNumber(rec.valor_despesa);
+          if ((!custo || custo <= 0) && (!despOp || despOp <= 0)) continue;
 
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
@@ -1483,15 +1508,35 @@ export function SmartImporter({
           let dataDesp = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDesp)) dataDesp = todayISO;
 
-          despesas.push({
-            id_servico: servicoId || null,
-            data_da_despesa: dataDesp,
-            valor_da_despesa: custo,
-            observacoes: `Importado: ${servicoNome}`,
-            status: "confirmada",
-          });
-          debug.despesaCount++;
-          debug.despesaSum += custo;
+          // Custo de obra (variável, ligado ao serviço)
+          if (custo && custo > 0) {
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra");
+            despesas.push({
+              id_servico: servicoId || null,
+              id_tipodespesa: tipoId,
+              data_da_despesa: dataDesp,
+              valor_da_despesa: custo,
+              observacoes: `Custo de obra: ${servicoNome}`,
+              status: "confirmada",
+            });
+            debug.despesaCount++;
+            debug.despesaSum += custo;
+          }
+
+          // Despesa operacional (separada — vai pra fato_despesas com tipo classificado)
+          if (despOp && despOp > 0) {
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional");
+            despesas.push({
+              id_servico: servicoId || null,
+              id_tipodespesa: tipoId,
+              data_da_despesa: dataDesp,
+              valor_da_despesa: despOp,
+              observacoes: `Despesa operacional: ${rec.categoria_despesa || servicoNome}`,
+              status: "confirmada",
+            });
+            debug.despesaCount++;
+            debug.despesaSum += despOp;
+          }
         }
 
         console.log(`[SmartImporter] Step 5 - Despesas a criar: ${despesas.length}`);

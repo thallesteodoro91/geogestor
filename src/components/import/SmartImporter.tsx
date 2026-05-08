@@ -988,9 +988,11 @@ export function SmartImporter({
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const cs = parseNullableNumber(v.row.custo_servico) || 0;
+        const dop = parseNullableNumber(v.row.valor_despesa) || 0;
         const val = re > 0 ? re : vu;
         if (val > 0) { receita += val; count++; }
         if (cs > 0) { despesas += cs; }
+        if (dop > 0) { despesas += dop; }
       }
     }
 

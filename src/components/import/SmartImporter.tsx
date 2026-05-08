@@ -35,6 +35,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { KPIData } from "@/domain/types/kpi.types";
 import { useKPIs } from "@/hooks/useKPIs";
+import { parseFinancialNumber } from "@/lib/financialNumberParser";
+import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
+import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -78,23 +81,12 @@ type PreviewFilter = "all" | "valid" | "errors" | "warnings";
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
 function sanitizeCurrency(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
-
-  let v = String(value).replace(/R\$\s*/gi, "").trim();
-  if (!v) return "";
-  if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
-    v = v.replace(/\./g, "").replace(",", ".");
-  }
-  return v;
+  const n = parseFinancialNumber(value);
+  return n === null ? "" : String(n);
 }
 
 function parseNullableNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-
-  const parsed = parseFloat(sanitizeCurrency(value));
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseFinancialNumber(value);
 }
 
 function sanitizeDigitsOnly(value: string): string {

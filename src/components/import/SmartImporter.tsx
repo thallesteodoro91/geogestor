@@ -35,6 +35,9 @@ import {
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { KPIData } from "@/domain/types/kpi.types";
 import { useKPIs } from "@/hooks/useKPIs";
+import { parseFinancialNumber } from "@/lib/financialNumberParser";
+import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
+import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -78,23 +81,12 @@ type PreviewFilter = "all" | "valid" | "errors" | "warnings";
 // ─── Sanitizers ─────────────────────────────────────────────────────────
 
 function sanitizeCurrency(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "";
-
-  let v = String(value).replace(/R\$\s*/gi, "").trim();
-  if (!v) return "";
-  if (/\d\.\d{3}/.test(v) || /,\d{1,2}$/.test(v)) {
-    v = v.replace(/\./g, "").replace(",", ".");
-  }
-  return v;
+  const n = parseFinancialNumber(value);
+  return n === null ? "" : String(n);
 }
 
 function parseNullableNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-
-  const parsed = parseFloat(sanitizeCurrency(value));
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseFinancialNumber(value);
 }
 
 function sanitizeDigitsOnly(value: string): string {
@@ -379,9 +371,12 @@ const COMPLETO_FIELDS: SystemField[] = [
   // Financeiro
   { key: "valor_unitario", label: "💰 Financeiro - Valor", required: false, validate: validatePositiveNumber, type: "number" },
   { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
-  { key: "custo_servico", label: "💰 Financeiro - Custo", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "custo_servico", label: "💰 Financeiro - Custo de Obra", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "valor_despesa", label: "💰 Financeiro - Despesa Operacional", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "categoria_despesa", label: "💰 Financeiro - Categoria da Despesa", required: false },
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
+
 
 
 
@@ -489,7 +484,9 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   // ── Financeiro (prioridade alta — sinônimos únicos) ──
   valor_unitario: ["valorunit", "preco", "precounitario", "vlrunit", "valorha", "valorhectare", "precoha", "valorservico"],
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
-  custo_servico: ["custo", "despesa", "gasto", "custoservico", "custototal", "custooperacional"],
+  custo_servico: ["custo", "custoservico", "custototal", "custooperacional", "custoobra", "custodoservico", "custodaobra", "custodireto"],
+  valor_despesa: ["despesa", "despesas", "gasto", "gastos", "valorpago", "saida", "pagamento", "valordespesa", "despesaoperacional", "despesafixa"],
+  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
 };
 
@@ -991,9 +988,11 @@ export function SmartImporter({
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const cs = parseNullableNumber(v.row.custo_servico) || 0;
+        const dop = parseNullableNumber(v.row.valor_despesa) || 0;
         const val = re > 0 ? re : vu;
         if (val > 0) { receita += val; count++; }
         if (cs > 0) { despesas += cs; }
+        if (dop > 0) { despesas += dop; }
       }
     }
 
@@ -1467,9 +1466,34 @@ export function SmartImporter({
         // Step 5: Create expenses (despesas) — for every row with custo_servico > 0
         setImportProgress(88);
         const despesas: Record<string, any>[] = [];
+
+        // Helper: ensure tipo_despesa exists for a free-text category, classified VARIAVEL/FIXA
+        const tipoDespesaCache = new Map<string, string>();
+        const ensureTipoDespesa = async (catLabel: string | null): Promise<string | null> => {
+          const key = (catLabel || "Geral").trim();
+          if (!key) return null;
+          if (tipoDespesaCache.has(key.toLowerCase())) return tipoDespesaCache.get(key.toLowerCase())!;
+          const { data: existing } = await supabase
+            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key).maybeSingle();
+          if (existing?.id_tipodespesa) {
+            tipoDespesaCache.set(key.toLowerCase(), existing.id_tipodespesa);
+            return existing.id_tipodespesa;
+          }
+          const classificacao = classifyExpenseCategory(key);
+          const { data: created } = await createTipoDespesa({
+            categoria: key, classificacao, descricao: "Criado pela importação inteligente",
+          });
+          if (created?.id_tipodespesa) {
+            tipoDespesaCache.set(key.toLowerCase(), created.id_tipodespesa);
+            return created.id_tipodespesa;
+          }
+          return null;
+        };
+
         for (const rec of recordsToInsert) {
           const custo = parseNullableNumber(rec.custo_servico);
-          if (!custo || custo <= 0) continue;
+          const despOp = parseNullableNumber(rec.valor_despesa);
+          if ((!custo || custo <= 0) && (!despOp || despOp <= 0)) continue;
 
           const clienteNome = rec.nome?.trim()?.toLowerCase();
           const clienteId = clienteNome ? clienteMap.get(clienteNome) : null;
@@ -1484,15 +1508,35 @@ export function SmartImporter({
           let dataDesp = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDesp)) dataDesp = todayISO;
 
-          despesas.push({
-            id_servico: servicoId || null,
-            data_da_despesa: dataDesp,
-            valor_da_despesa: custo,
-            observacoes: `Importado: ${servicoNome}`,
-            status: "confirmada",
-          });
-          debug.despesaCount++;
-          debug.despesaSum += custo;
+          // Custo de obra (variável, ligado ao serviço)
+          if (custo && custo > 0) {
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra");
+            despesas.push({
+              id_servico: servicoId || null,
+              id_tipodespesa: tipoId,
+              data_da_despesa: dataDesp,
+              valor_da_despesa: custo,
+              observacoes: `Custo de obra: ${servicoNome}`,
+              status: "confirmada",
+            });
+            debug.despesaCount++;
+            debug.despesaSum += custo;
+          }
+
+          // Despesa operacional (separada — vai pra fato_despesas com tipo classificado)
+          if (despOp && despOp > 0) {
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional");
+            despesas.push({
+              id_servico: servicoId || null,
+              id_tipodespesa: tipoId,
+              data_da_despesa: dataDesp,
+              valor_da_despesa: despOp,
+              observacoes: `Despesa operacional: ${rec.categoria_despesa || servicoNome}`,
+              status: "confirmada",
+            });
+            debug.despesaCount++;
+            debug.despesaSum += despOp;
+          }
         }
 
         console.log(`[SmartImporter] Step 5 - Despesas a criar: ${despesas.length}`);

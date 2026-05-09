@@ -1993,40 +1993,16 @@ export function SmartImporter({
               )}
               {/* Financial preview card */}
               {financialPreview && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="font-medium text-sm">Impacto Financeiro Estimado</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    {financialPreview.receita > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Receita</p>
-                        <p className="text-lg font-bold text-primary">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.receita)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
-                      </div>
-                    )}
-                    {financialPreview.despesas > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Despesas</p>
-                        <p className="text-lg font-bold text-destructive">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.despesas)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
-                      </div>
-                    )}
-                    {financialPreview.receita > 0 && financialPreview.despesas > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Lucro</p>
-                        <p className={`text-lg font-bold ${financialPreview.lucro >= 0 ? "text-primary" : "text-destructive"}`}>
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.lucro)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <FinancialPreviewCard
+                  receita={financialPreview.receita}
+                  custo={financialPreview.custo}
+                  despesa={financialPreview.despesa}
+                  rowsWithFinancial={financialPreview.rowsWithFinancial}
+                  totalRows={financialPreview.totalRows}
+                  classified={classifiedHeaders}
+                  uniqueClientes={financialPreview.uniqueClientes}
+                  uniquePropriedades={financialPreview.uniquePropriedades}
+                />
               )}
 
 

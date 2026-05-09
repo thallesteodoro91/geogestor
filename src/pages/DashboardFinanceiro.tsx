@@ -32,13 +32,40 @@ import {
 
 const DashboardFinanceiro = () => {
   // Buscar todas as métricas via RPC (processamento no servidor)
-  const { data: metrics, isLoading } = useDashboardMetrics();
+  const { data: metricsCurrent, isLoading: isLoadingCurrent } = useDashboardMetrics();
+
+  // Auto-expansão: se o ano corrente não trouxe receita, busca janela ampla (2020 → +1 ano)
+  const shouldAutoExpand = !isLoadingCurrent && (metricsCurrent?.receita_total ?? 0) === 0;
+  const wideStart = "2020-01-01";
+  const wideEnd = `${new Date().getFullYear() + 1}-12-31`;
+  const { data: metricsWide, isLoading: isLoadingWide } = useDashboardMetrics({
+    dataInicio: wideStart,
+    dataFim: wideEnd,
+    enabled: shouldAutoExpand,
+  });
+
+  const metrics = shouldAutoExpand && metricsWide ? metricsWide : metricsCurrent;
+  const isLoading = isLoadingCurrent || (shouldAutoExpand && isLoadingWide);
+  const isAutoExpanded = shouldAutoExpand && !!metricsWide && (metricsWide.receita_total ?? 0) > 0;
+
   const { colorblindMode, density } = useChartSettings();
   
   const colors = colorblindMode ? colorblindSafeColors : standardChartColors;
 
   // Calcular KPIs derivados a partir das métricas agregadas
   const derivedKPIs = metrics ? calculateDerivedKPIs(metrics) : null;
+
+  // Detecta importação incompleta: receita > 0 mas custos e despesas zerados
+  const hasReceita = (metrics?.receita_total ?? 0) > 0;
+  const noCostsDetected =
+    hasReceita &&
+    (metrics?.custos_variaveis ?? 0) === 0 &&
+    (metrics?.despesas_fixas ?? 0) === 0;
+  const profitEqualsRevenue =
+    hasReceita && (derivedKPIs?.lucro_liquido ?? 0) === (metrics?.receita_total ?? 0);
+  const importWarning = noCostsDetected || profitEqualsRevenue
+    ? "Nenhum custo ou despesa foi detectado — o lucro está igual à receita. Verifique se sua planilha possui colunas de custo/despesa mapeadas na próxima importação."
+    : undefined;
 
   // Cores para o gráfico de lucro por cliente
   const clienteColors = [

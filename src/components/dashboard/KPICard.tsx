@@ -62,6 +62,7 @@ export const KPICard = ({
   iconColor,
   description,
   calculation,
+  warning,
 }: KPICardProps) => {
   const cleanChange = change?.replace(/^[+-]\s*/, '');
 

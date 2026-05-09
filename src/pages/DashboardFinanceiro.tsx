@@ -67,6 +67,22 @@ const DashboardFinanceiro = () => {
     ? "Nenhum custo ou despesa foi detectado — o lucro está igual à receita. Verifique se sua planilha possui colunas de custo/despesa mapeadas na próxima importação."
     : undefined;
 
+  // Aviso de inconsistência tributária (Receita x Impostos)
+  const taxWarning = (() => {
+    if (!hasReceita) return undefined;
+    const impostos = metrics?.total_impostos ?? 0;
+    if (impostos === 0) {
+      return "Nenhum imposto foi identificado nos orçamentos importados. Confira se a coluna de imposto/ISS foi mapeada — caso contrário a Receita Líquida estará igual à Receita Bruta.";
+    }
+    if (impostos > (metrics?.receita_total ?? 0)) {
+      return "O total de impostos é maior que a Receita Bruta — provável erro de mapeamento de coluna na importação.";
+    }
+    if (impostos / (metrics?.receita_total ?? 1) > 0.5) {
+      return "A carga tributária detectada é superior a 50% da receita — verifique se valores de impostos não foram duplicados.";
+    }
+    return undefined;
+  })();
+
   // Cores para o gráfico de lucro por cliente
   const clienteColors = [
     "hsl(160, 84%, 39%)",   // Emerald
@@ -154,6 +170,7 @@ const DashboardFinanceiro = () => {
                   changeType="neutral"
                   description="Receita após dedução de impostos."
                   calculation="Receita Bruta - Impostos"
+                  warning={taxWarning}
                 />
 
                 <KPICard

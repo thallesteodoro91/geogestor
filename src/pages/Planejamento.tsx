@@ -62,6 +62,9 @@ export default function Planejamento() {
             changeType="neutral"
             icon={Target}
             iconTone="warning"
+            description="Diferença percentual entre o valor orçado e o realizado."
+            calculation="((Realizado - Orçado) / Orçado) × 100"
+            warning="Este KPI ainda usa dados de exemplo — configure metas orçamentárias por categoria para ver o desvio real do seu negócio."
           />
           <KPICard
             title="Margem Contribuição"

@@ -154,6 +154,7 @@ const DashboardFinanceiro = () => {
                   changeType="positive"
                   description="Percentual da receita disponível para cobrir custos fixos e gerar lucro."
                   calculation="(Receita Líquida - Custos Variáveis) / Receita Líquida × 100"
+                  warning={importWarning}
                 />
 
                 <KPICard

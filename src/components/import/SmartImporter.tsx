@@ -967,38 +967,57 @@ export function SmartImporter({
     if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos" && entityType !== "completo") return null;
     const validRows = allValidatedRows.filter(v => !v.hasErrors);
     let receita = 0;
-    let despesas = 0;
-    let count = 0;
+    let custo = 0;
+    let despesa = 0;
+    let rowsWithFinancial = 0;
+    const clientesSet = new Set<string>();
+    const propriedadesSet = new Set<string>();
 
     for (const v of validRows) {
+      let touched = false;
       if (entityType === "orcamentos") {
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const qty = parseInt(v.row.quantidade || "1") || 1;
         const desc = parseNullableNumber(v.row.desconto) || 0;
         const val = re > 0 ? re : (vu * qty) - desc;
-        if (val > 0) { receita += val; count++; }
+        if (val > 0) { receita += val; touched = true; }
       } else if (entityType === "despesas") {
         const val = parseNullableNumber(v.row.valor_da_despesa) || 0;
-        if (val > 0) { despesas += val; count++; }
+        if (val > 0) { despesa += val; touched = true; }
       } else if (entityType === "servicos") {
         const val = parseNullableNumber(v.row.receita_servico) || 0;
-        if (val > 0) { receita += val; count++; }
+        const cs = parseNullableNumber(v.row.custo_servico) || 0;
+        if (val > 0) { receita += val; touched = true; }
+        if (cs > 0) { custo += cs; touched = true; }
       } else if (entityType === "completo") {
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const cs = parseNullableNumber(v.row.custo_servico) || 0;
         const dop = parseNullableNumber(v.row.valor_despesa) || 0;
         const val = re > 0 ? re : vu;
-        if (val > 0) { receita += val; count++; }
-        if (cs > 0) { despesas += cs; }
-        if (dop > 0) { despesas += dop; }
+        if (val > 0) { receita += val; touched = true; }
+        if (cs > 0) { custo += cs; touched = true; }
+        if (dop > 0) { despesa += dop; touched = true; }
       }
+      if (touched) rowsWithFinancial++;
+      const nome = (v.row.nome || v.row.nome_cliente || "").toString().trim();
+      if (nome) clientesSet.add(nome.toLowerCase());
+      const prop = (v.row.nome_propriedade || v.row.propriedade || "").toString().trim();
+      if (prop) propriedadesSet.add(prop.toLowerCase());
     }
 
-    if (receita === 0 && despesas === 0) return null;
-    return { receita, despesas, lucro: receita - despesas, count };
+    if (receita === 0 && custo === 0 && despesa === 0) return null;
+    return {
+      receita, custo, despesa,
+      rowsWithFinancial,
+      totalRows: allValidatedRows.length,
+      uniqueClientes: clientesSet.size,
+      uniquePropriedades: propriedadesSet.size,
+    };
   }, [allValidatedRows, entityType]);
+
+  const classifiedHeaders = useMemo(() => classifyHeaders(headers), [headers]);
 
 
   const checkDuplicates = useCallback(async () => {

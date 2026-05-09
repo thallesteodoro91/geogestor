@@ -967,38 +967,57 @@ export function SmartImporter({
     if (entityType !== "orcamentos" && entityType !== "despesas" && entityType !== "servicos" && entityType !== "completo") return null;
     const validRows = allValidatedRows.filter(v => !v.hasErrors);
     let receita = 0;
-    let despesas = 0;
-    let count = 0;
+    let custo = 0;
+    let despesa = 0;
+    let rowsWithFinancial = 0;
+    const clientesSet = new Set<string>();
+    const propriedadesSet = new Set<string>();
 
     for (const v of validRows) {
+      let touched = false;
       if (entityType === "orcamentos") {
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const qty = parseInt(v.row.quantidade || "1") || 1;
         const desc = parseNullableNumber(v.row.desconto) || 0;
         const val = re > 0 ? re : (vu * qty) - desc;
-        if (val > 0) { receita += val; count++; }
+        if (val > 0) { receita += val; touched = true; }
       } else if (entityType === "despesas") {
         const val = parseNullableNumber(v.row.valor_da_despesa) || 0;
-        if (val > 0) { despesas += val; count++; }
+        if (val > 0) { despesa += val; touched = true; }
       } else if (entityType === "servicos") {
         const val = parseNullableNumber(v.row.receita_servico) || 0;
-        if (val > 0) { receita += val; count++; }
+        const cs = parseNullableNumber(v.row.custo_servico) || 0;
+        if (val > 0) { receita += val; touched = true; }
+        if (cs > 0) { custo += cs; touched = true; }
       } else if (entityType === "completo") {
         const re = parseNullableNumber(v.row.receita_esperada) || 0;
         const vu = parseNullableNumber(v.row.valor_unitario) || 0;
         const cs = parseNullableNumber(v.row.custo_servico) || 0;
         const dop = parseNullableNumber(v.row.valor_despesa) || 0;
         const val = re > 0 ? re : vu;
-        if (val > 0) { receita += val; count++; }
-        if (cs > 0) { despesas += cs; }
-        if (dop > 0) { despesas += dop; }
+        if (val > 0) { receita += val; touched = true; }
+        if (cs > 0) { custo += cs; touched = true; }
+        if (dop > 0) { despesa += dop; touched = true; }
       }
+      if (touched) rowsWithFinancial++;
+      const nome = (v.row.nome || v.row.nome_cliente || "").toString().trim();
+      if (nome) clientesSet.add(nome.toLowerCase());
+      const prop = (v.row.nome_propriedade || v.row.propriedade || "").toString().trim();
+      if (prop) propriedadesSet.add(prop.toLowerCase());
     }
 
-    if (receita === 0 && despesas === 0) return null;
-    return { receita, despesas, lucro: receita - despesas, count };
+    if (receita === 0 && custo === 0 && despesa === 0) return null;
+    return {
+      receita, custo, despesa,
+      rowsWithFinancial,
+      totalRows: allValidatedRows.length,
+      uniqueClientes: clientesSet.size,
+      uniquePropriedades: propriedadesSet.size,
+    };
   }, [allValidatedRows, entityType]);
+
+  const classifiedHeaders = useMemo(() => classifyHeaders(headers), [headers]);
 
 
   const checkDuplicates = useCallback(async () => {
@@ -1974,40 +1993,16 @@ export function SmartImporter({
               )}
               {/* Financial preview card */}
               {financialPreview && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="h-4 w-4 text-primary" />
-                    <span className="font-medium text-sm">Impacto Financeiro Estimado</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    {financialPreview.receita > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Receita</p>
-                        <p className="text-lg font-bold text-primary">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.receita)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
-                      </div>
-                    )}
-                    {financialPreview.despesas > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Despesas</p>
-                        <p className="text-lg font-bold text-destructive">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.despesas)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{financialPreview.count} registro(s)</p>
-                      </div>
-                    )}
-                    {financialPreview.receita > 0 && financialPreview.despesas > 0 && (
-                      <div>
-                        <p className="text-xs text-muted-foreground">Lucro</p>
-                        <p className={`text-lg font-bold ${financialPreview.lucro >= 0 ? "text-primary" : "text-destructive"}`}>
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(financialPreview.lucro)}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                <FinancialPreviewCard
+                  receita={financialPreview.receita}
+                  custo={financialPreview.custo}
+                  despesa={financialPreview.despesa}
+                  rowsWithFinancial={financialPreview.rowsWithFinancial}
+                  totalRows={financialPreview.totalRows}
+                  classified={classifiedHeaders}
+                  uniqueClientes={financialPreview.uniqueClientes}
+                  uniquePropriedades={financialPreview.uniquePropriedades}
+                />
               )}
 
 

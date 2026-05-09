@@ -170,6 +170,7 @@ const DashboardFinanceiro = () => {
                   changeType="neutral"
                   description="Receita após dedução de impostos."
                   calculation="Receita Bruta - Impostos"
+                  warning={taxWarning}
                 />
 
                 <KPICard

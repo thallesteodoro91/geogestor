@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { LucideIcon, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { LucideIcon, TrendingUp, TrendingDown, Info, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type IconTone = "primary" | "success" | "warning" | "danger" | "info" | "neutral" | "accent";

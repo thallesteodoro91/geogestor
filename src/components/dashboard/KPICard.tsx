@@ -19,6 +19,8 @@ interface KPICardProps {
   description?: string;
   /** Calculation formula shown in the info tooltip */
   calculation?: string;
+  /** Optional warning message — shows an amber alert badge with tooltip */
+  warning?: string;
 }
 
 /** Semantic-token icon background+text classes (theme & dark-mode aware) */

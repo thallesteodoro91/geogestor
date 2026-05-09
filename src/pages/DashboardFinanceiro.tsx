@@ -113,6 +113,16 @@ const DashboardFinanceiro = () => {
           <DensityToggle />
         </PageHeader>
 
+        {isAutoExpanded && (
+          <div className="rounded-lg border border-info/30 bg-info/5 px-4 py-3 text-sm text-info flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>
+              Não encontramos dados no ano corrente — exibindo o período completo
+              ({wideStart.slice(0, 4)} – {wideEnd.slice(0, 4)}) com base nos dados importados.
+            </p>
+          </div>
+        )}
+
         {/* Main KPIs Section - First in DOM for accessibility */}
         <section aria-labelledby="kpis-heading" role="region">
           <h2 id="kpis-heading" className="sr-only">Indicadores Principais</h2>

@@ -1,6 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { LucideIcon, TrendingUp, TrendingDown, Info } from "lucide-react";
+import { LucideIcon, TrendingUp, TrendingDown, Info, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type IconTone = "primary" | "success" | "warning" | "danger" | "info" | "neutral" | "accent";
@@ -19,6 +19,8 @@ interface KPICardProps {
   description?: string;
   /** Calculation formula shown in the info tooltip */
   calculation?: string;
+  /** Optional warning message — shows an amber alert badge with tooltip */
+  warning?: string;
 }
 
 /** Semantic-token icon background+text classes (theme & dark-mode aware) */
@@ -60,6 +62,7 @@ export const KPICard = ({
   iconColor,
   description,
   calculation,
+  warning,
 }: KPICardProps) => {
   const cleanChange = change?.replace(/^[+-]\s*/, '');
 
@@ -116,6 +119,21 @@ export const KPICard = ({
               <h3 className="text-2xl font-heading font-bold text-foreground leading-tight tracking-tight">
                 {value}
               </h3>
+              {warning && (
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full cursor-help bg-warning/15 text-warning">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>Atenção</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[280px]">
+                      <p className="text-xs">{warning}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
               {cleanChange && (
                 <TooltipProvider delayDuration={200}>
                   <Tooltip>

@@ -29,13 +29,19 @@ import {
   Target,
   AlertCircle,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 const DashboardFinanceiro = () => {
-  // Buscar todas as métricas via RPC (processamento no servidor)
-  const { data: metricsCurrent, isLoading: isLoadingCurrent } = useDashboardMetrics();
+  const [searchParams] = useSearchParams();
+  const fromImport = searchParams.get("source") === "import";
 
-  // Auto-expansão: se o ano corrente não trouxe receita, busca janela ampla (2020 → +1 ano)
-  const shouldAutoExpand = !isLoadingCurrent && (metricsCurrent?.receita_total ?? 0) === 0;
+  // Buscar todas as métricas via RPC (processamento no servidor)
+  const { data: metricsCurrent, isLoading: isLoadingCurrent } = useDashboardMetrics({
+    enabled: !fromImport, // pular query do ano corrente quando vindo do import
+  });
+
+  // Auto-expansão: se o ano corrente não trouxe receita OU se vindo do import, busca janela ampla
+  const shouldAutoExpand = fromImport || (!isLoadingCurrent && (metricsCurrent?.receita_total ?? 0) === 0);
   const wideStart = "2020-01-01";
   const wideEnd = `${new Date().getFullYear() + 1}-12-31`;
   const { data: metricsWide, isLoading: isLoadingWide } = useDashboardMetrics({
@@ -45,7 +51,7 @@ const DashboardFinanceiro = () => {
   });
 
   const metrics = shouldAutoExpand && metricsWide ? metricsWide : metricsCurrent;
-  const isLoading = isLoadingCurrent || (shouldAutoExpand && isLoadingWide);
+  const isLoading = (isLoadingCurrent && !fromImport) || (shouldAutoExpand && isLoadingWide);
   const isAutoExpanded = shouldAutoExpand && !!metricsWide && (metricsWide.receita_total ?? 0) > 0;
 
   const { colorblindMode, density } = useChartSettings();

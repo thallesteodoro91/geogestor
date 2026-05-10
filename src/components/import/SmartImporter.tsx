@@ -491,8 +491,13 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
   custo_servico: ["custo", "custoservico", "custototal", "custooperacional", "custoobra", "custodoservico", "custodaobra", "custodireto"],
   valor_despesa: ["despesa", "despesas", "gasto", "gastos", "valorpago", "saida", "pagamento", "valordespesa", "despesaoperacional", "despesafixa"],
-  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa"],
+  valor_imposto: ["imposto", "impostos", "iss", "tributo", "taxaimposto", "valorimposto"],
+  receita_realizada: ["receitarealizada", "valorrecebido", "valorpago", "recebido", "valorfaturado", "faturado"],
+  lucro_informado: ["lucro", "lucroliquido", "lucrobruto", "resultado", "lucratividade"],
+  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa", "categoria"],
+  subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
+  data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {

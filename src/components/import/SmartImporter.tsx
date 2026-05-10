@@ -1663,6 +1663,19 @@ export function SmartImporter({
         if (debug.despesaSum > 0) {
           warnings.push(`R$ ${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2 }).format(debug.despesaSum)} em despesas importadas`);
         }
+
+        // Cross-validation: lucro informado vs lucro calculado
+        const lucroInformadoSum = recordsToInsert.reduce((acc, r) => acc + (parseNullableNumber(r.lucro_informado) ?? 0), 0);
+        if (lucroInformadoSum > 0) {
+          const lucroCalculado = debug.receitaSum - debug.despesaSum;
+          const diff = Math.abs(lucroInformadoSum - lucroCalculado);
+          const ref = Math.max(Math.abs(lucroInformadoSum), Math.abs(lucroCalculado), 1);
+          if (diff / ref > 0.05) {
+            warnings.push(
+              `Atenção: lucro informado na planilha (R$ ${lucroInformadoSum.toFixed(2)}) diverge do lucro calculado (R$ ${lucroCalculado.toFixed(2)}). Verifique se as colunas de custo/despesa estão completas.`
+            );
+          }
+        }
       } else {
         switch (entityType) {
           case "propriedades": result = await createPropriedadesBatch(recordsToInsert as any); break;

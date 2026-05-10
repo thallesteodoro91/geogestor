@@ -911,7 +911,8 @@ export function SmartImporter({
     setEntityType(newEntity);
     const fields = getFieldsForEntity(newEntity);
     const synonyms = getSynonymsForEntity(newEntity);
-    autoMap(headers, fields, synonyms);
+    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers) : undefined;
+    autoMap(headers, fields, synonyms, preMap);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {

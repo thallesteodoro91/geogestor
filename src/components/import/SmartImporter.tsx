@@ -709,13 +709,25 @@ export function SmartImporter({
 
   // ─── File processing ───────────────────────────────────────────────
 
-  const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>) => {
+  const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>, preMap?: Record<string, string>) => {
     const newMappings: Record<string, string> = {};
     const confidences: Record<string, MatchConfidence> = {};
     const usedHeaders = new Set<string>(); // Prevent double-mapping
 
+    // STEP 0 — apply semantic classifier pre-map (highest priority, locks the column)
+    if (preMap) {
+      for (const [fieldKey, header] of Object.entries(preMap)) {
+        if (!header || usedHeaders.has(header)) continue;
+        if (!fileHeaders.includes(header)) continue;
+        if (!fields.find(f => f.key === fieldKey)) continue;
+        newMappings[fieldKey] = header;
+        confidences[fieldKey] = "exact";
+        usedHeaders.add(header);
+      }
+    }
+
     // Sort fields: required first, then financial fields (higher priority)
-    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "data_orcamento"]);
+    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "valor_despesa", "valor_imposto", "data_orcamento"]);
     const sortedFields = [...fields].sort((a, b) => {
       if (a.required !== b.required) return a.required ? -1 : 1;
       if (financialKeys.has(a.key) !== financialKeys.has(b.key)) return financialKeys.has(a.key) ? -1 : 1;
@@ -723,6 +735,7 @@ export function SmartImporter({
     });
 
     for (const field of sortedFields) {
+      if (newMappings[field.key]) continue; // already locked by classifier
       const b = normalize(field.key);
       const c = normalize(field.label);
 
@@ -738,6 +751,41 @@ export function SmartImporter({
     }
     setMappings(newMappings);
     setMatchConfidences(confidences);
+  }, []);
+
+  // Build classifier-driven pre-map (role → field) for completo mode
+  const buildSemanticPreMap = useCallback((fileHeaders: string[]): Record<string, string> => {
+    const roleToField: Record<string, string> = {
+      receita_bruta: "receita_esperada",
+      receita_liquida: "receita_esperada",
+      valor_orcado: "valor_unitario",
+      custo_obra: "custo_servico",
+      despesa_operacional: "valor_despesa",
+      imposto: "valor_imposto",
+      lucro_informado: "lucro_informado",
+      margem_informada: "lucro_informado",
+      categoria_despesa: "categoria_despesa",
+      data_orcamento: "data_orcamento",
+      data_despesa: "data_despesa",
+      cliente_nome: "nome",
+      propriedade_nome: "nome_da_propriedade",
+      municipio: "municipio",
+      servico_nome: "nome_do_servico",
+    };
+    const classified = classifyHeaders(fileHeaders);
+    const preMap: Record<string, string> = {};
+    const usedFields = new Set<string>();
+    // Sort by confidence desc so higher-weight rules win the field
+    const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
+    for (const c of sorted) {
+      if (c.confidence < 80) continue;
+      const fieldKey = roleToField[c.role];
+      if (!fieldKey) continue;
+      if (usedFields.has(fieldKey)) continue;
+      preMap[fieldKey] = c.header;
+      usedFields.add(fieldKey);
+    }
+    return preMap;
   }, []);
 
   // Check if headers contain financial columns

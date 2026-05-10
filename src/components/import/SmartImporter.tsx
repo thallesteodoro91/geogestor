@@ -373,8 +373,13 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
   { key: "custo_servico", label: "💰 Financeiro - Custo de Obra", required: false, validate: validatePositiveNumber, type: "number" },
   { key: "valor_despesa", label: "💰 Financeiro - Despesa Operacional", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "valor_imposto", label: "💰 Financeiro - Imposto", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "receita_realizada", label: "💰 Financeiro - Receita Realizada", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "lucro_informado", label: "💰 Financeiro - Lucro (informado)", required: false, validate: validateNumber, type: "number" },
   { key: "categoria_despesa", label: "💰 Financeiro - Categoria da Despesa", required: false },
+  { key: "subcategoria_despesa", label: "💰 Financeiro - Subcategoria da Despesa", required: false },
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
+  { key: "data_despesa", label: "💰 Financeiro - Data da Despesa", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
 

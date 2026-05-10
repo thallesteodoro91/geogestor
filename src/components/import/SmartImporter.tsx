@@ -2279,23 +2279,18 @@ export function SmartImporter({
                 </Alert>
               )}
 
-              {/* Composite stats cards (premium) */}
-              {compositeStatsResult && entityType === "completo" && (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {[
-                    { label: "Clientes", value: compositeStatsResult.clientes, icon: "👤" },
-                    { label: "Propriedades", value: compositeStatsResult.propriedades, icon: "🏡" },
-                    { label: "Projetos", value: compositeStatsResult.servicos, icon: "📋" },
-                    { label: "Orçamentos", value: compositeStatsResult.orcamentos, icon: "💰" },
-                    { label: "Despesas", value: compositeStatsResult.despesas, icon: "📉" },
-                  ].map(({ label, value, icon }) => (
-                    <div key={label} className="rounded-lg border bg-card p-3 text-center">
-                      <p className="text-lg">{icon}</p>
-                      <p className="text-2xl font-bold text-foreground">{value}</p>
-                      <p className="text-xs text-muted-foreground">{label}</p>
-                    </div>
-                  ))}
-                </div>
+              {/* Premium validation card with health badge + CTA to dashboard */}
+              {compositeStatsResult && entityType === "completo" && debugStats && (
+                <ImportValidationCard
+                  receita={debugStats.receitaSum}
+                  despesa={debugStats.despesaSum}
+                  clientes={compositeStatsResult.clientes}
+                  propriedades={compositeStatsResult.propriedades}
+                  servicos={compositeStatsResult.servicos}
+                  orcamentos={compositeStatsResult.orcamentos}
+                  despesasCount={compositeStatsResult.despesas}
+                  onClose={() => onOpenChange(false)}
+                />
               )}
 
               {/* Reconciliation Panel — Spreadsheet vs Database */}

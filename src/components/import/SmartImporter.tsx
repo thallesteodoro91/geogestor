@@ -38,6 +38,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
+import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

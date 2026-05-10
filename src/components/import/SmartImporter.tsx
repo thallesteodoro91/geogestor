@@ -38,6 +38,7 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
+import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -373,8 +374,13 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "receita_esperada", label: "💰 Financeiro - Receita", required: false, validate: validatePositiveNumber, type: "number" },
   { key: "custo_servico", label: "💰 Financeiro - Custo de Obra", required: false, validate: validatePositiveNumber, type: "number" },
   { key: "valor_despesa", label: "💰 Financeiro - Despesa Operacional", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "valor_imposto", label: "💰 Financeiro - Imposto", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "receita_realizada", label: "💰 Financeiro - Receita Realizada", required: false, validate: validatePositiveNumber, type: "number" },
+  { key: "lucro_informado", label: "💰 Financeiro - Lucro (informado)", required: false, validate: validateNumber, type: "number" },
   { key: "categoria_despesa", label: "💰 Financeiro - Categoria da Despesa", required: false },
+  { key: "subcategoria_despesa", label: "💰 Financeiro - Subcategoria da Despesa", required: false },
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
+  { key: "data_despesa", label: "💰 Financeiro - Data da Despesa", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
 
@@ -486,8 +492,13 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "amount", "revenue", "valorcontrato", "valorglobal", "valor", "vlr"],
   custo_servico: ["custo", "custoservico", "custototal", "custooperacional", "custoobra", "custodoservico", "custodaobra", "custodireto"],
   valor_despesa: ["despesa", "despesas", "gasto", "gastos", "valorpago", "saida", "pagamento", "valordespesa", "despesaoperacional", "despesafixa"],
-  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa"],
+  valor_imposto: ["imposto", "impostos", "iss", "tributo", "taxaimposto", "valorimposto"],
+  receita_realizada: ["receitarealizada", "valorrecebido", "valorpago", "recebido", "valorfaturado", "faturado"],
+  lucro_informado: ["lucro", "lucroliquido", "lucrobruto", "resultado", "lucratividade"],
+  categoria_despesa: ["categoriadespesa", "tipodespesa", "naturezadespesa", "grupodespesa", "categoria"],
+  subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
+  data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
@@ -699,13 +710,25 @@ export function SmartImporter({
 
   // ─── File processing ───────────────────────────────────────────────
 
-  const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>) => {
+  const autoMap = useCallback((fileHeaders: string[], fields: SystemField[], synonyms: Record<string, string[]>, preMap?: Record<string, string>) => {
     const newMappings: Record<string, string> = {};
     const confidences: Record<string, MatchConfidence> = {};
     const usedHeaders = new Set<string>(); // Prevent double-mapping
 
+    // STEP 0 — apply semantic classifier pre-map (highest priority, locks the column)
+    if (preMap) {
+      for (const [fieldKey, header] of Object.entries(preMap)) {
+        if (!header || usedHeaders.has(header)) continue;
+        if (!fileHeaders.includes(header)) continue;
+        if (!fields.find(f => f.key === fieldKey)) continue;
+        newMappings[fieldKey] = header;
+        confidences[fieldKey] = "exact";
+        usedHeaders.add(header);
+      }
+    }
+
     // Sort fields: required first, then financial fields (higher priority)
-    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "data_orcamento"]);
+    const financialKeys = new Set(["receita_esperada", "valor_unitario", "custo_servico", "valor_despesa", "valor_imposto", "data_orcamento"]);
     const sortedFields = [...fields].sort((a, b) => {
       if (a.required !== b.required) return a.required ? -1 : 1;
       if (financialKeys.has(a.key) !== financialKeys.has(b.key)) return financialKeys.has(a.key) ? -1 : 1;
@@ -713,6 +736,7 @@ export function SmartImporter({
     });
 
     for (const field of sortedFields) {
+      if (newMappings[field.key]) continue; // already locked by classifier
       const b = normalize(field.key);
       const c = normalize(field.label);
 
@@ -728,6 +752,41 @@ export function SmartImporter({
     }
     setMappings(newMappings);
     setMatchConfidences(confidences);
+  }, []);
+
+  // Build classifier-driven pre-map (role → field) for completo mode
+  const buildSemanticPreMap = useCallback((fileHeaders: string[]): Record<string, string> => {
+    const roleToField: Record<string, string> = {
+      receita_bruta: "receita_esperada",
+      receita_liquida: "receita_esperada",
+      valor_orcado: "valor_unitario",
+      custo_obra: "custo_servico",
+      despesa_operacional: "valor_despesa",
+      imposto: "valor_imposto",
+      lucro_informado: "lucro_informado",
+      margem_informada: "lucro_informado",
+      categoria_despesa: "categoria_despesa",
+      data_orcamento: "data_orcamento",
+      data_despesa: "data_despesa",
+      cliente_nome: "nome",
+      propriedade_nome: "nome_da_propriedade",
+      municipio: "municipio",
+      servico_nome: "nome_do_servico",
+    };
+    const classified = classifyHeaders(fileHeaders);
+    const preMap: Record<string, string> = {};
+    const usedFields = new Set<string>();
+    // Sort by confidence desc so higher-weight rules win the field
+    const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
+    for (const c of sorted) {
+      if (c.confidence < 80) continue;
+      const fieldKey = roleToField[c.role];
+      if (!fieldKey) continue;
+      if (usedFields.has(fieldKey)) continue;
+      preMap[fieldKey] = c.header;
+      usedFields.add(fieldKey);
+    }
+    return preMap;
   }, []);
 
   // Check if headers contain financial columns
@@ -803,9 +862,10 @@ export function SmartImporter({
 
     const fields = getFieldsForEntity(effectiveEntity);
     const synonyms = getSynonymsForEntity(effectiveEntity);
-    autoMap(h, fields, synonyms);
+    const preMap = effectiveEntity === "completo" ? buildSemanticPreMap(h) : undefined;
+    autoMap(h, fields, synonyms, preMap);
     setStep("mapping");
-  }, [initialEntityType, autoMap, hasFinancialColumns]);
+  }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap]);
 
   const processFile = useCallback((file: File) => {
     setFileName(file.name);
@@ -852,7 +912,8 @@ export function SmartImporter({
     setEntityType(newEntity);
     const fields = getFieldsForEntity(newEntity);
     const synonyms = getSynonymsForEntity(newEntity);
-    autoMap(headers, fields, synonyms);
+    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers) : undefined;
+    autoMap(headers, fields, synonyms, preMap);
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -1454,6 +1515,8 @@ export function SmartImporter({
 
           const vu = valorUnit ?? receitaEsperada ?? 0;
           const re = receitaEsperada ?? vu;
+          const rr = parseNullableNumber(rec.receita_realizada);
+          const vimp = parseNullableNumber(rec.valor_imposto);
 
           // Validate date — fallback to today if missing/invalid
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
@@ -1467,6 +1530,9 @@ export function SmartImporter({
             valor_unitario: vu,
             quantidade: 1,
             receita_esperada: re,
+            receita_realizada: rr ?? re,
+            valor_imposto: vimp ?? 0,
+            incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
             situacao: "Aprovado",
           });
@@ -1488,22 +1554,25 @@ export function SmartImporter({
 
         // Helper: ensure tipo_despesa exists for a free-text category, classified VARIAVEL/FIXA
         const tipoDespesaCache = new Map<string, string>();
-        const ensureTipoDespesa = async (catLabel: string | null): Promise<string | null> => {
+        const ensureTipoDespesa = async (catLabel: string | null, subLabel?: string | null): Promise<string | null> => {
           const key = (catLabel || "Geral").trim();
           if (!key) return null;
-          if (tipoDespesaCache.has(key.toLowerCase())) return tipoDespesaCache.get(key.toLowerCase())!;
+          const sub = (subLabel || "").trim() || null;
+          const cacheKey = `${key.toLowerCase()}|${(sub || "").toLowerCase()}`;
+          if (tipoDespesaCache.has(cacheKey)) return tipoDespesaCache.get(cacheKey)!;
           const { data: existing } = await supabase
-            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key).maybeSingle();
+            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key)
+            .eq("subcategoria", sub as any).maybeSingle();
           if (existing?.id_tipodespesa) {
-            tipoDespesaCache.set(key.toLowerCase(), existing.id_tipodespesa);
+            tipoDespesaCache.set(cacheKey, existing.id_tipodespesa);
             return existing.id_tipodespesa;
           }
           const classificacao = classifyExpenseCategory(key);
           const { data: created } = await createTipoDespesa({
-            categoria: key, classificacao, descricao: "Criado pela importação inteligente",
-          });
+            categoria: key, subcategoria: sub, classificacao, descricao: "Criado pela importação inteligente",
+          } as any);
           if (created?.id_tipodespesa) {
-            tipoDespesaCache.set(key.toLowerCase(), created.id_tipodespesa);
+            tipoDespesaCache.set(cacheKey, created.id_tipodespesa);
             return created.id_tipodespesa;
           }
           return null;
@@ -1524,12 +1593,12 @@ export function SmartImporter({
             servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) ||
             null;
 
-          let dataDesp = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
+          let dataDesp = rec.data_despesa || rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDesp)) dataDesp = todayISO;
 
           // Custo de obra (variável, ligado ao serviço)
           if (custo && custo > 0) {
-            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra");
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra", rec.subcategoria_despesa);
             despesas.push({
               id_servico: servicoId || null,
               id_tipodespesa: tipoId,
@@ -1544,7 +1613,7 @@ export function SmartImporter({
 
           // Despesa operacional (separada — vai pra fato_despesas com tipo classificado)
           if (despOp && despOp > 0) {
-            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional");
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional", rec.subcategoria_despesa);
             despesas.push({
               id_servico: servicoId || null,
               id_tipodespesa: tipoId,
@@ -1594,6 +1663,19 @@ export function SmartImporter({
         }
         if (debug.despesaSum > 0) {
           warnings.push(`R$ ${new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2 }).format(debug.despesaSum)} em despesas importadas`);
+        }
+
+        // Cross-validation: lucro informado vs lucro calculado
+        const lucroInformadoSum = recordsToInsert.reduce((acc, r) => acc + (parseNullableNumber(r.lucro_informado) ?? 0), 0);
+        if (lucroInformadoSum > 0) {
+          const lucroCalculado = debug.receitaSum - debug.despesaSum;
+          const diff = Math.abs(lucroInformadoSum - lucroCalculado);
+          const ref = Math.max(Math.abs(lucroInformadoSum), Math.abs(lucroCalculado), 1);
+          if (diff / ref > 0.05) {
+            warnings.push(
+              `Atenção: lucro informado na planilha (R$ ${lucroInformadoSum.toFixed(2)}) diverge do lucro calculado (R$ ${lucroCalculado.toFixed(2)}). Verifique se as colunas de custo/despesa estão completas.`
+            );
+          }
         }
       } else {
         switch (entityType) {
@@ -2198,23 +2280,18 @@ export function SmartImporter({
                 </Alert>
               )}
 
-              {/* Composite stats cards (premium) */}
-              {compositeStatsResult && entityType === "completo" && (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {[
-                    { label: "Clientes", value: compositeStatsResult.clientes, icon: "👤" },
-                    { label: "Propriedades", value: compositeStatsResult.propriedades, icon: "🏡" },
-                    { label: "Projetos", value: compositeStatsResult.servicos, icon: "📋" },
-                    { label: "Orçamentos", value: compositeStatsResult.orcamentos, icon: "💰" },
-                    { label: "Despesas", value: compositeStatsResult.despesas, icon: "📉" },
-                  ].map(({ label, value, icon }) => (
-                    <div key={label} className="rounded-lg border bg-card p-3 text-center">
-                      <p className="text-lg">{icon}</p>
-                      <p className="text-2xl font-bold text-foreground">{value}</p>
-                      <p className="text-xs text-muted-foreground">{label}</p>
-                    </div>
-                  ))}
-                </div>
+              {/* Premium validation card with health badge + CTA to dashboard */}
+              {compositeStatsResult && entityType === "completo" && debugStats && (
+                <ImportValidationCard
+                  receita={debugStats.receitaSum}
+                  despesa={debugStats.despesaSum}
+                  clientes={compositeStatsResult.clientes}
+                  propriedades={compositeStatsResult.propriedades}
+                  servicos={compositeStatsResult.servicos}
+                  orcamentos={compositeStatsResult.orcamentos}
+                  despesasCount={compositeStatsResult.despesas}
+                  onClose={() => onOpenChange(false)}
+                />
               )}
 
               {/* Reconciliation Panel — Spreadsheet vs Database */}

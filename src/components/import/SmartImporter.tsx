@@ -1514,6 +1514,8 @@ export function SmartImporter({
 
           const vu = valorUnit ?? receitaEsperada ?? 0;
           const re = receitaEsperada ?? vu;
+          const rr = parseNullableNumber(rec.receita_realizada);
+          const vimp = parseNullableNumber(rec.valor_imposto);
 
           // Validate date — fallback to today if missing/invalid
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
@@ -1527,6 +1529,9 @@ export function SmartImporter({
             valor_unitario: vu,
             quantidade: 1,
             receita_esperada: re,
+            receita_realizada: rr ?? re,
+            valor_imposto: vimp ?? 0,
+            incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
             situacao: "Aprovado",
           });

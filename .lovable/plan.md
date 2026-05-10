@@ -1,130 +1,79 @@
+## Diagnóstico
 
-# Importação Financeira Inteligente — GeoGestor
+Hoje o `SmartImporter` já tem um pipeline composto (clientes → propriedades → projetos → orçamentos → despesas) e duas peças novas (`financialColumnClassifier` + `financialNumberParser`), mas elas **não estão conectadas ao auto-mapeamento**. O auto-map ainda é feito só pelos sinônimos do `COMPLETO_SYNONYMS`, o que causa:
 
-## Diagnóstico (causa raiz)
+- Colunas como **"Receita Bruta", "Custo", "Despesa", "Lucro Líquido"** caírem todas no mesmo campo (`receita_esperada` ou `valor_unitario`), porque o sinônimo `"valor"` casa primeiro.
+- **Lucro Líquido = Receita** no dashboard: não há custos/despesas persistidas, então `vw_kpis_financeiros` calcula lucro = receita.
+- Categoria/SubCategoria, Imposto, Receita Realizada e Data da Despesa **não são lidos**.
+- Sem evidência visual pós-import do que foi vinculado e calculado.
 
-Inspecionei `SmartImporter.tsx`, a view `vw_kpis_financeiros`, a RPC `get_financial_dashboard_metrics` e os hooks `useDashboardMetrics`/`useKPIs`. Os sintomas vêm de 3 problemas combinados:
+---
 
-1. **Receita = Lucro Líquido** — A view calcula `lucro_liquido = receita_total - total_despesas`. Quando a importação cria orçamentos mas **nenhuma despesa** (porque a planilha do usuário usa um único campo "valor" que é mapeado só como `receita_esperada`), `total_despesas = 0` → o lucro fica idêntico à receita. Não é bug de fórmula, é falta de classificação de saídas.
-2. **Gráficos zerados** — O dashboard usa `get_financial_dashboard_metrics` filtrado pelo ano corrente (`date_trunc('year', CURRENT_DATE)`). Linhas importadas com data antiga ou sem data caem fora do recorte. Além disso, despesas sem `id_tipodespesa` com classificação `VARIAVEL/FIXA` quebram a separação custo×despesa nos charts.
-3. **Confusão semântica** — Os sinônimos atuais (`COMPLETO_SYNONYMS`) misturam "valor", "total", "preco", "receita", "faturamento" todos em `receita_esperada`, e "custo", "despesa", "gasto" em `custo_servico`. Não existe distinção entre **custo de obra** (variável, ligado ao serviço) e **despesa operacional** (fixa, lançada como `fato_despesas`). Também não há detecção de colunas de **lucro/margem informados** para validação cruzada.
+## Plano (4 fases, só frontend + ajuste leve de persistência)
 
-## Solução
+### Fase 1 — Conectar o classificador ao auto-mapeamento (motor ETL)
 
-### 1. Engine de Classificação Financeira (`src/lib/financialColumnClassifier.ts` — novo)
+Arquivo: `src/components/import/SmartImporter.tsx`
 
-Função pura que recebe os headers normalizados e devolve um mapa **com categoria semântica** (não apenas campo do banco):
+1. No passo `mapping`, antes de aplicar `COMPLETO_SYNONYMS`, rodar `classifyHeaders(headers)` e construir um **`roleToField` map**:
+   - `receita_bruta` / `receita_liquida` → `receita_esperada`
+   - `valor_orcado` → `valor_unitario`
+   - `custo_obra` → `custo_servico`
+   - `despesa_operacional` → `valor_despesa`
+   - `imposto` → novo campo `valor_imposto`
+   - `lucro_informado` / `margem_informada` → novo campo informativo `lucro_informado` (não grava, só serve para validação cruzada)
+   - `categoria_despesa` → `categoria_despesa`
+   - `data_despesa` → novo campo `data_despesa`
+   - `data_orcamento` → `data_orcamento`
+   - `cliente_nome`, `propriedade_nome`, `municipio`, `servico_nome` → respectivos
+2. **Regra anti-colisão**: cada coluna fonte só pode ser atribuída a UM campo. O classificador (com weight ≥ 80) tem prioridade sobre sinônimos. Se sinônimo tentar reusar coluna já atribuída, o sinônimo é descartado.
+3. Estender `COMPLETO_FIELDS` com:
+   - `receita_realizada` (number)
+   - `valor_imposto` (number)
+   - `subcategoria_despesa` (text)
+   - `data_despesa` (date)
+   - `lucro_informado` (number, somente leitura/validação)
 
-```ts
-type SemanticRole =
-  | "receita_bruta"      // receita, faturamento, valor recebido
-  | "receita_liquida"    // receita líquida
-  | "valor_orcado"       // valor unitário, preço, proposta, valor orçado
-  | "custo_obra"         // custo, custo operacional, custo do serviço
-  | "despesa_operacional"// despesa, gasto, saída, pagamento
-  | "imposto"            // imposto, ISS, taxa
-  | "lucro_informado"    // lucro, lucro líquido, resultado
-  | "margem_informada"   // margem, %
-  | "pipeline"           // previsão, potencial, negociação
-  | "ignorar";
-```
+### Fase 2 — Persistência enriquecida
 
-Cada role tem sua lista de keywords/regex (separando "custo" de "despesa", "valor" de "receita") e um peso de confiança. O resultado é a base do mapeamento — o `SmartImporter` deixa de chutar entre `valor_unitario` vs `receita_esperada`.
+Mesmo arquivo, dentro do bloco `if (entityType === "completo")`:
 
-### 2. Normalizador numérico robusto (`src/lib/financialNumberParser.ts` — novo, com testes vitest)
+- **Step 4 (orçamentos)**: gravar `receita_realizada` (cair pra `receita_esperada` se nulo), `valor_imposto`, `incluir_imposto = valor_imposto > 0`.
+- **Step 5 (despesas)**:
+  - usar `rec.data_despesa` quando existir; senão cair pra `data_orcamento`/hoje.
+  - quando criar `dim_tipodespesa` automaticamente, passar também `subcategoria` (vinda de `rec.subcategoria_despesa`).
+- **Validação cruzada**: se `lucro_informado` existir e divergir mais de 5% do `receita - custo - despesa` calculado, registrar warning na tela de resultado (não bloqueia).
 
-Aceita: `R$ 12.500,00`, `12500`, `12.500`, `12,500.00`, `1.2k`, `(1.500)` (negativo contábil), valores com espaço/NBSP. Detecta locale automaticamente (BR vs US) por heurística do último separador. Substitui `sanitizeCurrency` atual.
+### Fase 3 — Card de validação pós-import (Dashboard 360 mini)
 
-### 3. Pipeline de roteamento por linha (refator em `SmartImporter.tsx`, modo `completo`)
+Substituir o `compositeStatsResult` atual por um **bloco de validação visual** no step `result`:
 
-Para cada linha importada o motor decide para qual tabela vai cada valor:
+- Totais persistidos: Receita, Custos, Despesas, **Lucro calculado** (sempre `receita − custo − despesa`, nunca igual à receita por design).
+- Vinculações: X clientes ↔ Y propriedades ↔ Z projetos ↔ W orçamentos ↔ V despesas.
+- Badge de saúde: verde/âmbar/vermelho conforme dados financeiros consistentes.
+- CTA primário: **"Ver Dashboard Financeiro"** → `/financeiro`.
 
-```text
-linha tem receita_bruta OU valor_orcado  → cria fato_orcamento
-linha tem custo_obra                     → soma em fato_servico.custo_servico
-linha tem despesa_operacional            → cria fato_despesas (separado)
-linha tem imposto                        → preenche valor_imposto + incluir_imposto=true
-linha tem lucro_informado                → usado APENAS para validação cruzada
-```
+Arquivo novo: `src/components/import/ImportValidationCard.tsx`.
 
-Regra obrigatória embutida: nunca atribuir o mesmo valor a `receita_esperada`, `lucro_esperado` e `margem_esperada`. Se a planilha só traz "valor", o motor calcula `lucro_esperado = receita_esperada - custo_obra` (custo da mesma linha) ou deixa null (nunca duplica).
+### Fase 4 — Garantir que o dashboard mostre os dados
 
-### 4. Auto-criação de tipos de despesa classificados
+`src/pages/DashboardFinanceiro.tsx` já tem auto-expansão (do turno anterior). Reforçar:
 
-Hoje o fallback cria um único tipo "Sem classificação". Mudar para:
-- Detectar palavras na coluna de despesa (`combustível`, `equipe`, `salário`, `documentação`, `imposto`) e criar/reusar `dim_tipodespesa` com `classificacao = VARIAVEL` ou `FIXA` apropriada. Isso destrava o Treemap de custos e a separação margem bruta vs líquida.
+- Quando vindo do `?source=import` (push do importer), forçar `shouldAutoExpand = true` no primeiro load.
+- Replicar o banner âmbar quando `total_despesas === 0` em `ChartCustosCategoria` / `RevenueChart` (vazio explicado, não tela em branco).
 
-### 5. Painel de Validação Pré-Import (UI)
+---
 
-Substitui a aba de preview atual por um card "Resumo Financeiro Detectado" com:
-- Linhas válidas / inválidas / com aviso
-- **Receita total reconhecida** (R$)
-- **Despesas reconhecidas** (R$)
-- **Lucro calculado** (R$) — destacado se ≠ receita
-- Distribuição: nº clientes, propriedades, projetos, orçamentos, despesas que serão criados
-- Lista das colunas interpretadas com a role semântica atribuída e confiança
-- Aviso explícito quando o motor detectar `receita == lucro` ou ausência de despesas (sugere mapear coluna de custo)
+## Detalhes técnicos relevantes
 
-### 6. Log de Processamento Pós-Import
+- O backend (`get_financial_dashboard_metrics`, `vw_kpis_financeiros`) **já calcula corretamente** lucro = receita − impostos − custos variáveis − despesas fixas. O bug "Lucro = Receita" hoje é **falta de despesas persistidas**, não fórmula. Resolver no ETL elimina o sintoma.
+- `parseFinancialNumber` já cobre `54.429,16`, `54429,16`, `54,429.16` — basta usá-lo (já está sendo usado via `parseNullableNumber`).
+- Regra "nunca reusar mesmo valor para múltiplos KPIs" é garantida por (a) classificador one-shot e (b) anti-colisão na fase 1.
 
-Tela final passa a mostrar (já temos `compositeStatsResult` parcial — ampliar):
-- N clientes / propriedades / projetos / orçamentos / despesas criados
-- Total receita / despesa / lucro reconhecidos
-- Colunas interpretadas (com a role)
-- Linhas descartadas + motivo agrupado
-- Botão "Ver Dashboard Financeiro" já com filtro de período cobrindo as datas importadas
-
-### 7. Correções de KPI/Gráfico
-
-- `useDashboardMetrics` / `DashboardFinanceiro`: ao detectar primeira visita pós-import, ampliar período padrão para abranger MIN/MAX das datas importadas (em vez de só ano corrente). Persistir em `localStorage` por tenant.
-- `KPIData`: garantir que o card "Lucro Líquido" mostre badge de aviso quando `lucro_liquido === receita_total` (indica zero despesas — provável import incompleto).
-
-### 8. Validação tolerante (corrige falsos positivos)
-
-- CPF/CNPJ formatado com máscara já passa hoje, mas validador de **telefone** ainda marca aviso para 8-9 dígitos sem DDD — rebaixar para info, não warning.
-- Datas seriais Excel: o `formatDate` atual converte, mas falha com strings tipo `"jan/24"`, `"01-2024"` — adicionar parsing `MMM/yy` e `MM-yyyy`.
-- Moeda com NBSP (`R$\u00a0`) não é tratada — corrigir no normalizador novo.
-
-### 9. Testes
-
-- `financialNumberParser.test.ts` — 20+ casos de format BR/US/contábil
-- `financialColumnClassifier.test.ts` — headers reais de planilhas (combinações ambíguas como "valor total", "valor recebido", "valor pago")
-- Atualizar `aiBatchApply.test.ts` se afetado (não deve)
-
-## Arquivos tocados
-
-| Arquivo | Mudança |
-|---|---|
-| `src/lib/financialColumnClassifier.ts` | NOVO — engine semântica |
-| `src/lib/financialNumberParser.ts` | NOVO — parser robusto |
-| `src/lib/financialColumnClassifier.test.ts` | NOVO |
-| `src/lib/financialNumberParser.test.ts` | NOVO |
-| `src/components/import/SmartImporter.tsx` | refator do pipeline `completo`, novo painel de resumo, uso dos engines |
-| `src/components/import/FinancialPreviewCard.tsx` | NOVO — card de resumo financeiro pré-import |
-| `src/components/import/ImportResultCard.tsx` | NOVO (extrair tela de resultado com log detalhado) |
-| `src/hooks/useDashboardMetrics.ts` | aceitar período auto-expandido |
-| `src/pages/DashboardFinanceiro.tsx` | aplicar período auto + badge de aviso lucro=receita |
-| `src/components/dashboard/KPICard.tsx` | suportar slot de aviso |
-
-Sem migrações de schema (a estrutura `fato_orcamento` / `fato_despesas` / `dim_tipodespesa` já cobre o modelo). Apenas inserts de tipos de despesa via service existente.
-
-## Detalhe técnico — fluxo do "completo" após refator
-
-```text
-upload → parse → classifyColumns(headers) → mapping sugerido com roles
-  → preview com FinancialPreviewCard (totais reconciliados)
-  → import:
-       1. clientes (dedupe por nome)
-       2. propriedades (dedupe por cliente+nome)
-       3. para cada linha: route(receita?, custo?, despesa?)
-            - receita_bruta/valor_orcado → fato_orcamento (com lucro derivado)
-            - custo_obra → fato_servico.custo_servico
-            - despesa_operacional → fato_despesas (com tipo classificado)
-       4. recalcular KPIs (RPC) e mostrar log
-```
+---
 
 ## Fora do escopo
 
-- Não implementa LTV real (precisa série temporal por cliente — tarefa separada)
-- Não toca em PDF, calendário, Stripe
-- Não cria novas tabelas (modelo atual já suporta)
+- Mudanças em RPC/SQL (não necessárias).
+- Novas tabelas (já existe coluna `subcategoria` em `dim_tipodespesa`, `valor_imposto`/`receita_realizada` em `fato_orcamento`).
+- Modificações em outras páginas além de `DashboardFinanceiro`.

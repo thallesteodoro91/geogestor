@@ -1553,22 +1553,25 @@ export function SmartImporter({
 
         // Helper: ensure tipo_despesa exists for a free-text category, classified VARIAVEL/FIXA
         const tipoDespesaCache = new Map<string, string>();
-        const ensureTipoDespesa = async (catLabel: string | null): Promise<string | null> => {
+        const ensureTipoDespesa = async (catLabel: string | null, subLabel?: string | null): Promise<string | null> => {
           const key = (catLabel || "Geral").trim();
           if (!key) return null;
-          if (tipoDespesaCache.has(key.toLowerCase())) return tipoDespesaCache.get(key.toLowerCase())!;
+          const sub = (subLabel || "").trim() || null;
+          const cacheKey = `${key.toLowerCase()}|${(sub || "").toLowerCase()}`;
+          if (tipoDespesaCache.has(cacheKey)) return tipoDespesaCache.get(cacheKey)!;
           const { data: existing } = await supabase
-            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key).maybeSingle();
+            .from("dim_tipodespesa").select("id_tipodespesa").eq("categoria", key)
+            .eq("subcategoria", sub as any).maybeSingle();
           if (existing?.id_tipodespesa) {
-            tipoDespesaCache.set(key.toLowerCase(), existing.id_tipodespesa);
+            tipoDespesaCache.set(cacheKey, existing.id_tipodespesa);
             return existing.id_tipodespesa;
           }
           const classificacao = classifyExpenseCategory(key);
           const { data: created } = await createTipoDespesa({
-            categoria: key, classificacao, descricao: "Criado pela importação inteligente",
-          });
+            categoria: key, subcategoria: sub, classificacao, descricao: "Criado pela importação inteligente",
+          } as any);
           if (created?.id_tipodespesa) {
-            tipoDespesaCache.set(key.toLowerCase(), created.id_tipodespesa);
+            tipoDespesaCache.set(cacheKey, created.id_tipodespesa);
             return created.id_tipodespesa;
           }
           return null;
@@ -1589,12 +1592,12 @@ export function SmartImporter({
             servicoMap.get(`${servicoNome.toLowerCase()}|${clienteId || "none"}`) ||
             null;
 
-          let dataDesp = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
+          let dataDesp = rec.data_despesa || rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataDesp)) dataDesp = todayISO;
 
           // Custo de obra (variável, ligado ao serviço)
           if (custo && custo > 0) {
-            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra");
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Custo de Obra", rec.subcategoria_despesa);
             despesas.push({
               id_servico: servicoId || null,
               id_tipodespesa: tipoId,
@@ -1609,7 +1612,7 @@ export function SmartImporter({
 
           // Despesa operacional (separada — vai pra fato_despesas com tipo classificado)
           if (despOp && despOp > 0) {
-            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional");
+            const tipoId = await ensureTipoDespesa(rec.categoria_despesa || "Despesa Operacional", rec.subcategoria_despesa);
             despesas.push({
               id_servico: servicoId || null,
               id_tipodespesa: tipoId,

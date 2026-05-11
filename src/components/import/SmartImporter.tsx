@@ -37,6 +37,9 @@ import type { KPIData } from "@/domain/types/kpi.types";
 import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
+import { inferColumnTypes, isMonetaryCompatible, type InferredColumn } from "@/lib/etl/columnTypeInference";
+import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/statusNormalizer";
+import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 

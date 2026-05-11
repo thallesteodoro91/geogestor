@@ -1355,45 +1355,55 @@ export function SmartImporter({
         let totalCreated = 0;
         const compositeStats = { clientes: 0, propriedades: 0, servicos: 0, orcamentos: 0, despesas: 0 };
 
-        // Step 1: Deduplicate and create clients
+        // Step 1: Deduplicate and create clients (natural key: CPF/CNPJ/email > name+phone > name)
         setImportProgress(45);
         const uniqueClientes = new Map<string, Record<string, any>>();
         for (const rec of recordsToInsert) {
           const nome = rec.nome?.trim();
           if (!nome) continue;
-          const key = nome.toLowerCase();
-          if (!uniqueClientes.has(key)) {
-            uniqueClientes.set(key, {
-              nome, cpf: rec.cpf || null, telefone: rec.telefone || null,
-              email: rec.email || null, endereco: rec.endereco || null,
+          const natKey = clientNaturalKey({
+            nome, cpf: rec.cpf, cnpj: rec.cnpj, telefone: rec.telefone, celular: rec.celular, email: rec.email,
+          }) || `n:${nome.toLowerCase()}`;
+          if (!uniqueClientes.has(natKey)) {
+            uniqueClientes.set(natKey, {
+              nome,
+              cpf: rec.cpf || null,
+              cnpj: rec.cnpj || null,
+              telefone: rec.telefone || null,
+              email: rec.email || null,
+              endereco: rec.endereco || null,
             });
           }
         }
 
-        // Check existing clients first
-        const { data: existingClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+        // Check existing clients first (build natural-key index from DB)
+        const { data: existingClients } = await supabase
+          .from("dim_cliente")
+          .select("id_cliente, nome, cpf, cnpj, telefone, email");
+        const clientIndex = buildClientIndex((existingClients || []) as any);
         for (const c of (existingClients || [])) {
-          clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+          if (c.nome) clienteMap.set(c.nome.toLowerCase(), c.id_cliente);
         }
 
-        // Create only new clients
+        // Create only new clients (those whose natural key is NOT already in the DB index)
         const newClients = Array.from(uniqueClientes.entries())
-          .filter(([key]) => !clienteMap.has(key))
+          .filter(([, data]) => !lookupClient(clientIndex, data as any))
           .map(([, data]) => data);
 
         if (newClients.length > 0) {
           const cRes = await createClientesBatch(newClients as any);
           compositeStats.clientes = cRes.success;
           result.errors.push(...cRes.errors);
-          // Refresh map
+          // Refresh nome→id map
           const { data: updatedClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
           for (const c of (updatedClients || [])) {
-            clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+            if (c.nome) clienteMap.set(c.nome.toLowerCase(), c.id_cliente);
           }
           console.log(`[SmartImporter] Step 1 - Clientes: ${cRes.success} criados, ${cRes.errors.length} erros`);
         }
-        compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
-        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos, ${newClients.length} novos)`);
+        compositeStats.clientes += uniqueClientes.size - newClients.length;
+        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos por chave natural, ${newClients.length} novos)`);
+
 
         // Step 2: Create properties
         setImportProgress(55);

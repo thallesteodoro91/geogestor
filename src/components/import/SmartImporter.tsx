@@ -504,6 +504,8 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
   data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
+  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento"],
+  data_do_faturamento: ["datafaturamento", "dtfaturamento", "vencimento", "datavencimento"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {

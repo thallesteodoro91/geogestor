@@ -37,6 +37,9 @@ import type { KPIData } from "@/domain/types/kpi.types";
 import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
+import { inferColumnTypes, isMonetaryCompatible, type InferredColumn } from "@/lib/etl/columnTypeInference";
+import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/statusNormalizer";
+import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 
@@ -381,6 +384,8 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "subcategoria_despesa", label: "💰 Financeiro - Subcategoria da Despesa", required: false },
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
   { key: "data_despesa", label: "💰 Financeiro - Data da Despesa", required: false, format: formatDate, validate: validateDate, type: "date" },
+  { key: "situacao_do_pagamento", label: "💰 Financeiro - Status do Pagamento", required: false },
+  { key: "data_do_faturamento", label: "💰 Financeiro - Data do Faturamento", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
 
@@ -499,6 +504,8 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
   data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
+  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento"],
+  data_do_faturamento: ["datafaturamento", "dtfaturamento", "vencimento", "datavencimento"],
 };
 
 function getSynonymsForEntity(entity: ImportEntityType): Record<string, string[]> {
@@ -754,8 +761,10 @@ export function SmartImporter({
     setMatchConfidences(confidences);
   }, []);
 
-  // Build classifier-driven pre-map (role → field) for completo mode
-  const buildSemanticPreMap = useCallback((fileHeaders: string[]): Record<string, string> => {
+  // Build classifier-driven pre-map (role → field) for completo mode.
+  // Uses CONTENT-BASED type inference to BLOCK financial roles on text columns
+  // (prevents bugs like "Situação do Pagamento" → despesa or "Pendente" → number).
+  const buildSemanticPreMap = useCallback((fileHeaders: string[], dataRows: string[][]): Record<string, string> => {
     const roleToField: Record<string, string> = {
       receita_bruta: "receita_esperada",
       receita_liquida: "receita_esperada",
@@ -773,16 +782,51 @@ export function SmartImporter({
       municipio: "municipio",
       servico_nome: "nome_do_servico",
     };
+    // Roles that MUST come from a monetary column. Otherwise we drop the suggestion.
+    const financialRoles = new Set([
+      "receita_bruta", "receita_liquida", "valor_orcado",
+      "custo_obra", "despesa_operacional", "imposto", "lucro_informado", "margem_informada",
+    ]);
+    // Roles that MUST come from a date column.
+    const dateRoles = new Set(["data_orcamento", "data_despesa"]);
+
+    const inferred = inferColumnTypes(fileHeaders, dataRows);
+    const inferredByHeader = new Map(inferred.map(i => [i.header, i]));
+
     const classified = classifyHeaders(fileHeaders);
     const preMap: Record<string, string> = {};
     const usedFields = new Set<string>();
     // Sort by confidence desc so higher-weight rules win the field
     const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
+
+    // Inject content-driven roles BEFORE header roles
+    // (status column found by content → maps to situacao_do_pagamento regardless of header)
+    for (const inf of inferred) {
+      if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+        preMap["situacao_do_pagamento"] = inf.header;
+        usedFields.add("situacao_do_pagamento");
+      }
+    }
+
     for (const c of sorted) {
       if (c.confidence < 80) continue;
       const fieldKey = roleToField[c.role];
       if (!fieldKey) continue;
       if (usedFields.has(fieldKey)) continue;
+
+      const inf = inferredByHeader.get(c.header);
+      // BLOCK financial roles on non-monetary columns
+      if (financialRoles.has(c.role) && inf && !isMonetaryCompatible(inf.type)) {
+        // If the column is actually a status, route to situacao_do_pagamento
+        if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+          preMap["situacao_do_pagamento"] = c.header;
+          usedFields.add("situacao_do_pagamento");
+        }
+        continue;
+      }
+      // BLOCK date roles on non-date columns
+      if (dateRoles.has(c.role) && inf && inf.type !== "data") continue;
+
       preMap[fieldKey] = c.header;
       usedFields.add(fieldKey);
     }
@@ -862,7 +906,7 @@ export function SmartImporter({
 
     const fields = getFieldsForEntity(effectiveEntity);
     const synonyms = getSynonymsForEntity(effectiveEntity);
-    const preMap = effectiveEntity === "completo" ? buildSemanticPreMap(h) : undefined;
+    const preMap = effectiveEntity === "completo" ? buildSemanticPreMap(h, data) : undefined;
     autoMap(h, fields, synonyms, preMap);
     setStep("mapping");
   }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap]);
@@ -912,7 +956,7 @@ export function SmartImporter({
     setEntityType(newEntity);
     const fields = getFieldsForEntity(newEntity);
     const synonyms = getSynonymsForEntity(newEntity);
-    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers) : undefined;
+    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers, rawData) : undefined;
     autoMap(headers, fields, synonyms, preMap);
   };
 
@@ -1311,45 +1355,55 @@ export function SmartImporter({
         let totalCreated = 0;
         const compositeStats = { clientes: 0, propriedades: 0, servicos: 0, orcamentos: 0, despesas: 0 };
 
-        // Step 1: Deduplicate and create clients
+        // Step 1: Deduplicate and create clients (natural key: CPF/CNPJ/email > name+phone > name)
         setImportProgress(45);
         const uniqueClientes = new Map<string, Record<string, any>>();
         for (const rec of recordsToInsert) {
           const nome = rec.nome?.trim();
           if (!nome) continue;
-          const key = nome.toLowerCase();
-          if (!uniqueClientes.has(key)) {
-            uniqueClientes.set(key, {
-              nome, cpf: rec.cpf || null, telefone: rec.telefone || null,
-              email: rec.email || null, endereco: rec.endereco || null,
+          const natKey = clientNaturalKey({
+            nome, cpf: rec.cpf, cnpj: rec.cnpj, telefone: rec.telefone, celular: rec.celular, email: rec.email,
+          }) || `n:${nome.toLowerCase()}`;
+          if (!uniqueClientes.has(natKey)) {
+            uniqueClientes.set(natKey, {
+              nome,
+              cpf: rec.cpf || null,
+              cnpj: rec.cnpj || null,
+              telefone: rec.telefone || null,
+              email: rec.email || null,
+              endereco: rec.endereco || null,
             });
           }
         }
 
-        // Check existing clients first
-        const { data: existingClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
+        // Check existing clients first (build natural-key index from DB)
+        const { data: existingClients } = await supabase
+          .from("dim_cliente")
+          .select("id_cliente, nome, cpf, cnpj, telefone, email");
+        const clientIndex = buildClientIndex((existingClients || []) as any);
         for (const c of (existingClients || [])) {
-          clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+          if (c.nome) clienteMap.set(c.nome.toLowerCase(), c.id_cliente);
         }
 
-        // Create only new clients
+        // Create only new clients (those whose natural key is NOT already in the DB index)
         const newClients = Array.from(uniqueClientes.entries())
-          .filter(([key]) => !clienteMap.has(key))
+          .filter(([, data]) => !lookupClient(clientIndex, data as any))
           .map(([, data]) => data);
 
         if (newClients.length > 0) {
           const cRes = await createClientesBatch(newClients as any);
           compositeStats.clientes = cRes.success;
           result.errors.push(...cRes.errors);
-          // Refresh map
+          // Refresh nome→id map
           const { data: updatedClients } = await supabase.from("dim_cliente").select("id_cliente, nome");
           for (const c of (updatedClients || [])) {
-            clienteMap.set(c.nome?.toLowerCase(), c.id_cliente);
+            if (c.nome) clienteMap.set(c.nome.toLowerCase(), c.id_cliente);
           }
           console.log(`[SmartImporter] Step 1 - Clientes: ${cRes.success} criados, ${cRes.errors.length} erros`);
         }
-        compositeStats.clientes += Array.from(uniqueClientes.keys()).filter(k => clienteMap.has(k)).length - newClients.length;
-        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos, ${newClients.length} novos)`);
+        compositeStats.clientes += uniqueClientes.size - newClients.length;
+        console.log(`[SmartImporter] Clientes total: ${compositeStats.clientes} (${uniqueClientes.size} únicos por chave natural, ${newClients.length} novos)`);
+
 
         // Step 2: Create properties
         setImportProgress(55);
@@ -1522,6 +1576,10 @@ export function SmartImporter({
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataOrc)) dataOrc = todayISO;
 
+          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento);
+          let dataFat: string | null = rec.data_do_faturamento || null;
+          if (dataFat && !/^\d{4}-\d{2}-\d{2}$/.test(dataFat)) dataFat = null;
+
           orcamentos.push({
             id_cliente: finalClienteId,
             id_propriedade: propId || null,
@@ -1534,7 +1592,9 @@ export function SmartImporter({
             valor_imposto: vimp ?? 0,
             incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
-            situacao: "Aprovado",
+            situacao: normalizeStatusServico(rec.situacao) || "Aprovado",
+            situacao_do_pagamento: statusPag,
+            data_do_faturamento: dataFat,
           });
           debug.receitaCount++;
           debug.receitaSum += re;

@@ -956,7 +956,7 @@ export function SmartImporter({
     setEntityType(newEntity);
     const fields = getFieldsForEntity(newEntity);
     const synonyms = getSynonymsForEntity(newEntity);
-    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers) : undefined;
+    const preMap = newEntity === "completo" ? buildSemanticPreMap(headers, rawData) : undefined;
     autoMap(headers, fields, synonyms, preMap);
   };
 

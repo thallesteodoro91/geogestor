@@ -1,79 +1,119 @@
+
+# ETL Relacional Inteligente — Refatoração do Importador
+
 ## Diagnóstico
 
-Hoje o `SmartImporter` já tem um pipeline composto (clientes → propriedades → projetos → orçamentos → despesas) e duas peças novas (`financialColumnClassifier` + `financialNumberParser`), mas elas **não estão conectadas ao auto-mapeamento**. O auto-map ainda é feito só pelos sinônimos do `COMPLETO_SYNONYMS`, o que causa:
+O importador atual classifica colunas só pelo **nome do header** (`financialColumnClassifier`) e força tudo num mapeamento flat de campos. Isso causa:
 
-- Colunas como **"Receita Bruta", "Custo", "Despesa", "Lucro Líquido"** caírem todas no mesmo campo (`receita_esperada` ou `valor_unitario`), porque o sinônimo `"valor"` casa primeiro.
-- **Lucro Líquido = Receita** no dashboard: não há custos/despesas persistidas, então `vw_kpis_financeiros` calcula lucro = receita.
-- Categoria/SubCategoria, Imposto, Receita Realizada e Data da Despesa **não são lidos**.
-- Sem evidência visual pós-import do que foi vinculado e calculado.
+- "Situação do Pagamento" cair em `despesa_operacional` (match parcial em "pag*").
+- "Data do Faturamento" virar receita (match em "faturamento").
+- "SubCategoria" colapsar em `categoria_despesa`.
+- Valores `Pendente`/`Pago` passarem por `parseFinancialNumber` → viram 0/NaN e somam como despesa.
+- Não há deduplicação real de clientes (só por nome exato).
+- Não há entidade `Status`; tudo é texto solto.
 
----
+## Arquitetura proposta
 
-## Plano (4 fases, só frontend + ajuste leve de persistência)
+Pipeline em 3 camadas, executado **antes** do mapping atual:
 
-### Fase 1 — Conectar o classificador ao auto-mapeamento (motor ETL)
+```text
+Planilha → [1. TypeInference] → [2. ContextClassifier] → [3. RelationalBuilder] → Persistência
+                  ↑ analisa AMOSTRA de valores (não só header)
+                                    ↑ combina header + tipo + conteúdo
+                                                          ↑ monta grafo Cliente→Propriedade→Orçamento→Serviço→Despesa
+```
 
-Arquivo: `src/components/import/SmartImporter.tsx`
+## Implementação
 
-1. No passo `mapping`, antes de aplicar `COMPLETO_SYNONYMS`, rodar `classifyHeaders(headers)` e construir um **`roleToField` map**:
-   - `receita_bruta` / `receita_liquida` → `receita_esperada`
-   - `valor_orcado` → `valor_unitario`
-   - `custo_obra` → `custo_servico`
-   - `despesa_operacional` → `valor_despesa`
-   - `imposto` → novo campo `valor_imposto`
-   - `lucro_informado` / `margem_informada` → novo campo informativo `lucro_informado` (não grava, só serve para validação cruzada)
-   - `categoria_despesa` → `categoria_despesa`
-   - `data_despesa` → novo campo `data_despesa`
-   - `data_orcamento` → `data_orcamento`
-   - `cliente_nome`, `propriedade_nome`, `municipio`, `servico_nome` → respectivos
-2. **Regra anti-colisão**: cada coluna fonte só pode ser atribuída a UM campo. O classificador (com weight ≥ 80) tem prioridade sobre sinônimos. Se sinônimo tentar reusar coluna já atribuída, o sinônimo é descartado.
-3. Estender `COMPLETO_FIELDS` com:
-   - `receita_realizada` (number)
-   - `valor_imposto` (number)
-   - `subcategoria_despesa` (text)
-   - `data_despesa` (date)
-   - `lucro_informado` (number, somente leitura/validação)
+### 1. `src/lib/etl/columnTypeInference.ts` (novo)
 
-### Fase 2 — Persistência enriquecida
+Função `inferColumnType(header, sampleValues[])` retorna:
 
-Mesmo arquivo, dentro do bloco `if (entityType === "completo")`:
+```ts
+type ColumnType =
+  | "monetario" | "percentual" | "data" | "status"
+  | "documento" | "telefone" | "email" | "municipio"
+  | "categoria" | "subcategoria" | "texto" | "numero" | "booleano";
+```
 
-- **Step 4 (orçamentos)**: gravar `receita_realizada` (cair pra `receita_esperada` se nulo), `valor_imposto`, `incluir_imposto = valor_imposto > 0`.
-- **Step 5 (despesas)**:
-  - usar `rec.data_despesa` quando existir; senão cair pra `data_orcamento`/hoje.
-  - quando criar `dim_tipodespesa` automaticamente, passar também `subcategoria` (vinda de `rec.subcategoria_despesa`).
-- **Validação cruzada**: se `lucro_informado` existir e divergir mais de 5% do `receita - custo - despesa` calculado, registrar warning na tela de resultado (não bloqueia).
+Heurísticas baseadas em **conteúdo** (não só header):
+- ≥70% de valores casam `/^(R\$|\d[\d.,]*)/` e parseFinancialNumber retorna número → `monetario`.
+- ≥70% casam regex de data (`dd/mm/aaaa`, ISO, serial Excel) → `data`.
+- ≥60% pertencem a vocabulário fechado `{pago, pendente, cancelado, aprovado, faturado, em aberto, atrasado, ...}` → `status`.
+- Cardinalidade ≤ 15 e valores curtos repetidos → `categoria`.
+- Regex CPF/CNPJ → `documento`.
+- Lista de municípios brasileiros (top-N) ou padrão "Cidade/UF" → `municipio`.
 
-### Fase 3 — Card de validação pós-import (Dashboard 360 mini)
+### 2. `src/lib/etl/contextClassifier.ts` (refatorar `financialColumnClassifier`)
 
-Substituir o `compositeStatsResult` atual por um **bloco de validação visual** no step `result`:
+Combina `header role` + `inferred type` num **role final** com regras de bloqueio:
 
-- Totais persistidos: Receita, Custos, Despesas, **Lucro calculado** (sempre `receita − custo − despesa`, nunca igual à receita por design).
-- Vinculações: X clientes ↔ Y propriedades ↔ Z projetos ↔ W orçamentos ↔ V despesas.
-- Badge de saúde: verde/âmbar/vermelho conforme dados financeiros consistentes.
-- CTA primário: **"Ver Dashboard Financeiro"** → `/financeiro`.
+| Header sugere | Tipo inferido | Role final |
+|---|---|---|
+| receita_bruta | monetario | receita_bruta ✅ |
+| receita_bruta | status | **status_pagamento** (override) |
+| despesa | data | **data_despesa** (override) |
+| categoria | texto curto | categoria_despesa |
+| subcategoria | texto curto | **subcategoria_despesa** (entidade própria) |
 
-Arquivo novo: `src/components/import/ImportValidationCard.tsx`.
+Regra dura: **role financeiro só é aceito se `tipo == monetario`**.
 
-### Fase 4 — Garantir que o dashboard mostre os dados
+### 3. `src/lib/etl/relationalBuilder.ts` (novo)
 
-`src/pages/DashboardFinanceiro.tsx` já tem auto-expansão (do turno anterior). Reforçar:
+Para cada linha da planilha, monta um `RowGraph`:
 
-- Quando vindo do `?source=import` (push do importer), forçar `shouldAutoExpand = true` no primeiro load.
-- Replicar o banner âmbar quando `total_despesas === 0` em `ChartCustosCategoria` / `RevenueChart` (vazio explicado, não tela em branco).
+```ts
+{
+  cliente: { nome, cpf?, cnpj?, telefone?, email? },
+  propriedade: { nome, municipio?, area_ha? } | null,
+  orcamento: { valor, data, status_pagamento, ... } | null,
+  servico: { nome, categoria, subcategoria? } | null,
+  despesa: { valor, data, categoria, subcategoria? } | null,
+}
+```
 
----
+E persiste em ordem com **deduplicação por chave natural**:
+- Cliente: `cpf || cnpj || normalize(nome)+telefone`. Cache em memória durante o batch + lookup no banco.
+- Propriedade: `(id_cliente, normalize(nome))`.
+- `dim_tipodespesa`: `(categoria, subcategoria)` — par, não só categoria.
 
-## Detalhes técnicos relevantes
+### 4. Entidade Status
 
-- O backend (`get_financial_dashboard_metrics`, `vw_kpis_financeiros`) **já calcula corretamente** lucro = receita − impostos − custos variáveis − despesas fixas. O bug "Lucro = Receita" hoje é **falta de despesas persistidas**, não fórmula. Resolver no ETL elimina o sintoma.
-- `parseFinancialNumber` já cobre `54.429,16`, `54429,16`, `54,429.16` — basta usá-lo (já está sendo usado via `parseNullableNumber`).
-- Regra "nunca reusar mesmo valor para múltiplos KPIs" é garantida por (a) classificador one-shot e (b) anti-colisão na fase 1.
+Persistir `status_pagamento` em `fato_orcamento.situacao_do_pagamento` (já existe). Adicionar normalização: dicionário `{paid, pago, quitado} → "Pago"` etc. Nunca passar pelo parser financeiro.
 
----
+### 5. Datas
 
-## Fora do escopo
+Datas alimentam apenas `data_orcamento`, `data_da_despesa`, `data_do_faturamento`. Nunca somar como valor.
 
-- Mudanças em RPC/SQL (não necessárias).
-- Novas tabelas (já existe coluna `subcategoria` em `dim_tipodespesa`, `valor_imposto`/`receita_realizada` em `fato_orcamento`).
-- Modificações em outras páginas além de `DashboardFinanceiro`.
+### 6. Validação financeira pós-import
+
+Em `ImportValidationCard`, adicionar invariante:
+- `lucro_liquido !== receita_total` (se igual → flag crítico "despesas não foram reconhecidas").
+- `total_despesas > 0` quando havia coluna inferida como `monetario` + role `despesa`.
+- Detalhar quantos clientes deduplicados, quantas propriedades vinculadas, etc.
+
+### 7. UI no passo de Mapping
+
+Mostrar para cada coluna: **header → tipo inferido (badge) → role sugerido**. Permitir override manual. Bloquear (com aviso) mapear coluna `status` em campo monetário.
+
+## Arquivos
+
+**Novos:**
+- `src/lib/etl/columnTypeInference.ts` + teste
+- `src/lib/etl/contextClassifier.ts` + teste
+- `src/lib/etl/relationalBuilder.ts` + teste
+- `src/lib/etl/statusNormalizer.ts`
+- `src/lib/etl/clientDedup.ts`
+
+**Editar:**
+- `src/components/import/SmartImporter.tsx` — substituir `classifyHeaders` direto pelo novo pipeline; usar `relationalBuilder` na fase de persistência; mostrar tipo inferido na UI de mapeamento.
+- `src/components/import/ImportValidationCard.tsx` — adicionar invariantes (lucro≠receita, contagem de relacionamentos).
+- `src/lib/financialColumnClassifier.ts` — manter como camada de "header hint", consumida pelo `contextClassifier`.
+
+**Sem mudanças de schema:** todas as tabelas necessárias (`dim_cliente`, `dim_propriedade`, `dim_tipodespesa` com `subcategoria`, `fato_orcamento.situacao_do_pagamento`, `fato_despesas`) já existem.
+
+## Validação
+
+- Testes unitários por engine (inferência, contexto, dedup).
+- Teste end-to-end com planilha-mock que reproduz os bugs reportados ("Situação do Pagamento", "Data do Faturamento", "SubCategoria", "Pendente").
+- Após import, abrir `/financeiro?source=import` e conferir: receita > 0, despesas > 0, lucro ≠ receita, gráficos renderizados.

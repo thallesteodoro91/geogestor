@@ -1566,6 +1566,10 @@ export function SmartImporter({
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataOrc)) dataOrc = todayISO;
 
+          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento);
+          let dataFat: string | null = rec.data_do_faturamento || null;
+          if (dataFat && !/^\d{4}-\d{2}-\d{2}$/.test(dataFat)) dataFat = null;
+
           orcamentos.push({
             id_cliente: finalClienteId,
             id_propriedade: propId || null,
@@ -1578,7 +1582,9 @@ export function SmartImporter({
             valor_imposto: vimp ?? 0,
             incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
-            situacao: "Aprovado",
+            situacao: normalizeStatusServico(rec.situacao) || "Aprovado",
+            situacao_do_pagamento: statusPag,
+            data_do_faturamento: dataFat,
           });
           debug.receitaCount++;
           debug.receitaSum += re;

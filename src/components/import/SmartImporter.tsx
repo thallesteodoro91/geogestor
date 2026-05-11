@@ -761,8 +761,10 @@ export function SmartImporter({
     setMatchConfidences(confidences);
   }, []);
 
-  // Build classifier-driven pre-map (role → field) for completo mode
-  const buildSemanticPreMap = useCallback((fileHeaders: string[]): Record<string, string> => {
+  // Build classifier-driven pre-map (role → field) for completo mode.
+  // Uses CONTENT-BASED type inference to BLOCK financial roles on text columns
+  // (prevents bugs like "Situação do Pagamento" → despesa or "Pendente" → number).
+  const buildSemanticPreMap = useCallback((fileHeaders: string[], dataRows: string[][]): Record<string, string> => {
     const roleToField: Record<string, string> = {
       receita_bruta: "receita_esperada",
       receita_liquida: "receita_esperada",
@@ -780,16 +782,51 @@ export function SmartImporter({
       municipio: "municipio",
       servico_nome: "nome_do_servico",
     };
+    // Roles that MUST come from a monetary column. Otherwise we drop the suggestion.
+    const financialRoles = new Set([
+      "receita_bruta", "receita_liquida", "valor_orcado",
+      "custo_obra", "despesa_operacional", "imposto", "lucro_informado", "margem_informada",
+    ]);
+    // Roles that MUST come from a date column.
+    const dateRoles = new Set(["data_orcamento", "data_despesa"]);
+
+    const inferred = inferColumnTypes(fileHeaders, dataRows);
+    const inferredByHeader = new Map(inferred.map(i => [i.header, i]));
+
     const classified = classifyHeaders(fileHeaders);
     const preMap: Record<string, string> = {};
     const usedFields = new Set<string>();
     // Sort by confidence desc so higher-weight rules win the field
     const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
+
+    // Inject content-driven roles BEFORE header roles
+    // (status column found by content → maps to situacao_do_pagamento regardless of header)
+    for (const inf of inferred) {
+      if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+        preMap["situacao_do_pagamento"] = inf.header;
+        usedFields.add("situacao_do_pagamento");
+      }
+    }
+
     for (const c of sorted) {
       if (c.confidence < 80) continue;
       const fieldKey = roleToField[c.role];
       if (!fieldKey) continue;
       if (usedFields.has(fieldKey)) continue;
+
+      const inf = inferredByHeader.get(c.header);
+      // BLOCK financial roles on non-monetary columns
+      if (financialRoles.has(c.role) && inf && !isMonetaryCompatible(inf.type)) {
+        // If the column is actually a status, route to situacao_do_pagamento
+        if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+          preMap["situacao_do_pagamento"] = c.header;
+          usedFields.add("situacao_do_pagamento");
+        }
+        continue;
+      }
+      // BLOCK date roles on non-date columns
+      if (dateRoles.has(c.role) && inf && inf.type !== "data") continue;
+
       preMap[fieldKey] = c.header;
       usedFields.add(fieldKey);
     }

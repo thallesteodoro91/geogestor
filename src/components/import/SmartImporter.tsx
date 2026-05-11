@@ -384,6 +384,8 @@ const COMPLETO_FIELDS: SystemField[] = [
   { key: "subcategoria_despesa", label: "💰 Financeiro - Subcategoria da Despesa", required: false },
   { key: "data_orcamento", label: "💰 Financeiro - Data", required: false, format: formatDate, validate: validateDate, type: "date" },
   { key: "data_despesa", label: "💰 Financeiro - Data da Despesa", required: false, format: formatDate, validate: validateDate, type: "date" },
+  { key: "situacao_do_pagamento", label: "💰 Financeiro - Status do Pagamento", required: false },
+  { key: "data_do_faturamento", label: "💰 Financeiro - Data do Faturamento", required: false, format: formatDate, validate: validateDate, type: "date" },
 ];
 
 

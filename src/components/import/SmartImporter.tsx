@@ -42,6 +42,7 @@ import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/stat
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
+import { MappingValidationPanel } from "@/components/import/MappingValidationPanel";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -2133,6 +2134,17 @@ export function SmartImporter({
                   </AlertDescription>
                 </Alert>
               )}
+              {/* Mapping validation panel — alerts + inline remap */}
+              <MappingValidationPanel
+                headers={headers}
+                rawData={rawData}
+                fields={SYSTEM_FIELDS}
+                mappings={mappings}
+                onChangeMapping={(fieldKey, header) =>
+                  setMappings(prev => ({ ...prev, [fieldKey]: header }))
+                }
+              />
+
               {/* Financial preview card */}
               {financialPreview && (
                 <FinancialPreviewCard

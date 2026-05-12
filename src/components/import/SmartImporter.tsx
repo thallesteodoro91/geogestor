@@ -43,6 +43,10 @@ import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clie
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 import { MappingValidationPanel } from "@/components/import/MappingValidationPanel";
+import {
+  findMappingProfile, saveMappingProfile, deleteMappingProfile, applyProfileToMappings,
+} from "@/lib/etl/mappingProfiles";
+import { useTenant } from "@/contexts/TenantContext";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -631,10 +635,12 @@ export function SmartImporter({
 }: SmartImporterProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [step, setStep] = useState<Step>("upload");
   const [rawData, setRawData] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
+  const [appliedProfile, setAppliedProfile] = useState<{ count: number; updatedAt: string } | null>(null);
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);
@@ -714,6 +720,7 @@ export function SmartImporter({
     setCompositeStatsResult(null);
     setDebugStats(null);
     setValidationReport(null);
+    setAppliedProfile(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -909,8 +916,25 @@ export function SmartImporter({
     const synonyms = getSynonymsForEntity(effectiveEntity);
     const preMap = effectiveEntity === "completo" ? buildSemanticPreMap(h, data) : undefined;
     autoMap(h, fields, synonyms, preMap);
+
+    // Apply previously-saved manual mapping profile (if any) for this header signature
+    const profile = findMappingProfile(tenant?.id ?? null, effectiveEntity, h);
+    if (profile) {
+      setMappings(prev => {
+        const { merged, appliedCount } = applyProfileToMappings(prev, profile, h);
+        if (appliedCount > 0) {
+          setAppliedProfile({ count: appliedCount, updatedAt: profile.updatedAt });
+        } else {
+          setAppliedProfile(null);
+        }
+        return merged;
+      });
+    } else {
+      setAppliedProfile(null);
+    }
+
     setStep("mapping");
-  }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap]);
+  }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap, tenant?.id]);
 
   const processFile = useCallback((file: File) => {
     setFileName(file.name);
@@ -1215,6 +1239,19 @@ export function SmartImporter({
     setImportProgress(0);
     setImportWarnings([]);
     setValidationReport(null);
+
+    // Persist the (possibly manually corrected) mapping for next imports with the same shape
+    try {
+      saveMappingProfile({
+        tenantId: tenant?.id ?? null,
+        entity: entityType,
+        headers,
+        mappings,
+        fileName,
+      });
+    } catch (e) {
+      console.warn("Could not persist mapping profile:", e);
+    }
 
     // Capture timestamp BEFORE any insert — used to filter what THIS batch created
     const batchStartTime = new Date().toISOString();
@@ -1996,6 +2033,30 @@ export function SmartImporter({
           {/* Step 2: Mapping */}
           {step === "mapping" && (
             <div className="space-y-4">
+              {appliedProfile && (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <AlertTitle>Esquema de mapeamento salvo aplicado</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between gap-3 mt-1">
+                    <span className="text-sm text-muted-foreground">
+                      {appliedProfile.count} coluna(s) reaproveitadas de uma importação anterior
+                      {" · "}
+                      {new Date(appliedProfile.updatedAt).toLocaleDateString("pt-BR")}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        deleteMappingProfile(tenant?.id ?? null, entityType, headers);
+                        setAppliedProfile(null);
+                        toast.success("Esquema salvo removido. O mapeamento automático foi mantido.");
+                      }}
+                    >
+                      Esquecer esquema
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
               {detectedEntity && detectedEntity.entity !== initialEntityType && detectedEntity.confidence > 40 && (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Sparkles className="h-4 w-4 text-primary" />

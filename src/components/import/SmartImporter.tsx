@@ -1239,6 +1239,19 @@ export function SmartImporter({
     setImportWarnings([]);
     setValidationReport(null);
 
+    // Persist the (possibly manually corrected) mapping for next imports with the same shape
+    try {
+      saveMappingProfile({
+        tenantId: tenant?.id ?? null,
+        entity: entityType,
+        headers,
+        mappings,
+        fileName,
+      });
+    } catch (e) {
+      console.warn("Could not persist mapping profile:", e);
+    }
+
     // Capture timestamp BEFORE any insert — used to filter what THIS batch created
     const batchStartTime = new Date().toISOString();
     // Track discarded rows with explanations for the validation report

@@ -2137,7 +2137,7 @@ export function SmartImporter({
               {/* Mapping validation panel — alerts + inline remap */}
               <MappingValidationPanel
                 headers={headers}
-                rawData={rawData.slice(1)}
+                rawData={rawData}
                 fields={SYSTEM_FIELDS}
                 mappings={mappings}
                 onChangeMapping={(fieldKey, header) =>

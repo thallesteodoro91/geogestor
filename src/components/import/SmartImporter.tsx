@@ -2134,6 +2134,17 @@ export function SmartImporter({
                   </AlertDescription>
                 </Alert>
               )}
+              {/* Mapping validation panel — alerts + inline remap */}
+              <MappingValidationPanel
+                headers={headers}
+                rawData={rawData.slice(1)}
+                fields={SYSTEM_FIELDS}
+                mappings={mappings}
+                onChangeMapping={(fieldKey, header) =>
+                  setMappings(prev => ({ ...prev, [fieldKey]: header }))
+                }
+              />
+
               {/* Financial preview card */}
               {financialPreview && (
                 <FinancialPreviewCard

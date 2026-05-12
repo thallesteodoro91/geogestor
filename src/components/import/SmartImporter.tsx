@@ -2033,6 +2033,30 @@ export function SmartImporter({
           {/* Step 2: Mapping */}
           {step === "mapping" && (
             <div className="space-y-4">
+              {appliedProfile && (
+                <Alert className="border-primary/30 bg-primary/5">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <AlertTitle>Esquema de mapeamento salvo aplicado</AlertTitle>
+                  <AlertDescription className="flex items-center justify-between gap-3 mt-1">
+                    <span className="text-sm text-muted-foreground">
+                      {appliedProfile.count} coluna(s) reaproveitadas de uma importação anterior
+                      {" · "}
+                      {new Date(appliedProfile.updatedAt).toLocaleDateString("pt-BR")}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        deleteMappingProfile(tenant?.id ?? null, entityType, headers);
+                        setAppliedProfile(null);
+                        toast.success("Esquema salvo removido. O mapeamento automático foi mantido.");
+                      }}
+                    >
+                      Esquecer esquema
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
               {detectedEntity && detectedEntity.entity !== initialEntityType && detectedEntity.confidence > 40 && (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Sparkles className="h-4 w-4 text-primary" />

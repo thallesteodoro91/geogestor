@@ -43,6 +43,10 @@ import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clie
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
 import { MappingValidationPanel } from "@/components/import/MappingValidationPanel";
+import {
+  findMappingProfile, saveMappingProfile, deleteMappingProfile, applyProfileToMappings,
+} from "@/lib/etl/mappingProfiles";
+import { useTenant } from "@/contexts/TenantContext";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

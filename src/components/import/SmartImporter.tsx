@@ -635,10 +635,12 @@ export function SmartImporter({
 }: SmartImporterProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { tenant } = useTenant();
   const [step, setStep] = useState<Step>("upload");
   const [rawData, setRawData] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
+  const [appliedProfile, setAppliedProfile] = useState<{ count: number; updatedAt: string } | null>(null);
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);

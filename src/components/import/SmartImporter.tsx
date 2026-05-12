@@ -720,6 +720,7 @@ export function SmartImporter({
     setCompositeStatsResult(null);
     setDebugStats(null);
     setValidationReport(null);
+    setAppliedProfile(null);
   };
 
   // ─── File processing ───────────────────────────────────────────────

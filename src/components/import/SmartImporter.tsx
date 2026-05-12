@@ -42,6 +42,7 @@ import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/stat
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
+import { MappingValidationPanel } from "@/components/import/MappingValidationPanel";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 

@@ -915,8 +915,25 @@ export function SmartImporter({
     const synonyms = getSynonymsForEntity(effectiveEntity);
     const preMap = effectiveEntity === "completo" ? buildSemanticPreMap(h, data) : undefined;
     autoMap(h, fields, synonyms, preMap);
+
+    // Apply previously-saved manual mapping profile (if any) for this header signature
+    const profile = findMappingProfile(tenant?.id ?? null, effectiveEntity, h);
+    if (profile) {
+      setMappings(prev => {
+        const { merged, appliedCount } = applyProfileToMappings(prev, profile, h);
+        if (appliedCount > 0) {
+          setAppliedProfile({ count: appliedCount, updatedAt: profile.updatedAt });
+        } else {
+          setAppliedProfile(null);
+        }
+        return merged;
+      });
+    } else {
+      setAppliedProfile(null);
+    }
+
     setStep("mapping");
-  }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap]);
+  }, [initialEntityType, autoMap, hasFinancialColumns, buildSemanticPreMap, tenant?.id]);
 
   const processFile = useCallback((file: File) => {
     setFileName(file.name);

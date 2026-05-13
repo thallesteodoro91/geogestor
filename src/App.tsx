@@ -82,6 +82,7 @@ const App = () => {
                     <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
                     <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
                     <Route path="/importacao" element={<ProtectedRoute><ImportacaoDados /></ProtectedRoute>} />
+                    <Route path="/importacao/esquemas" element={<ProtectedRoute><EsquemasImportacao /></ProtectedRoute>} />
                     <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />
                     <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />

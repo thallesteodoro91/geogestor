@@ -10,6 +10,12 @@ const MAX_PROFILES = 30;
 
 export interface MappingProfile {
   signature: string;
+  /** Strict, order-sensitive hash of the column layout. Differs from `signature`
+   *  whenever columns are added/removed/reordered/renamed — used to detect
+   *  structural drift even when the column SET still matches. */
+  layoutHash: string;
+  /** Bumped on every save to track profile evolution. */
+  version: number;
   entity: string;
   tenantId: string | null;
   headers: string[];
@@ -22,11 +28,25 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[_\s\-.*]/g, "").trim();
 
-/** Order-independent signature of the spreadsheet column set. */
+/** Order-independent signature of the spreadsheet column SET (used as the key). */
 export function buildHeaderSignature(headers: string[]): string {
   const tokens = Array.from(new Set(headers.map(norm).filter(Boolean))).sort();
   return tokens.join("|");
 }
+
+/** djb2 string hash → base36 */
+function djb2(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/** Order-sensitive hash of the exact column layout (headers in order + count). */
+export function buildLayoutHash(headers: string[]): string {
+  const normalized = headers.map(norm);
+  return `${headers.length}:${djb2(normalized.join("\u0001"))}`;
+}
+
 
 function readAll(): MappingProfile[] {
   try {
@@ -55,14 +75,34 @@ function keyOf(p: { tenantId: string | null; entity: string; signature: string }
   return `${p.tenantId ?? "_"}::${p.entity}::${p.signature}`;
 }
 
+export interface FindProfileResult {
+  profile: MappingProfile;
+  /** True when the saved profile's layoutHash differs from the current spreadsheet's. */
+  layoutChanged: boolean;
+  currentLayoutHash: string;
+}
+
+/**
+ * Looks up a profile by (tenant, entity, signature). The signature matches
+ * order-independently — but the returned `layoutChanged` flag tells the caller
+ * whether the strict layout (order/count) drifted, so they can decide NOT to
+ * silently reapply the saved mapping.
+ */
 export function findMappingProfile(
   tenantId: string | null,
   entity: string,
   headers: string[],
-): MappingProfile | null {
+): FindProfileResult | null {
   const signature = buildHeaderSignature(headers);
+  const currentLayoutHash = buildLayoutHash(headers);
   const target = keyOf({ tenantId, entity, signature });
-  return readAll().find(p => keyOf(p) === target) ?? null;
+  const profile = readAll().find(p => keyOf(p) === target);
+  if (!profile) return null;
+  return {
+    profile,
+    currentLayoutHash,
+    layoutChanged: profile.layoutHash !== currentLayoutHash,
+  };
 }
 
 export function saveMappingProfile(input: {
@@ -73,16 +113,24 @@ export function saveMappingProfile(input: {
   fileName?: string;
 }): MappingProfile {
   const signature = buildHeaderSignature(input.headers);
+  const layoutHash = buildLayoutHash(input.headers);
   const cleanedMappings = Object.fromEntries(
     Object.entries(input.mappings).filter(([, v]) => v && v.length > 0)
   );
+  // Bump version when overwriting an existing entry for the same key
+  const existing = readAll().find(p => keyOf(p) === keyOf({
+    tenantId: input.tenantId, entity: input.entity, signature,
+  }));
+  const nextVersion = (existing?.version ?? 0) + 1;
   const profile: MappingProfile = {
     signature,
+    layoutHash,
+    version: nextVersion,
     entity: input.entity,
     tenantId: input.tenantId,
     headers: input.headers,
     mappings: cleanedMappings,
-    fileName: input.fileName,
+    fileName: input.fileName ?? existing?.fileName,
     updatedAt: new Date().toISOString(),
   };
 

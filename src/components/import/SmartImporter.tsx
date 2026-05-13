@@ -921,19 +921,31 @@ export function SmartImporter({
     autoMap(h, fields, synonyms, preMap);
 
     // Apply previously-saved manual mapping profile (if any) for this header signature
-    const profile = findMappingProfile(tenant?.id ?? null, effectiveEntity, h);
-    if (profile) {
-      setMappings(prev => {
-        const { merged, appliedCount } = applyProfileToMappings(prev, profile, h);
-        if (appliedCount > 0) {
-          setAppliedProfile({ count: appliedCount, updatedAt: profile.updatedAt });
-        } else {
-          setAppliedProfile(null);
-        }
-        return merged;
-      });
+    const found = findMappingProfile(tenant?.id ?? null, effectiveEntity, h);
+    if (found) {
+      if (found.layoutChanged) {
+        // Same column SET, but order/count drifted → don't auto-apply, ask user
+        setStaleProfile({ profile: found.profile });
+        setAppliedProfile(null);
+      } else {
+        setMappings(prev => {
+          const { merged, appliedCount } = applyProfileToMappings(prev, found.profile, h);
+          if (appliedCount > 0) {
+            setAppliedProfile({
+              count: appliedCount,
+              updatedAt: found.profile.updatedAt,
+              version: found.profile.version,
+            });
+          } else {
+            setAppliedProfile(null);
+          }
+          return merged;
+        });
+        setStaleProfile(null);
+      }
     } else {
       setAppliedProfile(null);
+      setStaleProfile(null);
     }
 
     setStep("mapping");

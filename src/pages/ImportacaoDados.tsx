@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { SmartImporter, ImportEntityType } from "@/components/import/SmartImporter";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, ChevronDown, FileSpreadsheet, Users, MapPin, FileText, Briefcase, Receipt } from "lucide-react";
+import { Upload, ChevronDown, FileSpreadsheet, Users, MapPin, FileText, Briefcase, Receipt, Settings2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 export default function ImportacaoDados() {
   const [importOpen, setImportOpen] = useState(false);
@@ -30,7 +31,14 @@ export default function ImportacaoDados() {
         <PageHeader
           title="Importação de Dados"
           subtitle="Importe dados do Excel ou CSV — o sistema detecta automaticamente o tipo de dado"
-        />
+        >
+          <Button variant="outline" asChild>
+            <Link to="/importacao/esquemas">
+              <Settings2 className="h-4 w-4 mr-2" />
+              Esquemas salvos
+            </Link>
+          </Button>
+        </PageHeader>
 
         {/* Modo principal: importar tudo */}
         <div

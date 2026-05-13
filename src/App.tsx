@@ -35,6 +35,7 @@ const CheckoutCancelado = lazy(() => import("./pages/CheckoutCancelado"));
 const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
 const Ajuda = lazy(() => import("./pages/Ajuda"));
 const ImportacaoDados = lazy(() => import("./pages/ImportacaoDados"));
+const EsquemasImportacao = lazy(() => import("./pages/EsquemasImportacao"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
@@ -81,6 +82,7 @@ const App = () => {
                     <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
                     <Route path="/perfil" element={<Navigate to="/configuracoes?tab=conta" replace />} />
                     <Route path="/importacao" element={<ProtectedRoute><ImportacaoDados /></ProtectedRoute>} />
+                    <Route path="/importacao/esquemas" element={<ProtectedRoute><EsquemasImportacao /></ProtectedRoute>} />
                     <Route path="/audit-logs" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
                     <Route path="/relatorio-executivo" element={<ProtectedRoute><RelatorioExecutivo /></ProtectedRoute>} />
                     <Route path="/ajuda" element={<ProtectedRoute><Ajuda /></ProtectedRoute>} />

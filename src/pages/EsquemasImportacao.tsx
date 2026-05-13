@@ -130,7 +130,10 @@ export default function EsquemasImportacao() {
                         onClick={() => setViewing(p)}
                       >
                         <TableCell className="font-medium">
-                          {p.fileName || <span className="text-muted-foreground italic">Sem nome</span>}
+                          <div className="flex items-center gap-2">
+                            <span>{p.fileName || <span className="text-muted-foreground italic">Sem nome</span>}</span>
+                            <Badge variant="outline" className="text-xs">v{p.version ?? 1}</Badge>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary">{p.entity}</Badge>

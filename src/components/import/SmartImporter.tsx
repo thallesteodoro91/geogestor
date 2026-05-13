@@ -640,7 +640,10 @@ export function SmartImporter({
   const [rawData, setRawData] = useState<string[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mappings, setMappings] = useState<Record<string, string>>({});
-  const [appliedProfile, setAppliedProfile] = useState<{ count: number; updatedAt: string } | null>(null);
+  const [appliedProfile, setAppliedProfile] = useState<{ count: number; updatedAt: string; version: number } | null>(null);
+  const [staleProfile, setStaleProfile] = useState<{
+    profile: import("@/lib/etl/mappingProfiles").MappingProfile;
+  } | null>(null);
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);

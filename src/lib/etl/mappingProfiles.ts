@@ -102,6 +102,39 @@ export function deleteMappingProfile(
   writeAll(readAll().filter(p => keyOf(p) !== target));
 }
 
+/** Delete by composite key (tenantId, entity, signature) — used by management UI. */
+export function deleteMappingProfileByKey(
+  tenantId: string | null,
+  entity: string,
+  signature: string,
+): void {
+  const target = keyOf({ tenantId, entity, signature });
+  writeAll(readAll().filter(p => keyOf(p) !== target));
+}
+
+/** List all mapping profiles for a given tenant (or all if tenantId is null). */
+export function listMappingProfiles(tenantId: string | null): MappingProfile[] {
+  const all = readAll();
+  if (tenantId === null) return all;
+  return all.filter(p => p.tenantId === tenantId);
+}
+
+/** Rename a profile's fileName label. Returns true if updated. */
+export function renameMappingProfile(
+  tenantId: string | null,
+  entity: string,
+  signature: string,
+  newName: string,
+): boolean {
+  const all = readAll();
+  const target = keyOf({ tenantId, entity, signature });
+  const idx = all.findIndex(p => keyOf(p) === target);
+  if (idx === -1) return false;
+  all[idx] = { ...all[idx], fileName: newName.trim() || undefined, updatedAt: new Date().toISOString() };
+  writeAll(all);
+  return true;
+}
+
 /**
  * Merge a saved profile onto fresh auto-mappings. Saved entries win when the
  * mapped header still exists in the new spreadsheet.

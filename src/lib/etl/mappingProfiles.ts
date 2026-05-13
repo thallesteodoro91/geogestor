@@ -75,14 +75,34 @@ function keyOf(p: { tenantId: string | null; entity: string; signature: string }
   return `${p.tenantId ?? "_"}::${p.entity}::${p.signature}`;
 }
 
+export interface FindProfileResult {
+  profile: MappingProfile;
+  /** True when the saved profile's layoutHash differs from the current spreadsheet's. */
+  layoutChanged: boolean;
+  currentLayoutHash: string;
+}
+
+/**
+ * Looks up a profile by (tenant, entity, signature). The signature matches
+ * order-independently — but the returned `layoutChanged` flag tells the caller
+ * whether the strict layout (order/count) drifted, so they can decide NOT to
+ * silently reapply the saved mapping.
+ */
 export function findMappingProfile(
   tenantId: string | null,
   entity: string,
   headers: string[],
-): MappingProfile | null {
+): FindProfileResult | null {
   const signature = buildHeaderSignature(headers);
+  const currentLayoutHash = buildLayoutHash(headers);
   const target = keyOf({ tenantId, entity, signature });
-  return readAll().find(p => keyOf(p) === target) ?? null;
+  const profile = readAll().find(p => keyOf(p) === target);
+  if (!profile) return null;
+  return {
+    profile,
+    currentLayoutHash,
+    layoutChanged: profile.layoutHash !== currentLayoutHash,
+  };
 }
 
 export function saveMappingProfile(input: {
@@ -93,16 +113,24 @@ export function saveMappingProfile(input: {
   fileName?: string;
 }): MappingProfile {
   const signature = buildHeaderSignature(input.headers);
+  const layoutHash = buildLayoutHash(input.headers);
   const cleanedMappings = Object.fromEntries(
     Object.entries(input.mappings).filter(([, v]) => v && v.length > 0)
   );
+  // Bump version when overwriting an existing entry for the same key
+  const existing = readAll().find(p => keyOf(p) === keyOf({
+    tenantId: input.tenantId, entity: input.entity, signature,
+  }));
+  const nextVersion = (existing?.version ?? 0) + 1;
   const profile: MappingProfile = {
     signature,
+    layoutHash,
+    version: nextVersion,
     entity: input.entity,
     tenantId: input.tenantId,
     headers: input.headers,
     mappings: cleanedMappings,
-    fileName: input.fileName,
+    fileName: input.fileName ?? existing?.fileName,
     updatedAt: new Date().toISOString(),
   };
 

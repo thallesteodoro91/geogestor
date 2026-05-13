@@ -31,6 +31,14 @@ export default function ImportacaoDados() {
         <PageHeader
           title="Importação de Dados"
           subtitle="Importe dados do Excel ou CSV — o sistema detecta automaticamente o tipo de dado"
+          actions={
+            <Button variant="outline" asChild>
+              <Link to="/importacao/esquemas">
+                <Settings2 className="h-4 w-4 mr-2" />
+                Esquemas salvos
+              </Link>
+            </Button>
+          }
         />
 
         {/* Modo principal: importar tudo */}

@@ -10,6 +10,12 @@ const MAX_PROFILES = 30;
 
 export interface MappingProfile {
   signature: string;
+  /** Strict, order-sensitive hash of the column layout. Differs from `signature`
+   *  whenever columns are added/removed/reordered/renamed — used to detect
+   *  structural drift even when the column SET still matches. */
+  layoutHash: string;
+  /** Bumped on every save to track profile evolution. */
+  version: number;
   entity: string;
   tenantId: string | null;
   headers: string[];
@@ -22,11 +28,25 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[_\s\-.*]/g, "").trim();
 
-/** Order-independent signature of the spreadsheet column set. */
+/** Order-independent signature of the spreadsheet column SET (used as the key). */
 export function buildHeaderSignature(headers: string[]): string {
   const tokens = Array.from(new Set(headers.map(norm).filter(Boolean))).sort();
   return tokens.join("|");
 }
+
+/** djb2 string hash → base36 */
+function djb2(str: string): string {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/** Order-sensitive hash of the exact column layout (headers in order + count). */
+export function buildLayoutHash(headers: string[]): string {
+  const normalized = headers.map(norm);
+  return `${headers.length}:${djb2(normalized.join("\u0001"))}`;
+}
+
 
 function readAll(): MappingProfile[] {
   try {

@@ -2051,7 +2051,9 @@ export function SmartImporter({
               {appliedProfile && (
                 <Alert className="border-primary/30 bg-primary/5">
                   <Sparkles className="h-4 w-4 text-primary" />
-                  <AlertTitle>Esquema de mapeamento salvo aplicado</AlertTitle>
+                  <AlertTitle>
+                    Esquema salvo aplicado · v{appliedProfile.version}
+                  </AlertTitle>
                   <AlertDescription className="flex items-center justify-between gap-3 mt-1">
                     <span className="text-sm text-muted-foreground">
                       {appliedProfile.count} coluna(s) reaproveitadas de uma importação anterior
@@ -2069,6 +2071,54 @@ export function SmartImporter({
                     >
                       Esquecer esquema
                     </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              {staleProfile && (
+                <Alert className="border-amber-500/40 bg-amber-500/5">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle>
+                    Estrutura da planilha mudou · esquema v{staleProfile.profile.version} não aplicado
+                  </AlertTitle>
+                  <AlertDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mt-1">
+                    <span className="text-sm text-muted-foreground">
+                      Encontramos um esquema salvo, mas a ordem/quantidade das colunas mudou
+                      desde {new Date(staleProfile.profile.updatedAt).toLocaleDateString("pt-BR")}.
+                      Confira o mapeamento antes de prosseguir.
+                    </span>
+                    <div className="flex gap-2 shrink-0">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const prof = staleProfile.profile;
+                          setMappings(prev => {
+                            const { merged, appliedCount } = applyProfileToMappings(prev, prof, headers);
+                            setAppliedProfile({
+                              count: appliedCount,
+                              updatedAt: prof.updatedAt,
+                              version: prof.version,
+                            });
+                            return merged;
+                          });
+                          setStaleProfile(null);
+                          toast.success("Esquema aplicado mesmo com mudanças no layout.");
+                        }}
+                      >
+                        Aplicar mesmo assim
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          deleteMappingProfile(tenant?.id ?? null, entityType, headers);
+                          setStaleProfile(null);
+                          toast.success("Esquema antigo descartado.");
+                        }}
+                      >
+                        Descartar
+                      </Button>
+                    </div>
                   </AlertDescription>
                 </Alert>
               )}

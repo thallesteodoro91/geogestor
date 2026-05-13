@@ -35,6 +35,7 @@ const CheckoutCancelado = lazy(() => import("./pages/CheckoutCancelado"));
 const RelatorioExecutivo = lazy(() => import("./pages/RelatorioExecutivo"));
 const Ajuda = lazy(() => import("./pages/Ajuda"));
 const ImportacaoDados = lazy(() => import("./pages/ImportacaoDados"));
+const EsquemasImportacao = lazy(() => import("./pages/EsquemasImportacao"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));

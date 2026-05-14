@@ -96,6 +96,42 @@ describe("SmartImporter — layoutChanged blocks auto-reapply", () => {
     expect(result.staleProfile!.profile.version).toBe(1);
   });
 
+  it("preserves a non-empty auto-map intact when layoutChanged=true (no partial merge)", () => {
+    // Auto-map has already inferred a different field→header mapping than what
+    // the saved profile would set. On drift we must keep the auto-map verbatim
+    // and NOT let the stale profile silently overwrite the user's fresh inference.
+    const originalHeaders = ["Cliente", "Receita", "Despesa"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: originalHeaders,
+      mappings: {
+        nome_do_servico: "Cliente",     // saved: Cliente → nome_do_servico
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    // Auto-map produced a competing inference for nome_do_servico AND a new field
+    const autoMap = {
+      nome_do_servico: "Receita",       // conflicts with saved (would be overwritten)
+      descricao: "Despesa",             // not in saved profile at all
+    };
+
+    const result = simulateProcessHeaders(reordered, autoMap);
+
+    // Drift detected: nothing should leak from the saved profile
+    expect(result.appliedProfile).toBeNull();
+    expect(result.staleProfile).not.toBeNull();
+
+    // Auto-map preserved EXACTLY — conflicting field kept its auto value,
+    // and saved-only fields (custo_servico, receita_servico→Receita) absent
+    expect(result.mappings).toEqual(autoMap);
+    expect(result.mappings.nome_do_servico).toBe("Receita");
+    expect(result.mappings.descricao).toBe("Despesa");
+    expect(result.mappings.custo_servico).toBeUndefined();
+    expect(result.mappings.receita_servico).toBeUndefined();
+  });
+
   it("treats column count change as drift (extra column with same set entries)", () => {
     // Edge: signature is set-based, so adding a duplicate-name column would still
     // change layoutHash because length differs.

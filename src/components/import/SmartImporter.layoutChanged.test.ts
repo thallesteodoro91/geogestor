@@ -174,4 +174,88 @@ describe("SmartImporter — layoutChanged blocks auto-reapply", () => {
       custo_servico: "Despesa",
     });
   });
+
+  it("'Aplicar mesmo assim' overlays saved mapping on top of an existing auto-map", () => {
+    // Mirrors the exact handler wired to the stale-profile banner button:
+    //   setMappings(prev => applyProfileToMappings(prev, staleProfile.profile, headers).merged)
+    // Auto-map already has multiple inferred fields. The override must:
+    //   - overwrite fields that ALSO exist in the saved profile (saved wins)
+    //   - preserve auto-only fields (not present in saved profile)
+    //   - skip saved entries whose header no longer exists in the new spreadsheet
+    const original = ["Cliente", "Receita", "Despesa", "DataServico"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+        data_do_servico_inicio: "DataServico",
+      },
+    });
+
+    // Drift via reorder — same column SET, different order
+    const reordered = ["Despesa", "DataServico", "Cliente", "Receita"];
+    const autoMap = {
+      nome_do_servico: "Despesa",       // auto inferred wrongly — must be overwritten
+      descricao: "DataServico",         // auto-only field — must be preserved
+    };
+
+    const initial = simulateProcessHeaders(reordered, autoMap);
+    expect(initial.staleProfile).not.toBeNull();
+    // Sanity: no auto-apply happened
+    expect(initial.mappings).toEqual(autoMap);
+
+    // User clicks "Aplicar mesmo assim"
+    const { merged, appliedCount } = applyProfileToMappings(
+      initial.mappings, initial.staleProfile!.profile, reordered,
+    );
+
+    // 4 saved entries, all headers still present → all 4 applied
+    expect(appliedCount).toBe(4);
+    // Saved overrides the conflicting auto entry
+    expect(merged.nome_do_servico).toBe("Cliente");
+    // Auto-only field preserved
+    expect(merged.descricao).toBe("DataServico");
+    // Saved-only fields layered in
+    expect(merged.receita_servico).toBe("Receita");
+    expect(merged.custo_servico).toBe("Despesa");
+    expect(merged.data_do_servico_inicio).toBe("DataServico");
+
+    // Full snapshot
+    expect(merged).toEqual({
+      nome_do_servico: "Cliente",
+      descricao: "DataServico",
+      receita_servico: "Receita",
+      custo_servico: "Despesa",
+      data_do_servico_inicio: "DataServico",
+    });
+  });
+
+  it("'Aplicar mesmo assim' skips saved fields whose header is missing in current sheet", () => {
+    const original = ["Cliente", "Receita", "Despesa"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const initial = simulateProcessHeaders(reordered, { descricao: "Receita" });
+    expect(initial.staleProfile).not.toBeNull();
+
+    // Force-apply against a current sheet missing "Despesa"
+    const currentHeaders = ["Receita", "Cliente"];
+    const { merged, appliedCount } = applyProfileToMappings(
+      initial.mappings, initial.staleProfile!.profile, currentHeaders,
+    );
+
+    expect(appliedCount).toBe(2);
+    expect(merged.nome_do_servico).toBe("Cliente");
+    expect(merged.receita_servico).toBe("Receita");
+    expect(merged.custo_servico).toBeUndefined(); // header missing → not applied
+    expect(merged.descricao).toBe("Receita");     // auto-only preserved
+  });
 });

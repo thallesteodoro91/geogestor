@@ -176,7 +176,7 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
 
   it("only applies saved mappings whose headers still exist in the current sheet", () => {
     const original = ["Cliente", "Receita", "Despesa"];
-    saveMappingProfile({
+    const profile = saveMappingProfile({
       tenantId: TENANT, entity: ENTITY, headers: original,
       mappings: {
         nome_do_servico: "Cliente",
@@ -189,7 +189,13 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
 
     // Current sheet is missing "Despesa" → only 2 of 3 saved headers exist
     const current = ["Receita", "Cliente"];
-    render(<Harness headers={current} autoMap={{ descricao: "Receita" }} />);
+    render(
+      <Harness
+        headers={current}
+        autoMap={{ descricao: "Receita" }}
+        forcedStaleProfile={profile}
+      />,
+    );
 
     expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
     expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");

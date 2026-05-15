@@ -128,4 +128,42 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
     expect(screen.getByTestId("map-custo_servico")).toHaveTextContent("custo_servico → Despesa");
   });
+
+  it("with empty auto-map, 'Aplicar mesmo assim' applies the saved mapping in full", () => {
+    const original = ["Cliente", "Receita", "Despesa"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Reordered → drift → banner; auto-map is EMPTY (nothing inferred)
+    const reordered = ["Despesa", "Cliente", "Receita"];
+    render(<Harness headers={reordered} autoMap={{}} />);
+
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("mappings").children.length).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+
+    // applyProfileToMappings called with empty starting mappings
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [callMappings, callProfile, callHeaders] = spy.mock.calls[0];
+    expect(callMappings).toEqual({});
+    expect(callProfile.version).toBe(1);
+    expect(callHeaders).toEqual(reordered);
+
+    // All 3 saved entries applied integrally
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/Esquema v1 aplicado \(3 campos\)/);
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
+    expect(screen.getByTestId("map-custo_servico")).toHaveTextContent("custo_servico → Despesa");
+    expect(screen.getByTestId("mappings").children.length).toBe(3);
+  });
 });

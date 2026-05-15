@@ -166,4 +166,45 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("map-custo_servico")).toHaveTextContent("custo_servico → Despesa");
     expect(screen.getByTestId("mappings").children.length).toBe(3);
   });
+
+  it("only applies saved mappings whose headers still exist in the current sheet", () => {
+    const original = ["Cliente", "Receita", "Despesa"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Current sheet is missing "Despesa" → only 2 of 3 saved headers exist
+    const current = ["Receita", "Cliente"];
+    render(<Harness headers={current} autoMap={{ descricao: "Receita" }} />);
+
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, , callHeaders] = spy.mock.calls[0];
+    expect(callHeaders).toEqual(current);
+
+    // Banner gone, chip shows only 2 applied (Despesa skipped)
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/Esquema v1 aplicado \(2 campos\)/);
+
+    // Existing saved entries applied
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
+
+    // Missing header → saved mapping skipped, auto-only field preserved
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");
+    expect(screen.getByTestId("mappings").children.length).toBe(3);
+  });
 });

@@ -30,11 +30,18 @@ const ENTITY = "servicos";
 function Harness({
   headers,
   autoMap = { nome_do_servico: "Cliente" },
-}: { headers: string[]; autoMap?: Record<string, string> }) {
-  const initial = findMappingProfile(TENANT, ENTITY, headers);
+  forcedStaleProfile,
+}: {
+  headers: string[];
+  autoMap?: Record<string, string>;
+  forcedStaleProfile?: MappingProfile;
+}) {
+  const found = forcedStaleProfile
+    ? { profile: forcedStaleProfile, layoutChanged: true, currentLayoutHash: "" }
+    : findMappingProfile(TENANT, ENTITY, headers);
   const [mappings, setMappings] = useState<Record<string, string>>(autoMap);
   const [staleProfile, setStaleProfile] = useState<{ profile: MappingProfile } | null>(
-    initial?.layoutChanged ? { profile: initial.profile } : null,
+    found?.layoutChanged ? { profile: found.profile } : null,
   );
   const [appliedProfile, setAppliedProfile] = useState<{
     count: number; version: number;
@@ -164,6 +171,53 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
     expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
     expect(screen.getByTestId("map-custo_servico")).toHaveTextContent("custo_servico → Despesa");
+    expect(screen.getByTestId("mappings").children.length).toBe(3);
+  });
+
+  it("only applies saved mappings whose headers still exist in the current sheet", () => {
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Current sheet is missing "Despesa" → only 2 of 3 saved headers exist
+    const current = ["Receita", "Cliente"];
+    render(
+      <Harness
+        headers={current}
+        autoMap={{ descricao: "Receita" }}
+        forcedStaleProfile={profile}
+      />,
+    );
+
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, , callHeaders] = spy.mock.calls[0];
+    expect(callHeaders).toEqual(current);
+
+    // Banner gone, chip shows only 2 applied (Despesa skipped)
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/Esquema v1 aplicado \(2 campos\)/);
+
+    // Existing saved entries applied
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
+
+    // Missing header → saved mapping skipped, auto-only field preserved
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");
     expect(screen.getByTestId("mappings").children.length).toBe(3);
   });
 });

@@ -27,11 +27,12 @@ import * as profilesModule from "@/lib/etl/mappingProfiles";
 const TENANT = "tenant-banner-1";
 const ENTITY = "servicos";
 
-function Harness({ headers }: { headers: string[] }) {
+function Harness({
+  headers,
+  autoMap = { nome_do_servico: "Cliente" },
+}: { headers: string[]; autoMap?: Record<string, string> }) {
   const initial = findMappingProfile(TENANT, ENTITY, headers);
-  const [mappings, setMappings] = useState<Record<string, string>>({
-    nome_do_servico: "Cliente", // auto-map already inferred something
-  });
+  const [mappings, setMappings] = useState<Record<string, string>>(autoMap);
   const [staleProfile, setStaleProfile] = useState<{ profile: MappingProfile } | null>(
     initial?.layoutChanged ? { profile: initial.profile } : null,
   );

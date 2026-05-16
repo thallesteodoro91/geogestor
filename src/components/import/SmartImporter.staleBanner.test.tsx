@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useState } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import {
   saveMappingProfile,
   findMappingProfile,
@@ -324,5 +324,56 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     // Auto-only mapping still preserved across re-renders
     expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Margem");
     expect(screen.getByTestId("mappings").children.length).toBe(1);
+  });
+
+  it("unmount/remount: banner state does not leak across instances", () => {
+    // Mounting the importer with a stale profile, dismissing the banner, then
+    // unmounting must NOT persist any local state to a fresh remount. Each
+    // mount initializes its own `staleProfile`/`appliedProfile` state from
+    // scratch — there's no module-level cache that could leak.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+
+    // --- Instance A: mount, see banner, dismiss, then unmount
+    const { unmount } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
+    unmount();
+
+    // After unmount, nothing from instance A should be in the DOM
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.queryByTestId("mappings")).toBeNull();
+
+    // --- Instance B: fresh mount with a NON-stale scenario (headers match the
+    // saved profile's exact layout → layoutChanged=false → no banner). If
+    // state had leaked from A, we'd see a stray appliedProfile chip or a
+    // dismissed-but-still-present banner. Neither should appear.
+    render(<Harness headers={original} />);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    cleanup();
+
+    // --- Instance C: remount with the original stale scenario — the banner
+    // must reappear cleanly on this fresh mount (new component instance →
+    // initializer runs again), and must NOT be paired with a leftover
+    // applied-chip from prior instances.
+    render(<Harness headers={reordered} forcedStaleProfile={profile} />);
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
   });
 });

@@ -366,19 +366,14 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.queryByTestId("stale-banner")).toBeNull();
     expect(screen.queryByTestId("applied-chip")).toBeNull();
     expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    cleanup();
 
-    // --- Instance B (cont.): unmount and remount once more with the original
-    // stale scenario — the banner must reappear cleanly on this fresh mount
-    // (it's a new component instance, so the initializer runs again), and
-    // it must NOT already be paired with a leftover applied-chip from A.
-    // (no explicit unmount for instance B's first render — re-rendering
-    // via a new `render()` call below mounts an additional tree; we only
-    // assert there's still no leftover applied-chip.)
-    const { unmount: unmountB } = render(
-      <Harness headers={reordered} forcedStaleProfile={profile} />,
-    );
+    // --- Instance C: remount with the original stale scenario — the banner
+    // must reappear cleanly on this fresh mount (new component instance →
+    // initializer runs again), and must NOT be paired with a leftover
+    // applied-chip from prior instances.
+    render(<Harness headers={reordered} forcedStaleProfile={profile} />);
     expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
     expect(screen.queryByTestId("applied-chip")).toBeNull();
-    unmountB();
   });
 });

@@ -15,7 +15,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useState } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import {
   saveMappingProfile,
   findMappingProfile,

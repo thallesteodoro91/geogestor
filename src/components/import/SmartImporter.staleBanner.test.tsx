@@ -380,4 +380,97 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
     expect(screen.queryByTestId("applied-chip")).toBeNull();
   });
+
+  it("remount with different tenantId/entity: stale-banner and applied-chip state does not leak across scenarios", () => {
+    // Two distinct (tenant, entity) scenarios. Profiles saved for scenario A
+    // must not influence the banner/applied-chip rendered for scenario B, and
+    // vice-versa. Each mount must derive its banner state purely from its own
+    // (tenantId, entity, headers) tuple.
+    const tenantA = "tenant-A";
+    const entityA = "servicos";
+    const tenantB = "tenant-B";
+    const entityB = "despesas";
+
+    const headersA = ["Cliente", "Receita", "Despesa"];
+    const headersB = ["Fornecedor", "Valor", "Data"];
+
+    // Save profiles for BOTH scenarios using their original layouts
+    saveMappingProfile({
+      tenantId: tenantA, entity: entityA, headers: headersA,
+      mappings: { nome_do_servico: "Cliente", receita_servico: "Receita", custo_servico: "Despesa" },
+    });
+    saveMappingProfile({
+      tenantId: tenantB, entity: entityB, headers: headersB,
+      mappings: { fornecedor: "Fornecedor", valor: "Valor", data_despesa: "Data" },
+    });
+
+    // --- Scenario A: reordered headers → banner appears, dismiss it
+    const reorderedA = ["Receita", "Cliente", "Despesa"];
+    const { unmount: unmountA } = render(
+      <Harness
+        headers={reorderedA}
+        autoMap={{}}
+        tenantId={tenantA}
+        entity={entityA}
+      />,
+    );
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/\(3 campos\)/);
+    unmountA();
+
+    // --- Scenario B fresh mount with matching layout → no banner, no chip
+    // (state from A must not leak in)
+    render(
+      <Harness
+        headers={headersB}
+        autoMap={{}}
+        tenantId={tenantB}
+        entity={entityB}
+      />,
+    );
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("mappings").children.length).toBe(0);
+    cleanup();
+
+    // --- Scenario B with its OWN drift → banner appears for B's profile only
+    const reorderedB = ["Valor", "Fornecedor", "Data"];
+    const { unmount: unmountB } = render(
+      <Harness
+        headers={reorderedB}
+        autoMap={{}}
+        tenantId={tenantB}
+        entity={entityB}
+      />,
+    );
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    // B's saved mappings applied — A's fields must NOT appear
+    expect(screen.getByTestId("map-fornecedor")).toHaveTextContent("fornecedor → Fornecedor");
+    expect(screen.getByTestId("map-valor")).toHaveTextContent("valor → Valor");
+    expect(screen.getByTestId("map-data_despesa")).toHaveTextContent("data_despesa → Data");
+    expect(screen.queryByTestId("map-nome_do_servico")).toBeNull();
+    expect(screen.queryByTestId("map-receita_servico")).toBeNull();
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+    unmountB();
+
+    // --- Back to scenario A fresh mount: banner reappears for A's profile
+    // and the applied-chip from B's dismissal does NOT bleed through
+    render(
+      <Harness
+        headers={reorderedA}
+        autoMap={{}}
+        tenantId={tenantA}
+        entity={entityA}
+      />,
+    );
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    // A's saved mappings still intact in storage — none of B's leaked
+    expect(screen.queryByTestId("map-fornecedor")).toBeNull();
+    expect(screen.queryByTestId("map-valor")).toBeNull();
+  });
 });

@@ -371,7 +371,9 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     // stale scenario — the banner must reappear cleanly on this fresh mount
     // (it's a new component instance, so the initializer runs again), and
     // it must NOT already be paired with a leftover applied-chip from A.
-    screen.unmount?.();
+    // (no explicit unmount for instance B's first render — re-rendering
+    // via a new `render()` call below mounts an additional tree; we only
+    // assert there's still no leftover applied-chip.)
     const { unmount: unmountB } = render(
       <Harness headers={reordered} forcedStaleProfile={profile} />,
     );

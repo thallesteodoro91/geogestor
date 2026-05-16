@@ -220,4 +220,57 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Receita");
     expect(screen.getByTestId("mappings").children.length).toBe(3);
   });
+
+  it("when NO saved headers exist in current sheet, banner disappears and no saved field is applied", () => {
+    // Saved profile references headers that are completely absent from the
+    // current sheet. Forcing the apply must still clear the banner, but
+    // applyProfileToMappings should apply 0 saved entries — auto-only
+    // mappings remain untouched.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Current sheet has an entirely different column set — none of the saved
+    // headers (Cliente/Receita/Despesa) exist here.
+    const current = ["Margem", "DataServico"];
+    render(
+      <Harness
+        headers={current}
+        autoMap={{ descricao: "Margem" }}
+        forcedStaleProfile={profile}
+      />,
+    );
+
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Margem");
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const [, , callHeaders] = spy.mock.calls[0];
+    expect(callHeaders).toEqual(current);
+
+    // Banner gone
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+
+    // Chip shows 0 saved fields applied
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/Esquema v1 aplicado \(0 campos\)/);
+
+    // None of the saved fields leaked into the mapping
+    expect(screen.queryByTestId("map-nome_do_servico")).toBeNull();
+    expect(screen.queryByTestId("map-receita_servico")).toBeNull();
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+
+    // Auto-only mapping preserved verbatim, nothing else added
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Margem");
+    expect(screen.getByTestId("mappings").children.length).toBe(1);
+  });
 });

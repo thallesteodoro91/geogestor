@@ -31,14 +31,18 @@ function Harness({
   headers,
   autoMap = { nome_do_servico: "Cliente" },
   forcedStaleProfile,
+  tenantId = TENANT,
+  entity = ENTITY,
 }: {
   headers: string[];
   autoMap?: Record<string, string>;
   forcedStaleProfile?: MappingProfile;
+  tenantId?: string;
+  entity?: string;
 }) {
   const found = forcedStaleProfile
     ? { profile: forcedStaleProfile, layoutChanged: true, currentLayoutHash: "" }
-    : findMappingProfile(TENANT, ENTITY, headers);
+    : findMappingProfile(tenantId, entity, headers);
   const [mappings, setMappings] = useState<Record<string, string>>(autoMap);
   const [staleProfile, setStaleProfile] = useState<{ profile: MappingProfile } | null>(
     found?.layoutChanged ? { profile: found.profile } : null,

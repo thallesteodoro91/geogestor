@@ -273,4 +273,56 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Margem");
     expect(screen.getByTestId("mappings").children.length).toBe(1);
   });
+
+  it("after 'Aplicar mesmo assim' with 0 matching headers, staleProfile stays cleared on re-render", () => {
+    // Regression guard: once the user dismisses the stale banner via the
+    // override, subsequent re-renders of the same Harness instance must NOT
+    // recompute `found` from props and re-populate staleProfile. The state
+    // initializer should only run on mount, and the post-click setStaleProfile(null)
+    // must stick.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    // Sheet shares no headers with the saved profile
+    const current = ["Margem", "DataServico"];
+    const { rerender } = render(
+      <Harness
+        headers={current}
+        autoMap={{ descricao: "Margem" }}
+        forcedStaleProfile={profile}
+      />,
+    );
+
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+
+    // Banner cleared, chip shows 0 applied
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/\(0 campos\)/);
+
+    // Force several re-renders with the SAME props — banner must not reappear
+    for (let i = 0; i < 3; i++) {
+      rerender(
+        <Harness
+          headers={current}
+          autoMap={{ descricao: "Margem" }}
+          forcedStaleProfile={profile}
+        />,
+      );
+      expect(screen.queryByTestId("stale-banner")).toBeNull();
+      expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
+    }
+
+    // Auto-only mapping still preserved across re-renders
+    expect(screen.getByTestId("map-descricao")).toHaveTextContent("descricao → Margem");
+    expect(screen.getByTestId("mappings").children.length).toBe(1);
+  });
 });

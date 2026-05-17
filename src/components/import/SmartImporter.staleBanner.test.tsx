@@ -546,4 +546,61 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
       unmount();
     }
   });
+
+  it("after each unmount, no stale-banner / applied-chip / mappings entries remain in the DOM", () => {
+    // Across a sequence of distinct mounts (banner visible, banner dismissed,
+    // no-banner) each unmount must wipe ALL test-ids from the DOM. Nothing
+    // from the previous instance should be queryable after unmount.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const assertDomClean = () => {
+      expect(screen.queryByTestId("stale-banner")).toBeNull();
+      expect(screen.queryByTestId("applied-chip")).toBeNull();
+      expect(screen.queryByTestId("mappings")).toBeNull();
+      expect(screen.queryAllByTestId(/^map-/)).toHaveLength(0);
+    };
+
+    // --- Mount 1: banner visible, then unmount immediately (without dismissing)
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const { unmount: unmount1 } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.getByTestId("mappings")).toBeInTheDocument();
+    unmount1();
+    assertDomClean();
+
+    // --- Mount 2: banner visible → dismiss → applied-chip + mappings rendered
+    // → unmount. All three test-ids must disappear.
+    const { unmount: unmount2 } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
+    expect(screen.getByTestId("map-nome_do_servico")).toBeInTheDocument();
+    expect(screen.getByTestId("map-receita_servico")).toBeInTheDocument();
+    expect(screen.getByTestId("map-custo_servico")).toBeInTheDocument();
+    unmount2();
+    assertDomClean();
+
+    // --- Mount 3: no-banner scenario (matching layout) with a single auto-map
+    // entry → unmount must remove the mappings list + its map-* entries too.
+    const { unmount: unmount3 } = render(
+      <Harness headers={original} autoMap={{ nome_do_servico: "Cliente" }} />,
+    );
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("map-nome_do_servico")).toBeInTheDocument();
+    unmount3();
+    assertDomClean();
+  });
 });

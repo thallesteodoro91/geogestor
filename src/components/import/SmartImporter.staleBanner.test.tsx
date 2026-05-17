@@ -525,4 +525,25 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.queryByTestId("stale-banner")).toBeNull();
     expect(screen.queryByTestId("applied-chip")).toBeNull();
   });
+
+  it("remount with varying headers but NO saved profile: never shows banner or applied-chip", () => {
+    // No saveMappingProfile call → storage is empty for (TENANT, ENTITY).
+    // Across multiple remounts with different headers, findMappingProfile
+    // must return null, so neither stale-banner nor applied-chip should
+    // ever appear, and no mapping should be auto-populated.
+    const headerSets = [
+      ["Cliente", "Receita", "Despesa"],
+      ["Fornecedor", "Valor", "Data"],
+      ["Margem"],
+      ["Cliente", "Receita", "Despesa", "Extra"],
+    ];
+
+    for (const headers of headerSets) {
+      const { unmount } = render(<Harness headers={headers} autoMap={{}} />);
+      expect(screen.queryByTestId("stale-banner")).toBeNull();
+      expect(screen.queryByTestId("applied-chip")).toBeNull();
+      expect(screen.getByTestId("mappings").children.length).toBe(0);
+      unmount();
+    }
+  });
 });

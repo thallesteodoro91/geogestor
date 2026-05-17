@@ -603,4 +603,72 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     unmount3();
     assertDomClean();
   });
+
+  it("after unmount, old DOM-node handlers do not fire into a fresh remount", () => {
+    // Capture references to the OLD instance's interactive nodes (the
+    // "Aplicar mesmo assim" button and the applied-chip), then unmount and
+    // mount a fresh instance. Dispatching clicks on the now-detached old
+    // nodes must NOT mutate state in the new instance — React unmounts
+    // detach event delegation, so the new instance's banner/chip should
+    // remain exactly as initialized.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+
+    // --- Instance A: dismiss banner so we can capture BOTH the apply button
+    // (pre-dismiss) and the applied-chip (post-dismiss). Capture the apply
+    // button reference BEFORE clicking it, since it disappears after.
+    const { unmount: unmountA } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    const oldApplyBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    fireEvent.click(oldApplyBtn);
+    const oldAppliedChip = screen.getByTestId("applied-chip");
+    expect(oldAppliedChip).toBeInTheDocument();
+    unmountA();
+
+    // After unmount, both old nodes are detached from the document
+    expect(oldApplyBtn.isConnected).toBe(false);
+    expect(oldAppliedChip.isConnected).toBe(false);
+
+    // --- Instance B: fresh mount, banner visible, applied-chip absent
+    render(<Harness headers={reordered} forcedStaleProfile={profile} />);
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+
+    // Spy to confirm no React handlers fire from the detached nodes into B
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Dispatch clicks on the OLD detached nodes — they must be no-ops
+    fireEvent.click(oldApplyBtn);
+    fireEvent.click(oldAppliedChip);
+    // Also try a raw native click for good measure
+    oldApplyBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    oldAppliedChip.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    // applyProfileToMappings must NOT have been triggered by old handlers
+    expect(spy).not.toHaveBeenCalled();
+
+    // Instance B state is unchanged: banner still visible, no chip
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    // No saved mappings were merged in — only the default auto-map entry
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.queryByTestId("map-receita_servico")).toBeNull();
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+
+    // Sanity: clicking the FRESH apply button in B still works normally
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
+  });
 });

@@ -473,4 +473,56 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.queryByTestId("map-fornecedor")).toBeNull();
     expect(screen.queryByTestId("map-valor")).toBeNull();
   });
+
+  it("remount with same tenant/entity but different headers: banner and applied-chip react to the new match", () => {
+    // Same (tenantId, entity) across mounts — only the headers change. The
+    // stale-banner and applied-chip must be derived freshly per mount from
+    // the current headers vs. the saved profile, with no leakage between
+    // remounts.
+    const original = ["Cliente", "Receita", "Despesa"];
+    saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    // --- Mount 1: headers match the saved layout exactly → no banner, no chip
+    const { unmount: unmount1 } = render(<Harness headers={original} autoMap={{}} />);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("mappings").children.length).toBe(0);
+    unmount1();
+
+    // --- Mount 2: same tenant/entity, but headers reordered → banner appears
+    const reordered = ["Despesa", "Receita", "Cliente"];
+    const { unmount: unmount2 } = render(<Harness headers={reordered} autoMap={{}} />);
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/\(3 campos\)/);
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.getByTestId("map-receita_servico")).toHaveTextContent("receita_servico → Receita");
+    expect(screen.getByTestId("map-custo_servico")).toHaveTextContent("custo_servico → Despesa");
+    unmount2();
+
+    // --- Mount 3: same tenant/entity, headers fully replaced (no overlap with
+    // saved profile) → natural lookup finds no profile, so banner is absent.
+    // Applied-chip from mount 2 must NOT bleed through.
+    const replaced = ["Margem", "DataServico", "Observacao"];
+    const { unmount: unmount3 } = render(<Harness headers={replaced} autoMap={{}} />);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("mappings").children.length).toBe(0);
+    unmount3();
+
+    // --- Mount 4: back to original headers → no banner, no chip again
+    render(<Harness headers={original} autoMap={{}} />);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+  });
 });

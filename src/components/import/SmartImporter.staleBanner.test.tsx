@@ -511,21 +511,12 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     unmount2();
 
     // --- Mount 3: same tenant/entity, headers fully replaced (no overlap with
-    // saved profile) → banner still appears (layoutChanged=true), but
-    // dismissing applies 0 saved fields since no saved header exists
+    // saved profile) → natural lookup finds no profile, so banner is absent.
+    // Applied-chip from mount 2 must NOT bleed through.
     const replaced = ["Margem", "DataServico", "Observacao"];
     const { unmount: unmount3 } = render(<Harness headers={replaced} autoMap={{}} />);
-    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
-    // Applied-chip from mount 2 must NOT bleed through
-    expect(screen.queryByTestId("applied-chip")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /aplicar mesmo assim/i }));
     expect(screen.queryByTestId("stale-banner")).toBeNull();
-    expect(screen.getByTestId("applied-chip")).toHaveTextContent(/\(0 campos\)/);
-    // None of the saved mappings leaked in
-    expect(screen.queryByTestId("map-nome_do_servico")).toBeNull();
-    expect(screen.queryByTestId("map-receita_servico")).toBeNull();
-    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
     expect(screen.getByTestId("mappings").children.length).toBe(0);
     unmount3();
 

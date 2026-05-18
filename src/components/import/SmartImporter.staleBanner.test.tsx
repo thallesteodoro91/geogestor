@@ -671,4 +671,81 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.queryByTestId("stale-banner")).toBeNull();
     expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
   });
+
+  it("keyboard events (Enter/Space) on old apply button and applied-chip do not fire after unmount+remount", () => {
+    // After unmount, React detaches synthetic event delegation. Dispatching
+    // keyboard events on the detached old nodes must be no-ops and must not
+    // mutate the freshly mounted instance's state.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+
+    // --- Instance A: capture apply button (pre-dismiss) and chip (post-dismiss)
+    const { unmount: unmountA } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    const oldApplyBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    fireEvent.click(oldApplyBtn);
+    const oldAppliedChip = screen.getByTestId("applied-chip");
+    expect(oldAppliedChip).toBeInTheDocument();
+    unmountA();
+
+    expect(oldApplyBtn.isConnected).toBe(false);
+    expect(oldAppliedChip.isConnected).toBe(false);
+
+    // --- Instance B: fresh mount, banner visible, applied-chip absent
+    render(<Harness headers={reordered} forcedStaleProfile={profile} />);
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+
+    // Dispatch Enter and Space (keydown/keypress/keyup) on the OLD detached
+    // apply button — must NOT trigger applyProfileToMappings or mutate B.
+    for (const key of ["Enter", " "] as const) {
+      const code = key === " " ? "Space" : "Enter";
+      fireEvent.keyDown(oldApplyBtn, { key, code });
+      fireEvent.keyPress(oldApplyBtn, { key, code });
+      fireEvent.keyUp(oldApplyBtn, { key, code });
+      oldApplyBtn.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true }));
+      oldApplyBtn.dispatchEvent(new KeyboardEvent("keyup", { key, code, bubbles: true }));
+    }
+
+    // Same for the old applied-chip (non-interactive <div>; any leaked
+    // listener would be caught here too).
+    for (const key of ["Enter", " "] as const) {
+      const code = key === " " ? "Space" : "Enter";
+      fireEvent.keyDown(oldAppliedChip, { key, code });
+      fireEvent.keyUp(oldAppliedChip, { key, code });
+      oldAppliedChip.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true }));
+    }
+
+    expect(spy).not.toHaveBeenCalled();
+
+    // Instance B state unchanged: banner still visible, no chip, no merged mappings
+    expect(screen.getByTestId("stale-banner")).toBeInTheDocument();
+    expect(screen.queryByTestId("applied-chip")).toBeNull();
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent("nome_do_servico → Cliente");
+    expect(screen.queryByTestId("map-receita_servico")).toBeNull();
+    expect(screen.queryByTestId("map-custo_servico")).toBeNull();
+
+    // Sanity: keyboard-driven activation on the FRESH apply button still works.
+    // jsdom does not synthesize a click from Enter keydown, so we also fire
+    // a click — the goal here is to confirm the live handler path is intact.
+    const freshBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    fireEvent.keyDown(freshBtn, { key: "Enter", code: "Enter" });
+    fireEvent.keyUp(freshBtn, { key: "Enter", code: "Enter" });
+    fireEvent.click(freshBtn);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
+  });
 });

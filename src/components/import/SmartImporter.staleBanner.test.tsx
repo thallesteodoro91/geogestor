@@ -813,4 +813,101 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(document.activeElement).not.toBe(oldApplyBtn);
     expect(freshChip.isConnected).toBe(true);
   });
+
+  it("after unmount+remount, Tab order reaches the fresh apply button and applied-chip, never the old nodes", () => {
+    // Make the applied-chip focusable so it participates in Tab order
+    // (the production chip is decorative; here we simulate a focusable
+    // variant to assert Tab traversal can reach BOTH the new button and
+    // the new chip without ever landing on detached old nodes).
+    function FocusableHarness(props: React.ComponentProps<typeof Harness>) {
+      return (
+        <div>
+          <button data-testid="before">before</button>
+          <Harness {...props} />
+          <button data-testid="after">after</button>
+        </div>
+      );
+    }
+
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const tabbableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    // --- Instance A: capture references to old apply button + applied-chip,
+    // dismiss banner so the chip exists, then unmount.
+    const { unmount: unmountA } = render(
+      <FocusableHarness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    const oldApplyBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    fireEvent.click(oldApplyBtn);
+    const oldChip = screen.getByTestId("applied-chip");
+    // Make the old chip artificially focusable too, so we can prove the
+    // new tab walk never returns it.
+    oldChip.setAttribute("tabindex", "0");
+    unmountA();
+    expect(oldApplyBtn.isConnected).toBe(false);
+    expect(oldChip.isConnected).toBe(false);
+
+    // --- Instance B: fresh mount. Banner is visible; click to surface the
+    // fresh applied-chip, then mark it tabbable for the traversal check.
+    render(<FocusableHarness headers={reordered} forcedStaleProfile={profile} />);
+    const freshBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    expect(freshBtn).not.toBe(oldApplyBtn);
+    fireEvent.click(freshBtn);
+    const freshChip = screen.getByTestId("applied-chip");
+    freshChip.setAttribute("tabindex", "0");
+    expect(freshChip).not.toBe(oldChip);
+
+    // Collect every tabbable element currently in the document, in source
+    // (Tab) order. jsdom does not move focus on a real Tab keypress, so we
+    // walk the list manually with .focus() — this is the standard way to
+    // assert Tab order in jsdom.
+    const tabbables = Array.from(
+      document.querySelectorAll<HTMLElement>(tabbableSelector),
+    ).filter(el => !el.hasAttribute("disabled"));
+
+    // Sanity: no detached old node leaked into the tabbable set
+    expect(tabbables).not.toContain(oldApplyBtn);
+    expect(tabbables).not.toContain(oldChip);
+    for (const el of tabbables) {
+      expect(el.isConnected).toBe(true);
+      expect(el.ownerDocument).toBe(document);
+    }
+
+    // Fresh chip is reachable in Tab order (button was unmounted after
+    // dismiss, but the chip remains and is now tabbable)
+    expect(tabbables).toContain(freshChip);
+
+    // Walk Tab order from the "before" anchor — focus must visit the fresh
+    // chip and never land on an old detached node along the way.
+    const before = screen.getByTestId("before");
+    const after = screen.getByTestId("after");
+    const startIdx = tabbables.indexOf(before);
+    const visited: HTMLElement[] = [];
+    for (let i = startIdx; i < tabbables.length; i++) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      visited.push(tabbables[i]);
+    }
+
+    expect(visited).toContain(freshChip);
+    expect(visited).toContain(after);
+    expect(visited).not.toContain(oldApplyBtn);
+    expect(visited).not.toContain(oldChip);
+
+    // Final focus is the last tabbable, not a detached old node
+    expect(document.activeElement).not.toBe(oldApplyBtn);
+    expect(document.activeElement).not.toBe(oldChip);
+    expect(document.activeElement?.isConnected).toBe(true);
+  });
 });

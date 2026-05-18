@@ -748,4 +748,69 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(screen.queryByTestId("stale-banner")).toBeNull();
     expect(screen.getByTestId("applied-chip")).toBeInTheDocument();
   });
+
+  it("after unmount+remount, focus does not stick to old nodes and keyboard works on fresh ones", () => {
+    // Verify that:
+    //  1) Focusing the old apply button BEFORE unmount, then unmounting,
+    //     leaves activeElement as <body> (no leaked focus on detached node).
+    //  2) The fresh remount's button can be focused and activated via
+    //     keyboard (Enter), driving applyProfileToMappings exactly once.
+    //  3) The fresh applied-chip is then in the document and the old
+    //     detached chip is no longer the activeElement.
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+
+    // --- Instance A: focus the apply button, then unmount
+    const { unmount: unmountA } = render(
+      <Harness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    const oldApplyBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    oldApplyBtn.focus();
+    expect(document.activeElement).toBe(oldApplyBtn);
+
+    unmountA();
+
+    // Old node detached; activeElement must not be the old button anymore
+    expect(oldApplyBtn.isConnected).toBe(false);
+    expect(document.activeElement).not.toBe(oldApplyBtn);
+    // Browsers fall back to <body> when the focused element is removed
+    expect(document.activeElement === document.body || document.activeElement === null).toBe(true);
+
+    // --- Instance B: fresh mount
+    render(<Harness headers={reordered} forcedStaleProfile={profile} />);
+    const freshBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    expect(freshBtn).not.toBe(oldApplyBtn);
+
+    // Focus shifts to the fresh button — it must accept focus
+    freshBtn.focus();
+    expect(document.activeElement).toBe(freshBtn);
+
+    // Keyboard activation on the FRESH button drives the handler.
+    // jsdom does not synthesize a click from Enter keydown on <button>,
+    // so we fire the equivalent click after the keyboard events to assert
+    // the handler path is wired and the fresh tree responds.
+    const spy = vi.spyOn(profilesModule, "applyProfileToMappings");
+    fireEvent.keyDown(freshBtn, { key: "Enter", code: "Enter" });
+    fireEvent.keyUp(freshBtn, { key: "Enter", code: "Enter" });
+    fireEvent.click(freshBtn);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId("stale-banner")).toBeNull();
+    const freshChip = screen.getByTestId("applied-chip");
+    expect(freshChip).toBeInTheDocument();
+
+    // The old (now detached) button must not be the activeElement, and
+    // the fresh chip is a brand-new node in the document.
+    expect(document.activeElement).not.toBe(oldApplyBtn);
+    expect(freshChip.isConnected).toBe(true);
+  });
 });

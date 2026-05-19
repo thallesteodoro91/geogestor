@@ -910,4 +910,95 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(document.activeElement).not.toBe(oldChip);
     expect(document.activeElement?.isConnected).toBe(true);
   });
+
+  it("after unmount+remount, Shift+Tab (reverse) order reaches fresh chip and button, never old nodes", () => {
+    // Mirror of the Tab-order test, but walking the tabbable list in
+    // reverse to simulate Shift+Tab. jsdom doesn't move focus on real
+    // key events, so we walk the list manually — the assertion is that
+    // the reverse order never lands on detached old nodes.
+    function FocusableHarness(props: React.ComponentProps<typeof Harness>) {
+      return (
+        <div>
+          <button data-testid="before">before</button>
+          <Harness {...props} />
+          <button data-testid="after">after</button>
+        </div>
+      );
+    }
+
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const tabbableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    // --- Instance A: capture old button + chip, then unmount
+    const { unmount: unmountA } = render(
+      <FocusableHarness headers={reordered} forcedStaleProfile={profile} />,
+    );
+    const oldApplyBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    fireEvent.click(oldApplyBtn);
+    const oldChip = screen.getByTestId("applied-chip");
+    oldChip.setAttribute("tabindex", "0");
+    unmountA();
+    expect(oldApplyBtn.isConnected).toBe(false);
+    expect(oldChip.isConnected).toBe(false);
+
+    // --- Instance B: fresh mount; surface fresh chip & make it tabbable
+    render(<FocusableHarness headers={reordered} forcedStaleProfile={profile} />);
+    const freshBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    expect(freshBtn).not.toBe(oldApplyBtn);
+    fireEvent.click(freshBtn);
+    const freshChip = screen.getByTestId("applied-chip");
+    freshChip.setAttribute("tabindex", "0");
+    expect(freshChip).not.toBe(oldChip);
+
+    const tabbables = Array.from(
+      document.querySelectorAll<HTMLElement>(tabbableSelector),
+    ).filter(el => !el.hasAttribute("disabled"));
+
+    // Sanity: detached old nodes never made it into the tabbable set
+    expect(tabbables).not.toContain(oldApplyBtn);
+    expect(tabbables).not.toContain(oldChip);
+    for (const el of tabbables) {
+      expect(el.isConnected).toBe(true);
+      expect(el.ownerDocument).toBe(document);
+    }
+
+    expect(tabbables).toContain(freshChip);
+
+    // Walk REVERSE order (Shift+Tab) starting from the "after" anchor
+    const before = screen.getByTestId("before");
+    const after = screen.getByTestId("after");
+    const startIdx = tabbables.indexOf(after);
+    expect(startIdx).toBeGreaterThanOrEqual(0);
+
+    const visited: HTMLElement[] = [];
+    for (let i = startIdx; i >= 0; i--) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      visited.push(tabbables[i]);
+    }
+
+    // Reverse traversal reaches the fresh chip and the "before" anchor,
+    // with the chip visited BEFORE "before" (since it sits later in DOM
+    // order, reverse walk hits it first), and never visits an old node.
+    expect(visited).toContain(freshChip);
+    expect(visited).toContain(before);
+    expect(visited.indexOf(freshChip)).toBeLessThan(visited.indexOf(before));
+    expect(visited).not.toContain(oldApplyBtn);
+    expect(visited).not.toContain(oldChip);
+
+    expect(document.activeElement).not.toBe(oldApplyBtn);
+    expect(document.activeElement).not.toBe(oldChip);
+    expect(document.activeElement?.isConnected).toBe(true);
+  });
 });

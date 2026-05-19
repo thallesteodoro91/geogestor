@@ -1125,4 +1125,165 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
       expect(document.activeElement).not.toBe(old);
     }
   });
+
+  it("after editing mappings (causing chip re-render), Tab and Shift+Tab never visit old chip nodes and reach the current chip/button", () => {
+    // Mirror of Harness but with an extra "edit mapping" button so we can
+    // force re-renders of the applied-chip without unmount/remount. We
+    // capture chip references across each edit and assert that Tab and
+    // Shift+Tab traversals after the final edit only reach the current
+    // (connected) chip — never any of the prior chip nodes that React
+    // may have replaced during re-renders.
+    function EditableHarness({
+      headers,
+      forcedStaleProfile,
+    }: {
+      headers: string[];
+      forcedStaleProfile: MappingProfile;
+    }) {
+      const [mappings, setMappings] = useState<Record<string, string>>({
+        nome_do_servico: "Cliente",
+      });
+      const [staleProfile, setStaleProfile] = useState<{ profile: MappingProfile } | null>(
+        { profile: forcedStaleProfile },
+      );
+      const [appliedProfile, setAppliedProfile] = useState<{
+        count: number; version: number;
+      } | null>(null);
+      const [editCount, setEditCount] = useState(0);
+
+      return (
+        <div>
+          <button data-testid="before">before</button>
+          {staleProfile && (
+            <button
+              data-testid="apply-btn"
+              onClick={() => {
+                const prof = staleProfile.profile;
+                setMappings(prev => {
+                  const { merged, appliedCount } = applyProfileToMappings(prev, prof, headers);
+                  setAppliedProfile({ count: appliedCount, version: prof.version });
+                  return merged;
+                });
+                setStaleProfile(null);
+              }}
+            >
+              Aplicar mesmo assim
+            </button>
+          )}
+          {appliedProfile && (
+            // key changes on each edit → React unmounts the old chip node
+            // and mounts a fresh one, exactly the scenario under test
+            <div key={`chip-${editCount}`} data-testid="applied-chip" tabIndex={0}>
+              Esquema v{appliedProfile.version} aplicado ({appliedProfile.count} campos) · edits={editCount}
+            </div>
+          )}
+          <button
+            data-testid="edit-mapping"
+            onClick={() => {
+              setMappings(prev => ({ ...prev, nome_do_servico: `Cliente-${editCount + 1}` }));
+              setEditCount(c => c + 1);
+            }}
+          >
+            edit mapping
+          </button>
+          <ul data-testid="mappings">
+            {Object.entries(mappings).map(([f, h]) => (
+              <li key={f} data-testid={`map-${f}`}>{f} → {h}</li>
+            ))}
+          </ul>
+          <button data-testid="after">after</button>
+        </div>
+      );
+    }
+
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const tabbableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    render(<EditableHarness headers={reordered} forcedStaleProfile={profile} />);
+
+    // Dismiss banner → chip mounts for the first time
+    fireEvent.click(screen.getByTestId("apply-btn"));
+    const oldChips: HTMLElement[] = [screen.getByTestId("applied-chip")];
+
+    // Trigger several mapping edits — each one bumps the chip key, so React
+    // replaces the chip DOM node every time.
+    const EDITS = 4;
+    for (let i = 0; i < EDITS; i++) {
+      fireEvent.click(screen.getByTestId("edit-mapping"));
+      const chip = screen.getByTestId("applied-chip");
+      // The new chip MUST be a different DOM node than every prior one
+      for (const old of oldChips) expect(chip).not.toBe(old);
+      oldChips.push(chip);
+    }
+
+    // The current chip is the last one captured; all earlier chip nodes
+    // must now be detached.
+    const freshChip = oldChips[oldChips.length - 1];
+    const priorChips = oldChips.slice(0, -1);
+    expect(freshChip.isConnected).toBe(true);
+    for (const old of priorChips) expect(old.isConnected).toBe(false);
+
+    // Mapping content reflects the last edit
+    expect(screen.getByTestId("map-nome_do_servico")).toHaveTextContent(
+      `nome_do_servico → Cliente-${EDITS}`,
+    );
+
+    const tabbables = Array.from(
+      document.querySelectorAll<HTMLElement>(tabbableSelector),
+    ).filter(el => !el.hasAttribute("disabled"));
+
+    // Sanity: no prior chip node leaked into the tabbable set
+    for (const old of priorChips) {
+      expect(tabbables).not.toContain(old);
+    }
+    for (const el of tabbables) {
+      expect(el.isConnected).toBe(true);
+      expect(el.ownerDocument).toBe(document);
+    }
+    expect(tabbables).toContain(freshChip);
+
+    const before = screen.getByTestId("before");
+    const after = screen.getByTestId("after");
+    const beforeIdx = tabbables.indexOf(before);
+    const afterIdx = tabbables.indexOf(after);
+    expect(beforeIdx).toBeGreaterThanOrEqual(0);
+    expect(afterIdx).toBeGreaterThan(beforeIdx);
+
+    // Forward (Tab) traversal
+    const forwardVisited: HTMLElement[] = [];
+    for (let i = beforeIdx; i <= afterIdx; i++) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      forwardVisited.push(tabbables[i]);
+    }
+    expect(forwardVisited).toContain(freshChip);
+    expect(forwardVisited).toContain(after);
+    for (const old of priorChips) expect(forwardVisited).not.toContain(old);
+
+    // Reverse (Shift+Tab) traversal
+    const reverseVisited: HTMLElement[] = [];
+    for (let i = afterIdx; i >= beforeIdx; i--) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      reverseVisited.push(tabbables[i]);
+    }
+    expect(reverseVisited).toContain(freshChip);
+    expect(reverseVisited).toContain(before);
+    expect(reverseVisited.indexOf(freshChip)).toBeLessThan(reverseVisited.indexOf(before));
+    for (const old of priorChips) expect(reverseVisited).not.toContain(old);
+
+    // Final focus is a live, connected node — not any old chip
+    expect(document.activeElement?.isConnected).toBe(true);
+    for (const old of priorChips) expect(document.activeElement).not.toBe(old);
+  });
 });

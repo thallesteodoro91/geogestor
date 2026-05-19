@@ -1001,4 +1001,128 @@ describe("SmartImporter stale-profile banner — 'Aplicar mesmo assim'", () => {
     expect(document.activeElement).not.toBe(oldChip);
     expect(document.activeElement?.isConnected).toBe(true);
   });
+
+  it("after multiple unmount+remount cycles, Tab and Shift+Tab never visit old nodes and always reach fresh chip and button", () => {
+    // Stress test: cycle the component N times, accumulating references
+    // to every old apply button and applied-chip. After the final mount,
+    // walk Tab (forward) and Shift+Tab (reverse) order and assert that
+    // none of the detached old nodes are ever visited, while the fresh
+    // chip and button are reachable in both directions.
+    function FocusableHarness(props: React.ComponentProps<typeof Harness>) {
+      return (
+        <div>
+          <button data-testid="before">before</button>
+          <Harness {...props} />
+          <button data-testid="after">after</button>
+        </div>
+      );
+    }
+
+    const original = ["Cliente", "Receita", "Despesa"];
+    const profile = saveMappingProfile({
+      tenantId: TENANT, entity: ENTITY, headers: original,
+      mappings: {
+        nome_do_servico: "Cliente",
+        receita_servico: "Receita",
+        custo_servico: "Despesa",
+      },
+    });
+
+    const reordered = ["Receita", "Cliente", "Despesa"];
+    const tabbableSelector =
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    const oldButtons: HTMLElement[] = [];
+    const oldChips: HTMLElement[] = [];
+
+    // --- Cycle N times: mount, dismiss banner, capture refs, unmount
+    const CYCLES = 5;
+    for (let i = 0; i < CYCLES; i++) {
+      const { unmount } = render(
+        <FocusableHarness headers={reordered} forcedStaleProfile={profile} />,
+      );
+      const btn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+      fireEvent.click(btn);
+      const chip = screen.getByTestId("applied-chip");
+      // Make chip tabbable so we can prove it doesn't leak across cycles
+      chip.setAttribute("tabindex", "0");
+      btn.focus(); // also exercise focus on each cycle
+      oldButtons.push(btn);
+      oldChips.push(chip);
+      unmount();
+      expect(btn.isConnected).toBe(false);
+      expect(chip.isConnected).toBe(false);
+    }
+
+    expect(oldButtons).toHaveLength(CYCLES);
+    expect(new Set(oldButtons).size).toBe(CYCLES); // all unique nodes
+    expect(new Set(oldChips).size).toBe(CYCLES);
+
+    // --- Final fresh mount
+    render(<FocusableHarness headers={reordered} forcedStaleProfile={profile} />);
+    const freshBtn = screen.getByRole("button", { name: /aplicar mesmo assim/i });
+    // Fresh button must not be any of the old ones
+    for (const old of oldButtons) expect(freshBtn).not.toBe(old);
+    fireEvent.click(freshBtn);
+    const freshChip = screen.getByTestId("applied-chip");
+    freshChip.setAttribute("tabindex", "0");
+    for (const old of oldChips) expect(freshChip).not.toBe(old);
+
+    const tabbables = Array.from(
+      document.querySelectorAll<HTMLElement>(tabbableSelector),
+    ).filter(el => !el.hasAttribute("disabled"));
+
+    // Sanity: no old detached node leaked into the tabbable set
+    for (const old of [...oldButtons, ...oldChips]) {
+      expect(tabbables).not.toContain(old);
+      expect(old.isConnected).toBe(false);
+    }
+    for (const el of tabbables) {
+      expect(el.isConnected).toBe(true);
+      expect(el.ownerDocument).toBe(document);
+    }
+    expect(tabbables).toContain(freshChip);
+
+    const before = screen.getByTestId("before");
+    const after = screen.getByTestId("after");
+    const beforeIdx = tabbables.indexOf(before);
+    const afterIdx = tabbables.indexOf(after);
+    expect(beforeIdx).toBeGreaterThanOrEqual(0);
+    expect(afterIdx).toBeGreaterThan(beforeIdx);
+
+    // --- Forward (Tab) walk from "before" → must reach fresh chip & "after",
+    // never any old node
+    const forwardVisited: HTMLElement[] = [];
+    for (let i = beforeIdx; i < tabbables.length; i++) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      forwardVisited.push(tabbables[i]);
+    }
+    expect(forwardVisited).toContain(freshChip);
+    expect(forwardVisited).toContain(after);
+    for (const old of [...oldButtons, ...oldChips]) {
+      expect(forwardVisited).not.toContain(old);
+    }
+
+    // --- Reverse (Shift+Tab) walk from "after" → must reach fresh chip & "before",
+    // never any old node
+    const reverseVisited: HTMLElement[] = [];
+    for (let i = afterIdx; i >= 0; i--) {
+      tabbables[i].focus();
+      expect(document.activeElement).toBe(tabbables[i]);
+      reverseVisited.push(tabbables[i]);
+    }
+    expect(reverseVisited).toContain(freshChip);
+    expect(reverseVisited).toContain(before);
+    expect(reverseVisited.indexOf(freshChip)).toBeLessThan(reverseVisited.indexOf(before));
+    for (const old of [...oldButtons, ...oldChips]) {
+      expect(reverseVisited).not.toContain(old);
+    }
+
+    // Final focus must be on a live node
+    expect(document.activeElement?.isConnected).toBe(true);
+    for (const old of [...oldButtons, ...oldChips]) {
+      expect(document.activeElement).not.toBe(old);
+    }
+  });
 });

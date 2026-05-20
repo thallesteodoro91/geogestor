@@ -138,6 +138,8 @@ export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
 
 export async function deleteOrcamento(id: string) {
   const tenantId = await getCurrentTenantId();
+  // Remove no Google antes de apagar local (fire-and-forget)
+  deleteEventFromGoogle(id, 'orcamento');
   let query = supabase.from('fato_orcamento').delete().eq('id_orcamento', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;

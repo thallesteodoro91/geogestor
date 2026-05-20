@@ -1,22 +1,40 @@
 /**
  * @fileoverview Serviço de integração com Google Calendar
- * Gerencia conexão OAuth, sincronização e status
+ * Gerencia conexão OAuth, sincronização, preferências e status
  */
 
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
+import type { EventCategory } from '@/lib/calendar/eventCategories';
 
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
+export interface GoogleCalendarSyncTypes {
+  servico?: boolean;
+  visita?: boolean;
+  orcamento?: boolean;
+  vencimento?: boolean;
+  financeiro?: boolean;
+  reuniao?: boolean;
+  tarefa?: boolean;
+}
 
 export interface GoogleCalendarStatus {
   connected: boolean;
   last_synced_at: string | null;
   connected_at: string | null;
+  selected_calendar_id: string;
+  calendar_label: string | null;
+  auto_sync_enabled: boolean;
+  sync_types: GoogleCalendarSyncTypes;
+  connection_status: 'active' | 'needs_reconnect' | string;
 }
 
-/**
- * Verifica o status da conexão com o Google Calendar
- */
+export interface GoogleCalendarItem {
+  id: string;
+  summary: string;
+  primary: boolean;
+  backgroundColor?: string;
+}
+
 export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
   const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
     body: { action: 'status' },
@@ -24,16 +42,21 @@ export async function getGoogleCalendarStatus(): Promise<GoogleCalendarStatus> {
 
   if (error) {
     console.error('Erro ao verificar status Google Calendar:', error);
-    return { connected: false, last_synced_at: null, connected_at: null };
+    return {
+      connected: false,
+      last_synced_at: null,
+      connected_at: null,
+      selected_calendar_id: 'primary',
+      calendar_label: null,
+      auto_sync_enabled: true,
+      sync_types: {},
+      connection_status: 'active',
+    };
   }
 
-  return data;
+  return data as GoogleCalendarStatus;
 }
 
-/**
- * Inicia o fluxo de conexão OAuth com o Google Calendar
- * Abre popup para autorização
- */
 export async function connectGoogleCalendar(): Promise<void> {
   const tenantId = await getCurrentTenantId();
   if (!tenantId) throw new Error('Tenant não identificado');
@@ -50,13 +73,9 @@ export async function connectGoogleCalendar(): Promise<void> {
     throw new Error('Erro ao gerar URL de autorização');
   }
 
-  // Full page redirect instead of popup
   window.location.href = data.url;
 }
 
-/**
- * Desconecta o Google Calendar
- */
 export async function disconnectGoogleCalendar(): Promise<void> {
   const { error } = await supabase.functions.invoke('google-calendar-auth', {
     body: { action: 'disconnect' },
@@ -65,12 +84,29 @@ export async function disconnectGoogleCalendar(): Promise<void> {
   if (error) throw new Error('Erro ao desconectar Google Calendar');
 }
 
-/**
- * Sincroniza um evento específico com o Google Calendar
- */
+export async function listGoogleCalendars(): Promise<GoogleCalendarItem[]> {
+  const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+    body: { action: 'list-calendars' },
+  });
+  if (error) throw new Error('Erro ao listar calendários');
+  return (data?.calendars || []) as GoogleCalendarItem[];
+}
+
+export async function updateGoogleCalendarPreferences(payload: {
+  selected_calendar_id?: string;
+  calendar_label?: string;
+  auto_sync_enabled?: boolean;
+  sync_types?: GoogleCalendarSyncTypes;
+}): Promise<void> {
+  const { error } = await supabase.functions.invoke('google-calendar-auth', {
+    body: { action: 'update-preferences', ...payload },
+  });
+  if (error) throw new Error('Erro ao salvar preferências');
+}
+
 export async function syncEventToGoogle(
   eventId: string,
-  eventType: 'orcamento' | 'servico'
+  eventType: 'orcamento' | 'servico',
 ): Promise<void> {
   const { data, error } = await supabase.functions.invoke('google-calendar-sync', {
     body: { action: 'push', event_id: eventId, event_type: eventType },
@@ -78,7 +114,6 @@ export async function syncEventToGoogle(
 
   if (error) {
     console.error('Erro ao sincronizar com Google Calendar:', error);
-    // Don't throw - sync failure shouldn't block the user's operation
   }
 
   if (data?.skipped) {
@@ -86,9 +121,16 @@ export async function syncEventToGoogle(
   }
 }
 
-/**
- * Executa sincronização completa de todos os eventos
- */
+export async function deleteEventFromGoogle(
+  eventId: string,
+  eventType: 'orcamento' | 'servico',
+): Promise<void> {
+  const { error } = await supabase.functions.invoke('google-calendar-sync', {
+    body: { action: 'delete', event_id: eventId, event_type: eventType },
+  });
+  if (error) console.error('Erro ao remover evento do Google Calendar:', error);
+}
+
 export async function fullSyncGoogleCalendar(): Promise<{ synced: number; errors: number }> {
   const { data, error } = await supabase.functions.invoke('google-calendar-sync', {
     body: { action: 'full-sync' },
@@ -98,3 +140,5 @@ export async function fullSyncGoogleCalendar(): Promise<{ synced: number; errors
 
   return { synced: data?.synced || 0, errors: data?.errors || 0 };
 }
+
+export type { EventCategory };

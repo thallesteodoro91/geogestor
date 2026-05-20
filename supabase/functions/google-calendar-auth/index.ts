@@ -190,7 +190,9 @@ Deno.serve(async (req) => {
       if (action === "status") {
         const { data } = await supabase
           .from("google_calendar_tokens")
-          .select("created_at, last_synced_at")
+          .select(
+            "created_at, last_synced_at, selected_calendar_id, calendar_label, auto_sync_enabled, sync_types, connection_status",
+          )
           .eq("user_id", userId)
           .maybeSingle();
 
@@ -199,9 +201,104 @@ Deno.serve(async (req) => {
             connected: !!data,
             last_synced_at: data?.last_synced_at,
             connected_at: data?.created_at,
+            selected_calendar_id: data?.selected_calendar_id ?? "primary",
+            calendar_label: data?.calendar_label ?? null,
+            auto_sync_enabled: data?.auto_sync_enabled ?? true,
+            sync_types: data?.sync_types ?? {},
+            connection_status: data?.connection_status ?? "active",
           }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
+      }
+
+      if (action === "list-calendars") {
+        const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const { data: tokenRow } = await supabaseAdmin
+          .from("google_calendar_tokens")
+          .select("*")
+          .eq("user_id", userId)
+          .single();
+        if (!tokenRow) {
+          return new Response(JSON.stringify({ error: "Not connected" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        // Refresh token if needed
+        let accessToken = tokenRow.access_token;
+        if (new Date(tokenRow.token_expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
+          const r = await fetch(GOOGLE_TOKEN_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({
+              refresh_token: tokenRow.refresh_token,
+              client_id: GOOGLE_CLIENT_ID,
+              client_secret: GOOGLE_CLIENT_SECRET,
+              grant_type: "refresh_token",
+            }),
+          });
+          if (r.ok) {
+            const j = await r.json();
+            accessToken = j.access_token;
+            await supabaseAdmin
+              .from("google_calendar_tokens")
+              .update({
+                access_token: j.access_token,
+                token_expires_at: new Date(Date.now() + j.expires_in * 1000).toISOString(),
+              })
+              .eq("id", tokenRow.id);
+          }
+        }
+        const listRes = await fetch(
+          "https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer",
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        const list = await listRes.json();
+        if (!listRes.ok) {
+          return new Response(
+            JSON.stringify({ error: "Failed to list calendars", details: list }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        const calendars = (list.items || []).map((c: any) => ({
+          id: c.id,
+          summary: c.summary,
+          primary: !!c.primary,
+          backgroundColor: c.backgroundColor,
+        }));
+        return new Response(JSON.stringify({ calendars }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      if (action === "update-preferences") {
+        const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+        if (typeof body.selected_calendar_id === "string") {
+          patch.selected_calendar_id = body.selected_calendar_id;
+        }
+        if (typeof body.calendar_label === "string") {
+          patch.calendar_label = body.calendar_label;
+        }
+        if (typeof body.auto_sync_enabled === "boolean") {
+          patch.auto_sync_enabled = body.auto_sync_enabled;
+        }
+        if (body.sync_types && typeof body.sync_types === "object") {
+          patch.sync_types = body.sync_types;
+        }
+        const { error } = await supabaseAdmin
+          .from("google_calendar_tokens")
+          .update(patch)
+          .eq("user_id", userId);
+        if (error) {
+          return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
       }
 
       return new Response(JSON.stringify({ error: "Invalid action" }), {

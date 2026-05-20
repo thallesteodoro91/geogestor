@@ -5,7 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarOrcamentoEmitido, registrarOrcamentoConvertido } from '@/modules/crm/services/cliente-eventos.service';
-import { syncEventToGoogle } from '@/services/google-calendar.service';
+import { syncEventToGoogle, deleteEventFromGoogle } from '@/services/google-calendar.service';
 
 export interface Orcamento {
   id_orcamento: string;
@@ -138,6 +138,8 @@ export async function updateOrcamento(id: string, data: Partial<Orcamento>) {
 
 export async function deleteOrcamento(id: string) {
   const tenantId = await getCurrentTenantId();
+  // Remove no Google antes de apagar local (fire-and-forget)
+  deleteEventFromGoogle(id, 'orcamento');
   let query = supabase.from('fato_orcamento').delete().eq('id_orcamento', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;

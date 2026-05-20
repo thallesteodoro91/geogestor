@@ -5,7 +5,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getCurrentTenantId } from '@/services/supabase.service';
 import { registrarServicoIniciado, registrarServicoConcluido } from '@/modules/crm/services/cliente-eventos.service';
-import { syncEventToGoogle } from '@/services/google-calendar.service';
+import { syncEventToGoogle, deleteEventFromGoogle } from '@/services/google-calendar.service';
 
 export interface Servico {
   id_servico: string;
@@ -133,6 +133,8 @@ export async function updateServico(id: string, data: Partial<Servico>) {
 
 export async function deleteServico(id: string) {
   const tenantId = await getCurrentTenantId();
+  // Remove no Google antes de apagar local (fire-and-forget)
+  deleteEventFromGoogle(id, 'servico');
   let query = supabase.from('fato_servico').delete().eq('id_servico', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;

@@ -133,6 +133,8 @@ export async function updateServico(id: string, data: Partial<Servico>) {
 
 export async function deleteServico(id: string) {
   const tenantId = await getCurrentTenantId();
+  // Remove no Google antes de apagar local (fire-and-forget)
+  deleteEventFromGoogle(id, 'servico');
   let query = supabase.from('fato_servico').delete().eq('id_servico', id);
   if (tenantId) query = query.eq('tenant_id', tenantId);
   return query;

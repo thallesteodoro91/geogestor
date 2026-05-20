@@ -154,6 +154,127 @@ export type Database = {
           },
         ]
       }
+      calendar_eventos_externos: {
+        Row: {
+          all_day: boolean
+          attendees: Json | null
+          created_at: string
+          description: string | null
+          end_at: string | null
+          google_calendar_id: string
+          google_event_id: string
+          google_updated_at: string | null
+          html_link: string | null
+          id: string
+          location: string | null
+          start_at: string | null
+          summary: string | null
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          attendees?: Json | null
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string
+          google_event_id: string
+          google_updated_at?: string | null
+          html_link?: string | null
+          id?: string
+          location?: string | null
+          start_at?: string | null
+          summary?: string | null
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          all_day?: boolean
+          attendees?: Json | null
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          google_calendar_id?: string
+          google_event_id?: string
+          google_updated_at?: string | null
+          html_link?: string | null
+          id?: string
+          location?: string | null
+          start_at?: string | null
+          summary?: string | null
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_eventos_externos_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_sync_queue: {
+        Row: {
+          attempts: number
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          last_error: string | null
+          operation: string
+          payload: Json | null
+          scheduled_at: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          last_error?: string | null
+          operation: string
+          payload?: Json | null
+          scheduled_at?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          last_error?: string | null
+          operation?: string
+          payload?: Json | null
+          scheduled_at?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_sync_queue_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cliente_eventos: {
         Row: {
           categoria: string
@@ -1267,31 +1388,49 @@ export type Database = {
       }
       google_calendar_sync: {
         Row: {
+          color_id: string | null
           created_at: string | null
+          event_category: string | null
           google_event_id: string
           id: string
+          last_error: string | null
           local_event_id: string
           local_event_type: string
+          next_retry_at: string | null
+          origin: string
+          retry_count: number
           tenant_id: string
           updated_at: string | null
           user_id: string
         }
         Insert: {
+          color_id?: string | null
           created_at?: string | null
+          event_category?: string | null
           google_event_id: string
           id?: string
+          last_error?: string | null
           local_event_id: string
           local_event_type: string
+          next_retry_at?: string | null
+          origin?: string
+          retry_count?: number
           tenant_id: string
           updated_at?: string | null
           user_id: string
         }
         Update: {
+          color_id?: string | null
           created_at?: string | null
+          event_category?: string | null
           google_event_id?: string
           id?: string
+          last_error?: string | null
           local_event_id?: string
           local_event_type?: string
+          next_retry_at?: string | null
+          origin?: string
+          retry_count?: number
           tenant_id?: string
           updated_at?: string | null
           user_id?: string
@@ -1309,42 +1448,69 @@ export type Database = {
       google_calendar_tokens: {
         Row: {
           access_token: string
+          auto_sync_enabled: boolean
           calendar_id: string | null
+          calendar_label: string | null
+          connection_status: string
           created_at: string | null
           id: string
           last_synced_at: string | null
           refresh_token: string
+          selected_calendar_id: string | null
           sync_token: string | null
+          sync_types: Json
           tenant_id: string
           token_expires_at: string
           updated_at: string | null
           user_id: string
+          watch_channel_id: string | null
+          watch_channel_token: string | null
+          watch_expires_at: string | null
+          watch_resource_id: string | null
         }
         Insert: {
           access_token: string
+          auto_sync_enabled?: boolean
           calendar_id?: string | null
+          calendar_label?: string | null
+          connection_status?: string
           created_at?: string | null
           id?: string
           last_synced_at?: string | null
           refresh_token: string
+          selected_calendar_id?: string | null
           sync_token?: string | null
+          sync_types?: Json
           tenant_id: string
           token_expires_at: string
           updated_at?: string | null
           user_id: string
+          watch_channel_id?: string | null
+          watch_channel_token?: string | null
+          watch_expires_at?: string | null
+          watch_resource_id?: string | null
         }
         Update: {
           access_token?: string
+          auto_sync_enabled?: boolean
           calendar_id?: string | null
+          calendar_label?: string | null
+          connection_status?: string
           created_at?: string | null
           id?: string
           last_synced_at?: string | null
           refresh_token?: string
+          selected_calendar_id?: string | null
           sync_token?: string | null
+          sync_types?: Json
           tenant_id?: string
           token_expires_at?: string
           updated_at?: string | null
           user_id?: string
+          watch_channel_id?: string | null
+          watch_channel_token?: string | null
+          watch_expires_at?: string | null
+          watch_resource_id?: string | null
         }
         Relationships: [
           {

@@ -26,6 +26,8 @@ export interface GoogleCalendarStatus {
   auto_sync_enabled: boolean;
   sync_types: GoogleCalendarSyncTypes;
   connection_status: 'active' | 'needs_reconnect' | string;
+  realtime_active?: boolean;
+  watch_expires_at?: string | null;
 }
 
 export interface GoogleCalendarItem {
@@ -139,6 +141,20 @@ export async function fullSyncGoogleCalendar(): Promise<{ synced: number; errors
   if (error) throw new Error('Erro ao sincronizar com Google Calendar');
 
   return { synced: data?.synced || 0, errors: data?.errors || 0 };
+}
+
+export async function startGoogleCalendarWatch(): Promise<void> {
+  const { error } = await supabase.functions.invoke('google-calendar-watch', {
+    body: { action: 'start' },
+  });
+  if (error) throw new Error('Erro ao ativar sincronização em tempo real');
+}
+
+export async function stopGoogleCalendarWatch(): Promise<void> {
+  const { error } = await supabase.functions.invoke('google-calendar-watch', {
+    body: { action: 'stop' },
+  });
+  if (error) throw new Error('Erro ao desativar sincronização em tempo real');
 }
 
 export type { EventCategory };

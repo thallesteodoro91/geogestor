@@ -257,6 +257,31 @@ export function GoogleCalendarCard() {
               />
             </div>
 
+            {/* Realtime (watch channel) */}
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div className="space-y-0.5">
+                <Label htmlFor="realtime-sync" className="flex items-center gap-2">
+                  <Radio
+                    className={`h-3.5 w-3.5 ${
+                      status.realtime_active ? "text-green-600" : "text-muted-foreground"
+                    }`}
+                  />
+                  Sincronização em tempo real
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {status.realtime_active
+                    ? "Mudanças no Google aparecem aqui automaticamente."
+                    : "Ative para receber alterações do Google sem precisar sincronizar manualmente."}
+                </p>
+              </div>
+              <Switch
+                id="realtime-sync"
+                checked={!!status.realtime_active}
+                onCheckedChange={handleToggleWatch}
+                disabled={togglingWatch || needsReconnect}
+              />
+            </div>
+
             {/* Tipos sincronizados */}
             <div className="space-y-2">
               <Label>Tipos de evento sincronizados</Label>

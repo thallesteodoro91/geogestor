@@ -21,6 +21,7 @@ import {
   Link2,
   Loader2,
   AlertTriangle,
+  Radio,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -30,6 +31,8 @@ import {
   fullSyncGoogleCalendar,
   listGoogleCalendars,
   updateGoogleCalendarPreferences,
+  startGoogleCalendarWatch,
+  stopGoogleCalendarWatch,
   type GoogleCalendarSyncTypes,
 } from "@/services/google-calendar.service";
 import { formatDistanceToNow } from "date-fns";
@@ -41,6 +44,7 @@ export function GoogleCalendarCard() {
   const [connecting, setConnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [togglingWatch, setTogglingWatch] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -48,6 +52,12 @@ export function GoogleCalendarCard() {
     if (gcResult === "success") {
       toast.success("Google Calendar conectado com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["google-calendar-status"] });
+      // Ativa o realtime automaticamente após conectar (fire-and-forget)
+      startGoogleCalendarWatch()
+        .then(() => queryClient.invalidateQueries({ queryKey: ["google-calendar-status"] }))
+        .catch(() => {
+          /* silencioso, usuário pode ativar manualmente depois */
+        });
       window.history.replaceState({}, "", window.location.pathname);
     } else if (gcResult === "error") {
       toast.error("Erro ao conectar Google Calendar");
@@ -111,6 +121,24 @@ export function GoogleCalendarCard() {
       toast.error(error.message || "Erro na sincronização");
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleToggleWatch = async () => {
+    setTogglingWatch(true);
+    try {
+      if (status?.realtime_active) {
+        await stopGoogleCalendarWatch();
+        toast.success("Sincronização em tempo real desativada");
+      } else {
+        await startGoogleCalendarWatch();
+        toast.success("Sincronização em tempo real ativada");
+      }
+      queryClient.invalidateQueries({ queryKey: ["google-calendar-status"] });
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao alterar sincronização em tempo real");
+    } finally {
+      setTogglingWatch(false);
     }
   };
 

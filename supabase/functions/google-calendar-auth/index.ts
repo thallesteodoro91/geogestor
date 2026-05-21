@@ -191,10 +191,15 @@ Deno.serve(async (req) => {
         const { data } = await supabase
           .from("google_calendar_tokens")
           .select(
-            "created_at, last_synced_at, selected_calendar_id, calendar_label, auto_sync_enabled, sync_types, connection_status",
+            "created_at, last_synced_at, selected_calendar_id, calendar_label, auto_sync_enabled, sync_types, connection_status, watch_channel_id, watch_expires_at",
           )
           .eq("user_id", userId)
           .maybeSingle();
+
+        const realtimeActive =
+          !!data?.watch_channel_id &&
+          !!data?.watch_expires_at &&
+          new Date(data.watch_expires_at).getTime() > Date.now();
 
         return new Response(
           JSON.stringify({
@@ -206,6 +211,8 @@ Deno.serve(async (req) => {
             auto_sync_enabled: data?.auto_sync_enabled ?? true,
             sync_types: data?.sync_types ?? {},
             connection_status: data?.connection_status ?? "active",
+            realtime_active: realtimeActive,
+            watch_expires_at: data?.watch_expires_at ?? null,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );

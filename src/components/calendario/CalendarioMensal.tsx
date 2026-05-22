@@ -118,7 +118,7 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
           start: new Date(ev.start_at),
           end: ev.end_at ? new Date(ev.end_at) : new Date(ev.start_at),
           resource: {
-            tipo: "orcamento",
+            tipo: "externo",
             status: "externo",
             cliente: "Google Calendar",
             categoria: "Externo",

@@ -43,6 +43,7 @@ const LEGENDA_ITEMS = [
   { cor: BUDGET_SITUATION_COLORS.PENDENTE.bg, label: "⏱ Pendente", textDark: true },
   { cor: SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg, label: "⟳ Em Andamento" },
   { cor: SERVICE_STATUS_COLORS.CANCELADO.bg, label: "✕ Cancelado" },
+  { cor: "#6b7280", label: "📅 Google Calendar" },
 ];
 
 interface CalendarioMensalProps {

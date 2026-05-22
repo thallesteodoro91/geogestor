@@ -28,7 +28,7 @@ interface CalendarEvent {
   start: Date;
   end: Date;
   resource: {
-    tipo: "orcamento" | "servico";
+    tipo: "orcamento" | "servico" | "externo";
     status: string;
     cliente: string;
     categoria: string;
@@ -43,6 +43,7 @@ const LEGENDA_ITEMS = [
   { cor: BUDGET_SITUATION_COLORS.PENDENTE.bg, label: "⏱ Pendente", textDark: true },
   { cor: SERVICE_STATUS_COLORS.EM_ANDAMENTO.bg, label: "⟳ Em Andamento" },
   { cor: SERVICE_STATUS_COLORS.CANCELADO.bg, label: "✕ Cancelado" },
+  { cor: "#6b7280", label: "📅 Google Calendar" },
 ];
 
 interface CalendarioMensalProps {
@@ -61,6 +62,10 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
       const { data: orcamentos } = await supabase
         .from("fato_orcamento")
         .select(`*, cliente:dim_cliente!fk_orcamento_cliente(nome), servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria)`);
+
+      const { data: externos } = await supabase
+        .from("calendar_eventos_externos")
+        .select("id, summary, start_at, end_at, html_link, location");
 
       const { data: servicos } = await supabase
         .from("fato_servico")
@@ -106,6 +111,22 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
         }
       });
 
+      externos?.forEach((ev: any) => {
+        if (!ev.start_at) return;
+        events.push({
+          id: `ext-${ev.id}`,
+          title: `📅 ${ev.summary || "(sem título)"}`,
+          start: new Date(ev.start_at),
+          end: ev.end_at ? new Date(ev.end_at) : new Date(ev.start_at),
+          resource: {
+            tipo: "externo",
+            status: "externo",
+            cliente: "Google Calendar",
+            categoria: "Externo",
+          },
+        });
+      });
+
       return events;
     },
   });
@@ -120,7 +141,19 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
 
   const eventStyleGetter = (event: CalendarEvent) => {
     const { status, tipo } = event.resource;
-    
+
+    if (tipo === "externo") {
+      return {
+        style: {
+          background: "linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)",
+          borderRadius: "6px", opacity: 0.9, color: "white", border: "0px",
+          borderLeft: "4px solid #4b5563", display: "block", padding: "4px 8px",
+          fontWeight: "500", fontSize: "0.8rem", fontStyle: "italic",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+        },
+      };
+    }
+
     if (tipo === "servico") {
       return {
         style: {
@@ -154,6 +187,7 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
   };
 
   const handleSelectEvent = (event: CalendarEvent) => {
+    if (event.resource.tipo === "externo") return;
     const separatorIndex = event.id.indexOf("-");
     const tipo = event.id.substring(0, separatorIndex);
     const id = event.id.substring(separatorIndex + 1);

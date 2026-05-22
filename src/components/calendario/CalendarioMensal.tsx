@@ -140,7 +140,19 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
 
   const eventStyleGetter = (event: CalendarEvent) => {
     const { status, tipo } = event.resource;
-    
+
+    if (tipo === "externo") {
+      return {
+        style: {
+          background: "linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)",
+          borderRadius: "6px", opacity: 0.9, color: "white", border: "0px",
+          borderLeft: "4px solid #4b5563", display: "block", padding: "4px 8px",
+          fontWeight: "500", fontSize: "0.8rem", fontStyle: "italic",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+        },
+      };
+    }
+
     if (tipo === "servico") {
       return {
         style: {

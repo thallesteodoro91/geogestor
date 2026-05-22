@@ -186,6 +186,7 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
   };
 
   const handleSelectEvent = (event: CalendarEvent) => {
+    if (event.resource.tipo === "externo") return;
     const separatorIndex = event.id.indexOf("-");
     const tipo = event.id.substring(0, separatorIndex);
     const id = event.id.substring(separatorIndex + 1);

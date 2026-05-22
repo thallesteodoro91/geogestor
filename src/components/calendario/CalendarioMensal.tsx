@@ -110,6 +110,22 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
         }
       });
 
+      externos?.forEach((ev: any) => {
+        if (!ev.start_at) return;
+        events.push({
+          id: `ext-${ev.id}`,
+          title: `📅 ${ev.summary || "(sem título)"}`,
+          start: new Date(ev.start_at),
+          end: ev.end_at ? new Date(ev.end_at) : new Date(ev.start_at),
+          resource: {
+            tipo: "orcamento",
+            status: "externo",
+            cliente: "Google Calendar",
+            categoria: "Externo",
+          },
+        });
+      });
+
       return events;
     },
   });

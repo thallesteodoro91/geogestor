@@ -28,7 +28,7 @@ interface CalendarEvent {
   start: Date;
   end: Date;
   resource: {
-    tipo: "orcamento" | "servico";
+    tipo: "orcamento" | "servico" | "externo";
     status: string;
     cliente: string;
     categoria: string;

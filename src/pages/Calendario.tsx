@@ -11,6 +11,8 @@ import { CalendarioSemanal } from "@/components/calendario/CalendarioSemanal";
 import { CalendarioDiario } from "@/components/calendario/CalendarioDiario";
 import { CalendarioTabela } from "@/components/calendario/CalendarioTabela";
 import { CompromissoDialog } from "@/components/calendario/CompromissoDialog";
+import { UpcomingSyncedCard } from "@/components/calendario/UpcomingSyncedCard";
+import { ConflictsCard } from "@/components/calendario/ConflictsCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, List, Table, CalendarDays, Plus, Briefcase, FileText } from "lucide-react";

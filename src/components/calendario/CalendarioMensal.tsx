@@ -62,6 +62,10 @@ export const CalendarioMensal = ({ busca = "", filtroTipo = "todos", filtroStatu
         .from("fato_orcamento")
         .select(`*, cliente:dim_cliente!fk_orcamento_cliente(nome), servico:fato_servico!fk_orcamento_servico(nome_do_servico, categoria)`);
 
+      const { data: externos } = await supabase
+        .from("calendar_eventos_externos")
+        .select("id, summary, start_at, end_at, html_link, location");
+
       const { data: servicos } = await supabase
         .from("fato_servico")
         .select(`*, cliente:dim_cliente!fk_servico_cliente(nome), propriedade:dim_propriedade!fk_servico_propriedade(nome_da_propriedade, municipio)`);

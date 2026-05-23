@@ -21,19 +21,28 @@ export function useOnboarding() {
   const isOnboardingDismissed = tenant?.settings?.onboarding_completed === true;
 
   const { data: steps = [], isLoading } = useQuery({
-    queryKey: ["onboarding-steps", tenant?.id],
+    queryKey: ["onboarding-steps", tenant?.id, user?.id],
     queryFn: async () => {
-      const [clientesRes, servicosRes, orcamentosRes, despesasRes] = await Promise.all([
+      const [clientesRes, servicosRes, orcamentosRes, despesasRes, gcalRes] = await Promise.all([
         supabase.from("dim_cliente").select("id_cliente", { count: "exact", head: true }),
         supabase.from("fato_servico").select("id_servico", { count: "exact", head: true }),
         supabase.from("fato_orcamento").select("id_orcamento", { count: "exact", head: true }),
         supabase.from("fato_despesas").select("id_despesas", { count: "exact", head: true }),
+        user?.id
+          ? supabase
+              .from("google_calendar_tokens")
+              .select("id, connection_status")
+              .eq("user_id", user.id)
+              .maybeSingle()
+          : Promise.resolve({ data: null } as any),
       ]);
 
       const hasClientes = (clientesRes.count || 0) > 0;
       const hasServicos = (servicosRes.count || 0) > 0;
       const hasOrcamentos = (orcamentosRes.count || 0) > 0;
       const hasDespesas = (despesasRes.count || 0) > 0;
+      const gcalConnected =
+        !!(gcalRes as any)?.data && (gcalRes as any).data.connection_status !== "needs_reconnect";
 
       const stepsList: OnboardingStep[] = [
         {
@@ -73,6 +82,15 @@ export function useOnboarding() {
           actionType: "import",
           completed: hasDespesas,
           icon: "Receipt",
+        },
+        {
+          id: "google_calendar",
+          title: "Conecte sua agenda Google",
+          description: "Sincronize orçamentos e serviços com o Google Calendar",
+          href: "/configuracoes?tab=integracoes",
+          actionType: "create",
+          completed: gcalConnected,
+          icon: "Calendar",
         },
         {
           id: "dashboard",

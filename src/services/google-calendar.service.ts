@@ -157,4 +157,19 @@ export async function stopGoogleCalendarWatch(): Promise<void> {
   if (error) throw new Error('Erro ao desativar sincronização em tempo real');
 }
 
+export async function retryCalendarSyncJob(jobId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke('google-calendar-worker', {
+    body: { action: 'retry-job', job_id: jobId },
+  });
+  if (error) throw new Error('Erro ao reagendar job');
+}
+
+export async function retryAllFailedCalendarSyncJobs(): Promise<{ count: number }> {
+  const { data, error } = await supabase.functions.invoke('google-calendar-worker', {
+    body: { action: 'retry-all-failed' },
+  });
+  if (error) throw new Error('Erro ao reagendar jobs');
+  return { count: (data as any)?.count ?? 0 };
+}
+
 export type { EventCategory };

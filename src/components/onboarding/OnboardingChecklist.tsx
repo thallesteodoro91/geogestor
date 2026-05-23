@@ -6,13 +6,13 @@ import { Progress } from "@/components/ui/progress";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import {
   CheckCircle2, Circle, Rocket, X, ChevronDown, ChevronUp,
-  Users, Briefcase, FileText, Receipt, BarChart3, FileSpreadsheet, Plus, Eye,
+  Users, Briefcase, FileText, Receipt, BarChart3, FileSpreadsheet, Plus, Eye, Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTenant } from "@/contexts/TenantContext";
 
 const ICON_MAP: Record<string, React.ElementType> = {
-  Users, Briefcase, FileText, Receipt, BarChart3,
+  Users, Briefcase, FileText, Receipt, BarChart3, Calendar,
 };
 
 export function OnboardingChecklist() {

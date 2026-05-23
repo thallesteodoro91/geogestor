@@ -13,6 +13,8 @@ import { CalendarioTabela } from "@/components/calendario/CalendarioTabela";
 import { CompromissoDialog } from "@/components/calendario/CompromissoDialog";
 import { UpcomingSyncedCard } from "@/components/calendario/UpcomingSyncedCard";
 import { ConflictsCard } from "@/components/calendario/ConflictsCard";
+import { CalendarConnectBanner } from "@/components/calendario/CalendarConnectBanner";
+import { CalendarSyncQueueCard } from "@/components/calendario/CalendarSyncQueueCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar, List, Table, CalendarDays, Plus, Briefcase, FileText } from "lucide-react";
@@ -93,10 +95,14 @@ const Calendario = () => {
           </Select>
         </FilterBar>
 
+        <CalendarConnectBanner />
+
         <div className="grid gap-4 md:grid-cols-2">
           <UpcomingSyncedCard />
           <ConflictsCard />
         </div>
+
+        <CalendarSyncQueueCard />
 
         <Tabs defaultValue="mensal" className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">

@@ -95,10 +95,14 @@ const Calendario = () => {
           </Select>
         </FilterBar>
 
+        <CalendarConnectBanner />
+
         <div className="grid gap-4 md:grid-cols-2">
           <UpcomingSyncedCard />
           <ConflictsCard />
         </div>
+
+        <CalendarSyncQueueCard />
 
         <Tabs defaultValue="mensal" className="w-full">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">

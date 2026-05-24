@@ -251,11 +251,14 @@ export default function Orcamentos() {
       orc.fato_servico?.nome_do_servico,
       orc.codigo_orcamento,
       orc.situacao_do_pagamento,
+      orc.forma_de_pagamento,
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchSituacao = filtroSituacao === "todos" || orc.situacao_do_pagamento === filtroSituacao;
+    const matchForma = filtroForma === "todos" || orc.forma_de_pagamento === filtroForma;
+    const matchStatusOrc = filtroStatusOrc === "todos" || orc.situacao === filtroStatusOrc;
 
-    return matchSearch && matchSituacao;
+    return matchSearch && matchSituacao && matchForma && matchStatusOrc;
   });
 
   // Pagination

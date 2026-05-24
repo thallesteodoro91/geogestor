@@ -516,7 +516,9 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
   data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
-  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento"],
+  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento", "statusfinanceiro", "situacaofinanceira"],
+  forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento", "metodopagamento", "modalidadepagamento", "modalidade", "metododepagamento", "formadepagamento"],
+  situacao: ["statusorcamento", "statusproposta", "estadoorcamento", "statusvenda"],
   data_do_faturamento: ["datafaturamento", "dtfaturamento", "vencimento", "datavencimento"],
 };
 

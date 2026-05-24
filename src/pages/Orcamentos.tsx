@@ -47,6 +47,8 @@ export default function Orcamentos() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("todos");
+  const [filtroForma, setFiltroForma] = useState("todos");
+  const [filtroStatusOrc, setFiltroStatusOrc] = useState("todos");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
 
   const { data: orcamentos = [], isLoading } = useQuery({

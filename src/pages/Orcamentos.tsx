@@ -316,17 +316,40 @@ export default function Orcamentos() {
             searchPlaceholder="Buscar por cliente, serviço ou código..."
           >
             <Select value={filtroSituacao} onValueChange={(v) => { setFiltroSituacao(v); pagination.goToPage(1); }}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Situação" />
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Pagamento" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todas as Situações</SelectItem>
+                <SelectItem value="todos">Todos os Pagamentos</SelectItem>
                 {PAYMENT_STATUS_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <Select value={filtroForma} onValueChange={(v) => { setFiltroForma(v); pagination.goToPage(1); }}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Forma" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas as Formas</SelectItem>
+                {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filtroStatusOrc} onValueChange={(v) => { setFiltroStatusOrc(v); pagination.goToPage(1); }}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Status orçamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os Status</SelectItem>
+                {BUDGET_SITUATION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </FilterBar>
+
 
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">Carregando...</div>

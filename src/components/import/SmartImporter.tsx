@@ -1336,6 +1336,22 @@ export function SmartImporter({
           if (field.type === "number") val = parseNullableNumber(val);
           record[field.key] = val;
         }
+        // Normalize payment/status fields to canonical enum values so the UI doesn't show "Não definido"
+        if (entityType === "orcamentos" || entityType === "completo") {
+          if (record.situacao_do_pagamento !== undefined) {
+            record.situacao_do_pagamento =
+              normalizeStatusPagamento(record.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE;
+          } else if (mappings["situacao_do_pagamento"]) {
+            record.situacao_do_pagamento = PAYMENT_STATUS.PENDENTE;
+          }
+          if (record.forma_de_pagamento !== undefined && record.forma_de_pagamento !== null) {
+            const norm = normalizeFormaPagamento(record.forma_de_pagamento);
+            record.forma_de_pagamento = norm; // may be null when unrecognized
+          }
+          if (record.situacao !== undefined && record.situacao !== null) {
+            record.situacao = normalizeStatusOrcamento(record.situacao) ?? record.situacao;
+          }
+        }
         if (entityType === "orcamentos" && !record.quantidade) record.quantidade = 1;
         if (entityType === "orcamentos" && !record.receita_esperada && record.valor_unitario) {
           const qty = record.quantidade || 1;

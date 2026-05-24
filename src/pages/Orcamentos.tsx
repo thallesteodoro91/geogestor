@@ -372,7 +372,8 @@ export default function Orcamentos() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Serviço</TableHead>
                     <TableHead>Receita Esperada</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <TableHead>Forma</TableHead>
+                    <TableHead>Pagamento</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -386,8 +387,13 @@ export default function Orcamentos() {
                         R$ {(parseFloat(String(orc.receita_esperada)) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusClasses(orc.situacao_do_pagamento)}>
-                          {orc.situacao_do_pagamento || 'Indefinido'}
+                        {orc.forma_de_pagamento
+                          ? <Badge variant="outline">{orc.forma_de_pagamento}</Badge>
+                          : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusClasses(orc.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE)}>
+                          {orc.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

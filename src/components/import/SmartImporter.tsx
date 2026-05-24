@@ -38,7 +38,14 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
 import { inferColumnTypes, isMonetaryCompatible, type InferredColumn } from "@/lib/etl/columnTypeInference";
-import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/statusNormalizer";
+import {
+  normalizeStatusPagamento,
+  normalizeStatusServico,
+  normalizeFormaPagamento,
+  normalizeStatusOrcamento,
+} from "@/lib/etl/statusNormalizer";
+import { PAYMENT_STATUS, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";

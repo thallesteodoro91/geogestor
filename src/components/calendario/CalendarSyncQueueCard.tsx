@@ -10,6 +10,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { retryCalendarSyncJob, retryAllFailedCalendarSyncJobs } from "@/services/google-calendar.service";
+import { logAuditEvent } from "@/services/audit.service";
 
 type Job = {
   id: string;

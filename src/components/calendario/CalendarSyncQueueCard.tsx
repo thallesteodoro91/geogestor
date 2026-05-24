@@ -201,7 +201,7 @@ export function CalendarSyncQueueCard() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => retryOne.mutate(job.id)}
+                    onClick={() => retryOne.mutate(job)}
                     disabled={retryOne.isPending}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />

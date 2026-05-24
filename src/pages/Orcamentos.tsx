@@ -353,7 +353,7 @@ export default function Orcamentos() {
 
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">Carregando...</div>
-          ) : filteredOrcamentos.length === 0 && !searchTerm && filtroSituacao === "todos" ? (
+          ) : filteredOrcamentos.length === 0 && !searchTerm && filtroSituacao === "todos" && filtroForma === "todos" && filtroStatusOrc === "todos" ? (
             <EmptyState
               icon={FileText}
               title="Envie sua primeira proposta"

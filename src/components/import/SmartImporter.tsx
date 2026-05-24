@@ -2374,6 +2374,13 @@ export function SmartImporter({
                 />
               )}
 
+              {/* Payment / status detection card */}
+              {(entityType === "orcamentos" || entityType === "completo") && (
+                <PaymentDetectionCard stats={paymentDetectionStats} />
+              )}
+
+
+
 
               {errorCount > 0 ? (
                 <Alert variant="destructive">

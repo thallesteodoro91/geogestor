@@ -1188,6 +1188,49 @@ export function SmartImporter({
 
   const classifiedHeaders = useMemo(() => classifyHeaders(headers), [headers]);
 
+  // ─── Payment / status detection preview ──────────────────────────────
+  const paymentDetectionStats = useMemo(() => {
+    const stats = {
+      formaPagamentoColumn: mappings["forma_de_pagamento"] || undefined,
+      formaPagamentoCounts: {} as Record<string, number>,
+      formaPagamentoUnmatched: 0,
+      statusPagamentoColumn: mappings["situacao_do_pagamento"] || undefined,
+      statusPagamentoCounts: {} as Record<string, number>,
+      statusPagamentoUnmatched: 0,
+      statusOrcamentoColumn: mappings["situacao"] || undefined,
+      statusOrcamentoCounts: {} as Record<string, number>,
+      statusOrcamentoUnmatched: 0,
+      totalOrcamentos: 0,
+      orcamentosVinculadosCliente: 0,
+    };
+    const validRows = allValidatedRows.filter(v => !v.hasErrors);
+    for (const v of validRows) {
+      const hasReceita =
+        (parseNullableNumber(v.row.receita_esperada) || 0) > 0 ||
+        (parseNullableNumber(v.row.valor_unitario) || 0) > 0;
+      if (entityType === "orcamentos" || (entityType === "completo" && hasReceita)) {
+        stats.totalOrcamentos++;
+        if (v.row.nome?.trim() || v.row.id_cliente) stats.orcamentosVinculadosCliente++;
+      }
+      if (stats.formaPagamentoColumn && v.row.forma_de_pagamento) {
+        const n = normalizeFormaPagamento(v.row.forma_de_pagamento);
+        if (n) stats.formaPagamentoCounts[n] = (stats.formaPagamentoCounts[n] || 0) + 1;
+        else stats.formaPagamentoUnmatched++;
+      }
+      if (stats.statusPagamentoColumn && v.row.situacao_do_pagamento) {
+        const n = normalizeStatusPagamento(v.row.situacao_do_pagamento);
+        if (n) stats.statusPagamentoCounts[n] = (stats.statusPagamentoCounts[n] || 0) + 1;
+        else stats.statusPagamentoUnmatched++;
+      }
+      if (stats.statusOrcamentoColumn && v.row.situacao) {
+        const n = normalizeStatusOrcamento(v.row.situacao);
+        if (n) stats.statusOrcamentoCounts[n] = (stats.statusOrcamentoCounts[n] || 0) + 1;
+        else stats.statusOrcamentoUnmatched++;
+      }
+    }
+    return stats;
+  }, [allValidatedRows, mappings, entityType]);
+
 
   const checkDuplicates = useCallback(async () => {
     if (entityType !== "clientes" && entityType !== "servicos" && entityType !== "completo") return;

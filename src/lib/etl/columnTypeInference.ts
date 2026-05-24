@@ -9,12 +9,18 @@
  */
 
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
+import {
+  isFormaPagamentoToken,
+  isStatusOrcamentoToken,
+} from "@/lib/etl/statusNormalizer";
 
 export type ColumnType =
   | "monetario"
   | "percentual"
   | "data"
   | "status"
+  | "forma_pagamento"
+  | "status_orcamento"
   | "documento"
   | "telefone"
   | "email"

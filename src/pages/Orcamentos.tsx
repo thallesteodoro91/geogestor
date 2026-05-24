@@ -23,7 +23,7 @@ import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
-import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
+import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { getStatusClasses } from "@/lib/statusColors";
 import { usePagination } from "@/hooks/usePagination";

@@ -821,9 +821,17 @@ export function SmartImporter({
     const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
 
     // Inject content-driven roles BEFORE header roles
-    // (status column found by content → maps to situacao_do_pagamento regardless of header)
+    // (a column whose content is mostly PIX/Boleto/etc → forma_de_pagamento;
+    //  mostly Pago/Pendente/etc → situacao_do_pagamento;
+    //  mostly Aprovado/Em Análise/etc → situacao)
     for (const inf of inferred) {
-      if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+      if (inf.type === "forma_pagamento" && !preMap["forma_de_pagamento"]) {
+        preMap["forma_de_pagamento"] = inf.header;
+        usedFields.add("forma_de_pagamento");
+      } else if (inf.type === "status_orcamento" && !preMap["situacao"]) {
+        preMap["situacao"] = inf.header;
+        usedFields.add("situacao");
+      } else if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
         preMap["situacao_do_pagamento"] = inf.header;
         usedFields.add("situacao_do_pagamento");
       }
@@ -838,8 +846,14 @@ export function SmartImporter({
       const inf = inferredByHeader.get(c.header);
       // BLOCK financial roles on non-monetary columns
       if (financialRoles.has(c.role) && inf && !isMonetaryCompatible(inf.type)) {
-        // If the column is actually a status, route to situacao_do_pagamento
-        if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+        // If the column is actually a payment-related status, route to the right field
+        if (inf.type === "forma_pagamento" && !preMap["forma_de_pagamento"]) {
+          preMap["forma_de_pagamento"] = c.header;
+          usedFields.add("forma_de_pagamento");
+        } else if (inf.type === "status_orcamento" && !preMap["situacao"]) {
+          preMap["situacao"] = c.header;
+          usedFields.add("situacao");
+        } else if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
           preMap["situacao_do_pagamento"] = c.header;
           usedFields.add("situacao_do_pagamento");
         }

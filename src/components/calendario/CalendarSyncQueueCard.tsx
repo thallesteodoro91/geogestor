@@ -10,6 +10,7 @@ import { useTenant } from "@/contexts/TenantContext";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { retryCalendarSyncJob, retryAllFailedCalendarSyncJobs } from "@/services/google-calendar.service";
+import { logAuditEvent } from "@/services/audit.service";
 
 type Job = {
   id: string;
@@ -46,21 +47,60 @@ export function CalendarSyncQueueCard() {
   });
 
   const retryOne = useMutation({
-    mutationFn: (id: string) => retryCalendarSyncJob(id),
+    mutationFn: async (job: Job) => {
+      const res = await retryCalendarSyncJob(job.id);
+      await logAuditEvent({
+        action: "UPDATE",
+        entity: "calendar_sync_queue",
+        entityId: job.id,
+        oldData: { status: job.status, attempts: job.attempts, last_error: job.last_error },
+        newData: { action: "retry-job", operation: job.operation, entity_type: job.entity_type, result: "success" },
+      });
+      return res;
+    },
     onSuccess: () => {
       toast.success("Job reagendado");
       queryClient.invalidateQueries({ queryKey: ["calendar-sync-queue"] });
     },
-    onError: (e: any) => toast.error(e.message || "Erro ao reagendar"),
+    onError: async (e: any, job) => {
+      await logAuditEvent({
+        action: "UPDATE",
+        entity: "calendar_sync_queue",
+        entityId: job?.id,
+        newData: { action: "retry-job", result: "error", error: e?.message || String(e) },
+      });
+      toast.error(e.message || "Erro ao reagendar");
+    },
   });
 
   const retryAll = useMutation({
-    mutationFn: retryAllFailedCalendarSyncJobs,
+    mutationFn: async () => {
+      const failedIds = (jobs || []).filter((j) => j.status === "failed").map((j) => j.id);
+      const res = await retryAllFailedCalendarSyncJobs();
+      await logAuditEvent({
+        action: "UPDATE",
+        entity: "calendar_sync_queue",
+        newData: {
+          action: "retry-all-failed",
+          result: "success",
+          count: res?.count ?? failedIds.length,
+          job_ids: failedIds,
+        },
+      });
+      return res;
+    },
     onSuccess: (res) => {
       toast.success(`${res.count} jobs reagendados`);
       queryClient.invalidateQueries({ queryKey: ["calendar-sync-queue"] });
     },
-    onError: (e: any) => toast.error(e.message || "Erro ao reagendar"),
+    onError: async (e: any) => {
+      await logAuditEvent({
+        action: "UPDATE",
+        entity: "calendar_sync_queue",
+        newData: { action: "retry-all-failed", result: "error", error: e?.message || String(e) },
+      });
+      toast.error(e.message || "Erro ao reagendar");
+    },
   });
 
   if (!isAdmin) return null;
@@ -161,7 +201,7 @@ export function CalendarSyncQueueCard() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => retryOne.mutate(job.id)}
+                    onClick={() => retryOne.mutate(job)}
                     disabled={retryOne.isPending}
                   >
                     <RefreshCw className="h-3.5 w-3.5" />

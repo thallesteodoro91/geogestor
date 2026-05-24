@@ -1669,7 +1669,12 @@ export function SmartImporter({
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataOrc)) dataOrc = todayISO;
 
-          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento);
+          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE;
+          const formaPag = normalizeFormaPagamento(rec.forma_de_pagamento);
+          const statusOrc =
+            normalizeStatusOrcamento(rec.situacao) ??
+            normalizeStatusServico(rec.situacao) ??
+            BUDGET_SITUATION.APROVADO;
           let dataFat: string | null = rec.data_do_faturamento || null;
           if (dataFat && !/^\d{4}-\d{2}-\d{2}$/.test(dataFat)) dataFat = null;
 
@@ -1685,8 +1690,9 @@ export function SmartImporter({
             valor_imposto: vimp ?? 0,
             incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
-            situacao: normalizeStatusServico(rec.situacao) || "Aprovado",
+            situacao: statusOrc,
             situacao_do_pagamento: statusPag,
+            forma_de_pagamento: formaPag,
             data_do_faturamento: dataFat,
           });
           debug.receitaCount++;

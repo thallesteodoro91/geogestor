@@ -60,10 +60,10 @@ const DOMAINS: DomainConfig[] = [
   },
   {
     id: "status",
-    label: "Status",
+    label: "Status & Pagamento",
     icon: Tag,
-    fieldKeys: ["situacao_do_pagamento", "situacao_do_servico", "situacao", "status"],
-    expectedType: ["status", "categoria", "texto"],
+    fieldKeys: ["situacao_do_pagamento", "situacao_do_servico", "situacao", "status", "forma_de_pagamento"],
+    expectedType: ["status", "forma_pagamento", "status_orcamento", "categoria", "texto"],
   },
 ];
 

@@ -273,6 +273,8 @@ export default function Orcamentos() {
   const handleClearFilters = () => {
     setSearchTerm("");
     setFiltroSituacao("todos");
+    setFiltroForma("todos");
+    setFiltroStatusOrc("todos");
   };
 
   return (

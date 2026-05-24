@@ -23,7 +23,7 @@ import { generateOrcamentoPDF } from "@/lib/pdfTemplateGenerator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
-import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS } from "@/constants/budgetStatus";
+import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { getStatusClasses } from "@/lib/statusColors";
 import { usePagination } from "@/hooks/usePagination";
@@ -47,6 +47,8 @@ export default function Orcamentos() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filtroSituacao, setFiltroSituacao] = useState("todos");
+  const [filtroForma, setFiltroForma] = useState("todos");
+  const [filtroStatusOrc, setFiltroStatusOrc] = useState("todos");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
 
   const { data: orcamentos = [], isLoading } = useQuery({
@@ -249,11 +251,14 @@ export default function Orcamentos() {
       orc.fato_servico?.nome_do_servico,
       orc.codigo_orcamento,
       orc.situacao_do_pagamento,
+      orc.forma_de_pagamento,
     ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchSituacao = filtroSituacao === "todos" || orc.situacao_do_pagamento === filtroSituacao;
+    const matchForma = filtroForma === "todos" || orc.forma_de_pagamento === filtroForma;
+    const matchStatusOrc = filtroStatusOrc === "todos" || orc.situacao === filtroStatusOrc;
 
-    return matchSearch && matchSituacao;
+    return matchSearch && matchSituacao && matchForma && matchStatusOrc;
   });
 
   // Pagination
@@ -268,6 +273,8 @@ export default function Orcamentos() {
   const handleClearFilters = () => {
     setSearchTerm("");
     setFiltroSituacao("todos");
+    setFiltroForma("todos");
+    setFiltroStatusOrc("todos");
   };
 
   return (
@@ -309,21 +316,44 @@ export default function Orcamentos() {
             searchPlaceholder="Buscar por cliente, serviço ou código..."
           >
             <Select value={filtroSituacao} onValueChange={(v) => { setFiltroSituacao(v); pagination.goToPage(1); }}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Situação" />
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Pagamento" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todas as Situações</SelectItem>
+                <SelectItem value="todos">Todos os Pagamentos</SelectItem>
                 {PAYMENT_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filtroForma} onValueChange={(v) => { setFiltroForma(v); pagination.goToPage(1); }}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Forma" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas as Formas</SelectItem>
+                {PAYMENT_METHOD_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filtroStatusOrc} onValueChange={(v) => { setFiltroStatusOrc(v); pagination.goToPage(1); }}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Status orçamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os Status</SelectItem>
+                {BUDGET_SITUATION_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </FilterBar>
 
+
           {isLoading ? (
             <div className="text-center py-12 text-muted-foreground">Carregando...</div>
-          ) : filteredOrcamentos.length === 0 && !searchTerm && filtroSituacao === "todos" ? (
+          ) : filteredOrcamentos.length === 0 && !searchTerm && filtroSituacao === "todos" && filtroForma === "todos" && filtroStatusOrc === "todos" ? (
             <EmptyState
               icon={FileText}
               title="Envie sua primeira proposta"
@@ -342,7 +372,8 @@ export default function Orcamentos() {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Serviço</TableHead>
                     <TableHead>Receita Esperada</TableHead>
-                    <TableHead>Situação</TableHead>
+                    <TableHead>Forma</TableHead>
+                    <TableHead>Pagamento</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -356,8 +387,13 @@ export default function Orcamentos() {
                         R$ {(parseFloat(String(orc.receita_esperada)) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusClasses(orc.situacao_do_pagamento)}>
-                          {orc.situacao_do_pagamento || 'Indefinido'}
+                        {orc.forma_de_pagamento
+                          ? <Badge variant="outline">{orc.forma_de_pagamento}</Badge>
+                          : <span className="text-muted-foreground text-xs">—</span>}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusClasses(orc.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE)}>
+                          {orc.situacao_do_pagamento || PAYMENT_STATUS.PENDENTE}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

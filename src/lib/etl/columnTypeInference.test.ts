@@ -26,4 +26,25 @@ describe("inferColumnType", () => {
     const r = inferColumnType("SubCategoria", ["Combustível", "Mão de obra", "Diária", "Combustível", "Material"]);
     expect(r.type).toBe("subcategoria");
   });
+
+  it("detects forma de pagamento from values", () => {
+    const r = inferColumnType("Pagamento", ["PIX", "Boleto", "Cartão", "PIX", "Transferência"]);
+    expect(r.type).toBe("forma_pagamento");
+  });
+
+  it("detects forma de pagamento with explicit header even with mixed values", () => {
+    const r = inferColumnType("Forma de Pagamento", ["pix", "boleto", "Crédito", "Outros"]);
+    expect(r.type).toBe("forma_pagamento");
+  });
+
+  it("does not classify monetary column as forma de pagamento", () => {
+    const r = inferColumnType("Pagamento", ["R$ 1.500,00", "R$ 800,00", "2000"]);
+    expect(r.type).toBe("monetario");
+  });
+
+  it("detects status do orçamento when header hints + values match", () => {
+    const r = inferColumnType("Status do Orçamento", ["Aprovado", "Em Análise", "Recusado", "Enviado"]);
+    expect(r.type).toBe("status_orcamento");
+  });
 });
+

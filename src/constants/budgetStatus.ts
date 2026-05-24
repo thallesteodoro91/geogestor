@@ -11,6 +11,8 @@ export const PAYMENT_STATUS = {
   PAGO: 'Pago',
   PARCIAL: 'Parcial',
   CANCELADO: 'Cancelado',
+  ATRASADO: 'Atrasado',
+  FATURADO: 'Faturado',
 } as const;
 
 export type PaymentStatus = typeof PAYMENT_STATUS[keyof typeof PAYMENT_STATUS];
@@ -20,6 +22,8 @@ export const PAYMENT_STATUS_OPTIONS = [
   { value: PAYMENT_STATUS.PENDENTE, label: 'Pendente', color: 'hsl(48,96%,53%)', textColor: 'text-black' },
   { value: PAYMENT_STATUS.PAGO, label: 'Pago', color: 'hsl(142,76%,36%)', textColor: 'text-white' },
   { value: PAYMENT_STATUS.PARCIAL, label: 'Parcial', color: 'hsl(217,91%,60%)', textColor: 'text-white' },
+  { value: PAYMENT_STATUS.ATRASADO, label: 'Atrasado', color: 'hsl(0,84%,55%)', textColor: 'text-white' },
+  { value: PAYMENT_STATUS.FATURADO, label: 'Faturado', color: 'hsl(262,83%,58%)', textColor: 'text-white' },
   { value: PAYMENT_STATUS.CANCELADO, label: 'Cancelado', color: 'hsl(0,100%,50%)', textColor: 'text-white' },
 ] as const;
 
@@ -28,8 +32,12 @@ export const PAYMENT_METHOD = {
   PIX: 'PIX',
   DINHEIRO: 'Dinheiro',
   CARTAO: 'Cartão',
+  CARTAO_CREDITO: 'Cartão de Crédito',
+  CARTAO_DEBITO: 'Cartão de Débito',
   TRANSFERENCIA: 'Transferência',
   BOLETO: 'Boleto',
+  PARCELADO: 'Parcelado',
+  OUTRO: 'Outro',
 } as const;
 
 export type PaymentMethod = typeof PAYMENT_METHOD[keyof typeof PAYMENT_METHOD];
@@ -39,8 +47,12 @@ export const PAYMENT_METHOD_OPTIONS = [
   { value: PAYMENT_METHOD.PIX, label: 'PIX', color: 'hsl(48,96%,53%)', textColor: 'text-black', icon: 'Smartphone' },
   { value: PAYMENT_METHOD.DINHEIRO, label: 'Dinheiro', color: 'hsl(142,76%,36%)', textColor: 'text-white', icon: 'Banknote' },
   { value: PAYMENT_METHOD.CARTAO, label: 'Cartão', color: 'hsl(217,91%,60%)', textColor: 'text-white', icon: 'CreditCard' },
+  { value: PAYMENT_METHOD.CARTAO_CREDITO, label: 'Cartão de Crédito', color: 'hsl(217,91%,55%)', textColor: 'text-white', icon: 'CreditCard' },
+  { value: PAYMENT_METHOD.CARTAO_DEBITO, label: 'Cartão de Débito', color: 'hsl(199,89%,48%)', textColor: 'text-white', icon: 'CreditCard' },
   { value: PAYMENT_METHOD.TRANSFERENCIA, label: 'Transferência', color: 'hsl(280,70%,50%)', textColor: 'text-white', icon: 'ArrowLeftRight' },
   { value: PAYMENT_METHOD.BOLETO, label: 'Boleto', color: 'hsl(25,95%,53%)', textColor: 'text-white', icon: 'FileText' },
+  { value: PAYMENT_METHOD.PARCELADO, label: 'Parcelado', color: 'hsl(340,82%,52%)', textColor: 'text-white', icon: 'CreditCard' },
+  { value: PAYMENT_METHOD.OUTRO, label: 'Outro', color: 'hsl(215,16%,47%)', textColor: 'text-white', icon: 'CircleEllipsis' },
 ] as const;
 
 // Status de situação do orçamento (para calendário/aprovação)

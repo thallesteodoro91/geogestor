@@ -38,7 +38,14 @@ import { useKPIs } from "@/hooks/useKPIs";
 import { parseFinancialNumber } from "@/lib/financialNumberParser";
 import { classifyHeaders, classifyExpenseCategory, type SemanticRole } from "@/lib/financialColumnClassifier";
 import { inferColumnTypes, isMonetaryCompatible, type InferredColumn } from "@/lib/etl/columnTypeInference";
-import { normalizeStatusPagamento, normalizeStatusServico } from "@/lib/etl/statusNormalizer";
+import {
+  normalizeStatusPagamento,
+  normalizeStatusServico,
+  normalizeFormaPagamento,
+  normalizeStatusOrcamento,
+} from "@/lib/etl/statusNormalizer";
+import { PAYMENT_STATUS, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
@@ -449,9 +456,9 @@ const ORCAMENTO_SYNONYMS: Record<string, string[]> = {
   quantidade: ["qtd", "qtde", "quant", "qty"],
   desconto: ["desc", "descontos"],
   receita_esperada: ["receita", "valortotal", "total", "receitaesperada", "faturamento", "valortotalservico", "amount", "revenue", "precoservico", "valorcontrato"],
-  situacao: ["status", "estado", "statusorcamento"],
-  situacao_do_pagamento: ["pagamento", "statuspagamento", "situacaopagamento"],
-  forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento"],
+  situacao: ["status", "estado", "statusorcamento", "statusproposta", "estadoorcamento", "statusvenda"],
+  situacao_do_pagamento: ["pagamento", "statuspagamento", "situacaopagamento", "statusfinanceiro", "situacaofinanceira", "statusfinance"],
+  forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento", "metodopagamento", "modalidadepagamento", "modalidade", "metododepagamento"],
   data_do_faturamento: ["datafaturamento", "dtfaturamento", "vencimento", "datavencimento"],
   data_inicio: ["inicio", "datainicio", "dtinicio"],
   data_termino: ["termino", "fim", "datatermino", "dttermino", "datafim"],
@@ -509,7 +516,9 @@ const COMPLETO_SYNONYMS: Record<string, string[]> = {
   subcategoria_despesa: ["subcategoria", "subcategoriadespesa", "subgrupo", "subgrupodespesa"],
   data_orcamento: ["dataorcamento", "dtorcamento", "dataemissao", "dataproposta"],
   data_despesa: ["datadespesa", "datadogasto", "datapagamento", "dtdespesa"],
-  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento"],
+  situacao_do_pagamento: ["statuspagamento", "situacaopagamento", "statuspag", "statusdopagamento", "situacaodopagamento", "statusfinanceiro", "situacaofinanceira"],
+  forma_de_pagamento: ["formapagamento", "meiodepagamento", "tipopagamento", "metodopagamento", "modalidadepagamento", "modalidade", "metododepagamento", "formadepagamento"],
+  situacao: ["statusorcamento", "statusproposta", "estadoorcamento", "statusvenda"],
   data_do_faturamento: ["datafaturamento", "dtfaturamento", "vencimento", "datavencimento"],
 };
 
@@ -812,9 +821,17 @@ export function SmartImporter({
     const sorted = [...classified].sort((a, b) => b.confidence - a.confidence);
 
     // Inject content-driven roles BEFORE header roles
-    // (status column found by content → maps to situacao_do_pagamento regardless of header)
+    // (a column whose content is mostly PIX/Boleto/etc → forma_de_pagamento;
+    //  mostly Pago/Pendente/etc → situacao_do_pagamento;
+    //  mostly Aprovado/Em Análise/etc → situacao)
     for (const inf of inferred) {
-      if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+      if (inf.type === "forma_pagamento" && !preMap["forma_de_pagamento"]) {
+        preMap["forma_de_pagamento"] = inf.header;
+        usedFields.add("forma_de_pagamento");
+      } else if (inf.type === "status_orcamento" && !preMap["situacao"]) {
+        preMap["situacao"] = inf.header;
+        usedFields.add("situacao");
+      } else if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
         preMap["situacao_do_pagamento"] = inf.header;
         usedFields.add("situacao_do_pagamento");
       }
@@ -829,8 +846,14 @@ export function SmartImporter({
       const inf = inferredByHeader.get(c.header);
       // BLOCK financial roles on non-monetary columns
       if (financialRoles.has(c.role) && inf && !isMonetaryCompatible(inf.type)) {
-        // If the column is actually a status, route to situacao_do_pagamento
-        if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
+        // If the column is actually a payment-related status, route to the right field
+        if (inf.type === "forma_pagamento" && !preMap["forma_de_pagamento"]) {
+          preMap["forma_de_pagamento"] = c.header;
+          usedFields.add("forma_de_pagamento");
+        } else if (inf.type === "status_orcamento" && !preMap["situacao"]) {
+          preMap["situacao"] = c.header;
+          usedFields.add("situacao");
+        } else if (inf.type === "status" && !preMap["situacao_do_pagamento"]) {
           preMap["situacao_do_pagamento"] = c.header;
           usedFields.add("situacao_do_pagamento");
         }
@@ -1165,6 +1188,49 @@ export function SmartImporter({
 
   const classifiedHeaders = useMemo(() => classifyHeaders(headers), [headers]);
 
+  // ─── Payment / status detection preview ──────────────────────────────
+  const paymentDetectionStats = useMemo(() => {
+    const stats = {
+      formaPagamentoColumn: mappings["forma_de_pagamento"] || undefined,
+      formaPagamentoCounts: {} as Record<string, number>,
+      formaPagamentoUnmatched: 0,
+      statusPagamentoColumn: mappings["situacao_do_pagamento"] || undefined,
+      statusPagamentoCounts: {} as Record<string, number>,
+      statusPagamentoUnmatched: 0,
+      statusOrcamentoColumn: mappings["situacao"] || undefined,
+      statusOrcamentoCounts: {} as Record<string, number>,
+      statusOrcamentoUnmatched: 0,
+      totalOrcamentos: 0,
+      orcamentosVinculadosCliente: 0,
+    };
+    const validRows = allValidatedRows.filter(v => !v.hasErrors);
+    for (const v of validRows) {
+      const hasReceita =
+        (parseNullableNumber(v.row.receita_esperada) || 0) > 0 ||
+        (parseNullableNumber(v.row.valor_unitario) || 0) > 0;
+      if (entityType === "orcamentos" || (entityType === "completo" && hasReceita)) {
+        stats.totalOrcamentos++;
+        if (v.row.nome?.trim() || v.row.id_cliente) stats.orcamentosVinculadosCliente++;
+      }
+      if (stats.formaPagamentoColumn && v.row.forma_de_pagamento) {
+        const n = normalizeFormaPagamento(v.row.forma_de_pagamento);
+        if (n) stats.formaPagamentoCounts[n] = (stats.formaPagamentoCounts[n] || 0) + 1;
+        else stats.formaPagamentoUnmatched++;
+      }
+      if (stats.statusPagamentoColumn && v.row.situacao_do_pagamento) {
+        const n = normalizeStatusPagamento(v.row.situacao_do_pagamento);
+        if (n) stats.statusPagamentoCounts[n] = (stats.statusPagamentoCounts[n] || 0) + 1;
+        else stats.statusPagamentoUnmatched++;
+      }
+      if (stats.statusOrcamentoColumn && v.row.situacao) {
+        const n = normalizeStatusOrcamento(v.row.situacao);
+        if (n) stats.statusOrcamentoCounts[n] = (stats.statusOrcamentoCounts[n] || 0) + 1;
+        else stats.statusOrcamentoUnmatched++;
+      }
+    }
+    return stats;
+  }, [allValidatedRows, mappings, entityType]);
+
 
   const checkDuplicates = useCallback(async () => {
     if (entityType !== "clientes" && entityType !== "servicos" && entityType !== "completo") return;
@@ -1312,6 +1378,22 @@ export function SmartImporter({
           if (!val) { record[field.key] = null; continue; }
           if (field.type === "number") val = parseNullableNumber(val);
           record[field.key] = val;
+        }
+        // Normalize payment/status fields to canonical enum values so the UI doesn't show "Não definido"
+        if (entityType === "orcamentos" || entityType === "completo") {
+          if (record.situacao_do_pagamento !== undefined) {
+            record.situacao_do_pagamento =
+              normalizeStatusPagamento(record.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE;
+          } else if (mappings["situacao_do_pagamento"]) {
+            record.situacao_do_pagamento = PAYMENT_STATUS.PENDENTE;
+          }
+          if (record.forma_de_pagamento !== undefined && record.forma_de_pagamento !== null) {
+            const norm = normalizeFormaPagamento(record.forma_de_pagamento);
+            record.forma_de_pagamento = norm; // may be null when unrecognized
+          }
+          if (record.situacao !== undefined && record.situacao !== null) {
+            record.situacao = normalizeStatusOrcamento(record.situacao) ?? record.situacao;
+          }
         }
         if (entityType === "orcamentos" && !record.quantidade) record.quantidade = 1;
         if (entityType === "orcamentos" && !record.receita_esperada && record.valor_unitario) {
@@ -1630,7 +1712,12 @@ export function SmartImporter({
           let dataOrc = rec.data_orcamento || rec.data_do_servico_inicio || todayISO;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dataOrc)) dataOrc = todayISO;
 
-          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento);
+          const statusPag = normalizeStatusPagamento(rec.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE;
+          const formaPag = normalizeFormaPagamento(rec.forma_de_pagamento);
+          const statusOrc =
+            normalizeStatusOrcamento(rec.situacao) ??
+            normalizeStatusServico(rec.situacao) ??
+            BUDGET_SITUATION.APROVADO;
           let dataFat: string | null = rec.data_do_faturamento || null;
           if (dataFat && !/^\d{4}-\d{2}-\d{2}$/.test(dataFat)) dataFat = null;
 
@@ -1646,8 +1733,9 @@ export function SmartImporter({
             valor_imposto: vimp ?? 0,
             incluir_imposto: !!(vimp && vimp > 0),
             orcamento_convertido: true,
-            situacao: normalizeStatusServico(rec.situacao) || "Aprovado",
+            situacao: statusOrc,
             situacao_do_pagamento: statusPag,
+            forma_de_pagamento: formaPag,
             data_do_faturamento: dataFat,
           });
           debug.receitaCount++;
@@ -2285,6 +2373,13 @@ export function SmartImporter({
                   uniquePropriedades={financialPreview.uniquePropriedades}
                 />
               )}
+
+              {/* Payment / status detection card */}
+              {(entityType === "orcamentos" || entityType === "completo") && (
+                <PaymentDetectionCard stats={paymentDetectionStats} />
+              )}
+
+
 
 
               {errorCount > 0 ? (

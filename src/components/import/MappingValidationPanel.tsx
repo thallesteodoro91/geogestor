@@ -60,10 +60,10 @@ const DOMAINS: DomainConfig[] = [
   },
   {
     id: "status",
-    label: "Status",
+    label: "Status & Pagamento",
     icon: Tag,
-    fieldKeys: ["situacao_do_pagamento", "situacao_do_servico", "situacao", "status"],
-    expectedType: ["status", "categoria", "texto"],
+    fieldKeys: ["situacao_do_pagamento", "situacao_do_servico", "situacao", "status", "forma_de_pagamento"],
+    expectedType: ["status", "forma_pagamento", "status_orcamento", "categoria", "texto"],
   },
 ];
 
@@ -72,6 +72,8 @@ const TYPE_LABEL: Record<ColumnType, string> = {
   percentual: "Percentual",
   data: "Data",
   status: "Status",
+  forma_pagamento: "Forma de Pagamento",
+  status_orcamento: "Status do Orçamento",
   documento: "Documento",
   telefone: "Telefone",
   email: "Email",

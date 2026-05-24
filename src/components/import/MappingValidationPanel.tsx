@@ -72,6 +72,8 @@ const TYPE_LABEL: Record<ColumnType, string> = {
   percentual: "Percentual",
   data: "Data",
   status: "Status",
+  forma_pagamento: "Forma de Pagamento",
+  status_orcamento: "Status do Orçamento",
   documento: "Documento",
   telefone: "Telefone",
   email: "Email",

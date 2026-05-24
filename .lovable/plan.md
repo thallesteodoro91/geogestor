@@ -1,133 +1,94 @@
-# Google Calendar — Integração Profissional Bidirecional
+## Problema
 
-## Estado atual
+Ao importar planilhas pelo SmartImporter, três campos não chegam ao banco no formato esperado pela UI:
 
-Já existe uma base funcional:
+- `forma_de_pagamento` — nenhum normalizador existe; o valor cru ("pix", "à vista", "cartão de crédito") é salvo como texto livre e não coincide com as opções do dropdown (`PIX`, `Dinheiro`, `Cartão`, `Transferência`, `Boleto`), por isso o badge mostra vazio / "Não definido".
+- `situacao_do_pagamento` — `normalizeStatusPagamento` existe e cobre vários sinônimos, mas só é acionado quando o campo foi mapeado; quando a coluna não tem cabeçalho óbvio (ex.: só "Status") a detecção por conteúdo já joga em `situacao_do_pagamento`, porém valores como "Faturado"/"Atrasado" não fazem parte do enum aceito pela UI (`Pendente | Pago | Parcial | Cancelado`) e ficam órfãos.
+- `situacao` (status do orçamento) — normalizado via `normalizeStatusServico`, que devolve "Aprovado/Pendente/Concluído/Cancelado/Rejeitado". A UI do orçamento usa `BUDGET_SITUATION` (`Em Analise | Em Negociacao | Aprovado | Recusado | …`), então "enviado", "em análise", "concluído" caem fora.
 
-- Tabelas `google_calendar_tokens` (OAuth + refresh + sync_token) e `google_calendar_sync` (mapping local↔Google).
-- Edge functions: `google-calendar-auth` (OAuth), `google-calendar-sync` (push local→Google), `google-calendar-webhook` (recebe notificações, hoje só ACK).
-- `GoogleCalendarCard` em Configurações → Integrações, com conectar / desconectar / sincronizar tudo.
-- Push automático em `createServico` / `updateServico` (fire-and-forget).
+Resultado: nas telas de Orçamentos, KPIs, filtros e dashboards os registros aparecem como "Não definido" / "Indefinido".
 
-Lacunas que este plano resolve:
-- Sincronização é apenas local→Google (one-way). Eventos criados no Google não voltam.
-- Sem watch channels (sem realtime, só sync manual).
-- Sem categorias/cores por tipo, sem seleção de calendário, sem preferências por evento.
-- Sem dashboard de "próximos compromissos sincronizados / conflitos".
-- Sem fila de retry — falhas de sync são silenciosas.
-- Orçamentos não chamam push automático (só serviços chamam).
+## Objetivo
 
-## O que vamos construir
+Garantir que uma planilha empresarial qualquer entre no sistema com **forma de pagamento, situação financeira e status do orçamento já alinhados aos enums oficiais**, mais um preview de importação que comprove a detecção.
 
-### 1. Modelo de dados (migration)
+## Plano
 
-Estender o schema atual:
+### 1. Vocabulário canônico unificado
+- Em `src/constants/budgetStatus.ts`, adicionar opções faltantes para casar com a realidade do importador:
+  - `PAYMENT_STATUS`: incluir `ATRASADO` e `FATURADO` (já existem no normalizador).
+  - `PAYMENT_METHOD`: incluir `CARTAO_CREDITO`, `CARTAO_DEBITO`, `PARCELADO`, `OUTRO` (mantendo `CARTAO` como alias retrocompatível).
+- Expandir `BUDGET_SITUATION_OPTIONS` para cobrir `Enviado`, `Em Analise`, `Recusado`, `Concluido`, `Cancelado` como valores canônicos.
 
-- `google_calendar_tokens`: adicionar `selected_calendar_id`, `calendar_label`, `auto_sync_enabled bool default true`, `sync_types jsonb default '{"servico":true,"orcamento":true,"visita":true,"vencimento":true,"reuniao":true,"tarefa":true}'`, `watch_channel_id`, `watch_resource_id`, `watch_expires_at`.
-- `google_calendar_sync`: adicionar `event_category text` (servico|orcamento|visita|vencimento|reuniao|tarefa), `color_id text`, `origin text` (local|google), `last_error text`, `retry_count int default 0`, `next_retry_at timestamptz`.
-- Nova tabela `calendar_eventos_externos` para guardar eventos vindos do Google que não pertencem a entidades do SkyGeo (reuniões pessoais, etc.), com `tenant_id`, `user_id`, `google_event_id`, `summary`, `start_at`, `end_at`, `description`, `attendees jsonb`, `updated_at`.
-- Nova tabela `calendar_sync_queue`: `id`, `tenant_id`, `user_id`, `operation` (create|update|delete|pull), `entity_type`, `entity_id`, `payload jsonb`, `status` (pending|processing|done|failed), `attempts int`, `last_error`, `scheduled_at`, `created_at`. Índice em `(status, scheduled_at)`.
-- RLS: todas as tabelas restritas por `tenant_id = get_user_tenant_id(auth.uid())` (segue padrão do projeto). INSERTs exigem `tenant_id` explícito.
+### 2. Novo normalizador `formaPagamento`
+- Em `src/lib/etl/statusNormalizer.ts` (ou novo `paymentMethodNormalizer.ts`), adicionar:
+  - `normalizeFormaPagamento(value)` → mapeia "pix", "boleto", "cartão", "cartao de credito", "débito", "transferência", "ted", "doc", "dinheiro/espécie", "à vista", "parcelado", "crédito" para os valores canônicos do enum.
+  - `normalizeStatusOrcamento(value)` → mapeia "aprovado", "enviado", "recusado/rejeitado", "em análise", "cancelado", "concluído/finalizado" para `BUDGET_SITUATION`.
+  - `isFormaPagamentoToken` e `isStatusOrcamentoToken` para inferência de conteúdo.
 
-### 2. Categorias e cores
+### 3. Inferência por conteúdo (columnTypeInference)
+- Adicionar dois novos `ColumnType`: `forma_pagamento` e `status_orcamento`.
+- Estender vocabulários (`PAYMENT_METHOD_VOCAB`, `ORCAMENTO_STATUS_VOCAB`) e a função `inferColumnType` para detectar essas colunas mesmo quando o cabeçalho é genérico (ex.: "Pagamento" cuja maioria dos valores é "PIX/Boleto/Cartão" → `forma_pagamento`).
+- Atualizar `isMonetaryCompatible` para continuar bloqueando essas colunas de virar receita.
 
-Helper único `src/lib/calendar/eventCategories.ts`:
+### 4. Roteamento automático no SmartImporter
+- Em `SmartImporter.tsx` (`pre-map` por inferência, linhas ~805–845):
+  - Quando `inf.type === "forma_pagamento"` e ainda não houver mapeamento, atribuir a `forma_de_pagamento`.
+  - Quando `inf.type === "status_orcamento"`, atribuir a `situacao`.
+  - Manter o roteamento atual de `status` → `situacao_do_pagamento`.
+- Acrescentar sinônimos em `ORCAMENTO_SYNONYMS` e `COMPLETO_SYNONYMS`:
+  - `forma_de_pagamento`: `["formapagamento", "meiodepagamento", "tipopagamento", "metodopagamento", "pagamento", "modalidadepagamento"]`.
+  - `situacao_do_pagamento`: `["statusfinanceiro", "situacaofinanceira", "pagamento", "statusfinance"]`.
+  - `situacao`: `["statusorcamento", "statusproposta", "estadoorcamento"]`.
 
-```text
-servico     → azul     (Google colorId "9")
-visita      → azul     ("7")
-orcamento   → roxo     ("3")
-vencimento  → vermelho ("11")
-financeiro  → verde    ("10")
-reuniao     → amarelo  ("5")
-tarefa      → cinza    ("8")
-```
+### 5. Aplicar normalizadores no pipeline
+- Em `SmartImporter.tsx`, ao montar a linha de orçamento (linhas ~1633–1652):
+  - `situacao` ← `normalizeStatusOrcamento(rec.situacao) ?? "Em Analise"`.
+  - `situacao_do_pagamento` ← `normalizeStatusPagamento(rec.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE` (padrão "Pendente" em vez de `null`, evita "Não definido").
+  - `forma_de_pagamento` ← `normalizeFormaPagamento(rec.forma_de_pagamento)` (mantém `null` se não houver match, mas registra contagem).
+- Repetir o mesmo tratamento nos caminhos não-compostos (`orcamentos` puro) — auditar `processBatch` e `mapRow` para garantir consistência.
 
-Usado tanto no builder de eventos do Google quanto no `statusColors.ts` do calendário interno (mantendo classes Tailwind estáticas, conforme memória).
+### 6. Fallback de confirmação manual
+- Em `MappingValidationPanel`, exibir um alerta âmbar para cada coluna inferida com confiança < 0.8:
+  - "Possível coluna de status detectada em **<header>** — confirme se é Situação do Pagamento ou Status do Orçamento."
+- O usuário pode aceitar/rejeitar via os selects existentes; nada é forçado.
 
-### 3. OAuth — endurecer o que já existe
+### 7. Preview de importação
+- Em `FinancialPreviewCard` (ou novo `PaymentDetectionCard` próximo dele), exibir antes da confirmação:
+  - ✓ Forma de pagamento detectada em **<coluna>** (N variações: PIX 12, Boleto 5…)
+  - ✓ Status financeiro detectado em **<coluna>** (Pendente 8, Pago 4, Atrasado 1)
+  - ✓ Status de orçamento detectado em **<coluna>** (Aprovado 9, Em Análise 2)
+  - ✓ X orçamentos vinculados a cliente | X pendentes | X pagos | X cancelados
+- Esses contadores são calculados em memória sobre `dataRows` aplicando os normalizadores; nada vai ao banco antes da confirmação.
 
-- Adicionar scope `https://www.googleapis.com/auth/calendar.events` (manter `calendar` para listar calendários).
-- Action `list-calendars` em `google-calendar-auth`: lista calendários do usuário para o seletor.
-- Action `update-preferences`: salva `selected_calendar_id`, `auto_sync_enabled`, `sync_types`.
-- Action `disconnect`: revoga token em `https://oauth2.google.com/revoke` antes de apagar a linha.
-- Refresh token já implementado; adicionar tratamento de `invalid_grant` → marcar conexão como expirada e exigir reconexão.
+### 8. Filtros na tela de Orçamentos
+- Em `src/pages/Orcamentos.tsx`, ao lado do filtro existente de `situacao_do_pagamento`, adicionar:
+  - Filtro por `forma_de_pagamento` (usa `PAYMENT_METHOD_OPTIONS`).
+  - Filtro por `situacao` (status do orçamento, usa `BUDGET_SITUATION_OPTIONS`).
+- Aplicar lógica de filtro idêntica ao padrão atual (`filtroForma === "todos" || orc.forma_de_pagamento === filtroForma`).
 
-### 4. Sync local → Google (push)
+### 9. Tela e badges
+- No badge da tabela de Orçamentos, quando `forma_de_pagamento` for nulo, mostrar `—` (não "Não definido"); para `situacao_do_pagamento` nulo, exibir `Pendente` (já é o default no banco após o passo 5, isso só protege registros legados).
 
-Refatorar `google-calendar-sync`:
+### 10. Testes
+- Atualizar/criar testes unitários em `src/lib/etl/`:
+  - `statusNormalizer.test.ts`: cobrir os novos casos de `forma_pagamento`, status do orçamento, novos sinônimos de pagamento.
+  - `columnTypeInference.test.ts`: garantir que colunas com valores predominantes em PIX/Boleto/etc são detectadas como `forma_pagamento` e não como `monetario`.
+  - Teste de regressão importando uma planilha exemplo com cabeçalho "Pagamento" contendo apenas valores monetários (continua `monetario`) vs "Pagamento" contendo "PIX/Boleto" (vira `forma_pagamento`).
 
-- Respeitar `auto_sync_enabled` e `sync_types[category]` antes de enviar.
-- Usar `selected_calendar_id` em vez de `primary` fixo.
-- Aplicar `colorId` e `extendedProperties.private.skygeo = {entity_type, entity_id, category}` para identificação confiável.
-- Em falha: gravar em `calendar_sync_queue` com `next_retry_at = now() + backoff` (1m, 5m, 30m, 2h).
-- Adicionar push automático em `createOrcamento`/`updateOrcamento` (hoje só `servico` chama), e em qualquer dialog de "visita técnica" / compromisso.
-- Em delete de serviço/orçamento: enviar DELETE para Google via mapping em `google_calendar_sync`.
+## Arquivos afetados (resumo técnico)
 
-### 5. Sync Google → local (pull) + watch channels
+- `src/constants/budgetStatus.ts` — novos enums/opções.
+- `src/lib/etl/statusNormalizer.ts` — `normalizeFormaPagamento`, `normalizeStatusOrcamento`, novos sinônimos.
+- `src/lib/etl/columnTypeInference.ts` — tipos `forma_pagamento`, `status_orcamento` e detecção.
+- `src/components/import/SmartImporter.tsx` — sinônimos, roteamento, aplicação dos normalizadores, contadores.
+- `src/components/import/MappingValidationPanel.tsx` — fallback "Possível coluna detectada".
+- `src/components/import/FinancialPreviewCard.tsx` (ou novo `PaymentDetectionCard.tsx`) — bloco de preview de detecções.
+- `src/pages/Orcamentos.tsx` — novos filtros + tratamento dos badges.
+- `src/lib/etl/statusNormalizer.test.ts` (novo) e `src/lib/etl/columnTypeInference.test.ts` — cobertura.
 
-- Edge function `google-calendar-watch` (nova): cria/renova watch channel via `POST /calendars/{id}/events/watch` apontando para `google-calendar-webhook`. Salva `watch_channel_id`, `watch_resource_id`, `watch_expires_at`. Renovação via pg_cron diário.
-- `google-calendar-webhook` (refatorar): ao receber notificação, localiza o tenant pelo `X-Goog-Channel-ID`, enfileira `operation='pull'` em `calendar_sync_queue`.
-- Edge function `google-calendar-worker` (nova): processa a fila. Para `pull`, chama `events.list?syncToken=...` (sync incremental), salva `sync_token` atualizado, e:
-  - Se evento tem `extendedProperties.private.skygeo` → atualiza a entidade do SkyGeo (data, título, descrição). Sem loop: comparar `updated` timestamps.
-  - Senão → grava em `calendar_eventos_externos`.
-- pg_cron job a cada 1 min dispara o worker (pattern já usado no projeto, ex.: `generate-ai-suggestions-cron`). Worker também faz retry de operações `create/update/delete` falhas.
+## Fora de escopo
 
-### 6. Calendário do SkyGeo
-
-- `CalendarioMensal/Semanal/Diario/Tabela`: passar a unir eventos locais (orçamentos/serviços) com `calendar_eventos_externos`. Badge "Google" nos eventos externos.
-- Detecção de conflitos: hook `useCalendarConflicts` que marca dois eventos sobrepostos no mesmo dia/horário.
-- Página `/calendario`: card no topo "Próximos compromissos sincronizados" + "Conflitos detectados (N)".
-
-### 7. UI — Configurações → Integrações
-
-`GoogleCalendarCard` ganha:
-
-- Seletor de calendário (após conectar, busca via `list-calendars`).
-- Toggle "Sincronização automática".
-- Checkboxes por tipo (serviço, visita, orçamento, vencimento, reunião, tarefa).
-- Indicador "Última sincronização há X" + botão "Sincronizar agora".
-- Status de saúde da conexão (token válido / precisa reconectar).
-
-Onboarding: banner em `OnboardingChecklist` "Conecte sua agenda Google" com benefícios + CTA → `/configuracoes?tab=integracoes`.
-
-### 8. Mobile & notificações
-
-- O Google Calendar mobile do usuário já dá push notifications nativas dos eventos sincronizados — esse é o ganho principal e zero código extra.
-- Garantir que `GoogleCalendarCard` e seletor de calendário são responsivos (já usamos AppLayout/Tabs responsivos).
-- Eventos enviados ao Google incluem `reminders.overrides` (1 dia antes para vencimentos, 1 hora antes para serviços/visitas).
-
-### 9. Segurança
-
-- Tokens permanecem em `google_calendar_tokens` (RLS por user_id já existe).
-- `client_secret` continua em `GOOGLE_CLIENT_SECRET` (já configurado).
-- Revogação real no disconnect (chamada ao endpoint Google `/revoke`).
-- Webhook valida `X-Goog-Channel-Token` (segredo gerado ao criar o watch).
-- Worker e cron usam `CRON_SECRET` (já configurado).
-
-## Arquivos a criar / alterar
-
-```text
-supabase/migrations/<ts>_google_calendar_v2.sql        novo
-supabase/functions/google-calendar-auth/index.ts       alterar (list-calendars, update-preferences, revoke)
-supabase/functions/google-calendar-sync/index.ts       alterar (color, fila, preferences, deletes)
-supabase/functions/google-calendar-webhook/index.ts    alterar (validar token, enfileirar pull)
-supabase/functions/google-calendar-watch/index.ts      novo (criar/renovar watch)
-supabase/functions/google-calendar-worker/index.ts     novo (processa fila)
-src/lib/calendar/eventCategories.ts                    novo (cores + helpers)
-src/services/google-calendar.service.ts                alterar (novos endpoints)
-src/components/settings/GoogleCalendarCard.tsx         alterar (seletor + toggles)
-src/components/onboarding/OnboardingChecklist.tsx      alterar (item Google Calendar)
-src/components/calendario/*                            alterar (unir eventos externos, conflitos)
-src/hooks/useCalendarConflicts.ts                      novo
-src/modules/finance/services/orcamento.service.ts      alterar (push automático)
-supabase/config.toml                                   alterar (verify_jwt das novas funções)
-```
-
-## Entregáveis por fase
-
-1. **Fase 1 — fundação:** migration + categorias/cores + push de orçamento + UI de preferências.
-2. **Fase 2 — pull bidirecional:** watch channel + webhook real + worker + tabela de eventos externos.
-3. **Fase 3 — UX:** conflitos no calendário, dashboard de próximos compromissos, onboarding.
-
-Posso começar pela Fase 1 e seguir nas próximas mensagens, ou implementar tudo numa única passada — me diga a preferência.
+- Migração para enum nativo Postgres (mantemos `text` para não quebrar dados existentes; a normalização garante o domínio).
+- KPIs/dashboards específicos por forma de pagamento (a infraestrutura passa a ter dados consistentes; novos gráficos podem ser tarefa separada).
+- Edge function para reprocessar orçamentos importados anteriormente (pode ser um botão "Renormalizar pagamento" em iteração posterior).

@@ -92,7 +92,8 @@ export function inferColumnType(header: string, samples: unknown[]): InferredCol
   }
 
   let nMonetary = 0, nDate = 0, nStatus = 0, nEmail = 0, nPhone = 0,
-      nDoc = 0, nPercent = 0, nNumber = 0, nBoolean = 0;
+      nDoc = 0, nPercent = 0, nNumber = 0, nBoolean = 0,
+      nFormaPag = 0, nStatusOrc = 0;
 
   const distinct = new Set<string>();
   let totalLen = 0;
@@ -105,6 +106,8 @@ export function inferColumnType(header: string, samples: unknown[]): InferredCol
 
     if (PERCENT_RE.test(v)) nPercent++;
     if (looksLikeStatus(vn)) nStatus++;
+    if (isFormaPagamentoToken(v)) nFormaPag++;
+    if (isStatusOrcamentoToken(v)) nStatusOrc++;
     if (EMAIL_RE.test(v)) nEmail++;
     if (PHONE_RE.test(v) && /\d{4}/.test(v) && !looksLikeMonetary(v)) nPhone++;
     if (CPF_CNPJ_RE.test(v) && (v.replace(/\D/g, "").length === 11 || v.replace(/\D/g, "").length === 14)) nDoc++;
@@ -116,7 +119,19 @@ export function inferColumnType(header: string, samples: unknown[]): InferredCol
 
   const ratio = (n: number) => n / total;
 
-  // Priority order: status (kills monetary), date, email/phone/doc, monetary, percent, categoria
+  // Header hints help disambiguate
+  const headerSuggestsForma = /(forma|meio|metodo|método|modalidade|tipo)\s*(de)?\s*pag/.test(headerN)
+    || /^pagamento$/.test(headerN) || /payment.*(method|type)/.test(headerN);
+  const headerSuggestsStatusOrc = /(status|situacao|situação|estado).*(orcament|orçament|proposta|venda)/.test(headerN)
+    || /^(status|situacao|situação)$/.test(headerN);
+
+  // Priority order: forma_pagamento → status_orcamento → status → date → ...
+  if (ratio(nFormaPag) >= 0.5 && distinct.size <= 12) {
+    return { header, type: "forma_pagamento", confidence: ratio(nFormaPag), sampleSize: total };
+  }
+  if (ratio(nStatusOrc) >= 0.5 && distinct.size <= 12 && headerSuggestsStatusOrc) {
+    return { header, type: "status_orcamento", confidence: ratio(nStatusOrc), sampleSize: total };
+  }
   if (ratio(nStatus) >= 0.5 && distinct.size <= 12) {
     return { header, type: "status", confidence: ratio(nStatus), sampleSize: total };
   }
@@ -134,6 +149,10 @@ export function inferColumnType(header: string, samples: unknown[]): InferredCol
   }
   if (ratio(nPercent) >= 0.6) {
     return { header, type: "percentual", confidence: ratio(nPercent), sampleSize: total };
+  }
+  // Header strongly suggests forma de pagamento — accept lower content ratio
+  if (headerSuggestsForma && ratio(nFormaPag) >= 0.2 && !looksLikeMonetary(values[0] || "")) {
+    return { header, type: "forma_pagamento", confidence: Math.max(0.5, ratio(nFormaPag)), sampleSize: total };
   }
   if (ratio(nMonetary) >= 0.6) {
     return { header, type: "monetario", confidence: ratio(nMonetary), sampleSize: total };

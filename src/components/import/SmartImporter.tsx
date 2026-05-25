@@ -44,7 +44,10 @@ import {
   normalizeFormaPagamento,
   normalizeStatusOrcamento,
 } from "@/lib/etl/statusNormalizer";
-import { PAYMENT_STATUS, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import {
+  PAYMENT_STATUS, BUDGET_SITUATION,
+  PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS,
+} from "@/constants/budgetStatus";
 import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
@@ -701,6 +704,11 @@ export function SmartImporter({
     duplicates: { clientes: { nome: string; count: number }[]; propriedades: { nome: string; count: number }[] };
     discardedRows: { line: number; reason: string }[];
   } | null>(null);
+  // Manual overrides for editable enum fields in the preview step
+  // Key: rawData row index → { fieldKey: chosen canonical value | null }
+  const [manualOverrides, setManualOverrides] = useState<
+    Record<number, Record<string, string | null>>
+  >({});
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();
@@ -734,6 +742,7 @@ export function SmartImporter({
     setValidationReport(null);
     setAppliedProfile(null);
     setStaleProfile(null);
+    setManualOverrides({});
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -1092,7 +1101,20 @@ export function SmartImporter({
     };
   }, [mappings, headers, defaultValues, SYSTEM_FIELDS]);
 
-  const allValidatedRows = useMemo(() => rawData.map((row) => validateAndFormatRow(row)), [rawData, validateAndFormatRow]);
+  const allValidatedRows = useMemo(() => rawData.map((row, idx) => {
+    const validated = validateAndFormatRow(row);
+    const ov = manualOverrides[idx];
+    if (ov) {
+      validated.row = { ...validated.row, ...ov };
+      for (const k of Object.keys(ov)) {
+        delete validated.errors[k];
+        delete validated.warnings[k];
+      }
+      validated.hasErrors = Object.keys(validated.errors).length > 0;
+      validated.hasWarnings = Object.keys(validated.warnings).length > 0;
+    }
+    return validated;
+  }), [rawData, validateAndFormatRow, manualOverrides]);
   const errorCount = useMemo(() => allValidatedRows.filter((v) => v.hasErrors).length, [allValidatedRows]);
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);
@@ -2079,11 +2101,59 @@ export function SmartImporter({
 
   // ─── Cell render helper ──────────────────────────────────────────
 
+  const EDITABLE_ENUMS: Record<string, { value: string; label: string }[]> = {
+    forma_de_pagamento: PAYMENT_METHOD_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+    situacao_do_pagamento: PAYMENT_STATUS_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+    situacao: BUDGET_SITUATION_OPTIONS.map(o => ({ value: o.value, label: o.label })),
+  };
+
   const renderCell = (v: RowValidation, fieldKey: string) => {
     const error = v.errors[fieldKey];
     const warning = v.warnings[fieldKey];
     const issue = error || warning;
     const value = v.row[fieldKey];
+
+    // Inline edit for canonical enum fields (only on budget-related imports)
+    const editable =
+      (entityType === "orcamentos" || entityType === "completo") &&
+      EDITABLE_ENUMS[fieldKey] !== undefined;
+    if (editable) {
+      const rowIdx = (v as RowValidation & { originalIndex?: number }).originalIndex ?? -1;
+      const options = EDITABLE_ENUMS[fieldKey];
+      const current = value ?? "";
+      const isUnknown = !!current && !options.some(o => o.value === current);
+      return (
+        <TableCell key={fieldKey} className="max-w-[200px]">
+          <Select
+            value={current || undefined}
+            onValueChange={(val) => {
+              if (rowIdx < 0) return;
+              setManualOverrides(prev => ({
+                ...prev,
+                [rowIdx]: { ...(prev[rowIdx] || {}), [fieldKey]: val },
+              }));
+            }}
+          >
+            <SelectTrigger className={`h-8 text-xs ${isUnknown ? "border-amber-500" : ""}`}>
+              <SelectValue placeholder="—">
+                {current || "—"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {options.map(o => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isUnknown && (
+            <span className="block text-[10px] text-amber-600 mt-0.5">
+              Original: "{current}"
+            </span>
+          )}
+        </TableCell>
+      );
+    }
+
 
     const cellClass = error
       ? "text-destructive font-medium bg-destructive/5"

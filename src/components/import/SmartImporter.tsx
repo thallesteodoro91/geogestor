@@ -1322,6 +1322,51 @@ export function SmartImporter({
     setImportWarnings([]);
     setValidationReport(null);
 
+    // Audit log: semantic inferences for this import (column → detected type,
+    // canonical enum normalizations, fallbacks). Single entry per import.
+    try {
+      const inferences = inferColumnTypes(headers, rawData).map((i) => ({
+        header: i.header,
+        type: i.type,
+        confidence: Number(i.confidence.toFixed(2)),
+        sampleSize: i.sampleSize,
+        mappedTo:
+          Object.entries(mappings).find(([, h]) => h === i.header)?.[0] ?? null,
+      }));
+      void logAuditEvent({
+        action: "INSERT",
+        entity: "smart_import_inference",
+        newData: {
+          fileName,
+          entityType,
+          totalRows: rawData.length,
+          mappings,
+          inferences,
+          normalization: {
+            forma_pagamento: {
+              column: paymentDetectionStats.formaPagamentoColumn ?? null,
+              matched: paymentDetectionStats.formaPagamentoCounts,
+              unmatched_fallback_null: paymentDetectionStats.formaPagamentoUnmatched,
+            },
+            situacao_do_pagamento: {
+              column: paymentDetectionStats.statusPagamentoColumn ?? null,
+              matched: paymentDetectionStats.statusPagamentoCounts,
+              unmatched_fallback: PAYMENT_STATUS.PENDENTE,
+              unmatched_count: paymentDetectionStats.statusPagamentoUnmatched,
+            },
+            situacao_orcamento: {
+              column: paymentDetectionStats.statusOrcamentoColumn ?? null,
+              matched: paymentDetectionStats.statusOrcamentoCounts,
+              unmatched_fallback: "raw_kept",
+              unmatched_count: paymentDetectionStats.statusOrcamentoUnmatched,
+            },
+          },
+        },
+      });
+    } catch (e) {
+      console.warn("Could not log inference audit:", e);
+    }
+
     // Persist the (possibly manually corrected) mapping for next imports with the same shape
     try {
       saveMappingProfile({

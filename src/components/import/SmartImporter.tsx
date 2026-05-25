@@ -701,6 +701,11 @@ export function SmartImporter({
     duplicates: { clientes: { nome: string; count: number }[]; propriedades: { nome: string; count: number }[] };
     discardedRows: { line: number; reason: string }[];
   } | null>(null);
+  // Manual overrides for editable enum fields in the preview step
+  // Key: rawData row index → { fieldKey: chosen canonical value | null }
+  const [manualOverrides, setManualOverrides] = useState<
+    Record<number, Record<string, string | null>>
+  >({});
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();

@@ -1098,7 +1098,20 @@ export function SmartImporter({
     };
   }, [mappings, headers, defaultValues, SYSTEM_FIELDS]);
 
-  const allValidatedRows = useMemo(() => rawData.map((row) => validateAndFormatRow(row)), [rawData, validateAndFormatRow]);
+  const allValidatedRows = useMemo(() => rawData.map((row, idx) => {
+    const validated = validateAndFormatRow(row);
+    const ov = manualOverrides[idx];
+    if (ov) {
+      validated.row = { ...validated.row, ...ov };
+      for (const k of Object.keys(ov)) {
+        delete validated.errors[k];
+        delete validated.warnings[k];
+      }
+      validated.hasErrors = Object.keys(validated.errors).length > 0;
+      validated.hasWarnings = Object.keys(validated.warnings).length > 0;
+    }
+    return validated;
+  }), [rawData, validateAndFormatRow, manualOverrides]);
   const errorCount = useMemo(() => allValidatedRows.filter((v) => v.hasErrors).length, [allValidatedRows]);
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);

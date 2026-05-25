@@ -44,7 +44,10 @@ import {
   normalizeFormaPagamento,
   normalizeStatusOrcamento,
 } from "@/lib/etl/statusNormalizer";
-import { PAYMENT_STATUS, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import {
+  PAYMENT_STATUS, BUDGET_SITUATION,
+  PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS,
+} from "@/constants/budgetStatus";
 import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";

@@ -739,6 +739,7 @@ export function SmartImporter({
     setValidationReport(null);
     setAppliedProfile(null);
     setStaleProfile(null);
+    setManualOverrides({});
   };
 
   // ─── File processing ───────────────────────────────────────────────

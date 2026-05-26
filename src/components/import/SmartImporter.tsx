@@ -2509,6 +2509,47 @@ export function SmartImporter({
                 <PaymentDetectionCard stats={paymentDetectionStats} />
               )}
 
+              {/* Consistency inconsistencies summary */}
+              {(entityType === "orcamentos" || entityType === "completo") && (() => {
+                const inconsistentRows = allValidatedRows.filter(v => (v.inconsistencies?.length ?? 0) > 0);
+                if (inconsistentRows.length === 0) return null;
+                const counts: Record<string, number> = {};
+                for (const v of inconsistentRows) {
+                  for (const i of v.inconsistencies!) counts[i.message] = (counts[i.message] || 0) + 1;
+                }
+                const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                return (
+                  <Alert className="border-amber-500/50 bg-amber-500/5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertTitle className="text-amber-700 dark:text-amber-400">
+                      {inconsistentRows.length} linha(s) com combinações inconsistentes
+                    </AlertTitle>
+                    <AlertDescription className="space-y-1.5 mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Verifique antes de importar — você ainda pode prosseguir, mas estas combinações são suspeitas:
+                      </p>
+                      <ul className="text-xs space-y-0.5 list-disc list-inside">
+                        {top.map(([msg, n]) => (
+                          <li key={msg}>
+                            <span className="font-medium">{n}×</span> {msg}
+                          </li>
+                        ))}
+                        {Object.keys(counts).length > top.length && (
+                          <li className="text-muted-foreground">
+                            +{Object.keys(counts).length - top.length} outras combinações
+                          </li>
+                        )}
+                      </ul>
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Use a edição em lote acima para corrigir várias linhas de uma vez.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+
+
+
 
 
 

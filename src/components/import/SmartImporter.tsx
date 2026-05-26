@@ -93,6 +93,7 @@ interface RowValidation {
   warnings: Record<string, FieldValidation>;
   hasErrors: boolean;
   hasWarnings: boolean;
+  inconsistencies?: ConsistencyIssue[];
 }
 
 type Step = "upload" | "mapping" | "preview" | "importing" | "result";

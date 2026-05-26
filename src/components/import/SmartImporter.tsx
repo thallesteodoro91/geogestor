@@ -2765,13 +2765,34 @@ export function SmartImporter({
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{v.originalIndex + 2}</TableCell>
                         <TableCell>
-                          {v.hasErrors ? (
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                          ) : v.hasWarnings ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-500" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                          )}
+                          <div className="flex items-center gap-1">
+                            {v.hasErrors ? (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            ) : v.hasWarnings ? (
+                              <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-primary" />
+                            )}
+                            {v.inconsistencies && v.inconsistencies.length > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 text-[10px] font-bold cursor-help">
+                                      !
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="max-w-xs">
+                                    <p className="text-xs font-medium mb-1">Combinações inconsistentes:</p>
+                                    <ul className="text-xs space-y-0.5 list-disc list-inside">
+                                      {v.inconsistencies.map((i, idx) => (
+                                        <li key={idx}>{i.message}</li>
+                                      ))}
+                                    </ul>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
                         </TableCell>
                         {mappedFields.map((f) => renderCell(v, f.key))}
                       </TableRow>

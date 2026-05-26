@@ -709,6 +709,10 @@ export function SmartImporter({
   const [manualOverrides, setManualOverrides] = useState<
     Record<number, Record<string, string | null>>
   >({});
+  // Bulk-edit selection (raw row indices) for the preview step
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [bulkField, setBulkField] = useState<string>("forma_de_pagamento");
+  const [bulkValue, setBulkValue] = useState<string>("");
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();

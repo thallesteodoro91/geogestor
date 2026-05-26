@@ -49,6 +49,7 @@ import {
   PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS,
 } from "@/constants/budgetStatus";
 import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
+import { checkBudgetRowConsistency, type ConsistencyIssue } from "@/lib/etl/consistencyChecks";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";

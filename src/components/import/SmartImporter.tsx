@@ -709,6 +709,10 @@ export function SmartImporter({
   const [manualOverrides, setManualOverrides] = useState<
     Record<number, Record<string, string | null>>
   >({});
+  // Bulk-edit selection (raw row indices) for the preview step
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [bulkField, setBulkField] = useState<string>("forma_de_pagamento");
+  const [bulkValue, setBulkValue] = useState<string>("");
 
   // KPI hook for post-import verification
   const { data: currentKpis, refetch: refetchKpis } = useKPIs();
@@ -743,6 +747,8 @@ export function SmartImporter({
     setAppliedProfile(null);
     setStaleProfile(null);
     setManualOverrides({});
+    setSelectedRows(new Set());
+    setBulkValue("");
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -2595,10 +2601,89 @@ export function SmartImporter({
                 </span>
               </div>
 
+              {/* Bulk edit toolbar (only for budget-related imports) */}
+              {(entityType === "orcamentos" || entityType === "completo") && (() => {
+                const bulkFieldOptions = [
+                  { key: "forma_de_pagamento", label: "Forma de Pagamento", options: PAYMENT_METHOD_OPTIONS },
+                  { key: "situacao_do_pagamento", label: "Situação do Pagamento", options: PAYMENT_STATUS_OPTIONS },
+                  { key: "situacao", label: "Status do Orçamento", options: BUDGET_SITUATION_OPTIONS },
+                ].filter(f => mappedFields.some(m => m.key === f.key));
+                if (bulkFieldOptions.length === 0) return null;
+                const currentBulk = bulkFieldOptions.find(f => f.key === bulkField) ?? bulkFieldOptions[0];
+                const visibleIndexes = paginatedRows.map(r => r.originalIndex);
+                const allVisibleSelected = visibleIndexes.length > 0 && visibleIndexes.every(i => selectedRows.has(i));
+                const applyBulk = () => {
+                  if (!bulkValue || selectedRows.size === 0) return;
+                  setManualOverrides(prev => {
+                    const next = { ...prev };
+                    selectedRows.forEach(idx => {
+                      next[idx] = { ...(next[idx] || {}), [currentBulk.key]: bulkValue };
+                    });
+                    return next;
+                  });
+                  toast.success(`${selectedRows.size} linha(s) atualizada(s): ${currentBulk.label} → ${bulkValue}`);
+                };
+                return (
+                  <div className="flex items-center gap-2 flex-wrap rounded-md border bg-muted/30 p-2">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={(c) => {
+                        setSelectedRows(prev => {
+                          const next = new Set(prev);
+                          if (c) visibleIndexes.forEach(i => next.add(i));
+                          else visibleIndexes.forEach(i => next.delete(i));
+                          return next;
+                        });
+                      }}
+                      aria-label="Selecionar visíveis"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {selectedRows.size > 0 ? `${selectedRows.size} selecionada(s)` : "Selecionar visíveis"}
+                    </span>
+                    <span className="mx-1 text-muted-foreground/40">|</span>
+                    <span className="text-xs font-medium">Edição em lote:</span>
+                    <Select value={bulkField} onValueChange={(v) => { setBulkField(v); setBulkValue(""); }}>
+                      <SelectTrigger className="h-7 w-[180px] text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {bulkFieldOptions.map(f => (
+                          <SelectItem key={f.key} value={f.key}>{f.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={bulkValue} onValueChange={setBulkValue}>
+                      <SelectTrigger className="h-7 w-[180px] text-xs">
+                        <SelectValue placeholder="Escolher valor…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {currentBulk.options.map(o => (
+                          <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="sm" className="h-7 text-xs"
+                      disabled={!bulkValue || selectedRows.size === 0}
+                      onClick={applyBulk}
+                    >
+                      Aplicar a {selectedRows.size || 0}
+                    </Button>
+                    {selectedRows.size > 0 && (
+                      <Button
+                        size="sm" variant="ghost" className="h-7 text-xs"
+                        onClick={() => setSelectedRows(new Set())}
+                      >
+                        Limpar seleção
+                      </Button>
+                    )}
+                  </div>
+                );
+              })()}
+
               <ScrollArea className="h-[280px] border rounded-md">
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-8"></TableHead>
                       <TableHead className="w-10">#</TableHead>
                       <TableHead className="w-10">Status</TableHead>
                       {mappedFields.map((f) => <TableHead key={f.key} className="whitespace-nowrap">{f.label}</TableHead>)}
@@ -2614,6 +2699,20 @@ export function SmartImporter({
                           : ""
                         }
                       >
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedRows.has(v.originalIndex)}
+                            onCheckedChange={(c) => {
+                              setSelectedRows(prev => {
+                                const next = new Set(prev);
+                                if (c) next.add(v.originalIndex);
+                                else next.delete(v.originalIndex);
+                                return next;
+                              });
+                            }}
+                            aria-label={`Selecionar linha ${v.originalIndex + 2}`}
+                          />
+                        </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{v.originalIndex + 2}</TableCell>
                         <TableCell>
                           {v.hasErrors ? (
@@ -2629,7 +2728,7 @@ export function SmartImporter({
                     ))}
                     {paginatedRows.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={mappedFields.length + 2} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={mappedFields.length + 3} className="text-center text-muted-foreground py-8">
                           Nenhuma linha nesta categoria
                         </TableCell>
                       </TableRow>

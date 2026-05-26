@@ -49,6 +49,7 @@ import {
   PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS,
 } from "@/constants/budgetStatus";
 import { PaymentDetectionCard } from "@/components/import/PaymentDetectionCard";
+import { checkBudgetRowConsistency, type ConsistencyIssue } from "@/lib/etl/consistencyChecks";
 import { clientNaturalKey, buildClientIndex, lookupClient } from "@/lib/etl/clientDedup";
 import { FinancialPreviewCard } from "@/components/import/FinancialPreviewCard";
 import { ImportValidationCard } from "@/components/import/ImportValidationCard";
@@ -92,6 +93,7 @@ interface RowValidation {
   warnings: Record<string, FieldValidation>;
   hasErrors: boolean;
   hasWarnings: boolean;
+  inconsistencies?: ConsistencyIssue[];
 }
 
 type Step = "upload" | "mapping" | "preview" | "importing" | "result";
@@ -1119,8 +1121,15 @@ export function SmartImporter({
       validated.hasErrors = Object.keys(validated.errors).length > 0;
       validated.hasWarnings = Object.keys(validated.warnings).length > 0;
     }
+    if (entityType === "orcamentos" || entityType === "completo") {
+      const inconsistencies = checkBudgetRowConsistency(validated.row);
+      if (inconsistencies.length > 0) {
+        validated.inconsistencies = inconsistencies;
+        validated.hasWarnings = true;
+      }
+    }
     return validated;
-  }), [rawData, validateAndFormatRow, manualOverrides]);
+  }), [rawData, validateAndFormatRow, manualOverrides, entityType]);
   const errorCount = useMemo(() => allValidatedRows.filter((v) => v.hasErrors).length, [allValidatedRows]);
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);
@@ -2500,6 +2509,47 @@ export function SmartImporter({
                 <PaymentDetectionCard stats={paymentDetectionStats} />
               )}
 
+              {/* Consistency inconsistencies summary */}
+              {(entityType === "orcamentos" || entityType === "completo") && (() => {
+                const inconsistentRows = allValidatedRows.filter(v => (v.inconsistencies?.length ?? 0) > 0);
+                if (inconsistentRows.length === 0) return null;
+                const counts: Record<string, number> = {};
+                for (const v of inconsistentRows) {
+                  for (const i of v.inconsistencies!) counts[i.message] = (counts[i.message] || 0) + 1;
+                }
+                const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+                return (
+                  <Alert className="border-amber-500/50 bg-amber-500/5">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                    <AlertTitle className="text-amber-700 dark:text-amber-400">
+                      {inconsistentRows.length} linha(s) com combinações inconsistentes
+                    </AlertTitle>
+                    <AlertDescription className="space-y-1.5 mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Verifique antes de importar — você ainda pode prosseguir, mas estas combinações são suspeitas:
+                      </p>
+                      <ul className="text-xs space-y-0.5 list-disc list-inside">
+                        {top.map(([msg, n]) => (
+                          <li key={msg}>
+                            <span className="font-medium">{n}×</span> {msg}
+                          </li>
+                        ))}
+                        {Object.keys(counts).length > top.length && (
+                          <li className="text-muted-foreground">
+                            +{Object.keys(counts).length - top.length} outras combinações
+                          </li>
+                        )}
+                      </ul>
+                      <p className="text-xs text-muted-foreground pt-1">
+                        Use a edição em lote acima para corrigir várias linhas de uma vez.
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                );
+              })()}
+
+
+
 
 
 
@@ -2715,13 +2765,34 @@ export function SmartImporter({
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{v.originalIndex + 2}</TableCell>
                         <TableCell>
-                          {v.hasErrors ? (
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                          ) : v.hasWarnings ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-500" />
-                          ) : (
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                          )}
+                          <div className="flex items-center gap-1">
+                            {v.hasErrors ? (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            ) : v.hasWarnings ? (
+                              <AlertTriangle className="h-4 w-4 text-amber-500" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-primary" />
+                            )}
+                            {v.inconsistencies && v.inconsistencies.length > 0 && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 text-[10px] font-bold cursor-help">
+                                      !
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="max-w-xs">
+                                    <p className="text-xs font-medium mb-1">Combinações inconsistentes:</p>
+                                    <ul className="text-xs space-y-0.5 list-disc list-inside">
+                                      {v.inconsistencies.map((i, idx) => (
+                                        <li key={idx}>{i.message}</li>
+                                      ))}
+                                    </ul>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
                         </TableCell>
                         {mappedFields.map((f) => renderCell(v, f.key))}
                       </TableRow>

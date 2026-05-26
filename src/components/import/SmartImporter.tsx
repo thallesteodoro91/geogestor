@@ -1121,8 +1121,15 @@ export function SmartImporter({
       validated.hasErrors = Object.keys(validated.errors).length > 0;
       validated.hasWarnings = Object.keys(validated.warnings).length > 0;
     }
+    if (entityType === "orcamentos" || entityType === "completo") {
+      const inconsistencies = checkBudgetRowConsistency(validated.row);
+      if (inconsistencies.length > 0) {
+        validated.inconsistencies = inconsistencies;
+        validated.hasWarnings = true;
+      }
+    }
     return validated;
-  }), [rawData, validateAndFormatRow, manualOverrides]);
+  }), [rawData, validateAndFormatRow, manualOverrides, entityType]);
   const errorCount = useMemo(() => allValidatedRows.filter((v) => v.hasErrors).length, [allValidatedRows]);
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);

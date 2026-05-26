@@ -747,6 +747,8 @@ export function SmartImporter({
     setAppliedProfile(null);
     setStaleProfile(null);
     setManualOverrides({});
+    setSelectedRows(new Set());
+    setBulkValue("");
   };
 
   // ─── File processing ───────────────────────────────────────────────

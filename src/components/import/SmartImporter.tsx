@@ -661,6 +661,7 @@ export function SmartImporter({
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);
+  const [blockOnInconsistencies, setBlockOnInconsistencies] = useState(false);
   const [importResult, setImportResult] = useState<{
     success: number; errors: string[]; failedRows: Record<string, string>[];
   } | null>(null);

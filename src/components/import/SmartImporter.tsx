@@ -661,6 +661,7 @@ export function SmartImporter({
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [skipErrors, setSkipErrors] = useState(true);
+  const [blockOnInconsistencies, setBlockOnInconsistencies] = useState(false);
   const [importResult, setImportResult] = useState<{
     success: number; errors: string[]; failedRows: Record<string, string>[];
   } | null>(null);
@@ -751,6 +752,7 @@ export function SmartImporter({
     setManualOverrides({});
     setSelectedRows(new Set());
     setBulkValue("");
+    setBlockOnInconsistencies(false);
   };
 
   // ─── File processing ───────────────────────────────────────────────
@@ -1134,7 +1136,13 @@ export function SmartImporter({
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);
   const mappedFields = SYSTEM_FIELDS.filter((f) => mappings[f.key]);
-  const canImport = skipErrors ? validCount > 0 : errorCount === 0;
+  const hasInconsistencies = useMemo(() => {
+    if (entityType !== "orcamentos" && entityType !== "completo") return false;
+    return allValidatedRows.some(v => (v.inconsistencies?.length ?? 0) > 0);
+  }, [allValidatedRows, entityType]);
+
+  const isBlockedByInconsistencies = blockOnInconsistencies && hasInconsistencies;
+  const canImport = (skipErrors ? validCount > 0 : errorCount === 0) && !isBlockedByInconsistencies;
 
   // Filtered and paginated rows for preview
   const filteredRows = useMemo(() => {
@@ -2519,14 +2527,15 @@ export function SmartImporter({
                 }
                 const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
                 return (
-                  <Alert className="border-amber-500/50 bg-amber-500/5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <AlertTitle className="text-amber-700 dark:text-amber-400">
+                  <Alert className={`${blockOnInconsistencies ? "border-destructive/50 bg-destructive/5" : "border-amber-500/50 bg-amber-500/5"}`}>
+                    <AlertTriangle className={`h-4 w-4 ${blockOnInconsistencies ? "text-destructive" : "text-amber-600"}`} />
+                    <AlertTitle className={`${blockOnInconsistencies ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
                       {inconsistentRows.length} linha(s) com combinações inconsistentes
+                      {blockOnInconsistencies && " — importação bloqueada"}
                     </AlertTitle>
                     <AlertDescription className="space-y-1.5 mt-2">
                       <p className="text-xs text-muted-foreground">
-                        Verifique antes de importar — você ainda pode prosseguir, mas estas combinações são suspeitas:
+                        Verifique antes de importar — estas combinações são suspeitas:
                       </p>
                       <ul className="text-xs space-y-0.5 list-disc list-inside">
                         {top.map(([msg, n]) => (
@@ -2540,13 +2549,32 @@ export function SmartImporter({
                           </li>
                         )}
                       </ul>
-                      <p className="text-xs text-muted-foreground pt-1">
-                        Use a edição em lote acima para corrigir várias linhas de uma vez.
-                      </p>
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
+                        <Checkbox
+                          id="block-inconsistencies"
+                          checked={blockOnInconsistencies}
+                          onCheckedChange={(v) => setBlockOnInconsistencies(!!v)}
+                        />
+                        <Label htmlFor="block-inconsistencies" className="text-xs font-medium cursor-pointer">
+                          Bloquear importação enquanto houver inconsistências
+                        </Label>
+                      </div>
+                      {blockOnInconsistencies && (
+                        <p className="text-xs text-destructive font-medium">
+                          A importação está bloqueada. Corrija as combinações acima ou desmarque esta opção para prosseguir.
+                        </p>
+                      )}
+                      {!blockOnInconsistencies && (
+                        <p className="text-xs text-muted-foreground pt-1">
+                          Use a edição em lote acima para corrigir várias linhas de uma vez.
+                        </p>
+                      )}
                     </AlertDescription>
                   </Alert>
                 );
               })()}
+
+
 
 
 
@@ -3194,6 +3222,12 @@ export function SmartImporter({
                 <Upload className="h-4 w-4 mr-2" />
                 Importar {skipErrors ? validCount : rawData.length} {entityLabel.singular}(s)
               </Button>
+              {isBlockedByInconsistencies && (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Importação bloqueada por inconsistências
+                </span>
+              )}
             </>
           )}
           {step === "result" && (

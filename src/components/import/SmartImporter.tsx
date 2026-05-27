@@ -2549,16 +2549,62 @@ export function SmartImporter({
                           </li>
                         )}
                       </ul>
-                      <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
-                        <Checkbox
-                          id="block-inconsistencies"
-                          checked={blockOnInconsistencies}
-                          onCheckedChange={(v) => setBlockOnInconsistencies(!!v)}
-                        />
-                        <Label htmlFor="block-inconsistencies" className="text-xs font-medium cursor-pointer">
-                          Bloquear importação enquanto houver inconsistências
-                        </Label>
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border/50 mt-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-1.5"
+                          onClick={() => {
+                            // Apply auto-fix patches to all inconsistent rows.
+                            let fixedRows = 0;
+                            let fixedIssues = 0;
+                            const ruleCounts: Record<string, number> = {};
+                            setManualOverrides(prev => {
+                              const next = { ...prev };
+                              for (const v of inconsistentRows) {
+                                const { patch, appliedCodes } = buildAutoFixPatch(v.inconsistencies ?? []);
+                                if (Object.keys(patch).length === 0) continue;
+                                const idx = (v as any).originalIndex ?? allValidatedRows.indexOf(v);
+                                next[idx] = { ...(next[idx] ?? {}), ...patch };
+                                fixedRows += 1;
+                                fixedIssues += appliedCodes.length;
+                                for (const c of appliedCodes) ruleCounts[c] = (ruleCounts[c] || 0) + 1;
+                              }
+                              return next;
+                            });
+                            if (fixedRows > 0) {
+                              toast({
+                                title: "Correção automática aplicada",
+                                description: `${fixedIssues} ajuste(s) em ${fixedRows} linha(s). Revise antes de importar.`,
+                              });
+                              console.info("[SmartImporter] auto-fix applied", { fixedRows, fixedIssues, ruleCounts });
+                            } else {
+                              toast({
+                                title: "Nada a corrigir automaticamente",
+                                description: "As inconsistências detectadas exigem revisão manual.",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <Wand2 className="h-3.5 w-3.5" />
+                          Corrigir automaticamente
+                        </Button>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Checkbox
+                            id="block-inconsistencies"
+                            checked={blockOnInconsistencies}
+                            onCheckedChange={(v) => setBlockOnInconsistencies(!!v)}
+                          />
+                          <Label htmlFor="block-inconsistencies" className="text-xs font-medium cursor-pointer">
+                            Bloquear importação enquanto houver inconsistências
+                          </Label>
+                        </div>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        A correção automática aplica regras seguras (ex.: Pago sem forma → Pendente, Parcelado com valor parcial → Parcial). Você pode revisar e ajustar em seguida.
+                      </p>
                       {blockOnInconsistencies && (
                         <p className="text-xs text-destructive font-medium">
                           A importação está bloqueada. Corrija as combinações acima ou desmarque esta opção para prosseguir.

@@ -3222,6 +3222,12 @@ export function SmartImporter({
                 <Upload className="h-4 w-4 mr-2" />
                 Importar {skipErrors ? validCount : rawData.length} {entityLabel.singular}(s)
               </Button>
+              {isBlockedByInconsistencies && (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  Importação bloqueada por inconsistências
+                </span>
+              )}
             </>
           )}
           {step === "result" && (

@@ -1136,7 +1136,13 @@ export function SmartImporter({
   const warningCount = useMemo(() => allValidatedRows.filter((v) => v.hasWarnings && !v.hasErrors).length, [allValidatedRows]);
   const validCount = useMemo(() => allValidatedRows.filter((v) => !v.hasErrors).length, [allValidatedRows]);
   const mappedFields = SYSTEM_FIELDS.filter((f) => mappings[f.key]);
-  const canImport = skipErrors ? validCount > 0 : errorCount === 0;
+  const hasInconsistencies = useMemo(() => {
+    if (entityType !== "orcamentos" && entityType !== "completo") return false;
+    return allValidatedRows.some(v => (v.inconsistencies?.length ?? 0) > 0);
+  }, [allValidatedRows, entityType]);
+
+  const isBlockedByInconsistencies = blockOnInconsistencies && hasInconsistencies;
+  const canImport = (skipErrors ? validCount > 0 : errorCount === 0) && !isBlockedByInconsistencies;
 
   // Filtered and paginated rows for preview
   const filteredRows = useMemo(() => {

@@ -42,18 +42,24 @@ export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
   // 1. Pago without forma de pagamento
   if (pago === PAYMENT_STATUS.PAGO && !forma) {
     issues.push({
+      code: "PAGO_SEM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: "Marcado como Pago, mas sem forma de pagamento",
       suggestion: "Defina a forma de pagamento usada",
+      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.PENDENTE },
+      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.PENDENTE}"`,
     });
   }
 
   // 2. Cancelado with forma de pagamento
   if (pago === PAYMENT_STATUS.CANCELADO && forma) {
     issues.push({
+      code: "CANCELADO_COM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: `Pagamento Cancelado, mas forma "${forma}" preenchida`,
       suggestion: "Remova a forma de pagamento ou revise o status",
+      autoFix: { forma_de_pagamento: null },
+      autoFixLabel: "Limpar forma de pagamento",
     });
   }
 
@@ -63,56 +69,95 @@ export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
     pago === PAYMENT_STATUS.PAGO
   ) {
     issues.push({
+      code: "RECUSADO_CANCELADO_PAGO",
       fields: ["situacao", "situacao_do_pagamento"],
       message: `Orçamento ${orc} marcado como Pago`,
       suggestion: "Revise: orçamentos recusados/cancelados normalmente não são pagos",
+      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.CANCELADO },
+      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.CANCELADO}"`,
     });
   }
 
   // 4. Orçamento Aprovado com pagamento Cancelado
   if (orc === BUDGET_SITUATION.APROVADO && pago === PAYMENT_STATUS.CANCELADO) {
     issues.push({
+      code: "APROVADO_PAGAMENTO_CANCELADO",
       fields: ["situacao", "situacao_do_pagamento"],
       message: "Orçamento Aprovado mas pagamento Cancelado",
       suggestion: "Verifique se o orçamento deveria estar como Recusado",
+      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.PENDENTE },
+      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.PENDENTE}"`,
     });
   }
 
   // 5. Parcelado mas marcado como Pago integral
   if (forma === PAYMENT_METHOD.PARCELADO && pago === PAYMENT_STATUS.PAGO && vTotal > 0 && vPago > 0 && vPago < vTotal) {
     issues.push({
+      code: "PARCELADO_PAGO_PARCIAL",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: "Parcelado e Pago, mas valor pago < valor total",
       suggestion: "Use status Parcial",
+      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.PARCIAL },
+      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.PARCIAL}"`,
     });
   }
 
   // 6. Valor pago > 0 mas status Pendente
   if (pago === PAYMENT_STATUS.PENDENTE && vPago > 0) {
+    const target = vTotal > 0 && vPago >= vTotal ? PAYMENT_STATUS.PAGO : PAYMENT_STATUS.PARCIAL;
     issues.push({
+      code: "PENDENTE_COM_VALOR_PAGO",
       fields: ["situacao_do_pagamento"],
       message: `Status Pendente, mas valor pago = ${vPago}`,
       suggestion: "Use Parcial ou Pago conforme o caso",
+      autoFix: { situacao_do_pagamento: target },
+      autoFixLabel: `Alterar pagamento para "${target}"`,
     });
   }
 
   // 7. Atrasado em orçamento ainda Em Análise
   if (pago === PAYMENT_STATUS.ATRASADO && (orc === BUDGET_SITUATION.EM_ANALISE || orc === BUDGET_SITUATION.EM_NEGOCIACAO)) {
     issues.push({
+      code: "ATRASADO_EM_ANALISE",
       fields: ["situacao", "situacao_do_pagamento"],
       message: `Pagamento Atrasado em orçamento ${orc}`,
       suggestion: "Orçamentos não aprovados normalmente não têm pagamento atrasado",
+      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.PENDENTE },
+      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.PENDENTE}"`,
     });
   }
 
   // 8. Faturado sem forma de pagamento definida
   if (pago === PAYMENT_STATUS.FATURADO && !forma) {
     issues.push({
+      code: "FATURADO_SEM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: "Faturado mas sem forma de pagamento",
       suggestion: "Defina como será cobrado (boleto, transferência, etc)",
+      autoFix: { forma_de_pagamento: PAYMENT_METHOD.BOLETO },
+      autoFixLabel: `Definir forma como "${PAYMENT_METHOD.BOLETO}"`,
     });
   }
 
   return issues;
 }
+
+/**
+ * Builds a consolidated patch from all auto-fixable issues for a row.
+ * Later rules override earlier ones for the same field (rules are ordered by priority).
+ */
+export function buildAutoFixPatch(
+  issues: ConsistencyIssue[]
+): { patch: Record<string, string | null>; appliedCodes: string[] } {
+  const patch: Record<string, string | null> = {};
+  const appliedCodes: string[] = [];
+  for (const issue of issues) {
+    if (!issue.autoFix) continue;
+    appliedCodes.push(issue.code);
+    for (const [k, v] of Object.entries(issue.autoFix)) {
+      patch[k] = v;
+    }
+  }
+  return { patch, appliedCodes };
+}
+

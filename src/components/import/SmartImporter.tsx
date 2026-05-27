@@ -2574,16 +2574,13 @@ export function SmartImporter({
                               return next;
                             });
                             if (fixedRows > 0) {
-                              toast({
-                                title: "Correção automática aplicada",
+                              toast.success("Correção automática aplicada", {
                                 description: `${fixedIssues} ajuste(s) em ${fixedRows} linha(s). Revise antes de importar.`,
                               });
                               console.info("[SmartImporter] auto-fix applied", { fixedRows, fixedIssues, ruleCounts });
                             } else {
-                              toast({
-                                title: "Nada a corrigir automaticamente",
+                              toast.error("Nada a corrigir automaticamente", {
                                 description: "As inconsistências detectadas exigem revisão manual.",
-                                variant: "destructive",
                               });
                             }
                           }}

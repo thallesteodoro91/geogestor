@@ -2527,14 +2527,15 @@ export function SmartImporter({
                 }
                 const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
                 return (
-                  <Alert className="border-amber-500/50 bg-amber-500/5">
-                    <AlertTriangle className="h-4 w-4 text-amber-600" />
-                    <AlertTitle className="text-amber-700 dark:text-amber-400">
+                  <Alert className={`${blockOnInconsistencies ? "border-destructive/50 bg-destructive/5" : "border-amber-500/50 bg-amber-500/5"}`}>
+                    <AlertTriangle className={`h-4 w-4 ${blockOnInconsistencies ? "text-destructive" : "text-amber-600"}`} />
+                    <AlertTitle className={`${blockOnInconsistencies ? "text-destructive" : "text-amber-700 dark:text-amber-400"}`}>
                       {inconsistentRows.length} linha(s) com combinações inconsistentes
+                      {blockOnInconsistencies && " — importação bloqueada"}
                     </AlertTitle>
                     <AlertDescription className="space-y-1.5 mt-2">
                       <p className="text-xs text-muted-foreground">
-                        Verifique antes de importar — você ainda pode prosseguir, mas estas combinações são suspeitas:
+                        Verifique antes de importar — estas combinações são suspeitas:
                       </p>
                       <ul className="text-xs space-y-0.5 list-disc list-inside">
                         {top.map(([msg, n]) => (
@@ -2548,13 +2549,32 @@ export function SmartImporter({
                           </li>
                         )}
                       </ul>
-                      <p className="text-xs text-muted-foreground pt-1">
-                        Use a edição em lote acima para corrigir várias linhas de uma vez.
-                      </p>
+                      <div className="flex items-center gap-2 pt-2 border-t border-border/50 mt-2">
+                        <Checkbox
+                          id="block-inconsistencies"
+                          checked={blockOnInconsistencies}
+                          onCheckedChange={(v) => setBlockOnInconsistencies(!!v)}
+                        />
+                        <Label htmlFor="block-inconsistencies" className="text-xs font-medium cursor-pointer">
+                          Bloquear importação enquanto houver inconsistências
+                        </Label>
+                      </div>
+                      {blockOnInconsistencies && (
+                        <p className="text-xs text-destructive font-medium">
+                          A importação está bloqueada. Corrija as combinações acima ou desmarque esta opção para prosseguir.
+                        </p>
+                      )}
+                      {!blockOnInconsistencies && (
+                        <p className="text-xs text-muted-foreground pt-1">
+                          Use a edição em lote acima para corrigir várias linhas de uma vez.
+                        </p>
+                      )}
                     </AlertDescription>
                   </Alert>
                 );
               })()}
+
+
 
 
 

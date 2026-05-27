@@ -752,6 +752,7 @@ export function SmartImporter({
     setManualOverrides({});
     setSelectedRows(new Set());
     setBulkValue("");
+    setBlockOnInconsistencies(false);
   };
 
   // ─── File processing ───────────────────────────────────────────────

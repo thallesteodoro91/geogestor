@@ -6,9 +6,14 @@
 import { PAYMENT_STATUS, PAYMENT_METHOD, BUDGET_SITUATION } from "@/constants/budgetStatus";
 
 export interface ConsistencyIssue {
+  code: string; // stable rule identifier
   fields: string[]; // canonical field keys involved
   message: string;
   suggestion?: string;
+  /** Auto-fix patch to apply on top of the row (only the fields that should change). */
+  autoFix?: Record<string, string | null>;
+  /** Human-readable description of what the auto-fix will do. */
+  autoFixLabel?: string;
 }
 
 interface BudgetRow {

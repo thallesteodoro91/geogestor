@@ -35,8 +35,12 @@ const num = (v: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
-export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
-  const issues: ConsistencyIssue[] = [];
+export function checkBudgetRowConsistency(
+  row: BudgetRow,
+  config?: RuleConfig
+): ConsistencyIssue[] {
+  const cfg = config ?? getRuleConfig();
+  const raw: ConsistencyIssue[] = [];
   const forma = row.forma_de_pagamento || null;
   const pago = row.situacao_do_pagamento || null;
   const orc = row.situacao || null;

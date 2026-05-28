@@ -141,7 +141,16 @@ export function checkBudgetRowConsistency(
     });
   }
 
-  return issues;
+  // Aplica a configuração: filtra regras desabilitadas e remove auto-fix das que tiveram auto-fix desligado.
+  return issues
+    .filter((i) => cfg[i.code]?.enabled !== false)
+    .map((i) => {
+      if (i.autoFix && cfg[i.code]?.autoFix === false) {
+        const { autoFix: _af, autoFixLabel: _afl, ...rest } = i;
+        return rest as ConsistencyIssue;
+      }
+      return i;
+    });
 }
 
 /**

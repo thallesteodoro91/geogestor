@@ -2,8 +2,12 @@
  * Cross-field consistency checks for budget rows during import.
  * Returns warnings (not blocking) when payment method + payment status +
  * budget situation form an unlikely combination.
+ *
+ * As regras podem ser ativadas/desativadas individualmente (e também os
+ * auto-fixes) via `consistencyRulesConfig`.
  */
 import { PAYMENT_STATUS, PAYMENT_METHOD, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { getRuleConfig, type RuleConfig } from "@/lib/etl/consistencyRulesConfig";
 
 export interface ConsistencyIssue {
   code: string; // stable rule identifier
@@ -31,7 +35,11 @@ const num = (v: unknown): number => {
   return isNaN(n) ? 0 : n;
 };
 
-export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
+export function checkBudgetRowConsistency(
+  row: BudgetRow,
+  config?: RuleConfig
+): ConsistencyIssue[] {
+  const cfg = config ?? getRuleConfig();
   const issues: ConsistencyIssue[] = [];
   const forma = row.forma_de_pagamento || null;
   const pago = row.situacao_do_pagamento || null;
@@ -133,7 +141,16 @@ export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
     });
   }
 
-  return issues;
+  // Aplica a configuração: filtra regras desabilitadas e remove auto-fix das que tiveram auto-fix desligado.
+  return issues
+    .filter((i) => cfg[i.code]?.enabled !== false)
+    .map((i) => {
+      if (i.autoFix && cfg[i.code]?.autoFix === false) {
+        const { autoFix: _af, autoFixLabel: _afl, ...rest } = i;
+        return rest as ConsistencyIssue;
+      }
+      return i;
+    });
 }
 
 /**

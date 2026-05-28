@@ -39,27 +39,23 @@ export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
   const vPago = num(row.valor_pago);
   const vTotal = num(row.valor_total);
 
-  // 1. Pago without forma de pagamento
+  // 1. Pago without forma de pagamento — apenas avisar (não corrigir automaticamente)
   if (pago === PAYMENT_STATUS.PAGO && !forma) {
     issues.push({
       code: "PAGO_SEM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: "Marcado como Pago, mas sem forma de pagamento",
-      suggestion: "Defina a forma de pagamento usada",
-      autoFix: { situacao_do_pagamento: PAYMENT_STATUS.PENDENTE },
-      autoFixLabel: `Alterar pagamento para "${PAYMENT_STATUS.PENDENTE}"`,
+      suggestion: "Defina manualmente a forma de pagamento usada",
     });
   }
 
-  // 2. Cancelado with forma de pagamento
+  // 2. Cancelado with forma de pagamento — apenas avisar; preservar a forma como histórico da tentativa original
   if (pago === PAYMENT_STATUS.CANCELADO && forma) {
     issues.push({
       code: "CANCELADO_COM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
-      message: `Pagamento Cancelado, mas forma "${forma}" preenchida`,
-      suggestion: "Remova a forma de pagamento ou revise o status",
-      autoFix: { forma_de_pagamento: null },
-      autoFixLabel: "Limpar forma de pagamento",
+      message: `Pagamento Cancelado com forma "${forma}" preenchida`,
+      suggestion: "Forma preservada como histórico da tentativa original; revise se necessário",
     });
   }
 

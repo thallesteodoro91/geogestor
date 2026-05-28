@@ -2863,6 +2863,43 @@ export function SmartImporter({
                                 </Tooltip>
                               </TooltipProvider>
                             )}
+                            {v.inconsistencies && v.inconsistencies.some(i => i.autoFix) && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-5 w-5"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const { patch, appliedCodes } = buildAutoFixPatch(v.inconsistencies ?? []);
+                                        if (Object.keys(patch).length === 0) {
+                                          toast.error("Nada a corrigir nesta linha", {
+                                            description: "As inconsistências desta linha exigem revisão manual.",
+                                          });
+                                          return;
+                                        }
+                                        setManualOverrides(prev => ({
+                                          ...prev,
+                                          [v.originalIndex]: { ...(prev[v.originalIndex] ?? {}), ...patch },
+                                        }));
+                                        toast.success("Linha corrigida", {
+                                          description: `${appliedCodes.length} ajuste(s) aplicado(s). Revise antes de importar.`,
+                                        });
+                                        console.info("[SmartImporter] auto-fix row", { rowIndex: v.originalIndex, appliedCodes });
+                                      }}
+                                    >
+                                      <Wand2 className="h-3 w-3 text-amber-600" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="right" className="text-xs">
+                                    Corrigir esta linha automaticamente
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
                           </div>
                         </TableCell>
                         {mappedFields.map((f) => renderCell(v, f.key))}

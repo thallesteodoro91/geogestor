@@ -123,15 +123,13 @@ export function checkBudgetRowConsistency(row: BudgetRow): ConsistencyIssue[] {
     });
   }
 
-  // 8. Faturado sem forma de pagamento definida
+  // 8. Faturado sem forma de pagamento — apenas avisar (não assumir forma padrão)
   if (pago === PAYMENT_STATUS.FATURADO && !forma) {
     issues.push({
       code: "FATURADO_SEM_FORMA",
       fields: ["forma_de_pagamento", "situacao_do_pagamento"],
       message: "Faturado mas sem forma de pagamento",
-      suggestion: "Defina como será cobrado (boleto, transferência, etc)",
-      autoFix: { forma_de_pagamento: PAYMENT_METHOD.BOLETO },
-      autoFixLabel: `Definir forma como "${PAYMENT_METHOD.BOLETO}"`,
+      suggestion: "Defina manualmente como será cobrado",
     });
   }
 

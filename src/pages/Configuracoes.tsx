@@ -3,11 +3,12 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { User, Building2, Bell, Plug } from "lucide-react";
+import { User, Building2, Bell, Plug, FileCheck2 } from "lucide-react";
 import { AccountTab } from "@/components/settings/AccountTab";
 import { CompanyTab } from "@/components/settings/CompanyTab";
 import { NotificationsTab } from "@/components/settings/NotificationsTab";
 import { IntegrationsTab } from "@/components/settings/IntegrationsTab";
+import { ImportRulesTab } from "@/components/settings/ImportRulesTab";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 const TABS = [
@@ -15,6 +16,7 @@ const TABS = [
   { value: "empresa", label: "Empresa", icon: Building2, description: "Dados da empresa, plano e equipe" },
   { value: "notificacoes", label: "Notificações", icon: Bell, description: "Alertas e canais de entrega" },
   { value: "integracoes", label: "Integrações", icon: Plug, description: "Google Calendar e importação" },
+  { value: "importacao", label: "Importação", icon: FileCheck2, description: "Regras de consistência e auto-fix da importação" },
 ] as const;
 
 type TabValue = typeof TABS[number]["value"];

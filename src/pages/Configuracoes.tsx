@@ -96,14 +96,6 @@ export default function Configuracoes() {
             </div>
           )}
 
-          {isMobile && (
-            <div className="mt-4">
-              <TabsContent value="conta" className="mt-0"><AccountTab /></TabsContent>
-              <TabsContent value="empresa" className="mt-0"><CompanyTab /></TabsContent>
-              <TabsContent value="notificacoes" className="mt-0"><NotificationsTab /></TabsContent>
-              <TabsContent value="integracoes" className="mt-0"><IntegrationsTab /></TabsContent>
-            </div>
-          )}
         </Tabs>
       </div>
     </AppLayout>

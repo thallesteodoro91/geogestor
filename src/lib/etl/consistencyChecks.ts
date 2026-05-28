@@ -2,8 +2,12 @@
  * Cross-field consistency checks for budget rows during import.
  * Returns warnings (not blocking) when payment method + payment status +
  * budget situation form an unlikely combination.
+ *
+ * As regras podem ser ativadas/desativadas individualmente (e também os
+ * auto-fixes) via `consistencyRulesConfig`.
  */
 import { PAYMENT_STATUS, PAYMENT_METHOD, BUDGET_SITUATION } from "@/constants/budgetStatus";
+import { getRuleConfig, type RuleConfig } from "@/lib/etl/consistencyRulesConfig";
 
 export interface ConsistencyIssue {
   code: string; // stable rule identifier

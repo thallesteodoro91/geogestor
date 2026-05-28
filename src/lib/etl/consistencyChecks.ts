@@ -40,7 +40,7 @@ export function checkBudgetRowConsistency(
   config?: RuleConfig
 ): ConsistencyIssue[] {
   const cfg = config ?? getRuleConfig();
-  const raw: ConsistencyIssue[] = [];
+  const issues: ConsistencyIssue[] = [];
   const forma = row.forma_de_pagamento || null;
   const pago = row.situacao_do_pagamento || null;
   const orc = row.situacao || null;

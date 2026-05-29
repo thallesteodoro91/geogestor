@@ -46,16 +46,18 @@ export function matchColumn(header: string, samples: unknown[]): HybridMatch {
     combined = Math.min(1, 0.6 * headerScore + 0.4 * contentScore + 0.15);
     reason = `header "${syn!.matchedAlias}" + conteúdo (${content!.reason})`;
   } else if (headerField && headerScore >= contentScore) {
+    // Header-only: trust the header alone (content may simply be missing).
     winner = headerField;
-    combined = 0.6 * headerScore + 0.4 * contentScore;
+    combined = headerScore;
     reason = `header "${syn!.matchedAlias}"`;
   } else if (contentField) {
+    // Content-only: trust strong value patterns even when the header is opaque.
     winner = contentField;
-    combined = 0.6 * headerScore + 0.4 * contentScore;
+    combined = contentScore;
     reason = `conteúdo (${content!.reason})`;
   } else if (headerField) {
     winner = headerField;
-    combined = 0.6 * headerScore;
+    combined = headerScore;
     reason = `header "${syn!.matchedAlias}"`;
   }
 

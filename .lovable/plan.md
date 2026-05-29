@@ -1,94 +1,178 @@
-## Problema
 
-Ao importar planilhas pelo SmartImporter, três campos não chegam ao banco no formato esperado pela UI:
+# Importador Universal GeoGestor
 
-- `forma_de_pagamento` — nenhum normalizador existe; o valor cru ("pix", "à vista", "cartão de crédito") é salvo como texto livre e não coincide com as opções do dropdown (`PIX`, `Dinheiro`, `Cartão`, `Transferência`, `Boleto`), por isso o badge mostra vazio / "Não definido".
-- `situacao_do_pagamento` — `normalizeStatusPagamento` existe e cobre vários sinônimos, mas só é acionado quando o campo foi mapeado; quando a coluna não tem cabeçalho óbvio (ex.: só "Status") a detecção por conteúdo já joga em `situacao_do_pagamento`, porém valores como "Faturado"/"Atrasado" não fazem parte do enum aceito pela UI (`Pendente | Pago | Parcial | Cancelado`) e ficam órfãos.
-- `situacao` (status do orçamento) — normalizado via `normalizeStatusServico`, que devolve "Aprovado/Pendente/Concluído/Cancelado/Rejeitado". A UI do orçamento usa `BUDGET_SITUATION` (`Em Analise | Em Negociacao | Aprovado | Recusado | …`), então "enviado", "em análise", "concluído" caem fora.
+Transformar o `SmartImporter` em um motor de ETL capaz de absorver qualquer planilha empresarial (cliente, propriedade, serviço, orçamento, financeiro) sem exigir adaptação do cliente. O GeoGestor passa a se adaptar à planilha — não o contrário.
 
-Resultado: nas telas de Orçamentos, KPIs, filtros e dashboards os registros aparecem como "Não definido" / "Indefinido".
+> Observação: o produto é **GeoGestor** (não SkyGeo). O plano usa a nomenclatura interna correta.
 
-## Objetivo
+---
 
-Garantir que uma planilha empresarial qualquer entre no sistema com **forma de pagamento, situação financeira e status do orçamento já alinhados aos enums oficiais**, mais um preview de importação que comprove a detecção.
+## Visão geral da arquitetura
 
-## Plano
+```text
+Planilha (xlsx/csv)
+   │
+   ▼
+[1] Sniffer de conteúdo  ──► tipo real de cada coluna
+   │                          (status, forma_pag, monetário, data, doc, geo, etc.)
+   ▼
+[2] Dicionário de sinônimos ──► campo canônico (CLIENTE.nome, FIN.receita_realizada, ...)
+   │
+   ▼
+[3] Matcher híbrido       ──► header + conteúdo + score de confiança
+   │
+   ▼
+[4] Mapper universal      ──► entidades: Cliente, Endereço, Propriedade,
+   │                          Serviço, Orçamento, Financeiro
+   ▼
+[5] Resolver de relações  ──► dedup + FK (Cliente↔Propriedade↔Serviço↔Orçamento)
+   │
+   ▼
+[6] Custom fields         ──► colunas sem destino viram campo personalizado
+   │
+   ▼
+[7] Tela de validação 360 ──► contadores, amostras, correção manual
+   │
+   ▼
+[8] Persistência em lote + refresh KPIs/Dashboard
+```
 
-### 1. Vocabulário canônico unificado
-- Em `src/constants/budgetStatus.ts`, adicionar opções faltantes para casar com a realidade do importador:
-  - `PAYMENT_STATUS`: incluir `ATRASADO` e `FATURADO` (já existem no normalizador).
-  - `PAYMENT_METHOD`: incluir `CARTAO_CREDITO`, `CARTAO_DEBITO`, `PARCELADO`, `OUTRO` (mantendo `CARTAO` como alias retrocompatível).
-- Expandir `BUDGET_SITUATION_OPTIONS` para cobrir `Enviado`, `Em Analise`, `Recusado`, `Concluido`, `Cancelado` como valores canônicos.
+---
 
-### 2. Novo normalizador `formaPagamento`
-- Em `src/lib/etl/statusNormalizer.ts` (ou novo `paymentMethodNormalizer.ts`), adicionar:
-  - `normalizeFormaPagamento(value)` → mapeia "pix", "boleto", "cartão", "cartao de credito", "débito", "transferência", "ted", "doc", "dinheiro/espécie", "à vista", "parcelado", "crédito" para os valores canônicos do enum.
-  - `normalizeStatusOrcamento(value)` → mapeia "aprovado", "enviado", "recusado/rejeitado", "em análise", "cancelado", "concluído/finalizado" para `BUDGET_SITUATION`.
-  - `isFormaPagamentoToken` e `isStatusOrcamentoToken` para inferência de conteúdo.
+## Fase 1 — Expansão do modelo canônico
 
-### 3. Inferência por conteúdo (columnTypeInference)
-- Adicionar dois novos `ColumnType`: `forma_pagamento` e `status_orcamento`.
-- Estender vocabulários (`PAYMENT_METHOD_VOCAB`, `ORCAMENTO_STATUS_VOCAB`) e a função `inferColumnType` para detectar essas colunas mesmo quando o cabeçalho é genérico (ex.: "Pagamento" cuja maioria dos valores é "PIX/Boleto/Cartão" → `forma_pagamento`).
-- Atualizar `isMonetaryCompatible` para continuar bloqueando essas colunas de virar receita.
+Criar `src/lib/etl/canonicalSchema.ts` com o catálogo completo de campos canônicos agrupados por entidade. Cada campo tem: `id`, `entity`, `label`, `tipo` (`text|number|monetary|date|doc|phone|email|geo|enum`), `required`, `aliases[]`, `valueValidators[]`.
 
-### 4. Roteamento automático no SmartImporter
-- Em `SmartImporter.tsx` (`pre-map` por inferência, linhas ~805–845):
-  - Quando `inf.type === "forma_pagamento"` e ainda não houver mapeamento, atribuir a `forma_de_pagamento`.
-  - Quando `inf.type === "status_orcamento"`, atribuir a `situacao`.
-  - Manter o roteamento atual de `status` → `situacao_do_pagamento`.
-- Acrescentar sinônimos em `ORCAMENTO_SYNONYMS` e `COMPLETO_SYNONYMS`:
-  - `forma_de_pagamento`: `["formapagamento", "meiodepagamento", "tipopagamento", "metodopagamento", "pagamento", "modalidadepagamento"]`.
-  - `situacao_do_pagamento`: `["statusfinanceiro", "situacaofinanceira", "pagamento", "statusfinance"]`.
-  - `situacao`: `["statusorcamento", "statusproposta", "estadoorcamento"]`.
+Entidades e campos cobertos:
 
-### 5. Aplicar normalizadores no pipeline
-- Em `SmartImporter.tsx`, ao montar a linha de orçamento (linhas ~1633–1652):
-  - `situacao` ← `normalizeStatusOrcamento(rec.situacao) ?? "Em Analise"`.
-  - `situacao_do_pagamento` ← `normalizeStatusPagamento(rec.situacao_do_pagamento) ?? PAYMENT_STATUS.PENDENTE` (padrão "Pendente" em vez de `null`, evita "Não definido").
-  - `forma_de_pagamento` ← `normalizeFormaPagamento(rec.forma_de_pagamento)` (mantém `null` se não houver match, mas registra contagem).
-- Repetir o mesmo tratamento nos caminhos não-compostos (`orcamentos` puro) — auditar `processBatch` e `mapRow` para garantir consistência.
+- **CLIENTE**: nome, razao_social, nome_fantasia, cpf, cnpj, email, telefone, celular, whatsapp, data_cadastro, categoria, origem, situacao
+- **ENDEREÇO** (embutido em Cliente e Propriedade): logradouro, numero, complemento, bairro, cidade, municipio, estado, cep
+- **PROPRIEDADE**: nome, tipo (`Fazenda|Chácara|Sítio|Imóvel|Urbano`), matricula, car, ccir, itr, area, area_total, hectares, latitude, longitude
+- **SERVIÇO**: nome, tipo_servico, categoria, subcategoria, responsavel, status, data_inicio, data_fim, progresso
+- **ORÇAMENTO**: codigo, valor_orcado, desconto, impostos, valor_final, forma_pagamento, situacao_pagamento, status, data_emissao, data_vencimento, data_faturamento
+- **FINANCEIRO**: receita, receita_prevista, receita_realizada, faturamento, custos, custos_variaveis, custos_fixos, despesas, despesas_operacionais, impostos, lucro_bruto, lucro_liquido, margem
 
-### 6. Fallback de confirmação manual
-- Em `MappingValidationPanel`, exibir um alerta âmbar para cada coluna inferida com confiança < 0.8:
-  - "Possível coluna de status detectada em **<header>** — confirme se é Situação do Pagamento ou Status do Orçamento."
-- O usuário pode aceitar/rejeitar via os selects existentes; nada é forçado.
+Mapeamento canônico → tabelas reais (`dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`, `fato_despesas`) fica em `src/lib/etl/canonicalToDb.ts`. Campos sem coluna física vão para `custom_fields` (JSONB — ver Fase 5).
 
-### 7. Preview de importação
-- Em `FinancialPreviewCard` (ou novo `PaymentDetectionCard` próximo dele), exibir antes da confirmação:
-  - ✓ Forma de pagamento detectada em **<coluna>** (N variações: PIX 12, Boleto 5…)
-  - ✓ Status financeiro detectado em **<coluna>** (Pendente 8, Pago 4, Atrasado 1)
-  - ✓ Status de orçamento detectado em **<coluna>** (Aprovado 9, Em Análise 2)
-  - ✓ X orçamentos vinculados a cliente | X pendentes | X pagos | X cancelados
-- Esses contadores são calculados em memória sobre `dataRows` aplicando os normalizadores; nada vai ao banco antes da confirmação.
+## Fase 2 — Dicionário de sinônimos
 
-### 8. Filtros na tela de Orçamentos
-- Em `src/pages/Orcamentos.tsx`, ao lado do filtro existente de `situacao_do_pagamento`, adicionar:
-  - Filtro por `forma_de_pagamento` (usa `PAYMENT_METHOD_OPTIONS`).
-  - Filtro por `situacao` (status do orçamento, usa `BUDGET_SITUATION_OPTIONS`).
-- Aplicar lógica de filtro idêntica ao padrão atual (`filtroForma === "todos" || orc.forma_de_pagamento === filtroForma`).
+Criar `src/lib/etl/synonymsDictionary.ts` consolidando todos os aliases. Estrutura:
 
-### 9. Tela e badges
-- No badge da tabela de Orçamentos, quando `forma_de_pagamento` for nulo, mostrar `—` (não "Não definido"); para `situacao_do_pagamento` nulo, exibir `Pendente` (já é o default no banco após o passo 5, isso só protege registros legados).
+```ts
+{ field: "cliente.nome", aliases: ["cliente", "nome", "contratante", "razão social", ...] }
+{ field: "fin.receita_realizada", aliases: ["receita realizada", "faturamento", "valor recebido", ...] }
+```
 
-### 10. Testes
-- Atualizar/criar testes unitários em `src/lib/etl/`:
-  - `statusNormalizer.test.ts`: cobrir os novos casos de `forma_pagamento`, status do orçamento, novos sinônimos de pagamento.
-  - `columnTypeInference.test.ts`: garantir que colunas com valores predominantes em PIX/Boleto/etc são detectadas como `forma_pagamento` e não como `monetario`.
-  - Teste de regressão importando uma planilha exemplo com cabeçalho "Pagamento" contendo apenas valores monetários (continua `monetario`) vs "Pagamento" contendo "PIX/Boleto" (vira `forma_pagamento`).
+Normalizador agressivo (lowercase, sem acento, sem `_-./`, plural→singular básico) já existe em `mappingProfiles.ts` — extrair para `src/lib/etl/textNormalize.ts` e reusar. Matching por:
+- igualdade normalizada
+- substring (`startsWith`/`includes`)
+- Levenshtein ≤ 2 para typos curtos
 
-## Arquivos afetados (resumo técnico)
+Saída: `synonymMatch(header) → { fieldId, score 0..1 }`.
 
-- `src/constants/budgetStatus.ts` — novos enums/opções.
-- `src/lib/etl/statusNormalizer.ts` — `normalizeFormaPagamento`, `normalizeStatusOrcamento`, novos sinônimos.
-- `src/lib/etl/columnTypeInference.ts` — tipos `forma_pagamento`, `status_orcamento` e detecção.
-- `src/components/import/SmartImporter.tsx` — sinônimos, roteamento, aplicação dos normalizadores, contadores.
-- `src/components/import/MappingValidationPanel.tsx` — fallback "Possível coluna detectada".
-- `src/components/import/FinancialPreviewCard.tsx` (ou novo `PaymentDetectionCard.tsx`) — bloco de preview de detecções.
-- `src/pages/Orcamentos.tsx` — novos filtros + tratamento dos badges.
-- `src/lib/etl/statusNormalizer.test.ts` (novo) e `src/lib/etl/columnTypeInference.test.ts` — cobertura.
+## Fase 3 — Detecção por conteúdo
 
-## Fora de escopo
+Estender o `columnTypeInference.ts` atual para emitir, além do tipo bruto, **sugestão de campo canônico** com base no conteúdo. Regras:
 
-- Migração para enum nativo Postgres (mantemos `text` para não quebrar dados existentes; a normalização garante o domínio).
-- KPIs/dashboards específicos por forma de pagamento (a infraestrutura passa a ter dados consistentes; novos gráficos podem ser tarefa separada).
-- Edge function para reprocessar orçamentos importados anteriormente (pode ser um botão "Renormalizar pagamento" em iteração posterior).
+- valores ∈ {Pago, Pendente, Cancelado, Em Aberto, Atrasado} → `orcamento.situacao_pagamento`
+- valores ∈ {PIX, Boleto, Cartão, Transferência, Dinheiro} → `orcamento.forma_pagamento`
+- valores ∈ {Aprovado, Recusado, Em Análise, Enviado} → `orcamento.status`
+- valores monetários com `R$` ou padrão `0.000,00` → financeiro (escolha do campo decidida pelo header)
+- 11/14 dígitos → cpf/cnpj
+- formato data → campo de data (qual? header decide)
+- pares numéricos lat/lng coerentes → propriedade.latitude/longitude
+
+O matcher final é **híbrido**: `score = 0.6 * synonymHeaderScore + 0.4 * contentScore`. Empate vai para o de maior `score` global; abaixo de 0.45 fica "sem destino" (Fase 5).
+
+## Fase 4 — Campos opcionais
+
+Nenhum campo é obrigatório por padrão exceto chaves naturais mínimas para criar a entidade (ex.: Cliente exige `nome` OU `cpf` OU `cnpj`; Propriedade exige `nome` ou `matricula`). Demais ausências:
+
+- não bloqueiam importação
+- registram `null`
+- aparecem como aviso amarelo (não erro) no painel de validação
+
+## Fase 5 — Campos desconhecidos (custom fields)
+
+Migração nova: adicionar coluna `custom_fields jsonb DEFAULT '{}'` em `dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`. Toda coluna da planilha sem destino canônico (score < 0.45) é gravada em `custom_fields` da entidade-alvo da linha (inferido pela presença de chaves da entidade).
+
+UI: nas telas de detalhe das entidades já existentes, mostrar um card "Campos personalizados" listando pares chave/valor.
+
+## Fase 6 — Relacionamentos
+
+Resolver de FKs em ordem topológica, em memória, antes do INSERT:
+
+1. **Cliente** — dedup por `clientNaturalKey` (já existe em `clientDedup.ts`); insere novos e indexa `id_cliente`.
+2. **Propriedade** — chave natural: `(nome_propriedade + id_cliente)` ou `matricula`. Vincula `id_cliente`.
+3. **Orçamento** — vincula `id_cliente` (obrigatório, já existe constraint) e `id_propriedade` quando presente.
+4. **Serviço** — vincula `id_cliente`, `id_propriedade`, `id_orcamento` quando inferível pelo código do orçamento na mesma linha.
+5. **Despesa** — vincula `id_orcamento` ou `id_servico` quando a linha trouxer código relacionável.
+6. **Município** — fica como atributo de Endereço (não cria tabela); agregações por município no dashboard usam o campo direto.
+
+Para linhas "wide" (uma linha = cliente + propriedade + orçamento + financeiro), o importador faz **explosão em múltiplas entidades** dentro da mesma transação.
+
+## Fase 7 — Dashboard 360 e KPIs
+
+Após confirmar a importação:
+
+- invalidar todos os `react-query` keys de KPIs/dashboard (`useKPIs`, `useDashboardMetrics`, `useChartData`, `useSalesFunnel`, `useClientesAnalytics`)
+- chamar `calcular_kpis_v2` e `get_financial_dashboard_metrics` para repovoar a `vw_kpis_financeiros`
+- toast "Importação concluída — Dashboard atualizado" com link para `/`
+
+Métricas garantidamente repopuladas: Receita Total, Despesas Totais, Lucro Líquido, Ticket Médio, Receita por Cliente, Receita por Município, Receita por Serviço, Fluxo Financeiro, Custos por Categoria, Lucro por Cliente.
+
+## Fase 8 — Tela de validação universal
+
+Reescrever a etapa de revisão do `SmartImporter` em um painel único com:
+
+- **Resumo detectado**: nº de Clientes novos / existentes, Propriedades, Orçamentos, Serviços, Receitas, Despesas, Formas de pagamento (top 5), Status (top 5).
+- **Tabela de colunas**: header original → campo canônico sugerido → score → ação (aceitar / trocar / ignorar / marcar como custom field).
+- **Inconsistências** (reaproveita `consistencyChecks.ts` e `consistencyRulesConfig.ts` já existentes) com auto-fix por linha já implementado.
+- **Pré-visualização**: 10 primeiras linhas já normalizadas.
+- Botões: `Voltar`, `Importar` (habilitado mesmo com warnings, desabilitado só com erro bloqueante).
+
+---
+
+## Arquivos a criar / alterar
+
+**Criar**
+- `src/lib/etl/canonicalSchema.ts` — catálogo de campos canônicos
+- `src/lib/etl/canonicalToDb.ts` — mapeamento canônico → colunas reais
+- `src/lib/etl/synonymsDictionary.ts` — sinônimos
+- `src/lib/etl/textNormalize.ts` — normalizador compartilhado
+- `src/lib/etl/contentClassifier.ts` — extensão do inference que sugere campo canônico
+- `src/lib/etl/hybridMatcher.ts` — score header + conteúdo
+- `src/lib/etl/relationResolver.ts` — dedup + FK em memória
+- `src/lib/etl/rowExploder.ts` — linha wide → várias entidades
+- `src/components/import/UniversalValidationPanel.tsx` — nova tela de validação
+- testes vitest correspondentes (`*.test.ts`)
+
+**Alterar**
+- `src/components/import/SmartImporter.tsx` — usar o pipeline novo, substituir a etapa de mapeamento e revisão
+- `src/lib/etl/columnTypeInference.ts` — expor mais sinais (lat/lng, doc, etc.)
+- `src/lib/etl/clientDedup.ts` — reusado como está; talvez expor para propriedade/orçamento
+- serviços de batch insert em `src/modules/{crm,operations,finance}/services/*` — aceitar `custom_fields`
+
+**Migração de banco**
+- Adicionar `custom_fields jsonb DEFAULT '{}' NOT NULL` em `dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`. Sem alterar RLS/GRANTs existentes.
+
+---
+
+## Rollout sugerido (PRs separados)
+
+1. Migração `custom_fields` + tipos
+2. `canonicalSchema` + `synonymsDictionary` + `textNormalize` (puro, com testes)
+3. `contentClassifier` + `hybridMatcher` (com testes em fixtures de planilha real)
+4. `rowExploder` + `relationResolver` (com testes)
+5. `UniversalValidationPanel` + integração no `SmartImporter`
+6. Refresh de KPIs/Dashboard pós-import
+
+Cada PR ≤ ~600 LOC, testável de forma independente.
+
+---
+
+## Pontos abertos (confirmar antes de PR 2)
+
+- Confirma que **uma única linha pode representar Cliente + Propriedade + Orçamento + Financeiro simultaneamente** (linha "wide" típica de planilha empresarial)?
+- Os custom fields devem aparecer em **todas as telas de detalhe** ou apenas em Cliente/Propriedade nesta primeira iteração?
+- Manter o fluxo atual de "perfil de mapeamento por planilha" (`mappingProfiles.ts`) reaproveitando a nova UI? (recomendo sim).

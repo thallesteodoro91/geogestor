@@ -602,6 +602,7 @@ export type Database = {
           cnpj: string | null
           cpf: string | null
           created_at: string | null
+          custom_fields: Json
           data_cadastro: string | null
           email: string | null
           endereco: string | null
@@ -621,6 +622,7 @@ export type Database = {
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null
+          custom_fields?: Json
           data_cadastro?: string | null
           email?: string | null
           endereco?: string | null
@@ -640,6 +642,7 @@ export type Database = {
           cnpj?: string | null
           cpf?: string | null
           created_at?: string | null
+          custom_fields?: Json
           data_cadastro?: string | null
           email?: string | null
           endereco?: string | null
@@ -763,6 +766,7 @@ export type Database = {
           ccir: string | null
           cidade: string | null
           created_at: string | null
+          custom_fields: Json
           documentacao: string | null
           id_cliente: string | null
           id_propriedade: string
@@ -792,6 +796,7 @@ export type Database = {
           ccir?: string | null
           cidade?: string | null
           created_at?: string | null
+          custom_fields?: Json
           documentacao?: string | null
           id_cliente?: string | null
           id_propriedade?: string
@@ -821,6 +826,7 @@ export type Database = {
           ccir?: string | null
           cidade?: string | null
           created_at?: string | null
+          custom_fields?: Json
           documentacao?: string | null
           id_cliente?: string | null
           id_propriedade?: string
@@ -1078,6 +1084,7 @@ export type Database = {
           anotacoes: string | null
           codigo_orcamento: string | null
           created_at: string | null
+          custom_fields: Json
           data_do_faturamento: string | null
           data_inicio: string | null
           data_orcamento: string
@@ -1115,6 +1122,7 @@ export type Database = {
           anotacoes?: string | null
           codigo_orcamento?: string | null
           created_at?: string | null
+          custom_fields?: Json
           data_do_faturamento?: string | null
           data_inicio?: string | null
           data_orcamento: string
@@ -1152,6 +1160,7 @@ export type Database = {
           anotacoes?: string | null
           codigo_orcamento?: string | null
           created_at?: string | null
+          custom_fields?: Json
           data_do_faturamento?: string | null
           data_inicio?: string | null
           data_orcamento?: string
@@ -1289,6 +1298,7 @@ export type Database = {
           categoria: string | null
           created_at: string | null
           custo_servico: number | null
+          custom_fields: Json
           data_do_servico_fim: string | null
           data_do_servico_inicio: string | null
           descricao: string | null
@@ -1310,6 +1320,7 @@ export type Database = {
           categoria?: string | null
           created_at?: string | null
           custo_servico?: number | null
+          custom_fields?: Json
           data_do_servico_fim?: string | null
           data_do_servico_inicio?: string | null
           descricao?: string | null
@@ -1331,6 +1342,7 @@ export type Database = {
           categoria?: string | null
           created_at?: string | null
           custo_servico?: number | null
+          custom_fields?: Json
           data_do_servico_fim?: string | null
           data_do_servico_inicio?: string | null
           descricao?: string | null

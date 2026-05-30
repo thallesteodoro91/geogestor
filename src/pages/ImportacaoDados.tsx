@@ -101,6 +101,11 @@ export default function ImportacaoDados() {
           entityType={importEntity}
           onSuccess={() => {}}
         />
+
+        <UniversalImporter
+          open={universalOpen}
+          onOpenChange={setUniversalOpen}
+        />
       </div>
     </AppLayout>
   );

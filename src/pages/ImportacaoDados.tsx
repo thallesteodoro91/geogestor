@@ -42,20 +42,25 @@ export default function ImportacaoDados() {
           </Button>
         </PageHeader>
 
-        {/* Modo principal: importar tudo */}
+        {/* Modo principal: importador universal */}
         <div
-          className="border-2 border-dashed border-muted-foreground/30 rounded-lg p-16 text-center hover:border-primary/50 transition-colors cursor-pointer"
-          onClick={() => openImporter("completo")}
+          className="border-2 border-dashed border-primary/40 rounded-lg p-16 text-center hover:border-primary transition-colors cursor-pointer bg-primary/5"
+          onClick={() => setUniversalOpen(true)}
         >
-          <Upload className="h-14 w-14 mx-auto text-muted-foreground mb-4" />
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Sparkles className="h-6 w-6 text-primary" />
+            <Upload className="h-14 w-14 text-primary" />
+          </div>
           <p className="text-lg font-medium text-foreground">
-            Clique aqui para importar sua planilha
+            Importação universal — clique para enviar sua planilha
           </p>
           <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-            Aceita CSV, XLS e XLSX — não precisa seguir modelo. O sistema identifica
-            automaticamente se são clientes, propriedades, projetos, orçamentos ou despesas.
+            CSV, XLS ou XLSX. O sistema detecta clientes, propriedades, orçamentos e financeiro
+            por conteúdo + cabeçalho, preserva colunas extras como campos personalizados e
+            atualiza o Dashboard automaticamente.
           </p>
         </div>
+
 
         {/* Modo avançado: por entidade */}
         <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>

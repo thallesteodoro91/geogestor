@@ -2,13 +2,15 @@ import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SmartImporter, ImportEntityType } from "@/components/import/SmartImporter";
+import { UniversalImporter } from "@/components/import/UniversalImporter";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Upload, ChevronDown, FileSpreadsheet, Users, MapPin, FileText, Briefcase, Receipt, Settings2 } from "lucide-react";
+import { Upload, ChevronDown, FileSpreadsheet, Users, MapPin, FileText, Briefcase, Receipt, Settings2, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export default function ImportacaoDados() {
   const [importOpen, setImportOpen] = useState(false);
+  const [universalOpen, setUniversalOpen] = useState(false);
   const [importEntity, setImportEntity] = useState<ImportEntityType>("completo");
   const [advancedOpen, setAdvancedOpen] = useState(false);
 

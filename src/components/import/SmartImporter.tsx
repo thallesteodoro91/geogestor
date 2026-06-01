@@ -1,8 +1,8 @@
 /**
  * SmartImporter — thin compatibility wrapper around the Universal Importer.
  *
- * The legacy multi-step wizard (with MappingValidationPanel, per-entity
- * SYSTEM_FIELDS, consistency auto-fix, etc.) has been replaced by the
+ * The legacy multi-step wizard (per-entity SYSTEM_FIELDS, consistency
+ * auto-fix, custom mapping panel, etc.) has been replaced by the
  * universal pipeline:
  *
  *   File → headers/rows → hybrid match → UniversalValidationPanel

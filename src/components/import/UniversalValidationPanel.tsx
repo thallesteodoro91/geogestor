@@ -2,7 +2,7 @@
  * Universal validation panel — content-aware preview of every column in the
  * uploaded spreadsheet with a 360º summary of detected entities.
  *
- * Pure presentational component. The host (SmartImporter) feeds in the
+ * Pure presentational component. The host (UniversalImporter) feeds in the
  * already-computed {@link HybridMatch} array and a small detection summary.
  */
 

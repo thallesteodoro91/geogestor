@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "lint:forbidden-terms": "bash -c 'if rg -l SmartImporter src/ --type ts --type tsx 2>/dev/null | grep -q .; then echo \"FORBIDDEN TERM FOUND: SmartImporter\"; rg -n SmartImporter src/ --type ts --type tsx; exit 1; fi; echo \"No forbidden terms found.\"'",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -15,22 +15,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check for forbidden terms (SmartImporter)
+      - name: Check for forbidden terms (SmartImporter — case-insensitive)
         run: |
           set -e
-          if rg -l SmartImporter src/ --type ts --type tsx 2>/dev/null | grep -q .; then
-            echo "::error::Forbidden term 'SmartImporter' found in source files."
-            rg -n SmartImporter src/ --type ts --type tsx
+          if rg -il smartimporter src/ --type ts --type tsx 2>/dev/null | grep -q .; then
+            echo "::error::Forbidden term 'smartimporter' (case-insensitive) found in source files."
+            rg -in smartimporter src/ --type ts --type tsx
             exit 1
           fi
           echo "✅ No forbidden terms found."
 
-      - name: Check for forbidden terms (MappingValidationPanel)
+      - name: Check for forbidden terms (MappingValidationPanel — case-insensitive)
         run: |
           set -e
-          if rg -l MappingValidationPanel src/ --type ts --type tsx 2>/dev/null | grep -q .; then
-            echo "::error::Forbidden term 'MappingValidationPanel' found in source files."
-            rg -n MappingValidationPanel src/ --type ts --type tsx
+          if rg -il mappingvalidationpanel src/ --type ts --type tsx 2>/dev/null | grep -q .; then
+            echo "::error::Forbidden term 'mappingvalidationpanel' (case-insensitive) found in source files."
+            rg -in mappingvalidationpanel src/ --type ts --type tsx
             exit 1
           fi
           echo "✅ No forbidden terms found."

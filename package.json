@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "lint:forbidden-terms": "bash scripts/check-forbidden-terms.sh src/",
+    "lint:forbidden-terms": "bash scripts/check-forbidden-terms.sh",
     "preview": "vite preview"
   },
   "dependencies": {

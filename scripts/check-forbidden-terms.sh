@@ -29,6 +29,8 @@ EXCLUDE_GLOBS=(
   "--glob=!bun.lockb"
   "--glob=!*.svg"
   "--glob=!public/**"
+  "--glob=!*.tsbuildinfo"
+  "--glob=!scripts/check-forbidden-terms.sh"
 )
 
 for term in "${FORBIDDEN_TERMS[@]}"; do

@@ -8,7 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "lint:forbidden-terms": "bash -c 'if rg -il smartimporter src/ --type ts --type tsx 2>/dev/null | grep -q .; then echo \"FORBIDDEN TERM FOUND: smartimporter (case-insensitive)\"; rg -in smartimporter src/ --type ts --type tsx; exit 1; fi; if rg -il mappingvalidationpanel src/ --type ts --type tsx 2>/dev/null | grep -q .; then echo \"FORBIDDEN TERM FOUND: mappingvalidationpanel (case-insensitive)\"; rg -in mappingvalidationpanel src/ --type ts --type tsx; exit 1; fi; echo \"No forbidden terms found.\"'",
+    "lint:forbidden-terms": "bash scripts/check-forbidden-terms.sh src/",
     "preview": "vite preview"
   },
   "dependencies": {

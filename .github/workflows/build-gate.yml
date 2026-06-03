@@ -16,4 +16,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run forbidden terms check (case-insensitive)
-        run: bash scripts/check-forbidden-terms.sh src/
+        run: bash scripts/check-forbidden-terms.sh

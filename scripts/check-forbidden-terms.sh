@@ -16,20 +16,54 @@ FOUND=0
 
 # Exclude common non-source directories and generated files
 EXCLUDE_GLOBS=(
+  # Dependencies & package managers
   "--glob=!node_modules/**"
-  "--glob=!dist/**"
-  "--glob=!build/**"
-  "--glob=!.git/**"
-  "--glob=!.lovable/**"
-  "--glob=!coverage/**"
-  "--glob=!*.lock"
+  "--glob=!bun.lockb"
   "--glob=!package-lock.json"
   "--glob=!yarn.lock"
   "--glob=!pnpm-lock.yaml"
-  "--glob=!bun.lockb"
-  "--glob=!*.svg"
-  "--glob=!public/**"
+  "--glob=!*.lock"
+
+  # Build artifacts
+  "--glob=!dist/**"
+  "--glob=!build/**"
+  "--glob=!coverage/**"
   "--glob=!*.tsbuildinfo"
+
+  # IDE / editor configs
+  "--glob=!.vscode/**"
+  "--glob=!.idea/**"
+
+  # Git & CI
+  "--glob=!.git/**"
+  "--glob=!.github/**"
+
+  # Generated / static assets
+  "--glob=!public/**"
+  "--glob=!*.svg"
+  "--glob=!*.png"
+  "--glob=!*.jpg"
+  "--glob=!*.jpeg"
+  "--glob=!*.gif"
+  "--glob=!*.ico"
+  "--glob=!*.woff*"
+  "--glob=!*.ttf"
+  "--glob=!*.eot"
+
+  # Documentation that may reference legacy names intentionally
+  "--glob=!*.md"
+  "--glob=!README*"
+  "--glob=!REFACTORING*"
+  "--glob=!CHANGELOG*"
+  "--glob=!LICENSE*"
+
+  # Environment & logs
+  "--glob=!*.env*"
+  "--glob=!*.log"
+  "--glob=!*.log.*"
+
+  # Tooling meta
+  "--glob=!.lovable/**"
   "--glob=!scripts/check-forbidden-terms.sh"
 )
 

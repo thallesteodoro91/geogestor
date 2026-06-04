@@ -12,6 +12,9 @@
 #                         forbidden-terms-report.json. Use "-" to write to stdout.
 #   -s, --schema[=PATH]   Export the JSON Schema for the report. Default path:
 #                         forbidden-terms-report.schema.json. Use "-" for stdout.
+#       --validate        Validate the generated JSON report against the schema
+#                         before returning the exit code (requires --json).
+#                         Exits with code 3 if validation fails.
 #   -h, --help            Show this help message
 set -euo pipefail
 
@@ -32,9 +35,10 @@ VERBOSE=0
 SHOW_IGNORED=0
 JSON_OUT=""
 SCHEMA_OUT=""
+VALIDATE=0
 SEARCH_PATHS=()
 
-print_help() { sed -n '2,16p' "$0"; }
+print_help() { sed -n '2,19p' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -46,6 +50,7 @@ while [ $# -gt 0 ]; do
     -s|--schema)       SCHEMA_OUT="forbidden-terms-report.schema.json" ;;
     --schema=*)        SCHEMA_OUT="${1#--schema=}" ;;
     -s=*)              SCHEMA_OUT="${1#-s=}" ;;
+    --validate)        VALIDATE=1 ;;
     -h|--help)         print_help; exit 0 ;;
     --)                shift; SEARCH_PATHS+=("$@"); break ;;
     -*)                echo "Unknown option: $1" >&2; print_help; exit 2 ;;
@@ -209,6 +214,64 @@ PY
   else
     echo "$REPORT" > "$JSON_OUT"
     echo "📝 JSON report written to: $JSON_OUT"
+  fi
+fi
+
+# Optional: validate the generated report against the JSON Schema.
+if [ "$VALIDATE" -eq 1 ]; then
+  if [ -z "$JSON_OUT" ]; then
+    echo "❌ --validate requires --json (no report was generated)" >&2
+    exit 2
+  fi
+  if [ ! -f "$SCHEMA_FILE" ]; then
+    echo "❌ Schema file not found: $SCHEMA_FILE" >&2
+    exit 2
+  fi
+
+  VALIDATION_INPUT=""
+  if [ "$JSON_OUT" = "-" ]; then
+    VALIDATION_INPUT="$REPORT"
+  else
+    VALIDATION_INPUT=$(cat "$JSON_OUT")
+  fi
+
+  VALIDATION_OUTPUT=$(
+    REPORT_JSON="$VALIDATION_INPUT" \
+    SCHEMA_PATH="$SCHEMA_FILE" \
+    python3 - <<'PY' 2>&1
+import json, os, sys
+try:
+    import jsonschema
+except ImportError:
+    print("jsonschema package not installed (pip install jsonschema)", file=sys.stderr)
+    sys.exit(2)
+
+try:
+    schema = json.load(open(os.environ["SCHEMA_PATH"]))
+    report = json.loads(os.environ["REPORT_JSON"])
+    jsonschema.validate(report, schema)
+except jsonschema.ValidationError as e:
+    print(f"path: {'/'.join(str(p) for p in e.absolute_path) or '<root>'}")
+    print(f"error: {e.message}")
+    sys.exit(1)
+except Exception as e:
+    print(f"validator error: {e}", file=sys.stderr)
+    sys.exit(2)
+print("ok")
+PY
+  )
+  VALIDATION_STATUS=$?
+
+  if [ "$VALIDATION_STATUS" -eq 0 ]; then
+    echo "✅ JSON report is valid against schema v${REPORT_VERSION}."
+  elif [ "$VALIDATION_STATUS" -eq 1 ]; then
+    echo "❌ JSON report failed schema validation:" >&2
+    echo "$VALIDATION_OUTPUT" >&2
+    exit 3
+  else
+    echo "❌ Validator error:" >&2
+    echo "$VALIDATION_OUTPUT" >&2
+    exit 2
   fi
 fi
 

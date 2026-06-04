@@ -43,7 +43,7 @@ export function UpcomingSyncedCard() {
               </p>
             </div>
             <Badge variant={evt.origem === "google" ? "secondary" : "default"} className="text-[10px] shrink-0">
-              {evt.origem === "google" ? "Google" : "SkyGeo"}
+              {evt.origem === "google" ? "Google" : "GeoGestor"}
             </Badge>
             {evt.htmlLink && (
               <Button asChild size="icon" variant="ghost" className="h-6 w-6 shrink-0">

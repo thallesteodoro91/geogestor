@@ -165,10 +165,10 @@ export function PrintableReport({
       <div data-pdf-section="header">
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `3px solid ${SKYGEO_BLUE}`, paddingBottom: "16px", marginBottom: "20px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <img src={skyGeoLogo} alt="SkyGeo" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
+            <img src={skyGeoLogo} alt="GeoGestor" style={{ width: "48px", height: "48px", objectFit: "contain" }} />
             <div>
               <h1 style={{ fontSize: "28px", fontWeight: 900, color: SKYGEO_BLUE, margin: 0, letterSpacing: "-0.03em", fontFamily: "'Inter', system-ui, sans-serif" }}>
-                SkyGeo
+                GeoGestor
               </h1>
               <p style={{ fontSize: "10px", color: "#94a3b8", margin: "2px 0 0", letterSpacing: "0.08em", textTransform: "uppercase" }}>
                 Inteligência Geoespacial & Gestão

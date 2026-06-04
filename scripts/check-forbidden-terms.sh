@@ -10,12 +10,15 @@
 #   -i, --show-ignored    List files/dirs ignored by the scan
 #   -j, --json[=PATH]     Export a JSON report (ignored + matches). Default path:
 #                         forbidden-terms-report.json. Use "-" to write to stdout.
+#   -s, --schema[=PATH]   Export the JSON Schema for the report. Default path:
+#                         forbidden-terms-report.schema.json. Use "-" for stdout.
 #   -h, --help            Show this help message
 set -euo pipefail
 
 # Stable report schema version — bump on breaking JSON changes.
 REPORT_VERSION="1.0.0"
 REPORT_SCHEMA="https://geogestor.lovable.app/schemas/forbidden-terms-report/v1"
+SCHEMA_FILE="$(cd "$(dirname "$0")" && pwd)/forbidden-terms-report.schema.json"
 
 FORBIDDEN_TERMS=(
   "smartimporter"

@@ -55,7 +55,22 @@ while [ $# -gt 0 ]; do
 done
 [ ${#SEARCH_PATHS[@]} -eq 0 ] && SEARCH_PATHS=(".")
 
+# Handle --schema early so it works standalone (no scan required).
+if [ -n "$SCHEMA_OUT" ]; then
+  if [ ! -f "$SCHEMA_FILE" ]; then
+    echo "Schema file not found: $SCHEMA_FILE" >&2
+    exit 2
+  fi
+  if [ "$SCHEMA_OUT" = "-" ]; then
+    cat "$SCHEMA_FILE"
+  else
+    cp "$SCHEMA_FILE" "$SCHEMA_OUT"
+    echo "📐 JSON Schema written to: $SCHEMA_OUT"
+  fi
+fi
+
 FOUND=0
+
 
 # Respect .gitignore + complementary ignore files (when present).
 IGNORE_FILE_FLAGS=()

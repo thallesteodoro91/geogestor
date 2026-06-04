@@ -1,5 +1,5 @@
 /**
- * Design System — Cores centralizadas para status em todo o SkyGeo
+ * Design System — Cores centralizadas para status em todo o GeoGestor
  * 
  * Verde (emerald) → Ativo, Concluído, Pago, Aprovado
  * Amarelo (amber) → Em Andamento, Pendente, Atenção

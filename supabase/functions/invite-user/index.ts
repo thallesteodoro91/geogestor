@@ -139,17 +139,17 @@ serve(async (req: Request): Promise<Response> => {
     if (resendApiKey) {
       try {
         const resend = new Resend(resendApiKey);
-        const appUrl = Deno.env.get("APP_URL") || "https://skygeo360.lovable.app";
+        const appUrl = Deno.env.get("APP_URL") || "https://geogestor.lovable.app";
         const inviteUrl = `${appUrl}/aceitar-convite?token=${token}`;
 
         await resend.emails.send({
-          from: "SkyGeo 360 <noreply@resend.dev>",
+          from: "GeoGestor <noreply@resend.dev>",
           to: [email],
-          subject: `Convite para ${tenant?.name || "SkyGeo 360"}`,
+          subject: `Convite para ${tenant?.name || "GeoGestor"}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h1 style="color: #1a365d;">Você foi convidado!</h1>
-              <p>Você recebeu um convite para participar de <strong>${tenant?.name || "uma empresa"}</strong> no SkyGeo 360.</p>
+              <p>Você recebeu um convite para participar de <strong>${tenant?.name || "uma empresa"}</strong> no GeoGestor.</p>
               <p>Clique no botão abaixo para aceitar o convite:</p>
               <a href="${inviteUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Aceitar Convite</a>
               <p style="color: #666; font-size: 14px;">Este convite expira em 7 dias.</p>

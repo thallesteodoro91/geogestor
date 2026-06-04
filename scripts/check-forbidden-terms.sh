@@ -240,8 +240,9 @@ if [ "$VALIDATE" -eq 1 ]; then
     SCHEMA_PATH="$SCHEMA_FILE" \
     python3 - <<'PY' 2>&1
 import json, os, sys
+
 try:
-    import jsonschema
+    from jsonschema import Draft202012Validator
 except ImportError:
     print("jsonschema package not installed (pip install jsonschema)", file=sys.stderr)
     sys.exit(2)
@@ -249,15 +250,35 @@ except ImportError:
 try:
     schema = json.load(open(os.environ["SCHEMA_PATH"]))
     report = json.loads(os.environ["REPORT_JSON"])
-    jsonschema.validate(report, schema)
-except jsonschema.ValidationError as e:
-    print(f"path: {'/'.join(str(p) for p in e.absolute_path) or '<root>'}")
-    print(f"error: {e.message}")
-    sys.exit(1)
 except Exception as e:
     print(f"validator error: {e}", file=sys.stderr)
     sys.exit(2)
-print("ok")
+
+validator = Draft202012Validator(schema)
+errors = list(validator.iter_errors(report))
+
+if not errors:
+    print("ok")
+    sys.exit(0)
+
+# Build human-readable summary to stderr
+lines = []
+lines.append(f"Schema validation failed: {len(errors)} error(s) found in the report.")
+lines.append("")
+for idx, err in enumerate(errors, start=1):
+    path = "/".join(str(p) for p in err.absolute_path) or "<root>"
+    lines.append(f"  [{idx}] Field: {path}")
+    lines.append(f"      Message: {err.message}")
+    if err.validator is not None:
+        lines.append(f"      Constraint: {err.validator}")
+    if err.validator_value is not None:
+        lines.append(f"      Expected:  {err.validator_value}")
+    if err.instance is not None and not isinstance(err.instance, (dict, list)):
+        lines.append(f"      Received:  {json.dumps(err.instance, ensure_ascii=False)}")
+    lines.append("")
+
+print("\n".join(lines), file=sys.stderr)
+sys.exit(1)
 PY
   )
   VALIDATION_STATUS=$?
@@ -265,8 +286,7 @@ PY
   if [ "$VALIDATION_STATUS" -eq 0 ]; then
     echo "✅ JSON report is valid against schema v${REPORT_VERSION}."
   elif [ "$VALIDATION_STATUS" -eq 1 ]; then
-    echo "❌ JSON report failed schema validation:" >&2
-    echo "$VALIDATION_OUTPUT" >&2
+    # Errors already printed to stderr by Python block above
     exit 3
   else
     echo "❌ Validator error:" >&2

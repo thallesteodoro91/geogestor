@@ -13,6 +13,10 @@
 #   -h, --help            Show this help message
 set -euo pipefail
 
+# Stable report schema version — bump on breaking JSON changes.
+REPORT_VERSION="1.0.0"
+REPORT_SCHEMA="https://geogestor.lovable.app/schemas/forbidden-terms-report/v1"
+
 FORBIDDEN_TERMS=(
   "smartimporter"
   "mappingvalidationpanel"

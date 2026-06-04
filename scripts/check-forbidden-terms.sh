@@ -12,6 +12,9 @@
 #                         forbidden-terms-report.json. Use "-" to write to stdout.
 #   -s, --schema[=PATH]   Export the JSON Schema for the report. Default path:
 #                         forbidden-terms-report.schema.json. Use "-" for stdout.
+#       --validate        Validate the generated JSON report against the schema
+#                         before returning the exit code (requires --json).
+#                         Exits with code 3 if validation fails.
 #   -h, --help            Show this help message
 set -euo pipefail
 

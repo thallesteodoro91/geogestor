@@ -1,0 +1,113 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://geogestor.lovable.app/schemas/forbidden-terms-report/v1",
+  "title": "Forbidden Terms Report",
+  "description": "Output schema for scripts/check-forbidden-terms.sh JSON reports.",
+  "type": "object",
+  "required": [
+    "$schema",
+    "report_version",
+    "generated_at",
+    "search_paths",
+    "forbidden_terms",
+    "exit_code",
+    "summary",
+    "ignored",
+    "matches"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "format": "uri",
+      "description": "Stable URI identifying the schema version this report conforms to."
+    },
+    "report_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the report payload."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp when the report was generated."
+    },
+    "search_paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths that were scanned."
+    },
+    "forbidden_terms": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Legacy terms searched for (case-insensitive)."
+    },
+    "exit_code": {
+      "type": "integer",
+      "enum": [0, 1],
+      "description": "0 = clean, 1 = forbidden terms were found."
+    },
+    "summary": {
+      "type": "object",
+      "required": ["total_matches", "matches_by_term", "ignored_count"],
+      "additionalProperties": false,
+      "properties": {
+        "total_matches": { "type": "integer", "minimum": 0 },
+        "matches_by_term": {
+          "type": "object",
+          "description": "Map of term -> match count.",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "ignored_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ignored": {
+      "type": "array",
+      "description": "Files/dirs excluded from the scan.",
+      "items": {
+        "type": "object",
+        "required": ["path", "rule"],
+        "additionalProperties": false,
+        "properties": {
+          "path": { "type": "string" },
+          "rule": {
+            "type": "string",
+            "description": "Source of the ignore rule (e.g. Gitignore, Globs, Override)."
+          }
+        }
+      }
+    },
+    "matches": {
+      "type": "array",
+      "description": "Individual term occurrences found in the scanned files.",
+      "items": {
+        "type": "object",
+        "required": ["term", "file", "line", "content"],
+        "additionalProperties": false,
+        "properties": {
+          "term": { "type": "string" },
+          "file": { "type": "string" },
+          "line": {
+            "oneOf": [
+              { "type": "integer", "minimum": 1 },
+              { "type": "string" }
+            ]
+          },
+          "content": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "schemaVersionMap": {
+      "description": "Mapping of report_version -> schema $id, kept inside the schema for tool compatibility.",
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "uri" },
+      "examples": [
+        {
+          "1.0.0": "https://geogestor.lovable.app/schemas/forbidden-terms-report/v1"
+        }
+      ]
+    }
+  }
+}

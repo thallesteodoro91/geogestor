@@ -1,178 +1,112 @@
 
-# Importador Universal GeoGestor
+# Auditoria Técnica — GeoGestor (mencionado como "SkyGeo")
 
-Transformar o `SmartImporter` em um motor de ETL capaz de absorver qualquer planilha empresarial (cliente, propriedade, serviço, orçamento, financeiro) sem exigir adaptação do cliente. O GeoGestor passa a se adaptar à planilha — não o contrário.
+> Observação de branding: o produto consta como **GeoGestor** no código e memória do projeto. O nome "SkyGeo" no pedido sugere divergência de marca — confirmar antes de materiais comerciais.
 
-> Observação: o produto é **GeoGestor** (não SkyGeo). O plano usa a nomenclatura interna correta.
-
----
-
-## Visão geral da arquitetura
-
-```text
-Planilha (xlsx/csv)
-   │
-   ▼
-[1] Sniffer de conteúdo  ──► tipo real de cada coluna
-   │                          (status, forma_pag, monetário, data, doc, geo, etc.)
-   ▼
-[2] Dicionário de sinônimos ──► campo canônico (CLIENTE.nome, FIN.receita_realizada, ...)
-   │
-   ▼
-[3] Matcher híbrido       ──► header + conteúdo + score de confiança
-   │
-   ▼
-[4] Mapper universal      ──► entidades: Cliente, Endereço, Propriedade,
-   │                          Serviço, Orçamento, Financeiro
-   ▼
-[5] Resolver de relações  ──► dedup + FK (Cliente↔Propriedade↔Serviço↔Orçamento)
-   │
-   ▼
-[6] Custom fields         ──► colunas sem destino viram campo personalizado
-   │
-   ▼
-[7] Tela de validação 360 ──► contadores, amostras, correção manual
-   │
-   ▼
-[8] Persistência em lote + refresh KPIs/Dashboard
-```
+Este plano descreve **o que será auditado, como e em que ordem**. Nenhuma alteração será aplicada nesta fase. Cada item gera um relatório com evidências (arquivo:linha, query, screenshot ou log).
 
 ---
 
-## Fase 1 — Expansão do modelo canônico
+## Fase 1 — Diagnóstico (read-only, ~estimado em blocos)
 
-Criar `src/lib/etl/canonicalSchema.ts` com o catálogo completo de campos canônicos agrupados por entidade. Cada campo tem: `id`, `entity`, `label`, `tipo` (`text|number|monetary|date|doc|phone|email|geo|enum`), `required`, `aliases[]`, `valueValidators[]`.
+### 1.1 Fluxos críticos (end-to-end)
+Para cada fluxo: reproduzir no preview, inspecionar console/network, validar persistência no banco e checar RLS.
 
-Entidades e campos cobertos:
+- **Auth**: `Auth.tsx`, Google OAuth, redirect, criação de profile via trigger `handle_user_profile`.
+- **Onboarding/Tenant**: `create_tenant_for_user`, trial 7 dias, `tenant_subscriptions`.
+- **Aceitar convite**: `AceitarConvite.tsx` + edge `accept-invite` + `check_user_limit`.
+- **Importação de planilha**: `ImportacaoDados.tsx`, `EsquemasImportacao.tsx` — pipeline composto (Cliente→Propriedade→Projeto).
+- **Clientes / Propriedades**: `Clientes.tsx`, `ClienteDetalhes.tsx`, timeline.
+- **Projetos/Serviços**: `Operacional.tsx`, `Servicos.tsx`, kanban, progresso.
+- **Orçamentos**: wizard unificado, código imutável, marco, impostos, conversão→serviço (trigger `auto_criar_servico_ao_converter_orcamento`), exportação PDF (template vs. padrão).
+- **Despesas**: pendentes vs. confirmadas, categorias, vínculo a orçamento/serviço.
+- **Dashboard 360 / Financeiro**: `Dashboard.tsx`, `DashboardFinanceiro.tsx`, RPCs `get_financial_dashboard_metrics`, `get_monthly_financial_data`, `calcular_kpis_v2`, view `vw_kpis_financeiros`.
+- **Relatório Executivo**: captura seccional do PDF.
+- **Pagamentos**: `Assinatura.tsx`, `create-checkout`, `customer-portal`, `stripe-webhook`, `check-subscription`, `simulate-expiry`, bloqueio por trial expirado.
+- **Configurações**: `Configuracoes.tsx` (4 abas), `GestaoEmpresa.tsx`, integrações (Google Calendar, Stripe).
+- **Calendário**: sync bidirecional (`google-calendar-*` functions, fila, retry).
 
-- **CLIENTE**: nome, razao_social, nome_fantasia, cpf, cnpj, email, telefone, celular, whatsapp, data_cadastro, categoria, origem, situacao
-- **ENDEREÇO** (embutido em Cliente e Propriedade): logradouro, numero, complemento, bairro, cidade, municipio, estado, cep
-- **PROPRIEDADE**: nome, tipo (`Fazenda|Chácara|Sítio|Imóvel|Urbano`), matricula, car, ccir, itr, area, area_total, hectares, latitude, longitude
-- **SERVIÇO**: nome, tipo_servico, categoria, subcategoria, responsavel, status, data_inicio, data_fim, progresso
-- **ORÇAMENTO**: codigo, valor_orcado, desconto, impostos, valor_final, forma_pagamento, situacao_pagamento, status, data_emissao, data_vencimento, data_faturamento
-- **FINANCEIRO**: receita, receita_prevista, receita_realizada, faturamento, custos, custos_variaveis, custos_fixos, despesas, despesas_operacionais, impostos, lucro_bruto, lucro_liquido, margem
+### 1.2 Caça a bugs
+Para cada fluxo, instrumentar checagens:
+- **Dados não salvos**: inspecionar `onSubmit`/mutations sem `await`, `toast` de sucesso sem confirmação da resposta.
+- **Duplicação**: uniqueness em `dim_cliente`, `dim_propriedade`, `fato_orcamento.codigo_orcamento`; duplo-clique em botões; idempotência do `stripe-webhook`.
+- **Campos "não definido"/null**: varrer renderização (`{obj.x}` sem fallback) em listagens e cards.
+- **Dashboards incorretos / gráficos vazios**: validar filtros de data, `tenant_id`, agregações zeradas vs. ausência de dados.
+- **Erros silenciosos**: `try/catch` engolindo erro sem `console.error` / `toast`.
+- **Validação**: zod schemas client-side, validação server-side em edge functions e triggers.
 
-Mapeamento canônico → tabelas reais (`dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`, `fato_despesas`) fica em `src/lib/etl/canonicalToDb.ts`. Campos sem coluna física vão para `custom_fields` (JSONB — ver Fase 5).
+### 1.3 Performance front-end
+- Build size, code-splitting por rota (lazy import).
+- Re-renders desnecessários (React DevTools profiler em Dashboard, listas grandes).
+- Tabelas: virtualização (clientes/orçamentos/despesas com N>200).
+- Gráficos Recharts: memoização, payloads server-aggregated (já existem em `get_financial_dashboard_metrics`).
+- Imagens/assets, fontes, LCP da rota inicial.
+- Responsividade mobile (sidebar, modais, kanban).
+- Dark mode: checar contraste e tokens (memória: usar `statusColors.ts` estático).
 
-## Fase 2 — Dicionário de sinônimos
+### 1.4 Performance back-end
+- `supabase--linter` + EXPLAIN das RPCs principais.
+- Índices em colunas filtradas (`tenant_id`, `data_orcamento`, `data_da_despesa`, FKs lógicas).
+- N+1 nas telas de detalhes (forçar joins/RPC).
+- Recalcular `tenant_id` em loops vs. cache em `TenantContext`.
+- Edge functions: cold start, payload, autorização global header.
 
-Criar `src/lib/etl/synonymsDictionary.ts` consolidando todos os aliases. Estrutura:
+### 1.5 Segurança
+- RLS por tabela: confirmar `tenant_id = get_user_tenant_id(auth.uid())` em todas (auditoria cruzada com schema).
+- Privilege escalation via `tenant_members.role` (usar `has_role`).
+- `audit_logs`, `analytics_events`, `calendar_*`, `propriedade_geometria` — testar acesso cross-tenant.
+- Storage buckets públicos (`empresa-assets`, `avatars`): confirmar que nenhum dado sensível é gravado.
+- Edge functions: verificação JWT e rate limits.
+- Segredos no client: garantir só anon/publishable.
+- HIBP password check, autoconfirm email, signup aberto.
+- Rodar `security--run_security_scan` + `supabase--linter`.
 
-```ts
-{ field: "cliente.nome", aliases: ["cliente", "nome", "contratante", "razão social", ...] }
-{ field: "fin.receita_realizada", aliases: ["receita realizada", "faturamento", "valor recebido", ...] }
-```
-
-Normalizador agressivo (lowercase, sem acento, sem `_-./`, plural→singular básico) já existe em `mappingProfiles.ts` — extrair para `src/lib/etl/textNormalize.ts` e reusar. Matching por:
-- igualdade normalizada
-- substring (`startsWith`/`includes`)
-- Levenshtein ≤ 2 para typos curtos
-
-Saída: `synonymMatch(header) → { fieldId, score 0..1 }`.
-
-## Fase 3 — Detecção por conteúdo
-
-Estender o `columnTypeInference.ts` atual para emitir, além do tipo bruto, **sugestão de campo canônico** com base no conteúdo. Regras:
-
-- valores ∈ {Pago, Pendente, Cancelado, Em Aberto, Atrasado} → `orcamento.situacao_pagamento`
-- valores ∈ {PIX, Boleto, Cartão, Transferência, Dinheiro} → `orcamento.forma_pagamento`
-- valores ∈ {Aprovado, Recusado, Em Análise, Enviado} → `orcamento.status`
-- valores monetários com `R$` ou padrão `0.000,00` → financeiro (escolha do campo decidida pelo header)
-- 11/14 dígitos → cpf/cnpj
-- formato data → campo de data (qual? header decide)
-- pares numéricos lat/lng coerentes → propriedade.latitude/longitude
-
-O matcher final é **híbrido**: `score = 0.6 * synonymHeaderScore + 0.4 * contentScore`. Empate vai para o de maior `score` global; abaixo de 0.45 fica "sem destino" (Fase 5).
-
-## Fase 4 — Campos opcionais
-
-Nenhum campo é obrigatório por padrão exceto chaves naturais mínimas para criar a entidade (ex.: Cliente exige `nome` OU `cpf` OU `cnpj`; Propriedade exige `nome` ou `matricula`). Demais ausências:
-
-- não bloqueiam importação
-- registram `null`
-- aparecem como aviso amarelo (não erro) no painel de validação
-
-## Fase 5 — Campos desconhecidos (custom fields)
-
-Migração nova: adicionar coluna `custom_fields jsonb DEFAULT '{}'` em `dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`. Toda coluna da planilha sem destino canônico (score < 0.45) é gravada em `custom_fields` da entidade-alvo da linha (inferido pela presença de chaves da entidade).
-
-UI: nas telas de detalhe das entidades já existentes, mostrar um card "Campos personalizados" listando pares chave/valor.
-
-## Fase 6 — Relacionamentos
-
-Resolver de FKs em ordem topológica, em memória, antes do INSERT:
-
-1. **Cliente** — dedup por `clientNaturalKey` (já existe em `clientDedup.ts`); insere novos e indexa `id_cliente`.
-2. **Propriedade** — chave natural: `(nome_propriedade + id_cliente)` ou `matricula`. Vincula `id_cliente`.
-3. **Orçamento** — vincula `id_cliente` (obrigatório, já existe constraint) e `id_propriedade` quando presente.
-4. **Serviço** — vincula `id_cliente`, `id_propriedade`, `id_orcamento` quando inferível pelo código do orçamento na mesma linha.
-5. **Despesa** — vincula `id_orcamento` ou `id_servico` quando a linha trouxer código relacionável.
-6. **Município** — fica como atributo de Endereço (não cria tabela); agregações por município no dashboard usam o campo direto.
-
-Para linhas "wide" (uma linha = cliente + propriedade + orçamento + financeiro), o importador faz **explosão em múltiplas entidades** dentro da mesma transação.
-
-## Fase 7 — Dashboard 360 e KPIs
-
-Após confirmar a importação:
-
-- invalidar todos os `react-query` keys de KPIs/dashboard (`useKPIs`, `useDashboardMetrics`, `useChartData`, `useSalesFunnel`, `useClientesAnalytics`)
-- chamar `calcular_kpis_v2` e `get_financial_dashboard_metrics` para repovoar a `vw_kpis_financeiros`
-- toast "Importação concluída — Dashboard atualizado" com link para `/`
-
-Métricas garantidamente repopuladas: Receita Total, Despesas Totais, Lucro Líquido, Ticket Médio, Receita por Cliente, Receita por Município, Receita por Serviço, Fluxo Financeiro, Custos por Categoria, Lucro por Cliente.
-
-## Fase 8 — Tela de validação universal
-
-Reescrever a etapa de revisão do `SmartImporter` em um painel único com:
-
-- **Resumo detectado**: nº de Clientes novos / existentes, Propriedades, Orçamentos, Serviços, Receitas, Despesas, Formas de pagamento (top 5), Status (top 5).
-- **Tabela de colunas**: header original → campo canônico sugerido → score → ação (aceitar / trocar / ignorar / marcar como custom field).
-- **Inconsistências** (reaproveita `consistencyChecks.ts` e `consistencyRulesConfig.ts` já existentes) com auto-fix por linha já implementado.
-- **Pré-visualização**: 10 primeiras linhas já normalizadas.
-- Botões: `Voltar`, `Importar` (habilitado mesmo com warnings, desabilitado só com erro bloqueante).
+### 1.6 Pagamentos (Stripe)
+- Fluxo plano → checkout → webhook → ativação → liberação.
+- Idempotência do webhook (`event.id` registrado?).
+- Estados: `trialing`, `active`, `past_due`, `canceled` → comportamento de bloqueio.
+- `simulate-expiry` cobre todos os cenários?
+- Customer Portal: cancelamento reflete em `tenant_subscriptions`.
+- Limites por plano (`check_user_limit`) aplicados em **todos** os pontos de criação.
+- Página de sucesso/cancelado, retorno seguro, race condition entre webhook e `check-subscription`.
 
 ---
 
-## Arquivos a criar / alterar
+## Fase 2 — Entregáveis do relatório
 
-**Criar**
-- `src/lib/etl/canonicalSchema.ts` — catálogo de campos canônicos
-- `src/lib/etl/canonicalToDb.ts` — mapeamento canônico → colunas reais
-- `src/lib/etl/synonymsDictionary.ts` — sinônimos
-- `src/lib/etl/textNormalize.ts` — normalizador compartilhado
-- `src/lib/etl/contentClassifier.ts` — extensão do inference que sugere campo canônico
-- `src/lib/etl/hybridMatcher.ts` — score header + conteúdo
-- `src/lib/etl/relationResolver.ts` — dedup + FK em memória
-- `src/lib/etl/rowExploder.ts` — linha wide → várias entidades
-- `src/components/import/UniversalValidationPanel.tsx` — nova tela de validação
-- testes vitest correspondentes (`*.test.ts`)
+Para cada achado:
+- **ID**, **severidade**, **arquivo:linha** ou **objeto SQL**, **passo para reproduzir**, **impacto**, **correção sugerida**, **esforço estimado**.
 
-**Alterar**
-- `src/components/import/SmartImporter.tsx` — usar o pipeline novo, substituir a etapa de mapeamento e revisão
-- `src/lib/etl/columnTypeInference.ts` — expor mais sinais (lat/lng, doc, etc.)
-- `src/lib/etl/clientDedup.ts` — reusado como está; talvez expor para propriedade/orçamento
-- serviços de batch insert em `src/modules/{crm,operations,finance}/services/*` — aceitar `custom_fields`
+Seções do relatório final:
 
-**Migração de banco**
-- Adicionar `custom_fields jsonb DEFAULT '{}' NOT NULL` em `dim_cliente`, `dim_propriedade`, `fato_servico`, `fato_orcamento`. Sem alterar RLS/GRANTs existentes.
+1. **Bugs críticos** (bloqueiam venda): perda de dados, vazamento cross-tenant, falha de pagamento/ativação, crash em fluxo principal.
+2. **Bugs médios**: UX quebrada, validações fracas, inconsistências de cálculo não-financeiras, erros silenciosos.
+3. **Melhorias de performance**: índices, code-split, virtualização, memoização, RPCs agregadas.
+4. **Melhorias de UX**: estados vazios, loading skeletons, mensagens de erro, mobile, dark mode.
+5. **Riscos antes de vender**: legais (LGPD/política), branding (SkyGeo vs GeoGestor), suporte, observabilidade, backup.
+6. **Ordem recomendada de correção**:
+   1. Segurança (RLS cross-tenant, webhook idempotente, segredos).
+   2. Pagamentos e bloqueio/ativação.
+   3. Bugs críticos em fluxos de receita (orçamento, conversão→serviço, despesa).
+   4. Perda/duplicação de dados em importação e cadastros.
+   5. Performance crítica (dashboard, listas grandes).
+   6. UX e polimento (mobile, dark mode, vazios).
+   7. Observabilidade e legais.
 
 ---
 
-## Rollout sugerido (PRs separados)
+## Detalhes técnicos do método
 
-1. Migração `custom_fields` + tipos
-2. `canonicalSchema` + `synonymsDictionary` + `textNormalize` (puro, com testes)
-3. `contentClassifier` + `hybridMatcher` (com testes em fixtures de planilha real)
-4. `rowExploder` + `relationResolver` (com testes)
-5. `UniversalValidationPanel` + integração no `SmartImporter`
-6. Refresh de KPIs/Dashboard pós-import
-
-Cada PR ≤ ~600 LOC, testável de forma independente.
+- **Ferramentas**: `code--view`/`rg` para varredura, `supabase--read_query` e `supabase--linter` para banco, `supabase--edge_function_logs` para edges, `browser--view_preview` + `browser--performance_profile` para front, `security--run_security_scan` para segurança.
+- **Cobertura RLS**: script que lista todas as tabelas `public.*` e confirma policy com `get_user_tenant_id`.
+- **Cobertura de webhooks**: simular eventos Stripe (checkout.session.completed, invoice.paid, customer.subscription.updated/deleted) em ambiente de teste.
+- **Critérios de "pronto para vender"**: 0 críticos, 0 vazamentos cross-tenant, pagamento end-to-end estável em test mode, dashboard sem NaN/undefined, mobile usável nas 5 telas mais usadas.
 
 ---
 
-## Pontos abertos (confirmar antes de PR 2)
+## Perguntas antes de começar
 
-- Confirma que **uma única linha pode representar Cliente + Propriedade + Orçamento + Financeiro simultaneamente** (linha "wide" típica de planilha empresarial)?
-- Os custom fields devem aparecer em **todas as telas de detalhe** ou apenas em Cliente/Propriedade nesta primeira iteração?
-- Manter o fluxo atual de "perfil de mapeamento por planilha" (`mappingProfiles.ts`) reaproveitando a nova UI? (recomendo sim).
+1. Confirmar o nome comercial: **GeoGestor** ou **SkyGeo**? (afeta varredura de strings e materiais).
+2. Posso rodar `security--run_security_scan` e `supabase--linter` agora (read-only) para já incluir no diagnóstico?
+3. Quer que o relatório final seja entregue como markdown no chat ou como PDF em `/mnt/documents/`?
+4. Há ambiente Stripe **test** com produtos/preços já configurados para eu validar checkout end-to-end?

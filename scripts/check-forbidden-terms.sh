@@ -134,6 +134,8 @@ if [ -n "$JSON_OUT" ]; then
     TERMS="$TERMS_JOINED" \
     PATHS="$PATHS_JOINED" \
     FOUND="$FOUND" \
+    REPORT_VERSION="$REPORT_VERSION" \
+    REPORT_SCHEMA="$REPORT_SCHEMA" \
     python3 - <<'PY'
 import json, os
 from datetime import datetime, timezone
@@ -162,6 +164,8 @@ for m in matches:
     by_term[m["term"]] = by_term.get(m["term"], 0) + 1
 
 report = {
+    "$schema": os.environ.get("REPORT_SCHEMA", ""),
+    "report_version": os.environ.get("REPORT_VERSION", ""),
     "generated_at": datetime.now(timezone.utc).isoformat(),
     "search_paths": [p for p in (os.environ.get("PATHS") or "").split(",") if p],
     "forbidden_terms": [t for t in (os.environ.get("TERMS") or "").split(",") if t],

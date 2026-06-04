@@ -111,16 +111,21 @@ RG_FLAGS=("${BASE_FLAGS[@]}" "${EXCLUDE_GLOBS[@]}")
 
 if [ "$SHOW_IGNORED" -eq 1 ]; then
   echo "── Ignored files/dirs (skipped by the scan) ──"
-  # --files lists all candidate files; --debug exposes ignore decisions.
-  # We grep for "ignoring" lines from rg's debug output to surface why each path was skipped.
-  rg --files --debug "${BASE_FLAGS[@]}" "${SEARCH_PATHS[@]}" 2>&1 1>/dev/null \
-    | grep -E "ignoring|whitelisted" \
-    | sed 's/^/  /' \
-    | sort -u \
-    || echo "  (none reported)"
+  # rg --debug emits lines like:  "ignoring ./path: Ignore(...)"  on stderr.
+  # We extract the path + the matching rule (gitignore/glob) for readability.
+  IGNORED=$(rg --files --debug "${RG_FLAGS[@]}" "${SEARCH_PATHS[@]}" 2>&1 1>/dev/null \
+    | grep -oE "ignoring [^:]+:.*" \
+    | sed -E 's/ignoring (.*): (Ignore\(IgnoreMatch\()?(Gitignore|Globs?)[^)]*\)*.*/  \1   [\3]/' \
+    | sort -u || true)
+  if [ -n "$IGNORED" ]; then
+    echo "$IGNORED"
+  else
+    echo "  (none reported for the given paths)"
+  fi
   echo "──────────────────────────────────────────────"
   echo
 fi
+
 
 for term in "${FORBIDDEN_TERMS[@]}"; do
   MATCHES=$(rg -in "${RG_FLAGS[@]}" "$term" "${SEARCH_PATHS[@]}" 2>/dev/null || true)

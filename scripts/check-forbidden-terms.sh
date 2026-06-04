@@ -31,9 +31,10 @@ FORBIDDEN_TERMS=(
 VERBOSE=0
 SHOW_IGNORED=0
 JSON_OUT=""
+SCHEMA_OUT=""
 SEARCH_PATHS=()
 
-print_help() { sed -n '2,13p' "$0"; }
+print_help() { sed -n '2,16p' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in

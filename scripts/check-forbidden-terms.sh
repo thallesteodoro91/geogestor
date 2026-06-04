@@ -10,12 +10,15 @@
 #   -i, --show-ignored    List files/dirs ignored by the scan
 #   -j, --json[=PATH]     Export a JSON report (ignored + matches). Default path:
 #                         forbidden-terms-report.json. Use "-" to write to stdout.
+#   -s, --schema[=PATH]   Export the JSON Schema for the report. Default path:
+#                         forbidden-terms-report.schema.json. Use "-" for stdout.
 #   -h, --help            Show this help message
 set -euo pipefail
 
 # Stable report schema version — bump on breaking JSON changes.
 REPORT_VERSION="1.0.0"
 REPORT_SCHEMA="https://geogestor.lovable.app/schemas/forbidden-terms-report/v1"
+SCHEMA_FILE="$(cd "$(dirname "$0")" && pwd)/forbidden-terms-report.schema.json"
 
 FORBIDDEN_TERMS=(
   "smartimporter"
@@ -28,9 +31,10 @@ FORBIDDEN_TERMS=(
 VERBOSE=0
 SHOW_IGNORED=0
 JSON_OUT=""
+SCHEMA_OUT=""
 SEARCH_PATHS=()
 
-print_help() { sed -n '2,13p' "$0"; }
+print_help() { sed -n '2,16p' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -39,6 +43,9 @@ while [ $# -gt 0 ]; do
     -j|--json)         JSON_OUT="forbidden-terms-report.json" ;;
     --json=*)          JSON_OUT="${1#--json=}" ;;
     -j=*)              JSON_OUT="${1#-j=}" ;;
+    -s|--schema)       SCHEMA_OUT="forbidden-terms-report.schema.json" ;;
+    --schema=*)        SCHEMA_OUT="${1#--schema=}" ;;
+    -s=*)              SCHEMA_OUT="${1#-s=}" ;;
     -h|--help)         print_help; exit 0 ;;
     --)                shift; SEARCH_PATHS+=("$@"); break ;;
     -*)                echo "Unknown option: $1" >&2; print_help; exit 2 ;;
@@ -48,7 +55,22 @@ while [ $# -gt 0 ]; do
 done
 [ ${#SEARCH_PATHS[@]} -eq 0 ] && SEARCH_PATHS=(".")
 
+# Handle --schema early so it works standalone (no scan required).
+if [ -n "$SCHEMA_OUT" ]; then
+  if [ ! -f "$SCHEMA_FILE" ]; then
+    echo "Schema file not found: $SCHEMA_FILE" >&2
+    exit 2
+  fi
+  if [ "$SCHEMA_OUT" = "-" ]; then
+    cat "$SCHEMA_FILE"
+  else
+    cp "$SCHEMA_FILE" "$SCHEMA_OUT"
+    echo "📐 JSON Schema written to: $SCHEMA_OUT"
+  fi
+fi
+
 FOUND=0
+
 
 # Respect .gitignore + complementary ignore files (when present).
 IGNORE_FILE_FLAGS=()

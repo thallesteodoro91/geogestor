@@ -43,6 +43,9 @@ while [ $# -gt 0 ]; do
     -j|--json)         JSON_OUT="forbidden-terms-report.json" ;;
     --json=*)          JSON_OUT="${1#--json=}" ;;
     -j=*)              JSON_OUT="${1#-j=}" ;;
+    -s|--schema)       SCHEMA_OUT="forbidden-terms-report.schema.json" ;;
+    --schema=*)        SCHEMA_OUT="${1#--schema=}" ;;
+    -s=*)              SCHEMA_OUT="${1#-s=}" ;;
     -h|--help)         print_help; exit 0 ;;
     --)                shift; SEARCH_PATHS+=("$@"); break ;;
     -*)                echo "Unknown option: $1" >&2; print_help; exit 2 ;;

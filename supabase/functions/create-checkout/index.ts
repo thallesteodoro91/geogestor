@@ -84,6 +84,17 @@ serve(async (req) => {
     if (userError || !user?.email) throw new Error("Usuário não autenticado ou sem e-mail");
     logStep("Usuário autenticado", { requestId, userId: user.id, email: user.email });
 
+    // Resolver tenant_id do usuário para garantir vínculo correto no webhook
+    const { data: membership } = await supabase
+      .from("tenant_members")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const tenantId = membership?.tenant_id ?? null;
+    if (!tenantId) {
+      logStep("ALERTA: usuário sem tenant_id ao iniciar checkout", { requestId, userId: user.id });
+    }
+
     const priceId = PRICE_IDS[rawPlanId];
     if (!priceId) {
       logStep("Plano inválido — abortando", { requestId, planId: rawPlanId });
@@ -100,12 +111,13 @@ serve(async (req) => {
     logStep("Customer Stripe resolvido", { requestId, customerId: customerId ?? "novo" });
 
     const origin = req.headers.get("origin") || "https://geogestor.lovable.app";
-    const metadata = {
+    const metadata: Record<string, string> = {
       plano: rawPlanId,
       oferta: ofertaSanitizada,
       user_id: user.id,
       request_id: requestId,
     };
+    if (tenantId) metadata.tenant_id = tenantId;
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -118,7 +130,9 @@ serve(async (req) => {
       cancel_url: `${origin}/checkout-cancelado`,
       metadata,
       subscription_data: { metadata },
-    });
+      // Idempotência: mesmo requestId nunca cria duas sessões
+      // (a Stripe trata POST repetidos com mesma chave como o mesmo recurso)
+    }, { idempotencyKey: `checkout-${user.id}-${rawPlanId}-${requestId}` });
 
     // Confirmação pós-criação: relê metadados retornados pelo Stripe para garantir
     // que chegaram corretamente (não confiamos só no payload enviado).

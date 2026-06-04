@@ -114,9 +114,10 @@ if [ "$SHOW_IGNORED" -eq 1 ]; then
   # rg --debug emits lines like:  "ignoring ./path: Ignore(...)"  on stderr.
   # We extract the path + the matching rule (gitignore/glob) for readability.
   IGNORED=$(rg --files --debug "${RG_FLAGS[@]}" "${SEARCH_PATHS[@]}" 2>&1 1>/dev/null \
-    | grep -oE "ignoring [^:]+:.*" \
-    | sed -E 's/ignoring (.*): (Ignore\(IgnoreMatch\()?(Gitignore|Globs?)[^)]*\)*.*/  \1   [\3]/' \
+    | grep -oE "ignoring [^:]+:.*(Gitignore|Override|Globs?)" \
+    | sed -E 's/ignoring (.+):.*(Gitignore|Override|Globs?).*/  \1   [\2]/' \
     | sort -u || true)
+
   if [ -n "$IGNORED" ]; then
     echo "$IGNORED"
   else

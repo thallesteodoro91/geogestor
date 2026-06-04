@@ -50,6 +50,7 @@ while [ $# -gt 0 ]; do
     -s|--schema)       SCHEMA_OUT="forbidden-terms-report.schema.json" ;;
     --schema=*)        SCHEMA_OUT="${1#--schema=}" ;;
     -s=*)              SCHEMA_OUT="${1#-s=}" ;;
+    --validate)        VALIDATE=1 ;;
     -h|--help)         print_help; exit 0 ;;
     --)                shift; SEARCH_PATHS+=("$@"); break ;;
     -*)                echo "Unknown option: $1" >&2; print_help; exit 2 ;;

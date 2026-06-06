@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
-import { StoryCard } from "@/components/dashboard/StoryCard";
+import { AIStoryCards } from "@/components/dashboard/AIStoryCards";
 import { RevenueChart } from "@/components/charts/RevenueChart";
 import { ProfitMarginChart } from "@/components/charts/ProfitMarginChart";
 import { GlobalFilters, FilterState } from "@/components/filters/GlobalFilters";
@@ -220,71 +220,8 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Story Cards - Storytelling Visual com Contexto */}
-        <div className="space-y-4 animate-fade-in" style={{ animationDelay: "0.3s" }}>
-          <div className="space-y-2">
-            <h2 className="text-2xl font-heading font-bold text-foreground">Insights Narrativos</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Análises que transformam dados em decisões — seu consultor financeiro digital
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 grid-8pt">
-            <StoryCard
-              title="Receita e Margem"
-              insight={kpis && kpiVariation 
-                ? `A receita ${kpiVariation.variations.receita_total >= 0 ? 'cresceu' : 'recuou'} ${formatVariation(kpiVariation.variations.receita_total)} no período. ${
-                    (kpis.margem_liquida_percent || 0) > 15 
-                      ? 'A margem líquida está saudável, indicando boa eficiência operacional.'
-                      : 'Recomenda-se revisar a estrutura de custos para preservar a rentabilidade.'
-                  }`
-                : "Carregando análise de receita e margem..."}
-              category="financial"
-              trend={kpiVariation?.variations.receita_total >= 0 ? "up" : "alert"}
-              emphasis="high"
-              action={kpiVariation?.variations.receita_total < 0 ? "Análise detalhada de custos operacionais prioritária" : undefined}
-            />
-            <StoryCard
-              title="Performance Operacional"
-              insight={kpis 
-                ? `${kpis.servicos_concluidos || 0} de ${kpis.total_servicos || 0} serviços concluídos. ${
-                    (kpis.taxa_conversao_percent || 0) > 50
-                      ? `Taxa de conversão de ${(kpis.taxa_conversao_percent || 0).toFixed(0)}% — acima da média do setor.`
-                      : `Taxa de conversão de ${(kpis.taxa_conversao_percent || 0).toFixed(0)}% — há espaço para melhorar o follow-up comercial.`
-                  }`
-                : "Carregando indicadores operacionais..."}
-              category="operational"
-              trend="up"
-              emphasis="high"
-            />
-            <StoryCard
-              title="Ticket Médio"
-              insight={kpis && kpiVariation
-                ? `Ticket médio de R$ ${(kpis.ticket_medio || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}, ${
-                    kpiVariation.variations.ticket_medio >= 0 
-                      ? `em alta de ${formatVariation(kpiVariation.variations.ticket_medio)}, reflexo de serviços de maior valor agregado.`
-                      : `com recuo de ${formatVariation(kpiVariation.variations.ticket_medio)}. Avaliar precificação.`
-                  }`
-                : "Carregando análise de ticket médio..."}
-              category="financial"
-              trend={kpiVariation?.variations.ticket_medio >= 0 ? "up" : "alert"}
-              emphasis="medium"
-            />
-            <StoryCard
-              title="Despesas sob Controle"
-              insight={kpis && kpiVariation
-                ? `Total de despesas: R$ ${(kpis.total_despesas || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${formatVariation(kpiVariation.variations.total_despesas)} vs anterior). ${
-                    kpiVariation.variations.total_despesas <= 0 
-                      ? 'Custos em queda — boa gestão de recursos.'
-                      : 'Atenção: custos em alta — revisar categorias com maior impacto.'
-                  }`
-                : "Carregando análise de despesas..."}
-              category="strategic"
-              trend={kpiVariation?.variations.total_despesas <= 0 ? "up" : "alert"}
-              emphasis="medium"
-              action={kpiVariation?.variations.total_despesas > 5 ? "Manter estratégia de precificação e follow-up comercial" : undefined}
-            />
-          </div>
-        </div>
+        {/* Story Cards gerados por IA sob demanda */}
+        <AIStoryCards />
 
         {/* Charts */}
         <div className="space-y-4 animate-fade-in" style={{ animationDelay: "0.4s" }}>

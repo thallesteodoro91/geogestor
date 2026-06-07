@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+import { ManageSubscriptionPanel } from "@/components/plan/ManageSubscriptionPanel";
 import {
   VALID_PLANOS,
   VALID_OFERTAS,
@@ -480,9 +481,9 @@ export default function Assinatura() {
                   const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === currentPriceId;
                   if (isCurrentPlan) {
                     return (
-                      <Button onClick={handleOpenPortal} disabled={portalLoading}>
-                        {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                        Gerenciar assinatura
+                      <Button variant="outline" disabled className="cursor-default">
+                        <Check className="h-4 w-4" />
+                        Seu plano atual
                       </Button>
                     );
                   }
@@ -509,29 +510,7 @@ export default function Assinatura() {
 
         {isActiveSubscriber && (
           <section className="mx-auto w-full max-w-4xl">
-            <Card className="border-success/30 bg-success/5">
-              <CardContent className="flex flex-col items-start gap-4 p-6 sm:flex-row sm:items-center">
-                <div className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-success/10">
-                  <Crown className="h-6 w-6 text-success" />
-                </div>
-                <div className="flex-1 space-y-1">
-                  <p className="text-lg font-semibold text-foreground">Você já possui uma assinatura ativa</p>
-                  <p className="text-sm text-muted-foreground">
-                    Para alterar pagamento, trocar plano ou cancelar, use o portal de gerenciamento.
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                  <Button variant="outline" onClick={() => navigate("/faturas")}>
-                    <FileText className="h-4 w-4" />
-                    Ver faturas
-                  </Button>
-                  <Button onClick={handleOpenPortal} disabled={portalLoading}>
-                    {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                    Gerenciar assinatura
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <ManageSubscriptionPanel />
           </section>
         )}
 
@@ -613,32 +592,25 @@ export default function Assinatura() {
           </div>
         </section>
 
-        <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-2 text-center">
-          <div className="space-y-1">
-            <p className="text-lg font-semibold text-foreground">
-              {isActiveSubscriber ? "Precisa ajustar sua assinatura?" : "Pronto para decidir com clareza total?"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {isActiveSubscriber
-                ? "Gerencie cobrança, forma de pagamento e plano atual em poucos cliques."
-                : "Escolha uma das duas opções e comece agora, sem dúvida e sem confusão."}
-            </p>
-          </div>
+        {!isActiveSubscriber && (
+          <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-2 text-center">
+            <div className="space-y-1">
+              <p className="text-lg font-semibold text-foreground">
+                Pronto para decidir com clareza total?
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Escolha uma das duas opções e comece agora, sem dúvida e sem confusão.
+              </p>
+            </div>
 
-          {isActiveSubscriber ? (
-            <Button size="lg" variant="outline" onClick={handleOpenPortal} disabled={portalLoading}>
-              {portalLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-              Gerenciar assinatura
-            </Button>
-          ) : (
             <Button size="lg" onClick={() => handleSubscribe(selectedPlan)} disabled={loadingPlan === selectedPlan}>
               {loadingPlan === selectedPlan ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {selectedPlan === "anual" ? "Começar com desconto" : "Começar agora"}
             </Button>
-          )}
 
-          <p className="text-xs text-muted-foreground">Cancele quando quiser · Sem contrato · Acesso imediato</p>
-        </section>
+            <p className="text-xs text-muted-foreground">Cancele quando quiser · Sem contrato · Acesso imediato</p>
+          </section>
+        )}
       </div>
     </div>
   );

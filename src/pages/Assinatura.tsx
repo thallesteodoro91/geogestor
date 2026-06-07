@@ -25,6 +25,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
+import { ManageSubscriptionPanel } from "@/components/plan/ManageSubscriptionPanel";
 import {
   VALID_PLANOS,
   VALID_OFERTAS,

@@ -592,32 +592,25 @@ export default function Assinatura() {
           </div>
         </section>
 
-        <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-2 text-center">
-          <div className="space-y-1">
-            <p className="text-lg font-semibold text-foreground">
-              {isActiveSubscriber ? "Precisa ajustar sua assinatura?" : "Pronto para decidir com clareza total?"}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {isActiveSubscriber
-                ? "Gerencie cobrança, forma de pagamento e plano atual em poucos cliques."
-                : "Escolha uma das duas opções e comece agora, sem dúvida e sem confusão."}
-            </p>
-          </div>
+        {!isActiveSubscriber && (
+          <section className="mx-auto flex w-full max-w-3xl flex-col items-center gap-4 py-2 text-center">
+            <div className="space-y-1">
+              <p className="text-lg font-semibold text-foreground">
+                Pronto para decidir com clareza total?
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Escolha uma das duas opções e comece agora, sem dúvida e sem confusão.
+              </p>
+            </div>
 
-          {isActiveSubscriber ? (
-            <Button size="lg" variant="outline" onClick={handleOpenPortal} disabled={portalLoading}>
-              {portalLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ExternalLink className="h-5 w-5" />}
-              Gerenciar assinatura
-            </Button>
-          ) : (
             <Button size="lg" onClick={() => handleSubscribe(selectedPlan)} disabled={loadingPlan === selectedPlan}>
               {loadingPlan === selectedPlan ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />}
               {selectedPlan === "anual" ? "Começar com desconto" : "Começar agora"}
             </Button>
-          )}
 
-          <p className="text-xs text-muted-foreground">Cancele quando quiser · Sem contrato · Acesso imediato</p>
-        </section>
+            <p className="text-xs text-muted-foreground">Cancele quando quiser · Sem contrato · Acesso imediato</p>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -481,9 +481,9 @@ export default function Assinatura() {
                   const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === currentPriceId;
                   if (isCurrentPlan) {
                     return (
-                      <Button onClick={handleOpenPortal} disabled={portalLoading}>
-                        {portalLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-                        Gerenciar assinatura
+                      <Button variant="outline" disabled className="cursor-default">
+                        <Check className="h-4 w-4" />
+                        Seu plano atual
                       </Button>
                     );
                   }

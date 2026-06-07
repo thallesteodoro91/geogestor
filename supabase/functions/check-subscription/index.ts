@@ -152,7 +152,7 @@ serve(async (req) => {
               status: "active",
               stripe_subscription_id: subscription.id,
               stripe_customer_id: customerId,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+              current_period_start: subscriptionStart,
               current_period_end: subscriptionEnd,
               updated_at: new Date().toISOString(),
             })

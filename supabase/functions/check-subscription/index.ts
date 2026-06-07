@@ -102,9 +102,22 @@ serve(async (req) => {
     }
 
     const subscription = subscriptions.data[0];
-    const subscriptionEnd = new Date(subscription.current_period_end * 1000).toISOString();
-    const priceId = subscription.items.data[0].price.id;
-    const productId = subscription.items.data[0].price.product as string;
+    const item = subscription.items.data[0];
+    // Stripe API 2025-08-27 moved period fields from subscription to subscription items.
+    const periodEndUnix =
+      (item as any).current_period_end ?? (subscription as any).current_period_end;
+    const periodStartUnix =
+      (item as any).current_period_start ?? (subscription as any).current_period_start;
+    const toIso = (unix: unknown): string | null => {
+      const n = typeof unix === "number" ? unix : Number(unix);
+      if (!Number.isFinite(n) || n <= 0) return null;
+      const d = new Date(n * 1000);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    };
+    const subscriptionEnd = toIso(periodEndUnix);
+    const subscriptionStart = toIso(periodStartUnix);
+    const priceId = item.price.id;
+    const productId = item.price.product as string;
 
     logStep("Active subscription found", { subscriptionId: subscription.id, priceId, subscriptionEnd });
 
@@ -139,7 +152,7 @@ serve(async (req) => {
               status: "active",
               stripe_subscription_id: subscription.id,
               stripe_customer_id: customerId,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
+              current_period_start: subscriptionStart,
               current_period_end: subscriptionEnd,
               updated_at: new Date().toISOString(),
             })

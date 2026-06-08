@@ -20,10 +20,10 @@ export function usePlanLimitCheck() {
     
     if (!result.allowed) {
       toast.error(result.message, {
-        description: 'Acesse Configurações > Plano para fazer upgrade.',
+        description: 'Acesse a página de Assinatura para fazer upgrade.',
         action: {
           label: 'Ver Planos',
-          onClick: () => window.location.href = '/configuracoes',
+          onClick: () => window.location.href = '/assinatura',
         },
         duration: 6000,
       });
@@ -48,10 +48,10 @@ export function usePlanLimitCheck() {
     
     if (!result.success) {
       toast.error(result.error || 'Operação não permitida', {
-        description: 'Acesse Configurações > Plano para fazer upgrade.',
+        description: 'Acesse a página de Assinatura para fazer upgrade.',
         action: {
           label: 'Ver Planos',
-          onClick: () => window.location.href = '/configuracoes',
+          onClick: () => window.location.href = '/assinatura',
         },
         duration: 6000,
       });
@@ -125,10 +125,10 @@ export function useProtectedMutation<TData, TVariables>(
       const isLimitError = error.message.includes('Limite') || error.message.includes('limite');
       
       toast.error(options?.errorMessage || error.message, {
-        description: isLimitError ? 'Acesse Configurações > Plano para fazer upgrade.' : undefined,
+        description: isLimitError ? 'Acesse a página de Assinatura para fazer upgrade.' : undefined,
         action: isLimitError ? {
           label: 'Ver Planos',
-          onClick: () => window.location.href = '/configuracoes',
+          onClick: () => window.location.href = '/assinatura',
         } : undefined,
         duration: isLimitError ? 6000 : 4000,
       });

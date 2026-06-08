@@ -4,10 +4,12 @@ import { Header } from "./Header";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
+import { PlanUsageBanner } from "@/components/plan/PlanUsageBanner";
 
 interface AppLayoutProps {
   children: ReactNode;
 }
+
 
 export const AppLayout = ({ children }: AppLayoutProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -42,6 +44,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
           role="main"
           aria-label="Conteúdo principal"
         >
+          <PlanUsageBanner />
           {children}
         </main>
       </div>

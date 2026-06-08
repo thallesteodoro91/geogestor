@@ -733,7 +733,7 @@ export function ClientePropriedadeUnificadoDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || blocked}>
               {saving ? "Salvando..." : isEditing ? "Salvar" : "Salvar Tudo"}
             </Button>
           </DialogFooter>

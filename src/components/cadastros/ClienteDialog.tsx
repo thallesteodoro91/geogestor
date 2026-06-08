@@ -13,6 +13,10 @@ import { useState, useEffect } from "react";
 import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
 import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+
 
 
 interface ClienteDialogProps {
@@ -27,6 +31,10 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
     defaultValues: cliente || {}
   });
   const isEditing = !!cliente;
+  const { isWithinLimit } = usePlanLimits();
+  const { clientsCount } = useResourceCounts();
+  const canAddClient = isEditing || isWithinLimit('clients', clientsCount);
+
 
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
     cliente?.origem ? cliente.origem.split(',').map((o: string) => o.trim()) : []
@@ -72,6 +80,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   };
 
   const onSubmit = async (data: any) => {
+    if (!isEditing && !canAddClient) {
+      toast.error("Limite de clientes do plano atingido.", {
+        description: "Faça upgrade para adicionar mais clientes.",
+        action: { label: "Ver planos", onClick: () => (window.location.href = "/assinatura") },
+      });
+      return;
+    }
+
     try {
       // Obter tenant_id para garantir isolamento de dados
       const { data: { user } } = await supabase.auth.getUser();
@@ -141,6 +157,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
         
         <form onSubmit={handleSubmit(onSubmit)} className="flex-1 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto max-h-[calc(90vh-200px)] space-y-4 pr-2">
+          {!isEditing && <PlanLimitAlert resource="clients" currentCount={clientsCount} />}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="nome">Nome *</Label>
@@ -285,7 +303,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" disabled={!isEditing && !canAddClient}>Salvar</Button>
           </DialogFooter>
         </form>
       </DialogContent>

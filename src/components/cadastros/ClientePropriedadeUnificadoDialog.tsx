@@ -20,6 +20,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { getCurrentTenantId } from "@/services/supabase.service";
 import { logAuditEvent } from "@/services/audit.service";
 import { formatPhoneNumber } from "@/lib/formatPhone";
+import { usePlanLimits } from "@/hooks/usePlanLimits";
+import { useResourceCounts } from "@/hooks/useResourceCounts";
+import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+
 
 interface PropriedadeForm {
   id_propriedade?: string; // exists for saved properties
@@ -64,6 +68,13 @@ export function ClientePropriedadeUnificadoDialog({
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!cliente;
+  const { isWithinLimit } = usePlanLimits();
+  const { clientsCount, propertiesCount } = useResourceCounts();
+  const canAddClient = isEditing || isWithinLimit('clients', clientsCount);
+  const newPropsCount = propriedades.filter(p => !p.id_propriedade).length;
+  const canAddNewProps = isWithinLimit('properties', propertiesCount + Math.max(newPropsCount - 1, 0));
+  const blocked = (!isEditing && !canAddClient) || (newPropsCount > 0 && !canAddNewProps);
+
 
   useEffect(() => {
     if (open) {
@@ -176,6 +187,14 @@ export function ClientePropriedadeUnificadoDialog({
   };
 
   const onSubmit = async (data: any) => {
+    if (blocked) {
+      toast.error("Limite do plano atingido.", {
+        description: "Faça upgrade para adicionar novos clientes ou propriedades.",
+        action: { label: "Ver planos", onClick: () => (window.location.href = "/assinatura") },
+      });
+      return;
+    }
+
     if (!data.nome?.trim()) {
       toast.error("Nome do cliente é obrigatório");
       setActiveTab("cliente");
@@ -385,6 +404,20 @@ export function ClientePropriedadeUnificadoDialog({
             </TabsList>
 
             <div className="flex-1 min-h-0 overflow-y-auto max-h-[calc(90vh-220px)] pr-4">
+              {!isEditing && (
+                <div className="mt-4">
+                  <PlanLimitAlert resource="clients" currentCount={clientsCount} />
+                </div>
+              )}
+              {newPropsCount > 0 && (
+                <div className="mt-2">
+                  <PlanLimitAlert
+                    resource="properties"
+                    currentCount={propertiesCount + Math.max(newPropsCount - 1, 0)}
+                  />
+                </div>
+              )}
+
               {/* Tab Cliente */}
               <TabsContent value="cliente" className="space-y-4 mt-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -700,7 +733,7 @@ export function ClientePropriedadeUnificadoDialog({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || blocked}>
               {saving ? "Salvando..." : isEditing ? "Salvar" : "Salvar Tudo"}
             </Button>
           </DialogFooter>

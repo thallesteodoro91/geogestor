@@ -94,7 +94,7 @@ export function usePlanLimits(): PlanLimits {
           description: 'Faça upgrade do seu plano para adicionar mais.',
           action: {
             label: 'Ver Planos',
-            onClick: () => window.location.href = '/configuracoes',
+            onClick: () => window.location.href = '/assinatura',
           },
           duration: 6000,
         }

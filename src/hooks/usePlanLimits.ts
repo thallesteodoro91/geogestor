@@ -20,6 +20,42 @@ export interface PlanLimits {
   checkAndNotify: (resource: ResourceType) => boolean;
 }
 
+/**
+ * DEBUG ONLY: allows QA to force plan limits regardless of the actual plan
+ * (including owner bypass). Reads from URL `?debugLimits=clients:N,properties:N,users:N`
+ * and persists to sessionStorage as `debug_plan_limits`. To clear:
+ * `sessionStorage.removeItem('debug_plan_limits')` or visit `?debugLimits=off`.
+ */
+function readDebugLimits(): { maxUsers?: number; maxProperties?: number; maxClients?: number } | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get('debugLimits');
+    if (raw === 'off') {
+      sessionStorage.removeItem('debug_plan_limits');
+      return null;
+    }
+    if (raw) {
+      const parsed: Record<string, number> = {};
+      raw.split(',').forEach((pair) => {
+        const [k, v] = pair.split(':');
+        if (k && v && !isNaN(Number(v))) parsed[k.trim()] = Number(v);
+      });
+      const result = {
+        maxClients: parsed.clients,
+        maxProperties: parsed.properties,
+        maxUsers: parsed.users,
+      };
+      sessionStorage.setItem('debug_plan_limits', JSON.stringify(result));
+      return result;
+    }
+    const stored = sessionStorage.getItem('debug_plan_limits');
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function usePlanLimits(): PlanLimits {
   const { subscription, canAddResource, getResourceLimit, isSubscriptionActive, isLoading: tenantLoading } = useTenant();
   const { clientsCount, propertiesCount, usersCount } = useResourceCounts();
@@ -28,6 +64,55 @@ export function usePlanLimits(): PlanLimits {
   const isActive = isSubscriptionActive();
   const isTrialing = subscription?.status === 'trialing';
   const isOwner = plan?.slug === 'owner';
+  const debug = readDebugLimits();
+
+  // DEBUG override: short-circuits owner bypass and DB limits for QA validation
+  if (debug && plan) {
+    const maxUsers = debug.maxUsers ?? plan.max_users;
+    const maxProperties = debug.maxProperties ?? plan.max_properties;
+    const maxClients = debug.maxClients ?? plan.max_clients;
+    const counts: Record<ResourceType, number> = {
+      users: usersCount,
+      properties: propertiesCount,
+      clients: clientsCount,
+    };
+    const maxes: Record<ResourceType, number> = {
+      users: maxUsers,
+      properties: maxProperties,
+      clients: maxClients,
+    };
+    const resourceNames: Record<ResourceType, string> = {
+      users: 'usuários',
+      properties: 'propriedades',
+      clients: 'clientes',
+    };
+    return {
+      maxUsers,
+      maxProperties,
+      maxClients,
+      features: plan.features || {},
+      planName: `${plan.name} (debug)`,
+      planSlug: plan.slug,
+      isTrialing,
+      isActive: true,
+      isLoading: false,
+      isWithinLimit: (resource, currentCount) => currentCount < maxes[resource],
+      checkAndNotify: (resource) => {
+        const ok = counts[resource] < maxes[resource];
+        if (!ok) {
+          toast.error(
+            `Limite de ${resourceNames[resource]} atingido (${counts[resource]}/${maxes[resource]})`,
+            {
+              description: 'Faça upgrade do seu plano para adicionar mais.',
+              action: { label: 'Ver Planos', onClick: () => (window.location.href = '/assinatura') },
+              duration: 6000,
+            }
+          );
+        }
+        return ok;
+      },
+    };
+  }
 
   // Owner plan: unlimited everything, never blocked
   if (plan && isOwner) {

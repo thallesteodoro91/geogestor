@@ -105,7 +105,9 @@ export function CompanyTab() {
     }
     setUploadingTemplate(true);
     try {
-      const fileName = `template-orcamento-${Date.now()}.pdf`;
+      const tenantId = await getCurrentTenantId();
+      if (!tenantId) throw new Error("Sessão sem tenant");
+      const fileName = `${tenantId}/template-orcamento-${Date.now()}.pdf`;
       const { error: uploadError } = await supabase.storage
         .from("empresa-assets")
         .upload(fileName, file, { cacheControl: "3600", upsert: false });
@@ -123,8 +125,13 @@ export function CompanyTab() {
   const handleRemoveTemplate = async () => {
     if (!empresa?.template_orcamento_url) return;
     try {
-      const fileName = empresa.template_orcamento_url.split("/").pop();
-      if (fileName) await supabase.storage.from("empresa-assets").remove([fileName]);
+      const tenantId = await getCurrentTenantId();
+      // Extrair path relativo após /empresa-assets/
+      const url = empresa.template_orcamento_url;
+      const marker = "/empresa-assets/";
+      const idx = url.indexOf(marker);
+      const relPath = idx >= 0 ? url.slice(idx + marker.length) : url.split("/").pop();
+      if (relPath) await supabase.storage.from("empresa-assets").remove([relPath]);
       await updateEmpresaMutation.mutateAsync({ template_orcamento_url: null });
       toast.success("Template removido!");
     } catch (error: any) {

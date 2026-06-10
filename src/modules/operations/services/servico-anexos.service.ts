@@ -31,21 +31,21 @@ export async function uploadAnexo(
   file: File
 ): Promise<{ data: ServicoAnexo | null; error: Error | null }> {
   const tenantId = await getCurrentTenantId();
-  
-  // Gerar path único
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${servicoId}/${Date.now()}_${file.name}`;
-  
-  // Upload para o storage
+  if (!tenantId) {
+    return { data: null, error: new Error('Sessão sem tenant') };
+  }
+
+  // Path com prefixo de tenant para isolamento por RLS de storage
+  const fileName = `${tenantId}/${servicoId}/${Date.now()}_${file.name}`;
+
   const { error: uploadError } = await supabase.storage
     .from('servico-anexos')
     .upload(fileName, file);
-  
+
   if (uploadError) {
     return { data: null, error: uploadError };
   }
-  
-  // Criar registro na tabela
+
   const { data, error } = await supabase
     .from('servico_anexos')
     .insert({
@@ -54,11 +54,11 @@ export async function uploadAnexo(
       tipo_arquivo: file.type,
       storage_path: fileName,
       tamanho_bytes: file.size,
-      tenant_id: tenantId
+      tenant_id: tenantId,
     })
     .select()
     .single();
-  
+
   return { data, error };
 }
 

@@ -1,11 +1,9 @@
 /**
- * Universal Importer — new pipeline that absorbs any business spreadsheet.
- *
+ * Universal Importer — pipeline completo:
  *   File → headers/rows → hybrid match → UniversalValidationPanel
- *        → explodeRow → resolveRelations → batch insert → refresh KPIs
- *
- * Lives alongside the legacy SmartImporter; reached via "Importar planilha"
- * on /importacao.
+ *        → explodeRow → resolveRelations → batch insert
+ *        (dim_cliente → dim_propriedade → fato_orcamento → fato_servico → fato_despesas)
+ *        → refresh KPIs → relatório pós-importação
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -17,7 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2, CheckCircle2 } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { matchAllColumns, type HybridMatch } from "@/lib/etl/hybridMatcher";
@@ -30,6 +28,12 @@ import {
 } from "@/lib/etl/relationResolver";
 import { CANONICAL_TO_COLUMN } from "@/lib/etl/canonicalToDb";
 import { invalidateDashboardAndKpis } from "@/lib/etl/dashboardRefresh";
+import {
+  normalizeStatusPagamento,
+  normalizeFormaPagamento,
+  normalizeStatusOrcamento,
+  normalizeStatusServico,
+} from "@/lib/etl/statusNormalizer";
 import {
   UniversalValidationPanel,
   type DetectionSummary,
@@ -44,42 +48,93 @@ interface Props {
   onSuccess?: () => void;
 }
 
+interface RowWarning {
+  rowIndex: number;
+  field: string;
+  message: string;
+}
+
 interface ImportResult {
   clientesCriados: number;
   propriedadesCriadas: number;
   orcamentosCriados: number;
+  servicosCriados: number;
+  despesasCriadas: number;
+  linhasIgnoradas: number;
+  camposNaoReconhecidos: string[];
   erros: string[];
+  avisos: RowWarning[];
 }
 
-/** Coerce raw spreadsheet cell to the canonical-typed value the DB expects. */
-function coerce(canonicalId: string, raw: unknown): unknown {
-  const f = CANONICAL_BY_ID[canonicalId];
-  if (!f) return raw;
-  const s = String(raw ?? "").trim();
+/**
+ * Date parser BR-first. Aceita dd/mm/yyyy, dd-mm-yyyy, yyyy-mm-dd, ISO.
+ * NUNCA usa `new Date(string)` antes do parser BR (evita inversão de dd/mm).
+ */
+function parseDateBRFirst(raw: unknown): string | null {
+  if (raw == null) return null;
+  if (raw instanceof Date) {
+    if (isNaN(raw.getTime())) return null;
+    return raw.toISOString().slice(0, 10);
+  }
+  const s = String(raw).trim();
   if (!s) return null;
+  // dd/mm/yyyy ou dd-mm-yyyy ou dd.mm.yyyy
+  const br = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
+  if (br) {
+    const d = parseInt(br[1], 10);
+    const m = parseInt(br[2], 10);
+    let y = parseInt(br[3], 10);
+    if (br[3].length === 2) y = 2000 + y;
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+      return `${y.toString().padStart(4, "0")}-${m.toString().padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
+    }
+    return null;
+  }
+  // ISO yyyy-mm-dd ou yyyy/mm/dd
+  const iso = s.match(/^(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})/);
+  if (iso) {
+    const y = parseInt(iso[1], 10);
+    const m = parseInt(iso[2], 10);
+    const d = parseInt(iso[3], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${m.toString().padStart(2, "0")}-${d.toString().padStart(2, "0")}`;
+    }
+  }
+  // Fallback Date.parse só para timestamps completos
+  const dt = new Date(s);
+  if (!isNaN(dt.getTime()) && s.length >= 10) return dt.toISOString().slice(0, 10);
+  return null;
+}
+
+/** Coerce raw cell to canonical-typed value. Retorna { value, warning? } */
+function coerce(canonicalId: string, raw: unknown): { value: unknown; warning?: string } {
+  const f = CANONICAL_BY_ID[canonicalId];
+  if (!f) return { value: raw };
+  const s = String(raw ?? "").trim();
+  if (!s) return { value: null };
   switch (f.type) {
     case "monetary":
     case "number":
-    case "percent":
-      return parseFinancialNumber(s);
+    case "percent": {
+      const n = parseFinancialNumber(s);
+      if (n === null) return { value: null, warning: `valor não numérico em ${f.label}: "${s}"` };
+      return { value: n };
+    }
     case "date": {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-      const br = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$/);
-      if (br) {
-        const yy = br[3].length === 2 ? `20${br[3]}` : br[3];
-        return `${yy}-${br[2].padStart(2, "0")}-${br[1].padStart(2, "0")}`;
-      }
-      return s;
+      const d = parseDateBRFirst(s);
+      if (d === null) return { value: null, warning: `data inválida em ${f.label}: "${s}"` };
+      return { value: d };
     }
     case "cpf":
     case "cnpj":
     case "phone":
-      return s.replace(/\D/g, "");
-    case "geo":
-      return parseFinancialNumber(s);
+      return { value: s.replace(/\D/g, "") };
+    case "geo": {
+      const n = parseFinancialNumber(s);
+      return { value: n };
+    }
     default:
-      return s;
+      return { value: s };
   }
 }
 
@@ -127,7 +182,7 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
       if (ex.servico) servicos++;
       const fp = ex.orcamento?.forma_pagamento; if (fp) formas.add(String(fp));
       const st = ex.orcamento?.status; if (st) statuses.add(String(st));
-      const r = ex.orcamento?.valor_orcado ?? ex.orcamento?.valor_final ?? ex.financeiro?.receita;
+      const r = ex.orcamento?.valor_orcado ?? ex.orcamento?.valor_final ?? ex.financeiro?.receita ?? ex.financeiro?.receita_realizada;
       if (r != null && Number(parseFinancialNumber(String(r))) > 0) receitas++;
       const d = ex.financeiro?.despesas;
       if (d != null && Number(parseFinancialNumber(String(d))) > 0) despesas++;
@@ -184,6 +239,13 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     setIsImporting(true);
     setStep("importing");
     const errors: string[] = [];
+    const avisos: RowWarning[] = [];
+    const camposNaoReconhecidos = new Set<string>();
+
+    // Captura colunas não mapeadas para o relatório
+    finalMatches.forEach(m => {
+      if (!m.field) camposNaoReconhecidos.add(m.header);
+    });
 
     try {
       // Carregar existentes para dedup
@@ -196,42 +258,39 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
           .eq("tenant_id", tenant.id),
       ]);
 
-      // Explode + Resolve
-      const exploded = rows.map(r => explodeRow(headers, finalMatches, r));
-      const matchesById = new Map(finalMatches.map(m => [m.header, m]));
-
-      // Build canonical-keyed payloads
-      const explodedCanonical = exploded.map((ex, idx) => {
+      // Explode + coerção com captura de warnings
+      const exploded = rows.map((r, rowIdx) => {
+        const ex = explodeRow(headers, finalMatches, r);
         const out: typeof ex = { customFieldsByEntity: ex.customFieldsByEntity };
         (["cliente","propriedade","servico","orcamento","financeiro","endereco"] as const).forEach(en => {
           const bag = ex[en];
           if (!bag) return;
           const coerced: Record<string, unknown> = {};
           Object.entries(bag).forEach(([key, val]) => {
-            coerced[key] = coerce(`${en}.${key}`, val);
+            const { value, warning } = coerce(`${en}.${key}`, val);
+            coerced[key] = value;
+            if (warning) avisos.push({ rowIndex: rowIdx + 2, field: `${en}.${key}`, message: warning });
           });
           out[en] = coerced;
         });
-        void idx;
         return out;
       });
 
       const resolved = resolveRelations(
-        explodedCanonical,
+        exploded,
         (existingClis ?? []) as ExistingCliente[],
         (existingProps ?? []) as ExistingPropriedade[],
       );
 
-      // 1) Insert new clientes
+      // 1) Insert clientes novos — só colunas válidas via CANONICAL_TO_COLUMN whitelist
       const clienteTempToId = new Map<string, string>();
       if (resolved.clientesNovos.length) {
         const payload = resolved.clientesNovos.map(c => {
           const { __tempId, ...rest } = c;
           const row: Record<string, unknown> = { tenant_id: tenant.id };
-          // Map canonical keys to columns
           Object.entries(rest).forEach(([key, val]) => {
             const col = CANONICAL_TO_COLUMN[`cliente.${key}`];
-            if (col?.table === "dim_cliente") row[col.column] = val;
+            if (col?.table === "dim_cliente" && val != null) row[col.column] = val;
           });
           if (!row.nome) row.nome = String(rest.cpf ?? rest.cnpj ?? "Cliente sem nome");
           return { __tempId, row };
@@ -240,28 +299,42 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
           .from("dim_cliente")
           .insert(payload.map(p => p.row) as any)
           .select("id_cliente");
-        if (error) throw new Error(`Clientes: ${error.message}`);
-        (data ?? []).forEach((d: any, i: number) => clienteTempToId.set(payload[i].__tempId, d.id_cliente));
+        if (error) {
+          errors.push(`dim_cliente: ${error.message}`);
+        } else {
+          (data ?? []).forEach((d: any, i: number) => clienteTempToId.set(payload[i].__tempId, d.id_cliente));
+        }
       }
 
-      const resolveClienteId = (ref: string | null | undefined): string | null => {
-        if (!ref) return null;
-        if (clienteTempToId.has(ref)) return clienteTempToId.get(ref)!;
-        return ref; // already an existing UUID
+      const resolveClienteFromResolved = (resolvedRow: typeof resolved.rows[number]): string | null => {
+        if (resolvedRow.id_cliente) return resolvedRow.id_cliente;
+        if (!resolvedRow.cliente) return null;
+        // Procurar tempId equivalente
+        for (const [tmp, real] of clienteTempToId) {
+          const c = resolved.clientesNovos.find(x => x.__tempId === tmp);
+          if (!c) continue;
+          if (
+            (c.cpf && c.cpf === resolvedRow.cliente.cpf) ||
+            (c.cnpj && c.cnpj === resolvedRow.cliente.cnpj) ||
+            (c.nome && c.nome === resolvedRow.cliente.nome)
+          ) return real;
+        }
+        return null;
       };
 
-      // 2) Insert new propriedades
+      // 2) Insert propriedades novas
       const propTempToId = new Map<string, string>();
       if (resolved.propriedadesNovas.length) {
         const payload = resolved.propriedadesNovas.map(p => {
           const { __tempId, __clienteRef, ...rest } = p;
+          const id_cliente = clienteTempToId.get(__clienteRef) ?? __clienteRef;
           const row: Record<string, unknown> = {
             tenant_id: tenant.id,
-            id_cliente: resolveClienteId(__clienteRef),
+            id_cliente: id_cliente && id_cliente.startsWith("tmp_") ? null : id_cliente,
           };
           Object.entries(rest).forEach(([key, val]) => {
             const col = CANONICAL_TO_COLUMN[`propriedade.${key}`];
-            if (col?.table === "dim_propriedade") row[col.column] = val;
+            if (col?.table === "dim_propriedade" && val != null) row[col.column] = val;
           });
           if (!row.nome_da_propriedade) row.nome_da_propriedade = String(rest.matricula ?? "Propriedade sem nome");
           return { __tempId, row };
@@ -270,81 +343,183 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
           .from("dim_propriedade")
           .insert(payload.map(p => p.row) as any)
           .select("id_propriedade");
-        if (error) errors.push(`Propriedades: ${error.message}`);
+        if (error) errors.push(`dim_propriedade: ${error.message}`);
         else (data ?? []).forEach((d: any, i: number) => propTempToId.set(payload[i].__tempId, d.id_propriedade));
       }
 
-      // 3) Insert orçamentos (one per row that has any orcamento/financeiro data)
-      const orcamentoPayloads: Record<string, unknown>[] = [];
-      resolved.rows.forEach((r, idx) => {
+      // 3) Build orçamentos por linha — guarda rowIndex → id_orcamento p/ associar serviço/despesa
+      const orcamentoByRow = new Map<number, string>();
+      const orcamentoPayloads: { rowIndex: number; row: Record<string, unknown> }[] = [];
+      resolved.rows.forEach((r) => {
         const orc = r.orcamento ?? {};
         const fin = r.financeiro ?? {};
-        if (!Object.keys(orc).length && !Object.keys(fin).length) return;
-        const id_cliente = r.id_cliente
-          ?? (r.cliente && clienteTempToId.size
-              ? (() => {
-                  // Find temp id created above for this row's cliente
-                  for (const [tmp, real] of clienteTempToId) {
-                    const c = resolved.clientesNovos.find(x => x.__tempId === tmp);
-                    if (c && (c.cpf === r.cliente?.cpf || c.cnpj === r.cliente?.cnpj || c.nome === r.cliente?.nome)) return real;
-                  }
-                  return null;
-                })()
-              : null);
-        if (!id_cliente) return; // orçamento exige cliente
-        const id_propriedade = r.id_propriedade
-          ?? (r.propriedade?.matricula || r.propriedade?.nome
-              ? Array.from(propTempToId.values())[idx] ?? null
-              : null);
+        const temOrcamento = Object.keys(orc).length > 0 || fin.receita != null || fin.receita_realizada != null;
+        if (!temOrcamento) return;
+        const id_cliente = resolveClienteFromResolved(r);
+        if (!id_cliente) {
+          avisos.push({ rowIndex: r.rowIndex + 2, field: "orcamento", message: "orçamento ignorado: cliente não identificado" });
+          return;
+        }
+        // Resolve propriedade: usar a propriedade do row, se houver
+        let id_propriedade: string | null = r.id_propriedade;
+        if (!id_propriedade && r.propriedade) {
+          const matricula = String(r.propriedade.matricula ?? "").trim();
+          if (matricula) {
+            // achar a temp id criada para essa matricula
+            const entry = resolved.propriedadesNovas.find(p => String(p.matricula ?? "").trim() === matricula);
+            if (entry) id_propriedade = propTempToId.get(entry.__tempId) ?? null;
+          }
+        }
+
+        const valorOrcado = (orc.valor_orcado ?? orc.valor_final ?? fin.receita ?? fin.receita_prevista) as number | null | undefined;
+        const valorRealizado = (fin.receita_realizada) as number | null | undefined;
+
         const row: Record<string, unknown> = {
           tenant_id: tenant.id,
           id_cliente,
           id_propriedade,
-          data_orcamento: orc.data_emissao ?? new Date().toISOString().slice(0, 10),
+          data_orcamento: (orc.data_emissao as string) ?? new Date().toISOString().slice(0, 10),
           quantidade: 1,
-          valor_unitario: orc.valor_orcado ?? orc.valor_final ?? fin.receita ?? fin.receita_realizada ?? 0,
-          receita_esperada: orc.valor_orcado ?? orc.valor_final ?? fin.receita ?? fin.receita_realizada ?? 0,
-          desconto: orc.desconto ?? 0,
-          valor_imposto: orc.impostos ?? fin.impostos ?? null,
-          forma_de_pagamento: orc.forma_pagamento ?? null,
-          situacao_do_pagamento: orc.situacao_pagamento ?? null,
-          situacao: orc.status ?? null,
-          codigo_orcamento: orc.codigo ?? null,
-          data_do_faturamento: orc.data_faturamento ?? orc.data_vencimento ?? null,
+          valor_unitario: valorOrcado ?? 0,
+          receita_esperada: valorOrcado ?? 0,
+          receita_realizada: valorRealizado ?? null,
+          valor_faturado: valorRealizado ?? null,
+          desconto: (orc.desconto as number | null) ?? 0,
+          valor_imposto: (orc.impostos ?? fin.impostos) as number | null ?? null,
+          forma_de_pagamento: normalizeFormaPagamento(orc.forma_pagamento) ?? null,
+          situacao_do_pagamento: normalizeStatusPagamento(orc.situacao_pagamento) ?? null,
+          situacao: normalizeStatusOrcamento(orc.status) ?? null,
+          codigo_orcamento: (orc.codigo as string | null) ?? null,
+          data_do_faturamento: (orc.data_faturamento ?? orc.data_vencimento) as string | null ?? null,
           custom_fields: r.customFieldsByEntity.orcamento ?? r.customFieldsByEntity.financeiro ?? {},
         };
-        orcamentoPayloads.push(row);
+        orcamentoPayloads.push({ rowIndex: r.rowIndex, row });
       });
 
       let orcamentosCriados = 0;
       if (orcamentoPayloads.length) {
         const { data, error } = await supabase
           .from("fato_orcamento")
-          .insert(orcamentoPayloads as any)
+          .insert(orcamentoPayloads.map(p => p.row) as any)
           .select("id_orcamento");
-        if (error) errors.push(`Orçamentos: ${error.message}`);
-        else orcamentosCriados = data?.length ?? 0;
+        if (error) {
+          errors.push(`fato_orcamento: ${error.message}`);
+        } else {
+          orcamentosCriados = data?.length ?? 0;
+          (data ?? []).forEach((d: any, i: number) => orcamentoByRow.set(orcamentoPayloads[i].rowIndex, d.id_orcamento));
+        }
       }
 
-      // 4) Refresh dashboard
+      // 4) Insert serviços (por linha com servico.* preenchido)
+      const servicoByRow = new Map<number, string>();
+      const servicoPayloads: { rowIndex: number; row: Record<string, unknown> }[] = [];
+      resolved.rows.forEach(r => {
+        const sv = r.servico;
+        if (!sv || !Object.keys(sv).length) return;
+        const id_cliente = resolveClienteFromResolved(r);
+        const id_orcamento = orcamentoByRow.get(r.rowIndex) ?? null;
+        const row: Record<string, unknown> = {
+          tenant_id: tenant.id,
+          id_cliente,
+          id_propriedade: r.id_propriedade,
+          id_orcamento,
+          nome_do_servico: (sv.nome as string) ?? `Serviço linha ${r.rowIndex + 2}`,
+          categoria: (sv.categoria as string) ?? null,
+          situacao_do_servico: normalizeStatusServico(sv.status) ?? "Pendente",
+          data_do_servico_inicio: (sv.data_inicio as string) ?? null,
+          data_do_servico_fim: (sv.data_fim as string) ?? null,
+          receita_servico: orcamentoByRow.has(r.rowIndex)
+            ? (r.orcamento?.valor_final ?? r.orcamento?.valor_orcado ?? r.financeiro?.receita ?? 0)
+            : 0,
+          custom_fields: r.customFieldsByEntity.servico ?? {},
+        };
+        servicoPayloads.push({ rowIndex: r.rowIndex, row });
+      });
+
+      let servicosCriados = 0;
+      if (servicoPayloads.length) {
+        const { data, error } = await supabase
+          .from("fato_servico")
+          .insert(servicoPayloads.map(p => p.row) as any)
+          .select("id_servico");
+        if (error) {
+          errors.push(`fato_servico: ${error.message}`);
+        } else {
+          servicosCriados = data?.length ?? 0;
+          (data ?? []).forEach((d: any, i: number) => servicoByRow.set(servicoPayloads[i].rowIndex, d.id_servico));
+        }
+      }
+
+      // 5) Insert despesas (por linha com financeiro.despesas > 0)
+      const despesaPayloads: Record<string, unknown>[] = [];
+      resolved.rows.forEach(r => {
+        const valor = r.financeiro?.despesas as number | null | undefined;
+        if (!valor || valor <= 0) return;
+        const dataReferencia =
+          (r.orcamento?.data_emissao as string) ??
+          (r.servico?.data_inicio as string) ??
+          new Date().toISOString().slice(0, 10);
+        despesaPayloads.push({
+          tenant_id: tenant.id,
+          valor_da_despesa: valor,
+          data_da_despesa: dataReferencia,
+          id_servico: servicoByRow.get(r.rowIndex) ?? null,
+          id_orcamento: orcamentoByRow.get(r.rowIndex) ?? null,
+          observacoes: r.customFieldsByEntity.financeiro
+            ? `Importado de planilha — ${Object.keys(r.customFieldsByEntity.financeiro).join(", ")}`
+            : "Importado de planilha",
+        });
+      });
+
+      let despesasCriadas = 0;
+      if (despesaPayloads.length) {
+        const { data, error } = await supabase
+          .from("fato_despesas")
+          .insert(despesaPayloads as any)
+          .select("id_despesas");
+        if (error) errors.push(`fato_despesas: ${error.message}`);
+        else despesasCriadas = data?.length ?? 0;
+      }
+
+      // Linhas ignoradas: nenhuma entidade criada
+      const linhasIgnoradas = resolved.rows.filter(r => {
+        const semCliente = !resolveClienteFromResolved(r);
+        const semOrcamento = !orcamentoByRow.has(r.rowIndex);
+        const semServico = !servicoByRow.has(r.rowIndex);
+        return semCliente && semOrcamento && semServico;
+      }).length;
+
+      // Refresh dashboard
       invalidateDashboardAndKpis(queryClient);
 
       setResult({
         clientesCriados: clienteTempToId.size,
         propriedadesCriadas: propTempToId.size,
         orcamentosCriados,
+        servicosCriados,
+        despesasCriadas,
+        linhasIgnoradas,
+        camposNaoReconhecidos: Array.from(camposNaoReconhecidos),
         erros: errors,
+        avisos,
       });
       setStep("result");
-      if (!errors.length) {
+      if (!errors.length && !avisos.length) {
         toast.success("Importação concluída — Dashboard atualizado");
         onSuccess?.();
+      } else if (errors.length) {
+        toast.error(`Importação concluída com ${errors.length} erro(s)`);
       } else {
-        toast.warning("Importação concluída com avisos");
+        toast.warning(`Importação concluída com ${avisos.length} aviso(s)`);
       }
     } catch (err: any) {
       toast.error(`Erro na importação: ${err.message}`);
-      setResult({ clientesCriados: 0, propriedadesCriadas: 0, orcamentosCriados: 0, erros: [err.message] });
+      setResult({
+        clientesCriados: 0, propriedadesCriadas: 0, orcamentosCriados: 0,
+        servicosCriados: 0, despesasCriadas: 0, linhasIgnoradas: rows.length,
+        camposNaoReconhecidos: [],
+        erros: [err.message], avisos: [],
+      });
       setStep("result");
     } finally {
       setIsImporting(false);
@@ -402,17 +577,45 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
           <div className="space-y-4 py-4">
             <div className="flex items-center gap-2 text-emerald-600">
               <CheckCircle2 className="h-6 w-6" />
-              <h3 className="text-lg font-semibold">Importação concluída</h3>
+              <h3 className="text-lg font-semibold">Relatório de Importação</h3>
             </div>
-            <ul className="text-sm space-y-1">
-              <li>Clientes criados: <strong>{result.clientesCriados}</strong></li>
-              <li>Propriedades criadas: <strong>{result.propriedadesCriadas}</strong></li>
-              <li>Orçamentos criados: <strong>{result.orcamentosCriados}</strong></li>
-            </ul>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+              <Stat label="Clientes" value={result.clientesCriados} />
+              <Stat label="Propriedades" value={result.propriedadesCriadas} />
+              <Stat label="Orçamentos" value={result.orcamentosCriados} />
+              <Stat label="Serviços" value={result.servicosCriados} />
+              <Stat label="Despesas" value={result.despesasCriadas} />
+              <Stat label="Linhas ignoradas" value={result.linhasIgnoradas} variant={result.linhasIgnoradas > 0 ? "warn" : "ok"} />
+            </div>
+
+            {result.camposNaoReconhecidos.length > 0 && (
+              <div className="rounded-md border border-border bg-muted/40 p-3 text-xs space-y-1">
+                <p className="font-medium">Colunas mantidas como campo personalizado ({result.camposNaoReconhecidos.length}):</p>
+                <p className="text-muted-foreground">{result.camposNaoReconhecidos.join(" · ")}</p>
+              </div>
+            )}
+
+            {result.avisos.length > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-1 max-h-48 overflow-y-auto">
+                <p className="font-medium text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Avisos por linha ({result.avisos.length}):
+                </p>
+                {result.avisos.slice(0, 20).map((a, i) => (
+                  <p key={i} className="text-amber-700 dark:text-amber-200">
+                    • Linha {a.rowIndex} — {a.message}
+                  </p>
+                ))}
+                {result.avisos.length > 20 && (
+                  <p className="text-amber-600 italic">…e mais {result.avisos.length - 20} avisos</p>
+                )}
+              </div>
+            )}
+
             {result.erros.length > 0 && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs space-y-1">
-                <p className="font-medium text-amber-700 dark:text-amber-300">Avisos:</p>
-                {result.erros.map((e, i) => <p key={i} className="text-amber-700 dark:text-amber-200">• {e}</p>)}
+              <div className="rounded-md border border-rose-300 bg-rose-50 dark:bg-rose-950/30 p-3 text-xs space-y-1">
+                <p className="font-medium text-rose-700 dark:text-rose-300">Erros ({result.erros.length}):</p>
+                {result.erros.map((e, i) => <p key={i} className="text-rose-700 dark:text-rose-200">• {e}</p>)}
               </div>
             )}
           </div>
@@ -428,5 +631,14 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Stat({ label, value, variant = "ok" }: { label: string; value: number; variant?: "ok" | "warn" }) {
+  return (
+    <div className={`rounded-md border p-3 ${variant === "warn" ? "border-amber-300 bg-amber-50 dark:bg-amber-950/30" : "border-border bg-card"}`}>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-2xl font-bold">{value}</p>
+    </div>
   );
 }

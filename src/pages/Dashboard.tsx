@@ -144,7 +144,7 @@ const Dashboard = () => {
           <div className="space-y-1">
             <h2 className="text-lg font-heading font-medium text-muted-foreground">Contexto Operacional</h2>
           </div>
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6 grid-8pt">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-7 grid-8pt">
             {isLoading ? (
               <>
                 <SkeletonKPI />

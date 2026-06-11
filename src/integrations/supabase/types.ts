@@ -2167,6 +2167,7 @@ export type Database = {
       }
       vw_kpis_financeiros: {
         Row: {
+          custo_servico_total: number | null
           custo_total: number | null
           custos_variaveis_reais: number | null
           despesas_fixas_reais: number | null
@@ -2178,6 +2179,7 @@ export type Database = {
           margem_liquida_percent: number | null
           ponto_equilibrio_receita: number | null
           receita_liquida: number | null
+          receita_pipeline: number | null
           receita_realizada_total: number | null
           receita_total: number | null
           servicos_concluidos: number | null
@@ -2197,6 +2199,7 @@ export type Database = {
       calcular_kpis_v2: {
         Args: never
         Returns: {
+          custo_servico_total: number
           custo_total: number
           custos_variaveis_reais: number
           despesas_fixas_reais: number
@@ -2208,6 +2211,7 @@ export type Database = {
           margem_liquida_percent: number
           ponto_equilibrio_receita: number
           receita_liquida: number
+          receita_pipeline: number
           receita_realizada_total: number
           receita_total: number
           servicos_concluidos: number

@@ -6,10 +6,12 @@ export interface KPIData {
   receita_total: number;
   receita_realizada_total: number;
   valor_faturado_total: number;
+  receita_pipeline: number;
   total_impostos: number;
   receita_liquida: number;
   lucro_bruto: number;
   lucro_liquido: number;
+  custo_servico_total: number;
   margem_bruta_percent: number;
   margem_liquida_percent: number;
   margem_contribuicao_percent: number;

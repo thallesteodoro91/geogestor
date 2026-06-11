@@ -22,7 +22,8 @@ import {
   Target, 
   Receipt, 
   ClipboardList, 
-  ClipboardCheck 
+  ClipboardCheck,
+  Filter
 } from "lucide-react";
 
 const Dashboard = () => {
@@ -100,8 +101,8 @@ const Dashboard = () => {
               iconTone="primary"
               change={kpiVariation ? formatVariation(kpiVariation.variations.receita_total) : "--"}
               changeType={kpiVariation?.variations.receita_total >= 0 ? "positive" : "negative"}
-              description="Soma de toda receita gerada no período a partir de orçamentos e serviços."
-              calculation="Σ receita de serviços + orçamentos"
+              description="Receita realizada no período (com fallback para faturado). Nunca usa apenas valor esperado."
+              calculation="Σ COALESCE(receita_realizada, valor_faturado) dos orçamentos"
             />
             <KPICard
               title="Lucro Líquido"
@@ -110,8 +111,8 @@ const Dashboard = () => {
               iconTone="success"
               change={kpiVariation ? formatVariation(kpiVariation.variations.lucro_liquido) : "--"}
               changeType={kpiVariation?.variations.lucro_liquido >= 0 ? "positive" : "negative"}
-              description="Resultado final após dedução de impostos, custos e despesas."
-              calculation="Receita - Impostos - Custos - Despesas"
+              description="Resultado final após impostos, custo de serviço e despesas."
+              calculation="Receita Realizada - Impostos - Custo de Serviço - Despesas"
             />
             <KPICard
               title="Margem Líquida"
@@ -143,9 +144,10 @@ const Dashboard = () => {
           <div className="space-y-1">
             <h2 className="text-lg font-heading font-medium text-muted-foreground">Contexto Operacional</h2>
           </div>
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6 grid-8pt">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-7 grid-8pt">
             {isLoading ? (
               <>
+                <SkeletonKPI />
                 <SkeletonKPI />
                 <SkeletonKPI />
                 <SkeletonKPI />
@@ -155,6 +157,14 @@ const Dashboard = () => {
               </>
             ) : (
               <>
+            <KPICard
+              title="Pipeline"
+              value={`R$ ${(kpis?.receita_pipeline || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              icon={Filter}
+              iconTone="warning"
+              description="Receita esperada de orçamentos em aberto, negociação ou pendentes."
+              calculation="Σ receita_esperada de orçamentos não convertidos"
+            />
             <KPICard
               title="Margem Bruta"
               value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}

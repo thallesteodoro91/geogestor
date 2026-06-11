@@ -153,9 +153,18 @@ const Dashboard = () => {
                 <SkeletonKPI />
                 <SkeletonKPI />
                 <SkeletonKPI />
+                <SkeletonKPI />
               </>
             ) : (
               <>
+            <KPICard
+              title="Pipeline"
+              value={`R$ ${(kpis?.receita_pipeline || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+              icon={Filter}
+              iconTone="warning"
+              description="Receita esperada de orçamentos em aberto, negociação ou pendentes."
+              calculation="Σ receita_esperada de orçamentos não convertidos"
+            />
             <KPICard
               title="Margem Bruta"
               value={`${(kpis?.margem_bruta_percent || 0).toFixed(1)}%`}

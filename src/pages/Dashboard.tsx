@@ -22,7 +22,8 @@ import {
   Target, 
   Receipt, 
   ClipboardList, 
-  ClipboardCheck 
+  ClipboardCheck,
+  Filter
 } from "lucide-react";
 
 const Dashboard = () => {

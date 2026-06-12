@@ -28,6 +28,8 @@ export interface PlanLimits {
  */
 function readDebugLimits(): { maxUsers?: number; maxProperties?: number; maxClients?: number } | null {
   if (typeof window === 'undefined') return null;
+  // Production hard-guard: debug overrides are dev-only.
+  if (!import.meta.env.DEV) return null;
   try {
     const params = new URLSearchParams(window.location.search);
     const raw = params.get('debugLimits');

@@ -850,13 +850,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "dim_propriedade_id_cliente_fkey"
-            columns: ["id_cliente"]
-            isOneToOne: false
-            referencedRelation: "dim_cliente"
-            referencedColumns: ["id_cliente"]
-          },
-          {
             foreignKeyName: "dim_propriedade_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -1390,6 +1383,20 @@ export type Database = {
             referencedColumns: ["id_empresa"]
           },
           {
+            foreignKeyName: "fk_servico_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "fato_orcamento"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
+            foreignKeyName: "fk_servico_orcamento"
+            columns: ["id_orcamento"]
+            isOneToOne: false
+            referencedRelation: "vw_alertas_financeiros"
+            referencedColumns: ["id_orcamento"]
+          },
+          {
             foreignKeyName: "fk_servico_propriedade"
             columns: ["id_propriedade"]
             isOneToOne: false
@@ -1539,21 +1546,21 @@ export type Database = {
           dismissed_at: string
           id: string
           id_referencia: string
-          tenant_id: string | null
+          tenant_id: string
           tipo: string
         }
         Insert: {
           dismissed_at?: string
           id?: string
           id_referencia: string
-          tenant_id?: string | null
+          tenant_id: string
           tipo: string
         }
         Update: {
           dismissed_at?: string
           id?: string
           id_referencia?: string
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string
         }
         Relationships: [
@@ -1650,7 +1657,7 @@ export type Database = {
           id_geometria: string
           id_propriedade: string
           perimetro_m: number | null
-          tenant_id: string | null
+          tenant_id: string
           updated_at: string | null
         }
         Insert: {
@@ -1665,7 +1672,7 @@ export type Database = {
           id_geometria?: string
           id_propriedade: string
           perimetro_m?: number | null
-          tenant_id?: string | null
+          tenant_id: string
           updated_at?: string | null
         }
         Update: {
@@ -1680,7 +1687,7 @@ export type Database = {
           id_geometria?: string
           id_propriedade?: string
           perimetro_m?: number | null
-          tenant_id?: string | null
+          tenant_id?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -1715,7 +1722,7 @@ export type Database = {
           nome_arquivo: string
           storage_path: string
           tamanho_bytes: number | null
-          tenant_id: string | null
+          tenant_id: string
           tipo_arquivo: string | null
         }
         Insert: {
@@ -1725,7 +1732,7 @@ export type Database = {
           nome_arquivo: string
           storage_path: string
           tamanho_bytes?: number | null
-          tenant_id?: string | null
+          tenant_id: string
           tipo_arquivo?: string | null
         }
         Update: {
@@ -1735,7 +1742,7 @@ export type Database = {
           nome_arquivo?: string
           storage_path?: string
           tamanho_bytes?: number | null
-          tenant_id?: string | null
+          tenant_id?: string
           tipo_arquivo?: string | null
         }
         Relationships: [
@@ -1761,7 +1768,7 @@ export type Database = {
           funcao: string
           id_designacao: string
           id_servico: string
-          tenant_id: string | null
+          tenant_id: string
           user_id: string
         }
         Insert: {
@@ -1769,7 +1776,7 @@ export type Database = {
           funcao: string
           id_designacao?: string
           id_servico: string
-          tenant_id?: string | null
+          tenant_id: string
           user_id: string
         }
         Update: {
@@ -1777,7 +1784,7 @@ export type Database = {
           funcao?: string
           id_designacao?: string
           id_servico?: string
-          tenant_id?: string | null
+          tenant_id?: string
           user_id?: string
         }
         Relationships: [
@@ -1810,7 +1817,7 @@ export type Database = {
           descricao: string
           id_evento: string
           id_servico: string
-          tenant_id: string | null
+          tenant_id: string
           tipo: string
         }
         Insert: {
@@ -1818,7 +1825,7 @@ export type Database = {
           descricao: string
           id_evento?: string
           id_servico: string
-          tenant_id?: string | null
+          tenant_id: string
           tipo: string
         }
         Update: {
@@ -1826,7 +1833,7 @@ export type Database = {
           descricao?: string
           id_evento?: string
           id_servico?: string
-          tenant_id?: string | null
+          tenant_id?: string
           tipo?: string
         }
         Relationships: [
@@ -1858,7 +1865,7 @@ export type Database = {
           ordem: number | null
           prioridade: string | null
           responsavel: string | null
-          tenant_id: string | null
+          tenant_id: string
           titulo: string
           updated_at: string | null
         }
@@ -1873,7 +1880,7 @@ export type Database = {
           ordem?: number | null
           prioridade?: string | null
           responsavel?: string | null
-          tenant_id?: string | null
+          tenant_id: string
           titulo: string
           updated_at?: string | null
         }
@@ -1888,7 +1895,7 @@ export type Database = {
           ordem?: number | null
           prioridade?: string | null
           responsavel?: string | null
-          tenant_id?: string | null
+          tenant_id?: string
           titulo?: string
           updated_at?: string | null
         }

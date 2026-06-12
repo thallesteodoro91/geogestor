@@ -45,13 +45,15 @@ Saída: importar a planilha do cliente piloto cria todos os registros e o relat�
 
 ---
 
-## Fase 3 — Banco e integridade
+## Fase 3 — Banco e integridade ✅
 
-1. Migration: criar FK `fato_servico.id_orcamento → fato_orcamento.id_orcamento` se ausente; remover FK duplicada `dim_propriedade ↔ dim_cliente`.
-2. Índices por `tenant_id`, datas (`data_orcamento`, `data_da_despesa`, `data_do_servico_inicio`), `id_cliente`, `id_propriedade`, `id_orcamento`, `id_servico`.
-3. `tenant_id NOT NULL` nas fato/dim que ainda permitem null.
-4. CHECK / trigger garantindo que relações cruzadas estão no mesmo tenant.
-5. Parar de usar `dim_empresa` como fonte agregada — apenas metadado da empresa.
+1. ✅ FK `fato_servico.id_orcamento → fato_orcamento` criada (`fk_servico_orcamento`, ON DELETE SET NULL).
+2. ✅ FK duplicada `dim_propriedade_id_cliente_fkey` removida (mantida `fk_propriedade_cliente`).
+3. ✅ Índices: `idx_fato_servico_id_orcamento`, `idx_fato_servico_data_inicio`, `idx_fato_servico_tenant_data`, `idx_fato_orcamento_situacao`, `idx_fato_orcamento_situacao_pagamento`.
+4. ✅ `tenant_id NOT NULL` aplicado em `servico_anexos`, `servico_equipes`, `servico_eventos`, `servico_tarefas`, `propriedade_geometria`, `notificacao_dismissals`.
+5. ✅ Trigger `enforce_same_tenant` em `fato_orcamento`, `fato_servico`, `fato_despesas` bloqueia vínculos cross-tenant (cliente, propriedade, orçamento, serviço).
+6. (Mantido) `dim_empresa` segue apenas como metadado — Fase 6 revisará leituras agregadas remanescentes.
+
 
 ---
 

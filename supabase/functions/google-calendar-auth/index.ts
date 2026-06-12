@@ -13,6 +13,78 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
 ].join(" ");
 
+// Allowed origins for OAuth return redirect (prevents open-redirect via state.origin)
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://geogestor.lovable.app",
+  "https://id-preview--d3c585eb-555b-44ef-94d6-4847914df44b.lovable.app",
+];
+function getAllowedOrigins(): string[] {
+  const env = Deno.env.get("ALLOWED_ORIGINS");
+  const list = env ? env.split(",").map((s) => s.trim()).filter(Boolean) : DEFAULT_ALLOWED_ORIGINS;
+  return list;
+}
+function isOriginAllowed(origin: string): boolean {
+  if (!origin) return false;
+  const list = getAllowedOrigins();
+  if (list.includes(origin)) return true;
+  // Accept lovable.app/lovable.dev preview subdomains
+  return /^https:\/\/[a-z0-9-]+\.lovable\.(app|dev)$/i.test(origin);
+}
+
+// HMAC-SHA256 sign/verify for OAuth state (anti-CSRF + integrity)
+function b64url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function b64urlDecode(s: string): Uint8Array {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  const norm = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const bin = atob(norm);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function getStateKey(): Promise<CryptoKey> {
+  const secret = Deno.env.get("CRON_SECRET") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+  if (!secret) throw new Error("No HMAC secret available for OAuth state");
+  return await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+async function signState(payload: Record<string, unknown>): Promise<string> {
+  const data = new TextEncoder().encode(JSON.stringify(payload));
+  const key = await getStateKey();
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, data));
+  return `${b64url(data)}.${b64url(sig)}`;
+}
+async function verifyState(state: string): Promise<Record<string, unknown> | null> {
+  const [payloadB64, sigB64] = state.split(".");
+  if (!payloadB64 || !sigB64) return null;
+  try {
+    const key = await getStateKey();
+    const ok = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      b64urlDecode(sigB64),
+      b64urlDecode(payloadB64),
+    );
+    if (!ok) return null;
+    const json = new TextDecoder().decode(b64urlDecode(payloadB64));
+    const obj = JSON.parse(json) as Record<string, unknown>;
+    // Reject expired states (>10 min)
+    const iat = typeof obj.iat === "number" ? obj.iat : 0;
+    if (Date.now() - iat > 10 * 60 * 1000) return null;
+    return obj;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

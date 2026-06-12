@@ -220,13 +220,20 @@ Deno.serve(async (req) => {
       const { action, tenant_id } = body;
 
       if (action === "get-auth-url") {
-        const state = btoa(
-          JSON.stringify({
-            user_id: userId,
-            tenant_id,
-            origin: body.origin || "",
-          })
-        );
+        const originParam = String(body.origin || "");
+        if (!isOriginAllowed(originParam)) {
+          return new Response(JSON.stringify({ error: "Origin not allowed" }), {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        const state = await signState({
+          user_id: userId,
+          tenant_id,
+          origin: originParam,
+          iat: Date.now(),
+          nonce: crypto.randomUUID(),
+        });
 
         const authUrl = `${GOOGLE_AUTH_URL}?${new URLSearchParams({
           client_id: GOOGLE_CLIENT_ID,

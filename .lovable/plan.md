@@ -57,13 +57,15 @@ Saída: importar a planilha do cliente piloto cria todos os registros e o relat�
 
 ---
 
-## Fase 4 — Segurança
+## Fase 4 — Segurança ✅
 
-1. **Storage `servico-anexos`**: path `tenant_id/servico_id/arquivo`, policy `(storage.foldername(name))[1] = get_user_tenant_id(auth.uid())::text`. Atualizar service de upload/download/delete e migrar paths existentes.
-2. **Stripe webhook**: rejeitar 500 se `STRIPE_WEBHOOK_SECRET` ausente; manter `stripe_webhook_events` idempotente; sincronizar `status`, `plan_id`, `stripe_customer_id`, `stripe_subscription_id`, `current_period_end`.
-3. **Limites de plano**: remover `?debugLimits` e `sessionStorage.debug_plan_limits` em produção (env guard). Criar RPC `check_plan_limit(resource)` chamada antes de cada insert via Edge Function ou trigger.
-4. **Google Calendar OAuth**: assinar `state` com HMAC do `CRON_SECRET`/secret próprio + validar tenant + allowlist de origin. Se não couber agora, desativar a integração em produção via feature flag.
-5. **CORS**: allowlist por env (`ALLOWED_ORIGINS`) em todas as edge functions sensíveis (`create-checkout`, `customer-portal`, `manage-subscription`, `invite-user`, `accept-invite`, `apply-ai-suggestions`).
+1. ✅ **Storage `servico-anexos`**: paths já gravados como `tenant_id/servico_id/arquivo`. Policies de `storage.objects` (SELECT/INSERT/UPDATE/DELETE) já checam `(storage.foldername(name))[1] = get_user_tenant_id(auth.uid())::text`. Mesmo padrão para `empresa-assets`.
+2. ✅ **Stripe webhook**: rejeita `500` quando `STRIPE_WEBHOOK_SECRET` ausente e `400` em assinatura inválida. Idempotência por `stripe_webhook_events` mantida; sincroniza `status`, `plan_id`, `stripe_customer_id`, `stripe_subscription_id`, `current_period_end`.
+3. ✅ **Debug de limite de plano**: hard guard `import.meta.env.DEV` em `usePlanLimits.ts` — `?debugLimits` e `sessionStorage.debug_plan_limits` ignorados em build de produção.
+4. ✅ **Google Calendar OAuth**: `state` agora assinado com HMAC-SHA256 (`CRON_SECRET`) + `iat` + `nonce`, com expiração de 10 min. `origin` validado contra `ALLOWED_ORIGINS` (env) + regex preview `*.lovable.app|.dev`. Open-redirect bloqueado.
+5. ✅ **CORS allowlist**: `create-checkout`, `customer-portal`, `manage-subscription`, `invite-user`, `accept-invite`, `apply-ai-suggestions` agora retornam `Access-Control-Allow-Origin` apenas para origin em `ALLOWED_ORIGINS` (env) ou subdomínio `lovable.app/.dev`. `Vary: Origin` adicionado. Sem mais `*`.
+
+Próximo passo opcional: definir `ALLOWED_ORIGINS` como secret de produção (`https://geogestor.lovable.app` + custom domains). Por padrão já cai nesse valor.
 
 ---
 

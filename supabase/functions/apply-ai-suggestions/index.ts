@@ -271,6 +271,7 @@ async function rollbackOne(sb: Sb, data: any): Promise<void> {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = corsFor(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {

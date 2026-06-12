@@ -127,11 +127,20 @@ Deno.serve(async (req) => {
 
       const tokenData = await tokenRes.json();
 
-      // Parse state to get user info
-      let stateData: { user_id: string; tenant_id: string; origin: string };
-      try {
-        stateData = JSON.parse(atob(state));
-      } catch {
+      // Parse + verify HMAC-signed state
+      const verified = await verifyState(state);
+      if (!verified) {
+        return new Response(null, {
+          status: 302,
+          headers: { ...corsHeaders, Location: "/?google-calendar=error" },
+        });
+      }
+      const stateData = {
+        user_id: String(verified.user_id ?? ""),
+        tenant_id: String(verified.tenant_id ?? ""),
+        origin: String(verified.origin ?? ""),
+      };
+      if (!stateData.user_id || !stateData.tenant_id || !isOriginAllowed(stateData.origin)) {
         return new Response(null, {
           status: 302,
           headers: { ...corsHeaders, Location: "/?google-calendar=error" },

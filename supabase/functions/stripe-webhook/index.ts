@@ -76,21 +76,33 @@ serve(async (req) => {
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
     const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
     if (!stripeKey) throw new Error("STRIPE_SECRET_KEY not set");
+    if (!webhookSecret) {
+      logStep("ERRO: STRIPE_WEBHOOK_SECRET não configurado — rejeitando webhook");
+      return new Response(
+        JSON.stringify({ error: "Webhook secret not configured" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
     const body = await req.text();
 
+    const signature = req.headers.get("stripe-signature");
+    if (!signature) {
+      return new Response(
+        JSON.stringify({ error: "No signature" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     let event: Stripe.Event;
-    if (webhookSecret) {
-      const signature = req.headers.get("stripe-signature");
-      if (!signature) {
-        return new Response(JSON.stringify({ error: "No signature" }), { status: 400, headers: corsHeaders });
-      }
+    try {
       event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
-    } else {
-      // Dev fallback — sem verificação de assinatura
-      event = JSON.parse(body) as Stripe.Event;
-      logStep("AVISO: STRIPE_WEBHOOK_SECRET não configurado — assinatura não verificada");
+    } catch (err) {
+      logStep("Assinatura inválida", { err: String(err) });
+      return new Response(
+        JSON.stringify({ error: "Invalid signature" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
     }
 
     logStep("Event received", { type: event.type, id: event.id });

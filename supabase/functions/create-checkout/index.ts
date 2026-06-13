@@ -100,11 +100,11 @@ serve(async (req) => {
       logStep("ALERTA: usuário sem tenant_id ao iniciar checkout", { requestId, userId: user.id });
     }
 
-    const priceId = PRICE_IDS[rawPlanId];
-    if (!priceId) {
+    if (!isValidPlanId(rawPlanId)) {
       logStep("Plano inválido — abortando", { requestId, planId: rawPlanId });
       throw new Error(`Plano inválido: ${rawPlanId}`);
     }
+    const priceId = PRICE_IDS[rawPlanId];
 
     const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
       apiVersion: "2025-08-27.basil",
@@ -114,6 +114,28 @@ serve(async (req) => {
     const customers = await stripe.customers.list({ email: user.email, limit: 1 });
     const customerId = customers.data.length > 0 ? customers.data[0].id : undefined;
     logStep("Customer Stripe resolvido", { requestId, customerId: customerId ?? "novo" });
+
+    // Idempotência por tenant: se existe uma sessão `open` recente (<30s) com o mesmo plano,
+    // devolve a URL existente em vez de criar outra.
+    if (customerId && tenantId) {
+      const recentSessions = await stripe.checkout.sessions.list({ customer: customerId, limit: 5 });
+      const nowSec = Math.floor(Date.now() / 1000);
+      const reuse = recentSessions.data.find((s) =>
+        s.status === "open" &&
+        s.metadata?.tenant_id === tenantId &&
+        s.metadata?.plano === rawPlanId &&
+        (nowSec - (s.created ?? 0)) < 30,
+      );
+      if (reuse?.url) {
+        logStep("Sessão recente reutilizada (idempotência por tenant)", {
+          requestId, tenantId, sessionId: reuse.id, ageSec: nowSec - (reuse.created ?? 0),
+        });
+        return new Response(JSON.stringify({ url: reuse.url, requestId, reused: true }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200,
+        });
+      }
+    }
+
 
     const origin = req.headers.get("origin") || "https://geogestor.lovable.app";
     const metadata: Record<string, string> = {

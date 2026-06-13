@@ -70,14 +70,37 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     const stripe = new Stripe(stripeKey, { apiVersion: "2025-08-27.basil" });
-    const customers = await stripe.customers.list({ email: user.email, limit: 1 });
-    
-    if (customers.data.length === 0) {
-      throw new Error("Nenhuma conta de pagamento encontrada. Você precisa ter uma assinatura ativa para gerenciar.");
+
+    // Preferencial: resolver customerId pela assinatura do tenant do usuário
+    // (suporta múltiplos membros do mesmo tenant sem depender de email do Stripe).
+    let customerId: string | null = null;
+    const { data: membership } = await supabaseClient
+      .from("tenant_members")
+      .select("tenant_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membership?.tenant_id) {
+      const { data: sub } = await supabaseClient
+        .from("tenant_subscriptions")
+        .select("stripe_customer_id")
+        .eq("tenant_id", membership.tenant_id)
+        .maybeSingle();
+      if (sub?.stripe_customer_id) {
+        customerId = sub.stripe_customer_id as string;
+        logStep("Customer resolved via tenant_subscriptions", { tenantId: membership.tenant_id, customerId });
+      }
     }
 
-    const customerId = customers.data[0].id;
-    logStep("Found Stripe customer", { customerId });
+    // Fallback: lookup por email (compatibilidade com tenants antigos sem stripe_customer_id salvo)
+    if (!customerId) {
+      const customers = await stripe.customers.list({ email: user.email, limit: 1 });
+      if (customers.data.length === 0) {
+        throw new Error("Nenhuma conta de pagamento encontrada. Você precisa ter uma assinatura ativa para gerenciar.");
+      }
+      customerId = customers.data[0].id;
+      logStep("Customer resolved via email fallback", { customerId });
+    }
+
 
     const origin = req.headers.get("origin") || "https://geogestor.lovable.app";
     const portalSession = await stripe.billingPortal.sessions.create({

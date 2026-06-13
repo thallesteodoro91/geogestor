@@ -44,6 +44,7 @@ import {
   formatPlanoExibido,
   formatParamsInvalidos,
 } from "@/lib/assinaturaToasts";
+import { getPriceId } from "@/config/plans";
 
 const MONTHLY_PRICE = 97;
 const YEARLY_PRICE = 970;
@@ -475,9 +476,7 @@ export default function Assinatura() {
                 </div>
 
                 {(() => {
-                  const currentPriceId = selectedPlan === "anual"
-                    ? "price_1TPMGBK3j5PLJZVVFGcr8tdf"
-                    : "price_1T2DaxK3j5PLJZVV2QghyqC5";
+                  const currentPriceId = getPriceId(selectedPlan);
                   const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === currentPriceId;
                   if (isCurrentPlan) {
                     return (

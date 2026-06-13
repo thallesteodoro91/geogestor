@@ -269,16 +269,42 @@ serve(async (req) => {
         }
 
         // ========== PAYMENT EVENTS ==========
+        case "invoice.paid":
         case "invoice.payment_succeeded": {
           const invoice = event.data.object as Stripe.Invoice;
           const customerId = typeof invoice.customer === "string"
             ? invoice.customer
             : invoice.customer?.id ?? null;
+          const subscriptionId = typeof (invoice as { subscription?: unknown }).subscription === "string"
+            ? (invoice as { subscription: string }).subscription
+            : null;
           if (customerId) {
-            logStep("Payment succeeded", { customerId, amount: invoice.amount_paid });
+            const tenantId = await resolveTenantId(serviceClient, stripe, { customerId });
+            if (tenantId) {
+              const update: Record<string, unknown> = {
+                status: "active",
+                updated_at: new Date().toISOString(),
+              };
+              if (subscriptionId) {
+                try {
+                  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+                  update.current_period_start = new Date(sub.current_period_start * 1000).toISOString();
+                  update.current_period_end = new Date(sub.current_period_end * 1000).toISOString();
+                  update.stripe_subscription_id = sub.id;
+                } catch (err) {
+                  logStep("Falha ao recuperar subscription após invoice.paid", { subscriptionId, err: String(err) });
+                }
+              }
+              await serviceClient
+                .from("tenant_subscriptions")
+                .update(update)
+                .eq("tenant_id", tenantId);
+              logStep("Invoice paga — assinatura ativa", { tenantId, amount: invoice.amount_paid });
+            }
           }
           break;
         }
+
 
         case "invoice.payment_failed": {
           const invoice = event.data.object as Stripe.Invoice;

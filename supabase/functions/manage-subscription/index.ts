@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { PRICE_IDS, priceIdToPlan as sharedPriceIdToPlan, type PlanId } from "../_shared/plans.ts";
 
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "https://geogestor.lovable.app").split(",").map((s) => s.trim()).filter(Boolean);
 const LOVABLE_PREVIEW_RE = /^https:\/\/[a-z0-9-]+\.lovable\.(app|dev)$/i;
@@ -15,12 +16,6 @@ function corsFor(req: Request) {
   };
 }
 
-const PRICE_IDS = {
-  mensal: "price_1T2DaxK3j5PLJZVV2QghyqC5",
-  anual: "price_1TPMGBK3j5PLJZVVFGcr8tdf",
-} as const;
-
-type PlanId = keyof typeof PRICE_IDS;
 type Action = "get_details" | "change_plan" | "cancel" | "reactivate";
 
 class RateLimiter {
@@ -56,11 +51,7 @@ const toIso = (unix: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-const priceIdToPlan = (priceId: string): PlanId | null => {
-  if (priceId === PRICE_IDS.mensal) return "mensal";
-  if (priceId === PRICE_IDS.anual) return "anual";
-  return null;
-};
+const priceIdToPlan = sharedPriceIdToPlan;
 
 async function getActiveSubscription(stripe: Stripe, email: string) {
   const customers = await stripe.customers.list({ email, limit: 1 });

@@ -51,11 +51,7 @@ const toIso = (unix: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
-const priceIdToPlan = (priceId: string): PlanId | null => {
-  if (priceId === PRICE_IDS.mensal) return "mensal";
-  if (priceId === PRICE_IDS.anual) return "anual";
-  return null;
-};
+const priceIdToPlan = sharedPriceIdToPlan;
 
 async function getActiveSubscription(stripe: Stripe, email: string) {
   const customers = await stripe.customers.list({ email, limit: 1 });

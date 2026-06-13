@@ -475,9 +475,7 @@ export default function Assinatura() {
                 </div>
 
                 {(() => {
-                  const currentPriceId = selectedPlan === "anual"
-                    ? "price_1TPMGBK3j5PLJZVVFGcr8tdf"
-                    : "price_1T2DaxK3j5PLJZVV2QghyqC5";
+                  const currentPriceId = getPriceId(selectedPlan);
                   const isCurrentPlan = isActiveSubscriber && stripeStatus.price_id === currentPriceId;
                   if (isCurrentPlan) {
                     return (

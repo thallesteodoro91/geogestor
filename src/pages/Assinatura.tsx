@@ -44,6 +44,7 @@ import {
   formatPlanoExibido,
   formatParamsInvalidos,
 } from "@/lib/assinaturaToasts";
+import { getPriceId } from "@/config/plans";
 
 const MONTHLY_PRICE = 97;
 const YEARLY_PRICE = 970;

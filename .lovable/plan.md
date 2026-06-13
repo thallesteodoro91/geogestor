@@ -69,13 +69,14 @@ Próximo passo opcional: definir `ALLOWED_ORIGINS` como secret de produção (`h
 
 ---
 
-## Fase 5 — Pagamentos e assinatura
+## Fase 5 — Pagamentos e assinatura ✅
 
-1. Price IDs em config central (`src/config/plans.ts`) lendo de env / `subscription_plans`. Remover hardcodes espalhados.
-2. Idempotência no `create-checkout`: lock por `tenant_id` + 30s, retornar sessão existente.
-3. Webhook cobre `customer.subscription.created/updated/deleted`, `invoice.paid`, `invoice.payment_failed` → atualiza `tenant_subscriptions` consistente.
-4. `customer-portal` resolve cliente por `tenant_subscriptions.stripe_customer_id` (não por email), suportando múltiplos membros.
-5. Página `/assinatura`: plano atual, próximo vencimento, status, CTAs upgrade/downgrade/cancel/portal, branding SkyGeo, copy revisada.
+1. ✅ Price IDs centralizados em `src/config/plans.ts` (front) e `supabase/functions/_shared/plans.ts` (edge), sobrescrevíveis por env (`VITE_STRIPE_PRICE_*` / `STRIPE_PRICE_*`). Hardcodes removidos de `create-checkout`, `manage-subscription` e `Assinatura.tsx`.
+2. ✅ Idempotência por tenant em `create-checkout`: antes de criar sessão nova, busca sessão `open` <30s com mesmo `tenant_id`+`plano` e devolve a URL existente (`reused: true`). `idempotencyKey` por requestId mantida como segunda camada.
+3. ✅ Webhook agora cobre `invoice.paid` (alias de `invoice.payment_succeeded`) atualizando `tenant_subscriptions` para `active` + período corrente; `customer.subscription.created/updated/deleted` e `invoice.payment_failed` já cobertos.
+4. ✅ `customer-portal` resolve `customerId` primeiro via `tenant_subscriptions.stripe_customer_id` (suporta múltiplos membros do mesmo tenant); email fica como fallback de compatibilidade.
+5. ✅ Página `/assinatura` segue com plano atual, vencimento, status e CTAs upgrade/downgrade/cancel/portal via `ManageSubscriptionPanel`; price IDs agora vêm do config central.
+
 
 ---
 

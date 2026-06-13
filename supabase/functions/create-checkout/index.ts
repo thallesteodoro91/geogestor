@@ -1,6 +1,8 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
+import { PRICE_IDS, isValidPlanId } from "../_shared/plans.ts";
+
 
 class RateLimiter {
   private requests = new Map<string, { count: number; resetAt: number }>();
@@ -29,11 +31,6 @@ function corsFor(req: Request) {
     "Access-Control-Allow-Headers": ALLOW_HDRS,
   };
 }
-
-const PRICE_IDS: Record<string, string> = {
-  mensal:      "price_1T2DaxK3j5PLJZVV2QghyqC5",
-  anual:       "price_1TPMGBK3j5PLJZVVFGcr8tdf",
-};
 
 const VALID_OFERTAS = ["padrao", "premium"] as const;
 type OfertaId = (typeof VALID_OFERTAS)[number];

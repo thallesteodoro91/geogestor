@@ -13,7 +13,7 @@ import { useChartSettings } from "@/contexts/ChartSettingsContext";
 import { SkeletonKPI } from "@/components/dashboard/SkeletonKPI";
 import { AIInsightsCard } from "@/components/dashboard/AIInsightsCard";
 import { useDashboardMetrics, calculateDerivedKPIs } from "@/hooks/useDashboardMetrics";
-import { standardChartColors, colorblindSafeColors } from "@/data/financial-mock-data";
+import { standardChartColors, colorblindSafeColors } from "@/data/chart-colors";
 import {
   BarChart,
   Bar,

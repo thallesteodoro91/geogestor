@@ -10,48 +10,34 @@ import { useTenant } from "@/contexts/TenantContext";
 
 const navigationSections = [
   {
-    title: "Visão Geral",
-    color: "text-blue-500",
-    bgColor: "bg-blue-500/10",
-    items: [
-      { name: "Dashboard 360", href: "/", icon: LayoutDashboard },
-      { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
-    ]
-  },
-  {
     title: "Operação",
     color: "text-amber-500",
     bgColor: "bg-amber-500/10",
     items: [
+      { name: "Dashboard 360", href: "/", icon: LayoutDashboard },
       { name: "Projetos", href: "/projetos", icon: Briefcase },
       { name: "Orçamentos", href: "/orcamentos", icon: FileText },
-      { name: "Despesas", href: "/despesas", icon: Receipt },
+      { name: "Clientes", href: "/clientes", icon: Users },
       { name: "Calendário", href: "/calendario", icon: CalendarDays },
     ]
   },
   {
-    title: "Relacionamento",
-    color: "text-violet-500",
-    bgColor: "bg-violet-500/10",
+    title: "Financeiro",
+    color: "text-emerald-500",
+    bgColor: "bg-emerald-500/10",
     items: [
-      { name: "Clientes", href: "/clientes", icon: Users },
-    ]
-  },
-  {
-    title: "Inteligência",
-    color: "text-pink-500",
-    bgColor: "bg-pink-500/10",
-    items: [
-      { name: "GeoBot", href: "/geobot", icon: Bot },
+      { name: "Dashboard Financeiro", href: "/dashboard-financeiro", icon: DollarSign },
+      { name: "Despesas", href: "/despesas", icon: Receipt },
       { name: "Relatório Executivo", href: "/relatorio-executivo", icon: ClipboardList },
       { name: "Operacional", href: "/operacional", icon: TrendingUp },
     ]
   },
   {
-    title: "Configurações",
+    title: "Sistema",
     color: "text-gray-500",
     bgColor: "bg-gray-500/10",
     items: [
+      { name: "GeoBot", href: "/geobot", icon: Bot },
       { name: "Cadastros", href: "/cadastros", icon: Settings },
       { name: "Logs de Auditoria", href: "/audit-logs", icon: Shield },
     ]

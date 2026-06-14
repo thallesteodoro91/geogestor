@@ -6,7 +6,7 @@ import { Loader2, FileText, AlertTriangle, Trophy, TrendingUp } from "lucide-rea
 import type { DadoSemanal, ReceitaCategoria, ClienteNovo, ServicoCusto, OrcamentoPendente, TopCliente, HistoricoMensal } from "@/hooks/useRelatorioData";
 import skyGeoLogo from "@/assets/skygeo-logo.png";
 
-/* ===== Monochromatic SkyGeo Palette ===== */
+/* ===== Monochromatic GeoGestor brand palette ===== */
 const SKYGEO_BLUE = "#1e3a5f";
 const SKYGEO_BLUE_10 = "rgba(30,58,95,0.10)";
 const SKYGEO_BLUE_20 = "rgba(30,58,95,0.20)";

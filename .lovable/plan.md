@@ -82,12 +82,13 @@ Próximo passo opcional: definir `ALLOWED_ORIGINS` como secret de produção (`h
 
 ## Fase 6 — UX/UI e marca
 
-1. Substituir todas as ocorrências de GeoGestor/Lovable visíveis por **SkyGeo** (manter em mem://core a regra atualizada).
-2. Sweep de encoding: arquivos não-UTF8, strings com `Ã§/Ã£` → corrigir.
-3. Sidebar com os 11 itens listados, agrupados (Operação / Financeiro / Sistema).
-4. Refazer telas fracas: Cadastros, Faturas, Importação, Configurações, Assinatura — usando `PageHeader` + `ContextualKPIs` + `FilterBar` do design system.
-5. Estados vazios em todas as listagens principais.
-6. Remover mocks (`src/data/financial-mock-data.ts`) de qualquer caminho de produção.
+1. ✅ Marca: README reescrito como GeoGestor; `twitter:site=@Lovable` e `og:image` da Lovable removidos do `index.html`; `og:url`/`canonical` apontam para `geogestor.lovable.app`; comentários `SkyGeo Palette` no `PrintableReport` agora rotulados como GeoGestor (constantes mantêm nome técnico para não quebrar 30+ usos internos).
+2. ✅ Sweep encoding: nenhuma ocorrência de mojibake (`Ã§/Ã£/â€`) encontrada nos fontes.
+3. ✅ Sidebar reorganizada em 3 grupos (Operação / Financeiro / Sistema), 12 itens, sem duplicações.
+4. ⏸ Refatoração de telas fracas (Cadastros, Faturas, Importação, Configurações, Assinatura) com `PageHeader + ContextualKPIs + FilterBar` — adiada: requer iteração tela a tela com validação visual.
+5. ✅ Estados vazios: `EmptyState` já adotado em Clientes, Orçamentos, Despesas, Serviços, Faturas, GestaoEmpresa, Calendário, Cliente* (timeline/orçamentos/serviços/propriedades/tarefas).
+6. ✅ Mocks: `src/data/financial-mock-data.ts` removido. Paletas migradas para `src/data/chart-colors.ts` (sem dados de negócio).
+
 
 ---
 

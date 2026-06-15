@@ -42,10 +42,8 @@ export function useStripeSubscription(): StripeSubscriptionStatus {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["stripe-subscription"],
     queryFn: fetchStripeStatus,
-    // Recheck every 5 minutes automatically
+    // Fase 7: sem polling. Recheck no foco da janela (volta do Stripe).
     staleTime: 5 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000,
-    // Recheck on window focus (e.g. user returns from Stripe tab)
     refetchOnWindowFocus: true,
   });
 

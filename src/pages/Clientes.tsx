@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -13,12 +13,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
-import { usePagination } from "@/hooks/usePagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
-import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
+import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStatusClasses } from "@/lib/statusColors";
 
@@ -32,21 +32,49 @@ export default function Clientes() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  const { data: clientes = [], isLoading } = useQuery({
-    queryKey: ["clientes-list"],
+  const [totalItems, setTotalItems] = useState(0);
+  const pagination = useServerPagination({ totalItems, initialPageSize: 15 });
+
+  // Sanitiza termo para uso em ilike/or (PostgREST quebra com vírgulas/parens não escapados).
+  const searchSanitized = searchTerm.trim().replace(/[%,()]/g, "");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["clientes-list", { search: searchSanitized, situacao: situacaoFilter, page: pagination.currentPage, pageSize: pagination.pageSize }],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("dim_cliente")
-        .select(`
+        .select(
+          `
           id_cliente, nome, email, telefone, celular, cpf, cnpj, endereco, situacao, origem, categoria, anotacoes,
           dim_propriedade!fk_propriedade_cliente(id_propriedade),
           fato_servico!fk_servico_cliente(id_servico, situacao_do_servico)
-        `)
-        .order("nome");
+        `,
+          { count: "exact" }
+        )
+        .order("nome")
+        .range(pagination.from, pagination.to);
+
+      if (searchSanitized) {
+        const term = `%${searchSanitized}%`;
+        q = q.or(`nome.ilike.${term},email.ilike.${term},cpf.ilike.${term},cnpj.ilike.${term}`);
+      }
+      if (situacaoFilter !== "all") {
+        q = q.eq("situacao", situacaoFilter);
+      }
+
+      const { data, error, count } = await q;
       if (error) throw error;
-      return data || [];
+      return { rows: data ?? [], count: count ?? 0 };
     },
   });
+
+  if (data && data.count !== totalItems) {
+    setTotalItems(data.count);
+  }
+
+  const clientes = data?.rows ?? [];
+  const hasFilters = searchTerm !== "" || situacaoFilter !== "all";
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -62,18 +90,6 @@ export default function Clientes() {
     },
     onError: (error: any) => toast.error(error.message),
   });
-
-  const filtered = clientes.filter((c: any) => {
-    const matchesSearch =
-      c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.cpf?.includes(searchTerm) ||
-      c.cnpj?.includes(searchTerm);
-    const matchesSituacao = situacaoFilter === "all" || c.situacao === situacaoFilter;
-    return matchesSearch && matchesSituacao;
-  });
-
-  const pagination = usePagination(filtered, { initialPageSize: 15 });
 
   const getServicosAtivos = (cliente: any) =>
     (cliente.fato_servico || []).filter((s: any) => s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Planejado").length;
@@ -96,10 +112,10 @@ export default function Clientes() {
         <PageContent title="Lista de Clientes">
           <FilterBar
             searchValue={searchTerm}
-            onSearchChange={setSearchTerm}
+            onSearchChange={(v) => { setSearchTerm(v); pagination.resetPage(); }}
             searchPlaceholder="Buscar por nome, CPF, e-mail..."
           >
-            <Select value={situacaoFilter} onValueChange={setSituacaoFilter}>
+            <Select value={situacaoFilter} onValueChange={(v) => { setSituacaoFilter(v); pagination.resetPage(); }}>
               <SelectTrigger className="w-[140px] h-9 text-sm">
                 <SelectValue placeholder="Situação" />
               </SelectTrigger>
@@ -114,7 +130,7 @@ export default function Clientes() {
 
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 && !searchTerm && situacaoFilter === "all" ? (
+          ) : totalItems === 0 && !hasFilters ? (
             <EmptyState
               icon={Users}
               title="Organize sua base de clientes"
@@ -123,8 +139,8 @@ export default function Clientes() {
               onAction={() => setDialogOpen({ open: true })}
               tip="Importe clientes de uma planilha para começar rápido"
             />
-          ) : filtered.length === 0 ? (
-            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setSituacaoFilter("all"); }} />
+          ) : totalItems === 0 ? (
+            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setSituacaoFilter("all"); pagination.resetPage(); }} />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -140,7 +156,7 @@ export default function Clientes() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagination.paginatedData.map((cliente: any) => {
+                  {clientes.map((cliente: any) => {
                     const propCount = (cliente.dim_propriedade || []).length;
                     const servicosAtivos = getServicosAtivos(cliente);
                     return (
@@ -180,10 +196,7 @@ export default function Clientes() {
                         </TableCell>
                         <TableCell>
                           {cliente.situacao ? (
-                            <Badge
-                              variant="secondary"
-                              className={getStatusClasses(cliente.situacao)}
-                            >
+                            <Badge variant="secondary" className={getStatusClasses(cliente.situacao)}>
                               {cliente.situacao}
                             </Badge>
                           ) : (

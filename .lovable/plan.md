@@ -94,10 +94,17 @@ Próximo passo opcional: definir `ALLOWED_ORIGINS` como secret de produção (`h
 
 ## Fase 7 — Performance
 
-1. Trocar `refetchInterval: 30s/60s` por invalidação de cache pós-mutação + botão refresh manual.
-2. Eliminar `select('*')` — listar colunas explicitamente.
-3. Paginação server-side (range) em Clientes, Orçamentos, Faturas, Despesas, Serviços.
-4. Mover qualquer agregação que ainda esteja no front para RPC.
+1. ✅ `refetchInterval` removido de `useKPIs`, `useKPIVariation`, `useChartData`, `useDashboardMetrics`, `AlertasFinanceiros` e `useStripeSubscription`. Substituído por `staleTime: 5min` + `refetchOnWindowFocus`. Polling preservado só onde faz sentido de UX (`CalendarSyncQueueCard`, `GoogleCalendarCard` durante OAuth).
+2. ⏸ `select('*')` — ~25 ocorrências, em grande parte em CRUD genérico de `src/modules/*`. Adiado: exige auditoria por consumidor.
+3. 🟡 Paginação server-side (range + count: 'exact'):
+   - ✅ Clientes — filtros (busca, situação) movidos para server via `or(...ilike)` + `eq`.
+   - ✅ Despesas — paginação + KPI "Total do Mês" via query dedicada filtrada pelo mês.
+   - ✅ Projetos/Serviços — tabela paginada server-side; Kanban mantém fetch completo só quando ativo; KPIs (Em Andamento/Atrasados/Concluídos) via query leve dedicada.
+   - ⏸ Orçamentos — pendente (KPIs Receita Esperada + Taxa de Conversão dependem do dataset completo, requerem RPC).
+   - ⏸ Faturas — pendente (1077 linhas, múltiplos KPIs agregados).
+   - Novo hook reutilizável: `src/hooks/useServerPagination.ts`.
+4. ⏸ Agregações restantes no front — adiado (a maior parte já em RPCs nas fases 2/3).
+
 
 ---
 

@@ -59,8 +59,8 @@ export function useDashboardMetrics(options: UseDashboardMetricsOptions = {}) {
       };
     },
     enabled,
-    staleTime: 30000, // 30 segundos
-    refetchInterval: 60000, // 1 minuto
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 }
 

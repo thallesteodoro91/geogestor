@@ -8,7 +8,9 @@ export function useKPIs() {
   return useQuery({
     queryKey: ['kpis', user?.id],
     queryFn: fetchKPIs,
-    refetchInterval: 30000, // Atualiza a cada 30 segundos
-    enabled: !!user, // Só busca KPIs se usuário estiver autenticado
+    // Fase 7: sem polling. Cache invalidado via invalidateDashboardAndKpis após mutações.
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    enabled: !!user,
   });
 }

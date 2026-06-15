@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { createDespesa, updateDespesa, deleteDespesa } from "@/modules/finance/services/despesa.service";
 import { logAuditEvent } from "@/services/audit.service";
@@ -18,14 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X, FileSpreadsheet } from "lucide-react";
+import { Plus, Trash2, Edit, DollarSign, CalendarIcon, X } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
-import { usePagination } from "@/hooks/usePagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import { despesaSchema } from "@/lib/validations";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,36 +50,106 @@ export default function Despesas() {
     observacoes: "",
   });
 
-  const { data: despesas = [], isLoading } = useQuery({
-    queryKey: ["despesas"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("fato_despesas")
-        .select(`*, dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao), fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)`)
-        .or("status.eq.confirmada,status.is.null")
-        .order("data_da_despesa", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-  });
+  const [totalItems, setTotalItems] = useState(0);
+  const pagination = useServerPagination({ totalItems, initialPageSize: 15 });
 
+  const searchSanitized = searchTerm.trim().replace(/[%,()]/g, "");
+  const dataInicioStr = dataInicio ? format(dataInicio, "yyyy-MM-dd") : null;
+  const dataFimStr = dataFim ? format(dataFim, "yyyy-MM-dd") : null;
+
+  // Tipos (lookup completo — pequena cardinalidade)
   const { data: tiposDespesa = [] } = useQuery({
     queryKey: ["tipos-despesa"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("dim_tipodespesa").select("*").order("categoria");
+      const { data, error } = await supabase
+        .from("dim_tipodespesa")
+        .select("id_tipodespesa, categoria, subcategoria, descricao, classificacao")
+        .order("categoria");
       if (error) throw error;
-      return data || [];
+      return data ?? [];
     },
   });
 
+  // Lookup leve de serviços (apenas id+nome para Select do form)
   const { data: servicos = [] } = useQuery({
-    queryKey: ["servicos"],
+    queryKey: ["servicos-lookup"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("fato_servico").select("id_servico, nome_do_servico").order("nome_do_servico");
+      const { data, error } = await supabase
+        .from("fato_servico")
+        .select("id_servico, nome_do_servico")
+        .order("nome_do_servico");
       if (error) throw error;
-      return data || [];
+      return data ?? [];
     },
   });
+
+  // KPI: total do mês corrente — query dedicada, ignora paginação/filtros da tabela
+  const mesAtualInicio = format(startOfMonth(new Date()), "yyyy-MM-dd");
+  const mesAtualFim = format(endOfMonth(new Date()), "yyyy-MM-dd");
+  const { data: totalMes = 0 } = useQuery({
+    queryKey: ["despesas-total-mes", mesAtualInicio, mesAtualFim],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fato_despesas")
+        .select("valor_da_despesa")
+        .or("status.eq.confirmada,status.is.null")
+        .gte("data_da_despesa", mesAtualInicio)
+        .lte("data_da_despesa", mesAtualFim);
+      if (error) throw error;
+      return (data ?? []).reduce((sum, d: any) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
+    },
+  });
+
+  // Lista paginada server-side
+  const { data: pageData, isLoading } = useQuery({
+    queryKey: [
+      "despesas",
+      { page: pagination.currentPage, pageSize: pagination.pageSize, search: searchSanitized, categoria: categoriaFilter, dataInicio: dataInicioStr, dataFim: dataFimStr },
+    ],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      let q = supabase
+        .from("fato_despesas")
+        .select(
+          `id_despesas, valor_da_despesa, data_da_despesa, id_tipodespesa, id_servico, observacoes, status,
+           dim_tipodespesa:dim_tipodespesa!fk_despesas_tipodespesa(categoria, subcategoria, descricao),
+           fato_servico:fato_servico!fk_despesas_servico(nome_do_servico)`,
+          { count: "exact" }
+        )
+        .or("status.eq.confirmada,status.is.null")
+        .order("data_da_despesa", { ascending: false })
+        .range(pagination.from, pagination.to);
+
+      if (dataInicioStr) q = q.gte("data_da_despesa", dataInicioStr);
+      if (dataFimStr) q = q.lte("data_da_despesa", dataFimStr);
+
+      if (categoriaFilter !== "all") {
+        // Filtra pelos id_tipodespesa cuja categoria bate (resolvido client-side em tiposDespesa).
+        const ids = tiposDespesa.filter((t: any) => t.categoria === categoriaFilter).map((t: any) => t.id_tipodespesa);
+        if (ids.length === 0) {
+          return { rows: [], count: 0 };
+        }
+        q = q.in("id_tipodespesa", ids);
+      }
+
+      if (searchSanitized) {
+        // Busca apenas em observacoes (texto livre da própria fato_despesas) — campos
+        // de tipo/serviço viriam de joins e PostgREST não suporta ilike em embedded.
+        q = q.ilike("observacoes", `%${searchSanitized}%`);
+      }
+
+      const { data, error, count } = await q;
+      if (error) throw error;
+      return { rows: data ?? [], count: count ?? 0 };
+    },
+  });
+
+  if (pageData && pageData.count !== totalItems) {
+    setTotalItems(pageData.count);
+  }
+
+  const despesas = pageData?.rows ?? [];
+  const hasFilters = searchTerm !== "" || categoriaFilter !== "all" || !!dataInicio || !!dataFim;
 
   const mutation = useMutation({
     mutationFn: async (data: typeof formData & { id_despesas?: string }) => {
@@ -93,6 +163,7 @@ export default function Despesas() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["despesas"] });
+      queryClient.invalidateQueries({ queryKey: ["despesas-total-mes"] });
       logAuditEvent({ action: editingId ? "UPDATE" : "INSERT", entity: "Despesa", entityId: editingId || undefined, newData: { ...formData } });
       toast.success(editingId ? "Despesa atualizada!" : "Despesa adicionada!");
       setIsDialogOpen(false);
@@ -108,6 +179,7 @@ export default function Despesas() {
     },
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ["despesas"] });
+      queryClient.invalidateQueries({ queryKey: ["despesas-total-mes"] });
       logAuditEvent({ action: "DELETE", entity: "Despesa", entityId: id });
       toast.success("Despesa excluída!");
     },
@@ -137,24 +209,7 @@ export default function Despesas() {
     }
   };
 
-  // Filtering
-  const filteredDespesas = despesas.filter((d: any) => {
-    const matchesSearch = d.dim_tipodespesa?.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) || d.dim_tipodespesa?.subcategoria?.toLowerCase().includes(searchTerm.toLowerCase()) || d.observacoes?.toLowerCase().includes(searchTerm.toLowerCase()) || d.fato_servico?.nome_do_servico?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategoria = categoriaFilter === "all" || d.dim_tipodespesa?.categoria === categoriaFilter;
-    const matchesDataInicio = !dataInicio || d.data_da_despesa >= format(dataInicio, "yyyy-MM-dd");
-    const matchesDataFim = !dataFim || d.data_da_despesa <= format(dataFim, "yyyy-MM-dd");
-    return matchesSearch && matchesCategoria && matchesDataInicio && matchesDataFim;
-  });
-
-  const pagination = usePagination(filteredDespesas, { initialPageSize: 15 });
-
-  // KPI
-  const now = new Date();
-  const mesAtualInicio = format(startOfMonth(now), "yyyy-MM-dd");
-  const mesAtualFim = format(endOfMonth(now), "yyyy-MM-dd");
-  const totalMes = despesas.filter((d: any) => d.data_da_despesa >= mesAtualInicio && d.data_da_despesa <= mesAtualFim).reduce((sum: number, d: any) => sum + parseFloat(String(d.valor_da_despesa || 0)), 0);
-
-  const categorias = [...new Set(despesas.map((d: any) => d.dim_tipodespesa?.categoria).filter(Boolean))];
+  const categorias = [...new Set(tiposDespesa.map((t: any) => t.categoria).filter(Boolean))];
 
   return (
     <AppLayout>
@@ -179,8 +234,12 @@ export default function Despesas() {
         />
 
         <PageContent title="Lista de Despesas">
-          <FilterBar searchValue={searchTerm} onSearchChange={setSearchTerm} searchPlaceholder="Buscar por categoria, serviço...">
-            <Select value={categoriaFilter} onValueChange={setCategoriaFilter}>
+          <FilterBar
+            searchValue={searchTerm}
+            onSearchChange={(v) => { setSearchTerm(v); pagination.resetPage(); }}
+            searchPlaceholder="Buscar nas observações..."
+          >
+            <Select value={categoriaFilter} onValueChange={(v) => { setCategoriaFilter(v); pagination.resetPage(); }}>
               <SelectTrigger className="w-[160px] h-9 text-sm">
                 <SelectValue placeholder="Categoria" />
               </SelectTrigger>
@@ -201,7 +260,7 @@ export default function Despesas() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dataInicio} onSelect={setDataInicio} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                  <Calendar mode="single" selected={dataInicio} onSelect={(d) => { setDataInicio(d); pagination.resetPage(); }} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
               <span className="text-xs text-muted-foreground">até</span>
@@ -213,11 +272,11 @@ export default function Despesas() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar mode="single" selected={dataFim} onSelect={setDataFim} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
+                  <Calendar mode="single" selected={dataFim} onSelect={(d) => { setDataFim(d); pagination.resetPage(); }} initialFocus locale={ptBR} className="p-3 pointer-events-auto" />
                 </PopoverContent>
               </Popover>
               {(dataInicio || dataFim) && (
-                <Button variant="ghost" size="icon" onClick={() => { setDataInicio(undefined); setDataFim(undefined); }} className="h-8 w-8">
+                <Button variant="ghost" size="icon" onClick={() => { setDataInicio(undefined); setDataFim(undefined); pagination.resetPage(); }} className="h-8 w-8">
                   <X className="h-3.5 w-3.5" />
                 </Button>
               )}
@@ -226,10 +285,10 @@ export default function Despesas() {
 
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-          ) : filteredDespesas.length === 0 && !searchTerm && categoriaFilter === "all" && !dataInicio && !dataFim ? (
+          ) : totalItems === 0 && !hasFilters ? (
             <EmptyState icon={DollarSign} title="Controle seus custos" description="Registre despesas para entender sua margem de lucro real e tomar decisões melhores." actionLabel="+ Registrar Despesa" onAction={() => { resetForm(); setIsDialogOpen(true); }} tip="Vincule a serviços para rastrear custos por projeto" />
-          ) : filteredDespesas.length === 0 ? (
-            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setCategoriaFilter("all"); setDataInicio(undefined); setDataFim(undefined); }} />
+          ) : totalItems === 0 ? (
+            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setCategoriaFilter("all"); setDataInicio(undefined); setDataFim(undefined); pagination.resetPage(); }} />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -244,7 +303,7 @@ export default function Despesas() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagination.paginatedData.map((despesa: any) => (
+                  {despesas.map((despesa: any) => (
                     <TableRow key={despesa.id_despesas}>
                       <TableCell>{new Date(despesa.data_da_despesa).toLocaleDateString("pt-BR")}</TableCell>
                       <TableCell>{despesa.dim_tipodespesa?.categoria || "-"}</TableCell>
@@ -314,7 +373,7 @@ export default function Despesas() {
 
         <ConfirmDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen} title="Excluir despesa" description="Tem certeza que deseja excluir esta despesa?" confirmLabel="Excluir" onConfirm={() => { if (deleteTargetId) deleteMutation.mutate(deleteTargetId); setDeleteConfirmOpen(false); setDeleteTargetId(null); }} />
 
-        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="despesas" onSuccess={() => queryClient.invalidateQueries({ queryKey: ["despesas"] })} />
+        <SmartImporter open={importOpen} onOpenChange={setImportOpen} entityType="despesas" onSuccess={() => { queryClient.invalidateQueries({ queryKey: ["despesas"] }); queryClient.invalidateQueries({ queryKey: ["despesas-total-mes"] }); }} />
       </div>
     </AppLayout>
   );

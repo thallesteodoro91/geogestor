@@ -52,7 +52,7 @@ export function AlertasFinanceiros() {
       
       return alertasFiltrados.slice(0, 10);
     },
-    refetchInterval: 60000,
+    staleTime: 5 * 60 * 1000,
   });
 
   if (!alertasEnabled) return null;

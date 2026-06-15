@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -13,14 +13,92 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
-import { usePagination } from "@/hooks/usePagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 import { ClientePropriedadeUnificadoDialog } from "@/components/cadastros/ClientePropriedadeUnificadoDialog";
 import { OnboardingPageBanner } from "@/components/onboarding/OnboardingPageBanner";
 import { SmartImporter } from "@/components/import/SmartImporter";
 import { toast } from "sonner";
-import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase, FileSpreadsheet } from "lucide-react";
+import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStatusClasses } from "@/lib/statusColors";
+
+export default function Clientes() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [situacaoFilter, setSituacaoFilter] = useState("all");
+  const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+
+  // Paginação server-side ANTES do query — totalItems virá do resultado e o hook
+  // ajusta a página se ficar fora do range após mudança de filtro.
+  const [totalItems, setTotalItems] = useState(0);
+  const pagination = useServerPagination({ totalItems, initialPageSize: 15 });
+
+  const escapeIlike = (s: string) => s.replace(/[%,()]/g, "");
+  const searchSanitized = escapeIlike(searchTerm.trim());
+
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ["clientes-list", { search: searchSanitized, situacao: situacaoFilter, page: pagination.currentPage, pageSize: pagination.pageSize }],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      let q = supabase
+        .from("dim_cliente")
+        .select(
+          `
+          id_cliente, nome, email, telefone, celular, cpf, cnpj, endereco, situacao, origem, categoria, anotacoes,
+          dim_propriedade!fk_propriedade_cliente(id_propriedade),
+          fato_servico!fk_servico_cliente(id_servico, situacao_do_servico)
+        `,
+          { count: "exact" }
+        )
+        .order("nome")
+        .range(pagination.from, pagination.to);
+
+      if (searchSanitized) {
+        const term = `%${searchSanitized}%`;
+        q = q.or(`nome.ilike.${term},email.ilike.${term},cpf.ilike.${term},cnpj.ilike.${term}`);
+      }
+      if (situacaoFilter !== "all") {
+        q = q.eq("situacao", situacaoFilter);
+      }
+
+      const { data, error, count } = await q;
+      if (error) throw error;
+      return { rows: data ?? [], count: count ?? 0 };
+    },
+  });
+
+  // Sincroniza totalItems após cada fetch para o controle reagir a filtros.
+  if (data && data.count !== totalItems) {
+    setTotalItems(data.count);
+  }
+
+  const clientes = data?.rows ?? [];
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("dim_cliente").delete().eq("id_cliente", id);
+      if (error) {
+        if (error.code === "23503") throw new Error("Este cliente possui serviços ou propriedades vinculados. Remova as dependências antes.");
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
+      toast.success("Cliente excluído com sucesso!");
+    },
+    onError: (error: any) => toast.error(error.message),
+  });
+
+  const getServicosAtivos = (cliente: any) =>
+    (cliente.fato_servico || []).filter((s: any) => s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Planejado").length;
+
+  const hasFilters = searchTerm !== "" || situacaoFilter !== "all";
+
+
 
 export default function Clientes() {
   const navigate = useNavigate();

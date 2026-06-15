@@ -32,15 +32,13 @@ export default function Clientes() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  // Paginação server-side ANTES do query — totalItems virá do resultado e o hook
-  // ajusta a página se ficar fora do range após mudança de filtro.
   const [totalItems, setTotalItems] = useState(0);
   const pagination = useServerPagination({ totalItems, initialPageSize: 15 });
 
-  const escapeIlike = (s: string) => s.replace(/[%,()]/g, "");
-  const searchSanitized = escapeIlike(searchTerm.trim());
+  // Sanitiza termo para uso em ilike/or (PostgREST quebra com vírgulas/parens não escapados).
+  const searchSanitized = searchTerm.trim().replace(/[%,()]/g, "");
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["clientes-list", { search: searchSanitized, situacao: situacaoFilter, page: pagination.currentPage, pageSize: pagination.pageSize }],
     placeholderData: keepPreviousData,
     queryFn: async () => {
@@ -71,61 +69,13 @@ export default function Clientes() {
     },
   });
 
-  // Sincroniza totalItems após cada fetch para o controle reagir a filtros.
   if (data && data.count !== totalItems) {
     setTotalItems(data.count);
   }
 
   const clientes = data?.rows ?? [];
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("dim_cliente").delete().eq("id_cliente", id);
-      if (error) {
-        if (error.code === "23503") throw new Error("Este cliente possui serviços ou propriedades vinculados. Remova as dependências antes.");
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["clientes-list"] });
-      toast.success("Cliente excluído com sucesso!");
-    },
-    onError: (error: any) => toast.error(error.message),
-  });
-
-  const getServicosAtivos = (cliente: any) =>
-    (cliente.fato_servico || []).filter((s: any) => s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Planejado").length;
-
   const hasFilters = searchTerm !== "" || situacaoFilter !== "all";
 
-
-
-export default function Clientes() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [situacaoFilter, setSituacaoFilter] = useState("all");
-  const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
-
-  const { data: clientes = [], isLoading } = useQuery({
-    queryKey: ["clientes-list"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("dim_cliente")
-        .select(`
-          id_cliente, nome, email, telefone, celular, cpf, cnpj, endereco, situacao, origem, categoria, anotacoes,
-          dim_propriedade!fk_propriedade_cliente(id_propriedade),
-          fato_servico!fk_servico_cliente(id_servico, situacao_do_servico)
-        `)
-        .order("nome");
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from("dim_cliente").delete().eq("id_cliente", id);
@@ -140,18 +90,6 @@ export default function Clientes() {
     },
     onError: (error: any) => toast.error(error.message),
   });
-
-  const filtered = clientes.filter((c: any) => {
-    const matchesSearch =
-      c.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.cpf?.includes(searchTerm) ||
-      c.cnpj?.includes(searchTerm);
-    const matchesSituacao = situacaoFilter === "all" || c.situacao === situacaoFilter;
-    return matchesSearch && matchesSituacao;
-  });
-
-  const pagination = usePagination(filtered, { initialPageSize: 15 });
 
   const getServicosAtivos = (cliente: any) =>
     (cliente.fato_servico || []).filter((s: any) => s.situacao_do_servico === "Em Andamento" || s.situacao_do_servico === "Planejado").length;
@@ -174,10 +112,10 @@ export default function Clientes() {
         <PageContent title="Lista de Clientes">
           <FilterBar
             searchValue={searchTerm}
-            onSearchChange={setSearchTerm}
+            onSearchChange={(v) => { setSearchTerm(v); pagination.resetPage(); }}
             searchPlaceholder="Buscar por nome, CPF, e-mail..."
           >
-            <Select value={situacaoFilter} onValueChange={setSituacaoFilter}>
+            <Select value={situacaoFilter} onValueChange={(v) => { setSituacaoFilter(v); pagination.resetPage(); }}>
               <SelectTrigger className="w-[140px] h-9 text-sm">
                 <SelectValue placeholder="Situação" />
               </SelectTrigger>
@@ -192,7 +130,7 @@ export default function Clientes() {
 
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 && !searchTerm && situacaoFilter === "all" ? (
+          ) : totalItems === 0 && !hasFilters ? (
             <EmptyState
               icon={Users}
               title="Organize sua base de clientes"
@@ -201,8 +139,8 @@ export default function Clientes() {
               onAction={() => setDialogOpen({ open: true })}
               tip="Importe clientes de uma planilha para começar rápido"
             />
-          ) : filtered.length === 0 ? (
-            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setSituacaoFilter("all"); }} />
+          ) : totalItems === 0 ? (
+            <FilterEmptyState onClearFilters={() => { setSearchTerm(""); setSituacaoFilter("all"); pagination.resetPage(); }} />
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -218,7 +156,7 @@ export default function Clientes() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagination.paginatedData.map((cliente: any) => {
+                  {clientes.map((cliente: any) => {
                     const propCount = (cliente.dim_propriedade || []).length;
                     const servicosAtivos = getServicosAtivos(cliente);
                     return (
@@ -258,10 +196,7 @@ export default function Clientes() {
                         </TableCell>
                         <TableCell>
                           {cliente.situacao ? (
-                            <Badge
-                              variant="secondary"
-                              className={getStatusClasses(cliente.situacao)}
-                            >
+                            <Badge variant="secondary" className={getStatusClasses(cliente.situacao)}>
                               {cliente.situacao}
                             </Badge>
                           ) : (

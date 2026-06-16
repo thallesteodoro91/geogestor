@@ -445,7 +445,7 @@ export default function Orcamentos() {
               <TablePagination
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
-                totalItems={filteredOrcamentos.length}
+                totalItems={pagination.totalItems}
                 pageSize={pagination.pageSize}
                 startIndex={pagination.startIndex}
                 endIndex={pagination.endIndex}

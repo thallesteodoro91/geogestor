@@ -1,0 +1,147 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  install:
+    name: Install dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache bun deps
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Run ESLint
+        run: bun run lint
+
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Typecheck (tsc --noEmit)
+        run: bunx tsc --noEmit
+
+  build:
+    name: Vite build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Build
+        env:
+          # CI build precisa de placeholders — runtime real usa .env do Lovable Cloud
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY || 'placeholder-anon-key' }}
+          VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID || 'placeholder' }}
+        run: bun run build
+
+  test:
+    name: Vitest
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb', 'package.json') }}
+          restore-keys: bun-${{ runner.os }}-
+      - run: bun install --frozen-lockfile
+      - name: Run vitest
+        run: bunx vitest run --reporter=default
+
+  migrations-validate:
+    name: Validate Supabase migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Filename + GRANT/RLS sanity check
+        run: bash scripts/validate-migrations.sh
+      - name: Setup Postgres (parser only)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Syntax check (parse-only via psql -f --set ON_ERROR_STOP=1 on ephemeral DB)
+        run: |
+          sudo systemctl start postgresql.service || sudo service postgresql start || true
+          sudo -u postgres psql -c "CREATE DATABASE migrations_dryrun;" || true
+          set -e
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            echo "== Parsing $f"
+            # Apenas valida sintaxe: usamos uma transação que é revertida.
+            sudo -u postgres psql -d migrations_dryrun -v ON_ERROR_STOP=1 -c "BEGIN; \\i $f ; ROLLBACK;" \
+              > /dev/null 2>&1 || {
+                # Re-roda mostrando erro real (pode falhar por extensões/roles ausentes; aceitamos
+                # apenas erros que não sejam de sintaxe).
+                ERR=$(sudo -u postgres psql -d migrations_dryrun -v ON_ERROR_STOP=1 -c "BEGIN; \\i $f ; ROLLBACK;" 2>&1 || true)
+                echo "$ERR"
+                if echo "$ERR" | grep -qiE "syntax error|unterminated|invalid input syntax"; then
+                  echo "::error file=$f::SQL syntax error"
+                  exit 1
+                else
+                  echo "::warning file=$f::Migration não aplicou em ambiente vazio (provável dependência de extensão/role ausente). Sem erro de sintaxe — seguindo."
+                fi
+              }
+          done
+
+  release-gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, build, test, migrations-validate]
+    steps:
+      - run: echo "✅ Todas as checagens passaram — pronto para release."

@@ -174,7 +174,7 @@ export default function Orcamentos() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['orcamentos'] }); queryClient.invalidateQueries({ queryKey: ['orcamentos-kpis'] });
       toast.success(editingId ? "Orçamento atualizado!" : "Orçamento criado!");
       setIsDialogOpen(false);
       resetForm();
@@ -190,7 +190,7 @@ export default function Orcamentos() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['orcamentos'] }); queryClient.invalidateQueries({ queryKey: ['orcamentos-kpis'] });
       toast.success("Orçamento excluído!");
     },
   });

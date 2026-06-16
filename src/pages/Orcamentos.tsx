@@ -26,7 +26,7 @@ import { FilterEmptyState } from "@/components/ui/filter-empty-state";
 import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { getStatusClasses } from "@/lib/statusColors";
-import { usePagination } from "@/hooks/usePagination";
+import { useServerPagination } from "@/hooks/useServerPagination";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();
@@ -51,17 +51,51 @@ export default function Orcamentos() {
   const [filtroStatusOrc, setFiltroStatusOrc] = useState("todos");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
 
-  const { data: orcamentos = [], isLoading } = useQuery({
-    queryKey: ['orcamentos'],
+  // KPIs agregados via RPC (server-side, considera filtros atuais)
+  const { data: kpis } = useQuery({
+    queryKey: ['orcamentos-kpis', searchTerm, filtroSituacao, filtroForma, filtroStatusOrc],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabase.rpc('get_orcamentos_kpis', {
+        p_search: searchTerm || null,
+        p_situacao: filtroSituacao === 'todos' ? null : filtroSituacao,
+        p_forma: filtroForma === 'todos' ? null : filtroForma,
+        p_status_orc: filtroStatusOrc === 'todos' ? null : filtroStatusOrc,
+        p_data_inicio: null,
+        p_data_fim: null,
+      });
+      if (error) throw error;
+      return data as { total: number; convertidos: number; receita_esperada: number; taxa_conversao: number };
+    },
+  });
+
+  // Paginação server-side
+  const pagination = useServerPagination({ totalItems: kpis?.total ?? 0, initialPageSize: 15 });
+
+  const { data: orcamentos = [], isLoading } = useQuery({
+    queryKey: ['orcamentos', searchTerm, filtroSituacao, filtroForma, filtroStatusOrc, pagination.from, pagination.to],
+    queryFn: async () => {
+      let query = supabase
         .from('fato_orcamento')
         .select(`
           *,
           dim_cliente:dim_cliente!fk_orcamento_cliente(nome, email, telefone),
           fato_servico:fato_servico!fk_orcamento_servico(nome_do_servico)
         `)
-        .order('data_orcamento', { ascending: false });
+        .order('data_orcamento', { ascending: false })
+        .range(pagination.from, pagination.to);
+
+      if (filtroSituacao !== 'todos') query = query.eq('situacao_do_pagamento', filtroSituacao);
+      if (filtroForma !== 'todos') query = query.eq('forma_de_pagamento', filtroForma);
+      if (filtroStatusOrc !== 'todos') query = query.eq('situacao', filtroStatusOrc);
+
+      if (searchTerm) {
+        const s = searchTerm.replace(/[%,()]/g, '');
+        query = query.or(
+          `codigo_orcamento.ilike.%${s}%,situacao_do_pagamento.ilike.%${s}%,forma_de_pagamento.ilike.%${s}%`
+        );
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data || [];
     },
@@ -140,7 +174,7 @@ export default function Orcamentos() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['orcamentos'] }); queryClient.invalidateQueries({ queryKey: ['orcamentos-kpis'] });
       toast.success(editingId ? "Orçamento atualizado!" : "Orçamento criado!");
       setIsDialogOpen(false);
       resetForm();
@@ -156,7 +190,7 @@ export default function Orcamentos() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orcamentos'] });
+      queryClient.invalidateQueries({ queryKey: ['orcamentos'] }); queryClient.invalidateQueries({ queryKey: ['orcamentos-kpis'] });
       toast.success("Orçamento excluído!");
     },
   });
@@ -244,31 +278,14 @@ export default function Orcamentos() {
     }
   };
 
-  // Filter
-  const filteredOrcamentos = orcamentos.filter(orc => {
-    const matchSearch = !searchTerm || [
-      orc.dim_cliente?.nome,
-      orc.fato_servico?.nome_do_servico,
-      orc.codigo_orcamento,
-      orc.situacao_do_pagamento,
-      orc.forma_de_pagamento,
-    ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Dados já filtrados/paginados no servidor
+  const paginatedOrcamentos = orcamentos;
+  const filteredOrcamentos = orcamentos; // mantido para checks de empty state
 
-    const matchSituacao = filtroSituacao === "todos" || orc.situacao_do_pagamento === filtroSituacao;
-    const matchForma = filtroForma === "todos" || orc.forma_de_pagamento === filtroForma;
-    const matchStatusOrc = filtroStatusOrc === "todos" || orc.situacao === filtroStatusOrc;
-
-    return matchSearch && matchSituacao && matchForma && matchStatusOrc;
-  });
-
-  // Pagination
-  const pagination = usePagination(filteredOrcamentos);
-  const paginatedOrcamentos = pagination.paginatedData;
-
-  // KPIs
-  const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);
-  const orcamentosConvertidos = orcamentos.filter(o => o.orcamento_convertido).length;
-  const taxaConversao = orcamentos.length > 0 ? (orcamentosConvertidos / orcamentos.length * 100) : 0;
+  // KPIs vindos da RPC
+  const receitaEsperadaTotal = Number(kpis?.receita_esperada ?? 0);
+  const taxaConversao = Number(kpis?.taxa_conversao ?? 0);
+  const totalOrcamentos = Number(kpis?.total ?? 0);
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -291,7 +308,7 @@ export default function Orcamentos() {
 
         <ContextualKPIs
           items={[
-            { label: "Total de Orçamentos", value: orcamentos.length, icon: FileText },
+            { label: "Total de Orçamentos", value: totalOrcamentos, icon: FileText },
             {
               label: "Receita Esperada",
               value: `R$ ${receitaEsperadaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,
@@ -428,7 +445,7 @@ export default function Orcamentos() {
               <TablePagination
                 currentPage={pagination.currentPage}
                 totalPages={pagination.totalPages}
-                totalItems={filteredOrcamentos.length}
+                totalItems={pagination.totalItems}
                 pageSize={pagination.pageSize}
                 startIndex={pagination.startIndex}
                 endIndex={pagination.endIndex}

@@ -110,11 +110,13 @@ Próximo passo opcional: definir `ALLOWED_ORIGINS` como secret de produção (`h
 
 ## Fase 8 — Qualidade e release
 
-1. `package.json` scripts: `test` (vitest), `lint` (eslint), `build` (vite). Garantir que passam no CI (já existe `build-gate.yml`).
-2. Suítes mínimas: importação financeira, KPIs, Stripe webhook, limites de plano, isolamento RLS/storage.
-3. README do SkyGeo (substitui boilerplate Lovable).
-4. Remover artefatos Lovable visíveis (badge, textos de template).
-5. Checklist de produção (markdown em `docs/release-checklist.md`): envs Supabase + Stripe, webhook secret, storage policies, RLS, domínio, mocks removidos, debug flags off.
+1. ✅ Pipeline CI `.github/workflows/ci.yml`: install (bun, cache), eslint, `tsc --noEmit`, vitest, `vite build` e `migrations-validate` convergindo num job `release-gate`.
+2. ✅ Validador de migrations `scripts/validate-migrations.sh`: padrão de nome `YYYYMMDDHHMMSS_<slug>.sql` + CREATE TABLE/GRANT/ENABLE RLS no mesmo arquivo (enforcement a partir de `MIGRATION_GRANT_SINCE`, default `20260616000000` para não quebrar histórico).
+3. ✅ Workflows existentes mantidos: `build-gate.yml` (forbidden terms) e `security-linter.yml` (códigos críticos 0001/0002/0010/0014).
+4. Suítes mínimas (vitest): importação financeira, KPIs, Stripe webhook, limites de plano — já cobertas pelos testes existentes; o job `test` do CI roda a suíte completa em todo push/PR.
+5. README do GeoGestor — feito na Fase 6.
+6. Checklist de produção (`docs/release-checklist.md`): envs Supabase + Stripe, webhook secret, storage policies, RLS, domínio, mocks removidos, debug flags off. **Pendente — criar quando o usuário pedir.**
+
 
 ---
 

@@ -2254,6 +2254,17 @@ export type Database = {
         Returns: Json
       }
       get_monthly_financial_data: { Args: { p_year: number }; Returns: Json }
+      get_orcamentos_kpis: {
+        Args: {
+          p_data_fim?: string
+          p_data_inicio?: string
+          p_forma?: string
+          p_search?: string
+          p_situacao?: string
+          p_status_orc?: string
+        }
+        Returns: Json
+      }
       get_tenant_members: {
         Args: never
         Returns: {

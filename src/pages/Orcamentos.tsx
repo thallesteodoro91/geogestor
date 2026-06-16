@@ -278,31 +278,14 @@ export default function Orcamentos() {
     }
   };
 
-  // Filter
-  const filteredOrcamentos = orcamentos.filter(orc => {
-    const matchSearch = !searchTerm || [
-      orc.dim_cliente?.nome,
-      orc.fato_servico?.nome_do_servico,
-      orc.codigo_orcamento,
-      orc.situacao_do_pagamento,
-      orc.forma_de_pagamento,
-    ].some(f => f?.toLowerCase().includes(searchTerm.toLowerCase()));
+  // Dados já filtrados/paginados no servidor
+  const paginatedOrcamentos = orcamentos;
+  const filteredOrcamentos = orcamentos; // mantido para checks de empty state
 
-    const matchSituacao = filtroSituacao === "todos" || orc.situacao_do_pagamento === filtroSituacao;
-    const matchForma = filtroForma === "todos" || orc.forma_de_pagamento === filtroForma;
-    const matchStatusOrc = filtroStatusOrc === "todos" || orc.situacao === filtroStatusOrc;
-
-    return matchSearch && matchSituacao && matchForma && matchStatusOrc;
-  });
-
-  // Pagination
-  const pagination = usePagination(filteredOrcamentos);
-  const paginatedOrcamentos = pagination.paginatedData;
-
-  // KPIs
-  const receitaEsperadaTotal = orcamentos.reduce((sum, o) => sum + (parseFloat(String(o.receita_esperada || 0))), 0);
-  const orcamentosConvertidos = orcamentos.filter(o => o.orcamento_convertido).length;
-  const taxaConversao = orcamentos.length > 0 ? (orcamentosConvertidos / orcamentos.length * 100) : 0;
+  // KPIs vindos da RPC
+  const receitaEsperadaTotal = Number(kpis?.receita_esperada ?? 0);
+  const taxaConversao = Number(kpis?.taxa_conversao ?? 0);
+  const totalOrcamentos = Number(kpis?.total ?? 0);
 
   const handleClearFilters = () => {
     setSearchTerm("");

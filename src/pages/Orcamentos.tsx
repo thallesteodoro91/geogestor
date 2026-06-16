@@ -308,7 +308,7 @@ export default function Orcamentos() {
 
         <ContextualKPIs
           items={[
-            { label: "Total de Orçamentos", value: orcamentos.length, icon: FileText },
+            { label: "Total de Orçamentos", value: totalOrcamentos, icon: FileText },
             {
               label: "Receita Esperada",
               value: `R$ ${receitaEsperadaTotal.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`,

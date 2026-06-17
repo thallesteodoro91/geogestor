@@ -461,7 +461,12 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+      <DialogContent
+        className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6"
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Importação Universal de Planilha</DialogTitle>
         </DialogHeader>

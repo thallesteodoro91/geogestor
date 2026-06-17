@@ -40,7 +40,7 @@ export const AppLayout = ({ children }: AppLayoutProps) => {
       <div className="md:pl-64">
         <Header />
         <main 
-          className="p-4 md:p-6 lg:p-8"
+          className="p-4 md:p-6 lg:p-8 min-w-0 overflow-x-hidden"
           role="main"
           aria-label="Conteúdo principal"
         >

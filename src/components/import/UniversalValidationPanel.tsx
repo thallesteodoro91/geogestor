@@ -56,6 +56,50 @@ const ENTITY_LABEL: Record<CanonicalEntity, string> = {
   financeiro: "Financeiro",
 };
 
+function getFieldHint(field?: CanonicalField): string | null {
+  if (!field) return null;
+  const typeHints: Record<string, string> = {
+    text: "Texto livre",
+    number: "Número (ex: 123,45)",
+    monetary: "Valor monetário (ex: R$ 1.234,56)",
+    percent: "Porcentagem (ex: 15% ou 0,15)",
+    date: "Data (ex: 01/01/2024)",
+    cpf: "CPF com 11 dígitos",
+    cnpj: "CNPJ com 14 dígitos",
+    doc: "Documento (CPF ou CNPJ)",
+    phone: "Telefone com DDD",
+    email: "E-mail válido (ex: nome@email.com)",
+    geo: "Coordenada geográfica",
+    enum: `Um dos valores: ${field.enumValues?.join(", ") ?? ""}`,
+  };
+  const hint = typeHints[field.type] ?? field.type;
+  return field.required ? `${hint} (obrigatório)` : hint;
+}
+
+function FieldInfoIcon({ fieldId }: { fieldId?: string }) {
+  const field = fieldId ? CANONICAL_BY_ID[fieldId] : undefined;
+  const hint = getFieldHint(field);
+  if (!hint) return null;
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          <p className="font-medium">{field?.label}</p>
+          <p className="text-muted-foreground">{hint}</p>
+          {field?.enumValues && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Valores aceitos: {field.enumValues.join(", ")}
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 export function UniversalValidationPanel({
   matches, summary, previewRows, headers, onOverride, onConfirm, onBack, isImporting,
 }: Props) {

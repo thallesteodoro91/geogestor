@@ -70,7 +70,7 @@ export function UniversalValidationPanel({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0 w-full">
       {/* Resumo detectado */}
       <Card>
         <CardHeader>
@@ -118,7 +118,7 @@ export function UniversalValidationPanel({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border overflow-hidden">
+          <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -172,25 +172,27 @@ export function UniversalValidationPanel({
         <CardHeader>
           <CardTitle>Pré-visualização (10 primeiras linhas)</CardTitle>
         </CardHeader>
-        <CardContent className="overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {headers.map(h => <TableHead key={h}>{h}</TableHead>)}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {previewRows.slice(0, 10).map((row, i) => (
-                <TableRow key={i}>
-                  {headers.map((_, idx) => (
-                    <TableCell key={idx} className="whitespace-nowrap text-xs">
-                      {String(row[idx] ?? "")}
-                    </TableCell>
-                  ))}
+        <CardContent className="p-0">
+          <div className="overflow-x-auto overflow-y-auto max-h-[400px]">
+            <Table className="min-w-full">
+              <TableHeader>
+                <TableRow>
+                  {headers.map(h => <TableHead key={h} className="whitespace-nowrap">{h}</TableHead>)}
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {previewRows.slice(0, 10).map((row, i) => (
+                  <TableRow key={i}>
+                    {headers.map((_, idx) => (
+                      <TableCell key={idx} className="whitespace-nowrap text-xs">
+                        {String(row[idx] ?? "")}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 

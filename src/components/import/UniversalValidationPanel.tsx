@@ -12,10 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, AlertTriangle, Sparkles, FileWarning } from "lucide-react";
-import { CANONICAL_FIELDS, type CanonicalEntity } from "@/lib/etl/canonicalSchema";
+import { CheckCircle2, AlertTriangle, Sparkles, FileWarning, Info } from "lucide-react";
+import { CANONICAL_FIELDS, CANONICAL_BY_ID, type CanonicalEntity, type CanonicalField } from "@/lib/etl/canonicalSchema";
 import type { HybridMatch } from "@/lib/etl/hybridMatcher";
 
 export interface DetectionSummary {
@@ -49,6 +55,50 @@ const ENTITY_LABEL: Record<CanonicalEntity, string> = {
   orcamento: "Orçamento",
   financeiro: "Financeiro",
 };
+
+function getFieldHint(field?: CanonicalField): string | null {
+  if (!field) return null;
+  const typeHints: Record<string, string> = {
+    text: "Texto livre",
+    number: "Número (ex: 123,45)",
+    monetary: "Valor monetário (ex: R$ 1.234,56)",
+    percent: "Porcentagem (ex: 15% ou 0,15)",
+    date: "Data (ex: 01/01/2024)",
+    cpf: "CPF com 11 dígitos",
+    cnpj: "CNPJ com 14 dígitos",
+    doc: "Documento (CPF ou CNPJ)",
+    phone: "Telefone com DDD",
+    email: "E-mail válido (ex: nome@email.com)",
+    geo: "Coordenada geográfica",
+    enum: `Um dos valores: ${field.enumValues?.join(", ") ?? ""}`,
+  };
+  const hint = typeHints[field.type] ?? field.type;
+  return field.required ? `${hint} (obrigatório)` : hint;
+}
+
+function FieldInfoIcon({ fieldId }: { fieldId?: string }) {
+  const field = fieldId ? CANONICAL_BY_ID[fieldId] : undefined;
+  const hint = getFieldHint(field);
+  if (!hint) return null;
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-help shrink-0" />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-xs text-xs">
+          <p className="font-medium">{field?.label}</p>
+          <p className="text-muted-foreground">{hint}</p>
+          {field?.enumValues && (
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              Valores aceitos: {field.enumValues.join(", ")}
+            </p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 export function UniversalValidationPanel({
   matches, summary, previewRows, headers, onOverride, onConfirm, onBack, isImporting,
@@ -132,7 +182,12 @@ export function UniversalValidationPanel({
               <TableBody>
                 {matches.map(m => (
                   <TableRow key={m.header}>
-                    <TableCell className="font-medium align-top">{m.header}</TableCell>
+                    <TableCell className="font-medium align-top">
+                      <div className="flex items-center gap-2">
+                        {m.header}
+                        <FieldInfoIcon fieldId={m.field?.id} />
+                      </div>
+                    </TableCell>
                     <TableCell className="align-top">
                       {m.field
                         ? <span>{ENTITY_LABEL[m.field.entity]} → <strong>{m.field.label}</strong></span>
@@ -171,7 +226,10 @@ export function UniversalValidationPanel({
             {matches.map(m => (
               <div key={m.header} className="rounded-md border p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium break-words min-w-0 flex-1">{m.header}</p>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <p className="font-medium break-words min-w-0 flex-1">{m.header}</p>
+                    <FieldInfoIcon fieldId={m.field?.id} />
+                  </div>
                   <ConfidenceBadge score={m.score} />
                 </div>
                 <div className="text-sm">

@@ -182,7 +182,12 @@ export function UniversalValidationPanel({
               <TableBody>
                 {matches.map(m => (
                   <TableRow key={m.header}>
-                    <TableCell className="font-medium align-top">{m.header}</TableCell>
+                    <TableCell className="font-medium align-top">
+                      <div className="flex items-center gap-2">
+                        {m.header}
+                        <FieldInfoIcon fieldId={m.field?.id} />
+                      </div>
+                    </TableCell>
                     <TableCell className="align-top">
                       {m.field
                         ? <span>{ENTITY_LABEL[m.field.entity]} → <strong>{m.field.label}</strong></span>
@@ -221,7 +226,10 @@ export function UniversalValidationPanel({
             {matches.map(m => (
               <div key={m.header} className="rounded-md border p-3 space-y-2">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium break-words min-w-0 flex-1">{m.header}</p>
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <p className="font-medium break-words min-w-0 flex-1">{m.header}</p>
+                    <FieldInfoIcon fieldId={m.field?.id} />
+                  </div>
                   <ConfidenceBadge score={m.score} />
                 </div>
                 <div className="text-sm">

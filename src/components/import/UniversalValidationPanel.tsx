@@ -12,10 +12,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, AlertTriangle, Sparkles, FileWarning } from "lucide-react";
-import { CANONICAL_FIELDS, type CanonicalEntity } from "@/lib/etl/canonicalSchema";
+import { CheckCircle2, AlertTriangle, Sparkles, FileWarning, Info } from "lucide-react";
+import { CANONICAL_FIELDS, CANONICAL_BY_ID, type CanonicalEntity, type CanonicalField } from "@/lib/etl/canonicalSchema";
 import type { HybridMatch } from "@/lib/etl/hybridMatcher";
 
 export interface DetectionSummary {

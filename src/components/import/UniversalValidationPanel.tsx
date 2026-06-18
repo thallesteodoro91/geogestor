@@ -86,13 +86,14 @@ function FieldInfoIcon({ fieldId }: { fieldId?: string }) {
         <TooltipTrigger asChild>
           <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-help shrink-0" />
         </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs text-xs">
-          <p className="font-medium">{field?.label}</p>
-          <p className="text-muted-foreground">{hint}</p>
-          {field?.enumValues && (
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Valores aceitos: {field.enumValues.join(", ")}
-            </p>
+        <TooltipContent side="top" className="max-w-xs text-xs space-y-1 p-3">
+          <p className="font-semibold">{field?.label}</p>
+          <p className="text-muted-foreground leading-relaxed">{hint}</p>
+          {field?.enumValues && field.enumValues.length > 0 && (
+            <div className="pt-1 border-t border-border/50">
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Valores aceitos</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{field.enumValues.join(", ")}</p>
+            </div>
           )}
         </TooltipContent>
       </Tooltip>

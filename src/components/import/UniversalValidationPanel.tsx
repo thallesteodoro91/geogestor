@@ -17,6 +17,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -81,23 +82,25 @@ function FieldInfoIcon({ fieldId }: { fieldId?: string }) {
   const hint = getFieldHint(field);
   if (!hint) return null;
   return (
-    <TooltipProvider delayDuration={100}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Info className="h-3.5 w-3.5 text-muted-foreground hover:text-primary cursor-help shrink-0" />
-        </TooltipTrigger>
-        <TooltipContent side="top" className="max-w-xs text-xs space-y-1 p-3">
-          <p className="font-semibold">{field?.label}</p>
-          <p className="text-muted-foreground leading-relaxed">{hint}</p>
+    <InfoTooltip
+      title={field?.label}
+      content={
+        <>
+          <p className="leading-relaxed">{hint}</p>
           {field?.enumValues && field.enumValues.length > 0 && (
-            <div className="pt-1 border-t border-border/50">
-              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Valores aceitos</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{field.enumValues.join(", ")}</p>
+            <div className="pt-1 mt-1 border-t border-border/50">
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                Valores aceitos
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {field.enumValues.join(", ")}
+              </p>
             </div>
           )}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+        </>
+      }
+      size="sm"
+    />
   );
 }
 

@@ -33,6 +33,7 @@ export default function ImportacaoDados() {
         <PageHeader
           title="Importação de Dados"
           subtitle="Importe dados do Excel ou CSV — o sistema detecta automaticamente o tipo de dado"
+          tooltipKey="importacao.geral"
         >
           <Button variant="outline" asChild>
             <Link to="/importacao/esquemas">

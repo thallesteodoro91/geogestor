@@ -20,6 +20,8 @@ interface KPICardProps {
   description?: string;
   /** Calculation formula shown in the info tooltip */
   calculation?: string;
+  /** Chave do catálogo central de tooltips (preferida sobre description). */
+  tooltipKey?: string;
   /** Optional warning message — shows an amber alert badge with tooltip */
   warning?: string;
 }

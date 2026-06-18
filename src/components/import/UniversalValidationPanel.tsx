@@ -59,21 +59,21 @@ const ENTITY_LABEL: Record<CanonicalEntity, string> = {
 function getFieldHint(field?: CanonicalField): string | null {
   if (!field) return null;
   const typeHints: Record<string, string> = {
-    text: "Texto livre",
-    number: "Número (ex: 123,45)",
-    monetary: "Valor monetário (ex: R$ 1.234,56)",
-    percent: "Porcentagem (ex: 15% ou 0,15)",
-    date: "Data (ex: 01/01/2024)",
-    cpf: "CPF com 11 dígitos",
-    cnpj: "CNPJ com 14 dígitos",
-    doc: "Documento (CPF ou CNPJ)",
-    phone: "Telefone com DDD",
-    email: "E-mail válido (ex: nome@email.com)",
-    geo: "Coordenada geográfica",
-    enum: `Um dos valores: ${field.enumValues?.join(", ") ?? ""}`,
+    text: "Texto livre. Ex: João Silva, Rua das Flores, 123",
+    number: "Número inteiro ou decimal. Ex: 150, 123,45",
+    monetary: "Valor monetário. Ex: 1250,00, R$ 1.234,56",
+    percent: "Porcentagem. Ex: 15%, 0,15, 15",
+    date: "Data em formato dia/mês/ano. Ex: 15/03/2024",
+    cpf: "CPF com 11 dígitos. Ex: 12345678901",
+    cnpj: "CNPJ com 14 dígitos. Ex: 12345678000195",
+    doc: "Documento brasileiro. Ex: 12345678901 (CPF) ou 12345678000195 (CNPJ)",
+    phone: "Telefone com DDD. Ex: 11987654321, (11) 98765-4321",
+    email: "E-mail válido. Ex: nome@email.com",
+    geo: "Coordenada geográfica. Ex: -23,55052, -46,63331",
+    enum: `Escolha um dos valores permitidos`,
   };
   const hint = typeHints[field.type] ?? field.type;
-  return field.required ? `${hint} (obrigatório)` : hint;
+  return field.required ? `${hint} — obrigatório` : hint;
 }
 
 function FieldInfoIcon({ fieldId }: { fieldId?: string }) {

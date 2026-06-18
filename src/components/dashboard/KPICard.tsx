@@ -99,24 +99,15 @@ export const KPICard = ({
               <p className="text-sm font-medium text-muted-foreground leading-relaxed">
                 {title}
               </p>
-              {description && (
-                <TooltipProvider delayDuration={200}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help hover:text-primary transition-colors shrink-0" />
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[280px]">
-                      <div className="space-y-1.5">
-                        <p className="text-xs text-popover-foreground">{description}</p>
-                        {calculation && (
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-semibold">Cálculo:</span> {calculation}
-                          </p>
-                        )}
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+              {(tooltipKey || description) && (
+                <InfoTooltip
+                  termKey={tooltipKey}
+                  title={title}
+                  content={description}
+                  calculation={calculation}
+                  size="sm"
+                  iconClassName="text-muted-foreground/60"
+                />
               )}
             </div>
             <div className="flex items-center gap-2 flex-wrap">

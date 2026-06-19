@@ -87,17 +87,53 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [fileName, setFileName] = useState<string>("");
+  const [truncatedDraft, setTruncatedDraft] = useState(false);
+  const [exitGuardOpen, setExitGuardOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [resumeDraftMeta, setResumeDraftMeta] = useState<{
+    fileName: string; headerCount: number; rowCount: number; savedAt: string;
+  } | null>(null);
 
-  const reset = () => {
+  const tenantId = tenant?.id ?? null;
+  // Há progresso a proteger sempre que o usuário já está validando ou importando.
+  // Não usamos setTimeout/setInterval em lugar nenhum: o modal nunca fecha sozinho.
+  const hasProgress = step === "validate" || step === "importing";
+
+  const reset = useCallback(() => {
     setStep("upload");
     setHeaders([]); setRows([]); setMatches([]); setOverrides({});
     setResult(null); setIsImporting(false);
-  };
+    setFileName(""); setTruncatedDraft(false);
+  }, []);
 
-  const handleClose = (v: boolean) => {
-    if (!v) reset();
-    onOpenChange(v);
-  };
+  const requestClose = useCallback(() => {
+    if (step === "importing") {
+      toast.info("Aguarde a importação terminar antes de fechar.");
+      return;
+    }
+    if (hasProgress) {
+      setExitGuardOpen(true);
+      return;
+    }
+    clearDraft(tenantId);
+    reset();
+    onOpenChange(false);
+  }, [step, hasProgress, tenantId, reset, onOpenChange]);
+
+  const confirmExit = useCallback(() => {
+    clearDraft(tenantId);
+    setExitGuardOpen(false);
+    reset();
+    onOpenChange(false);
+  }, [tenantId, reset, onOpenChange]);
+
+  // Radix chama onOpenChange(false) em vários gatilhos; canalizamos para requestClose.
+  const handleOpenChange = useCallback((v: boolean) => {
+    if (v) { onOpenChange(true); return; }
+    requestClose();
+  }, [onOpenChange, requestClose]);
+
 
   const finalMatches = useMemo<HybridMatch[]>(() => {
     return matches.map(m => {

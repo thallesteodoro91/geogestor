@@ -285,7 +285,181 @@ export const TOOLTIPS = {
     title: "Modo Daltônico",
     description: "Substitui a paleta por cores acessíveis para pessoas com deficiência visual cromática.",
   },
+
+  // ───── Clientes (complementos) ─────
+  "cliente.nome": {
+    title: "Nome do Cliente",
+    description: "Razão social (PJ) ou nome completo (PF) usado em orçamentos, contratos e PDFs.",
+  },
+  "cliente.email": {
+    title: "E-mail",
+    description: "Endereço usado para envio de orçamentos, faturas e notificações automáticas.",
+  },
+  "cliente.telefone": {
+    title: "Telefone",
+    description: "Contato principal do cliente. Aceita DDD + número. Ex.: (11) 98765-4321.",
+  },
+  "cliente.endereco": {
+    title: "Endereço",
+    description: "Endereço comercial ou de cobrança do cliente, usado em contratos e faturas.",
+  },
+  "cliente.origem": {
+    title: "Origem do Cliente",
+    description: "Canal pelo qual o cliente chegou (indicação, site, anúncio, etc.).",
+  },
+  "cliente.status": {
+    title: "Status do Cliente",
+    description: "Situação do relacionamento: ativo, prospect, inativo ou perdido.",
+  },
+  "cliente.ltv": {
+    title: "LTV do Cliente",
+    description: "Receita total já gerada por este cliente desde o cadastro.",
+    calculation: "Soma das receitas de todos os serviços concluídos do cliente.",
+  },
+  "cliente.ultimaInteracao": {
+    title: "Última Interação",
+    description: "Data do evento mais recente registrado na linha do tempo do cliente.",
+  },
+
+  // ───── Projetos / Serviços (complementos) ─────
+  "projeto.codigo": {
+    title: "Código do Projeto",
+    description: "Identificador interno do projeto, herdado do orçamento de origem quando aplicável.",
+  },
+  "projeto.nome": {
+    title: "Nome do Projeto",
+    description: "Descrição curta usada em listagens, calendário e relatórios.",
+  },
+  "projeto.cliente": {
+    title: "Cliente do Projeto",
+    description: "Cliente vinculado ao projeto — define cobrança, contatos e histórico.",
+  },
+  "projeto.propriedade": {
+    title: "Propriedade",
+    description: "Imóvel rural ou urbano onde o serviço será executado.",
+  },
+  "projeto.prazo": {
+    title: "Prazo",
+    description: "Data limite acordada para entrega do serviço ao cliente.",
+  },
+  "projeto.equipe": {
+    title: "Equipe",
+    description: "Membros designados para executar este projeto.",
+  },
+  "projeto.tarefas": {
+    title: "Tarefas",
+    description: "Checklist de etapas operacionais do projeto. Concluí-las atualiza o progresso.",
+  },
+  "projeto.anexos": {
+    title: "Anexos",
+    description: "Arquivos vinculados ao projeto: KMLs, PDFs, fotos e documentos do cliente.",
+  },
+  "projeto.eventos": {
+    title: "Eventos do Projeto",
+    description: "Histórico cronológico de mudanças de status, comentários e marcos.",
+  },
+  "projeto.receita": {
+    title: "Receita do Projeto",
+    description: "Valor faturável vindo do orçamento aprovado vinculado ao projeto.",
+  },
+  "projeto.custo": {
+    title: "Custo do Projeto",
+    description: "Soma de despesas confirmadas vinculadas a este projeto.",
+  },
+  "projeto.margem": {
+    title: "Margem do Projeto",
+    description: "Resultado financeiro do projeto após descontar custos da receita.",
+    calculation: "((Receita − Custo) ÷ Receita) × 100",
+  },
+
+  // ───── Orçamentos (complementos) ─────
+  "orcamento.subtotal": {
+    title: "Subtotal",
+    description: "Soma dos itens do orçamento antes de descontos e impostos.",
+  },
+  "orcamento.total": {
+    title: "Total do Orçamento",
+    description: "Valor final apresentado ao cliente, após descontos e impostos.",
+    calculation: "Subtotal − Descontos + Impostos",
+  },
+  "orcamento.validade": {
+    title: "Validade",
+    description: "Data até a qual o orçamento permanece válido para aceite do cliente.",
+  },
+  "orcamento.formaPagamento": {
+    title: "Forma de Pagamento",
+    description: "Condições de pagamento propostas (à vista, parcelado, entrada + saldo, etc.).",
+  },
+  "orcamento.itens": {
+    title: "Itens do Orçamento",
+    description: "Serviços e produtos cotados. Cada item tem quantidade, preço unitário e total.",
+  },
+  "orcamento.observacoes": {
+    title: "Observações",
+    description: "Notas adicionais visíveis para o cliente no PDF do orçamento.",
+  },
+  "orcamento.conversao": {
+    title: "Conversão em Serviço",
+    description: "Ao aprovar, o orçamento gera automaticamente um serviço vinculado para execução.",
+  },
+
+  // ───── Despesas (complementos) ─────
+  "despesa.valor": {
+    title: "Valor da Despesa",
+    description: "Quantia paga ou a pagar, em reais.",
+  },
+  "despesa.data": {
+    title: "Data da Despesa",
+    description: "Data em que a despesa foi realizada ou está prevista.",
+  },
+  "despesa.fornecedor": {
+    title: "Fornecedor",
+    description: "Pessoa ou empresa que recebeu o pagamento desta despesa.",
+  },
+  "despesa.recorrente": {
+    title: "Despesa Recorrente",
+    description: "Despesa que se repete periodicamente (ex.: aluguel, assinaturas).",
+  },
+  "despesa.formaPagamento": {
+    title: "Forma de Pagamento da Despesa",
+    description: "Meio usado para quitar a despesa: PIX, boleto, cartão, dinheiro, transferência.",
+  },
+  "despesa.anexoNota": {
+    title: "Comprovante",
+    description: "Nota fiscal, recibo ou comprovante do pagamento anexado para auditoria.",
+  },
+
+  // ───── Pagamentos (complementos) ─────
+  "pagamento.valor": {
+    title: "Valor do Pagamento",
+    description: "Quantia recebida do cliente referente a um serviço ou fatura.",
+  },
+  "pagamento.dataVencimento": {
+    title: "Vencimento",
+    description: "Data limite para o cliente efetuar o pagamento sem juros.",
+  },
+  "pagamento.dataRecebimento": {
+    title: "Data de Recebimento",
+    description: "Data em que o valor foi efetivamente creditado.",
+  },
+  "pagamento.atraso": {
+    title: "Atraso",
+    description: "Dias decorridos entre o vencimento e a data atual para pagamentos não quitados.",
+  },
+  "pagamento.juros": {
+    title: "Juros e Multa",
+    description: "Encargos aplicados sobre pagamentos em atraso.",
+  },
+  "pagamento.comprovante": {
+    title: "Comprovante de Pagamento",
+    description: "Arquivo enviado pelo cliente ou gerado pelo sistema confirmando o recebimento.",
+  },
+  "pagamento.fatura": {
+    title: "Fatura",
+    description: "Documento de cobrança que agrupa um ou mais pagamentos do cliente.",
+  },
 } as const;
+
 
 export type TooltipKey = keyof typeof TOOLTIPS;
 

@@ -561,15 +561,29 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
   }, [tenant?.id, tenantId, rows, headers, finalMatches, queryClient, onSuccess]);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6"
+        // Esconde o X nativo do shadcn (selector [&>button]:hidden) — usamos o nosso, com guarda.
+        className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 [&>button]:hidden"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => { e.preventDefault(); requestClose(); }}
       >
         <DialogHeader>
-          <DialogTitle>Importação Universal de Planilha</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <DialogTitle>Importação Universal de Planilha</DialogTitle>
+            <button
+              type="button"
+              onClick={requestClose}
+              disabled={step === "importing"}
+              aria-label="Fechar importação"
+              title={step === "importing" ? "Aguarde a importação terminar" : "Fechar"}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-30"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogHeader>
 
         {step === "upload" && (
@@ -593,16 +607,26 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         )}
 
         {step === "validate" && (
-          <UniversalValidationPanel
-            matches={finalMatches}
-            summary={summary}
-            previewRows={rows}
-            headers={headers}
-            onOverride={(header, fieldId) => setOverrides(p => ({ ...p, [header]: fieldId }))}
-            onConfirm={runImport}
-            onBack={() => setStep("upload")}
-            isImporting={isImporting}
-          />
+          <>
+            {truncatedDraft && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  Algumas linhas não foram preservadas no rascunho retomado. Para validar todas, reenvie a planilha original.
+                </span>
+              </div>
+            )}
+            <UniversalValidationPanel
+              matches={finalMatches}
+              summary={summary}
+              previewRows={rows}
+              headers={headers}
+              onOverride={(header, fieldId) => setOverrides(p => ({ ...p, [header]: fieldId }))}
+              onConfirm={runImport}
+              onBack={() => setStep("upload")}
+              isImporting={isImporting}
+            />
+          </>
         )}
 
         {step === "importing" && (
@@ -662,16 +686,65 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
 
         <DialogFooter>
           {step === "result" && (
-            <Button onClick={() => handleClose(false)}>Fechar</Button>
+            <Button onClick={() => { clearDraft(tenantId); reset(); onOpenChange(false); }}>Fechar</Button>
           )}
           {step === "upload" && (
-            <Button variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={requestClose}>Cancelar</Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmação de saída com progresso */}
+    <AlertDialog open={exitGuardOpen} onOpenChange={setExitGuardOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Sair da importação?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Você tem uma importação em andamento. Se sair agora, o progresso será perdido.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>Continuar importação</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmExit}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Sair mesmo assim
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Retomar rascunho salvo */}
+    <AlertDialog open={resumeOpen} onOpenChange={setResumeOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Retomar importação?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {resumeDraftMeta ? (
+              <>
+                Encontramos uma importação em andamento de <strong>{resumeDraftMeta.fileName}</strong>
+                {" "}({resumeDraftMeta.headerCount} colunas, {resumeDraftMeta.rowCount} linhas, salva em{" "}
+                {new Date(resumeDraftMeta.savedAt).toLocaleString("pt-BR")}). Deseja continuar de onde parou?
+              </>
+            ) : (
+              "Encontramos uma importação em andamento. Deseja continuar de onde parou?"
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={discardDraft}>Começar nova importação</AlertDialogCancel>
+          <AlertDialogAction onClick={resumeFromDraft} autoFocus>
+            Continuar de onde parei
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
+
 
 function Stat({ label, value, variant = "ok" }: { label: string; value: number; variant?: "ok" | "warn" }) {
   return (

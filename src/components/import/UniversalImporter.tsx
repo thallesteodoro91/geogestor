@@ -536,6 +536,8 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         avisos,
       });
       setStep("result");
+      clearDraft(tenantId);
+
       if (!errors.length && !avisos.length) {
         toast.success("Importação concluída — Dashboard atualizado");
         onSuccess?.();

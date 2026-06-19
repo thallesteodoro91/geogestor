@@ -6,7 +6,7 @@
  *        → refresh KPIs → relatório pós-importação
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -14,8 +14,14 @@ import Papa from "papaparse";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Upload, Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { saveDraft, loadDraft, clearDraft, hasDraft } from "@/lib/etl/importDraft";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
 import { matchAllColumns, type HybridMatch } from "@/lib/etl/hybridMatcher";
@@ -81,17 +87,53 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
   const [overrides, setOverrides] = useState<Record<string, string | null>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [fileName, setFileName] = useState<string>("");
+  const [truncatedDraft, setTruncatedDraft] = useState(false);
+  const [exitGuardOpen, setExitGuardOpen] = useState(false);
+  const [resumeOpen, setResumeOpen] = useState(false);
+  const [resumeDraftMeta, setResumeDraftMeta] = useState<{
+    fileName: string; headerCount: number; rowCount: number; savedAt: string;
+  } | null>(null);
 
-  const reset = () => {
+  const tenantId = tenant?.id ?? null;
+  // Há progresso a proteger sempre que o usuário já está validando ou importando.
+  // Não usamos setTimeout/setInterval em lugar nenhum: o modal nunca fecha sozinho.
+  const hasProgress = step === "validate" || step === "importing";
+
+  const reset = useCallback(() => {
     setStep("upload");
     setHeaders([]); setRows([]); setMatches([]); setOverrides({});
     setResult(null); setIsImporting(false);
-  };
+    setFileName(""); setTruncatedDraft(false);
+  }, []);
 
-  const handleClose = (v: boolean) => {
-    if (!v) reset();
-    onOpenChange(v);
-  };
+  const requestClose = useCallback(() => {
+    if (step === "importing") {
+      toast.info("Aguarde a importação terminar antes de fechar.");
+      return;
+    }
+    if (hasProgress) {
+      setExitGuardOpen(true);
+      return;
+    }
+    clearDraft(tenantId);
+    reset();
+    onOpenChange(false);
+  }, [step, hasProgress, tenantId, reset, onOpenChange]);
+
+  const confirmExit = useCallback(() => {
+    clearDraft(tenantId);
+    setExitGuardOpen(false);
+    reset();
+    onOpenChange(false);
+  }, [tenantId, reset, onOpenChange]);
+
+  // Radix chama onOpenChange(false) em vários gatilhos; canalizamos para requestClose.
+  const handleOpenChange = useCallback((v: boolean) => {
+    if (v) { onOpenChange(true); return; }
+    requestClose();
+  }, [onOpenChange, requestClose]);
+
 
   const finalMatches = useMemo<HybridMatch[]>(() => {
     return matches.map(m => {
@@ -132,10 +174,18 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     const ext = file.name.split(".").pop()?.toLowerCase();
     const onParsed = (h: string[], r: unknown[][]) => {
       if (r.length === 0) { toast.error("Planilha vazia"); return; }
+      const initialMatches = matchAllColumns(h, r);
       setHeaders(h);
       setRows(r);
-      setMatches(matchAllColumns(h, r));
+      setMatches(initialMatches);
+      setFileName(file.name);
+      setTruncatedDraft(false);
       setStep("validate");
+      // Persistência imediata do rascunho — sobrevive a refresh / fechamento acidental.
+      saveDraft({
+        tenantId, fileName: file.name, headers: h, rows: r,
+        matches: initialMatches, overrides: {},
+      });
     };
     if (ext === "csv" || ext === "txt") {
       Papa.parse(file, {
@@ -165,7 +215,56 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     } else {
       toast.error("Formato não suportado (use CSV ou XLSX)");
     }
-  }, []);
+  }, [tenantId]);
+
+  // Persiste mudanças de overrides com debounce curto durante a validação.
+  const overridesSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (step !== "validate" || headers.length === 0) return;
+    if (overridesSaveRef.current) clearTimeout(overridesSaveRef.current);
+    overridesSaveRef.current = setTimeout(() => {
+      saveDraft({ tenantId, fileName, headers, rows, matches, overrides });
+    }, 300);
+    return () => {
+      if (overridesSaveRef.current) clearTimeout(overridesSaveRef.current);
+    };
+  }, [overrides, step, tenantId, fileName, headers, rows, matches]);
+
+  // Ao abrir, oferece retomar se houver rascunho salvo.
+  useEffect(() => {
+    if (!open) return;
+    if (step !== "upload") return;
+    if (!hasDraft(tenantId)) return;
+    const d = loadDraft(tenantId);
+    if (!d) return;
+    setResumeDraftMeta({
+      fileName: d.fileName,
+      headerCount: d.headers.length,
+      rowCount: d.totalRows,
+      savedAt: d.savedAt,
+    });
+    setResumeOpen(true);
+  }, [open, step, tenantId]);
+
+  const resumeFromDraft = useCallback(() => {
+    const d = loadDraft(tenantId);
+    setResumeOpen(false);
+    if (!d) return;
+    setHeaders(d.headers);
+    setRows(d.rows);
+    setMatches(d.matches);
+    setOverrides(d.overrides);
+    setFileName(d.fileName);
+    setTruncatedDraft(d.truncated);
+    setStep("validate");
+  }, [tenantId]);
+
+  const discardDraft = useCallback(() => {
+    clearDraft(tenantId);
+    setResumeOpen(false);
+    setResumeDraftMeta(null);
+  }, [tenantId]);
+
 
   const runImport = useCallback(async () => {
     if (!tenant?.id) { toast.error("Tenant não identificado"); return; }
@@ -437,6 +536,8 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         avisos,
       });
       setStep("result");
+      clearDraft(tenantId);
+
       if (!errors.length && !avisos.length) {
         toast.success("Importação concluída — Dashboard atualizado");
         onSuccess?.();
@@ -457,18 +558,32 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     } finally {
       setIsImporting(false);
     }
-  }, [tenant?.id, rows, headers, finalMatches, queryClient, onSuccess]);
+  }, [tenant?.id, tenantId, rows, headers, finalMatches, queryClient, onSuccess]);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6"
+        // Esconde o X nativo do shadcn (selector [&>button]:hidden) — usamos o nosso, com guarda.
+        className="w-[95vw] sm:w-auto max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-4 sm:p-6 [&>button]:hidden"
         onPointerDownOutside={(e) => e.preventDefault()}
         onInteractOutside={(e) => e.preventDefault()}
-        onEscapeKeyDown={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => { e.preventDefault(); requestClose(); }}
       >
         <DialogHeader>
-          <DialogTitle>Importação Universal de Planilha</DialogTitle>
+          <div className="flex items-start justify-between gap-3">
+            <DialogTitle>Importação Universal de Planilha</DialogTitle>
+            <button
+              type="button"
+              onClick={requestClose}
+              disabled={step === "importing"}
+              aria-label="Fechar importação"
+              title={step === "importing" ? "Aguarde a importação terminar" : "Fechar"}
+              className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-30"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </DialogHeader>
 
         {step === "upload" && (
@@ -492,16 +607,26 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         )}
 
         {step === "validate" && (
-          <UniversalValidationPanel
-            matches={finalMatches}
-            summary={summary}
-            previewRows={rows}
-            headers={headers}
-            onOverride={(header, fieldId) => setOverrides(p => ({ ...p, [header]: fieldId }))}
-            onConfirm={runImport}
-            onBack={() => setStep("upload")}
-            isImporting={isImporting}
-          />
+          <>
+            {truncatedDraft && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <span>
+                  Algumas linhas não foram preservadas no rascunho retomado. Para validar todas, reenvie a planilha original.
+                </span>
+              </div>
+            )}
+            <UniversalValidationPanel
+              matches={finalMatches}
+              summary={summary}
+              previewRows={rows}
+              headers={headers}
+              onOverride={(header, fieldId) => setOverrides(p => ({ ...p, [header]: fieldId }))}
+              onConfirm={runImport}
+              onBack={() => setStep("upload")}
+              isImporting={isImporting}
+            />
+          </>
         )}
 
         {step === "importing" && (
@@ -561,16 +686,65 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
 
         <DialogFooter>
           {step === "result" && (
-            <Button onClick={() => handleClose(false)}>Fechar</Button>
+            <Button onClick={() => { clearDraft(tenantId); reset(); onOpenChange(false); }}>Fechar</Button>
           )}
           {step === "upload" && (
-            <Button variant="outline" onClick={() => handleClose(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={requestClose}>Cancelar</Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    {/* Confirmação de saída com progresso */}
+    <AlertDialog open={exitGuardOpen} onOpenChange={setExitGuardOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Sair da importação?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Você tem uma importação em andamento. Se sair agora, o progresso será perdido.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel autoFocus>Continuar importação</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirmExit}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            Sair mesmo assim
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    {/* Retomar rascunho salvo */}
+    <AlertDialog open={resumeOpen} onOpenChange={setResumeOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Retomar importação?</AlertDialogTitle>
+          <AlertDialogDescription>
+            {resumeDraftMeta ? (
+              <>
+                Encontramos uma importação em andamento de <strong>{resumeDraftMeta.fileName}</strong>
+                {" "}({resumeDraftMeta.headerCount} colunas, {resumeDraftMeta.rowCount} linhas, salva em{" "}
+                {new Date(resumeDraftMeta.savedAt).toLocaleString("pt-BR")}). Deseja continuar de onde parou?
+              </>
+            ) : (
+              "Encontramos uma importação em andamento. Deseja continuar de onde parou?"
+            )}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={discardDraft}>Começar nova importação</AlertDialogCancel>
+          <AlertDialogAction onClick={resumeFromDraft} autoFocus>
+            Continuar de onde parei
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
+
 
 function Stat({ label, value, variant = "ok" }: { label: string; value: number; variant?: "ok" | "warn" }) {
   return (

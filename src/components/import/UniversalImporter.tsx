@@ -558,7 +558,7 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     } finally {
       setIsImporting(false);
     }
-  }, [tenant?.id, rows, headers, finalMatches, queryClient, onSuccess]);
+  }, [tenant?.id, tenantId, rows, headers, finalMatches, queryClient, onSuccess]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>

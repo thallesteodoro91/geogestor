@@ -174,10 +174,18 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     const ext = file.name.split(".").pop()?.toLowerCase();
     const onParsed = (h: string[], r: unknown[][]) => {
       if (r.length === 0) { toast.error("Planilha vazia"); return; }
+      const initialMatches = matchAllColumns(h, r);
       setHeaders(h);
       setRows(r);
-      setMatches(matchAllColumns(h, r));
+      setMatches(initialMatches);
+      setFileName(file.name);
+      setTruncatedDraft(false);
       setStep("validate");
+      // Persistência imediata do rascunho — sobrevive a refresh / fechamento acidental.
+      saveDraft({
+        tenantId, fileName: file.name, headers: h, rows: r,
+        matches: initialMatches, overrides: {},
+      });
     };
     if (ext === "csv" || ext === "txt") {
       Papa.parse(file, {
@@ -207,7 +215,56 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
     } else {
       toast.error("Formato não suportado (use CSV ou XLSX)");
     }
-  }, []);
+  }, [tenantId]);
+
+  // Persiste mudanças de overrides com debounce curto durante a validação.
+  const overridesSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (step !== "validate" || headers.length === 0) return;
+    if (overridesSaveRef.current) clearTimeout(overridesSaveRef.current);
+    overridesSaveRef.current = setTimeout(() => {
+      saveDraft({ tenantId, fileName, headers, rows, matches, overrides });
+    }, 300);
+    return () => {
+      if (overridesSaveRef.current) clearTimeout(overridesSaveRef.current);
+    };
+  }, [overrides, step, tenantId, fileName, headers, rows, matches]);
+
+  // Ao abrir, oferece retomar se houver rascunho salvo.
+  useEffect(() => {
+    if (!open) return;
+    if (step !== "upload") return;
+    if (!hasDraft(tenantId)) return;
+    const d = loadDraft(tenantId);
+    if (!d) return;
+    setResumeDraftMeta({
+      fileName: d.fileName,
+      headerCount: d.headers.length,
+      rowCount: d.totalRows,
+      savedAt: d.savedAt,
+    });
+    setResumeOpen(true);
+  }, [open, step, tenantId]);
+
+  const resumeFromDraft = useCallback(() => {
+    const d = loadDraft(tenantId);
+    setResumeOpen(false);
+    if (!d) return;
+    setHeaders(d.headers);
+    setRows(d.rows);
+    setMatches(d.matches);
+    setOverrides(d.overrides);
+    setFileName(d.fileName);
+    setTruncatedDraft(d.truncated);
+    setStep("validate");
+  }, [tenantId]);
+
+  const discardDraft = useCallback(() => {
+    clearDraft(tenantId);
+    setResumeOpen(false);
+    setResumeDraftMeta(null);
+  }, [tenantId]);
+
 
   const runImport = useCallback(async () => {
     if (!tenant?.id) { toast.error("Tenant não identificado"); return; }

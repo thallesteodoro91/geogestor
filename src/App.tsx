@@ -63,6 +63,7 @@ const App = () => {
                 <Suspense fallback={<AppSkeleton />}>
                   <Routes>
                     <Route path="/auth" element={<Auth />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
                     <Route path="/aceitar-convite" element={<AceitarConvite />} />
                     <Route path="/" element={<ProtectedRoute><GestaoEmpresa /></ProtectedRoute>} />
                     <Route path="/financeiro" element={<ProtectedRoute><Financeiro /></ProtectedRoute>} />

@@ -140,6 +140,12 @@ export default function ResetPassword() {
 
     setStatus("saving");
     try {
+      // Re-verify the active session still belongs to the recovery user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || (recoveryUserId && user.id !== recoveryUserId)) {
+        throw new Error("Sessão de recuperação perdida. Solicite um novo link.");
+      }
+
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
 

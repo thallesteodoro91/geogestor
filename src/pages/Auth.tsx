@@ -65,6 +65,18 @@ export default function Auth() {
   };
 
   useEffect(() => {
+    // If user lands here with a recovery link (legacy URL), forward to /reset-password
+    // and do NOT auto-redirect even if a recovery session exists.
+    const hasRecovery =
+      window.location.search.includes("type=recovery") ||
+      window.location.hash.includes("type=recovery");
+    if (hasRecovery) {
+      const qs = window.location.search || "";
+      const hash = window.location.hash || "";
+      navigate(`/reset-password${qs}${hash}`, { replace: true });
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         handlePostLoginRedirect();
@@ -201,9 +213,22 @@ export default function Auth() {
       const { error } = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
       });
-      
+
       if (error) {
-        toast.error("Erro ao fazer login com Google");
+        const msg = (error as any)?.message?.toLowerCase?.() || "";
+        if (msg.includes("identity_already_exists") || msg.includes("email_exists") || msg.includes("already registered")) {
+          toast.error("Este email já tem conta com senha", {
+            description: "Faça login com email e senha e, depois, vincule o Google em Configurações.",
+          });
+        } else if (isNetworkError(error)) {
+          toast.error("Sem conexão com o servidor", {
+            description: "Verifique sua internet e tente novamente.",
+          });
+        } else {
+          toast.error("Erro ao fazer login com Google", {
+            description: (error as any)?.message,
+          });
+        }
       }
     } catch (error: any) {
       if (isNetworkError(error)) {
@@ -211,7 +236,7 @@ export default function Auth() {
           description: "Verifique sua conexão com a internet e tente novamente.",
         });
       } else {
-        toast.error("Erro ao conectar com Google");
+        toast.error("Erro ao conectar com Google", { description: error?.message });
       }
     } finally {
       setLoading(false);
@@ -235,7 +260,7 @@ export default function Auth() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(resetEmail.trim(), {
-        redirectTo: `${window.location.origin}/auth?type=recovery`,
+        redirectTo: `${window.location.origin}/reset-password`,
       });
 
       if (error) {

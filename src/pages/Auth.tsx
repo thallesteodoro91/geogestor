@@ -65,6 +65,18 @@ export default function Auth() {
   };
 
   useEffect(() => {
+    // If user lands here with a recovery link (legacy URL), forward to /reset-password
+    // and do NOT auto-redirect even if a recovery session exists.
+    const hasRecovery =
+      window.location.search.includes("type=recovery") ||
+      window.location.hash.includes("type=recovery");
+    if (hasRecovery) {
+      const qs = window.location.search || "";
+      const hash = window.location.hash || "";
+      navigate(`/reset-password${qs}${hash}`, { replace: true });
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         handlePostLoginRedirect();

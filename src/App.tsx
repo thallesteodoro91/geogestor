@@ -38,6 +38,7 @@ const ImportacaoDados = lazy(() => import("./pages/ImportacaoDados"));
 const EsquemasImportacao = lazy(() => import("./pages/EsquemasImportacao"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Auth = lazy(() => import("./pages/Auth"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
 
 

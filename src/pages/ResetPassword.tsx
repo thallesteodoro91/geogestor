@@ -16,9 +16,17 @@ export default function ResetPassword() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    let recoveryUid: string | null = null;
+
+    const captureRecoveryUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      recoveryUid = user?.id ?? null;
+      if (!cancelled) setRecoveryUserId(recoveryUid);
+    };
 
     const processRecoveryLink = async () => {
       try {
@@ -39,8 +47,8 @@ export default function ResetPassword() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          // Clean URL
           window.history.replaceState({}, document.title, "/reset-password");
+          await captureRecoveryUser();
           if (!cancelled) setStatus("ready");
           return;
         }
@@ -55,6 +63,7 @@ export default function ResetPassword() {
           });
           if (error) throw error;
           window.history.replaceState({}, document.title, "/reset-password");
+          await captureRecoveryUser();
           if (!cancelled) setStatus("ready");
           return;
         }
@@ -69,6 +78,7 @@ export default function ResetPassword() {
           });
           if (error) throw error;
           window.history.replaceState({}, document.title, "/reset-password");
+          await captureRecoveryUser();
           if (!cancelled) setStatus("ready");
           return;
         }
@@ -76,6 +86,7 @@ export default function ResetPassword() {
         // 4) If a recovery session was auto-created by detectSessionInUrl, accept it.
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
+          await captureRecoveryUser();
           if (!cancelled) setStatus("ready");
           return;
         }
@@ -91,8 +102,30 @@ export default function ResetPassword() {
     };
 
     processRecoveryLink();
-    return () => { cancelled = true; };
+
+    // Guard: if any OTHER session (different user) gets injected mid-flow
+    // — e.g. another tab logs in and syncs via localStorage — abort safely.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (cancelled) return;
+      if (event === "SIGNED_OUT") return;
+      // Only react once we have captured the recovery user
+      if (!recoveryUid) return;
+      const incomingUid = session?.user?.id ?? null;
+      if (incomingUid && incomingUid !== recoveryUid) {
+        console.warn("[ResetPassword] foreign session detected, aborting reset flow");
+        await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+        setErrorMsg("Outra conta foi detectada durante a redefinição. Solicite um novo link e tente novamente em uma janela anônima.");
+        setStatus("invalid");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, []);
+
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

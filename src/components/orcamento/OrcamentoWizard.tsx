@@ -961,8 +961,40 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         </div>
       </div>
 
-      {/* Marco e Imposto - lado a lado */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Marco, ART e Imposto - lado a lado */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* ART */}
+        <div className="p-4 border rounded-lg space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-amber-500" />
+                <span className="font-medium">ART</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Anotação de Responsabilidade Técnica (não aparece como item na proposta)</p>
+            </div>
+            <Switch
+              checked={watchedIncluirArt}
+              onCheckedChange={(checked) => setValue("incluir_art", checked)}
+            />
+          </div>
+
+          {watchedIncluirArt && (
+            <div className="pt-2">
+              <div className="space-y-2">
+                <Label>Valor da ART (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...register("valor_art", { valueAsNumber: true })}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Marco */}
         <div className="p-4 border rounded-lg space-y-4">
           <div className="flex items-center justify-between">

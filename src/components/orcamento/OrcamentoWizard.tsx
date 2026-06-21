@@ -1266,6 +1266,12 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade || 0}x)</span>
             <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
           </div>
+          {watchedIncluirArt && (
+            <div className="text-center">
+              <span className="text-muted-foreground text-xs block whitespace-nowrap">ART (interno)</span>
+              <p className="font-semibold whitespace-nowrap text-amber-600">R$ {formatCurrency(valorArt)}</p>
+            </div>
+          )}
           <div className="text-center">
             <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
             <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>

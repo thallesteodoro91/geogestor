@@ -240,11 +240,20 @@ export default function Auth() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
+      // Clear any stale local session to avoid conflicts on the OAuth callback
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch (e) {
+        console.warn("[google-oauth] local signOut warn", e);
+      }
+      console.info("[google-oauth] starting flow", { origin: window.location.origin });
+
       const { error } = await lovable.auth.signInWithOAuth("google", {
         redirect_uri: window.location.origin,
       });
 
       if (error) {
+        console.error("[google-oauth] signInWithOAuth error", error);
         const msg = (error as any)?.message?.toLowerCase?.() || "";
         if (msg.includes("identity_already_exists") || msg.includes("email_exists") || msg.includes("already registered")) {
           toast.error("Este email já tem conta com senha", {
@@ -261,6 +270,7 @@ export default function Auth() {
         }
       }
     } catch (error: any) {
+      console.error("[google-oauth] exception", error);
       if (isNetworkError(error)) {
         toast.error("Sem conexão com o servidor", {
           description: "Verifique sua conexão com a internet e tente novamente.",

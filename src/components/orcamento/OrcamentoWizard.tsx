@@ -410,6 +410,11 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         return;
       }
 
+      if (data.incluir_art && (!data.valor_art || Number(data.valor_art) <= 0)) {
+        toast.error("Informe um valor de ART maior que zero.");
+        return;
+      }
+
       const servicosValidos = data.itens.filter((item: any) => item.id_servico?.trim());
 
       if (servicosValidos.length === 0) {

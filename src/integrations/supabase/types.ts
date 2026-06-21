@@ -1090,6 +1090,7 @@ export type Database = {
           id_orcamento: string
           id_propriedade: string | null
           id_servico: string | null
+          incluir_art: boolean
           incluir_imposto: boolean | null
           incluir_marco: boolean | null
           lucro_esperado: number | null
@@ -1107,6 +1108,7 @@ export type Database = {
           situacao_do_pagamento: string | null
           tenant_id: string
           updated_at: string | null
+          valor_art: number
           valor_faturado: number | null
           valor_imposto: number | null
           valor_unitario: number
@@ -1128,6 +1130,7 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_art?: boolean
           incluir_imposto?: boolean | null
           incluir_marco?: boolean | null
           lucro_esperado?: number | null
@@ -1145,6 +1148,7 @@ export type Database = {
           situacao_do_pagamento?: string | null
           tenant_id: string
           updated_at?: string | null
+          valor_art?: number
           valor_faturado?: number | null
           valor_imposto?: number | null
           valor_unitario: number
@@ -1166,6 +1170,7 @@ export type Database = {
           id_orcamento?: string
           id_propriedade?: string | null
           id_servico?: string | null
+          incluir_art?: boolean
           incluir_imposto?: boolean | null
           incluir_marco?: boolean | null
           lucro_esperado?: number | null
@@ -1183,6 +1188,7 @@ export type Database = {
           situacao_do_pagamento?: string | null
           tenant_id?: string
           updated_at?: string | null
+          valor_art?: number
           valor_faturado?: number | null
           valor_imposto?: number | null
           valor_unitario?: number

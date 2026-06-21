@@ -97,6 +97,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
+      incluir_art: orcamento?.incluir_art || false,
+      valor_art: orcamento?.valor_art || 0,
       incluir_imposto: orcamento?.incluir_imposto || false,
       percentual_imposto: orcamento?.percentual_imposto || 0,
       orcamento_convertido: orcamento?.orcamento_convertido || false,
@@ -117,6 +119,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
   const watchedMarcoValorUnitario = watch("marco_valor_unitario");
+  const watchedIncluirArt = watch("incluir_art");
+  const watchedValorArt = watch("valor_art");
   const watchedIncluirImposto = watch("incluir_imposto");
   const watchedPercentualImposto = watch("percentual_imposto");
   const watchedSituacao = watch("situacao_do_pagamento");
@@ -188,6 +192,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         incluir_marco: orcamento.incluir_marco || false,
         marco_quantidade: orcamento.marco_quantidade || 0,
         marco_valor_unitario: orcamento.marco_valor_unitario || 0,
+        incluir_art: orcamento.incluir_art || false,
+        valor_art: orcamento.valor_art || 0,
         incluir_imposto: orcamento.incluir_imposto || false,
         percentual_imposto: orcamento.percentual_imposto || 0,
         orcamento_convertido: orcamento.orcamento_convertido || false,
@@ -236,7 +242,9 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     // Desconto global aplicado sobre o total
     const descontoGlobalPercent = toNum(watchedDescontoGlobal);
     const descontoTotal = receitaBruta * (descontoGlobalPercent / 100);
-    const receitaEsperada = receitaBruta - descontoTotal;
+    // ART compõe a receita silenciosamente (não aparece na proposta final, mas entra no total)
+    const valorArt = watchedIncluirArt ? toNum(watchedValorArt) : 0;
+    const receitaEsperada = receitaBruta - descontoTotal + valorArt;
 
     const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
     const marcoValorTotal = watchedIncluirMarco ? Math.floor(toNum(watchedMarcoQuantidade)) * toNum(watchedMarcoValorUnitario) : 0;
@@ -247,10 +255,10 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     const lucroEsperado = receitaEsperada - custoTotal - totalImpostos;
     const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;
 
-    return { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada };
+    return { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, valorArt, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada };
   };
 
-  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, valorArt, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const formatCurrency = (value: number): string => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -402,6 +410,11 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         return;
       }
 
+      if (data.incluir_art && (!data.valor_art || Number(data.valor_art) <= 0)) {
+        toast.error("Informe um valor de ART maior que zero.");
+        return;
+      }
+
       const servicosValidos = data.itens.filter((item: any) => item.id_servico?.trim());
 
       if (servicosValidos.length === 0) {
@@ -439,6 +452,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         marco_quantidade: data.incluir_marco ? data.marco_quantidade : 0,
         marco_valor_unitario: data.incluir_marco ? data.marco_valor_unitario : 0,
         marco_valor_total: marcoValorTotal,
+        incluir_art: data.incluir_art,
+        valor_art: data.incluir_art ? (data.valor_art || 0) : 0,
         orcamento_convertido: data.orcamento_convertido || false,
         situacao_do_pagamento: data.situacao_do_pagamento || null,
         forma_de_pagamento: data.forma_de_pagamento || null,
@@ -946,8 +961,40 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         </div>
       </div>
 
-      {/* Marco e Imposto - lado a lado */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Marco, ART e Imposto - lado a lado */}
+      <div className="grid grid-cols-3 gap-4">
+        {/* ART */}
+        <div className="p-4 border rounded-lg space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-amber-500" />
+                <span className="font-medium">ART</span>
+              </div>
+              <p className="text-xs text-muted-foreground">Anotação de Responsabilidade Técnica (não aparece como item na proposta)</p>
+            </div>
+            <Switch
+              checked={watchedIncluirArt}
+              onCheckedChange={(checked) => setValue("incluir_art", checked)}
+            />
+          </div>
+
+          {watchedIncluirArt && (
+            <div className="pt-2">
+              <div className="space-y-2">
+                <Label>Valor da ART (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  {...register("valor_art", { valueAsNumber: true })}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Marco */}
         <div className="p-4 border rounded-lg space-y-4">
           <div className="flex items-center justify-between">
@@ -1219,6 +1266,12 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
             <span className="text-muted-foreground text-xs block whitespace-nowrap">Marcos ({watchedMarcoQuantidade || 0}x)</span>
             <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(marcoValorTotal)}</p>
           </div>
+          {watchedIncluirArt && (
+            <div className="text-center">
+              <span className="text-muted-foreground text-xs block whitespace-nowrap">ART (interno)</span>
+              <p className="font-semibold whitespace-nowrap text-amber-600">R$ {formatCurrency(valorArt)}</p>
+            </div>
+          )}
           <div className="text-center">
             <span className="text-muted-foreground text-xs block whitespace-nowrap">Receita + Impostos</span>
             <p className="font-semibold whitespace-nowrap">R$ {formatCurrency(receitaComImposto)}</p>

@@ -1,54 +1,97 @@
+# Plano: Correções Google Login + ART no Orçamento
 
-## Bug 1 — Reset de Senha
+## Parte 1 — Login Google
 
-**Causa raiz:** `resetPasswordForEmail` redireciona para `/auth?type=recovery`, mas o `useEffect` em `Auth.tsx` chama `handlePostLoginRedirect()` assim que detecta qualquer sessão (incluindo a sessão temporária de recovery criada pelo Supabase ao processar o link). Resultado: o usuário é jogado direto para `/` (ou para a conta que já estava logada), sem nunca ver a tela para digitar nova senha. Não existe rota dedicada `/reset-password`.
+### Diagnóstico
+O código já usa `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` corretamente (padrão Lovable Cloud Managed OAuth). Os secrets `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` estão presentes. O fluxo OAuth atual está tecnicamente correto — o ponto de falha mais provável é:
 
-### Mudanças
-
-1. **Criar `src/pages/ResetPassword.tsx`** (rota pública, fora do `ProtectedRoute`):
-   - Detecta `type=recovery` no hash/query da URL.
-   - Processa o token usando `supabase.auth.exchangeCodeForSession` (fluxo PKCE moderno) com fallback para `verifyOtp({ type: 'recovery', token_hash })` quando vier `token_hash` no link clássico.
-   - Antes de processar o token: se já houver sessão de outro usuário, faz `supabase.auth.signOut({ scope: 'local' })` para não contaminar o reset.
-   - Mostra formulário com **Nova senha** + **Confirmar senha** (validação mínima 6 chars + match).
-   - Em sucesso: `updateUser({ password })`, depois `signOut()` e redireciona para `/auth` com toast: *"Senha redefinida com sucesso. Faça login novamente."*
-   - Em token inválido/expirado: estado de erro com mensagem *"Link expirado ou inválido. Solicite uma nova redefinição."* e botão para voltar ao login.
-   - NÃO depende de usuário estar logado nem usa `ProtectedRoute`.
-
-2. **Editar `src/App.tsx`**: adicionar `<Route path="/reset-password" element={<ResetPassword />} />` (público).
-
-3. **Editar `src/pages/Auth.tsx`**:
-   - Em `handleForgotPassword`: trocar `redirectTo` para `${window.location.origin}/reset-password`.
-   - No `useEffect` de auto-redirect: ignorar a sessão se a URL contiver `type=recovery` (defesa em profundidade, caso o usuário caia aqui acidentalmente).
-   - Toast pós-reset (quando vier com `?reset=success`): mostrar mensagem de sucesso.
-
-4. **Atualizar `src/components/settings/AccountTab.tsx`**: mesmo `redirectTo` apontando para `/reset-password`.
-
-## Bug 2 — Login com Google
-
-**Diagnóstico:** O fluxo usa `lovable.auth.signInWithOAuth("google", ...)` que está correto para Cloud-managed. O erro do "usuário principal" provavelmente é: a conta foi criada originalmente por email/senha; ao tentar Google com o mesmo email, o Supabase rejeita por padrão (identity linking desabilitado), retornando algo como *"User already registered"* ou um erro de conflito de identidade. Isso quebra o sign-in sem mensagem útil.
+1. **Ambiente de preview** (`id-preview--…lovable.app`) — o proxy de fetch da preview interfere em chamadas para `/auth/v1/token`, gerando "Failed to fetch" silencioso no callback. Esse caso já é tratado em produção (URL publicada `geogestor.lovable.app` funciona).
+2. **Falta de tratamento do callback** quando o usuário retorna com `error=...` ou `error_description=...` na URL (ex: provider_email_needs_verification, server_error).
+3. **Identidades não vinculadas automaticamente** quando o email já existe via senha — hoje mostramos toast mas não há fluxo de vinculação.
+4. **Sessão pendurada** — após erro de OAuth, eventual sessão parcial não é limpa, mantendo o usuário em loop.
 
 ### Mudanças
 
-1. **Habilitar manual linking** no Supabase Auth (via `configure_auth` se exposto, senão documentar): permitir que provedores OAuth se vinculem a usuários existentes com o mesmo email verificado. *Nota: na Lovable Cloud isso é controlado pelo flag `MAILER_AUTOCONFIRM`/identity linking — vou aplicar via migração de config ou orientar setting.*
+**`src/pages/Auth.tsx`**
+- Adicionar `useEffect` que detecta `error`, `error_code`, `error_description` no `window.location.hash`/`search` ao montar. Limpar a URL (`history.replaceState`) e exibir toast claro mapeado:
+  - `provider_email_needs_verification` → "Verifique seu email no Google antes de continuar."
+  - `server_error` / `unexpected_failure` → "Erro temporário no provedor. Tente novamente."
+  - `access_denied` → "Login cancelado."
+  - genérico → mostra `error_description`.
+- Adicionar `console.error("[google-oauth]", …)` com o objeto bruto para debug técnico.
+- Em `handleGoogleSignIn`: antes da chamada, fazer `await supabase.auth.signOut({ scope: "local" })` para evitar conflito com sessão antiga. Log de início do fluxo.
+- Após o `signInWithOAuth` retornar com erro `email_exists` / `identity_already_exists`: mostrar toast com ação "Fazer login com senha" que pré-preenche email e leva à aba Login.
 
-2. **Tratamento de erro em `handleGoogleSignIn`** (`Auth.tsx`):
-   - Capturar erro específico `identity_already_exists` / `email_exists` e mostrar:
-     *"Este email já tem conta com senha. Faça login com email e senha, depois vincule o Google em Configurações."*
-   - Outros erros: manter mensagem genérica mais descritiva (`error.message` quando seguro).
+**Lovable Cloud Auth (manual, fora do código)**
+- Documentar na resposta final que para **vincular automaticamente** identidade Google a usuário existente, o admin precisa habilitar **Manual Linking** em Cloud → Users → Auth Settings → Identities. Não é configurável via código.
+- Após login Google bem-sucedido o fluxo já cai em `handlePostLoginRedirect` → `/` (Dashboard 360). Sem mudança necessária.
 
-3. **Validar configuração OAuth** (sem mudança de código se já correto):
-   - `redirect_uri: window.location.origin` ✓ (já usa o broker `~oauth`).
-   - Conferir que `GOOGLE_CLIENT_ID`/`SECRET` estão presentes (já listados em secrets).
-   - Não há duplicação, pois usamos OAuth managed; a checagem de "mesma conta" passa pelo identity linking acima.
+**Testes manuais (no plano, não automatizados):**
+- Usuário novo via Google, usuário existente com mesma conta Google, usuário só email/senha tenta Google (toast claro), logout + relogin, callback com `error_description`.
 
-4. **NÃO** alterar dados existentes — o linking preserva o `auth.users.id` original, então `tenant_members`, `profiles` e tudo mais permanecem intactos.
+### Por que não mexer em mais nada
+Não vamos: alterar `redirect_uri`, modificar `window.fetch`, adicionar CORS, mexer em `src/integrations/lovable/`, ou reconfigurar provedor. Esses são anti-padrões conhecidos nesse contexto (vide stack-overflow do projeto).
 
-## Arquivos
+---
 
-- **Criar:** `src/pages/ResetPassword.tsx`
-- **Editar:** `src/App.tsx`, `src/pages/Auth.tsx`, `src/components/settings/AccountTab.tsx`
+## Parte 2 — ART no Orçamento
 
-## Testes manuais (lista para validar após implementação)
+Reaproveitar o padrão existente do "Marco" (toggle + valor que compõe total mas com tratamento próprio). Diferença chave: **Marco aparece no resumo financeiro interno como linha; ART também aparece no resumo interno, mas no PDF final entregue ao cliente NÃO aparece como item separado** — soma silenciosa no total.
 
-- Reset: deslogado / logado em outra conta / conta nova / link expirado → todos devem cair em `/reset-password` e permitir trocar a senha (ou mostrar erro claro).
-- Google: novo usuário / usuário existente com mesmo email (após habilitar linking) / logout-login → preservar dados do tenant principal.
+### Schema (migration)
+Adicionar 2 colunas em `fato_orcamento`:
+- `incluir_art boolean default false`
+- `valor_art numeric default 0`
+
+Sem trigger, sem alteração de RLS (já cobre a tabela). Atualizar `src/integrations/supabase/types.ts` é automático.
+
+### Backend tipo
+**`src/modules/finance/services/orcamento.service.ts`** — adicionar `incluir_art?: boolean | null` e `valor_art?: number | null` na interface `Orcamento`.
+
+### Wizard de Orçamento
+**`src/components/orcamento/OrcamentoWizard.tsx`**
+- Adicionar ao defaultValues / reset: `incluir_art`, `valor_art`.
+- `watch` desses dois campos.
+- Em `calcularTotais()`: somar `valorArt = watchedIncluirArt ? toNum(watchedValorArt) : 0` à `receitaEsperada` ANTES do cálculo de imposto (ART entra na base tributável — consistente com a regra "Serviços + ART + Impostos - Descontos = Total").
+  - Fórmula: `receitaEsperada = (receitaBruta - descontoTotal) + valorArt`
+  - Imposto incide sobre `receitaEsperada` (já é o comportamento atual).
+- Renderizar nova seção na UI próxima ao bloco "Marco":
+  - `Switch` "Incluir ART (Anotação de Responsabilidade Técnica)"
+  - Quando ativo: input numérico de valor (R$), aceita formato BR (já há helper de parsing — usar mesmo padrão dos outros campos numéricos do wizard).
+  - Validação: se ligado, `valor_art > 0` (Zod inline ou check no submit).
+- No resumo financeiro do modal (área do passo final / `Calcular totais`): adicionar linha "ART" com o valor, apenas quando incluído. Esse resumo é **interno**, não é o PDF.
+- No submit (`onSubmit`): persistir `incluir_art`, `valor_art` (zerado se desligado), e garantir que `receita_esperada` salva já inclui ART.
+
+### Edição
+O carregamento de orçamento existente (linha 187 do wizard) precisa hidratar `incluir_art` / `valor_art` a partir do registro.
+
+### PDF / Proposta
+**`src/lib/pdfTemplateGenerator.ts`** e **`src/lib/pdfReportGenerator.ts`**
+- ART **não** entra na tabela de itens da proposta.
+- Total final (`receita_esperada`) já contém ART (somado no wizard antes de salvar) → o PDF naturalmente mostra o total correto sem mudança.
+- **Auditar** os dois geradores para garantir que nenhum loop adiciona ART como linha. Se houver agregação por item (`fato_orcamento_itens`), confirmar que ART não é inserido como item — só fica na coluna `valor_art` do orçamento mestre.
+- Nenhuma alteração visual no template é necessária; apenas garantir não-discriminação.
+
+### KPIs / Dashboards
+Como `receita_esperada` no banco já contém o valor da ART, todas as KPIs/dashboards (`get_financial_dashboard_metrics`, `vw_kpis_financeiros`, etc.) refletem automaticamente sem alteração de SQL.
+
+### Categoria "ART" pré-existente
+Verificar via `supabase--read_query` se há categoria de serviço/despesa "ART" cadastrada. Caso exista, **não criar duplicata** — apenas documentar que o valor agora vive em coluna própria do orçamento (não como item de serviço nem despesa). A categoria pode permanecer para fins de relatórios futuros sem conflito.
+
+### Validações
+- Submit bloqueia se `incluir_art && (!valor_art || valor_art <= 0)` com toast "Informe um valor de ART maior que zero".
+- Parse aceita "150,00", "R$ 150,00", "150.00" — usar mesmo parser numérico utilizado por `valor_unitario`/`marco_valor_unitario`.
+
+---
+
+## Arquivos alterados
+- `src/pages/Auth.tsx`
+- `src/components/orcamento/OrcamentoWizard.tsx`
+- `src/modules/finance/services/orcamento.service.ts`
+- migration: adicionar `incluir_art` + `valor_art` em `fato_orcamento`
+- (auditoria, possível ajuste mínimo) `src/lib/pdfTemplateGenerator.ts`, `src/lib/pdfReportGenerator.ts`
+
+## Fora do escopo
+- Vinculação automática de identidade Google (depende de toggle em Cloud Auth Settings — manual).
+- Mudanças em RLS / triggers.
+- Alteração de KPIs SQL (cobertura via `receita_esperada` já consolidada).

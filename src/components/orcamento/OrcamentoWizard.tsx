@@ -97,6 +97,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       incluir_marco: orcamento?.incluir_marco || false,
       marco_quantidade: orcamento?.marco_quantidade || 0,
       marco_valor_unitario: orcamento?.marco_valor_unitario || 0,
+      incluir_art: orcamento?.incluir_art || false,
+      valor_art: orcamento?.valor_art || 0,
       incluir_imposto: orcamento?.incluir_imposto || false,
       percentual_imposto: orcamento?.percentual_imposto || 0,
       orcamento_convertido: orcamento?.orcamento_convertido || false,
@@ -117,6 +119,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedIncluirMarco = watch("incluir_marco");
   const watchedMarcoQuantidade = watch("marco_quantidade");
   const watchedMarcoValorUnitario = watch("marco_valor_unitario");
+  const watchedIncluirArt = watch("incluir_art");
+  const watchedValorArt = watch("valor_art");
   const watchedIncluirImposto = watch("incluir_imposto");
   const watchedPercentualImposto = watch("percentual_imposto");
   const watchedSituacao = watch("situacao_do_pagamento");
@@ -188,6 +192,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         incluir_marco: orcamento.incluir_marco || false,
         marco_quantidade: orcamento.marco_quantidade || 0,
         marco_valor_unitario: orcamento.marco_valor_unitario || 0,
+        incluir_art: orcamento.incluir_art || false,
+        valor_art: orcamento.valor_art || 0,
         incluir_imposto: orcamento.incluir_imposto || false,
         percentual_imposto: orcamento.percentual_imposto || 0,
         orcamento_convertido: orcamento.orcamento_convertido || false,
@@ -236,7 +242,9 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     // Desconto global aplicado sobre o total
     const descontoGlobalPercent = toNum(watchedDescontoGlobal);
     const descontoTotal = receitaBruta * (descontoGlobalPercent / 100);
-    const receitaEsperada = receitaBruta - descontoTotal;
+    // ART compõe a receita silenciosamente (não aparece na proposta final, mas entra no total)
+    const valorArt = watchedIncluirArt ? toNum(watchedValorArt) : 0;
+    const receitaEsperada = receitaBruta - descontoTotal + valorArt;
 
     const totalDespesasOrcamento = (watchedDespesas || []).reduce((acc, d) => acc + toNum(d?.valor), 0);
     const marcoValorTotal = watchedIncluirMarco ? Math.floor(toNum(watchedMarcoQuantidade)) * toNum(watchedMarcoValorUnitario) : 0;
@@ -247,10 +255,10 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
     const lucroEsperado = receitaEsperada - custoTotal - totalImpostos;
     const margemEsperada = receitaEsperada > 0 ? (lucroEsperado / receitaEsperada) * 100 : 0;
 
-    return { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada };
+    return { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, valorArt, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada };
   };
 
-  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
+  const { custoTotal, totalDespesasOrcamento, receitaBruta, receitaEsperada, descontoTotal, valorArt, marcoValorTotal, totalImpostos, percentualImposto, receitaComImposto, lucroEsperado, margemEsperada } = calcularTotais();
 
   const formatCurrency = (value: number): string => value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -439,6 +447,8 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
         marco_quantidade: data.incluir_marco ? data.marco_quantidade : 0,
         marco_valor_unitario: data.incluir_marco ? data.marco_valor_unitario : 0,
         marco_valor_total: marcoValorTotal,
+        incluir_art: data.incluir_art,
+        valor_art: data.incluir_art ? (data.valor_art || 0) : 0,
         orcamento_convertido: data.orcamento_convertido || false,
         situacao_do_pagamento: data.situacao_do_pagamento || null,
         forma_de_pagamento: data.forma_de_pagamento || null,

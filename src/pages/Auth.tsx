@@ -77,6 +77,36 @@ export default function Auth() {
       return;
     }
 
+    // Detect OAuth callback errors (Google etc.) returned via hash or query
+    const parseParams = (str: string) => new URLSearchParams(str.startsWith("#") ? str.slice(1) : str);
+    const hashParams = parseParams(window.location.hash || "");
+    const queryParams = parseParams(window.location.search || "");
+    const oauthError =
+      hashParams.get("error") || queryParams.get("error") ||
+      hashParams.get("error_code") || queryParams.get("error_code");
+    const oauthErrorDesc =
+      hashParams.get("error_description") || queryParams.get("error_description");
+    if (oauthError) {
+      console.error("[google-oauth] callback error", { error: oauthError, description: oauthErrorDesc });
+      const key = (oauthError || "").toLowerCase();
+      const desc = (oauthErrorDesc || "").toLowerCase();
+      if (key.includes("access_denied")) {
+        toast.error("Login cancelado.");
+      } else if (key.includes("provider_email_needs_verification") || desc.includes("verification")) {
+        toast.error("Verifique seu email no Google antes de continuar.");
+      } else if (key.includes("server_error") || key.includes("unexpected_failure")) {
+        toast.error("Erro temporário no provedor. Tente novamente em alguns segundos.");
+      } else if (desc.includes("identity") || desc.includes("already") || key.includes("email_exists")) {
+        toast.error("Este email já tem conta com senha", {
+          description: "Faça login com email e senha e, depois, vincule o Google em Configurações.",
+        });
+      } else {
+        toast.error("Falha no login com Google", { description: oauthErrorDesc || oauthError });
+      }
+      // Clean URL so the error doesn't persist on reload
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         handlePostLoginRedirect();

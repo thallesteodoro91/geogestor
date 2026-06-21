@@ -36,6 +36,8 @@ export interface Orcamento {
   marco_quantidade?: number | null;
   marco_valor_unitario?: number | null;
   marco_valor_total?: number | null;
+  incluir_art?: boolean | null;
+  valor_art?: number | null;
   created_at?: string | null;
   updated_at?: string | null;
 }

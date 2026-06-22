@@ -130,7 +130,12 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClie
       onSuccess();
     } catch (error: any) {
       console.error('Erro ao salvar propriedade:', error);
-      toast.error(error.message || "Erro ao salvar propriedade");
+      const planLimit = (await import("@/lib/planLimitError")).getPlanLimitMessage(error);
+      if (planLimit) {
+        toast.error(planLimit.title, { description: planLimit.description });
+      } else {
+        toast.error(error.message || "Erro ao salvar propriedade");
+      }
     }
   };
 

@@ -48,8 +48,8 @@ describe('KPICard', () => {
     
     // Verifica que o container tem a classe de cor verde (accent)
     const badge = changeText.closest('div');
-    expect(badge?.className).toContain('text-accent');
-    expect(badge?.className).toContain('bg-accent/10');
+    expect(badge?.className).toContain('text-success');
+    expect(badge?.className).toContain('bg-success/10');
   });
 
   it('deve renderizar variacao negativa com estilo vermelho', () => {
@@ -91,7 +91,7 @@ describe('KPICard', () => {
     // Verifica que o container tem a classe de cor neutra (muted)
     const badge = changeText.closest('div');
     expect(badge?.className).toContain('text-muted-foreground');
-    expect(badge?.className).toContain('bg-muted/10');
+    expect(badge?.className).toContain('bg-muted/30');
   });
 
   it('nao deve renderizar badge quando change nao e fornecido', () => {

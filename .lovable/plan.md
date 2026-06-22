@@ -1,97 +1,75 @@
-# Plano: Correções Google Login + ART no Orçamento
 
-## Parte 1 — Login Google
+# Plano — Rodada 1 do Audit GeoGestor (22/06/2026)
 
-### Diagnóstico
-O código já usa `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` corretamente (padrão Lovable Cloud Managed OAuth). Os secrets `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` estão presentes. O fluxo OAuth atual está tecnicamente correto — o ponto de falha mais provável é:
+Foco: os 7 bloqueadores antes de cliente pagante. Achados "não bloqueadores" ficam para a Rodada 2.
 
-1. **Ambiente de preview** (`id-preview--…lovable.app`) — o proxy de fetch da preview interfere em chamadas para `/auth/v1/token`, gerando "Failed to fetch" silencioso no callback. Esse caso já é tratado em produção (URL publicada `geogestor.lovable.app` funciona).
-2. **Falta de tratamento do callback** quando o usuário retorna com `error=...` ou `error_description=...` na URL (ex: provider_email_needs_verification, server_error).
-3. **Identidades não vinculadas automaticamente** quando o email já existe via senha — hoje mostramos toast mas não há fluxo de vinculação.
-4. **Sessão pendurada** — após erro de OAuth, eventual sessão parcial não é limpa, mantendo o usuário em loop.
+## 1. Corrigir RPC `get_financial_dashboard_metrics` (receita realizada vs pipeline)
 
-### Mudanças
+Migração SQL substituindo a função:
+- `receita_total` → `SUM(receita_realizada)` (mesma semântica de `vw_kpis_financeiros`).
+- Adicionar `receita_pipeline` = `SUM(receita_esperada) FILTER (WHERE orcamento_convertido = false)`.
+- `lucro_por_cliente` → usar `lucro_realizado` (ou `receita_realizada - custo_real` agregado), não `lucro_esperado`.
+- `margem_por_servico` segue usando `receita_servico`/`custo_servico` (já é realizado).
+- Manter assinatura JSON para não quebrar `useDashboardMetrics` e telas consumidoras.
 
-**`src/pages/Auth.tsx`**
-- Adicionar `useEffect` que detecta `error`, `error_code`, `error_description` no `window.location.hash`/`search` ao montar. Limpar a URL (`history.replaceState`) e exibir toast claro mapeado:
-  - `provider_email_needs_verification` → "Verifique seu email no Google antes de continuar."
-  - `server_error` / `unexpected_failure` → "Erro temporário no provedor. Tente novamente."
-  - `access_denied` → "Login cancelado."
-  - genérico → mostra `error_description`.
-- Adicionar `console.error("[google-oauth]", …)` com o objeto bruto para debug técnico.
-- Em `handleGoogleSignIn`: antes da chamada, fazer `await supabase.auth.signOut({ scope: "local" })` para evitar conflito com sessão antiga. Log de início do fluxo.
-- Após o `signInWithOAuth` retornar com erro `email_exists` / `identity_already_exists`: mostrar toast com ação "Fazer login com senha" que pré-preenche email e leva à aba Login.
+## 2. Proteger `trial-expiry-reminder` com `CRON_SECRET`
 
-**Lovable Cloud Auth (manual, fora do código)**
-- Documentar na resposta final que para **vincular automaticamente** identidade Google a usuário existente, o admin precisa habilitar **Manual Linking** em Cloud → Users → Auth Settings → Identities. Não é configurável via código.
-- Após login Google bem-sucedido o fluxo já cai em `handlePostLoginRedirect` → `/` (Dashboard 360). Sem mudança necessária.
+Já existe pattern em `simulate-expiry`. Editar `supabase/functions/trial-expiry-reminder/index.ts`:
+- Validar header `x-cron-secret` contra `Deno.env.get("CRON_SECRET")` antes de qualquer query/envio. 401 se inválido.
+- (Nota: a entrada de contexto resumida diz que isso já foi feito numa rodada anterior — vou conferir o arquivo e só agir se ainda estiver desprotegido.)
 
-**Testes manuais (no plano, não automatizados):**
-- Usuário novo via Google, usuário existente com mesma conta Google, usuário só email/senha tenta Google (toast claro), logout + relogin, callback com `error_description`.
+## 3. Enforcement server-side dos limites de plano (clientes/propriedades)
 
-### Por que não mexer em mais nada
-Não vamos: alterar `redirect_uri`, modificar `window.fetch`, adicionar CORS, mexer em `src/integrations/lovable/`, ou reconfigurar provedor. Esses são anti-padrões conhecidos nesse contexto (vide stack-overflow do projeto).
+Nova migração:
+- Função `public.check_resource_limit(p_tenant_id uuid, p_resource text)` SECURITY DEFINER que conta linhas em `dim_cliente`/`dim_propriedade` e compara com `subscription_plans.max_clients`/`max_properties`.
+- Triggers `BEFORE INSERT` em `dim_cliente` e `dim_propriedade` chamando essa função e dando `RAISE EXCEPTION 'plan_limit_exceeded:<resource>'` quando estourar.
+- Frontend (`ClienteDialog`, `PropriedadeDialog`, `UniversalImporter`) já mostra UX amigável; adicionar catch do erro `plan_limit_exceeded:*` traduzindo para toast.
 
----
+## 4. Pipeline de qualidade verde
 
-## Parte 2 — ART no Orçamento
+- Adicionar script `"test": "vitest run"` em `package.json`.
+- Resolver peer dep: downgrade de `date-fns` para `^3.6.0` (compatível com `react-day-picker@8`) — alternativa menos invasiva que trocar o picker. `bun add date-fns@^3.6.0` regenera lockfile.
+- Corrigir os 2 testes quebrados em `src/components/dashboard/KPICard.test.tsx` (atualizar expectativas para `text-success`/`bg-success/10` e `bg-muted/30`, refletindo o componente atual).
+- Lint: 328 erros é fora do escopo de "rodada curta"; **não vou zerar lint nesta rodada**. Vou apenas garantir que `tsc` e build passem. Sinalizo isso explicitamente para você decidir se quer uma sub-rodada só para lint.
 
-Reaproveitar o padrão existente do "Marco" (toggle + valor que compõe total mas com tratamento próprio). Diferença chave: **Marco aparece no resumo financeiro interno como linha; ART também aparece no resumo interno, mas no PDF final entregue ao cliente NÃO aparece como item separado** — soma silenciosa no total.
+## 5. Vulnerabilidade `xlsx`
 
-### Schema (migration)
-Adicionar 2 colunas em `fato_orcamento`:
-- `incluir_art boolean default false`
-- `valor_art numeric default 0`
+`xlsx` da SheetJS no npm tem CVEs sem patch. Substituir por **`exceljs`** (mantido, sem CVEs ativos) nos pontos do importador (`SmartImporter`, `UniversalImporter`, helpers em `src/lib/etl/*`).
+- Manter API interna (`parseWorkbook(file): Row[][]`) para minimizar mudança nas telas.
+- Adicionar limites: tamanho máx do arquivo (ex.: 10 MB) e número máx de linhas (ex.: 50k) antes do parse.
 
-Sem trigger, sem alteração de RLS (já cobre a tabela). Atualizar `src/integrations/supabase/types.ts` é automático.
+## 6. Bug do `id_propriedade` em `fato_servico` no importador
 
-### Backend tipo
-**`src/modules/finance/services/orcamento.service.ts`** — adicionar `incluir_art?: boolean | null` e `valor_art?: number | null` na interface `Orcamento`.
+Em `UniversalImporter.tsx`, replicar a mesma correção do insert de orçamento no insert de `fato_servico`: quando `r.id_propriedade` for um ID temporário do `relationResolver`, substituir pelo ID real recém-criado em `dim_propriedade` (mesmo lookup map já usado para orçamentos).
 
-### Wizard de Orçamento
-**`src/components/orcamento/OrcamentoWizard.tsx`**
-- Adicionar ao defaultValues / reset: `incluir_art`, `valor_art`.
-- `watch` desses dois campos.
-- Em `calcularTotais()`: somar `valorArt = watchedIncluirArt ? toNum(watchedValorArt) : 0` à `receitaEsperada` ANTES do cálculo de imposto (ART entra na base tributável — consistente com a regra "Serviços + ART + Impostos - Descontos = Total").
-  - Fórmula: `receitaEsperada = (receitaBruta - descontoTotal) + valorArt`
-  - Imposto incide sobre `receitaEsperada` (já é o comportamento atual).
-- Renderizar nova seção na UI próxima ao bloco "Marco":
-  - `Switch` "Incluir ART (Anotação de Responsabilidade Técnica)"
-  - Quando ativo: input numérico de valor (R$), aceita formato BR (já há helper de parsing — usar mesmo padrão dos outros campos numéricos do wizard).
-  - Validação: se ligado, `valor_art > 0` (Zod inline ou check no submit).
-- No resumo financeiro do modal (área do passo final / `Calcular totais`): adicionar linha "ART" com o valor, apenas quando incluído. Esse resumo é **interno**, não é o PDF.
-- No submit (`onSubmit`): persistir `incluir_art`, `valor_art` (zerado se desligado), e garantir que `receita_esperada` salva já inclui ART.
+## 7. (Já feito) Verificação dupla de itens da rodada anterior
 
-### Edição
-O carregamento de orçamento existente (linha 187 do wizard) precisa hidratar `incluir_art` / `valor_art` a partir do registro.
+Antes de mexer, vou conferir o estado atual de:
+- `trial-expiry-reminder` (item 2) — pelo histórico já tem CRON_SECRET.
+- RLS / outros itens marcados como concluídos nas mensagens anteriores.
+Só edito o que ainda estiver pendente.
 
-### PDF / Proposta
-**`src/lib/pdfTemplateGenerator.ts`** e **`src/lib/pdfReportGenerator.ts`**
-- ART **não** entra na tabela de itens da proposta.
-- Total final (`receita_esperada`) já contém ART (somado no wizard antes de salvar) → o PDF naturalmente mostra o total correto sem mudança.
-- **Auditar** os dois geradores para garantir que nenhum loop adiciona ART como linha. Se houver agregação por item (`fato_orcamento_itens`), confirmar que ART não é inserido como item — só fica na coluna `valor_art` do orçamento mestre.
-- Nenhuma alteração visual no template é necessária; apenas garantir não-discriminação.
+## Arquivos previstos
 
-### KPIs / Dashboards
-Como `receita_esperada` no banco já contém o valor da ART, todas as KPIs/dashboards (`get_financial_dashboard_metrics`, `vw_kpis_financeiros`, etc.) refletem automaticamente sem alteração de SQL.
+- `supabase/migrations/<nova>.sql` — RPC corrigida + triggers de limite.
+- `supabase/functions/trial-expiry-reminder/index.ts` — se ainda sem guarda.
+- `src/components/import/UniversalImporter.tsx` — fix `id_propriedade` + integração `exceljs`.
+- `src/components/import/SmartImporter.tsx` e `src/lib/etl/*` — troca `xlsx` → `exceljs`.
+- `src/components/cadastros/ClienteDialog.tsx`, `PropriedadeDialog.tsx` — tratar erro `plan_limit_exceeded`.
+- `src/components/dashboard/KPICard.test.tsx` — atualizar 2 asserts.
+- `package.json` — script `test`, troca `xlsx`→`exceljs`, ajuste `date-fns`.
 
-### Categoria "ART" pré-existente
-Verificar via `supabase--read_query` se há categoria de serviço/despesa "ART" cadastrada. Caso exista, **não criar duplicata** — apenas documentar que o valor agora vive em coluna própria do orçamento (não como item de serviço nem despesa). A categoria pode permanecer para fins de relatórios futuros sem conflito.
+## Fora de escopo desta rodada (Rodada 2 do audit)
 
-### Validações
-- Submit bloqueia se `incluir_art && (!valor_art || valor_art <= 0)` com toast "Informe um valor de ART maior que zero".
-- Parse aceita "150,00", "R$ 150,00", "150.00" — usar mesmo parser numérico utilizado por `valor_unitario`/`marco_valor_unitario`.
+- Zerar 328 erros de lint.
+- Padronizar CORS em todas as Edge Functions.
+- Sincronização total `plan_id`/`price_id` Stripe.
+- Code-splitting / chunks grandes.
+- Renomear `vite_react_shadcn_ts` no `package.json`.
+- E2E autenticado.
 
----
+## Pontos para confirmar antes de implementar
 
-## Arquivos alterados
-- `src/pages/Auth.tsx`
-- `src/components/orcamento/OrcamentoWizard.tsx`
-- `src/modules/finance/services/orcamento.service.ts`
-- migration: adicionar `incluir_art` + `valor_art` em `fato_orcamento`
-- (auditoria, possível ajuste mínimo) `src/lib/pdfTemplateGenerator.ts`, `src/lib/pdfReportGenerator.ts`
-
-## Fora do escopo
-- Vinculação automática de identidade Google (depende de toggle em Cloud Auth Settings — manual).
-- Mudanças em RLS / triggers.
-- Alteração de KPIs SQL (cobertura via `receita_esperada` já consolidada).
+1. **`date-fns` downgrade** para v3: alguns lugares podem usar APIs novas da v4. Se preferir manter v4, alternativa é trocar `react-day-picker` para v9 (mais invasivo no UI do calendário). Posso ir de downgrade por padrão; ok?
+2. **Trigger de limite**: bloquear `INSERT` direto é o correto, mas isso também bloqueia o seeder/importador legítimo se o tenant estourar. Confirma que importação acima do limite deve falhar item-a-item com erro claro?
+3. **`xlsx` → `exceljs`**: muda a forma de leitura (API assíncrona baseada em streams). Vou encapsular para minimizar diff, mas é uma troca real de lib. Pode prosseguir?

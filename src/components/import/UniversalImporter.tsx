@@ -9,7 +9,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMPORT_ROWS = 50_000;
 import Papa from "papaparse";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -187,29 +190,58 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         matches: initialMatches, overrides: {},
       });
     };
+    if (file.size > MAX_IMPORT_FILE_BYTES) {
+      toast.error(`Arquivo muito grande (máx ${Math.round(MAX_IMPORT_FILE_BYTES / 1024 / 1024)} MB).`);
+      return;
+    }
     if (ext === "csv" || ext === "txt") {
       Papa.parse(file, {
         encoding: "UTF-8",
         complete: (res) => {
           const data = res.data as string[][];
           if (data.length < 2) { toast.error("Arquivo sem dados"); return; }
+          if (data.length - 1 > MAX_IMPORT_ROWS) {
+            toast.error(`Arquivo excede o limite de ${MAX_IMPORT_ROWS} linhas.`);
+            return;
+          }
           onParsed(data[0].map(c => String(c ?? "").trim()),
             data.slice(1).filter(r => r.some(c => String(c ?? "").trim())));
         },
       });
     } else if (ext === "xlsx" || ext === "xls") {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const wb = XLSX.read(e.target?.result, { type: "array", cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const data: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: "yyyy-mm-dd" });
-        if (data.length < 2) { toast.error("Planilha sem dados"); return; }
-        onParsed(
-          data[0].map((c: any) => String(c ?? "").trim()),
-          data.slice(1)
-            .filter((r: any[]) => r.some((c: any) => c != null && String(c).trim()))
-            .map((r: any[]) => r.map((c: any) => c instanceof Date ? c.toISOString().slice(0, 10) : (c ?? "")))
-        );
+      reader.onload = async (e) => {
+        try {
+          const buf = e.target?.result as ArrayBuffer;
+          const wb = new ExcelJS.Workbook();
+          await wb.xlsx.load(buf);
+          const ws = wb.worksheets[0];
+          if (!ws) { toast.error("Planilha vazia"); return; }
+          const rowsRaw: any[][] = [];
+          ws.eachRow({ includeEmpty: false }, (row) => {
+            // row.values is 1-based; index 0 is empty
+            const vals = (row.values as any[]).slice(1).map((c: any) => {
+              if (c == null) return "";
+              if (c instanceof Date) return c.toISOString().slice(0, 10);
+              if (typeof c === "object" && c.text) return String(c.text);
+              if (typeof c === "object" && c.result != null) return String(c.result);
+              return c;
+            });
+            rowsRaw.push(vals);
+          });
+          if (rowsRaw.length < 2) { toast.error("Planilha sem dados"); return; }
+          if (rowsRaw.length - 1 > MAX_IMPORT_ROWS) {
+            toast.error(`Planilha excede o limite de ${MAX_IMPORT_ROWS} linhas.`);
+            return;
+          }
+          onParsed(
+            rowsRaw[0].map((c: any) => String(c ?? "").trim()),
+            rowsRaw.slice(1).filter((r: any[]) => r.some((c: any) => c != null && String(c).trim()))
+          );
+        } catch (err: any) {
+          console.error("[importer] xlsx parse error", err);
+          toast.error("Falha ao ler a planilha", { description: err?.message });
+        }
       };
       reader.readAsArrayBuffer(file);
     } else {
@@ -450,10 +482,20 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         if (!sv || !Object.keys(sv).length) return;
         const id_cliente = resolveClienteFromResolved(r);
         const id_orcamento = orcamentoByRow.get(r.rowIndex) ?? null;
+        // Resolve id_propriedade igual ao orçamento: se a propriedade foi recém-criada,
+        // pega o UUID real via propTempToId em vez de manter um ID temporário/null.
+        let id_propriedade: string | null = r.id_propriedade;
+        if (!id_propriedade && r.propriedade) {
+          const matricula = String(r.propriedade.matricula ?? "").trim();
+          if (matricula) {
+            const entry = resolved.propriedadesNovas.find(p => String(p.matricula ?? "").trim() === matricula);
+            if (entry) id_propriedade = propTempToId.get(entry.__tempId) ?? null;
+          }
+        }
         const row: Record<string, unknown> = {
           tenant_id: tenant.id,
           id_cliente,
-          id_propriedade: r.id_propriedade,
+          id_propriedade,
           id_orcamento,
           nome_do_servico: (sv.nome as string) ?? `Serviço linha ${r.rowIndex + 2}`,
           categoria: (sv.categoria as string) ?? null,

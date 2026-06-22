@@ -144,7 +144,12 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {
-      toast.error(error.message || "Erro ao salvar cliente");
+      const planLimit = (await import("@/lib/planLimitError")).getPlanLimitMessage(error);
+      if (planLimit) {
+        toast.error(planLimit.title, { description: planLimit.description });
+      } else {
+        toast.error(error.message || "Erro ao salvar cliente");
+      }
     }
   };
 

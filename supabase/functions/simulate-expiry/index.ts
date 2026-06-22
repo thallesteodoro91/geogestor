@@ -33,6 +33,16 @@ serve(async (req) => {
       { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } });
   }
 
+  // Restrict to operators holding the shared CRON_SECRET — prevents priv-esc
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const providedSecret = req.headers.get("x-cron-secret");
+  if (!cronSecret || providedSecret !== cronSecret) {
+    return new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {

@@ -9,7 +9,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+
+const MAX_IMPORT_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_IMPORT_ROWS = 50_000;
 import Papa from "papaparse";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,

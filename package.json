@@ -9,7 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "lint:forbidden-terms": "bash scripts/check-forbidden-terms.sh",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

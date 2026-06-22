@@ -58,10 +58,34 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Rate limiting
+  // Require authenticated user
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const supabaseAuth = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const token = authHeader.replace("Bearer ", "");
+  const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+  if (claimsError || !claimsData?.claims?.sub) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  const userId = claimsData.claims.sub as string;
+
+  // Per-user rate limiting (also keep IP as fallback identifier)
   const clientIP = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  if (rateLimiter.isRateLimited(clientIP)) {
-    console.warn(JSON.stringify({ timestamp: new Date().toISOString(), event: "rate_limited", ip: clientIP, function: "geobot-chat" }));
+  const rlKey = `${userId}:${clientIP}`;
+  if (rateLimiter.isRateLimited(rlKey)) {
+    console.warn(JSON.stringify({ timestamp: new Date().toISOString(), event: "rate_limited", user_id: userId, function: "geobot-chat" }));
     return new Response(
       JSON.stringify({ error: "Muitas requisições. Tente novamente em breve." }),
       { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json", "Retry-After": "60" } }

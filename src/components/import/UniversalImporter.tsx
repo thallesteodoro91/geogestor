@@ -482,10 +482,20 @@ export function UniversalImporter({ open, onOpenChange, onSuccess }: Props) {
         if (!sv || !Object.keys(sv).length) return;
         const id_cliente = resolveClienteFromResolved(r);
         const id_orcamento = orcamentoByRow.get(r.rowIndex) ?? null;
+        // Resolve id_propriedade igual ao orçamento: se a propriedade foi recém-criada,
+        // pega o UUID real via propTempToId em vez de manter um ID temporário/null.
+        let id_propriedade: string | null = r.id_propriedade;
+        if (!id_propriedade && r.propriedade) {
+          const matricula = String(r.propriedade.matricula ?? "").trim();
+          if (matricula) {
+            const entry = resolved.propriedadesNovas.find(p => String(p.matricula ?? "").trim() === matricula);
+            if (entry) id_propriedade = propTempToId.get(entry.__tempId) ?? null;
+          }
+        }
         const row: Record<string, unknown> = {
           tenant_id: tenant.id,
           id_cliente,
-          id_propriedade: r.id_propriedade,
+          id_propriedade,
           id_orcamento,
           nome_do_servico: (sv.nome as string) ?? `Serviço linha ${r.rowIndex + 2}`,
           categoria: (sv.categoria as string) ?? null,

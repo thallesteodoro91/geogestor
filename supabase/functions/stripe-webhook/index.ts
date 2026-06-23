@@ -204,28 +204,21 @@ serve(async (req) => {
           }
 
           // Buscar status atual da subscription para já refletir corretamente
-          let newStatus = "active";
-          let periodStart: string | null = null;
-          let periodEnd: string | null = null;
+          let update: Record<string, unknown> = {
+            status: "active",
+            updated_at: new Date().toISOString(),
+            last_synced_at: new Date().toISOString(),
+          };
+          if (customerId) update.stripe_customer_id = customerId;
           if (subscriptionId) {
             try {
               const sub = await stripe.subscriptions.retrieve(subscriptionId);
-              newStatus = STATUS_MAP[sub.status] || sub.status;
-              periodStart = new Date(sub.current_period_start * 1000).toISOString();
-              periodEnd = new Date(sub.current_period_end * 1000).toISOString();
+              update = await buildSubscriptionUpdate(serviceClient, sub);
             } catch (err) {
               logStep("Falha ao recuperar subscription da Stripe", { subscriptionId, err: String(err) });
+              if (subscriptionId) update.stripe_subscription_id = subscriptionId;
             }
           }
-
-          const update: Record<string, unknown> = {
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-          };
-          if (customerId) update.stripe_customer_id = customerId;
-          if (subscriptionId) update.stripe_subscription_id = subscriptionId;
-          if (periodStart) update.current_period_start = periodStart;
-          if (periodEnd) update.current_period_end = periodEnd;
 
           const { error: updErr } = await serviceClient
             .from("tenant_subscriptions")
@@ -238,7 +231,8 @@ serve(async (req) => {
             tenantId,
             customerId,
             subscriptionId,
-            status: newStatus,
+            status: update.status,
+            planId: update.plan_id,
           });
           break;
         }

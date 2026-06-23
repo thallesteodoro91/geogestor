@@ -44,12 +44,10 @@ function validateChatRequest(body: any): ChatRequest {
   return body as ChatRequest;
 }
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsFor } from "../_shared/cors.ts";
 
 serve(async (req) => {
+  const corsHeaders = corsFor(req);
   const startTime = Date.now();
 
   console.log(JSON.stringify({ timestamp: new Date().toISOString(), method: req.method, url: req.url }));

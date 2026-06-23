@@ -261,25 +261,19 @@ serve(async (req) => {
             break;
           }
 
-          const newStatus = STATUS_MAP[subscription.status] || subscription.status;
+          const update = await buildSubscriptionUpdate(serviceClient, subscription);
 
           const { error: updErr } = await serviceClient
             .from("tenant_subscriptions")
-            .update({
-              status: newStatus,
-              stripe_subscription_id: subscription.id,
-              stripe_customer_id: customerId,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
+            .update(update)
             .eq("tenant_id", tenantId);
           if (updErr) throw new Error(updErr.message);
 
           logStep("Subscription updated", {
             tenantId,
-            status: newStatus,
-            end: new Date(subscription.current_period_end * 1000).toISOString(),
+            status: update.status,
+            planId: update.plan_id,
+            end: update.current_period_end,
           });
           break;
         }
@@ -298,7 +292,15 @@ serve(async (req) => {
           if (tenantId) {
             await serviceClient
               .from("tenant_subscriptions")
-              .update({ status: "canceled", updated_at: new Date().toISOString() })
+              .update({
+                status: "canceled",
+                cancel_at_period_end: false,
+                canceled_at: subscription.canceled_at
+                  ? new Date(subscription.canceled_at * 1000).toISOString()
+                  : new Date().toISOString(),
+                last_synced_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
               .eq("tenant_id", tenantId);
             logStep("Subscription canceled", { tenantId });
           }

@@ -174,6 +174,33 @@ export function ManageSubscriptionPanel() {
     setActionLoading(null);
   };
 
+  const handleStripeSync = async () => {
+    setActionLoading("stripe-sync");
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-stripe-subscription");
+      if (error) throw new Error(error.message);
+      if (data?.synced === false) {
+        toast.info("Nenhuma assinatura encontrada no Stripe para este e-mail.");
+      } else if (data?.hasSubscription === false) {
+        toast.success("Customer Stripe sincronizado (sem assinatura ativa).");
+      } else {
+        toast.success(
+          data?.planMapped
+            ? "Assinatura sincronizada com sucesso."
+            : "Assinatura sincronizada, mas o preço não está mapeado a um plano interno.",
+        );
+      }
+      await load(false);
+      stripeStatus.refetch();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Falha ao sincronizar com o Stripe.",
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <Card className="border-border/80 bg-card/70">

@@ -3,10 +3,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsFor } from "../_shared/cors.ts";
 
 // CRON_SECRET fetched from vault on each cold start
 let CACHED_CRON_SECRET: string | null = null;
@@ -107,6 +104,7 @@ Responda APENAS com um array JSON válido. Cada item:
 }
 
 serve(async (req) => {
+  const corsHeaders = corsFor(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const auth = req.headers.get("authorization") ?? "";

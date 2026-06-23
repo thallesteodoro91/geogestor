@@ -84,7 +84,7 @@ export function ManageSubscriptionPanel() {
   const [sub, setSub] = useState<SubscriptionDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<
-    null | "change" | "cancel" | "reactivate" | "refresh"
+    null | "change" | "cancel" | "reactivate" | "refresh" | "stripe-sync"
   >(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [confirmChangeOpen, setConfirmChangeOpen] = useState<PlanId | null>(null);

@@ -264,6 +264,20 @@ export function ManageSubscriptionPanel() {
                 )}
                 Atualizar status
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleStripeSync}
+                disabled={actionLoading !== null}
+                title="Reconcilia status, plano e período diretamente com o Stripe"
+              >
+                {actionLoading === "stripe-sync" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+                Sincronizar com Stripe
+              </Button>
               <Button variant="outline" size="sm" onClick={() => navigate("/faturas")}>
                 <FileText className="h-4 w-4" />
                 Ver faturas

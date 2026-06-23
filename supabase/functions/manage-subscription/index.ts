@@ -3,18 +3,7 @@ import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "npm:@supabase/supabase-js@2.57.2";
 import { PRICE_IDS, priceIdToPlan as sharedPriceIdToPlan, type PlanId } from "../_shared/plans.ts";
 
-const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "https://geogestor.lovable.app").split(",").map((s) => s.trim()).filter(Boolean);
-const LOVABLE_PREVIEW_RE = /^https:\/\/[a-z0-9-]+\.lovable\.(app|dev)$/i;
-const ALLOW_HDRS = "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version";
-function corsFor(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const allow = (ALLOWED_ORIGINS.includes(origin) || LOVABLE_PREVIEW_RE.test(origin)) ? origin : (ALLOWED_ORIGINS[0] ?? "");
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Vary": "Origin",
-    "Access-Control-Allow-Headers": ALLOW_HDRS,
-  };
-}
+import { corsFor } from "../_shared/cors.ts";
 
 type Action = "get_details" | "change_plan" | "cancel" | "reactivate";
 

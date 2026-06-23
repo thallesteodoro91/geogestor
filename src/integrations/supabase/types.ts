@@ -1965,6 +1965,8 @@ export type Database = {
           name: string
           price_cents: number
           slug: string
+          stripe_price_id: string | null
+          stripe_product_id: string | null
         }
         Insert: {
           created_at?: string | null
@@ -1978,6 +1980,8 @@ export type Database = {
           name: string
           price_cents?: number
           slug: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
         }
         Update: {
           created_at?: string | null
@@ -1991,6 +1995,8 @@ export type Database = {
           name?: string
           price_cents?: number
           slug?: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
         }
         Relationships: []
       }
@@ -2072,10 +2078,13 @@ export type Database = {
       }
       tenant_subscriptions: {
         Row: {
+          cancel_at_period_end: boolean
+          canceled_at: string | null
           created_at: string | null
           current_period_end: string | null
           current_period_start: string | null
           id: string
+          last_synced_at: string | null
           plan_id: string
           status: string
           stripe_customer_id: string | null
@@ -2084,10 +2093,13 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
           created_at?: string | null
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          last_synced_at?: string | null
           plan_id: string
           status?: string
           stripe_customer_id?: string | null
@@ -2096,10 +2108,13 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
           created_at?: string | null
           current_period_end?: string | null
           current_period_start?: string | null
           id?: string
+          last_synced_at?: string | null
           plan_id?: string
           status?: string
           stripe_customer_id?: string | null

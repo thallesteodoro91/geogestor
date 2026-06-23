@@ -67,6 +67,43 @@ async function resolveTenantId(
   return null;
 }
 
+// Lookup plan_id internally from the stripe price_id on a subscription.
+async function planIdForPrice(
+  serviceClient: SupabaseClient,
+  priceId: string | null | undefined,
+): Promise<string | null> {
+  if (!priceId) return null;
+  const { data } = await serviceClient
+    .from("subscription_plans")
+    .select("id")
+    .eq("stripe_price_id", priceId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+// Build the canonical tenant_subscriptions update payload from a Stripe sub.
+async function buildSubscriptionUpdate(
+  serviceClient: SupabaseClient,
+  sub: Stripe.Subscription,
+): Promise<Record<string, unknown>> {
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  const priceId = sub.items?.data?.[0]?.price?.id ?? null;
+  const planId = await planIdForPrice(serviceClient, priceId);
+  const update: Record<string, unknown> = {
+    status: STATUS_MAP[sub.status] || sub.status,
+    stripe_subscription_id: sub.id,
+    stripe_customer_id: customerId,
+    current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
+    current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+    cancel_at_period_end: !!sub.cancel_at_period_end,
+    canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+    last_synced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (planId) update.plan_id = planId;
+  return update;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -167,28 +204,21 @@ serve(async (req) => {
           }
 
           // Buscar status atual da subscription para já refletir corretamente
-          let newStatus = "active";
-          let periodStart: string | null = null;
-          let periodEnd: string | null = null;
+          let update: Record<string, unknown> = {
+            status: "active",
+            updated_at: new Date().toISOString(),
+            last_synced_at: new Date().toISOString(),
+          };
+          if (customerId) update.stripe_customer_id = customerId;
           if (subscriptionId) {
             try {
               const sub = await stripe.subscriptions.retrieve(subscriptionId);
-              newStatus = STATUS_MAP[sub.status] || sub.status;
-              periodStart = new Date(sub.current_period_start * 1000).toISOString();
-              periodEnd = new Date(sub.current_period_end * 1000).toISOString();
+              update = await buildSubscriptionUpdate(serviceClient, sub);
             } catch (err) {
               logStep("Falha ao recuperar subscription da Stripe", { subscriptionId, err: String(err) });
+              if (subscriptionId) update.stripe_subscription_id = subscriptionId;
             }
           }
-
-          const update: Record<string, unknown> = {
-            status: newStatus,
-            updated_at: new Date().toISOString(),
-          };
-          if (customerId) update.stripe_customer_id = customerId;
-          if (subscriptionId) update.stripe_subscription_id = subscriptionId;
-          if (periodStart) update.current_period_start = periodStart;
-          if (periodEnd) update.current_period_end = periodEnd;
 
           const { error: updErr } = await serviceClient
             .from("tenant_subscriptions")
@@ -201,7 +231,8 @@ serve(async (req) => {
             tenantId,
             customerId,
             subscriptionId,
-            status: newStatus,
+            status: update.status,
+            planId: update.plan_id,
           });
           break;
         }
@@ -224,25 +255,19 @@ serve(async (req) => {
             break;
           }
 
-          const newStatus = STATUS_MAP[subscription.status] || subscription.status;
+          const update = await buildSubscriptionUpdate(serviceClient, subscription);
 
           const { error: updErr } = await serviceClient
             .from("tenant_subscriptions")
-            .update({
-              status: newStatus,
-              stripe_subscription_id: subscription.id,
-              stripe_customer_id: customerId,
-              current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-              current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-              updated_at: new Date().toISOString(),
-            })
+            .update(update)
             .eq("tenant_id", tenantId);
           if (updErr) throw new Error(updErr.message);
 
           logStep("Subscription updated", {
             tenantId,
-            status: newStatus,
-            end: new Date(subscription.current_period_end * 1000).toISOString(),
+            status: update.status,
+            planId: update.plan_id,
+            end: update.current_period_end,
           });
           break;
         }
@@ -261,7 +286,15 @@ serve(async (req) => {
           if (tenantId) {
             await serviceClient
               .from("tenant_subscriptions")
-              .update({ status: "canceled", updated_at: new Date().toISOString() })
+              .update({
+                status: "canceled",
+                cancel_at_period_end: false,
+                canceled_at: subscription.canceled_at
+                  ? new Date(subscription.canceled_at * 1000).toISOString()
+                  : new Date().toISOString(),
+                last_synced_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              })
               .eq("tenant_id", tenantId);
             logStep("Subscription canceled", { tenantId });
           }

@@ -67,6 +67,43 @@ async function resolveTenantId(
   return null;
 }
 
+// Lookup plan_id internally from the stripe price_id on a subscription.
+async function planIdForPrice(
+  serviceClient: SupabaseClient,
+  priceId: string | null | undefined,
+): Promise<string | null> {
+  if (!priceId) return null;
+  const { data } = await serviceClient
+    .from("subscription_plans")
+    .select("id")
+    .eq("stripe_price_id", priceId)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
+// Build the canonical tenant_subscriptions update payload from a Stripe sub.
+async function buildSubscriptionUpdate(
+  serviceClient: SupabaseClient,
+  sub: Stripe.Subscription,
+): Promise<Record<string, unknown>> {
+  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  const priceId = sub.items?.data?.[0]?.price?.id ?? null;
+  const planId = await planIdForPrice(serviceClient, priceId);
+  const update: Record<string, unknown> = {
+    status: STATUS_MAP[sub.status] || sub.status,
+    stripe_subscription_id: sub.id,
+    stripe_customer_id: customerId,
+    current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
+    current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+    cancel_at_period_end: !!sub.cancel_at_period_end,
+    canceled_at: sub.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : null,
+    last_synced_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (planId) update.plan_id = planId;
+  return update;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });

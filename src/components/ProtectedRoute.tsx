@@ -1,39 +1,18 @@
-import { useEffect, useState, useRef } from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useTenant } from "@/contexts/TenantContext";
+import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { SubscriptionExpiredScreen } from "@/components/plan/SubscriptionExpiredScreen";
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  // Reusa o listener único do useAuth — antes havia um segundo
+  // onAuthStateChange aqui que disparava re-render a cada refresh de token.
+  const { user, loading: authLoading } = useAuth();
   const { tenant, subscription, isLoading: tenantLoading, error: tenantError, refetchTenant } = useTenant();
-  const location = useLocation();
-  const redirectCountRef = useRef(0);
-  const lastPathRef = useRef(location.pathname);
 
-  // Detectar loops de redirecionamento
-  useEffect(() => {
-    if (location.pathname === "/onboarding" && lastPathRef.current !== "/onboarding") {
-      redirectCountRef.current += 1;
-    }
-    lastPathRef.current = location.pathname;
-  }, [location.pathname]);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setIsAuthenticated(!!session);
-    });
-
-    const { data: { subscription: authSub } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-    });
-
-    return () => authSub.unsubscribe();
-  }, []);
-
-  if (isAuthenticated === null) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse text-muted-foreground">Carregando...</div>
@@ -41,9 +20,10 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!user) {
     return <Navigate to="/auth" replace />;
   }
+
 
   if (tenantLoading) {
     return (
@@ -53,7 +33,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (tenantError || redirectCountRef.current >= 3) {
+  if (tenantError) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4 p-6 max-w-md">
@@ -63,9 +43,8 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
             {tenantError || "Não foi possível carregar os dados da sua empresa. Isso pode ser um problema temporário."}
           </p>
           <div className="flex gap-2 justify-center">
-            <Button 
+            <Button
               onClick={() => {
-                redirectCountRef.current = 0;
                 refetchTenant();
               }}
               variant="default"
@@ -73,6 +52,7 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
               <RefreshCw className="h-4 w-4 mr-2" />
               Tentar novamente
             </Button>
+
             <Button 
               onClick={() => { supabase.auth.signOut(); }}
               variant="outline"

@@ -65,6 +65,13 @@ export default function Auth() {
   };
 
   useEffect(() => {
+    // NOTA SOBRE LOGIN GOOGLE NO PREVIEW DO LOVABLE:
+    // O preview (id-preview--*.lovable.app) roda em iframe e pode ser
+    // bloqueado por políticas de cookies de terceiros, exibindo 404 ou
+    // falhando silenciosamente. Para testar OAuth de forma confiável,
+    // use a URL publicada (ex.: geogestor.lovable.app). Isso não é
+    // bug do app — é restrição do navegador no preview em iframe.
+
     // If user lands here with a recovery link (legacy URL), forward to /reset-password
     // and do NOT auto-redirect even if a recovery session exists.
     const hasRecovery =
@@ -107,20 +114,16 @@ export default function Auth() {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
+    // Redireciona apenas no carregamento inicial se já houver sessão.
+    // Não escutamos onAuthStateChange aqui: o listener antigo disparava
+    // navigate em TOKEN_REFRESHED, causando navegações indesejadas.
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         handlePostLoginRedirect();
       }
     });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        handlePostLoginRedirect();
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, [navigate]);
+
 
   const handlePostLoginRedirect = () => {
     // Check if there's a pending invite token

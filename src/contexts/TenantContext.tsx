@@ -255,9 +255,13 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     return currentCount < limit;
   }, [isSubscriptionActive, getResourceLimit]);
 
+  // Refaz fetch só quando o id muda (login/logout/troca de conta),
+  // não a cada refresh de token.
   useEffect(() => {
     fetchTenantData();
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
 
   return (
     <TenantContext.Provider

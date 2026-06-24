@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  AlertTriangle,
   Crown,
   FileText,
   Loader2,
@@ -22,6 +23,7 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";

@@ -90,6 +90,8 @@ export function ManageSubscriptionPanel() {
   >(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [confirmChangeOpen, setConfirmChangeOpen] = useState<PlanId | null>(null);
+  const [unmappedPlans, setUnmappedPlans] = useState<string[]>([]);
+  const [plansChecking, setPlansChecking] = useState(true);
 
   const load = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -107,8 +109,28 @@ export function ManageSubscriptionPanel() {
     }
   };
 
+  const checkPlanMappings = async () => {
+    setPlansChecking(true);
+    try {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("slug, name, stripe_price_id")
+        .in("slug", ["completo"]);
+      if (error) throw error;
+      const missing = (data ?? [])
+        .filter((p) => !p.stripe_price_id)
+        .map((p) => p.name ?? p.slug);
+      setUnmappedPlans(missing);
+    } catch {
+      setUnmappedPlans([]);
+    } finally {
+      setPlansChecking(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    checkPlanMappings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

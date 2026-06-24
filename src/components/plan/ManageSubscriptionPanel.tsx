@@ -199,6 +199,12 @@ export function ManageSubscriptionPanel() {
   };
 
   const handleStripeSync = async () => {
+    if (unmappedPlans.length > 0) {
+      toast.error("Sincronização bloqueada", {
+        description: `Configure o stripe_price_id do plano: ${unmappedPlans.join(", ")}.`,
+      });
+      return;
+    }
     setActionLoading("stripe-sync");
     try {
       const { data, error } = await supabase.functions.invoke("sync-stripe-subscription");

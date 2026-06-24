@@ -8,9 +8,11 @@ export function useKPIs() {
   return useQuery({
     queryKey: ['kpis', user?.id],
     queryFn: fetchKPIs,
-    // Fase 7: sem polling. Cache invalidado via invalidateDashboardAndKpis após mutações.
+    // KPI é caro (calcular_kpis_v2). Cache longo + sem refetch on focus.
+    // Invalidação explícita acontece via invalidateDashboardAndKpis após mutações.
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     enabled: !!user,
   });
+
 }

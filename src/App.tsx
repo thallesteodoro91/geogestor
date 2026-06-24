@@ -42,7 +42,21 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const PoliticaPrivacidade = lazy(() => import("./pages/PoliticaPrivacidade"));
 
 
-const queryClient = new QueryClient();
+// Defaults conservadores para evitar refetch em cascata após refresh
+// de token / foco da janela (causa raiz da explosão de chamadas a
+// calcular_kpis_v2 e dim_cliente vistas no pg_stat_statements).
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      gcTime: 5 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      retry: 1,
+    },
+  },
+});
+
 
 const App = () => {
   return (

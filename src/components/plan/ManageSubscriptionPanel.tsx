@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  AlertTriangle,
   Crown,
   FileText,
   Loader2,
@@ -22,6 +23,7 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useStripeSubscription } from "@/hooks/useStripeSubscription";
@@ -88,6 +90,8 @@ export function ManageSubscriptionPanel() {
   >(null);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [confirmChangeOpen, setConfirmChangeOpen] = useState<PlanId | null>(null);
+  const [unmappedPlans, setUnmappedPlans] = useState<string[]>([]);
+  const [plansChecking, setPlansChecking] = useState(true);
 
   const load = async (showSpinner = true) => {
     if (showSpinner) setLoading(true);
@@ -105,8 +109,28 @@ export function ManageSubscriptionPanel() {
     }
   };
 
+  const checkPlanMappings = async () => {
+    setPlansChecking(true);
+    try {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("slug, name, stripe_price_id")
+        .in("slug", ["completo"]);
+      if (error) throw error;
+      const missing = (data ?? [])
+        .filter((p) => !p.stripe_price_id)
+        .map((p) => p.name ?? p.slug);
+      setUnmappedPlans(missing);
+    } catch {
+      setUnmappedPlans([]);
+    } finally {
+      setPlansChecking(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    checkPlanMappings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -175,6 +199,12 @@ export function ManageSubscriptionPanel() {
   };
 
   const handleStripeSync = async () => {
+    if (unmappedPlans.length > 0) {
+      toast.error("Sincronização bloqueada", {
+        description: `Configure o stripe_price_id do plano: ${unmappedPlans.join(", ")}.`,
+      });
+      return;
+    }
     setActionLoading("stripe-sync");
     try {
       const { data, error } = await supabase.functions.invoke("sync-stripe-subscription");
@@ -268,8 +298,12 @@ export function ManageSubscriptionPanel() {
                 variant="outline"
                 size="sm"
                 onClick={handleStripeSync}
-                disabled={actionLoading !== null}
-                title="Reconcilia status, plano e período diretamente com o Stripe"
+                disabled={actionLoading !== null || plansChecking || unmappedPlans.length > 0}
+                title={
+                  unmappedPlans.length > 0
+                    ? `Configure stripe_price_id do(s) plano(s): ${unmappedPlans.join(", ")}`
+                    : "Reconcilia status, plano e período diretamente com o Stripe"
+                }
               >
                 {actionLoading === "stripe-sync" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -284,6 +318,20 @@ export function ManageSubscriptionPanel() {
               </Button>
             </div>
           </div>
+
+          {/* Aviso de plano sem stripe_price_id */}
+          {unmappedPlans.length > 0 && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Configuração de plano incompleta</AlertTitle>
+              <AlertDescription>
+                O(s) plano(s) <strong>{unmappedPlans.join(", ")}</strong> não possui(em){" "}
+                <code>stripe_price_id</code> configurado. A sincronização com o Stripe está
+                bloqueada até que o mapeamento seja preenchido em{" "}
+                <code>subscription_plans</code>.
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* Aviso de cancelamento agendado */}
           {scheduledCancel && (

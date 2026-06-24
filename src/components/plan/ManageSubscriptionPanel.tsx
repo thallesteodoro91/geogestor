@@ -298,8 +298,12 @@ export function ManageSubscriptionPanel() {
                 variant="outline"
                 size="sm"
                 onClick={handleStripeSync}
-                disabled={actionLoading !== null}
-                title="Reconcilia status, plano e período diretamente com o Stripe"
+                disabled={actionLoading !== null || plansChecking || unmappedPlans.length > 0}
+                title={
+                  unmappedPlans.length > 0
+                    ? `Configure stripe_price_id do(s) plano(s): ${unmappedPlans.join(", ")}`
+                    : "Reconcilia status, plano e período diretamente com o Stripe"
+                }
               >
                 {actionLoading === "stripe-sync" ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

@@ -319,6 +319,20 @@ export function ManageSubscriptionPanel() {
             </div>
           </div>
 
+          {/* Aviso de plano sem stripe_price_id */}
+          {unmappedPlans.length > 0 && (
+            <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Configuração de plano incompleta</AlertTitle>
+              <AlertDescription>
+                O(s) plano(s) <strong>{unmappedPlans.join(", ")}</strong> não possui(em){" "}
+                <code>stripe_price_id</code> configurado. A sincronização com o Stripe está
+                bloqueada até que o mapeamento seja preenchido em{" "}
+                <code>subscription_plans</code>.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Aviso de cancelamento agendado */}
           {scheduledCancel && (
             <div className="rounded-md border border-warning/30 bg-warning/10 p-4">

@@ -1,75 +1,73 @@
 
-# Plano — Rodada 1 do Audit GeoGestor (22/06/2026)
+# Auditoria do GeoGestor + plano de correção
 
-Foco: os 7 bloqueadores antes de cliente pagante. Achados "não bloqueadores" ficam para a Rodada 2.
+## O que está acontecendo (achados objetivos)
 
-## 1. Corrigir RPC `get_financial_dashboard_metrics` (receita realizada vs pipeline)
+### 1. Perda de dados ao deixar janela aberta — CONFIRMADO como bug global de auth
+- O Supabase JS faz **refresh de token automaticamente** a cada ~50 min (e os logs já mostram `token_revoked` + `Invalid Refresh Token Not Found` recentes).
+- Hoje temos **dois listeners separados** de `onAuthStateChange` (`useAuth.ts` e `ProtectedRoute.tsx`). Ambos chamam `setState` no evento `TOKEN_REFRESHED`, gerando re-render em árvore.
+- `TenantContext` (consumido pelo `ProtectedRoute`) provavelmente refaz fetch quando o user muda → telas remontam → formulários, filtros, wizards perdem estado local.
+- Sintoma do usuário: "deixei aberto, atualizou, perdi tudo".
 
-Migração SQL substituindo a função:
-- `receita_total` → `SUM(receita_realizada)` (mesma semântica de `vw_kpis_financeiros`).
-- Adicionar `receita_pipeline` = `SUM(receita_esperada) FILTER (WHERE orcamento_convertido = false)`.
-- `lucro_por_cliente` → usar `lucro_realizado` (ou `receita_realizada - custo_real` agregado), não `lucro_esperado`.
-- `margem_por_servico` segue usando `receita_servico`/`custo_servico` (já é realizado).
-- Manter assinatura JSON para não quebrar `useDashboardMetrics` e telas consumidoras.
+### 2. Erro 404 no login Google só no preview do Lovable
+- Logs de auth mostram login **bem-sucedido** via `geogestor.lovable.app` (publicado).
+- Preview `id-preview--…lovable.app` roda em iframe. Hoje o `Auth.tsx` precisa ser revisado para usar o helper Lovable corretamente sem detecção custom de iframe.
+- **Não é bug do seu código de negócio**: é comportamento do OAuth em iframe + cookies de terceiros. A correção é (a) garantir uso do helper oficial `lovable.auth.signInWithOAuth` e (b) orientar o teste de login pela URL publicada.
 
-## 2. Proteger `trial-expiry-reminder` com `CRON_SECRET`
+### 3. Performance — KPI sendo chamada absurdamente
+Top ofensores do banco (pg_stat_statements):
+- `calcular_kpis_v2()` → **11.454 chamadas**, ~252 s totais. É a função mais cara, disparada repetidamente.
+- `dim_cliente` listagem → **4.332 chamadas**.
+- `tenant_subscriptions` lookup → **6.771 chamadas**.
+- `fato_despesas` e `fato_orcamento` com `select` mínimo → ~2.300 cada.
 
-Já existe pattern em `simulate-expiry`. Editar `supabase/functions/trial-expiry-reminder/index.ts`:
-- Validar header `x-cron-secret` contra `Deno.env.get("CRON_SECRET")` antes de qualquer query/envio. 401 se inválido.
-- (Nota: a entrada de contexto resumida diz que isso já foi feito numa rodada anterior — vou conferir o arquivo e só agir se ainda estiver desprotegido.)
+Isso indica polling/refetch em cascata (provável `useKPIs` + invalidações do React Query disparando em mudanças de auth/tenant). Cada refresh de token pode multiplicar essas chamadas.
 
-## 3. Enforcement server-side dos limites de plano (clientes/propriedades)
+### 4. Bugs/sintomas menores observados
+- Console: vários `Warning: Missing Description or aria-describedby for {DialogContent}` — acessibilidade, fácil de corrigir.
+- `ProtectedRoute` tem `redirectCountRef` que conta loops para `/onboarding`, mas essa rota nem existe em `App.tsx` — código morto que pode esconder bugs reais.
+- "Menu Propriedade" — **não é bug**: foi consolidado em Cadastros (decisão de produto registrada na memória do projeto). Mantido como está.
+- Créditos — é o saldo da plataforma Lovable, não problema do seu app.
 
-Nova migração:
-- Função `public.check_resource_limit(p_tenant_id uuid, p_resource text)` SECURITY DEFINER que conta linhas em `dim_cliente`/`dim_propriedade` e compara com `subscription_plans.max_clients`/`max_properties`.
-- Triggers `BEFORE INSERT` em `dim_cliente` e `dim_propriedade` chamando essa função e dando `RAISE EXCEPTION 'plan_limit_exceeded:<resource>'` quando estourar.
-- Frontend (`ClienteDialog`, `PropriedadeDialog`, `UniversalImporter`) já mostra UX amigável; adicionar catch do erro `plan_limit_exceeded:*` traduzindo para toast.
+## O que vou fazer (4 lotes, do mais crítico ao polimento)
 
-## 4. Pipeline de qualidade verde
+### Lote 1 — Parar a perda de dados (causa raiz)
+1. **Refatorar `useAuth.ts` + `ProtectedRoute.tsx`** para:
+   - Manter UM único listener `onAuthStateChange` (via contexto `AuthProvider`).
+   - Ignorar evento `TOKEN_REFRESHED` quando o `user.id` não mudou (sem `setState`, sem re-render).
+   - Expor `user`, `session`, `isReady` para todo o app.
+2. **`TenantContext`**: trocar dependência de `user` por `user.id` para não refazer fetch a cada refresh de token.
+3. **Smoke test**: deixar a tela aberta, forçar `supabase.auth.refreshSession()` no console e confirmar que filtros/formulários sobrevivem.
 
-- Adicionar script `"test": "vitest run"` em `package.json`.
-- Resolver peer dep: downgrade de `date-fns` para `^3.6.0` (compatível com `react-day-picker@8`) — alternativa menos invasiva que trocar o picker. `bun add date-fns@^3.6.0` regenera lockfile.
-- Corrigir os 2 testes quebrados em `src/components/dashboard/KPICard.test.tsx` (atualizar expectativas para `text-success`/`bg-success/10` e `bg-muted/30`, refletindo o componente atual).
-- Lint: 328 erros é fora do escopo de "rodada curta"; **não vou zerar lint nesta rodada**. Vou apenas garantir que `tsc` e build passem. Sinalizo isso explicitamente para você decidir se quer uma sub-rodada só para lint.
+### Lote 2 — Performance do banco
+1. Achar o hook que dispara `calcular_kpis_v2()` (provavelmente `useKPIs`/`useDashboardMetrics`).
+2. Aplicar `staleTime` adequado no React Query (mínimo 60 s) e remover refetch em `onWindowFocus` quando o dado não precisa.
+3. Memoizar `queryKey` em filtros para evitar nova key a cada render.
+4. Verificar se `tenant_subscriptions` está sendo lido em loop pelo provider — cachear no `TenantContext`.
+5. Meta: reduzir as 11k chamadas/dia de KPI em pelo menos 80%.
 
-## 5. Vulnerabilidade `xlsx`
+### Lote 3 — Login Google no preview
+1. Confirmar que `Auth.tsx` usa `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` direto, sem `window.open` custom nem detecção de iframe.
+2. Remover qualquer fluxo legado de `supabase.auth.signInWithOAuth` direto, se existir.
+3. Documentar no `Auth.tsx` (comentário visível) que testes de OAuth devem usar a URL publicada — preview em iframe pode falhar por bloqueio de cookies, **não é regressão**.
 
-`xlsx` da SheetJS no npm tem CVEs sem patch. Substituir por **`exceljs`** (mantido, sem CVEs ativos) nos pontos do importador (`SmartImporter`, `UniversalImporter`, helpers em `src/lib/etl/*`).
-- Manter API interna (`parseWorkbook(file): Row[][]`) para minimizar mudança nas telas.
-- Adicionar limites: tamanho máx do arquivo (ex.: 10 MB) e número máx de linhas (ex.: 50k) antes do parse.
+### Lote 4 — Polimento (curto)
+1. Adicionar `<DialogDescription>` ou `aria-describedby` nos `Dialog` que estão gerando warning (acessibilidade).
+2. Remover o código morto do `redirectCountRef` (rota `/onboarding` inexistente) no `ProtectedRoute`.
+3. Rodar o `security--run_security_scan` ao final e te mostrar achados pendentes para você decidir o que tratar.
 
-## 6. Bug do `id_propriedade` em `fato_servico` no importador
+## Fora de escopo (intencional)
+- Não vou re-adicionar "Propriedades" no menu (você pediu para manter).
+- Não vou mexer em Stripe/sync (já estabilizado nas rodadas anteriores).
+- Não vou refatorar UI de telas sem bug confirmado.
 
-Em `UniversalImporter.tsx`, replicar a mesma correção do insert de orçamento no insert de `fato_servico`: quando `r.id_propriedade` for um ID temporário do `relationResolver`, substituir pelo ID real recém-criado em `dim_propriedade` (mesmo lookup map já usado para orçamentos).
+## Detalhes técnicos
+- Arquivos esperados: `src/hooks/useAuth.ts`, `src/components/ProtectedRoute.tsx`, `src/contexts/TenantContext.tsx`, `src/pages/Auth.tsx`, `src/hooks/useKPIs.ts` (+ correlatos).
+- Nenhuma migration nova prevista; apenas leitura de `pg_stat_statements` para validar antes/depois.
+- React Query `staleTime` será calibrado por tipo de dado (KPIs 60 s, listagens 30 s, dados de tenant 5 min).
 
-## 7. (Já feito) Verificação dupla de itens da rodada anterior
-
-Antes de mexer, vou conferir o estado atual de:
-- `trial-expiry-reminder` (item 2) — pelo histórico já tem CRON_SECRET.
-- RLS / outros itens marcados como concluídos nas mensagens anteriores.
-Só edito o que ainda estiver pendente.
-
-## Arquivos previstos
-
-- `supabase/migrations/<nova>.sql` — RPC corrigida + triggers de limite.
-- `supabase/functions/trial-expiry-reminder/index.ts` — se ainda sem guarda.
-- `src/components/import/UniversalImporter.tsx` — fix `id_propriedade` + integração `exceljs`.
-- `src/components/import/SmartImporter.tsx` e `src/lib/etl/*` — troca `xlsx` → `exceljs`.
-- `src/components/cadastros/ClienteDialog.tsx`, `PropriedadeDialog.tsx` — tratar erro `plan_limit_exceeded`.
-- `src/components/dashboard/KPICard.test.tsx` — atualizar 2 asserts.
-- `package.json` — script `test`, troca `xlsx`→`exceljs`, ajuste `date-fns`.
-
-## Fora de escopo desta rodada (Rodada 2 do audit)
-
-- Zerar 328 erros de lint.
-- Padronizar CORS em todas as Edge Functions.
-- Sincronização total `plan_id`/`price_id` Stripe.
-- Code-splitting / chunks grandes.
-- Renomear `vite_react_shadcn_ts` no `package.json`.
-- E2E autenticado.
-
-## Pontos para confirmar antes de implementar
-
-1. **`date-fns` downgrade** para v3: alguns lugares podem usar APIs novas da v4. Se preferir manter v4, alternativa é trocar `react-day-picker` para v9 (mais invasivo no UI do calendário). Posso ir de downgrade por padrão; ok?
-2. **Trigger de limite**: bloquear `INSERT` direto é o correto, mas isso também bloqueia o seeder/importador legítimo se o tenant estourar. Confirma que importação acima do limite deve falhar item-a-item com erro claro?
-3. **`xlsx` → `exceljs`**: muda a forma de leitura (API assíncrona baseada em streams). Vou encapsular para minimizar diff, mas é uma troca real de lib. Pode prosseguir?
+## Entregável final
+Mensagem com:
+- Diff resumido por lote.
+- Comparativo de chamadas ao banco (antes/depois dos lotes 1 e 2).
+- Lista de achados do scanner que sobraram, para você priorizar.

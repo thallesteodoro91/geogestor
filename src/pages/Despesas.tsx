@@ -30,6 +30,7 @@ import { despesaSchema } from "@/lib/validations";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { useStateDraft } from "@/hooks/useFormDraft";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
@@ -52,6 +53,13 @@ export default function Despesas() {
 
   const [totalItems, setTotalItems] = useState(0);
   const pagination = useServerPagination({ totalItems, initialPageSize: 15 });
+
+  const { clearDraft: clearDespesaDraft } = useStateDraft({
+    key: 'despesa:new',
+    value: formData,
+    setValue: setFormData,
+    enabled: isDialogOpen && !editingId,
+  });
 
   const searchSanitized = searchTerm.trim().replace(/[%,()]/g, "");
   const dataInicioStr = dataInicio ? format(dataInicio, "yyyy-MM-dd") : null;
@@ -166,6 +174,7 @@ export default function Despesas() {
       queryClient.invalidateQueries({ queryKey: ["despesas-total-mes"] });
       logAuditEvent({ action: editingId ? "UPDATE" : "INSERT", entity: "Despesa", entityId: editingId || undefined, newData: { ...formData } });
       toast.success(editingId ? "Despesa atualizada!" : "Despesa adicionada!");
+      clearDespesaDraft();
       setIsDialogOpen(false);
       resetForm();
     },

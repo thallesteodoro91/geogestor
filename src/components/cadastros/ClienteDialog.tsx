@@ -16,6 +16,8 @@ import { formatCPF, formatCNPJ } from "@/lib/formatDocument";
 import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import type { UseFormReturn } from "react-hook-form";
 
 
 
@@ -34,6 +36,16 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
   const { isWithinLimit } = usePlanLimits();
   const { clientsCount } = useResourceCounts();
   const canAddClient = isEditing || isWithinLimit('clients', clientsCount);
+
+  const { clearDraft } = useFormDraft({
+    key: 'cliente:new',
+    form: { watch, reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditing,
+    onAfterRestore: (v: any) => {
+      if (v?.origem) setProspeccaoOptions(String(v.origem).split(',').map((o: string) => o.trim()).filter(Boolean));
+      if (v?.categoria) setCategoriaOptions(String(v.categoria).split(',').map((c: string) => c.trim()).filter(Boolean));
+    },
+  });
 
 
   const [prospeccaoOptions, setProspeccaoOptions] = useState<string[]>(
@@ -141,6 +153,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, onSuccess }: Client
       reset();
       setProspeccaoOptions([]);
       setCategoriaOptions([]);
+      clearDraft();
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {

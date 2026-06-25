@@ -56,8 +56,8 @@ export default function Despesas() {
 
   const { clearDraft: clearDespesaDraft } = useStateDraft({
     key: 'despesa:new',
-    value: formData,
-    setValue: setFormData,
+    value: formData as unknown as Record<string, unknown>,
+    setValue: (v) => setFormData(v as typeof formData),
     enabled: isDialogOpen && !editingId,
   });
 

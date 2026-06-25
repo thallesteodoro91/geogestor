@@ -24,6 +24,8 @@ import {
   registrarOrcamentoEmitido
 } from '@/modules/crm/services/cliente-eventos.service';
 import { PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, EXPENSE_STATUS } from "@/constants/budgetStatus";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import type { UseFormReturn } from "react-hook-form";
 
 interface OrcamentoWizardProps {
   open: boolean;
@@ -124,6 +126,23 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
   const watchedIncluirImposto = watch("incluir_imposto");
   const watchedPercentualImposto = watch("percentual_imposto");
   const watchedSituacao = watch("situacao_do_pagamento");
+
+  const isEditingOrc = !!orcamento;
+  const { clearDraft: clearOrcDraft } = useFormDraft({
+    key: 'orcamento:wizard:new',
+    form: { watch, reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditingOrc,
+  });
+  const { clearDraft: clearClienteDraft } = useFormDraft({
+    key: 'orcamento:wizard:cliente',
+    form: { watch: clienteForm.watch, reset: clienteForm.reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditingOrc && createNewCliente,
+  });
+  const { clearDraft: clearPropriedadeDraft } = useFormDraft({
+    key: 'orcamento:wizard:propriedade',
+    form: { watch: propriedadeForm.watch, reset: propriedadeForm.reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditingOrc && createNewPropriedade,
+  });
 
   useEffect(() => {
     if (open) {
@@ -550,6 +569,9 @@ export function OrcamentoWizard({ open, onOpenChange, orcamento, clienteId, onSu
       reset();
       clienteForm.reset();
       propriedadeForm.reset();
+      clearOrcDraft();
+      clearClienteDraft();
+      clearPropriedadeDraft();
       setNewClienteId(null);
       setNewPropriedadeId(null);
       onOpenChange(false);

@@ -8,6 +8,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { SERVICE_STATUS } from "@/constants/serviceStatus";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import type { UseFormReturn } from "react-hook-form";
 
 interface ServicoDialogProps {
   open: boolean;
@@ -18,13 +20,20 @@ interface ServicoDialogProps {
 }
 
 export function ServicoDialog({ open, onOpenChange, servico, clienteId, onSuccess }: ServicoDialogProps) {
-  const { register, handleSubmit, setValue, reset } = useForm({
+  const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: servico || {}
   });
-  
+  const isEditing = !!servico;
+
   const [clientes, setClientes] = useState<any[]>([]);
   const [propriedades, setPropriedades] = useState<any[]>([]);
   const [empresas, setEmpresas] = useState<any[]>([]);
+
+  const { clearDraft } = useFormDraft({
+    key: clienteId ? `servico:new:${clienteId}` : 'servico:new',
+    form: { watch, reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditing,
+  });
 
   useEffect(() => {
     if (open) {
@@ -79,6 +88,7 @@ export function ServicoDialog({ open, onOpenChange, servico, clienteId, onSucces
       }
       
       reset();
+      clearDraft();
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {

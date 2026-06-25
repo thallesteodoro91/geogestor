@@ -12,6 +12,8 @@ import { usePlanLimits } from "@/hooks/usePlanLimits";
 import { useResourceCounts } from "@/hooks/useResourceCounts";
 import { PlanLimitAlert } from "@/components/plan/PlanLimitAlert";
 import { StickyNote } from "lucide-react";
+import { useFormDraft } from "@/hooks/useFormDraft";
+import type { UseFormReturn } from "react-hook-form";
 
 interface PropriedadeDialogProps {
   open: boolean;
@@ -22,13 +24,22 @@ interface PropriedadeDialogProps {
 }
 
 export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClienteId, onSuccess }: PropriedadeDialogProps) {
-  const { register, handleSubmit, setValue, reset } = useForm({
+  const { register, handleSubmit, setValue, reset, watch } = useForm({
     defaultValues: propriedade || {}
   });
   const { isWithinLimit } = usePlanLimits();
   const { propertiesCount } = useResourceCounts();
   const isEditing = !!propriedade;
   const canAddProperty = isEditing || isWithinLimit('properties', propertiesCount);
+
+  const { clearDraft } = useFormDraft({
+    key: 'propriedade:new',
+    form: { watch, reset } as unknown as UseFormReturn<any>,
+    enabled: open && !isEditing,
+    onAfterRestore: (v: any) => {
+      if (v?.id_cliente) setSelectedClienteId(v.id_cliente);
+    },
+  });
   
   const [clientes, setClientes] = useState<any[]>([]);
   const [selectedClienteId, setSelectedClienteId] = useState<string | undefined>(
@@ -126,6 +137,7 @@ export function PropriedadeDialog({ open, onOpenChange, propriedade, defaultClie
       }
       
       reset();
+      clearDraft();
       onOpenChange(false);
       onSuccess();
     } catch (error: any) {

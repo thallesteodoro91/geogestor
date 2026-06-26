@@ -76,9 +76,21 @@ const RelatorioExecutivo = () => {
     queryFn: async () => {
       const { data: result, error } = await supabase.functions.invoke("ai-insights");
       if (error) throw error;
+      // O edge function devolve { error: 'PAYMENT_REQUIRED' | 'RATE_LIMITED' | ... }
+      // em vez de lançar — tratamos aqui para a UI saber.
+      if (result?.error) {
+        const err = new Error(result.error);
+        (err as Error & { code?: string }).code = result.error;
+        throw err;
+      }
       return result;
     },
     staleTime: 1800000,
+    retry: (failureCount, err) => {
+      const code = (err as Error & { code?: string })?.code;
+      if (code === "PAYMENT_REQUIRED" || code === "RATE_LIMITED") return false;
+      return failureCount < 1;
+    },
     enabled: !data.isLoading && !!data.metrics,
   });
 

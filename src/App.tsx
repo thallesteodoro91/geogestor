@@ -73,7 +73,12 @@ const App = () => {
               <Toaster />
               <Sonner />
               <PWAPrompt />
-              <BrowserRouter>
+              <BrowserRouter
+                future={{
+                  v7_startTransition: true,
+                  v7_relativeSplatPath: true,
+                }}
+              >
                 <Suspense fallback={<AppSkeleton />}>
                   <Routes>
                     <Route path="/auth" element={<Auth />} />

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { createTenant } from "@/services/tenant.service";
@@ -263,19 +263,26 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, [user?.id]);
 
 
+  // Memoiza o value para evitar re-renderizar consumidores quando nada relevante muda
+  // (ex.: a cada refresh de token o useAuth pode reidentificar dependências).
+  const contextValue = useMemo(
+    () => ({
+      tenant,
+      subscription,
+      isLoading,
+      error,
+      refetchTenant: fetchTenantData,
+      canAddResource,
+      getResourceLimit,
+      isSubscriptionActive,
+    }),
+    // fetchTenantData é estável dentro do provider (não recriado por refresh).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tenant, subscription, isLoading, error, canAddResource, getResourceLimit, isSubscriptionActive],
+  );
+
   return (
-    <TenantContext.Provider
-      value={{
-        tenant,
-        subscription,
-        isLoading,
-        error,
-        refetchTenant: fetchTenantData,
-        canAddResource,
-        getResourceLimit,
-        isSubscriptionActive,
-      }}
-    >
+    <TenantContext.Provider value={contextValue}>
       {children}
     </TenantContext.Provider>
   );

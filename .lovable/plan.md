@@ -1,73 +1,47 @@
+# Correções de Bugs — Lote 1
 
-# Auditoria do GeoGestor + plano de correção
+Foco em problemas concretos detectados durante a auditoria, sem misturar features novas. Tudo no frontend e em queries/invalidações.
 
-## O que está acontecendo (achados objetivos)
+## Bugs a corrigir
 
-### 1. Perda de dados ao deixar janela aberta — CONFIRMADO como bug global de auth
-- O Supabase JS faz **refresh de token automaticamente** a cada ~50 min (e os logs já mostram `token_revoked` + `Invalid Refresh Token Not Found` recentes).
-- Hoje temos **dois listeners separados** de `onAuthStateChange` (`useAuth.ts` e `ProtectedRoute.tsx`). Ambos chamam `setState` no evento `TOKEN_REFRESHED`, gerando re-render em árvore.
-- `TenantContext` (consumido pelo `ProtectedRoute`) provavelmente refaz fetch quando o user muda → telas remontam → formulários, filtros, wizards perdem estado local.
-- Sintoma do usuário: "deixei aberto, atualizou, perdi tudo".
+### 1. CompromissoDialog — queries sem `tenant_id` (multi-tenancy quebrada)
+**Arquivo:** `src/components/calendario/CompromissoDialog.tsx`
 
-### 2. Erro 404 no login Google só no preview do Lovable
-- Logs de auth mostram login **bem-sucedido** via `geogestor.lovable.app` (publicado).
-- Preview `id-preview--…lovable.app` roda em iframe. Hoje o `Auth.tsx` precisa ser revisado para usar o helper Lovable corretamente sem detecção custom de iframe.
-- **Não é bug do seu código de negócio**: é comportamento do OAuth em iframe + cookies de terceiros. A correção é (a) garantir uso do helper oficial `lovable.auth.signInWithOAuth` e (b) orientar o teste de login pela URL publicada.
+As queries `clientes`, `servicos` e `propriedades` fazem `select` direto sem `.eq('tenant_id', tenant.id)` e a `queryKey` não inclui o tenant. Isso:
+- Pode vazar dados entre tenants quando RLS permite múltiplos vínculos (owner em mais de um tenant).
+- Causa cache compartilhado errado ao trocar de tenant.
 
-### 3. Performance — KPI sendo chamada absurdamente
-Top ofensores do banco (pg_stat_statements):
-- `calcular_kpis_v2()` → **11.454 chamadas**, ~252 s totais. É a função mais cara, disparada repetidamente.
-- `dim_cliente` listagem → **4.332 chamadas**.
-- `tenant_subscriptions` lookup → **6.771 chamadas**.
-- `fato_despesas` e `fato_orcamento` com `select` mínimo → ~2.300 cada.
+**Correção:** adicionar `tenant?.id` na queryKey, filtrar por `tenant_id`, e habilitar a query só com `enabled: !!tenant?.id`.
 
-Isso indica polling/refetch em cascata (provável `useKPIs` + invalidações do React Query disparando em mudanças de auth/tenant). Cada refresh de token pode multiplicar essas chamadas.
+### 2. CompromissoDialog — perda de rascunho
+Mesmo arquivo já usa `useState`. Vou aplicar `useStateDraft` (chave `compromisso:new`) com TTL 24h, alinhado ao padrão dos outros formulários.
 
-### 4. Bugs/sintomas menores observados
-- Console: vários `Warning: Missing Description or aria-describedby for {DialogContent}` — acessibilidade, fácil de corrigir.
-- `ProtectedRoute` tem `redirectCountRef` que conta loops para `/onboarding`, mas essa rota nem existe em `App.tsx` — código morto que pode esconder bugs reais.
-- "Menu Propriedade" — **não é bug**: foi consolidado em Cadastros (decisão de produto registrada na memória do projeto). Mantido como está.
-- Créditos — é o saldo da plataforma Lovable, não problema do seu app.
+### 3. Invalidações faltando após criar compromisso
+Após criar orçamento/serviço no calendário, só invalidamos chaves `calendario-*`. Páginas `/orcamentos`, `/servicos` e `/dashboard` continuam exibindo dados velhos. Adicionar `invalidateQueries` para `["orcamentos"]`, `["servicos"]`, `["kpis"]`, `["dashboard-metrics"]`.
 
-## O que vou fazer (4 lotes, do mais crítico ao polimento)
+### 4. Refresh de token disparando re-render global
+Logs confirmam `token_revoked` → `login` a cada renovação. Apesar do fix em `useAuth.ts`, o `TenantContext` ainda re-resolve quando o objeto `session` muda. Travar com `useMemo` no valor do contexto e comparar `user?.id` estritamente.
 
-### Lote 1 — Parar a perda de dados (causa raiz)
-1. **Refatorar `useAuth.ts` + `ProtectedRoute.tsx`** para:
-   - Manter UM único listener `onAuthStateChange` (via contexto `AuthProvider`).
-   - Ignorar evento `TOKEN_REFRESHED` quando o `user.id` não mudou (sem `setState`, sem re-render).
-   - Expor `user`, `session`, `isReady` para todo o app.
-2. **`TenantContext`**: trocar dependência de `user` por `user.id` para não refazer fetch a cada refresh de token.
-3. **Smoke test**: deixar a tela aberta, forçar `supabase.auth.refreshSession()` no console e confirmar que filtros/formulários sobrevivem.
+**Arquivo:** `src/contexts/TenantContext.tsx`
 
-### Lote 2 — Performance do banco
-1. Achar o hook que dispara `calcular_kpis_v2()` (provavelmente `useKPIs`/`useDashboardMetrics`).
-2. Aplicar `staleTime` adequado no React Query (mínimo 60 s) e remover refetch em `onWindowFocus` quando o dado não precisa.
-3. Memoizar `queryKey` em filtros para evitar nova key a cada render.
-4. Verificar se `tenant_subscriptions` está sendo lido em loop pelo provider — cachear no `TenantContext`.
-5. Meta: reduzir as 11k chamadas/dia de KPI em pelo menos 80%.
+### 5. AI Insights — toast genérico em 402
+Edge `ai-insights` retorna 402 "Not enough credits" mas o frontend mostra erro genérico. Vou tratar status 402 no consumidor (`useAiSuggestions.ts`) e exibir toast claro com CTA para a tela de créditos da plataforma, em vez de "Erro ao gerar insights".
 
-### Lote 3 — Login Google no preview
-1. Confirmar que `Auth.tsx` usa `lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin })` direto, sem `window.open` custom nem detecção de iframe.
-2. Remover qualquer fluxo legado de `supabase.auth.signInWithOAuth` direto, se existir.
-3. Documentar no `Auth.tsx` (comentário visível) que testes de OAuth devem usar a URL publicada — preview em iframe pode falhar por bloqueio de cookies, **não é regressão**.
+### 6. React Router future flags (warnings no console)
+Adicionar `future={{ v7_startTransition: true, v7_relativeSplatPath: true }}` no `<BrowserRouter>` em `src/App.tsx` para silenciar warnings e preparar v7.
 
-### Lote 4 — Polimento (curto)
-1. Adicionar `<DialogDescription>` ou `aria-describedby` nos `Dialog` que estão gerando warning (acessibilidade).
-2. Remover o código morto do `redirectCountRef` (rota `/onboarding` inexistente) no `ProtectedRoute`.
-3. Rodar o `security--run_security_scan` ao final e te mostrar achados pendentes para você decidir o que tratar.
+### 7. Loader "Carregando..." sem timeout
+O replay mostra `animate-pulse text-muted-foreground` "Carregando..." persistindo. Em `AppSkeleton.tsx` (ou onde está o fallback), adicionar timeout de 8s com mensagem "Demorando mais que o esperado — verifique sua conexão" + botão recarregar, para o usuário não ficar travado.
 
-## Fora de escopo (intencional)
-- Não vou re-adicionar "Propriedades" no menu (você pediu para manter).
-- Não vou mexer em Stripe/sync (já estabilizado nas rodadas anteriores).
-- Não vou refatorar UI de telas sem bug confirmado.
+## Fora do escopo deste lote
+- Filtros globais persistentes (próximo lote).
+- Otimização de `useChartData` / `useRelatorioData` (próximo lote).
+- Configurações de plano/créditos (questão de plataforma, não bug).
 
-## Detalhes técnicos
-- Arquivos esperados: `src/hooks/useAuth.ts`, `src/components/ProtectedRoute.tsx`, `src/contexts/TenantContext.tsx`, `src/pages/Auth.tsx`, `src/hooks/useKPIs.ts` (+ correlatos).
-- Nenhuma migration nova prevista; apenas leitura de `pg_stat_statements` para validar antes/depois.
-- React Query `staleTime` será calibrado por tipo de dado (KPIs 60 s, listagens 30 s, dados de tenant 5 min).
+## Validação
+- `tsgo` para checagem de tipos.
+- Abrir CompromissoDialog, preencher, atualizar a página → toast de rascunho deve aparecer.
+- Criar um orçamento pelo calendário → `/orcamentos` atualiza sem refresh manual.
+- Console limpo dos warnings do React Router.
 
-## Entregável final
-Mensagem com:
-- Diff resumido por lote.
-- Comparativo de chamadas ao banco (antes/depois dos lotes 1 e 2).
-- Lista de achados do scanner que sobraram, para você priorizar.
+Aprovar para implementar.

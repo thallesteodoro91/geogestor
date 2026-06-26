@@ -53,8 +53,8 @@ export const CompromissoDialog = ({
   // Auto-save de rascunho (24h) — só ativo para criação (sem eventoId).
   const { clearDraft } = useStateDraft({
     key: "compromisso:new",
-    value: formData,
-    setValue: setFormData,
+    value: formData as unknown as Record<string, unknown>,
+    setValue: (v) => setFormData(v as unknown as ReturnType<typeof initialFormData>),
     enabled: open && !eventoId,
   });
 

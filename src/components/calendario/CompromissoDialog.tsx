@@ -17,6 +17,7 @@ import { SERVICE_STATUS, CALENDAR_STATUS_OPTIONS } from "@/constants/serviceStat
 import { cn } from "@/lib/utils";
 import { BUDGET_SITUATION_OPTIONS } from "@/constants/budgetStatus";
 import { useTenant } from "@/contexts/TenantContext";
+import { useStateDraft } from "@/hooks/useFormDraft";
 
 interface CompromissoDialogProps {
   open: boolean;
@@ -24,6 +25,18 @@ interface CompromissoDialogProps {
   tipo?: "orcamento" | "servico";
   eventoId?: string;
 }
+
+const initialFormData = () => ({
+  id_cliente: "",
+  id_servico: "",
+  id_propriedade: "",
+  nome_do_servico: "",
+  data_inicio: new Date().toISOString().split("T")[0],
+  data_termino: "",
+  valor_unitario: "",
+  situacao: SERVICE_STATUS.PENDENTE as string,
+  situacao_servico: SERVICE_STATUS.PLANEJADO as string,
+});
 
 export const CompromissoDialog = ({
   open,
@@ -33,61 +46,81 @@ export const CompromissoDialog = ({
 }: CompromissoDialogProps) => {
   const queryClient = useQueryClient();
   const { tenant } = useTenant();
+  const tenantId = tenant?.id;
   const [tipo, setTipo] = useState<"orcamento" | "servico">(tipoInicial);
-  const [formData, setFormData] = useState({
-    id_cliente: "",
-    id_servico: "",
-    id_propriedade: "",
-    nome_do_servico: "",
-    data_inicio: new Date().toISOString().split("T")[0],
-    data_termino: "",
-    valor_unitario: "",
-    situacao: SERVICE_STATUS.PENDENTE as string,
-    situacao_servico: SERVICE_STATUS.PLANEJADO as string,
+  const [formData, setFormData] = useState(initialFormData);
+
+  // Auto-save de rascunho (24h) — só ativo para criação (sem eventoId).
+  const { clearDraft } = useStateDraft({
+    key: "compromisso:new",
+    value: formData,
+    setValue: setFormData,
+    enabled: open && !eventoId,
   });
 
-  // Buscar clientes
+  // Buscar clientes do tenant atual
   const { data: clientes = [] } = useQuery({
-    queryKey: ["clientes"],
+    queryKey: ["compromisso-clientes", tenantId],
     queryFn: async () => {
       const { data } = await supabase
         .from("dim_cliente")
         .select("id_cliente, nome")
+        .eq("tenant_id", tenantId!)
         .order("nome");
       return data || [];
     },
+    enabled: !!tenantId && open,
   });
 
-  // Buscar serviços
+  // Buscar serviços do tenant atual
   const { data: servicos = [] } = useQuery({
-    queryKey: ["servicos"],
+    queryKey: ["compromisso-servicos", tenantId],
     queryFn: async () => {
       const { data } = await supabase
         .from("fato_servico")
         .select("id_servico, nome_do_servico, categoria")
+        .eq("tenant_id", tenantId!)
         .order("nome_do_servico");
       return data || [];
     },
+    enabled: !!tenantId && open,
   });
 
-  // Buscar propriedades do cliente selecionado
+  // Buscar propriedades do cliente selecionado (filtradas também por tenant)
   const { data: propriedades = [] } = useQuery({
-    queryKey: ["propriedades", formData.id_cliente],
+    queryKey: ["compromisso-propriedades", tenantId, formData.id_cliente],
     queryFn: async () => {
       if (!formData.id_cliente) return [];
       const { data } = await supabase
         .from("dim_propriedade")
         .select("id_propriedade, nome_da_propriedade")
+        .eq("tenant_id", tenantId!)
         .eq("id_cliente", formData.id_cliente)
         .order("nome_da_propriedade");
       return data || [];
     },
-    enabled: !!formData.id_cliente,
+    enabled: !!tenantId && !!formData.id_cliente,
   });
+
+  // Invalida todas as views que dependem desses dados (calendário + listas + KPIs)
+  const invalidateAfterMutation = () => {
+    [
+      "calendario-eventos",
+      "calendario-semanal",
+      "calendario-diario",
+      "calendario-tabela",
+      "calendario-kpis",
+      "orcamentos",
+      "servicos",
+      "kpis",
+      "dashboard-metrics",
+      "dashboard-financial",
+    ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
+  };
 
   // Mutation para criar orçamento
   const createOrcamento = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: typeof formData) => {
       const { error } = await supabase.from("fato_orcamento").insert([
         {
           id_cliente: data.id_cliente,
@@ -98,20 +131,17 @@ export const CompromissoDialog = ({
           data_termino: data.data_termino || null,
           valor_unitario: parseFloat(data.valor_unitario) || 0,
           situacao: data.situacao,
-          tenant_id: tenant?.id,
+          tenant_id: tenantId,
         },
       ]);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["calendario-eventos"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-semanal"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-diario"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-tabela"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-kpis"] });
+      invalidateAfterMutation();
       toast.success("Orçamento criado com sucesso!");
+      clearDraft();
+      setFormData(initialFormData());
       onOpenChange(false);
-      resetForm();
     },
     onError: (error) => {
       toast.error("Erro ao criar orçamento");
@@ -121,7 +151,7 @@ export const CompromissoDialog = ({
 
   // Mutation para criar serviço
   const createServico = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: typeof formData) => {
       const { error } = await supabase.from("fato_servico").insert([
         {
           nome_do_servico: data.nome_do_servico || "Novo Serviço",
@@ -131,20 +161,17 @@ export const CompromissoDialog = ({
           data_do_servico_fim: data.data_termino || null,
           situacao_do_servico: data.situacao_servico,
           receita_servico: parseFloat(data.valor_unitario || "0"),
-          tenant_id: tenant?.id,
+          tenant_id: tenantId,
         },
       ]);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["calendario-eventos"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-semanal"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-diario"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-tabela"] });
-      queryClient.invalidateQueries({ queryKey: ["calendario-kpis"] });
+      invalidateAfterMutation();
       toast.success("Serviço criado com sucesso!");
+      clearDraft();
+      setFormData(initialFormData());
       onOpenChange(false);
-      resetForm();
     },
     onError: (error) => {
       toast.error("Erro ao criar serviço");
@@ -152,23 +179,13 @@ export const CompromissoDialog = ({
     },
   });
 
-  const resetForm = () => {
-    setFormData({
-      id_cliente: "",
-      id_servico: "",
-      id_propriedade: "",
-      nome_do_servico: "",
-      data_inicio: new Date().toISOString().split("T")[0],
-      data_termino: "",
-      valor_unitario: "",
-      situacao: SERVICE_STATUS.PENDENTE,
-      situacao_servico: SERVICE_STATUS.PLANEJADO,
-    });
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    if (!tenantId) {
+      toast.error("Carregando dados da empresa, tente novamente em instantes");
+      return;
+    }
     if (!formData.id_cliente) {
       toast.error("Selecione um cliente para criar o orçamento");
       return;

@@ -31,15 +31,16 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useStateDraft } from "@/hooks/useFormDraft";
+import { usePersistentFilters } from "@/hooks/usePersistentFilters";
 
 export default function Despesas() {
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [categoriaFilter, setCategoriaFilter] = useState("all");
-  const [dataInicio, setDataInicio] = useState<Date | undefined>(undefined);
-  const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
+  const [searchTerm, setSearchTerm] = usePersistentFilters<string>("despesas:search", "");
+  const [categoriaFilter, setCategoriaFilter] = usePersistentFilters<string>("despesas:categoria", "all");
+  const [dataInicio, setDataInicio] = usePersistentFilters<Date | undefined>("despesas:dataInicio", undefined);
+  const [dataFim, setDataFim] = usePersistentFilters<Date | undefined>("despesas:dataFim", undefined);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);

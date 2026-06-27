@@ -34,7 +34,7 @@ function useMonthlyFinancialData(year?: number) {
     queryKey: ['monthly-financial-data', targetYear],
     queryFn: () => fetchMonthlyFinancialData(targetYear),
     staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 }
 

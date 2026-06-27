@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { Plus, Users, Eye, Edit, Trash2, MapPin, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getStatusClasses } from "@/lib/statusColors";
+import { usePersistentFilters } from "@/hooks/usePersistentFilters";
 
 export default function Clientes() {
   const navigate = useNavigate();

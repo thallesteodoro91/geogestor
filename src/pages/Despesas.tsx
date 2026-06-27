@@ -31,6 +31,7 @@ import { format, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useStateDraft } from "@/hooks/useFormDraft";
+import { usePersistentFilters } from "@/hooks/usePersistentFilters";
 
 export default function Despesas() {
   const queryClient = useQueryClient();

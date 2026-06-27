@@ -25,8 +25,8 @@ import { getStatusClasses } from "@/lib/statusColors";
 export default function Clientes() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [situacaoFilter, setSituacaoFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = usePersistentFilters<string>("clientes:search", "");
+  const [situacaoFilter, setSituacaoFilter] = usePersistentFilters<string>("clientes:situacao", "all");
   const [dialogOpen, setDialogOpen] = useState<{ open: boolean; data?: any }>({ open: false });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);

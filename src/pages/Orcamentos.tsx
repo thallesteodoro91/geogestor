@@ -27,6 +27,7 @@ import { PAYMENT_STATUS, PAYMENT_STATUS_OPTIONS, PAYMENT_METHOD_OPTIONS, BUDGET_
 import { ClienteDialog } from "@/components/cadastros/ClienteDialog";
 import { getStatusClasses } from "@/lib/statusColors";
 import { useServerPagination } from "@/hooks/useServerPagination";
+import { usePersistentFilters } from "@/hooks/usePersistentFilters";
 
 export default function Orcamentos() {
   const queryClient = useQueryClient();

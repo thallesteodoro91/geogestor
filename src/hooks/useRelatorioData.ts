@@ -54,6 +54,8 @@ export interface HistoricoMensal {
   receita: number;
 }
 
+const RELATORIO_QUERY_OPTS = { staleTime: 2 * 60 * 1000, refetchOnWindowFocus: false } as const;
+
 export function useRelatorioData({ mes, ano, customInicio, customFim }: RelatorioParams) {
   const dataInicio = customInicio || format(startOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
   const dataFim = customFim || format(endOfMonth(new Date(ano, mes)), "yyyy-MM-dd");
@@ -78,6 +80,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
       if (error) throw error;
       return (data || []) as ClienteNovo[];
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Serviços com maior custo
@@ -101,6 +104,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
           : 0,
       }));
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Orçamentos pendentes
@@ -122,6 +126,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
         data_faturamento: o.data_do_faturamento,
       }));
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Dados semanais (entradas/saídas)
@@ -161,6 +166,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
         return { semana: `Sem ${i + 1}`, entradas, saidas };
       });
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Receita por categoria de serviço
@@ -182,6 +188,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
         .map(([categoria, valor]) => ({ categoria, valor }))
         .sort((a, b) => b.valor - a.valor);
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Empresa info
@@ -191,6 +198,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
       const { data } = await supabase.from("dim_empresa").select("nome").limit(1).single();
       return data;
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Taxa de conversão do mês
@@ -206,6 +214,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
       const convertidos = data?.filter((o) => o.orcamento_convertido).length || 0;
       return { total, convertidos, taxa: total > 0 ? (convertidos / total) * 100 : 0 };
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Top 3 clientes por receita no período
@@ -230,6 +239,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
         .sort((a, b) => b.receita - a.receita)
         .slice(0, 3);
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   // Histórico 12 meses para sparkline
@@ -259,6 +269,7 @@ export function useRelatorioData({ mes, ano, customInicio, customFim }: Relatori
       });
       return resultMeses;
     },
+    ...RELATORIO_QUERY_OPTS,
   });
 
   const derivedKPIs = metricsAtual.data ? calculateDerivedKPIs(metricsAtual.data) : null;

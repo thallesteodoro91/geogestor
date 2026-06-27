@@ -28,6 +28,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { useServerPagination } from "@/hooks/useServerPagination";
 import { fetchServicos, deleteServico } from "@/modules/operations";
+import { usePersistentFilters } from "@/hooks/usePersistentFilters";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";

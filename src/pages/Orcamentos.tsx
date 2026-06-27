@@ -45,10 +45,10 @@ export default function Orcamentos() {
   });
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [filtroSituacao, setFiltroSituacao] = useState("todos");
-  const [filtroForma, setFiltroForma] = useState("todos");
-  const [filtroStatusOrc, setFiltroStatusOrc] = useState("todos");
+  const [searchTerm, setSearchTerm] = usePersistentFilters<string>("orcamentos:search", "");
+  const [filtroSituacao, setFiltroSituacao] = usePersistentFilters<string>("orcamentos:situacao", "todos");
+  const [filtroForma, setFiltroForma] = usePersistentFilters<string>("orcamentos:forma", "todos");
+  const [filtroStatusOrc, setFiltroStatusOrc] = usePersistentFilters<string>("orcamentos:statusOrc", "todos");
   const [clienteDialogOpen, setClienteDialogOpen] = useState(false);
 
   // KPIs agregados via RPC (server-side, considera filtros atuais)

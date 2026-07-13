@@ -1,0 +1,593 @@
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../services/apiClient';
+import { Layout } from '../components/Layout';
+import { RecentActivities } from '../components/RecentActivities';
+import { Skeleton } from '../components/Skeleton';
+import { motion } from 'framer-motion';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend
+} from 'recharts';
+import { 
+  chartTextColor, chartBorder, chartLegendStyle, chartCursor, responsiveChartProps 
+} from '../utils/chartHelpers';
+import { chartColors, colorblindSafeColors } from '../data/chart-colors';
+import { DynamicTooltip } from '../components/charts/DynamicTooltip';
+import { RichTooltip } from '../components/charts/RichTooltip';
+import { geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass } from '../utils/geoTheme';
+
+import valueChainIcon from '../assets/magnific-icons/value-chain_10220236.svg';
+import coexistenceIcon from '../assets/magnific-icons/coexistence_10415362.svg';
+import projectFolderIcon from '../assets/magnific-icons/project_folder.svg';
+import mapIcon from '../assets/magnific-icons/map_3909526.svg';
+import stopwatchIcon from '../assets/magnific-icons/stopwatch_9527988.svg';
+import diplomaIcon from '../assets/magnific-icons/diploma_5172207.svg';
+import calendarIcon from '../assets/magnific-icons/calendar_5684639.svg';
+import blueprintIcon from '../assets/magnific-icons/blueprint_7504288.svg';
+
+const getStatusColor = (status: string, index: number) => {
+  switch (status) {
+    case 'Concluído':
+    case 'Finalizado':
+      return chartColors.positive;
+    case 'Em Andamento':
+      return chartColors.primary;
+    case 'Atrasado':
+      return chartColors.negative;
+    case 'Aguardando Órgão':
+      return chartColors.warning;
+    case 'Em Análise':
+      return chartColors.secondary;
+    default:
+      return colorblindSafeColors[index % colorblindSafeColors.length];
+  }
+};
+
+interface StatsGeral {
+  orcamentosStats?: Array<{ total?: number }>;
+  despesasPorCategoria?: Array<{ categoria: string; total: number }>;
+  areaTotal?: number;
+  historicoMensal?: {
+    receitasMensais: Array<{ mes: string; total: number }>;
+    despesasMensais: Array<{ mes: string; total: number }>;
+  };
+  projetosPorStatus?: Array<{ status: string; count: number }>;
+}
+
+interface TaskItem {
+  id: string;
+  titulo: string;
+  status: string;
+  dataLimite?: string | null;
+  projetoNome?: string;
+  clienteNome?: string;
+  prioridade?: string;
+}
+
+interface ProjetoResumo {
+  id: string;
+  nome: string;
+  clienteNome?: string;
+  status: string;
+  tipo?: string | null;
+}
+
+interface ClienteResumo {
+  id: string;
+  nome: string;
+  email?: string | null;
+}
+
+interface LicencaItem {
+  id: string;
+  projetoId: string;
+  numero: string;
+  orgao: string;
+  dataEmissao?: string | null;
+  dataVencimento: string;
+  status: string;
+  observacoes?: string | null;
+}
+
+const getDaysLeftText = (targetDate: Date) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(targetDate);
+  target.setHours(0, 0, 0, 0);
+
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) {
+    return { text: `Vencido há ${Math.abs(diffDays)}d`, className: 'bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20' };
+  }
+  if (diffDays === 0) {
+    return { text: 'Vence hoje', className: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20' };
+  }
+  if (diffDays === 1) {
+    return { text: 'Amanhã', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20' };
+  }
+  return { text: `Em ${diffDays} dias`, className: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/80' };
+};
+
+export function Dashboard() {
+  const [projetoFilterMode, setProjetoFilterMode] = useState<'macro' | 'unitario'>('macro');
+  const [selectedProjetoTipo, setSelectedProjetoTipo] = useState<string>('');
+
+  const { data: clientes = [], isLoading: loadingClientes } = useQuery<ClienteResumo[]>({
+    queryKey: ['clientes'],
+    queryFn: () => apiClient.get<ClienteResumo[]>('/api/clientes')
+  });
+
+  const { data: projetos = [], isLoading: loadingProjetos } = useQuery<ProjetoResumo[]>({
+    queryKey: ['projetos'],
+    queryFn: () => apiClient.get<ProjetoResumo[]>('/api/projetos')
+  });
+
+  const { data: tasks = [] } = useQuery<TaskItem[]>({
+    queryKey: ['tarefas'],
+    queryFn: () => apiClient.get<TaskItem[]>('/api/tarefas')
+  });
+
+  const { data: stats, isLoading: loadingStats } = useQuery<StatsGeral>({
+    queryKey: ['stats-geral'],
+    queryFn: () => apiClient.get<StatsGeral>('/api/relatorios/geral')
+  });
+
+  const { data: licencas = [] } = useQuery<LicencaItem[]>({
+    queryKey: ['licencas'],
+    queryFn: () => apiClient.get<LicencaItem[]>('/api/licencas')
+  });
+
+  // Calcular balanço financeiro
+  const { netProfit, areaTotal } = useMemo(() => {
+    const totalReceitas = stats?.orcamentosStats?.reduce((acc: number, curr) => acc + (curr.total || 0), 0) || 0;
+    const totalDespesas = stats?.despesasPorCategoria?.reduce((acc: number, curr) => acc + (curr.total || 0), 0) || 0;
+    return {
+      netProfit: totalReceitas - totalDespesas,
+      areaTotal: stats?.areaTotal || 0,
+    };
+  }, [stats]);
+
+  // Porcentagem de tarefas concluídas
+  const { completedTasks, taskCompletionRate } = useMemo(() => {
+    const completed = tasks.filter((t) => t.status === 'Concluído').length;
+    const rate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+    return { completedTasks: completed, taskCompletionRate: rate };
+  }, [tasks]);
+
+  // Preparar dados do gráfico financeiro
+  const financeChartData = useMemo(() => {
+    const chartMap = new Map<string, { mes: string; receita: number; despesa: number }>();
+    if (stats?.historicoMensal) {
+      stats.historicoMensal.receitasMensais.forEach((r) => {
+        chartMap.set(r.mes, { mes: r.mes, receita: r.total / 100, despesa: 0 });
+      });
+      stats.historicoMensal.despesasMensais.forEach((d) => {
+        const existing = chartMap.get(d.mes);
+        if (existing) {
+          existing.despesa = d.total / 100;
+        } else {
+          chartMap.set(d.mes, { mes: d.mes, receita: 0, despesa: d.total / 100 });
+        }
+      });
+    }
+    let data = Array.from(chartMap.values()).sort((a, b) => a.mes.localeCompare(b.mes));
+    if (data.length === 0) {
+      data = [{ mes: 'Jan', receita: 0, despesa: 0 }, { mes: 'Fev', receita: 0, despesa: 0 }, { mes: 'Mar', receita: 0, despesa: 0 }];
+    }
+    return data;
+  }, [stats]);
+
+
+
+  // Preparar os tipos de projetos disponíveis a partir dos dados reais
+  const availableProjectTypes = useMemo(() => 
+    Array.from(new Set(projetos.map((p) => p.tipo || 'Não Informado'))) as string[],
+  [projetos]);
+
+  const effectiveProjetoTipo = selectedProjetoTipo || availableProjectTypes[0] || '';
+
+  // Preparar dados de distribuição de projetos
+  const projetosStatusData = useMemo(() => {
+    if (projetoFilterMode === 'macro') {
+      const countMap = new Map<string, number>();
+      projetos.forEach((p) => {
+        const key = p.tipo || 'Não Informado';
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      });
+      return Array.from(countMap.entries()).map(([name, value]) => ({ name, value }));
+    } else {
+      const filtered = projetos.filter((p) => (p.tipo || 'Não Informado') === effectiveProjetoTipo);
+      const countMap = new Map<string, number>();
+      filtered.forEach((p) => {
+        const key = p.status || 'Sem Status';
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      });
+      return Array.from(countMap.entries()).map(([name, value]) => ({ name, value }));
+    }
+  }, [projetos, projetoFilterMode, effectiveProjetoTipo]);
+
+
+
+  const upcomingItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      tipo: 'tarefa' | 'licenca';
+      titulo: string;
+      contexto: string;
+      data: Date;
+      dataString: string;
+      badgeColor: string;
+    }> = [];
+
+    tasks.forEach(t => {
+      if (t.status !== 'Concluído' && t.dataLimite) {
+        const dateParts = t.dataLimite.split('-');
+        if (dateParts.length === 3) {
+          const date = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
+          const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+          items.push({
+            id: t.id,
+            tipo: 'tarefa',
+            titulo: t.titulo,
+            contexto: t.projetoNome || t.clienteNome || 'Interno',
+            data: date,
+            dataString: formattedDate,
+            badgeColor: t.prioridade === 'Alta' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+          });
+        }
+      }
+    });
+
+    licencas.forEach(l => {
+      if (l.status !== 'Concluído' && l.status !== 'Entregue' && l.dataVencimento) {
+        const dateParts = l.dataVencimento.split('-');
+        if (dateParts.length >= 3) {
+          const date = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
+          const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+          const projeto = projetos.find(p => p.id === l.projetoId);
+          items.push({
+            id: l.id,
+            tipo: 'licenca',
+            titulo: `${l.numero} - ${l.orgao}`,
+            contexto: projeto ? projeto.nome : 'Sem Projeto',
+            data: date,
+            dataString: formattedDate,
+            badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+          });
+        }
+      }
+    });
+
+    return items.sort((a, b) => a.data.getTime() - b.data.getTime()).slice(0, 5);
+  }, [tasks, licencas, projetos]);
+  return (
+    <Layout>
+      <div className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div>
+          <h1 className="text-5xl font-semibold tracking-tighter text-text-primary">
+            Visão Geral
+          </h1>
+          <p className="mt-3 text-lg text-text-secondary font-medium">
+            Monitoramento operacional, financeiro e geográfico consolidado.
+          </p>
+        </div>
+
+      </div>
+      
+            {/* Top Row: Finance & Quick Stats */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        
+        {/* Fluxo de Caixa (Large Bento Box) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, type: "spring", stiffness: 100 }}
+          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col min-h-[360px]"
+        >
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 flex items-center justify-center">
+                <img src={valueChainIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+              </div>
+              <span className="text-sm font-semibold uppercase tracking-wider text-text-muted">Fluxo de Caixa</span>
+            </div>
+            <div className="text-right">
+              <span className="text-sm font-medium text-text-muted block mb-1">Lucro Estimado</span>
+              <span className="text-3xl font-semibold tracking-tight text-text-primary">
+                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit / 100)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-[200px] w-full">
+            <ResponsiveContainer {...responsiveChartProps}>
+              <AreaChart data={financeChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColors.negative} stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor={chartColors.negative} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} opacity={0.4} />
+                <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} tickFormatter={(value) => `R$ ${value}`} />
+                <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Lucro Estimado" format="currency" />} />
+                <Area type="monotone" name="Receita" dataKey="receita" stroke={chartColors.primary} strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
+                <Area type="monotone" name="Despesa" dataKey="despesa" stroke={chartColors.negative} strokeWidth={3} fillOpacity={1} fill="url(#colorDespesa)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+
+        {/* Quick Stats Column (stacked vertically on right) */}
+        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
+          <div className="flex flex-col gap-6">
+          
+          {/* Clientes */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
+            className={`${geoGreenSurfaceClass} flex-1 rounded-[2rem] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-emerald-300/15 p-6 flex justify-between items-center relative overflow-hidden transition-transform duration-300 hover:-translate-y-0.5`}
+          >
+            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
+              <img src={coexistenceIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+            </div>
+            <div className="text-right relative z-10">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${geoGreenLabelClass} block mb-1`}>Clientes</span>
+              {loadingClientes ? (
+                <Skeleton className="h-10 w-16 ml-auto mt-1" />
+              ) : (
+                <span className={`text-4xl font-semibold tracking-tighter ${geoGreenValueClass}`}>
+                  {String(clientes.length).padStart(2, '0')}
+                </span>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Projetos */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 100 }}
+            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-[2rem] p-6 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5`}
+          >
+            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
+              <img src={projectFolderIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+            </div>
+            <div className="text-right relative z-10">
+              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-orange-100/85">Projetos</span>
+              {loadingProjetos ? (
+                <Skeleton className="h-10 w-16 ml-auto mt-1" />
+              ) : (
+                <span className="text-4xl font-semibold tracking-tighter text-white">
+                  {String(projetos.length).padStart(2, '0')}
+                </span>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Área sob Gestão */}
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
+            className={`${geoOrangeSurfaceClass} flex-1 rounded-[2rem] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-orange-300/15 p-6 flex justify-between items-center relative overflow-hidden transition-transform duration-300 hover:-translate-y-0.5`}
+          >
+            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
+              <img src={mapIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+            </div>
+            <div className="text-right relative z-10">
+              <span className={`text-xs font-semibold uppercase tracking-wider ${geoOrangeLabelClass} block mb-1`}>Área sob Gestão (ha)</span>
+              {loadingStats ? (
+                <Skeleton className="h-10 w-24 ml-auto mt-1" />
+              ) : (
+                <span className={`text-4xl font-semibold tracking-tighter ${geoOrangeValueClass}`}>
+                  {areaTotal.toFixed(1)}
+                </span>
+              )}
+            </div>
+          </motion.div>
+        </div>
+        </div>
+
+      </div>
+
+      {/* Row 2: Vencimentos & Eficiência */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        
+        {/* Próximos Vencimentos */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.8, type: "spring", stiffness: 100 }}
+          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col justify-between min-h-[360px]"
+        >
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 flex items-center justify-center">
+                <img src={calendarIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold uppercase tracking-wider text-text-muted block">Próximos Vencimentos</span>
+                <span className="text-[10px] text-text-secondary font-medium block mt-0.5">Prazos de tarefas e licenças ambientais para os próximos dias</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {upcomingItems.length === 0 ? (
+                <div className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-sm">
+                  Nenhum vencimento pendente para os próximos dias.
+                </div>
+              ) : (
+                upcomingItems.map((item) => {
+                  const daysBadge = getDaysLeftText(item.data);
+                  return (
+                    <div key={item.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80 rounded-2xl hover:bg-zinc-100/50 dark:hover:bg-zinc-800/70 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                          {item.tipo === 'tarefa' ? (
+                            <img src={calendarIcon} alt="" className="h-[22px] w-[22px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                          ) : (
+                            <img src={diplomaIcon} alt="" className="h-[26px] w-[26px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-text-primary truncate">{item.titulo}</h4>
+                          <p className="text-[10px] text-text-secondary truncate mt-0.5">{item.contexto}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-[10px] text-text-secondary font-medium tabular-nums">{item.dataString}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${daysBadge.className}`}>
+                          {daysBadge.text}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Eficiência Operacional */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.7, type: "spring", stiffness: 100 }}
+          className="col-span-1 lg:col-span-4 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col justify-between min-h-[360px]"
+        >
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 flex items-center justify-center">
+                <img src={stopwatchIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+              </div>
+              <span className="text-sm font-semibold uppercase tracking-wider text-text-muted">Eficiência Operacional</span>
+            </div>
+
+            <div className="flex items-baseline gap-2 mb-4">
+              <span className="text-5xl font-bold tracking-tight text-text-primary">{taskCompletionRate}%</span>
+              <span className="text-xs text-text-secondary font-medium">das tarefas concluídas</span>
+            </div>
+
+            {/* Detalhamento compacto */}
+            <div className="space-y-2 mt-4 border-t border-zinc-100 dark:border-zinc-800/80 pt-4 text-[11px]">
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Concluídas:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{completedTasks}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-text-secondary">Pendentes:</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">{tasks.length - completedTasks}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden mb-2">
+              <div 
+                className="bg-emerald-600 dark:bg-emerald-500 h-full rounded-full transition-all duration-1000" 
+                style={{ width: `${taskCompletionRate}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-text-secondary">Métrica de conclusão de atividades.</p>
+          </div>
+        </motion.div>
+
+      </div>
+{/* Row 3: Distribuição e Despesas */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Atividades Recentes (span 8) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
+          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col h-[460px]"
+        >
+          <RecentActivities />
+        </motion.div>
+
+        {/* Distribuição de Projetos (span 4) */}
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
+          className="col-span-1 lg:col-span-4 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col h-[460px]"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 flex items-center justify-center shrink-0">
+                <img src={blueprintIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+              </div>
+              <div>
+                <span className="text-sm font-semibold uppercase tracking-wider text-text-muted block">Distribuição de Projetos</span>
+                <span className="text-[10px] text-text-secondary font-medium block mt-0.5">
+                  {projetoFilterMode === 'macro' ? 'Por tipo/categoria' : `Status (${effectiveProjetoTipo})`}
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex bg-zinc-100 dark:bg-zinc-800/60 p-1 rounded-xl">
+                <button 
+                  onClick={() => setProjetoFilterMode('macro')} 
+                  className={`px-3 py-1 text-[10px] font-medium rounded-lg transition-all ${projetoFilterMode === 'macro' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                >
+                  Todos
+                </button>
+                <button 
+                  onClick={() => setProjetoFilterMode('unitario')} 
+                  className={`px-3 py-1 text-[10px] font-medium rounded-lg transition-all ${projetoFilterMode === 'unitario' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                >
+                  Unitário
+                </button>
+              </div>
+              
+              {projetoFilterMode === 'unitario' && availableProjectTypes.length > 0 && (
+                <select
+                  value={effectiveProjetoTipo}
+                  onChange={(e) => setSelectedProjetoTipo(e.target.value)}
+                  className="bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-xl px-2 py-1.5 text-[10px] font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer animate-in fade-in zoom-in-95 duration-200"
+                >
+                  {availableProjectTypes.map((tipo) => (
+                    <option key={tipo} value={tipo}>{tipo}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+          <div className="flex-1">
+            <ResponsiveContainer {...responsiveChartProps}>
+              <PieChart>
+                <Pie
+                  data={projetosStatusData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={70}
+                  outerRadius={105}
+                  paddingAngle={5}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {projetosStatusData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={getStatusColor(entry.name, index)} />
+                  ))}
+                </Pie>
+                <RechartsTooltip content={<DynamicTooltip formatter={(v) => `${v} projetos`} />} />
+                <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      </div>
+    </Layout>
+  );
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@geogestor/database",
+  "version": "1.0.0",
+  "main": "src/index.ts",
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "push": "drizzle-kit push",
+    "studio": "drizzle-kit studio",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.6.0",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.3"
+  }
+}

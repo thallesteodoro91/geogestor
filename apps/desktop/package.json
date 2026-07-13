@@ -1,0 +1,57 @@
+{
+  "name": "geogestor-desktop",
+  "version": "1.1.0",
+  "description": "GeoGestor - Gestao para Topografia (Desktop)",
+  "main": "main.js",
+  "author": "GeoGestor",
+  "packageManager": "pnpm@11.8.0",
+  "private": true,
+  "scripts": {
+    "dev": "electron .",
+    "build": "node prepare-app.mjs && electron-builder --projectDir .build-app --win",
+    "build:all": "node prepare-app.mjs && electron-builder --projectDir .build-app --win --mac --linux"
+  },
+  "build": {
+    "appId": "com.geogestor.desktop",
+    "productName": "GeoGestor",
+    "artifactName": "${productName} Setup ${version}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js"
+    ],
+    "extraResources": [
+      {
+        "from": "../api/dist",
+        "to": "api",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../web/dist",
+        "to": "web",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "GeoGestor"
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.7.5",
+    "electron-builder": "^26.0.12"
+  }
+}

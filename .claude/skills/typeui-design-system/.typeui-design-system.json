@@ -1,0 +1,12 @@
+﻿{
+  "designSystemId": "78e45805-9741-477e-b79e-08e8a0b51842",
+  "installScope": "project",
+  "packageId": "25e4bac4-74be-4f02-870c-3878a42099a4",
+  "skillFolderName": "typeui-design-system",
+  "slug": "professional-design-system",
+  "source": "workspace",
+  "templateSlug": "professional",
+  "type": "typeui-design-system",
+  "variant": "workspace",
+  "workspaceId": "4308ac32-885a-49b1-9101-178f2e7c62e4"
+}

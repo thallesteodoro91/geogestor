@@ -1,3 +1,4 @@
+import { FormSelect } from '../../components/Form';
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { Layout } from '../../components/Layout';
@@ -221,7 +222,7 @@ export function MapaVisualizador() {
         </div>
 
         <div className="flex items-center gap-4">
-          <select 
+          <FormSelect
             value={selectedCliente} 
             onChange={e => setSelectedCliente(e.target.value)}
             className="bg-white dark:bg-zinc-900 ring-1 ring-zinc-900/5 shadow-sm rounded-xl px-4 py-3 text-sm text-zinc-700 focus:outline-none min-w-[200px]"
@@ -229,7 +230,7 @@ export function MapaVisualizador() {
             {clientes.map(c => (
               <option key={c.id} value={c.id}>{c.nome}</option>
             ))}
-          </select>
+          </FormSelect>
         </div>
       </div>
 

@@ -1,3 +1,4 @@
+import { FormSelect } from '../../components/Form';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
@@ -18,6 +19,7 @@ import {
 } from '@phosphor-icons/react';
 import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoOrangeIconClass, geoOrangeLabelClass, geoOrangeSurfaceWithAccentClass, geoOrangeValueClass, geoPurpleSurfaceClass } from '../../utils/geoTheme';
 import { apiClient } from '../../services/apiClient';
+import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
 
 interface Projeto {
   id: string;
@@ -101,7 +103,7 @@ export function Operacional() {
   const productivityRate = totalProjetos > 0 ? Math.round((projetosConcluidos / totalProjetos) * 100) : 0;
 
   // 4. Budget average (Ticket Médio)
-  const approvedBudgets = orcamentos.filter((o) => o.status === 'Pago' || o.status === 'Aprovado');
+  const approvedBudgets = orcamentos.filter((o) => isApprovedBudgetStatus(o.status));
   const avgTicket = approvedBudgets.length > 0 
     ? Math.round(approvedBudgets.reduce((acc: number, curr) => acc + curr.valorTotal, 0) / approvedBudgets.length) 
     : 0;
@@ -109,7 +111,7 @@ export function Operacional() {
   // 5. Custo vs Receita por Projeto (Top 5)
   const projectComparisonData = filteredProjetos.map((proj) => {
     // find related budget value
-    const relatedBudgets = orcamentos.filter((o) => o.clienteId === proj.clienteId);
+    const relatedBudgets = orcamentos.filter((o) => o.clienteId === proj.clienteId && isApprovedBudgetStatus(o.status));
     // divide total client budget by their project count as estimation if not 1-to-1
     const clientProjects = filteredProjetos.filter((p) => p.clienteId === proj.clienteId).length;
     const estimatedReceita = relatedBudgets.reduce((acc: number, o) => acc + o.valorTotal, 0) / (clientProjects || 1);
@@ -289,7 +291,7 @@ export function Operacional() {
                     </button>
                   </div>
 
-                  <select 
+                  <FormSelect
                     value={categoriaFilter} 
                     onChange={e => setCategoriaFilter(e.target.value)} 
                     className="h-9 bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-3 text-xs font-semibold text-zinc-700 focus:outline-none dark:text-zinc-200"
@@ -297,7 +299,7 @@ export function Operacional() {
                     <option value="todos">Todos os Tipos</option>
                     <option value="Rural">Rural</option>
                     <option value="Urbano">Urbano</option>
-                  </select>
+                  </FormSelect>
                 </div>
               </div>
               

@@ -20,7 +20,7 @@ import {
 } from '@phosphor-icons/react';
 import { Modal } from '../components/Modal';
 import { cn } from '../utils/cn';
-import { geoFieldClass, geoKickerClass, geoPanelClass, geoTabButtonClass } from '../utils/geoTheme';
+import { geoFieldClass, geoKickerClass, geoPanelClass, geoTabButtonClass, geoTabIconClass } from '../utils/geoTheme';
 import { primarySmallActionButtonClass, primarySubmitButtonClass, revenueActionButtonClass } from '../utils/actionStyles';
 
 export function Configuracoes() {
@@ -429,7 +429,7 @@ export function Configuracoes() {
             onClick={() => setActiveTab('geral')}
             className={settingsTabClass('geral', 'system')}
           >
-            <Gear weight={activeTab === 'geral' ? 'fill' : 'regular'} className="w-5 h-5 text-blue-500" />
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'geral', 'system')}><Gear weight={activeTab === 'geral' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
             Configuração Geral
           </button>
           <button
@@ -438,7 +438,7 @@ export function Configuracoes() {
             onClick={() => setActiveTab('aparencia')}
             className={settingsTabClass('aparencia', 'warning')}
           >
-            <Palette weight={activeTab === 'aparencia' ? 'fill' : 'regular'} className="w-5 h-5 text-amber-500" />
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'aparencia', 'warning')}><Palette weight={activeTab === 'aparencia' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
             Tema & Aparência
           </button>
           <button
@@ -447,7 +447,7 @@ export function Configuracoes() {
             onClick={() => setActiveTab('desktop')}
             className={settingsTabClass('desktop', 'system')}
           >
-            <Database weight={activeTab === 'desktop' ? 'fill' : 'regular'} className="w-5 h-5 text-purple-500" />
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'desktop', 'system')}><Database weight={activeTab === 'desktop' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
             Desktop & Backup
           </button>
           <button
@@ -456,7 +456,7 @@ export function Configuracoes() {
             onClick={() => setActiveTab('template')}
             className={settingsTabClass('template', 'success')}
           >
-            <FileText weight={activeTab === 'template' ? 'fill' : 'regular'} className="w-5 h-5 text-emerald-500" />
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'template', 'success')}><FileText weight={activeTab === 'template' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
             Template & Orçamentos
           </button>
           
@@ -466,7 +466,7 @@ export function Configuracoes() {
             onClick={() => setActiveTab('integracoes')}
             className={settingsTabClass('integracoes', 'field')}
           >
-            <Link weight={activeTab === 'integracoes' ? 'fill' : 'regular'} className="w-5 h-5 text-indigo-500" />
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'integracoes', 'field')}><Link weight={activeTab === 'integracoes' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
             Integrações & Agenda
           </button>
         </div>
@@ -674,7 +674,7 @@ export function Configuracoes() {
                       <div className="bg-emerald-500/10 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/20">
                         <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Versão do Aplicativo</p>
                         <p className="text-base font-heading font-extrabold text-emerald-950 dark:text-emerald-100 mt-0.5 flex items-center gap-2">
-                          v1.1.0 <span className="text-[9px] font-mono font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">Atualizado</span>
+                          v1.1.1 <span className="text-[9px] font-mono font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">Atualizado</span>
                         </p>
                       </div>
                       <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">

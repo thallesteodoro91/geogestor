@@ -3,6 +3,7 @@ import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq, and, isNotNull } from 'drizzle-orm';
 import crypto from 'crypto';
+import { LocalSecretService } from './local-secret.service';
 
 const getErrorStatus = (err: unknown) => {
   const value = err as { code?: unknown; status?: unknown };
@@ -20,7 +21,9 @@ export class GoogleCalendarService {
       throw new Error('Chaves de API do Google Calendar não configuradas no GeoGestor.');
     }
 
-    const { googleClientId, googleClientSecret } = configs[0];
+    const googleClientId = configs[0].googleClientId;
+    const googleClientSecret = LocalSecretService.reveal(configs[0].googleClientSecret);
+    if (!googleClientSecret) throw new Error('Segredo do Google Calendar indisponível.');
 
     // O loopback OAuth aceita redirecionamento dinâmico local.
     // Usaremos a própria API do GeoGestor para interceptar o callback se necessário, ou localhost genérico.
@@ -35,10 +38,12 @@ export class GoogleCalendarService {
       redirectUri
     );
 
-    if (configs[0].googleRefreshToken) {
+    const googleRefreshToken = LocalSecretService.reveal(configs[0].googleRefreshToken);
+    const googleAccessToken = LocalSecretService.reveal(configs[0].googleAccessToken);
+    if (googleRefreshToken) {
       oauth2Client.setCredentials({
-        refresh_token: configs[0].googleRefreshToken,
-        access_token: configs[0].googleAccessToken || undefined
+        refresh_token: googleRefreshToken,
+        access_token: googleAccessToken || undefined
       });
     }
 
@@ -46,8 +51,8 @@ export class GoogleCalendarService {
     oauth2Client.on('tokens', (tokens) => {
       if (tokens.access_token) {
         db.update(schema.configuracoes).set({
-          googleAccessToken: tokens.access_token,
-          googleRefreshToken: tokens.refresh_token || configs[0].googleRefreshToken,
+          googleAccessToken: LocalSecretService.protect(tokens.access_token),
+          googleRefreshToken: LocalSecretService.protect(tokens.refresh_token || googleRefreshToken),
           updatedAt: new Date().toISOString()
         }).where(eq(schema.configuracoes.id, configs[0].id)).execute().catch(err => {
           console.error('Erro ao atualizar token OAuth no banco:', err);
@@ -78,8 +83,8 @@ export class GoogleCalendarService {
     const configs = await db.select().from(schema.configuracoes).limit(1);
     if (configs[0]) {
       await db.update(schema.configuracoes).set({
-        googleAccessToken: tokens.access_token || null,
-        googleRefreshToken: tokens.refresh_token || configs[0].googleRefreshToken, // Preserva se não vier
+        googleAccessToken: LocalSecretService.protect(tokens.access_token || null),
+        googleRefreshToken: LocalSecretService.protect(tokens.refresh_token || LocalSecretService.reveal(configs[0].googleRefreshToken)),
         googleSyncActive: true,
         updatedAt: new Date().toISOString()
       }).where(eq(schema.configuracoes.id, configs[0].id));
@@ -102,6 +107,7 @@ export class GoogleCalendarService {
     // Pegar compromissos que ainda não têm googleEventId ou foram modificados
     const compromissosLocais = await db.select().from(schema.compromissos);
     let sent = 0;
+    let failures = 0;
 
     for (const comp of compromissosLocais) {
       try {
@@ -168,6 +174,7 @@ export class GoogleCalendarService {
           }
         }
       } catch (err) {
+        failures += 1;
         console.error(`Erro ao sincronizar compromisso local ${comp.id} para Google:`, getErrorMessage(err));
       }
     }
@@ -250,9 +257,13 @@ export class GoogleCalendarService {
         }
       }
     } catch (err) {
+      failures += 1;
       console.error('Erro ao sincronizar compromissos do Google para o local:', getErrorMessage(err));
     }
 
+    if (failures > 0) {
+      throw new Error(`Sincronização parcial: ${failures} etapa(s) falharam; enviados=${sent}; recebidos=${received}. Tente novamente.`);
+    }
     return { sent, received };
   }
 }

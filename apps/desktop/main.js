@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, shell, ipcMain, safeStorage, session } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const { fork } = require('child_process');
@@ -28,6 +28,7 @@ const isDev = !app.isPackaged;
 
 let mainWindow = null;
 let apiProcess = null;
+let securityHeadersInstalled = false;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -83,6 +84,36 @@ function checkApiHealth(port) {
   });
 }
 
+function getOrCreateSecretKey() {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('A proteção de credenciais do Windows não está disponível neste perfil.');
+  }
+  const keyPath = path.join(app.getPath('userData'), 'local-secrets.key');
+  if (fs.existsSync(keyPath)) {
+    return safeStorage.decryptString(fs.readFileSync(keyPath));
+  }
+  const key = crypto.randomBytes(32).toString('base64');
+  const encrypted = safeStorage.encryptString(key);
+  const temporaryPath = `${keyPath}.pending`;
+  fs.writeFileSync(temporaryPath, encrypted, { flag: 'wx', mode: 0o600 });
+  fs.renameSync(temporaryPath, keyPath);
+  return key;
+}
+
+function installSecurityHeaders() {
+  if (securityHeadersInstalled || isDev) return;
+  securityHeadersInstalled = true;
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const responseHeaders = { ...(details.responseHeaders || {}) };
+    responseHeaders['Content-Security-Policy'] = [
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+    ];
+    responseHeaders['X-Content-Type-Options'] = ['nosniff'];
+    responseHeaders['Referrer-Policy'] = ['no-referrer'];
+    callback({ responseHeaders });
+  });
+}
+
 async function startApiServer() {
   const port = await findFreePort(3001);
   apiPort = port;
@@ -108,16 +139,11 @@ async function startApiServer() {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    const seedDbPath = path.join(resourcesPath, 'data', 'geogestor.db');
     if (!fs.existsSync(dbPath)) {
-      if (fs.existsSync(seedDbPath)) {
-        fs.copyFileSync(seedDbPath, dbPath);
-        console.log('[Electron] Copied seed database to user data directory');
-      } else {
-        fs.closeSync(fs.openSync(dbPath, 'a'));
-        console.log('[Electron] Created empty database in user data directory');
-      }
+      fs.closeSync(fs.openSync(dbPath, 'a'));
+      console.log('[Electron] Created an empty database in the user data directory');
     }
+    const secretKey = getOrCreateSecretKey();
 
     console.log(`[Electron] Starting API server from: ${serverScript} on port ${port}`);
 
@@ -128,6 +154,7 @@ async function startApiServer() {
       GEOGESTOR_DB_PATH: dbPath,
       GEOGESTOR_WEB_DIST: path.join(process.resourcesPath, 'web'),
       GEOGESTOR_API_TOKEN: apiToken,
+      GEOGESTOR_SECRET_KEY: secretKey,
       NODE_PATH: [
         path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules'),
         path.join(process.resourcesPath, 'api', 'node_modules'),
@@ -183,13 +210,14 @@ function stopApiServer() {
 }
 
 function createWindow(port) {
+  installSecurityHeaders();
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 680,
     minWidth: 800,
     minHeight: 520,
     center: true,
-    title: 'GeoGestor v1.1.0',
+    title: `GeoGestor v${app.getVersion()}`,
     backgroundColor: '#FAFAFA',
     show: false,
     webPreferences: {
@@ -224,7 +252,14 @@ function createWindow(port) {
       // Non-HTTP protocols are opened externally below.
     }
 
-    shell.openExternal(targetUrl);
+    try {
+      const externalTarget = new URL(targetUrl);
+      if (externalTarget.protocol === 'https:' || externalTarget.protocol === 'http:') {
+        shell.openExternal(externalTarget.toString());
+      }
+    } catch {
+      // Invalid or non-allowlisted URLs are ignored.
+    }
     return { action: 'deny' };
   });
 

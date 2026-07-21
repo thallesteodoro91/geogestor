@@ -4,6 +4,8 @@
   "main": "src/index.ts",
   "scripts": {
     "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "seed": "drizzle-kit migrate",
     "push": "drizzle-kit push",
     "studio": "drizzle-kit studio",
     "build": "tsc"

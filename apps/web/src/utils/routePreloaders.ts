@@ -1,7 +1,7 @@
 const routePreloaders: Record<string, () => Promise<unknown>> = {
   '/': () => import('../pages/Dashboard'),
   '/clientes': () => import('../pages/Clientes/ListagemClientes'),
-  '/contatos': () => import('../pages/Contatos/Contatos'),
+  '/contatos': () => import('../pages/CRM/CRM'),
   '/projetos': () => import('../pages/Projetos/ListagemProjetos'),
   '/crm': () => import('../pages/CRM/CRM'),
   '/calendario': () => import('../pages/Calendario/Calendario'),

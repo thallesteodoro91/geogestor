@@ -118,7 +118,7 @@ export function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, delay, ease: 'easeOut' }}
       className={cn(
-        'geo-card-interactive group relative flex min-h-[140px] flex-col justify-between overflow-hidden p-6',
+        'geo-card-interactive group relative flex min-h-[140px] min-w-0 flex-col justify-between overflow-hidden p-6',
         surfaceStyles.card,
         className
       )}
@@ -132,11 +132,11 @@ export function MetricCard({
             : cn('bg-gradient-to-r', surfaceStyles.accent)
         )}
       />
-      <div className="flex items-center justify-between gap-4">
-        <span className={cn('block text-[11px] font-semibold uppercase tracking-wider', labelClass)}>
+      <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
+        <span className={cn('block min-w-0 break-words text-[10px] font-semibold uppercase tracking-wider sm:text-[11px]', labelClass)}>
           {label}
         </span>
-        <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1', iconClass)}>
+        <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 sm:h-10 sm:w-10', iconClass)}>
           {icon}
         </span>
       </div>

@@ -3,7 +3,7 @@ import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq } from 'drizzle-orm';
 import fs from 'fs/promises';
-import { createWriteStream } from 'fs';
+import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
 import path from 'path';
@@ -12,13 +12,45 @@ import { execFile } from 'child_process';
 import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemService } from '../services/fs.service';
+import { RecoverableFileService, type QuarantineManifest } from '../services/recoverable-file.service';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.gpkg', '.kml', '.kmz', '.docx', '.csv', '.xlsx', '.dwg', '.shp', '.geojson', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.zip'];
 const PREVIEW_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
 const HEAVY_EXTENSIONS = ['.gpkg', '.kml', '.kmz', '.dwg', '.shp', '.geojson', '.zip'];
+const MAX_GEO_TEXT_BYTES = 10 * 1024 * 1024;
+const MAX_KMZ_BYTES = 50 * 1024 * 1024;
+const MAX_KMZ_ENTRIES = 10;
+const MAX_ZIP_EXPANSION_RATIO = 100;
 
 function getMaxFileSize(ext: string): number {
   return HEAVY_EXTENSIONS.includes(ext.toLowerCase()) ? 500 * 1024 * 1024 : 50 * 1024 * 1024;
+}
+
+function hasExpectedSignature(buffer: Buffer, ext: string) {
+  if (ext === '.pdf') return buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+  if (ext === '.png') return buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (ext === '.jpg' || ext === '.jpeg') return buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  if (ext === '.gif') return ['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString('ascii'));
+  if (ext === '.webp') return buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+  if (ext === '.gpkg') return buffer.subarray(0, 16).toString('ascii') === 'SQLite format 3\0';
+  if (['.zip', '.kmz', '.docx', '.xlsx'].includes(ext)) {
+    return buffer[0] === 0x50 && buffer[1] === 0x4b && [0x03, 0x05, 0x07].includes(buffer[2]);
+  }
+  if (ext === '.dwg') return buffer.subarray(0, 4).toString('ascii') === 'AC10';
+  return true;
+}
+
+async function assertFileSignature(filePath: string, ext: string) {
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(32);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (!hasExpectedSignature(buffer.subarray(0, bytesRead), ext)) {
+      throw new Error(`O conteúdo do arquivo não corresponde à extensão ${ext}.`);
+    }
+  } finally {
+    await handle.close();
+  }
 }
 
 function createSizeLimiter(limitBytes: number, ext: string) {
@@ -198,9 +230,14 @@ async function ensureDocumentCategory(categoryName?: string | null, options?: { 
   return created[0];
 }
 
-async function syncDocumentRecord(file: any, scope: { clienteId: string; projetoId?: string | null; origem?: string }) {
-  const category = await ensureDocumentCategory(file.category);
-  const existing = await db.select()
+async function syncDocumentRecord(
+  file: any,
+  scope: { clienteId: string; projetoId?: string | null; origem?: string },
+  database: any = db,
+  knownCategory?: Awaited<ReturnType<typeof ensureDocumentCategory>>
+) {
+  const category = knownCategory || await ensureDocumentCategory(file.category);
+  const existing = await database.select()
     .from(schema.documentos)
     .where(eq(schema.documentos.caminho, file.path))
     .limit(1);
@@ -231,11 +268,11 @@ async function syncDocumentRecord(file: any, scope: { clienteId: string; projeto
   let documentId = existing[0]?.id;
 
   if (existing.length) {
-    await db.update(schema.documentos).set(payload)
+    await database.update(schema.documentos).set(payload)
       .where(eq(schema.documentos.id, existing[0].id));
   } else {
     documentId = crypto.randomUUID();
-    await db.insert(schema.documentos).values({
+    await database.insert(schema.documentos).values({
       id: documentId,
       ...payload
     });
@@ -355,9 +392,17 @@ function parseKmlFeatureCollection(content: string, fileName: string) {
   };
 }
 
-function decodeZipEntry(data: Buffer, compressionMethod: number) {
-  if (compressionMethod === 0) return data.toString('utf-8');
-  if (compressionMethod === 8) return zlib.inflateRawSync(data).toString('utf-8');
+function decodeZipEntry(data: Buffer, compressionMethod: number, uncompressedSize: number) {
+  if (uncompressedSize > MAX_GEO_TEXT_BYTES || uncompressedSize > Math.max(data.length, 1) * MAX_ZIP_EXPANSION_RATIO) {
+    throw new Error('Entrada KMZ excede os limites seguros de expansão.');
+  }
+  if (compressionMethod === 0) {
+    if (data.length > MAX_GEO_TEXT_BYTES) throw new Error('Entrada KML excede o limite seguro.');
+    return data.toString('utf-8');
+  }
+  if (compressionMethod === 8) {
+    return zlib.inflateRawSync(data, { maxOutputLength: MAX_GEO_TEXT_BYTES }).toString('utf-8');
+  }
   return null;
 }
 
@@ -375,6 +420,7 @@ function extractKmlEntriesFromKmz(buffer: Buffer) {
 
     const compressionMethod = buffer.readUInt16LE(offset + 10);
     const compressedSize = buffer.readUInt32LE(offset + 20);
+    const uncompressedSize = buffer.readUInt32LE(offset + 24);
     const fileNameLength = buffer.readUInt16LE(offset + 28);
     const extraLength = buffer.readUInt16LE(offset + 30);
     const commentLength = buffer.readUInt16LE(offset + 32);
@@ -393,8 +439,9 @@ function extractKmlEntriesFromKmz(buffer: Buffer) {
         const dataEnd = dataStart + compressedSize;
 
         if (dataEnd <= buffer.length) {
-          const content = decodeZipEntry(buffer.subarray(dataStart, dataEnd), compressionMethod);
+          const content = decodeZipEntry(buffer.subarray(dataStart, dataEnd), compressionMethod, uncompressedSize);
           if (content) entries.push({ name: entryName, content });
+          if (entries.length >= MAX_KMZ_ENTRIES) return entries;
         }
       }
     }
@@ -430,6 +477,7 @@ async function collectGeoFeaturesFromDir(targetDir: string, depth = 0) {
 
     if (ext === '.geojson' || ext === '.json') {
       try {
+        if ((await fs.stat(filePath)).size > MAX_GEO_TEXT_BYTES) continue;
         const content = await fs.readFile(filePath, 'utf-8');
         const json = JSON.parse(content);
         if (json.type === 'FeatureCollection' || json.type === 'Feature') {
@@ -444,6 +492,7 @@ async function collectGeoFeaturesFromDir(targetDir: string, depth = 0) {
       }
     } else if (ext === '.kml') {
       try {
+        if ((await fs.stat(filePath)).size > MAX_GEO_TEXT_BYTES) continue;
         const content = await fs.readFile(filePath, 'utf-8');
         const featureCollection = parseKmlFeatureCollection(content, file.name);
 
@@ -459,6 +508,7 @@ async function collectGeoFeaturesFromDir(targetDir: string, depth = 0) {
       }
     } else if (ext === '.kmz') {
       try {
+        if ((await fs.stat(filePath)).size > MAX_KMZ_BYTES) continue;
         const kmzBuffer = await fs.readFile(filePath);
         const kmlEntries = extractKmlEntriesFromKmz(kmzBuffer);
 
@@ -766,33 +816,45 @@ export async function arquivosRoutes(server: FastifyInstance) {
         throw streamErr;
       }
 
+      try {
+        await assertFileSignature(filePath, ext);
+      } catch (signatureError) {
+        await fs.unlink(filePath).catch(() => undefined);
+        const message = signatureError instanceof Error ? signatureError.message : 'Conteúdo de arquivo inválido';
+        return reply.status(400).send({ error: message });
+      }
       const stat = await fs.stat(filePath);
       const relativePath = path.relative(path.dirname(targetDir), filePath);
 
-      const syncedDocument = await syncDocumentRecord({
-        name: path.basename(filePath),
-        extension: ext,
-        sizeBytes: stat.size,
-        createdAt: stat.birthtime,
-        modifiedAt: stat.mtime,
-        path: filePath,
-        category: documentCategory.nome,
-        relativePath
-      }, {
-        clienteId: currentClienteId,
-        projetoId: currentProjetoId,
-        origem: 'upload'
-      });
-
-      if (currentClienteId) {
-        const uploadedAt = new Date();
-        await JornadaService.logDocumentoAgrupado({
-          clienteId: currentClienteId,
-          projetoId: currentProjetoId,
-          nomeArquivo: syncedDocument.name,
-          categoria: syncedDocument.category,
-          data: uploadedAt.toISOString()
+      let syncedDocument: any;
+      try {
+        syncedDocument = await db.transaction(async (tx) => {
+          const synced = await syncDocumentRecord({
+            name: path.basename(filePath),
+            extension: ext,
+            sizeBytes: stat.size,
+            createdAt: stat.birthtime,
+            modifiedAt: stat.mtime,
+            path: filePath,
+            category: documentCategory.nome,
+            relativePath
+          }, {
+            clienteId: currentClienteId,
+            projetoId: currentProjetoId,
+            origem: 'upload'
+          }, tx, documentCategory);
+          await JornadaService.logDocumentoAgrupado({
+            clienteId: currentClienteId,
+            projetoId: currentProjetoId,
+            nomeArquivo: synced.name,
+            categoria: synced.category,
+            data: new Date().toISOString()
+          }, tx);
+          return synced;
         });
+      } catch (databaseError) {
+        await fs.unlink(filePath).catch(() => undefined);
+        throw databaseError;
       }
 
       return { success: true, ...syncedDocument };
@@ -884,6 +946,9 @@ export async function arquivosRoutes(server: FastifyInstance) {
       const filePath = await getAvailableFilePath(targetDir, safeFileName);
 
       // Write file to disk
+      if (!hasExpectedSignature(fileBuffer.subarray(0, 32), ext)) {
+        return reply.status(400).send({ error: `O conteúdo do arquivo não corresponde à extensão ${ext}` });
+      }
       await fs.writeFile(filePath, fileBuffer);
       const stat = await fs.stat(filePath);
       const relativePath = path.relative(path.dirname(targetDir), filePath);
@@ -892,30 +957,35 @@ export async function arquivosRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: 'Não foi possível identificar o cliente do arquivo' });
       }
 
-      const syncedDocument = await syncDocumentRecord({
-        name: path.basename(filePath),
-        extension: ext,
-        sizeBytes: stat.size,
-        createdAt: stat.birthtime,
-        modifiedAt: stat.mtime,
-        path: filePath,
-        category: documentCategory.nome,
-        relativePath
-      }, {
-        clienteId: currentClienteId,
-        projetoId: currentProjetoId,
-        origem: 'upload'
-      });
-
-      if (currentClienteId) {
-        const uploadedAt = new Date();
-        await JornadaService.logDocumentoAgrupado({
-          clienteId: currentClienteId,
-          projetoId: currentProjetoId,
-          nomeArquivo: syncedDocument.name,
-          categoria: syncedDocument.category,
-          data: uploadedAt.toISOString()
+      let syncedDocument: any;
+      try {
+        syncedDocument = await db.transaction(async (tx) => {
+          const synced = await syncDocumentRecord({
+            name: path.basename(filePath),
+            extension: ext,
+            sizeBytes: stat.size,
+            createdAt: stat.birthtime,
+            modifiedAt: stat.mtime,
+            path: filePath,
+            category: documentCategory.nome,
+            relativePath
+          }, {
+            clienteId: currentClienteId,
+            projetoId: currentProjetoId,
+            origem: 'upload'
+          }, tx, documentCategory);
+          await JornadaService.logDocumentoAgrupado({
+            clienteId: currentClienteId,
+            projetoId: currentProjetoId,
+            nomeArquivo: synced.name,
+            categoria: synced.category,
+            data: new Date().toISOString()
+          }, tx);
+          return synced;
         });
+      } catch (databaseError) {
+        await fs.unlink(filePath).catch(() => undefined);
+        throw databaseError;
       }
 
       return { success: true, ...syncedDocument };
@@ -937,12 +1007,14 @@ export async function arquivosRoutes(server: FastifyInstance) {
       const dadosPasta = await getDataRoot();
       ensurePathInsideRoot(filePath, dadosPasta);
 
-      const fileBuffer = await fs.readFile(filePath);
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) return reply.status(404).send({ error: 'Arquivo não encontrado' });
       const fileName = path.basename(filePath);
 
       reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
       reply.header('Access-Control-Expose-Headers', 'Content-Disposition');
-      reply.send(fileBuffer);
+      reply.header('Content-Length', String(stat.size));
+      return reply.send(createReadStream(filePath));
     } catch (err) {
       server.log.error(err);
       return reply.status(404).send({ error: 'Arquivo não encontrado' });
@@ -966,13 +1038,15 @@ export async function arquivosRoutes(server: FastifyInstance) {
       const dadosPasta = await getDataRoot();
       ensurePathInsideRoot(filePath, dadosPasta);
 
-      const fileBuffer = await fs.readFile(filePath);
+      const stat = await fs.stat(filePath);
+      if (!stat.isFile()) return reply.status(404).send({ error: 'Arquivo não encontrado' });
       const fileName = path.basename(filePath);
 
       reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
       reply.header('Cache-Control', 'no-store');
+      reply.header('Content-Length', String(stat.size));
       reply.type(getMimeType(filePath));
-      return reply.send(fileBuffer);
+      return reply.send(createReadStream(filePath));
     } catch (err) {
       server.log.error(err);
       return reply.status(404).send({ error: 'Arquivo não encontrado' });
@@ -1022,7 +1096,62 @@ export async function arquivosRoutes(server: FastifyInstance) {
     }
   });
 
-  // DELETE: Delete a file
+  // POST: Restore the latest recoverable copy of a document (technical endpoint; no UI dependency)
+  server.post('/restore', async (request, reply) => {
+    const { documentId } = request.body as { documentId?: string };
+    if (!documentId) return reply.status(400).send({ error: 'documentId é obrigatório' });
+
+    const documentRecord = await db.select()
+      .from(schema.documentos)
+      .where(eq(schema.documentos.id, documentId))
+      .limit(1);
+    if (!documentRecord.length) return reply.status(404).send({ error: 'Documento não encontrado' });
+    if (documentRecord[0].status !== 'excluido') {
+      return reply.status(409).send({ error: 'O documento não está marcado como excluído' });
+    }
+
+    const dadosPasta = await getDataRoot();
+    let restored = false;
+    try {
+      await RecoverableFileService.restoreLatestByRecordId(dadosPasta, documentId);
+      restored = true;
+      const restoredAt = new Date();
+      await db.transaction(async (tx) => {
+        await tx.update(schema.documentos).set({
+          status: 'ativo',
+          updatedAt: restoredAt.toISOString(),
+          ultimoSyncEm: restoredAt.toISOString()
+        }).where(eq(schema.documentos.id, documentId));
+        await JornadaService.logClienteEvento({
+          clienteId: documentRecord[0].clienteId,
+          projetoId: documentRecord[0].projetoId || null,
+          tipo: 'Documento',
+          titulo: `Documento restaurado: ${documentRecord[0].nome}`,
+          categoria: documentRecord[0].categoria || 'Documento',
+          data: restoredAt.toISOString(),
+          descricao: `Documento restaurado da lixeira interna em ${restoredAt.toLocaleDateString('pt-BR')}`
+        }, tx);
+      });
+      return { success: true };
+    } catch (error) {
+      if (restored) {
+        try {
+          const replacement = await RecoverableFileService.quarantine({
+            sourcePath: documentRecord[0].caminho,
+            dataRoot: dadosPasta,
+            recordId: documentId
+          });
+          await RecoverableFileService.commit(replacement);
+        } catch (compensationError) {
+          server.log.error(compensationError, 'Falha ao compensar restauração de documento');
+        }
+      }
+      server.log.error(error);
+      return reply.status(500).send({ error: 'Não foi possível restaurar o documento com segurança' });
+    }
+  });
+
+  // DELETE: Move a file to an internal recoverable quarantine
   server.delete('/', async (request, reply) => {
     const { path: filePath } = request.query as any;
 
@@ -1030,6 +1159,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
       return reply.status(400).send({ error: 'Caminho do arquivo é obrigatório' });
     }
 
+    let quarantined: QuarantineManifest | null = null;
     try {
       const dadosPasta = await getDataRoot();
       ensurePathInsideRoot(filePath, dadosPasta);
@@ -1039,32 +1169,45 @@ export async function arquivosRoutes(server: FastifyInstance) {
         .where(eq(schema.documentos.caminho, filePath))
         .limit(1);
 
-      await fs.unlink(filePath);
+      quarantined = await RecoverableFileService.quarantine({
+        sourcePath: filePath,
+        dataRoot: dadosPasta,
+        recordId: documentRecord[0]?.id ?? null
+      });
+      quarantined = await RecoverableFileService.commit(quarantined);
 
       if (documentRecord.length) {
         const deletedAt = new Date();
-        await db.update(schema.documentos).set({
-          status: 'excluido',
-          updatedAt: deletedAt.toISOString(),
-          ultimoSyncEm: deletedAt.toISOString()
-        })
-          .where(eq(schema.documentos.id, documentRecord[0].id));
+        await db.transaction(async (tx) => {
+          await tx.update(schema.documentos).set({
+            status: 'excluido',
+            updatedAt: deletedAt.toISOString(),
+            ultimoSyncEm: deletedAt.toISOString()
+          }).where(eq(schema.documentos.id, documentRecord[0].id));
 
-        await JornadaService.logClienteEvento({
-          clienteId: documentRecord[0].clienteId,
-          projetoId: documentRecord[0].projetoId || null,
-          tipo: 'Documento',
-          titulo: `Documento excluído: ${documentRecord[0].nome}`,
-          categoria: documentRecord[0].categoria || 'Documento',
-          data: deletedAt.toISOString(),
-          descricao: `Arquivo: ${documentRecord[0].nome}\nCategoria: ${documentRecord[0].categoria || 'Documento'}\nData: ${deletedAt.toLocaleDateString('pt-BR')}`
+          await JornadaService.logClienteEvento({
+            clienteId: documentRecord[0].clienteId,
+            projetoId: documentRecord[0].projetoId || null,
+            tipo: 'Documento',
+            titulo: `Documento excluído: ${documentRecord[0].nome}`,
+            categoria: documentRecord[0].categoria || 'Documento',
+            data: deletedAt.toISOString(),
+            descricao: `Arquivo movido para a lixeira interna em ${deletedAt.toLocaleDateString('pt-BR')}`
+          }, tx);
         });
       }
 
       return { success: true };
     } catch (err) {
+      if (quarantined) {
+        try {
+          await RecoverableFileService.rollback(quarantined);
+        } catch (rollbackError) {
+          server.log.error(rollbackError, 'Arquivo preservado em quarentena; restauração automática falhou');
+        }
+      }
       server.log.error(err);
-      return reply.status(500).send({ error: 'Erro ao excluir o arquivo do disco' });
+      return reply.status(500).send({ error: 'Erro ao excluir o arquivo com segurança' });
     }
   });
 

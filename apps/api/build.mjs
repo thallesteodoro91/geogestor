@@ -5,13 +5,16 @@ import fs from 'fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(__dirname, '../..');
+const outputDir = path.join(__dirname, 'dist');
+fs.rmSync(outputDir, { recursive: true, force: true });
+fs.mkdirSync(outputDir, { recursive: true });
 await esbuild.build({
   entryPoints: [path.join(__dirname, 'src/server.ts')],
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  outfile: path.join(__dirname, 'dist/server.js'),
+  outfile: path.join(outputDir, 'server.js'),
   external: [
     // Native Node modules that can't be bundled
     'better-sqlite3',
@@ -29,8 +32,16 @@ await esbuild.build({
     // Map workspace package to its source
     '@geogestor/database': path.join(monorepoRoot, 'packages/database/src/index.ts'),
   },
-  sourcemap: true,
+  sourcemap: false,
 });
+
+fs.writeFileSync(path.join(outputDir, 'release-metadata.json'), `${JSON.stringify({
+  version: process.env.GEOGESTOR_BUILD_VERSION || process.env.npm_package_version || 'unknown',
+  commit: process.env.GEOGESTOR_BUILD_COMMIT || 'unknown',
+  dirty: process.env.GEOGESTOR_BUILD_DIRTY === 'true',
+  builtAt: new Date().toISOString(),
+  runtime: process.version
+}, null, 2)}\n`);
 
 console.log('✓ API build complete → dist/server.js');
 

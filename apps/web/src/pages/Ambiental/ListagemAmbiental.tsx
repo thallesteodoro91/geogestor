@@ -1,152 +1,399 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Layout } from '../../components/Layout';
-import { Plus, MagnifyingGlass, Funnel, Leaf, Scales, Certificate } from '@phosphor-icons/react';
+import { DatePickerField, FormSelect } from '../../components/Form';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import {
+  ArrowRight,
+  CalendarBlank,
+  Calculator,
+  CaretLeft,
+  CaretRight,
+  Certificate,
+  Funnel,
+  Leaf,
+  MagnifyingGlass,
+  Plus,
+  Scales,
+  WarningCircle,
+  X
+} from '@phosphor-icons/react';
+import type { EnvironmentalDemandListResponse } from '@geogestor/contracts';
+import { Layout } from '../../components/Layout';
 import { apiClient } from '../../services/apiClient';
 import { Licenciamento } from '../Licenciamento/Licenciamento';
+import { CalculadoraAmbiental } from '../Calculadoras/CalculadoraAmbiental';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass } from '../../utils/actionStyles';
+import { primaryActionButtonClass, primaryActionIconClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 
-interface ProjetoAmbiental {
-  id: string;
-  nome: string;
-  status?: string | null;
-  descricao?: string | null;
-  dataEntrega?: string | null;
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
+const numberFormatter = new Intl.NumberFormat('pt-BR');
+const environmentalTabs = ['ambiental', 'licenciamento', 'car'] as const;
+type EnvironmentalTab = typeof environmentalTabs[number];
+const headerActionButtonClass = 'h-11 min-h-11 w-full shrink-0 justify-between gap-2.5 px-5 py-0 text-sm font-semibold sm:w-auto sm:self-end sm:justify-center';
+const headerActionIconClass = 'h-5 w-5 group-hover:translate-x-0.5';
+
+const formatDate = (date?: string | null) => date ? dateFormatter.format(new Date(`${date.slice(0, 10)}T12:00:00Z`)) : 'Não definido';
+
+function deadlineTone(date?: string | null) {
+  if (!date) return 'text-zinc-500 dark:text-zinc-400';
+  const days = Math.ceil((new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86_400_000);
+  if (days < 0) return 'text-red-700 dark:text-red-300';
+  if (days <= 7) return 'text-amber-700 dark:text-amber-300';
+  return 'text-emerald-700 dark:text-emerald-300';
 }
 
 export function ListagemAmbiental() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [searchTerm, setSearchTerm] = useState('');
-  const activeTab = searchParams.get('tab') === 'licenciamento' ? 'licenciamento' : 'ambiental';
+  const [showFilters, setShowFilters] = useState(false);
+  const [licenseFormOpen, setLicenseFormOpen] = useState(false);
+  const [tabScrollCues, setTabScrollCues] = useState({ left: false, right: false });
+  const requestedTab = searchParams.get('tab');
+  const activeTab: EnvironmentalTab = environmentalTabs.includes(requestedTab as EnvironmentalTab)
+    ? requestedTab as EnvironmentalTab
+    : 'ambiental';
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const tabListRef = useRef<HTMLDivElement | null>(null);
+  const searchId = useId();
+  const filterPanelId = useId();
+  const page = Math.max(1, Number(searchParams.get('page') || 1));
+  const status = searchParams.get('status') || '';
+  const tipo = searchParams.get('tipo') || '';
+  const inicio = searchParams.get('inicio') || '';
+  const fim = searchParams.get('fim') || '';
+  const searchTerm = searchParams.get('q') || '';
 
-  const handleTabChange = (tab: 'ambiental' | 'licenciamento') => {
-    setSearchParams({ tab });
+  useEffect(() => {
+    const index = environmentalTabs.indexOf(activeTab);
+    tabRefs.current[index]?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+
+    const updateScrollCues = () => {
+      const tabList = tabListRef.current;
+      if (!tabList) return;
+      setTabScrollCues({
+        left: tabList.scrollLeft > 2,
+        right: tabList.scrollWidth - tabList.clientWidth - tabList.scrollLeft > 2
+      });
+    };
+
+    const frame = window.requestAnimationFrame(updateScrollCues);
+    window.addEventListener('resize', updateScrollCues);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', updateScrollCues);
+    };
+  }, [activeTab]);
+
+  const updateParam = (key: string, value: string, replace = false) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value); else next.delete(key);
+    if (key !== 'page') next.delete('page');
+    setSearchParams(next, { replace });
   };
 
-  const { data: projetos = [], isLoading } = useQuery<ProjetoAmbiental[]>({
-    queryKey: ['projetos-ambiental'],
-    queryFn: () => apiClient.get<ProjetoAmbiental[]>('/api/projetos').then(res =>
-      // Filtrar apenas projetos que sejam do tipo "Ambiental" ou "Perícia"
-      // Como não temos esse tipo exato no mock, vamos simular mostrando todos ou criar uma lógica para isso
-      res
-    ),
+  const handleTabChange = (tab: EnvironmentalTab) => {
+    if (tab !== 'licenciamento') setLicenseFormOpen(false);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', tab);
+    setSearchParams(next);
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
+    if (!keys.includes(event.key)) return;
+    event.preventDefault();
+    const nextIndex = event.key === 'Home' ? 0
+      : event.key === 'End' ? environmentalTabs.length - 1
+        : event.key === 'ArrowRight' ? (index + 1) % environmentalTabs.length
+          : (index - 1 + environmentalTabs.length) % environmentalTabs.length;
+    const tab = environmentalTabs[nextIndex];
+    handleTabChange(tab);
+    window.setTimeout(() => tabRefs.current[nextIndex]?.focus(), 0);
+  };
+
+  const queryString = useMemo(() => {
+    const query = new URLSearchParams({ page: String(page), limit: '24' });
+    const q = searchParams.get('q');
+    if (q) query.set('q', q);
+    if (status) query.set('status', status);
+    if (tipo) query.set('tipo', tipo);
+    if (inicio) query.set('inicio', inicio);
+    if (fim) query.set('fim', fim);
+    return query.toString();
+  }, [fim, inicio, page, searchParams, status, tipo]);
+
+  const demandsQuery = useQuery<EnvironmentalDemandListResponse>({
+    queryKey: ['ambiental-demandas', queryString],
+    queryFn: () => apiClient.get<EnvironmentalDemandListResponse>(`/api/ambiental?${queryString}`),
+    enabled: activeTab === 'ambiental'
   });
 
-  const filteredProjetos = projetos.filter(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+  const hasFilters = Boolean(searchParams.get('q') || status || tipo || inicio || fim);
+  const totalPages = Math.max(1, Math.ceil((demandsQuery.data?.total || 0) / 24));
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    ['q', 'status', 'tipo', 'inicio', 'fim', 'page'].forEach((key) => next.delete(key));
+    next.set('tab', 'ambiental');
+    setSearchParams(next);
+  };
+
+  const activeHeader = activeTab === 'ambiental'
+    ? {
+        title: 'Gestão Ambiental e Perícias',
+        description: 'Acompanhe processos, laudos, fases e próximas ações ambientais.',
+        icon: <Leaf weight="duotone" className="h-6 w-6" />,
+        iconClass: 'bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-400/20'
+      }
+    : activeTab === 'licenciamento'
+      ? {
+          title: 'Licenciamento Ambiental',
+          description: 'Controle licenças, renovações, condicionantes e vencimentos reais.',
+          icon: <Certificate weight="duotone" className="h-6 w-6" />,
+          iconClass: 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-500/20 dark:text-amber-200 dark:ring-amber-400/20'
+        }
+      : {
+          title: 'Análise preliminar de Reserva Legal',
+          description: 'Faça uma triagem quantitativa com base nos arts. 12, 15, 67 e 68 da Lei nº 12.651/2012. O resultado não substitui a análise do CAR pelo órgão competente.',
+          icon: <Calculator weight="duotone" className="h-6 w-6" />,
+          iconClass: 'bg-cyan-100 text-cyan-800 ring-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-200 dark:ring-cyan-400/20'
+        };
 
   return (
     <Layout>
-      {/* Tabs Navigation */}
-      <div role="tablist" aria-label="Abas Ambientais" className="flex gap-2 border-b border-zinc-100 dark:border-zinc-800 pb-2 mb-4">
-        <button 
+      <header className="mb-3 border-b border-zinc-200/80 pb-3 dark:border-zinc-800">
+        <span className={cn(geoKickerClass, 'mb-4')}>Gestão ambiental</span>
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <h1 className="flex min-w-0 items-center gap-3 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
+              <span aria-hidden="true" className={cn('inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1', activeHeader.iconClass)}>
+                {activeHeader.icon}
+              </span>
+              <span className="min-w-0 text-pretty">{activeHeader.title}</span>
+            </h1>
+            <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{activeHeader.description}</p>
+          </div>
+
+          {activeTab === 'ambiental' && (
+            <button
+              type="button"
+              onClick={() => navigate('/projetos', { state: { openCreateModal: true, contexto: 'ambiental' } })}
+              className={cn(primaryActionButtonClass, headerActionButtonClass)}
+            >
+              <span>Nova demanda</span>
+              <span aria-hidden="true" className={cn(primaryActionIconClass, headerActionIconClass)}>
+                <Plus weight="bold" className="h-3.5 w-3.5" />
+              </span>
+            </button>
+          )}
+
+          {activeTab === 'licenciamento' && (
+            <button
+              type="button"
+              onClick={() => setLicenseFormOpen(true)}
+              className={cn(primaryActionButtonClass, headerActionButtonClass)}
+            >
+              <span>Nova licença</span>
+              <span aria-hidden="true" className={cn(primaryActionIconClass, headerActionIconClass)}>
+                <Plus weight="bold" className="h-3.5 w-3.5" />
+              </span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="relative mb-4 min-w-0 max-w-full">
+        <div
+          ref={tabListRef}
+          role="tablist"
+          aria-label="Módulo Ambiental"
+          onScroll={(event) => setTabScrollCues({
+            left: event.currentTarget.scrollLeft > 2,
+            right: event.currentTarget.scrollWidth - event.currentTarget.clientWidth - event.currentTarget.scrollLeft > 2
+          })}
+          className={cn(geoTabListClass, 'flex min-w-0 max-w-full scroll-px-3 gap-1 overflow-x-auto rounded-xl')}
+        >
+        <button
+          ref={(element) => { tabRefs.current[0] = element; }}
+          id="ambiental-tab-demandas"
           type="button"
           role="tab"
           aria-selected={activeTab === 'ambiental'}
+          aria-controls="ambiental-panel-demandas"
+          tabIndex={activeTab === 'ambiental' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 0)}
           onClick={() => handleTabChange('ambiental')}
-          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'ambiental' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'}`}
+          className={cn(geoTabButtonClass(activeTab === 'ambiental', 'success'), 'rounded-lg px-4 py-2.5')}
         >
-          <Leaf weight={activeTab === 'ambiental' ? 'fill' : 'regular'} className="w-3.5 h-3.5" /> Demandas Ambientais
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'ambiental', 'success')}>
+            <Leaf weight={activeTab === 'ambiental' ? 'fill' : 'regular'} className="h-4 w-4" />
+          </span>
+          Demandas Ambientais
         </button>
-        <button 
+        <button
+          ref={(element) => { tabRefs.current[1] = element; }}
+          id="ambiental-tab-licenciamento"
           type="button"
           role="tab"
           aria-selected={activeTab === 'licenciamento'}
+          aria-controls="ambiental-panel-licenciamento"
+          tabIndex={activeTab === 'licenciamento' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 1)}
           onClick={() => handleTabChange('licenciamento')}
-          className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${activeTab === 'licenciamento' ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white'}`}
+          className={cn(geoTabButtonClass(activeTab === 'licenciamento', 'warning'), 'rounded-lg px-4 py-2.5')}
         >
-          <Certificate weight={activeTab === 'licenciamento' ? 'fill' : 'regular'} className="w-3.5 h-3.5" /> Licenciamento
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'licenciamento', 'warning')}>
+            <Certificate weight={activeTab === 'licenciamento' ? 'fill' : 'regular'} className="h-4 w-4" />
+          </span>
+          Licenciamento
         </button>
-      </div>
-
-      {activeTab === 'ambiental' ? (
-        <div className="animate-in fade-in duration-500">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2.5">
-            <div className="p-2 bg-emerald-100 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 rounded-xl">
-              <Leaf weight="duotone" className="w-5 h-5" />
-            </div>
-            Gestão Ambiental e Perícias
-          </h1>
-          <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            Acompanhe processos ambientais, laudos e andamentos processuais
-          </p>
-        </div>
-
         <button
-          onClick={() => navigate('/projetos', { state: { openCreateModal: true, contexto: 'ambiental' } })}
-          className={cn(primaryActionButtonClass, 'gap-2 shrink-0 px-3.5 py-2 text-xs font-semibold')}
+          ref={(element) => { tabRefs.current[2] = element; }}
+          id="ambiental-tab-car"
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'car'}
+          aria-controls="ambiental-panel-car"
+          tabIndex={activeTab === 'car' ? 0 : -1}
+          onKeyDown={(event) => handleTabKeyDown(event, 2)}
+          onClick={() => handleTabChange('car')}
+          className={cn(geoTabButtonClass(activeTab === 'car', 'field'), 'rounded-lg px-4 py-2.5')}
         >
-          <Plus weight="bold" className="h-3.5 w-3.5" />
-          Nova Demanda
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'car', 'field')}>
+            <Calculator weight={activeTab === 'car' ? 'fill' : 'regular'} className="h-4 w-4" />
+          </span>
+          Análise CAR
         </button>
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mb-4">
-        <div className="relative flex-1 w-full sm:max-w-md min-w-0">
-          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 z-10" />
-          <input
-            type="text"
-            placeholder="Buscar demandas, clientes ou processos..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full relative z-0 pl-9 pr-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all dark:text-white"
-          />
         </div>
-        <button className="inline-flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-all">
-          <Funnel className="w-3.5 h-3.5" />
-          Filtros
-        </button>
-      </div>
-
-      {/* List */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {isLoading ? (
-          <p className="col-span-full py-6 text-center text-xs text-zinc-500">Carregando demandas...</p>
-        ) : filteredProjetos.length === 0 ? (
-          <div className="col-span-full py-12 text-center bg-white dark:bg-zinc-900 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl">
-            <Scales className="w-8 h-8 text-zinc-300 dark:text-zinc-600 mx-auto mb-2" />
-            <h3 className="text-sm font-medium text-zinc-900 dark:text-white mb-0.5">Nenhuma demanda encontrada</h3>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">Comece cadastrando uma nova demanda ambiental ou perícia.</p>
-          </div>
-        ) : (
-          filteredProjetos.map(projeto => (
-            <div 
-              key={projeto.id} 
-              onClick={() => navigate(`/ambiental/${projeto.id}`)}
-              className="group relative flex flex-col bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-500/30 transition-all cursor-pointer"
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="p-1.5 bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 rounded-lg">
-                  <Scales weight="duotone" className="w-3.5 h-3.5" />
-                </div>
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                  {projeto.status || 'Em Andamento'}
-                </span>
-              </div>
-              <h3 className="text-[13px] font-semibold text-zinc-900 dark:text-white mb-0.5 line-clamp-1 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                {projeto.nome}
-              </h3>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mb-2 line-clamp-2 leading-relaxed">
-                {projeto.descricao || 'Sem descrição cadastrada'}
-              </p>
-              
-              <div className="mt-auto pt-2 border-t border-zinc-100 dark:border-zinc-800/80 flex items-center justify-between text-[10px]">
-                <span className="text-zinc-500 dark:text-zinc-400 font-medium">Prazo: {projeto.dataEntrega || 'Não definido'}</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">Detalhes &rarr;</span>
-              </div>
-            </div>
-          ))
+        {tabScrollCues.left && (
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center rounded-l-xl bg-gradient-to-r from-white via-white to-transparent pl-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
+            <CaretLeft weight="bold" className="h-3.5 w-3.5" />
+          </span>
+        )}
+        {tabScrollCues.right && (
+          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end rounded-r-xl bg-gradient-to-l from-white via-white to-transparent pr-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
+            <CaretRight weight="bold" className="h-3.5 w-3.5" />
+          </span>
         )}
       </div>
+
+      <section
+        id="ambiental-panel-demandas"
+        role="tabpanel"
+        aria-labelledby="ambiental-tab-demandas"
+        hidden={activeTab !== 'ambiental'}
+      >
+        <div className="mb-4 space-y-3">
+          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+            <div className="relative min-w-0 flex-1 sm:max-w-xl">
+              <label htmlFor={searchId} className="sr-only">Buscar demandas ambientais</label>
+              <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <input id={searchId} name="buscaAmbiental" type="search" autoComplete="off" value={searchTerm} onChange={(event) => updateParam('q', event.target.value, true)} placeholder="Buscar por demanda, cliente, órgão ou processo…" className="relative z-0 w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs text-zinc-950 transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white" />
+            </div>
+            <button type="button" aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((current) => !current)} className={cn(secondarySmallActionButtonClass, 'min-h-10 gap-1.5 px-3')}>
+              <Funnel aria-hidden="true" className="h-3.5 w-3.5" />
+              Filtros
+            </button>
+            {hasFilters && (
+              <button type="button" onClick={clearFilters} className={cn(secondarySmallActionButtonClass, 'min-h-10 gap-1.5 px-3')}>
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+                Limpar
+              </button>
+            )}
+          </div>
+          {showFilters && (
+            <div id={filterPanelId} className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo
+                <FormSelect name="tipoAmbiental" autoComplete="off" value={tipo} onChange={(event) => updateParam('tipo', event.target.value)} className="geo-native-select mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+                  <option value="">Todos</option><option value="Ambiental">Ambiental</option><option value="Perícia">Perícia</option>
+                </FormSelect>
+              </label>
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Status
+                <FormSelect name="statusAmbiental" autoComplete="off" value={status} onChange={(event) => updateParam('status', event.target.value)} className="geo-native-select mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+                  <option value="">Todos</option><option value="Planejamento">Planejamento</option><option value="Em Análise">Em análise</option><option value="Em Andamento">Em andamento</option><option value="Aguardando Órgão">Aguardando órgão</option><option value="Finalizado">Finalizado</option>
+                </FormSelect>
+              </label>
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo a partir de
+                <DatePickerField name="inicioAmbiental" autoComplete="off" value={inicio} onChange={(event) => updateParam('inicio', event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
+              </label>
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo até
+                <DatePickerField name="fimAmbiental" autoComplete="off" min={inicio || undefined} value={fim} onChange={(event) => updateParam('fim', event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
+              </label>
+            </div>
+          )}
         </div>
-      ) : (
-        <Licenciamento />
-      )}
+
+        <div aria-live="polite" className="sr-only">{demandsQuery.isLoading ? 'Carregando demandas…' : `${demandsQuery.data?.total || 0} demandas encontradas.`}</div>
+        {demandsQuery.isLoading ? (
+          <div role="status" className="rounded-2xl border border-zinc-200 bg-white py-14 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">Carregando demandas…</div>
+        ) : demandsQuery.isError ? (
+          <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 px-5 py-10 text-center dark:border-red-900/60 dark:bg-red-950/30">
+            <WarningCircle aria-hidden="true" className="mx-auto mb-3 h-8 w-8 text-red-600" />
+            <h2 className="text-sm font-semibold text-red-900 dark:text-red-200">Não foi possível carregar as demandas</h2>
+            <p className="mt-1 text-xs text-red-700 dark:text-red-300">Verifique a conexão com o banco e tente novamente.</p>
+            <button type="button" onClick={() => demandsQuery.refetch()} className={cn(secondarySmallActionButtonClass, 'mt-4')}>Tentar novamente</button>
+          </div>
+        ) : !demandsQuery.data?.items.length ? (
+          <div className="rounded-2xl border border-dashed border-zinc-200 bg-white py-12 text-center dark:border-zinc-800 dark:bg-zinc-900">
+            <Scales aria-hidden="true" className="mx-auto mb-2 h-8 w-8 text-zinc-300 dark:text-zinc-600" />
+            <h2 className="text-sm font-medium text-zinc-900 dark:text-white">{hasFilters ? 'Nenhum resultado para os filtros' : 'Nenhuma demanda cadastrada'}</h2>
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hasFilters ? 'Ajuste ou limpe os filtros para ampliar a busca.' : 'Use “Nova demanda” para cadastrar uma demanda ambiental ou perícia.'}</p>
+            {hasFilters && (
+              <button type="button" onClick={clearFilters} className={cn(secondarySmallActionButtonClass, 'mt-4 px-4')}>
+                Limpar filtros
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <p className="mb-3 text-xs font-medium text-zinc-500 dark:text-zinc-400">{numberFormatter.format(demandsQuery.data.total)} {demandsQuery.data.total === 1 ? 'demanda encontrada' : 'demandas encontradas'}</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {demandsQuery.data.items.map((demand) => (
+                <Link key={demand.id} to={`/ambiental/${demand.id}`} className="group flex min-w-0 flex-col rounded-xl border border-zinc-200/80 bg-white p-4 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-500/40 dark:focus-visible:ring-offset-zinc-950">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <span className="rounded-lg bg-emerald-50 p-2 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"><Scales aria-hidden="true" weight="duotone" className="h-4 w-4" /></span>
+                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{demand.status || 'Sem status'}</span>
+                  </div>
+                  <p className="truncate text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{demand.tipoDemanda || demand.tipo}</p>
+                  <h2 className="mt-1 line-clamp-2 text-sm font-semibold text-zinc-950 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-300">{demand.nome}</h2>
+                  <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{demand.clienteNome}</p>
+                  <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
+                    <div className="min-w-0"><dt className="text-zinc-400">Órgão / processo</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.orgaoAmbiental || demand.protocolo || 'Não informado'}</dd></div>
+                    <div className="min-w-0"><dt className="text-zinc-400">Fase</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.statusFase || 'Inicial'}</dd></div>
+                    <div className="col-span-2 min-w-0"><dt className="text-zinc-400">Próxima ação</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.proximaAcao || 'Nenhuma ação programada'}</dd></div>
+                  </dl>
+                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3 text-[11px] dark:border-zinc-800">
+                    <span className={cn('flex min-w-0 items-center gap-1 font-semibold', deadlineTone(demand.dataEntrega))}><CalendarBlank aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{formatDate(demand.dataEntrega)}</span></span>
+                    <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">Abrir <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" /></span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <nav aria-label="Paginação das demandas" className="mt-6 flex items-center justify-between gap-4">
+                <button type="button" disabled={page <= 1} onClick={() => updateParam('page', String(page - 1))} className={secondarySmallActionButtonClass}>Anterior</button>
+                <span className="text-xs text-zinc-500">Página {page} de {totalPages}</span>
+                <button type="button" disabled={page >= totalPages} onClick={() => updateParam('page', String(page + 1))} className={secondarySmallActionButtonClass}>Próxima</button>
+              </nav>
+            )}
+          </>
+        )}
+      </section>
+
+      <section id="ambiental-panel-licenciamento" role="tabpanel" aria-labelledby="ambiental-tab-licenciamento" hidden={activeTab !== 'licenciamento'}>
+        {activeTab === 'licenciamento' && (
+          <Licenciamento
+            showHeader={false}
+            createModalOpen={licenseFormOpen}
+            onCreateModalOpenChange={setLicenseFormOpen}
+          />
+        )}
+      </section>
+
+      <section id="ambiental-panel-car" role="tabpanel" aria-labelledby="ambiental-tab-car" hidden={activeTab !== 'car'}>
+        {activeTab === 'car' && <CalculadoraAmbiental embedded showHeader={false} />}
+      </section>
     </Layout>
   );
 }

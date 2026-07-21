@@ -1,15 +1,17 @@
-import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { z } from 'zod';
-import { Layout } from '../../components/Layout';
-import { Modal } from '../../components/Modal';
-import { motion } from 'framer-motion';
-import { Plus, Trash, PencilSimple, Receipt, FolderSimple, CurrencyDollar, Tag, MagnifyingGlass } from '@phosphor-icons/react';
+import { CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import { MetricCard } from '../../components/MetricCard';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
+import { Layout } from '../../components/Layout';
+import { Modal } from '../../components/Modal';
+import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
 import { apiFetch, apiClient } from '../../services/apiClient';
 import {
   filterBarClass,
@@ -52,6 +54,7 @@ export function Despesas() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [selectedDespesa, setSelectedDespesa] = useState<DespesaItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DespesaItem | null>(null);
 
   // Form states
   const [projetoId, setProjetoId] = useState('');
@@ -143,6 +146,7 @@ export function Despesas() {
       if (!res.ok) throw new Error('Erro ao excluir despesa');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
       queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
     },
@@ -220,8 +224,7 @@ export function Despesas() {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
-    deleteMutation.mutate(id);
+    setDeleteTarget(despesas.find((despesa) => despesa.id === id) ?? null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -358,15 +361,13 @@ export function Despesas() {
               { label: 'Não reembolsável', value: 'Nao' }
             ]}
           />
-          <input
-            type="date"
+          <DatePickerField
             value={dataInicioFilter}
             onChange={(event) => setDataInicioFilter(event.target.value)}
             className={filterControlClass}
             aria-label="Data inicial"
           />
-          <input
-            type="date"
+          <DatePickerField
             value={dataFimFilter}
             onChange={(event) => setDataFimFilter(event.target.value)}
             className={filterControlClass}
@@ -545,9 +546,8 @@ export function Despesas() {
             </div>
             <div>
               <label htmlFor="despesa-data" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data *</label>
-              <input 
+              <DatePickerField
                 id="despesa-data"
-                type="date" 
                 required 
                 value={data} 
                 onChange={e => setData(e.target.value)} 
@@ -556,9 +556,8 @@ export function Despesas() {
             </div>
             <div>
               <label htmlFor="despesa-competencia" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Competencia</label>
-              <input
+              <DatePickerField
                 id="despesa-competencia"
-                type="date"
                 value={dataCompetencia}
                 onChange={e => setDataCompetencia(e.target.value)}
                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
@@ -566,9 +565,8 @@ export function Despesas() {
             </div>
             <div>
               <label htmlFor="despesa-data-pagamento" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data de pagamento</label>
-              <input
+              <DatePickerField
                 id="despesa-data-pagamento"
-                type="date"
                 value={dataPagamento}
                 onChange={e => setDataPagamento(e.target.value)}
                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
@@ -579,7 +577,7 @@ export function Despesas() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="despesa-categoria" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Categoria</label>
-              <select 
+              <FormSelect
                 id="despesa-categoria"
                 value={categoria} 
                 onChange={e => setCategoria(e.target.value)} 
@@ -588,11 +586,11 @@ export function Despesas() {
                 {CATEGORIAS.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despesa-projeto" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Projeto Vinculado</label>
-              <select 
+              <FormSelect
                 id="despesa-projeto"
                 value={projetoId} 
                 onChange={e => setProjetoId(e.target.value)} 
@@ -602,36 +600,36 @@ export function Despesas() {
                 {projetos.map((proj) => (
                   <option key={proj.id} value={proj.id}>{proj.nome}</option>
                 ))}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despesa-tipo-custo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tipo de custo</label>
-              <select
+              <FormSelect
                 id="despesa-tipo-custo"
                 value={tipoCusto}
                 onChange={e => setTipoCusto(e.target.value)}
                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
               >
                 {TIPOS_CUSTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despesa-centro-custo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Centro de custo</label>
-              <select
+              <FormSelect
                 id="despesa-centro-custo"
                 value={centroCusto}
                 onChange={e => setCentroCusto(e.target.value)}
                 className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
               >
                 {CENTROS_CUSTO.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </select>
+              </FormSelect>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="despesa-status" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Status Pagamento</label>
-              <select 
+              <FormSelect
                 id="despesa-status"
                 value={status} 
                 onChange={e => setStatus(e.target.value)} 
@@ -640,11 +638,11 @@ export function Despesas() {
                 <option value="Pendente">Pendente</option>
                 <option value="Pago">Pago</option>
                 <option value="Atrasado">Atrasado</option>
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despesa-forma" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Forma de Pagamento</label>
-              <select 
+              <FormSelect
                 id="despesa-forma"
                 value={formaPagamento} 
                 onChange={e => setFormaPagamento(e.target.value)} 
@@ -655,14 +653,11 @@ export function Despesas() {
                 <option value="Cartão de Crédito">Cartão de Crédito</option>
                 <option value="Boleto">Boleto</option>
                 <option value="Transferência">Transferência Bancária</option>
-              </select>
+              </FormSelect>
             </div>
           </div>
 
-          <label className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
-            <input type="checkbox" checked={reembolsavel} onChange={(event) => setReembolsavel(event.target.checked)} className="h-4 w-4 rounded border-emerald-300 text-emerald-600 focus:ring-emerald-500" />
-            Despesa reembolsavel pelo cliente
-          </label>
+          <CheckboxField id="despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={reembolsavel} onChange={setReembolsavel} className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200" />
 
           <div>
             <label htmlFor="despesa-obs" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Observações</label>
@@ -694,6 +689,15 @@ export function Despesas() {
           </div>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
+        title={`Excluir despesa${deleteTarget?.descricao ? ` “${deleteTarget.descricao}”` : ''}?`}
+        description="A despesa será removida e os totais financeiros e indicadores da DRE serão recalculados. Os vínculos com projeto e cliente serão preservados. Esta ação não pode ser desfeita."
+        confirmText="Excluir despesa"
+        loading={deleteMutation.isPending}
+      />
     </Layout>
   );
 }

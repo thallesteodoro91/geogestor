@@ -1,3 +1,4 @@
+import { FormSelect } from '../components/Form';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
@@ -53,6 +54,14 @@ interface StatsGeral {
     despesasMensais: Array<{ mes: string; total: number }>;
   };
   projetosPorStatus?: Array<{ status: string; count: number }>;
+  financeiro?: {
+    receitaContratada: number;
+    receitaRecebida: number;
+    receitaPendente: number;
+    despesasPagas: number;
+    impostosPrevistos: number;
+    resultadoCaixa: number;
+  };
 }
 
 interface TaskItem {
@@ -142,10 +151,8 @@ export function Dashboard() {
 
   // Calcular balanço financeiro
   const { netProfit, areaTotal } = useMemo(() => {
-    const totalReceitas = stats?.orcamentosStats?.reduce((acc: number, curr) => acc + (curr.total || 0), 0) || 0;
-    const totalDespesas = stats?.despesasPorCategoria?.reduce((acc: number, curr) => acc + (curr.total || 0), 0) || 0;
     return {
-      netProfit: totalReceitas - totalDespesas,
+      netProfit: stats?.financeiro?.resultadoCaixa || 0,
       areaTotal: stats?.areaTotal || 0,
     };
   }, [stats]);
@@ -265,12 +272,12 @@ export function Dashboard() {
   }, [tasks, licencas, projetos]);
   return (
     <Layout>
-      <div className="mb-12 flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-        <div>
-          <h1 className="text-5xl font-semibold tracking-tighter text-text-primary">
+      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:pt-10 lg:mb-10 xl:pt-0">
+        <div className="min-w-0">
+          <h1 className="text-4xl font-semibold tracking-tighter text-text-primary sm:text-5xl">
             Visão Geral
           </h1>
-          <p className="mt-3 text-lg text-text-secondary font-medium">
+          <p className="mt-2 max-w-3xl text-base font-medium leading-7 text-text-secondary sm:mt-3 sm:text-lg">
             Monitoramento operacional, financeiro e geográfico consolidado.
           </p>
         </div>
@@ -278,25 +285,25 @@ export function Dashboard() {
       </div>
       
             {/* Top Row: Finance & Quick Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
         
         {/* Fluxo de Caixa (Large Bento Box) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1, type: "spring", stiffness: 100 }}
-          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col min-h-[360px]"
+          className="geo-card col-span-1 flex min-h-[320px] flex-col p-5 sm:min-h-[360px] sm:p-6 lg:p-8 xl:col-span-8"
         >
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4 sm:mb-6 sm:items-center">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 flex items-center justify-center">
                 <img src={valueChainIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
-              <span className="text-sm font-semibold uppercase tracking-wider text-text-muted">Fluxo de Caixa</span>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">Fluxo de Caixa</h2>
             </div>
             <div className="text-right">
-              <span className="text-sm font-medium text-text-muted block mb-1">Lucro Estimado</span>
-              <span className="text-3xl font-semibold tracking-tight text-text-primary">
+              <span className="text-sm font-medium text-text-muted block mb-1">Resultado de Caixa</span>
+              <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit / 100)}
               </span>
             </div>
@@ -327,15 +334,15 @@ export function Dashboard() {
         </motion.div>
 
         {/* Quick Stats Column (stacked vertically on right) */}
-        <div className="col-span-1 lg:col-span-4 flex flex-col gap-6">
-          <div className="flex flex-col gap-6">
+        <div className="col-span-1 flex flex-col gap-4 sm:gap-5 lg:gap-6 xl:col-span-4">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 min-[900px]:grid-cols-3 lg:gap-6 xl:flex xl:flex-col">
           
           {/* Clientes */}
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
-            className={`${geoGreenSurfaceClass} flex-1 rounded-[2rem] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-emerald-300/15 p-6 flex justify-between items-center relative overflow-hidden transition-transform duration-300 hover:-translate-y-0.5`}
+            className={`${geoGreenSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-emerald-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
           >
             <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
               <img src={coexistenceIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
@@ -345,7 +352,7 @@ export function Dashboard() {
               {loadingClientes ? (
                 <Skeleton className="h-10 w-16 ml-auto mt-1" />
               ) : (
-                <span className={`text-4xl font-semibold tracking-tighter ${geoGreenValueClass}`}>
+                <span className={`text-3xl font-semibold tracking-tighter sm:text-2xl xl:text-4xl ${geoGreenValueClass}`}>
                   {String(clientes.length).padStart(2, '0')}
                 </span>
               )}
@@ -357,7 +364,7 @@ export function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, type: "spring", stiffness: 100 }}
-            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-[2rem] p-6 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5`}
+            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
           >
             <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
               <img src={projectFolderIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
@@ -367,7 +374,7 @@ export function Dashboard() {
               {loadingProjetos ? (
                 <Skeleton className="h-10 w-16 ml-auto mt-1" />
               ) : (
-                <span className="text-4xl font-semibold tracking-tighter text-white">
+                <span className="text-3xl font-semibold tracking-tighter text-white sm:text-2xl xl:text-4xl">
                   {String(projetos.length).padStart(2, '0')}
                 </span>
               )}
@@ -379,7 +386,7 @@ export function Dashboard() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
-            className={`${geoOrangeSurfaceClass} flex-1 rounded-[2rem] shadow-[0_10px_30px_-10px_rgba(0,0,0,0.02)] ring-1 ring-orange-300/15 p-6 flex justify-between items-center relative overflow-hidden transition-transform duration-300 hover:-translate-y-0.5`}
+            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
           >
             <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
               <img src={mapIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
@@ -389,7 +396,7 @@ export function Dashboard() {
               {loadingStats ? (
                 <Skeleton className="h-10 w-24 ml-auto mt-1" />
               ) : (
-                <span className={`text-4xl font-semibold tracking-tighter ${geoOrangeValueClass}`}>
+                <span className={`text-3xl font-semibold tracking-tighter sm:text-2xl xl:text-4xl ${geoOrangeValueClass}`}>
                   {areaTotal.toFixed(1)}
                 </span>
               )}
@@ -401,22 +408,22 @@ export function Dashboard() {
       </div>
 
       {/* Row 2: Vencimentos & Eficiência */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+      <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
         
         {/* Próximos Vencimentos */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.8, type: "spring", stiffness: 100 }}
-          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col justify-between min-h-[360px]"
+          className="geo-card col-span-1 flex min-h-[300px] flex-col justify-between p-5 sm:min-h-[340px] sm:p-6 lg:min-h-[360px] lg:p-8 xl:col-span-8"
         >
           <div>
-            <div className="flex items-center gap-3 mb-6">
+            <div className="mb-5 flex items-center gap-3 sm:mb-6">
               <div className="w-12 h-12 flex items-center justify-center">
                 <img src={calendarIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
               <div>
-                <span className="text-sm font-semibold uppercase tracking-wider text-text-muted block">Próximos Vencimentos</span>
+                <h2 className="block text-sm font-semibold uppercase tracking-wider text-text-muted">Próximos Vencimentos</h2>
                 <span className="text-[10px] text-text-secondary font-medium block mt-0.5">Prazos de tarefas e licenças ambientais para os próximos dias</span>
               </div>
             </div>
@@ -463,14 +470,14 @@ export function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7, type: "spring", stiffness: 100 }}
-          className="col-span-1 lg:col-span-4 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col justify-between min-h-[360px]"
+          className="geo-card col-span-1 flex min-h-[300px] flex-col justify-between p-5 sm:min-h-[340px] sm:p-6 lg:min-h-[360px] lg:p-8 xl:col-span-4"
         >
           <div>
-            <div className="flex items-center gap-3 mb-6">
+            <div className="mb-5 flex items-center gap-3 sm:mb-6">
               <div className="w-12 h-12 flex items-center justify-center">
                 <img src={stopwatchIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
-              <span className="text-sm font-semibold uppercase tracking-wider text-text-muted">Eficiência Operacional</span>
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">Eficiência Operacional</h2>
             </div>
 
             <div className="flex items-baseline gap-2 mb-4">
@@ -492,7 +499,7 @@ export function Dashboard() {
           </div>
 
           <div className="mt-4">
-            <div className="w-full bg-zinc-200 dark:bg-zinc-800 h-2.5 rounded-full overflow-hidden mb-2">
+            <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800" role="progressbar" aria-label="Conclusão das tarefas" aria-valuemin={0} aria-valuemax={100} aria-valuenow={taskCompletionRate}>
               <div 
                 className="bg-emerald-600 dark:bg-emerald-500 h-full rounded-full transition-all duration-1000" 
                 style={{ width: `${taskCompletionRate}%` }}
@@ -504,14 +511,14 @@ export function Dashboard() {
 
       </div>
 {/* Row 3: Distribuição e Despesas */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 gap-5 lg:gap-6 xl:grid-cols-12">
         
         {/* Atividades Recentes (span 8) */}
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
-          className="col-span-1 lg:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col h-[460px]"
+          className="geo-card col-span-1 flex h-[420px] flex-col p-5 sm:h-[460px] sm:p-6 lg:p-8 xl:col-span-8"
         >
           <RecentActivities />
         </motion.div>
@@ -521,7 +528,7 @@ export function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
-          className="col-span-1 lg:col-span-4 bg-white dark:bg-zinc-900 rounded-[2.5rem] shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] dark:shadow-none ring-1 ring-zinc-900/5 dark:ring-white/10 p-8 flex flex-col h-[460px]"
+          className="geo-card col-span-1 flex h-[380px] flex-col p-5 sm:h-[460px] sm:p-6 lg:p-8 xl:col-span-4"
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div className="flex items-center gap-3">
@@ -529,43 +536,55 @@ export function Dashboard() {
                 <img src={blueprintIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
               <div>
-                <span className="text-sm font-semibold uppercase tracking-wider text-text-muted block">Distribuição de Projetos</span>
+                <h2 className="block text-sm font-semibold uppercase tracking-wider text-text-muted">Distribuição de Projetos</h2>
                 <span className="text-[10px] text-text-secondary font-medium block mt-0.5">
                   {projetoFilterMode === 'macro' ? 'Por tipo/categoria' : `Status (${effectiveProjetoTipo})`}
                 </span>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex bg-zinc-100 dark:bg-zinc-800/60 p-1 rounded-xl">
-                <button 
+              <div className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800/60" role="group" aria-label="Agrupamento da distribuição de projetos">
+                <button
+                  type="button"
                   onClick={() => setProjetoFilterMode('macro')} 
-                  className={`px-3 py-1 text-[10px] font-medium rounded-lg transition-all ${projetoFilterMode === 'macro' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                  aria-pressed={projetoFilterMode === 'macro'}
+                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'macro' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
                 >
                   Todos
                 </button>
-                <button 
+                <button
+                  type="button"
                   onClick={() => setProjetoFilterMode('unitario')} 
-                  className={`px-3 py-1 text-[10px] font-medium rounded-lg transition-all ${projetoFilterMode === 'unitario' ? 'bg-white dark:bg-zinc-700 shadow text-zinc-900 dark:text-white' : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'}`}
+                  aria-pressed={projetoFilterMode === 'unitario'}
+                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'unitario' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
                 >
                   Unitário
                 </button>
               </div>
               
               {projetoFilterMode === 'unitario' && availableProjectTypes.length > 0 && (
-                <select
+                <FormSelect
+                  aria-label="Filtrar distribuição por tipo de projeto"
+                  name="dashboardProjectType"
                   value={effectiveProjetoTipo}
                   onChange={(e) => setSelectedProjetoTipo(e.target.value)}
-                  className="bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/80 rounded-xl px-2 py-1.5 text-[10px] font-medium text-text-primary focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer animate-in fade-in zoom-in-95 duration-200"
+                  className="geo-focus-ring cursor-pointer animate-in rounded-xl border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[10px] font-medium text-text-primary transition-[border-color,box-shadow] duration-200 fade-in zoom-in-95 dark:border-zinc-700/80 dark:bg-zinc-800/60"
                 >
                   {availableProjectTypes.map((tipo) => (
                     <option key={tipo} value={tipo}>{tipo}</option>
                   ))}
-                </select>
+                </FormSelect>
               )}
             </div>
           </div>
-          <div className="flex-1">
-            <ResponsiveContainer {...responsiveChartProps}>
+          <div className="min-h-0 flex-1">
+            {projetosStatusData.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+                <img src={blueprintIcon} alt="" className="h-10 w-10 opacity-45 grayscale" />
+                <p className="mt-3 text-sm font-semibold text-text-secondary">Nenhum projeto para distribuir</p>
+                <p className="mt-1 max-w-xs text-xs leading-5 text-text-muted">Os dados aparecerão aqui quando houver projetos cadastrados.</p>
+              </div>
+            ) : <ResponsiveContainer {...responsiveChartProps}>
               <PieChart>
                 <Pie
                   data={projetosStatusData}
@@ -584,7 +603,7 @@ export function Dashboard() {
                 <RechartsTooltip content={<DynamicTooltip formatter={(v) => `${v} projetos`} />} />
                 <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
               </PieChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
           </div>
         </motion.div>
       </div>

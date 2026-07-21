@@ -16,6 +16,7 @@ import {
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
 import { apiClient } from '../../services/apiClient';
+import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
 
 interface ProjetoStatusStat {
   status: string;
@@ -85,11 +86,11 @@ export function RelatorioExecutivo() {
 
   // Process financial KPIs
   const totalBudgets = orcamentosStats.reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
-  const approvedBudgets = orcamentosStats.filter((o: OrcamentoStat) => o.status === 'Aprovado' || o.status === 'Pago').reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
+  const approvedBudgets = orcamentosStats.filter((o: OrcamentoStat) => isApprovedBudgetStatus(o.status)).reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
   const conversionRate = totalBudgets > 0 ? (approvedBudgets / totalBudgets) * 100 : 0;
 
   const totalRevenue = orcamentosStats
-    .filter((o: OrcamentoStat) => o.status === 'Pago' || o.status === 'Aprovado')
+    .filter((o: OrcamentoStat) => isApprovedBudgetStatus(o.status))
     .reduce((acc: number, curr: OrcamentoStat) => acc + (curr.total || 0), 0);
 
   const totalExpense = despesasPorCategoria.reduce((acc: number, curr: DespesaCategoriaStat) => acc + (curr.total || 0), 0);

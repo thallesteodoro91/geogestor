@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
-import { FormError, FormFooter, FormSection } from '../../components/Form';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { DatePickerField, FormError, FormFooter, FormSection, FormSelect } from '../../components/Form';
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
@@ -37,6 +38,8 @@ export function Tarefas() {
   const [novaPrioridade, setNovaPrioridade] = useState('Média');
   const [novaDataLimite, setNovaDataLimite] = useState('');
   const [formError, setFormError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<Tarefa | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const focusedTaskId = new URLSearchParams(location.search).get('tarefaId');
 
   const fetchDados = () => {
@@ -123,14 +126,24 @@ export function Tarefas() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Deseja excluir esta tarefa?')) return;
+    setDeleteTarget(tarefas.find((tarefa) => tarefa.id === id) ?? null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      const res = await apiFetch(`/api/tarefas/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tarefas/${deleteTarget.id}`, { method: 'DELETE' });
       if (res.ok) {
-        setTarefas(prev => prev.filter(t => t.id !== id));
+        setTarefas(prev => prev.filter(t => t.id !== deleteTarget.id));
+        setDeleteTarget(null);
+      } else {
+        throw new Error('Não foi possível excluir a tarefa.');
       }
     } catch {
-      alert('Erro ao deletar tarefa');
+      alert('Não foi possível excluir a tarefa. Tente novamente.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -239,15 +252,13 @@ export function Tarefas() {
             className="min-w-0"
             options={['Todas', 'Baixa', 'Média', 'Alta'].map((value) => ({ label: value === 'Todas' ? 'Todas as prioridades' : value, value }))}
           />
-          <input
-            type="date"
+          <DatePickerField
             value={dataInicioFilter}
             onChange={(event) => setDataInicioFilter(event.target.value)}
             className={filterControlClass}
             aria-label="Prazo inicial"
           />
-          <input
-            type="date"
+          <DatePickerField
             value={dataFimFilter}
             onChange={(event) => setDataFimFilter(event.target.value)}
             className={filterControlClass}
@@ -409,7 +420,7 @@ export function Tarefas() {
 
           <div>
             <label htmlFor="tarefa-projeto" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Projeto</label>
-            <select 
+            <FormSelect
               id="tarefa-projeto"
               required 
               value={novoProjetoId} 
@@ -419,13 +430,13 @@ export function Tarefas() {
               {projetos.map(p => (
                 <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
-            </select>
+            </FormSelect>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="tarefa-prioridade" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Prioridade</label>
-              <select 
+              <FormSelect
                 id="tarefa-prioridade"
                 value={novaPrioridade} 
                 onChange={e => setNovaPrioridade(e.target.value)} 
@@ -434,14 +445,13 @@ export function Tarefas() {
                 <option value="Baixa">Baixa</option>
                 <option value="Média">Média</option>
                 <option value="Alta">Alta</option>
-              </select>
+              </FormSelect>
             </div>
 
             <div>
               <label htmlFor="tarefa-data-limite" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data Limite</label>
-              <input 
+              <DatePickerField
                 id="tarefa-data-limite"
-                type="date" 
                 value={novaDataLimite} 
                 onChange={e => setNovaDataLimite(e.target.value)} 
                 className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow" 
@@ -480,6 +490,15 @@ export function Tarefas() {
           </FormFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Excluir tarefa${deleteTarget?.titulo ? ` “${deleteTarget.titulo}”` : ''}?`}
+        description="A tarefa será removida do quadro e deixará de aparecer no projeto e nos demais contextos vinculados. O projeto será preservado. Esta ação não pode ser desfeita."
+        confirmText="Excluir tarefa"
+        loading={deleting}
+      />
     </Layout>
   );
 }

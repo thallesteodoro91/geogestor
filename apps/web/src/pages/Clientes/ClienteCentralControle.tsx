@@ -1,3 +1,4 @@
+import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import { ModalAdicionarNota } from '../../components/ModalAdicionarNota';
 import { Modal } from '../../components/Modal';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { getTaskPriorityTone } from '../../utils/taskPriority';
 import { cn } from '../../utils/cn';
 import { primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -206,6 +208,11 @@ export function ClienteCentralControle({
   const [agendaHora, setAgendaHora] = useState('');
   const [agendaTipo, setAgendaTipo] = useState('Visita de Campo');
   const [editingAgendaId, setEditingAgendaId] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'task'; item: Tarefa }
+    | { type: 'agenda'; item: Compromisso }
+    | null
+  >(null);
 
   const { data: tarefas = [], isLoading: loadingTarefas } = useQuery({
     queryKey: ['cliente-central-tarefas', clienteId],
@@ -388,6 +395,7 @@ export function ClienteCentralControle({
       return res.json();
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['tarefas'] });
     },
@@ -455,6 +463,7 @@ export function ClienteCentralControle({
       return res.json();
     },
     onSuccess: (_data, agendaId) => {
+      setDeleteTarget(null);
       if (editingAgendaId === agendaId) {
         setAgendaTitulo('');
         setAgendaDescricao('');
@@ -744,7 +753,7 @@ export function ClienteCentralControle({
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
                 <div>
                   <label htmlFor="central-event-tipo" className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">Tipo</label>
-                  <select
+                  <FormSelect
                     id="central-event-tipo"
                     value={eventTipo}
                     onChange={event => setEventTipo(event.target.value)}
@@ -756,13 +765,12 @@ export function ClienteCentralControle({
                     <option value="Email">Email</option>
                     <option value="Reunião">Reunião</option>
                     <option value="Documento">Documento</option>
-                  </select>
+                  </FormSelect>
                 </div>
                 <div>
                   <label htmlFor="central-event-data" className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">Data</label>
-                  <input
+                  <DatePickerField
                     id="central-event-data"
-                    type="date"
                     value={eventDate}
                     onChange={event => setEventDate(event.target.value)}
                     className={cn(centralCompactFieldClass, 'w-full')}
@@ -770,7 +778,7 @@ export function ClienteCentralControle({
                 </div>
                 <div>
                   <label htmlFor="central-event-projeto" className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">Vinculo</label>
-                  <select
+                  <FormSelect
                     id="central-event-projeto"
                     value={eventProjetoId}
                     onChange={event => setEventProjetoId(event.target.value)}
@@ -780,7 +788,7 @@ export function ClienteCentralControle({
                     {projetos.map(projeto => (
                       <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
                     ))}
-                  </select>
+                  </FormSelect>
                 </div>
                 <div>
                   <label htmlFor="central-event-title" className="block text-xs font-bold uppercase tracking-wider text-zinc-500 mb-1">Resumo / Título *</label>
@@ -930,7 +938,7 @@ export function ClienteCentralControle({
 
               {showTaskForm && (
                 <form onSubmit={handleAddTask} className="geo-card mt-4 space-y-3 p-4">
-                  <select
+                  <FormSelect
                     value={taskProjetoId}
                     onChange={event => setTaskProjetoId(event.target.value)}
                     className={cn(centralFieldClass, 'w-full')}
@@ -941,7 +949,7 @@ export function ClienteCentralControle({
                         {projeto.nome}
                       </option>
                     ))}
-                  </select>
+                  </FormSelect>
                   <input
                     value={taskTitulo}
                     onChange={event => setTaskTitulo(event.target.value)}
@@ -949,7 +957,7 @@ export function ClienteCentralControle({
                     className={cn(centralFieldClass, 'w-full')}
                   />
                   <div className="grid grid-cols-2 gap-2">
-                    <select
+                    <FormSelect
                       value={taskPrioridade}
                       onChange={event => setTaskPrioridade(event.target.value as TaskPriority)}
                       className={centralFieldClass}
@@ -957,9 +965,8 @@ export function ClienteCentralControle({
                       <option value="Baixa">Baixa</option>
                       <option value="Média">Média</option>
                       <option value="Alta">Alta</option>
-                    </select>
-                    <input
-                      type="date"
+                    </FormSelect>
+                    <DatePickerField
                       value={taskDataLimite}
                       onChange={event => setTaskDataLimite(event.target.value)}
                       className={centralFieldClass}
@@ -1028,11 +1035,7 @@ export function ClienteCentralControle({
                         </div>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (window.confirm(`Excluir a tarefa "${tarefa.titulo}"?`)) {
-                              deleteTaskMutation.mutate(tarefa.id);
-                            }
-                          }}
+                          onClick={() => setDeleteTarget({ type: 'task', item: tarefa })}
                           disabled={deleteTaskMutation.isPending}
                           className="geo-focus-ring flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-[background-color,color,transform] hover:bg-brand-red-50 hover:text-brand-red-600 active:scale-95 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-brand-red-400/10"
                           aria-label={`Excluir tarefa ${tarefa.titulo}`}
@@ -1073,19 +1076,17 @@ export function ClienteCentralControle({
                     className={cn(centralFieldClass, 'w-full')}
                   />
                   <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="date"
+                    <DatePickerField
                       value={agendaData}
                       onChange={event => setAgendaData(event.target.value)}
                       className={cn(centralFieldClass, 'w-full')}
                     />
-                    <input
-                      type="time"
+                    <TimePickerField
                       value={agendaHora}
                       onChange={event => setAgendaHora(event.target.value)}
                       className={cn(centralFieldClass, 'w-full')}
                     />
-                    <select
+                    <FormSelect
                       value={agendaTipo}
                       onChange={event => setAgendaTipo(event.target.value)}
                       className={cn(centralFieldClass, 'w-full')}
@@ -1095,9 +1096,9 @@ export function ClienteCentralControle({
                       <option value="Cartório">Cartório</option>
                       <option value="Entrega">Entrega</option>
                       <option value="Outro">Outro</option>
-                    </select>
+                    </FormSelect>
                   </div>
-                  <select
+                  <FormSelect
                     value={agendaProjetoId}
                     onChange={event => setAgendaProjetoId(event.target.value)}
                     className={cn(centralFieldClass, 'w-full')}
@@ -1108,7 +1109,7 @@ export function ClienteCentralControle({
                         {projeto.nome}
                       </option>
                     ))}
-                  </select>
+                  </FormSelect>
                   <textarea
                     value={agendaDescricao}
                     onChange={event => setAgendaDescricao(event.target.value)}
@@ -1158,11 +1159,7 @@ export function ClienteCentralControle({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (window.confirm(`Excluir o compromisso "${compromisso.titulo}"?`)) {
-                                    deleteAgendaMutation.mutate(compromisso.id);
-                                  }
-                                }}
+                                onClick={() => setDeleteTarget({ type: 'agenda', item: compromisso })}
                                 disabled={deleteAgendaMutation.isPending}
                                 className="geo-focus-ring flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-zinc-400 transition-[background-color,color,transform] hover:bg-brand-red-50 hover:text-brand-red-600 active:scale-95 disabled:cursor-wait disabled:opacity-50 dark:hover:bg-brand-red-400/10"
                                 title="Excluir compromisso"
@@ -1190,6 +1187,22 @@ export function ClienteCentralControle({
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['cliente-historico', clienteId] });
         }}
+      />
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget?.type === 'task') deleteTaskMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'agenda') deleteAgendaMutation.mutate(deleteTarget.item.id);
+        }}
+        title={deleteTarget?.type === 'task'
+          ? `Excluir tarefa “${deleteTarget.item.titulo}”?`
+          : `Excluir compromisso${deleteTarget?.item.titulo ? ` “${deleteTarget.item.titulo}”` : ''}?`}
+        description={deleteTarget?.type === 'task'
+          ? 'A tarefa será removida da central do cliente e do projeto vinculado, quando houver. Os cadastros do cliente e do projeto serão preservados. Esta ação não pode ser desfeita.'
+          : 'O compromisso será removido da agenda e da central do cliente. Os cadastros do cliente e do projeto vinculado serão preservados. Esta ação não pode ser desfeita.'}
+        confirmText={deleteTarget?.type === 'task' ? 'Excluir tarefa' : 'Excluir compromisso'}
+        loading={deleteTaskMutation.isPending || deleteAgendaMutation.isPending}
       />
     </div>
   );

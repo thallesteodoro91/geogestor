@@ -30,6 +30,8 @@ export function getBaseUrl(): string {
 
     return `http://127.0.0.1:${port}`;
   }
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/$/, '');
+  if (configuredUrl) return configuredUrl;
   return 'http://127.0.0.1:3001';
 }
 

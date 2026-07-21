@@ -1,3 +1,4 @@
+import { DatePickerField, FormSelect } from './Form';
 import { useState } from 'react';
 import { Modal } from './Modal';
 import { FilePdf } from '@phosphor-icons/react';
@@ -55,7 +56,7 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Tipo de Laudo
             </label>
-            <select
+            <FormSelect
               value={formData.tipoLaudo}
               onChange={(e) => handleChange('tipoLaudo', e.target.value)}
               className={cn(geoFieldClass, 'w-full px-3 py-2 text-sm')}
@@ -64,14 +65,13 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
               <option value="fauna">Monitoramento de Fauna</option>
               <option value="flora">Inventário Florestal</option>
               <option value="outros">Laudo Ambiental Genérico</option>
-            </select>
+            </FormSelect>
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Data da Vistoria
             </label>
-            <input
-              type="date"
+            <DatePickerField
               value={formData.dataVistoria}
               onChange={(e) => handleChange('dataVistoria', e.target.value)}
               className={cn(geoFieldClass, 'w-full px-3 py-2 text-sm')}

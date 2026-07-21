@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { execFile } from 'child_process';
 import { db, dbReady } from './db';
 import { schema } from '@geogestor/database';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { clientesRoutes } from './routes/clientes.routes';
 import { projetosRoutes } from './routes/projetos.routes';
 import { financeiroRoutes } from './routes/financeiro.routes';
@@ -22,14 +22,40 @@ import { auditRoutes } from './routes/audit.routes';
 import { searchRoutes } from './routes/search.routes';
 import { contatosRoutes } from './routes/contatos.routes';
 import { licencasRoutes } from './routes/licencas.routes';
+import { ambientalRoutes } from './routes/ambiental.routes';
+import { orcamentosRoutes } from './routes/orcamentos.routes';
 import { runRuntimeMigrations } from './services/runtime-migrations.service';
 import { FileSystemService } from './services/fs.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
 import { SchedulerService } from './services/scheduler.service';
 import { BackupService } from './services/backup.service';
+import { LocalSecretService } from './services/local-secret.service';
+
+function redactRequestUrl(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl, 'http://127.0.0.1');
+    for (const key of ['token', 'access_token', 'refresh_token', 'code']) {
+      if (parsed.searchParams.has(key)) parsed.searchParams.set(key, '[REDACTED]');
+    }
+    return `${parsed.pathname}${parsed.search}`;
+  } catch {
+    return rawUrl.split('?')[0];
+  }
+}
 
 export const server = Fastify({
-  logger: true
+  logger: {
+    serializers: {
+      req(request) {
+        return {
+          method: request.method,
+          url: redactRequestUrl(request.url),
+          hostname: request.hostname,
+          remoteAddress: request.ip
+        };
+      }
+    }
+  }
 }).withTypeProvider<ZodTypeProvider>();
 
 server.setValidatorCompiler(validatorCompiler);
@@ -64,17 +90,29 @@ function hashAdminPassword(password: unknown) {
   return `scrypt:${salt}:${hash}`;
 }
 
-function sanitizeConfiguracao<T extends { adminSenhaHash?: string }>(config: T | null | undefined) {
+function sanitizeConfiguracao(config: any | null | undefined) {
   if (!config) return null;
-  const { adminSenhaHash, ...safeConfig } = config;
-  return safeConfig;
+  const { adminSenhaHash, googleRefreshToken, googleAccessToken, ...safeConfig } = config;
+  return {
+    ...safeConfig,
+    googleClientSecret: LocalSecretService.reveal(safeConfig.googleClientSecret)
+  };
+}
+
+function tokensMatch(candidate: unknown, expected: string) {
+  if (typeof candidate !== 'string') return false;
+  const candidateBuffer = Buffer.from(candidate);
+  const expectedBuffer = Buffer.from(expected);
+  return candidateBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
 }
 
 // Hook para segurança de acesso local à API
 server.addHook('onRequest', async (request, reply) => {
   const token = process.env.GEOGESTOR_API_TOKEN;
   if (!token) {
-    // Se não há token configurado nas variáveis de ambiente, ignora a validação (fallback de desenvolvimento)
+    if (process.env.NODE_ENV === 'production') {
+      return reply.status(503).send({ error: 'A API local não iniciou com uma credencial válida.' });
+    }
     return;
   }
 
@@ -95,13 +133,15 @@ server.addHook('onRequest', async (request, reply) => {
     return;
   }
 
-  const requestToken = request.headers['x-api-token'] || 
-                       (request.headers['authorization']?.toString().startsWith('Bearer ') 
-                          ? request.headers['authorization'].toString().slice(7) 
-                          : undefined) ||
-                       (request.query as any)?.token;
+  const queryTokenAllowed = request.method === 'GET'
+    && (requestPath === '/api/arquivos/download' || requestPath === '/api/arquivos/preview');
+  const requestToken = request.headers['x-api-token']
+    || (request.headers['authorization']?.toString().startsWith('Bearer ')
+      ? request.headers['authorization'].toString().slice(7)
+      : undefined)
+    || (queryTokenAllowed ? (request.query as any)?.token : undefined);
 
-  if (requestToken !== token) {
+  if (!tokensMatch(requestToken, token)) {
     return reply.status(401).send({ error: 'Unauthorized: Invalid API Token' });
   }
 });
@@ -203,15 +243,11 @@ server.register(cors, {
       return;
     }
 
-    try {
-      const parsedOrigin = new URL(origin);
-      const isLocalOrigin =
-        (parsedOrigin.protocol === 'http:' || parsedOrigin.protocol === 'https:')
-        && (parsedOrigin.hostname === '127.0.0.1' || parsedOrigin.hostname === 'localhost');
-      callback(null, isLocalOrigin);
-    } catch {
-      callback(null, false);
-    }
+    const port = String(Number(process.env.PORT) || 3001);
+    const allowedOrigins = process.env.NODE_ENV === 'production'
+      ? new Set([`http://127.0.0.1:${port}`])
+      : new Set(['http://localhost:5173', 'http://127.0.0.1:5173', `http://127.0.0.1:${port}`]);
+    callback(null, allowedOrigins.has(origin));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -230,6 +266,8 @@ server.register(auditRoutes, { prefix: '/api/audit-logs' });
 server.register(searchRoutes, { prefix: '/api/search' });
 server.register(contatosRoutes, { prefix: '/api/contatos' });
 server.register(licencasRoutes, { prefix: '/api/licencas' });
+server.register(ambientalRoutes, { prefix: '/api/ambiental' });
+server.register(orcamentosRoutes, { prefix: '/api/orcamentos' });
 
 // Health check
 server.get('/api/health', async (request, reply) => {
@@ -272,6 +310,7 @@ server.post('/api/sistema/backup', async (request, reply) => {
 
 const resetHandler = async (request: FastifyRequest, reply: FastifyReply) => {
   try {
+    const recoveryBackup = await BackupService.createLocalBackup();
     await db.transaction(async (tx) => {
       // Filhos primeiro para preservar a integridade referencial sem desligar
       // as foreign keys da conexão durante a limpeza.
@@ -283,13 +322,27 @@ const resetHandler = async (request: FastifyRequest, reply: FastifyReply) => {
       await tx.delete(schema.tarefas);
       await tx.delete(schema.despesas);
       await tx.delete(schema.parcelas);
+      await tx.delete(schema.orcamentoProjetos);
+      await tx.delete(schema.orcamentoVersoes);
+      await tx.delete(schema.orcamentoStatusHistorico);
+      await tx.delete(schema.orcamentoCondicoesPagamento);
+      await tx.delete(schema.orcamentoImpostos);
+      await tx.delete(schema.orcamento_despesas);
+      await tx.delete(schema.orcamento_itens);
       await tx.delete(schema.orcamentos);
+      await tx.delete(schema.tributos);
+      await tx.delete(schema.perfisTributarios);
+      await tx.delete(schema.orcamentoModelos);
+      await tx.delete(schema.parametrosPrecificacao);
       await tx.delete(schema.projetos);
       await tx.delete(schema.clientes);
       await tx.delete(schema.contatos);
     });
 
-    return { message: 'Todos os dados foram apagados com sucesso' };
+    return {
+      message: 'Todos os dados foram apagados com sucesso',
+      recoveryBackupPath: recoveryBackup.bundlePath
+    };
   } catch (err) {
     server.log.error(err);
     return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao apagar informações do banco de dados') });
@@ -328,41 +381,17 @@ server.get('/api/sistema/backup-completo/preflight', async (request, reply) => {
 server.post('/api/sistema/backup-completo', async (request, reply) => {
   try {
     const databasePath = getDatabasePath();
-    const dataDirectory = getDataDirectory();
-    const backupDirectory = path.join(dataDirectory, 'backups');
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupBasePath = path.join(backupDirectory, `geogestor-backup-completo-${timestamp}`);
     const filesRootDirectory = await FileSystemService.getRootFolder();
-    const filesBackupPath = `${backupBasePath}-arquivos`;
     const [databaseStats, filesStats] = await Promise.all([
       getDatabaseBundleStats(databasePath),
       getPathStats(filesRootDirectory)
     ]);
-
-    await fs.mkdir(backupDirectory, { recursive: true });
-
-    const copiedFiles: string[] = [];
-    const mainBackupPath = `${backupBasePath}.db`;
-
-    const safeBackupPath = mainBackupPath.replace(/\\/g, '/');
-    await db.run(sql.raw(`VACUUM INTO '${safeBackupPath}'`));
-    copiedFiles.push(mainBackupPath);
-
-    const sourceRoot = path.resolve(filesRootDirectory).toLowerCase();
-    const targetRoot = path.resolve(filesBackupPath).toLowerCase();
-    if (targetRoot.startsWith(`${sourceRoot}${path.sep}`)) {
-      return reply.status(400).send({
-        error: 'A pasta de backup completo não pode ficar dentro da própria pasta de arquivos.'
-      });
-    }
-
-    await fs.cp(filesRootDirectory, filesBackupPath, { recursive: true, force: true });
+    const backup = await BackupService.createCompleteBackup(filesRootDirectory);
 
     return {
       message: 'Backup completo criado com sucesso',
-      backupPath: mainBackupPath,
-      filesBackupPath,
-      copiedFiles,
+      ...backup,
+      filesBackupPath: path.join(backup.bundlePath, 'files'),
       databaseStats,
       filesStats,
       totalBytes: databaseStats.bytes + filesStats.bytes,
@@ -436,9 +465,9 @@ server.patch('/api/configuracoes', async (request, reply) => {
         adminEmail: data.adminEmail !== undefined ? data.adminEmail : undefined,
         adminSenhaHash: data.adminSenha !== undefined ? hashAdminPassword(data.adminSenha) : undefined,
         googleClientId: data.googleClientId !== undefined ? data.googleClientId : undefined,
-        googleClientSecret: data.googleClientSecret !== undefined ? data.googleClientSecret : undefined,
-        googleRefreshToken: data.googleRefreshToken !== undefined ? data.googleRefreshToken : undefined,
-        googleAccessToken: data.googleAccessToken !== undefined ? data.googleAccessToken : undefined,
+        googleClientSecret: data.googleClientSecret !== undefined ? LocalSecretService.protect(data.googleClientSecret) : undefined,
+        googleRefreshToken: data.googleRefreshToken !== undefined ? LocalSecretService.protect(data.googleRefreshToken) : undefined,
+        googleAccessToken: data.googleAccessToken !== undefined ? LocalSecretService.protect(data.googleAccessToken) : undefined,
         googleSyncActive: data.googleSyncActive !== undefined ? data.googleSyncActive : undefined,
         updatedAt: new Date().toISOString()
       }).where(eq(schema.configuracoes.id, configs[0].id)).returning();
@@ -453,9 +482,9 @@ server.patch('/api/configuracoes', async (request, reply) => {
         adminSenhaHash: hashAdminPassword(data.adminSenha),
         setupConcluido: true,
         googleClientId: data.googleClientId || null,
-        googleClientSecret: data.googleClientSecret || null,
-        googleRefreshToken: data.googleRefreshToken || null,
-        googleAccessToken: data.googleAccessToken || null,
+        googleClientSecret: LocalSecretService.protect(data.googleClientSecret || null),
+        googleRefreshToken: LocalSecretService.protect(data.googleRefreshToken || null),
+        googleAccessToken: LocalSecretService.protect(data.googleAccessToken || null),
         googleSyncActive: data.googleSyncActive || false
       }).returning();
       return sanitizeConfiguracao(newConfig[0]);
@@ -578,6 +607,12 @@ if (isProduction) {
 
 export const start = async () => {
   try {
+    if (process.env.NODE_ENV === 'production' && !process.env.GEOGESTOR_API_TOKEN) {
+      throw new Error('Inicialização recusada: GEOGESTOR_API_TOKEN não foi configurado.');
+    }
+    if (process.env.NODE_ENV === 'production' && !process.env.GEOGESTOR_SECRET_KEY) {
+      throw new Error('Inicialização recusada: a chave local de proteção de segredos não foi configurada.');
+    }
     const dataDir = getDataDirectory();
     await fs.mkdir(dataDir, { recursive: true });
 
@@ -585,6 +620,7 @@ export const start = async () => {
     
     // Run schema migrations via code
     await runRuntimeMigrations();
+    await LocalSecretService.migrateStoredGoogleSecrets();
 
     const port = Number(process.env.PORT) || 3001;
     server.listen({ port, host: '127.0.0.1' }, (err, address) => {

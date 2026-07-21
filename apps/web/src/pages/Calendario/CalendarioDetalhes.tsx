@@ -1,8 +1,13 @@
+import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
-import { motion } from 'framer-motion';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiFetch } from '../../services/apiClient';
+import { primaryActionButtonClass, secondaryActionButtonClass } from '../../utils/actionStyles';
+import { cn } from '../../utils/cn';
+import { geoGreenSurfaceClass, geoKickerClass } from '../../utils/geoTheme';
+import { toast } from 'sonner';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -13,18 +18,39 @@ import {
   CheckSquare
 } from '@phosphor-icons/react';
 
-const getGoogleCalendarUrl = (titulo: string, dataStr: string, descricao?: string) => {
-  const dateParts = dataStr?.split('-');
-  if (dateParts && dateParts.length === 3) {
-    const y = parseInt(dateParts[0], 10);
-    const m = parseInt(dateParts[1], 10);
-    const d = parseInt(dateParts[2], 10);
+const localDateFormatter = new Intl.DateTimeFormat('pt-BR');
+
+const formatLocalDate = (value?: string | null) => {
+  if (!value) return '-';
+
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  const date = dateOnlyMatch
+    ? new Date(Number(dateOnlyMatch[1]), Number(dateOnlyMatch[2]) - 1, Number(dateOnlyMatch[3]))
+    : new Date(value);
+
+  return Number.isNaN(date.getTime()) ? '-' : localDateFormatter.format(date);
+};
+
+const getGoogleCalendarUrl = (titulo: string, dataStr: string, descricao?: string, hora?: string | null) => {
+  const dateParts = /^(\d{4})-(\d{2})-(\d{2})/.exec(dataStr);
+  if (dateParts) {
+    const [, year, month, day] = dateParts;
+    const y = Number(year);
+    const m = Number(month);
+    const d = Number(day);
     const nextDay = new Date(y, m - 1, d + 1);
     const nextY = nextDay.getFullYear();
     const nextM = String(nextDay.getMonth() + 1).padStart(2, '0');
     const nextD = String(nextDay.getDate()).padStart(2, '0');
-    const datesParam = `${dateParts[0]}${dateParts[1]}${dateParts[2]}/${nextY}${nextM}${nextD}`;
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&details=${encodeURIComponent(descricao || '')}&dates=${datesParam}`;
+    const dateKey = `${year}-${month}-${day}`;
+    let datesParam = `${year}${month}${day}/${nextY}${nextM}${nextD}`;
+    if (hora) {
+      const start = new Date(`${dateKey}T${hora}:00`);
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      const compact = (date: Date) => `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}00`;
+      datesParam = `${compact(start)}/${compact(end)}`;
+    }
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo)}&details=${encodeURIComponent(descricao || '')}&dates=${datesParam}&ctz=America%2FSao_Paulo`;
   }
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(titulo || '')}&details=${encodeURIComponent(descricao || '')}`;
 };
@@ -33,8 +59,8 @@ export function CalendarioDetalhes() {
   const { tipo, id } = useParams<{ tipo: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  // Mutation to delete the commitment (if it is a commitment)
   const deleteCompromissoMutation = useMutation({
     mutationFn: async () => {
       const res = await apiFetch(`/api/compromissos/${id}`, {
@@ -44,14 +70,14 @@ export function CalendarioDetalhes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['compromissos'] });
+      toast.success('Compromisso excluído com sucesso.');
       navigate('/calendario');
     },
     onError: () => {
-      alert('Erro ao excluir compromisso.');
+      toast.error('Não foi possível excluir o compromisso. Tente novamente.');
     }
   });
 
-  // Query details depending on the event type
   const { data: detalhes, isLoading, error } = useQuery({
     queryKey: ['calendario-detalhe', tipo, id],
     queryFn: async () => {
@@ -104,7 +130,6 @@ export function CalendarioDetalhes() {
           id: t.id
         };
       } else {
-        // Default to compromisso
         const res = await apiFetch(`/api/compromissos/${id}`);
         if (!res.ok) throw new Error('Compromisso não encontrado');
         const comp = await res.json();
@@ -113,7 +138,8 @@ export function CalendarioDetalhes() {
           titulo: comp.titulo,
           descricao: comp.descricao,
           data: comp.data,
-          tipoCompromisso: comp.tipo, // Visita de Campo, Reunião, etc
+          hora: comp.hora,
+          tipoCompromisso: comp.tipo,
           projetoNome: comp.projetoNome,
           projetoId: comp.projetoId,
           clienteNome: comp.clienteNome,
@@ -126,15 +152,15 @@ export function CalendarioDetalhes() {
   });
 
   const handleDelete = () => {
-    if (!confirm('Deseja realmente excluir este compromisso permanentemente?')) return;
-    deleteCompromissoMutation.mutate();
+    setDeleteDialogOpen(true);
   };
 
   if (isLoading) {
     return (
       <Layout>
-        <div className="py-24 flex justify-center">
-          <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-8 h-8 rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 animate-spin" />
+        <div role="status" aria-live="polite" className="flex min-h-64 flex-col items-center justify-center gap-3 py-24 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <span aria-hidden="true" className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-indigo-600 motion-reduce:animate-none dark:border-zinc-800 dark:border-t-indigo-400" />
+          <span>Carregando detalhes do evento…</span>
         </div>
       </Layout>
     );
@@ -143,119 +169,139 @@ export function CalendarioDetalhes() {
   if (error || !detalhes) {
     return (
       <Layout>
-        <div className="text-center py-12">
-          <h2 className="text-2xl font-bold mb-4">Compromisso não encontrado</h2>
-          <button onClick={() => navigate('/calendario')} className="px-4 py-2 bg-zinc-950 text-white rounded-xl">
+        <section role="alert" className="geo-surface mx-auto max-w-xl rounded-[2rem] p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">Evento não encontrado</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
+            O evento pode ter sido excluído ou não estar mais disponível.
+          </p>
+          <Link to="/calendario" className={cn(primaryActionButtonClass, 'mx-auto mt-6 w-fit')}>
             Voltar para o calendário
-          </button>
-        </div>
+          </Link>
+        </section>
       </Layout>
     );
   }
 
+  const eventTypeLabel = detalhes.tipo === 'projeto'
+    ? 'Prazo de projeto'
+    : detalhes.tipo === 'tarefa'
+      ? 'Limite de tarefa'
+      : detalhes.tipoCompromisso;
+
   return (
     <Layout>
-      {/* Top Bar with back button */}
-      <div className="flex items-center gap-4 mb-8">
-        <button 
-          onClick={() => navigate('/calendario')}
-          className="w-10 h-10 rounded-full border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-950 transition-colors"
+      <nav aria-label="Navegação estrutural" className="mb-8 flex min-w-0 items-center gap-3">
+        <Link
+          to="/calendario"
+          aria-label="Voltar para o calendário"
+          className="geo-focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 transition-[background-color,border-color,color] hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-200"
         >
-          <ArrowLeft weight="bold" className="w-4 h-4" />
-        </button>
-        <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          <Link to="/calendario" className="hover:text-zinc-900 dark:text-zinc-100 transition-colors">Calendário</Link>
-          <span className="mx-2 text-zinc-300">/</span>
-          <span className="text-zinc-950 dark:text-white">Detalhes do Evento</span>
+          <ArrowLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
+        </Link>
+        <div className="min-w-0 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <Link to="/calendario" className="geo-focus-ring rounded-md transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Calendário</Link>
+          <span aria-hidden="true" className="mx-2 text-zinc-300 dark:text-zinc-700">/</span>
+          <span aria-current="page" className="text-zinc-950 dark:text-white">Detalhes do evento</span>
         </div>
-      </div>
+      </nav>
 
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-12">
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-semibold bg-zinc-100 text-zinc-600 mb-3">
-            {detalhes.tipo === 'projeto' ? 'Prazo de Projeto' : detalhes.tipo === 'tarefa' ? 'Limite de Tarefa' : detalhes.tipoCompromisso}
-          </span>
-          <h1 className="text-4xl font-semibold tracking-tighter text-zinc-950 dark:text-white">{detalhes.titulo}</h1>
-          <p className="mt-2 text-zinc-500 dark:text-zinc-400 font-medium">Visualização expandida do compromisso agendado no calendário.</p>
+      <div className="mb-10 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <div className="min-w-0">
+          <span className={cn(geoKickerClass, 'mb-2')}>{eventTypeLabel}</span>
+          <h1 className="break-words text-4xl font-semibold tracking-tighter text-zinc-950 text-balance sm:text-5xl dark:text-white">{detalhes.titulo}</h1>
+          <p className="mt-2 max-w-3xl text-base font-medium leading-relaxed text-zinc-500 sm:text-lg dark:text-zinc-400">
+            Consulte a data, o contexto e os vínculos deste evento.
+          </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap lg:justify-end">
           {detalhes.data && (
             <a
-              href={getGoogleCalendarUrl(detalhes.titulo, detalhes.data, detalhes.descricao)}
+              href={getGoogleCalendarUrl(detalhes.titulo, detalhes.data, detalhes.descricao, detalhes.hora)}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-zinc-50 text-zinc-900 dark:text-zinc-100 rounded-full px-5 py-3 font-semibold text-sm transition-all shadow-sm"
+              aria-label="Adicionar ao Google Agenda; abre em uma nova guia"
+              className={cn(secondaryActionButtonClass, 'w-full justify-center sm:w-auto')}
             >
-              <svg className="w-4 h-4 text-indigo-600 fill-current" viewBox="0 0 24 24">
-                <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5z"/>
-              </svg>
-              <span>Sincronizar Google Calendar</span>
+              <Calendar aria-hidden="true" className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+              <span>Adicionar ao Google Agenda</span>
             </a>
           )}
           {detalhes.tipo === 'compromisso' && (
-            <button 
+            <button
+              type="button"
               onClick={handleDelete}
               disabled={deleteCompromissoMutation.isPending}
-              className="flex items-center gap-2 border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 rounded-full px-5 py-3 font-semibold text-sm transition-all"
+              className="geo-focus-ring flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 transition-[background-color,border-color,color] hover:border-red-300 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200 dark:hover:border-red-400/45 dark:hover:bg-red-500/15"
             >
-              <Trash weight="bold" className="w-4 h-4" />
-              <span>Excluir Compromisso</span>
+              <Trash aria-hidden="true" weight="bold" className="h-4 w-4" />
+              <span>{deleteCompromissoMutation.isPending ? 'Excluindo…' : 'Excluir compromisso'}</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Event Details Bento Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main info card */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded-3xl p-8 shadow-sm space-y-6">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+        <section aria-labelledby="event-information-heading" className="space-y-6 rounded-[2rem] bg-gradient-to-br from-white via-white to-indigo-50/45 p-6 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-zinc-900/5 sm:p-8 lg:col-span-2 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/20 dark:ring-white/10">
+          <div>
+            <h2 id="event-information-heading" className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">Informações do evento</h2>
+            <p className="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">Dados principais registrados no calendário.</p>
+          </div>
+
+          <div className="space-y-6 border-t border-zinc-200/80 pt-6 dark:border-zinc-800">
             <div>
-              <h3 className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2">Descrição</h3>
-              <p className="text-zinc-900 dark:text-zinc-100 font-medium leading-relaxed text-base">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Descrição</h3>
+              <p className="break-words text-base font-medium leading-relaxed text-zinc-900 dark:text-zinc-100">
                 {detalhes.descricao || 'Sem descrição detalhada cadastrada para este evento.'}
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-zinc-100 dark:border-zinc-800">
-              <div>
-                <h3 className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" /> Data do Evento
+            <div className="grid grid-cols-1 gap-6 border-t border-zinc-200/80 pt-6 sm:grid-cols-2 dark:border-zinc-800">
+              <div className="rounded-2xl border border-zinc-200/80 bg-white/75 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                  <Calendar aria-hidden="true" className="h-4 w-4" /> Data do evento
                 </h3>
-                <p className="text-lg font-bold text-zinc-950 dark:text-white">
-                  {detalhes.data ? new Date(detalhes.data).toLocaleDateString('pt-BR') : '-'}
+                <p className="text-lg font-bold tabular-nums text-zinc-950 dark:text-white">
+                  {formatLocalDate(detalhes.data)}
                 </p>
               </div>
 
               {detalhes.tipo === 'projeto' && (
-                <div>
-                  <h3 className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <Clock className="w-4 h-4" /> Período do Projeto
+                <div className="rounded-2xl border border-zinc-200/80 bg-white/75 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <Clock aria-hidden="true" className="h-4 w-4" /> Período do projeto
                   </h3>
-                  <p className="text-sm font-semibold text-zinc-700">
-                    Início: {detalhes.dataInicio ? new Date(detalhes.dataInicio).toLocaleDateString('pt-BR') : '-'}
+                  <p className="text-sm font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
+                    Início: {formatLocalDate(detalhes.dataInicio)}
                   </p>
-                  <p className="text-sm font-semibold text-zinc-700">
-                    Entrega: {detalhes.dataEntrega ? new Date(detalhes.dataEntrega).toLocaleDateString('pt-BR') : '-'}
+                  <p className="mt-1 text-sm font-semibold tabular-nums text-zinc-700 dark:text-zinc-200">
+                    Entrega: {formatLocalDate(detalhes.dataEntrega)}
                   </p>
+                </div>
+              )}
+
+              {detalhes.tipo === 'compromisso' && detalhes.hora && (
+                <div className="rounded-2xl border border-zinc-200/80 bg-white/75 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <Clock aria-hidden="true" className="h-4 w-4" /> Horário
+                  </h3>
+                  <p className="text-lg font-bold tabular-nums text-zinc-950 dark:text-white">{detalhes.hora}</p>
                 </div>
               )}
               
               {detalhes.tipo === 'tarefa' && (
-                <div>
-                  <h3 className="text-xs text-zinc-400 font-semibold uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                    <CheckSquare className="w-4 h-4" /> Status & Prioridade
+                <div className="rounded-2xl border border-zinc-200/80 bg-white/75 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+                  <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                    <CheckSquare aria-hidden="true" className="h-4 w-4" /> Status e prioridade
                   </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                      detalhes.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                      detalhes.status === 'Concluído' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/15 dark:text-emerald-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-400/15 dark:text-amber-200'
                     }`}>
                       {detalhes.status}
                     </span>
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                      detalhes.prioridade === 'Alta' ? 'bg-red-50 text-red-700' : 'bg-zinc-100 text-zinc-600'
+                    <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                      detalhes.prioridade === 'Alta' ? 'bg-red-50 text-red-700 dark:bg-red-400/15 dark:text-red-200' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
                     }`}>
                       {detalhes.prioridade}
                     </span>
@@ -264,23 +310,23 @@ export function CalendarioDetalhes() {
               )}
             </div>
           </div>
-        </div>
+        </section>
 
-        {/* Sidebar context card */}
-        <div className="space-y-6">
-          {/* Related Parent Context (Project / Client) */}
-          <div className="bg-zinc-950 text-white rounded-3xl p-6 shadow-sm space-y-6">
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Contexto Relacionado</h3>
+        <aside aria-labelledby="related-context-heading" className={cn(geoGreenSurfaceClass, 'space-y-6 rounded-[2rem] p-6 text-white shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-emerald-300/15 sm:p-8')}>
+          <div>
+            <h2 id="related-context-heading" className="text-xl font-semibold text-white">Contexto relacionado</h2>
+            <p className="mt-1 text-sm font-medium leading-relaxed text-emerald-50/80">Vínculos usados para navegar entre os registros.</p>
+          </div>
             
-            {detalhes.projetoId || detalhes.tipo === 'projeto' ? (
-              <div className="space-y-4">
+          {detalhes.projetoId || detalhes.tipo === 'projeto' ? (
+              <div className="space-y-4 rounded-2xl border border-white/15 bg-white/[0.06] p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                    <Briefcase className="w-5 h-5 text-indigo-400" />
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
+                    <Briefcase aria-hidden="true" className="h-5 w-5 text-emerald-100" />
                   </div>
-                  <div>
-                    <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Projeto</p>
-                    <p className="text-sm font-semibold text-white mt-0.5">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-50/70">Projeto</p>
+                    <p className="mt-0.5 break-words text-sm font-semibold text-white">
                       {detalhes.tipo === 'projeto' ? detalhes.titulo : detalhes.projetoNome}
                     </p>
                   </div>
@@ -288,42 +334,52 @@ export function CalendarioDetalhes() {
 
                 <Link 
                   to={`/projetos/${detalhes.tipo === 'projeto' ? detalhes.id : detalhes.projetoId}`}
-                  className="w-full text-center block bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl py-3 text-xs font-bold transition-all"
+                  className="geo-focus-ring block min-h-11 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-center text-xs font-semibold text-white transition-[background-color,border-color] hover:border-white/30 hover:bg-white/15"
                 >
-                  Ver Ficha do Projeto
+                  Ver ficha do projeto
                 </Link>
               </div>
             ) : null}
 
             {detalhes.clienteId || detalhes.clienteNome ? (
-              <div className="space-y-4 pt-4 border-t border-zinc-800">
+              <div className="space-y-4 rounded-2xl border border-white/15 bg-white/[0.06] p-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                    <User className="w-5 h-5 text-emerald-400" />
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
+                    <User aria-hidden="true" className="h-5 w-5 text-emerald-100" />
                   </div>
-                  <div>
-                    <p className="text-xs text-zinc-400 font-semibold uppercase tracking-wider">Cliente</p>
-                    <p className="text-sm font-semibold text-white mt-0.5">{detalhes.clienteNome}</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-50/70">Cliente</p>
+                    <p className="mt-0.5 break-words text-sm font-semibold text-white">{detalhes.clienteNome}</p>
                   </div>
                 </div>
 
                 {detalhes.clienteId && (
                   <Link 
                     to={`/clientes/${detalhes.clienteId}`}
-                    className="w-full text-center block bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl py-3 text-xs font-bold transition-all"
+                    className="geo-focus-ring block min-h-11 w-full rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-center text-xs font-semibold text-white transition-[background-color,border-color] hover:border-white/30 hover:bg-white/15"
                   >
-                    Ver Perfil do Cliente
+                    Ver perfil do cliente
                   </Link>
                 )}
               </div>
             ) : (
               !(detalhes.projetoId || detalhes.tipo === 'projeto') && (
-                <p className="text-xs text-zinc-400 font-medium">Este compromisso é geral e não está vinculado a nenhum cliente ou projeto específico.</p>
+                <p className="rounded-2xl border border-white/15 bg-white/[0.06] p-4 text-sm font-medium leading-relaxed text-emerald-50/85">
+                  Este evento é geral e não está vinculado a nenhum cliente ou projeto específico.
+                </p>
               )
             )}
-          </div>
-        </div>
+        </aside>
       </div>
+      <ConfirmDialog
+        isOpen={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        onConfirm={() => deleteCompromissoMutation.mutate()}
+        title={`Excluir compromisso${detalhes.titulo ? ` “${detalhes.titulo}”` : ''}?`}
+        description="O compromisso será removido do calendário. Os cadastros de cliente e projeto vinculados serão preservados. Esta ação não pode ser desfeita."
+        confirmText="Excluir compromisso"
+        loading={deleteCompromissoMutation.isPending}
+      />
     </Layout>
   );
 }

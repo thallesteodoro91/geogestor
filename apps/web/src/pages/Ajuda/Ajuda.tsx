@@ -51,12 +51,12 @@ export function Ajuda() {
     {
       id: 'gestao-crm',
       category: 'crm',
-      title: 'Gestão de Clientes e CRM (Funil)',
-      excerpt: 'Entenda como acompanhar contatos e oportunidades no funil de vendas visual.',
+      title: 'CRM e área comercial',
+      excerpt: 'Entenda como acompanhar leads, oportunidades e indicadores comerciais.',
       icon: Users,
       content: [
-        'O GeoGestor possui dois locais de gestão de clientes: Clientes (listagem geral) e CRM (Funil de Vendas).',
-        'Na aba CRM, você pode gerenciar novas oportunidades através de colunas visuais no estilo Kanban (Prospectado, Contato, Proposta, Ganho, Perdido). Basta arrastar os cartões para atualizar o estágio da negociação.',
+        'O CRM reúne as seções Leads, Funil de vendas e Indicadores. O cadastro de clientes continua separado para preservar cada entidade e seu histórico.',
+        'No Funil de vendas, você pode gerenciar oportunidades em colunas visuais (Prospectado, Contato, Proposta, Ganho e Perdido). Basta arrastar os cartões para atualizar a etapa da negociação.',
         'Ao entrar nos Detalhes do Cliente, você terá acesso à Linha do Tempo do CRM. Nela, você pode cadastrar interações manuais (como ligações, mensagens de WhatsApp ou reuniões) para registrar todo o histórico de contato.'
       ]
     },
@@ -287,7 +287,7 @@ export function Ajuda() {
               </div>
 
               <div className="mt-12 pt-8 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                <span>Última atualização local: GeoGestor v1.0.0</span>
+                <span>Última atualização local: GeoGestor v1.1.1</span>
                 <span>GeoGestor Desktop</span>
               </div>
             </motion.div>

@@ -5,7 +5,7 @@ import test from 'node:test';
 import { sql } from 'drizzle-orm';
 
 const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
-const dbPath = path.join(testRoot, 'financeiro-reports.test.db');
+const dbPath = path.join(testRoot, `financeiro-reports.${process.pid}.test.db`);
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 
 process.env.GEOGESTOR_DB_PATH = dbPath;

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useEffect, useState } from 'react';
+import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CurrencyDollar, Plus, TrendUp, TrendDown, Wallet, PencilSimple, Trash, ChartBar, Receipt, Calendar, Check, MagnifyingGlass, Printer, Briefcase } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -16,7 +18,7 @@ import { cn } from '../../utils/cn';
 import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass, revenueActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import { apiFetch, apiClient } from '../../services/apiClient';
-import { geoFieldClass, geoGreenAccentClass, geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeAccentClass, geoOrangeIconClass, geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass, geoPurpleAccentClass, geoPurpleIconClass, geoPurpleLabelClass, geoPurpleSurfaceClass, geoPurpleSurfaceWithAccentClass, geoPurpleValueClass, geoTabButtonClass, geoTabListClass } from '../../utils/geoTheme';
+import { geoFieldClass, geoGreenAccentClass, geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeAccentClass, geoOrangeIconClass, geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass, geoPurpleAccentClass, geoPurpleIconClass, geoPurpleLabelClass, geoPurpleSurfaceClass, geoPurpleSurfaceWithAccentClass, geoPurpleValueClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import {
   filterBarClass,
   filterClearButtonClass,
@@ -162,6 +164,11 @@ export function Financeiro() {
   const [financeCategoria, setFinanceCategoria] = useState('Todas');
   const [financeTipoCusto, setFinanceTipoCusto] = useState('Todos');
   const [financeCentroCusto, setFinanceCentroCusto] = useState('Todos');
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'orcamento'; item: Orcamento }
+    | { type: 'despesa'; item: Despesa }
+    | null
+  >(null);
 
   // Orcamento Modal States
   const [showOrcamentoModal, setShowOrcamentoModal] = useState(false);
@@ -377,6 +384,7 @@ export function Financeiro() {
       if (!res.ok) throw new Error('Erro ao excluir orçamento');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['orcamentos-financeiro'] });
       queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
     },
@@ -415,6 +423,7 @@ export function Financeiro() {
       if (!res.ok) throw new Error('Erro ao excluir despesa');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['despesas-financeiro'] });
       queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
     },
@@ -487,8 +496,8 @@ export function Financeiro() {
   };
 
   const handleDeleteOrcamento = (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este orçamento e todas as parcelas vinculadas?')) return;
-    deleteOrcamentoMutation.mutate(id);
+    const item = orcamentos.find((orcamento) => orcamento.id === id);
+    if (item) setDeleteTarget({ type: 'orcamento', item });
   };
 
   const handleOrcamentoSubmit = (e: React.FormEvent) => {
@@ -573,8 +582,8 @@ export function Financeiro() {
   };
 
   const handleDeleteDespesa = (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta despesa?')) return;
-    deleteDespesaMutation.mutate(id);
+    const item = despesas.find((despesa) => despesa.id === id);
+    if (item) setDeleteTarget({ type: 'despesa', item });
   };
 
   const handleDespesaSubmit = (e: React.FormEvent) => {
@@ -698,8 +707,7 @@ export function Financeiro() {
         <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[repeat(6,minmax(140px,1fr))_auto] items-end">
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Data inicial</label>
-            <input
-              type="date"
+            <DatePickerField
               value={financeDataInicio}
               onChange={(event) => setFinanceDataInicio(event.target.value)}
               className={cn(filterControlClass, 'w-full')}
@@ -707,8 +715,7 @@ export function Financeiro() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Data final</label>
-            <input
-              type="date"
+            <DatePickerField
               value={financeDataFim}
               onChange={(event) => setFinanceDataFim(event.target.value)}
               className={cn(filterControlClass, 'w-full')}
@@ -788,7 +795,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('visao')}
           className={geoTabButtonClass(activeTab === 'visao', 'finance')}
         >
-          <ChartBar weight={activeTab === 'visao' ? 'fill' : 'regular'} className="w-5 h-5" /> Visão 360 (DRE)
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'visao', 'system')}><ChartBar weight={activeTab === 'visao' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Visão 360 (DRE)
         </button>
         <button 
           role="tab"
@@ -796,7 +803,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('receber')}
           className={geoTabButtonClass(activeTab === 'receber', 'finance')}
         >
-          <CurrencyDollar weight={activeTab === 'receber' ? 'fill' : 'regular'} className="w-5 h-5" /> Contas a Receber
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'receber', 'success')}><CurrencyDollar weight={activeTab === 'receber' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Contas a Receber
         </button>
         <button 
           role="tab"
@@ -804,7 +811,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('pagar')}
           className={geoTabButtonClass(activeTab === 'pagar', 'finance')}
         >
-          <Receipt weight={activeTab === 'pagar' ? 'fill' : 'regular'} className="w-5 h-5" /> Contas a Pagar
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'pagar', 'danger')}><Receipt weight={activeTab === 'pagar' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Contas a Pagar
         </button>
         <button 
           role="tab"
@@ -812,7 +819,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('faturas')}
           className={geoTabButtonClass(activeTab === 'faturas', 'finance')}
         >
-          <Receipt weight={activeTab === 'faturas' ? 'fill' : 'regular'} className="w-5 h-5" /> Faturas & Parcelas
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'faturas', 'warning')}><Receipt weight={activeTab === 'faturas' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Faturas & Parcelas
         </button>
         <button 
           role="tab"
@@ -820,7 +827,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('relatorios')}
           className={geoTabButtonClass(activeTab === 'relatorios', 'finance')}
         >
-          <Printer weight={activeTab === 'relatorios' ? 'fill' : 'regular'} className="w-5 h-5" /> Relatórios Corporativos
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'relatorios', 'system')}><Printer weight={activeTab === 'relatorios' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Relatórios Corporativos
         </button>
       </div>
 
@@ -1228,15 +1235,13 @@ export function Financeiro() {
                         className={cn(financeCompactFieldClass, 'pl-10 pr-4')}
                       />
                     </div>
-                    <input
-                      type="date"
+                    <DatePickerField
                       value={faturasDataInicio}
                       onChange={(event) => setFaturasDataInicio(event.target.value)}
                       className={financeCompactFieldClass}
                       aria-label="Vencimento inicial"
                     />
-                    <input
-                      type="date"
+                    <DatePickerField
                       value={faturasDataFim}
                       onChange={(event) => setFaturasDataFim(event.target.value)}
                       className={financeCompactFieldClass}
@@ -1529,14 +1534,14 @@ export function Financeiro() {
             </div>
             <div>
               <label htmlFor="orcClienteId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Cliente Vinculado</label>
-              <select id="orcClienteId" required value={orcClienteId} onChange={e => setOrcClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="orcClienteId" required value={orcClienteId} onChange={e => setOrcClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="">Selecione um cliente...</option>
                 {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div className="md:col-span-2">
               <label htmlFor="orcProjetoId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Propriedade / Projeto</label>
-              <select
+              <FormSelect
                 id="orcProjetoId"
                 value={orcProjetoId}
                 onChange={e => setOrcProjetoId(e.target.value)}
@@ -1547,7 +1552,7 @@ export function Financeiro() {
                 {projetosDoCliente.map((projeto) => (
                   <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
                 ))}
-              </select>
+              </FormSelect>
             </div>
           </div>
           <div>
@@ -1565,12 +1570,12 @@ export function Financeiro() {
             </div>
             <div>
               <label htmlFor="orcStatus" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Status</label>
-              <select id="orcStatus" value={orcStatus} onChange={e => setOrcStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="orcStatus" value={orcStatus} onChange={e => setOrcStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="Em Análise">Em Análise</option>
                 <option value="Aprovado">Aprovado</option>
                 <option value="Rejeitado">Rejeitado</option>
                 <option value="Pago">Pago</option>
-              </select>
+              </FormSelect>
             </div>
           </div>
           <div>
@@ -1584,27 +1589,24 @@ export function Financeiro() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="orcDataCompetencia" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Competencia</label>
-              <input id="orcDataCompetencia" type="date" value={orcDataCompetencia} onChange={e => setOrcDataCompetencia(e.target.value)} className={financeFieldClass} />
+              <DatePickerField id="orcDataCompetencia" value={orcDataCompetencia} onChange={e => setOrcDataCompetencia(e.target.value)} className={financeFieldClass} />
             </div>
             <div>
               <label htmlFor="orcDataPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data de pagamento</label>
-              <input id="orcDataPagamento" type="date" value={orcDataPagamento} onChange={e => setOrcDataPagamento(e.target.value)} className={financeFieldClass} />
+              <DatePickerField id="orcDataPagamento" value={orcDataPagamento} onChange={e => setOrcDataPagamento(e.target.value)} className={financeFieldClass} />
             </div>
             <div>
               <label htmlFor="orcCentroCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Centro de custo</label>
-              <select id="orcCentroCusto" value={orcCentroCusto} onChange={e => setOrcCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="orcCentroCusto" value={orcCentroCusto} onChange={e => setOrcCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="orcImpostoValor" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Imposto / retencao (BRL)</label>
               <input id="orcImpostoValor" type="number" step="0.01" value={orcImpostoValor} onChange={e => setOrcImpostoValor(e.target.value)} placeholder="R$ 0,00" className={financeFieldClass} />
             </div>
           </div>
-          <label className="geo-card flex items-center gap-3 px-4 py-3 text-sm font-semibold text-text-primary">
-            <input type="checkbox" checked={orcImpostoRetido} onChange={(event) => setOrcImpostoRetido(event.target.checked)} className="h-4 w-4 rounded border-zinc-300 text-brand-primary-600 focus:ring-brand-primary-500" />
-            Imposto retido na fonte
-          </label>
+          <CheckboxField id="financeiro-imposto-retido" label="Imposto retido na fonte" checked={orcImpostoRetido} onChange={setOrcImpostoRetido} className="geo-card px-3" />
           <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3 flex-shrink-0">
             <button type="button" onClick={() => setShowOrcamentoModal(false)} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
             <button type="submit" className={cn(primarySubmitButtonClass, 'px-6 py-3')}>Salvar</button>
@@ -1623,21 +1625,21 @@ export function Financeiro() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div>
               <label htmlFor="despClienteId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Cliente vinculado</label>
-              <select id="despClienteId" value={despClienteId} onChange={e => setDespClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despClienteId" value={despClienteId} onChange={e => setDespClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="">Administrativo / sem cliente</option>
                 {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despProjetoId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Projeto Vinculado</label>
-              <select id="despProjetoId" value={despProjetoId} onChange={e => setDespProjetoId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despProjetoId" value={despProjetoId} onChange={e => setDespProjetoId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="">Nenhum / custo geral</option>
                 {projetosDaDespesa.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despCategoria" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Plano de Contas</label>
-              <select id="despCategoria" value={despCategoria} onChange={e => setDespCategoria(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despCategoria" value={despCategoria} onChange={e => setDespCategoria(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="Combustível">Combustível e Transporte</option>
                 <option value="Cartório">Emolumentos (Cartório)</option>
                 <option value="Alimentação">Alimentação e Hospedagem</option>
@@ -1646,19 +1648,19 @@ export function Financeiro() {
                 <option value="Salários">Folha de Pagamento</option>
                 <option value="Software">Softwares / Licenças</option>
                 <option value="Outros">Despesas Gerais</option>
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despTipoCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Tipo de custo</label>
-              <select id="despTipoCusto" value={despTipoCusto} onChange={e => setDespTipoCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despTipoCusto" value={despTipoCusto} onChange={e => setDespTipoCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 {tiposCusto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-              </select>
+              </FormSelect>
             </div>
             <div>
               <label htmlFor="despCentroCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Centro de custo</label>
-              <select id="despCentroCusto" value={despCentroCusto} onChange={e => setDespCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despCentroCusto" value={despCentroCusto} onChange={e => setDespCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </select>
+              </FormSelect>
             </div>
           </div>
           <div>
@@ -1680,15 +1682,15 @@ export function Financeiro() {
             </div>
             <div>
               <label htmlFor="despData" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data Vencimento</label>
-              <input id="despData" type="date" required value={despData} onChange={e => setDespData(e.target.value)} className={financeFieldClass} />
+              <DatePickerField id="despData" required value={despData} onChange={e => setDespData(e.target.value)} className={financeFieldClass} />
             </div>
             <div>
               <label htmlFor="despDataCompetencia" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Competencia</label>
-              <input id="despDataCompetencia" type="date" value={despDataCompetencia} onChange={e => setDespDataCompetencia(e.target.value)} className={financeFieldClass} />
+              <DatePickerField id="despDataCompetencia" value={despDataCompetencia} onChange={e => setDespDataCompetencia(e.target.value)} className={financeFieldClass} />
             </div>
             <div>
               <label htmlFor="despDataPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data de pagamento</label>
-              <input id="despDataPagamento" type="date" value={despDataPagamento} onChange={e => setDespDataPagamento(e.target.value)} className={financeFieldClass} />
+              <DatePickerField id="despDataPagamento" value={despDataPagamento} onChange={e => setDespDataPagamento(e.target.value)} className={financeFieldClass} />
             </div>
             <div>
               <label htmlFor="despFormaPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Forma de pagamento</label>
@@ -1696,23 +1698,36 @@ export function Financeiro() {
             </div>
             <div>
               <label htmlFor="despStatus" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Status</label>
-              <select id="despStatus" value={despStatus} onChange={e => setDespStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+              <FormSelect id="despStatus" value={despStatus} onChange={e => setDespStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
                 <option value="Pendente">Pendente</option>
                 <option value="Pago">Pago</option>
                 <option value="Atrasado">Atrasado</option>
-              </select>
+              </FormSelect>
             </div>
           </div>
-          <label className="geo-card flex items-center gap-3 border-brand-green-200 bg-brand-green-50 px-4 py-3 text-sm font-semibold text-brand-green-800 dark:border-brand-green-300/20 dark:bg-brand-green-400/10 dark:text-brand-green-100">
-            <input type="checkbox" checked={despReembolsavel} onChange={(event) => setDespReembolsavel(event.target.checked)} className="h-4 w-4 rounded border-brand-green-300 text-brand-green-600 focus:ring-brand-green-500" />
-            Despesa reembolsavel pelo cliente
-          </label>
+          <CheckboxField id="financeiro-despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={despReembolsavel} onChange={setDespReembolsavel} className="geo-card border-brand-green-200 bg-brand-green-50 px-3 text-brand-green-800 dark:border-brand-green-300/20 dark:bg-brand-green-400/10 dark:text-brand-green-100" />
           <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3">
             <button type="button" onClick={() => setShowDespesaModal(false)} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
             <button type="submit" className={cn(primarySubmitButtonClass, 'px-6 py-3')}>Salvar</button>
           </div>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget?.type === 'orcamento') deleteOrcamentoMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'despesa') deleteDespesaMutation.mutate(deleteTarget.item.id);
+        }}
+        title={deleteTarget?.type === 'orcamento'
+          ? `Excluir orçamento${deleteTarget.item.codigoOrcamento ? ` ${deleteTarget.item.codigoOrcamento}` : ''}?`
+          : `Excluir despesa${deleteTarget?.item.descricao ? ` “${deleteTarget.item.descricao}”` : ''}?`}
+        description={deleteTarget?.type === 'orcamento'
+          ? 'O orçamento financeiro e todas as parcelas vinculadas serão removidos. Os indicadores financeiros e a DRE serão recalculados. Esta ação não pode ser desfeita.'
+          : 'A despesa será removida e os totais financeiros e indicadores da DRE serão recalculados. Os cadastros de cliente e projeto vinculados serão preservados. Esta ação não pode ser desfeita.'}
+        confirmText={deleteTarget?.type === 'orcamento' ? 'Excluir orçamento' : 'Excluir despesa'}
+        loading={deleteOrcamentoMutation.isPending || deleteDespesaMutation.isPending}
+      />
     </Layout>
   );
 }

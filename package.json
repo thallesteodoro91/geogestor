@@ -1,6 +1,6 @@
 {
   "name": "geogestor-local",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "scripts": {
     "dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
@@ -8,6 +8,12 @@
     "dev:web": "pnpm --filter web dev",
     "desktop:dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\" \"pnpm --filter geogestor-desktop dev\"",
     "desktop:build": "node scripts/build.mjs",
+    "release:verify-source": "node scripts/release-verify.mjs --source",
+    "release:verify-package": "node scripts/release-verify.mjs --package",
+    "release:verify-candidate": "node scripts/release-verify.mjs --package --allow-dirty",
+    "release:evidence": "node scripts/release-evidence.mjs",
+    "release:verify-signature": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-authenticode.ps1",
+    "release:smoke-package": "node scripts/smoke-packaged-api.mjs",
     "lint": "pnpm --filter web lint",
     "build": "node scripts/build.mjs",
     "db:generate": "pnpm --filter database generate",

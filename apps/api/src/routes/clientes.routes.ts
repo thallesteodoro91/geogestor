@@ -3,7 +3,7 @@ import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq, isNull, desc, count, sum, not, inArray, and, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { ClientePayloadSchema } from '@geogestor/contracts';
+import { ClientePatchPayloadSchema, ClientePayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { FileSystemService } from '../services/fs.service';
 import { AuditLogService } from '../services/audit.service';
@@ -13,6 +13,22 @@ type IdParams = { id: string };
 type HistoricoParams = { id: string; historicoId: string };
 type Payload = Record<string, any>;
 
+const historyBodySchema = z.object({
+  projetoId: z.string().uuid().nullable().optional(),
+  orcamentoId: z.string().uuid().nullable().optional(),
+  tipo: z.string().trim().min(1).max(100),
+  titulo: z.string().trim().min(1).max(500).nullable().optional(),
+  categoria: z.string().trim().min(1).max(100).nullable().optional(),
+  manual: z.boolean().optional(),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}(?:T.*)?$/, 'Data inválida'),
+  descricao: z.string().trim().min(1).max(20_000)
+});
+
+const historyPatchSchema = historyBodySchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  'Informe ao menos um campo para atualizar.'
+);
+
 const labelValue = (value: any) => {
   if (value === null || value === undefined || value === '') return 'não informado';
   return String(value);
@@ -21,19 +37,29 @@ const labelValue = (value: any) => {
 const buildClienteChanges = (oldCliente: any, data: any) => {
   const fields: Array<[string, string]> = [
     ['nome', 'Nome'],
+    ['tipoPessoa', 'Tipo de pessoa'],
     ['email', 'E-mail'],
     ['telefone', 'Telefone'],
     ['celular', 'Celular'],
+    ['celularWhatsapp', 'Possui WhatsApp'],
     ['cpf', 'CPF'],
+    ['rg', 'RG'],
     ['cnpj', 'CNPJ'],
+    ['inscricaoEstadual', 'Inscrição Estadual'],
     ['endereco', 'Endereço'],
     ['numero', 'Número'],
+    ['semNumero', 'Sem número'],
+    ['complemento', 'Complemento'],
     ['bairro', 'Bairro'],
-    ['origem', 'Origem'],
-    ['categoria', 'Categoria'],
+    ['municipio', 'Município'],
+    ['uf', 'UF'],
+    ['cep', 'CEP'],
+    ['origemPrincipal', 'Origem principal'],
+    ['origemDetalhe', 'Detalhe da origem'],
+    ['indicadoPor', 'Indicado por'],
+    ['perfis', 'Perfis comerciais'],
     ['situacao', 'Situação'],
-    ['previsaoEntrega', 'Previsão de Entrega'],
-    ['servicos', 'Serviços']
+    ['servicos', 'Serviços de interesse']
   ];
 
   return fields.flatMap(([field, label]) => {
@@ -62,7 +88,43 @@ export async function clientesRoutes(server: FastifyInstance) {
         .limit(limit)
         .offset(offset)
         .orderBy(desc(schema.clientes.createdAt));
-      return clientesList;
+
+      const clientIds = clientesList.map((cliente) => cliente.id);
+      if (clientIds.length === 0) return [];
+
+      const [structuredPropertyCounts, legacyPropertyCounts] = await Promise.all([
+        db.select({ clienteId: schema.propriedades.clienteId, value: count() })
+          .from(schema.propriedades)
+          .where(and(
+            inArray(schema.propriedades.clienteId, clientIds),
+            isNull(schema.propriedades.deletedAt)
+          ))
+          .groupBy(schema.propriedades.clienteId),
+        db.select({ clienteId: schema.projetos.clienteId, value: count() })
+          .from(schema.projetos)
+          .where(and(
+            inArray(schema.projetos.clienteId, clientIds),
+            isNull(schema.projetos.propriedadeId),
+            isNull(schema.projetos.deletedAt)
+          ))
+          .groupBy(schema.projetos.clienteId)
+      ]);
+
+      const propertyCountByClient = new Map<string, number>();
+      for (const item of structuredPropertyCounts) {
+        propertyCountByClient.set(item.clienteId, Number(item.value));
+      }
+      for (const item of legacyPropertyCounts) {
+        propertyCountByClient.set(
+          item.clienteId,
+          (propertyCountByClient.get(item.clienteId) || 0) + Number(item.value)
+        );
+      }
+
+      return clientesList.map((cliente) => ({
+        ...cliente,
+        propriedadesCount: propertyCountByClient.get(cliente.id) || 0
+      }));
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao buscar clientes' });
@@ -156,17 +218,30 @@ export async function clientesRoutes(server: FastifyInstance) {
         const result = await tx.insert(schema.clientes).values({
           id: crypto.randomUUID(),
           nome: data.nome,
+          tipoPessoa: data.tipoPessoa,
           documento: data.documento || null,
           email: data.email || null,
           telefone: data.telefone || null,
           endereco: data.endereco || null,
-          numero: data.numero || null,
+          numero: data.semNumero ? null : data.numero || null,
+          semNumero: data.semNumero || false,
+          complemento: data.complemento || null,
           bairro: data.bairro || null,
+          municipio: data.municipio || null,
+          uf: data.uf || null,
+          cep: data.cep || null,
           celular: data.celular || null,
+          celularWhatsapp: data.celularWhatsapp || false,
           cpf: data.cpf || null,
+          rg: data.rg || null,
           cnpj: data.cnpj || null,
-          origem: data.origem || null,
+          inscricaoEstadual: data.inscricaoEstadual || null,
+          origem: data.origem || data.origemPrincipal || null,
+          origemPrincipal: data.origemPrincipal || null,
+          origemDetalhe: data.origemDetalhe || null,
+          indicadoPor: data.indicadoPor || null,
           categoria: data.categoria || null,
+          perfis: data.perfis || null,
           anotacoes: data.anotacoes || null,
           situacao: data.situacao || 'Ativo',
           previsaoEntrega: data.previsaoEntrega || null,
@@ -211,7 +286,7 @@ export async function clientesRoutes(server: FastifyInstance) {
   zServer.patch('/:id', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
-      body: ClientePayloadSchema.partial()
+      body: ClientePatchPayloadSchema
     }
   }, async (request, reply) => {
     const { id } = request.params;
@@ -225,17 +300,31 @@ export async function clientesRoutes(server: FastifyInstance) {
       const clienteAtualizado = await db.transaction(async (tx) => {
         const result = await tx.update(schema.clientes).set({
           nome: data.nome !== undefined ? data.nome : undefined,
+          tipoPessoa: data.tipoPessoa !== undefined ? data.tipoPessoa : undefined,
           documento: data.documento !== undefined ? data.documento : undefined,
           email: data.email !== undefined ? data.email : undefined,
           telefone: data.telefone !== undefined ? data.telefone : undefined,
           endereco: data.endereco !== undefined ? data.endereco : undefined,
-          numero: data.numero !== undefined ? data.numero : undefined,
+          numero: data.semNumero === true ? null : data.numero !== undefined ? data.numero : undefined,
+          semNumero: data.semNumero !== undefined ? data.semNumero : undefined,
+          complemento: data.complemento !== undefined ? data.complemento : undefined,
           bairro: data.bairro !== undefined ? data.bairro : undefined,
+          municipio: data.municipio !== undefined ? data.municipio : undefined,
+          uf: data.uf !== undefined ? data.uf : undefined,
+          cep: data.cep !== undefined ? data.cep : undefined,
           celular: data.celular !== undefined ? data.celular : undefined,
+          celularWhatsapp: data.celularWhatsapp !== undefined ? data.celularWhatsapp : undefined,
           cpf: data.cpf !== undefined ? data.cpf : undefined,
+          rg: data.rg !== undefined ? data.rg : undefined,
           cnpj: data.cnpj !== undefined ? data.cnpj : undefined,
+          inscricaoEstadual: data.inscricaoEstadual !== undefined ? data.inscricaoEstadual : undefined,
+          // O texto legado de origem só muda quando o chamador o envia explicitamente.
           origem: data.origem !== undefined ? data.origem : undefined,
+          origemPrincipal: data.origemPrincipal !== undefined ? data.origemPrincipal : undefined,
+          origemDetalhe: data.origemDetalhe !== undefined ? data.origemDetalhe : undefined,
+          indicadoPor: data.indicadoPor !== undefined ? data.indicadoPor : undefined,
           categoria: data.categoria !== undefined ? data.categoria : undefined,
+          perfis: data.perfis !== undefined ? data.perfis : undefined,
           anotacoes: data.anotacoes !== undefined ? data.anotacoes : undefined,
           situacao: data.situacao !== undefined ? data.situacao : undefined,
           previsaoEntrega: data.previsaoEntrega !== undefined ? data.previsaoEntrega : undefined,
@@ -305,8 +394,10 @@ export async function clientesRoutes(server: FastifyInstance) {
   // ========== HISTÓRICO CRM ==========
   
   // Buscar histórico de um cliente
-  server.get('/:id/historico', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as IdParams;
+  zServer.get('/:id/historico', {
+    schema: { params: z.object({ id: z.string().uuid() }) }
+  }, async (request, reply) => {
+    const { id } = request.params;
     try {
       const historico = await db.select()
         .from(schema.interacoes_cliente)
@@ -323,10 +414,18 @@ export async function clientesRoutes(server: FastifyInstance) {
   });
 
   // Adicionar nova interação ao histórico
-  server.post('/:id/historico', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as IdParams;
-    const data = request.body as Payload;
+  zServer.post('/:id/historico', {
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      body: historyBodySchema
+    }
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const data = request.body;
     try {
+      const client = await db.select({ id: schema.clientes.id }).from(schema.clientes)
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
+      if (!client.length) return reply.status(404).send({ error: 'Cliente não encontrado' });
       const novaInteracao = await db.insert(schema.interacoes_cliente).values({
         id: crypto.randomUUID(),
         clienteId: id,
@@ -348,9 +447,14 @@ export async function clientesRoutes(server: FastifyInstance) {
   });
 
   // Atualizar interação do histórico
-  server.patch('/:id/historico/:historicoId', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id, historicoId } = request.params as HistoricoParams;
-    const data = request.body as Payload;
+  zServer.patch('/:id/historico/:historicoId', {
+    schema: {
+      params: z.object({ id: z.string().uuid(), historicoId: z.string().uuid() }),
+      body: historyPatchSchema
+    }
+  }, async (request, reply) => {
+    const { id, historicoId } = request.params;
+    const data = request.body;
 
     try {
       const interacao = await db.select()
@@ -383,44 +487,91 @@ export async function clientesRoutes(server: FastifyInstance) {
   });
 
   // Importação em Lote
-  server.post('/lote', async (request: FastifyRequest, reply: FastifyReply) => {
-    const data = request.body as Payload[]; // Array of items
-    if (!Array.isArray(data)) return reply.status(400).send({ error: 'Payload deve ser um array' });
-    
+  zServer.post('/lote', {
+    schema: { body: z.array(z.unknown()).min(1).max(500) }
+  }, async (request, reply) => {
     try {
-      const inserts = data.map(item => ({
-        id: crypto.randomUUID(),
-        nome: item.nome || 'Sem Nome',
-        documento: item.documento || null,
-        email: item.email || null,
-        telefone: item.telefone || null,
-        endereco: item.endereco || null,
-        numero: item.numero || null,
-        bairro: item.bairro || null,
-        celular: item.celular || null,
-        cpf: item.cpf || null,
-        cnpj: item.cnpj || null,
-        origem: item.origem || null,
-        categoria: item.categoria || null,
-        anotacoes: item.anotacoes || null,
-        situacao: item.situacao || 'Ativo'
-      }));
+      const existing = await db.select({ cpf: schema.clientes.cpf, cnpj: schema.clientes.cnpj })
+        .from(schema.clientes).where(isNull(schema.clientes.deletedAt));
+      const knownDocuments = new Set(existing.flatMap((item) => [item.cpf, item.cnpj])
+        .filter(Boolean).map((value) => String(value).replace(/\D/g, '')));
+      const accepted: Array<{ index: number; data: z.infer<typeof ClientePayloadSchema>; id: string }> = [];
+      const results: Array<{ index: number; status: 'success' | 'failed'; id?: string; errors?: string[] }> = [];
 
-      if (inserts.length > 0) {
-        await db.insert(schema.clientes).values(inserts);
-        await AuditLogService.log('INSERT', 'Cliente', null, { 
-          importacaoLote: true, 
-          quantidade: inserts.length, 
-          clientes: inserts.map(c => c.nome) 
+      request.body.forEach((raw, index) => {
+        const parsed = ClientePayloadSchema.safeParse(raw);
+        if (!parsed.success) {
+          results.push({ index, status: 'failed', errors: parsed.error.issues.map((issue) => issue.message) });
+          return;
+        }
+        const document = String(parsed.data.tipoPessoa === 'PJ' ? parsed.data.cnpj : parsed.data.cpf).replace(/\D/g, '');
+        if (knownDocuments.has(document)) {
+          results.push({ index, status: 'failed', errors: ['CPF/CNPJ já cadastrado ou repetido neste lote.'] });
+          return;
+        }
+        knownDocuments.add(document);
+        accepted.push({ index, data: parsed.data, id: crypto.randomUUID() });
+      });
+
+      if (accepted.length) {
+        await db.transaction(async (tx) => {
+          for (const item of accepted) {
+            const data = item.data;
+            await tx.insert(schema.clientes).values({
+              id: item.id,
+              nome: data.nome,
+              tipoPessoa: data.tipoPessoa,
+              documento: data.documento || null,
+              email: data.email || null,
+              telefone: data.telefone || null,
+              endereco: data.endereco || null,
+              numero: data.semNumero ? null : data.numero || null,
+              semNumero: data.semNumero || false,
+              complemento: data.complemento || null,
+              bairro: data.bairro || null,
+              municipio: data.municipio || null,
+              uf: data.uf || null,
+              cep: data.cep || null,
+              celular: data.celular || null,
+              celularWhatsapp: data.celularWhatsapp || false,
+              cpf: data.cpf || null,
+              rg: data.rg || null,
+              cnpj: data.cnpj || null,
+              inscricaoEstadual: data.inscricaoEstadual || null,
+              origem: data.origem || data.origemPrincipal || null,
+              origemPrincipal: data.origemPrincipal || null,
+              origemDetalhe: data.origemDetalhe || null,
+              indicadoPor: data.indicadoPor || null,
+              categoria: data.categoria || null,
+              perfis: data.perfis || null,
+              anotacoes: data.anotacoes || null,
+              situacao: data.situacao || 'Ativo',
+              previsaoEntrega: data.previsaoEntrega || null,
+              servicos: data.servicos || null
+            });
+            results.push({ index: item.index, status: 'success', id: item.id });
+          }
+          await AuditLogService.log('INSERT', 'Cliente', null, {
+            importacaoLote: true,
+            quantidade: accepted.length,
+            ids: accepted.map((item) => item.id)
+          }, tx);
         });
-        
-        // Crie pastas para todos os clientes criados (em background, para não travar a resposta)
-        Promise.allSettled(
-          inserts.map(c => FileSystemService.getClientFolder(c.nome))
-        ).catch(e => server.log.error('Erro criando pastas em lote', e));
+
+        void Promise.allSettled(accepted.map((item) => FileSystemService.getClientFolder(item.data.nome)))
+          .then((folderResults) => {
+            const failed = folderResults.filter((result) => result.status === 'rejected').length;
+            if (failed) server.log.error({ failed }, 'Falha ao criar pastas de clientes importados');
+          });
       }
 
-      return reply.status(201).send({ message: `${inserts.length} registros importados com sucesso` });
+      results.sort((a, b) => a.index - b.index);
+      return reply.status(201).send({
+        message: `${accepted.length} registros importados com sucesso`,
+        imported: accepted.length,
+        failed: results.length - accepted.length,
+        results
+      });
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar em lote' });

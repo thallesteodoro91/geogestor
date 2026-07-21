@@ -7,6 +7,7 @@ import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { normalizeBudgetStatus } from '@geogestor/contracts';
 
 const formatCurrency = (valueInCents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((valueInCents || 0) / 100);
@@ -17,6 +18,26 @@ const todayKey = () => {
 };
 
 type IdParams = { id: string };
+
+const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida');
+const nullableDateSchema = isoDateSchema.nullable().optional();
+const centsSchema = z.number().int().min(0).max(9_000_000_000);
+const nullableCentsSchema = centsSchema.nullable().optional();
+const legacyBudgetItemSchema = z.object({
+  descricao: z.string().trim().min(1).max(500),
+  quantidade: z.number().finite().positive().max(1_000_000),
+  valorUnitario: centsSchema,
+  // Mantido no contrato por compatibilidade; o valor persistido é recalculado no servidor.
+  total: centsSchema
+});
+const legacyBudgetCostSchema = z.object({
+  descricao: z.string().trim().min(1).max(500),
+  valor: centsSchema
+});
+
+function calculatedLegacyItemTotal(item: z.infer<typeof legacyBudgetItemSchema>) {
+  return Math.round(item.quantidade * item.valorUnitario);
+}
 
 export async function financeiroRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
@@ -57,6 +78,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         possuiImposto: schema.orcamentos.possuiImposto,
         impostoPorcentagem: schema.orcamentos.impostoPorcentagem,
         impostoValor: schema.orcamentos.impostoValor,
+        impostosPrevistos: schema.orcamentos.impostosPrevistos,
         impostoRetido: schema.orcamentos.impostoRetido,
         centroCusto: schema.orcamentos.centroCusto,
         possuiArt: schema.orcamentos.possuiArt,
@@ -97,43 +119,39 @@ export async function financeiroRoutes(server: FastifyInstance) {
   zServer.post('/orcamentos', {
     schema: {
       body: z.object({
-        clienteId: z.string().min(1, 'Cliente é obrigatório'),
-        projetoId: z.string().nullable().optional(),
-        valorTotal: z.number({ required_error: 'Valor Total é obrigatório' }).min(0, 'Valor não pode ser negativo'),
-        status: z.string().optional(),
-        descricao: z.string().min(1, 'Descrição é obrigatória'),
-        anotacoes: z.string().nullable().optional(),
-        formaDePagamento: z.string().nullable().optional(),
-        desconto: z.number().nullable().optional(),
-        codigoOrcamento: z.string().nullable().optional(),
-        dataOrcamento: z.string().nullable().optional(),
-        dataCompetencia: z.string().nullable().optional(),
-        dataPagamento: z.string().nullable().optional(),
-        itens: z.array(z.object({
-          descricao: z.string(),
-          quantidade: z.number(),
-          valorUnitario: z.number(),
-          total: z.number()
-        })).optional(),
+        clienteId: z.string().uuid('Cliente inválido'),
+        projetoId: z.string().uuid('Projeto inválido').nullable().optional(),
+        valorTotal: centsSchema,
+        status: z.string().max(50).optional(),
+        descricao: z.string().trim().min(1, 'Descrição é obrigatória').max(2_000),
+        anotacoes: z.string().max(20_000).nullable().optional(),
+        formaDePagamento: z.string().max(200).nullable().optional(),
+        desconto: nullableCentsSchema,
+        codigoOrcamento: z.string().max(100).nullable().optional(),
+        dataOrcamento: nullableDateSchema,
+        dataCompetencia: nullableDateSchema,
+        dataPagamento: nullableDateSchema,
+        itens: z.array(legacyBudgetItemSchema).max(500).optional(),
         possuiMarco: z.boolean().optional(),
-        marcoQtd: z.number().nullable().optional(),
-        marcoValor: z.number().nullable().optional(),
+        marcoQtd: z.number().int().min(0).max(1_000_000).nullable().optional(),
+        marcoValor: nullableCentsSchema,
         possuiImposto: z.boolean().optional(),
-        impostoPorcentagem: z.number().nullable().optional(),
-        impostoValor: z.number().nullable().optional(),
+        impostoPorcentagem: z.number().finite().min(0).max(100).nullable().optional(),
+        impostoValor: nullableCentsSchema,
         impostoRetido: z.boolean().optional(),
-        centroCusto: z.string().nullable().optional(),
+        centroCusto: z.string().max(200).nullable().optional(),
         possuiArt: z.boolean().optional(),
-        artValor: z.number().nullable().optional(),
-        despesas: z.array(z.object({
-          descricao: z.string(),
-          valor: z.number()
-        })).optional()
+        artValor: nullableCentsSchema,
+        despesas: z.array(legacyBudgetCostSchema).max(500).optional()
       })
     }
   }, async (request, reply) => {
     const data = request.body;
     const projetoId = data.projetoId || null;
+
+    const cliente = await db.select({ id: schema.clientes.id }).from(schema.clientes)
+      .where(and(eq(schema.clientes.id, data.clienteId), isNull(schema.clientes.deletedAt))).limit(1);
+    if (!cliente.length) return reply.status(400).send({ error: 'Cliente não encontrado' });
 
     if (projetoId) {
       const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, projetoId)).limit(1);
@@ -151,7 +169,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         clienteId: data.clienteId,
         projetoId,
         valorTotal: data.valorTotal,
-        status: data.status || 'Em Análise',
+        status: 'rascunho',
         descricao: data.descricao,
         anotacoes: data.anotacoes || null,
         formaDePagamento: data.formaDePagamento || null,
@@ -159,7 +177,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         codigoOrcamento: data.codigoOrcamento || null,
         dataOrcamento: data.dataOrcamento || null,
         dataCompetencia: data.dataCompetencia || null,
-        dataPagamento: data.dataPagamento || (data.status === 'Pago' ? todayKey() : null),
+        dataPagamento: data.dataPagamento || null,
         possuiMarco: data.possuiMarco !== undefined ? data.possuiMarco : false,
         marcoQtd: data.marcoQtd !== undefined ? data.marcoQtd : null,
         marcoValor: data.marcoValor !== undefined ? data.marcoValor : null,
@@ -180,7 +198,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
             descricao: item.descricao,
             quantidade: item.quantidade,
             valorUnitario: item.valorUnitario,
-            total: item.total
+            total: calculatedLegacyItemTotal(item)
           });
         }
       }
@@ -196,23 +214,22 @@ export async function financeiroRoutes(server: FastifyInstance) {
         }
       }
 
+      await AuditLogService.log('INSERT', 'Orcamento', null, orc[0], tx);
+      await JornadaService.logClienteEvento({
+        clienteId: orc[0].clienteId,
+        projetoId: orc[0].projetoId || null,
+        orcamentoId: orc[0].id,
+        tipo: 'Orçamento',
+        titulo: `Orçamento criado: ${orc[0].codigoOrcamento || orc[0].descricao || orc[0].id.slice(0, 8)}`,
+        categoria: 'Orçamento',
+        descricao: [
+          `Valor: ${formatCurrency(orc[0].valorTotal)}`,
+          `Status: ${orc[0].status}`,
+          orc[0].dataOrcamento ? `Data: ${orc[0].dataOrcamento}` : null,
+          orc[0].formaDePagamento ? `Pagamento: ${orc[0].formaDePagamento}` : null
+        ].filter(Boolean).join('\n')
+      }, tx);
       return orc;
-    });
-
-    await AuditLogService.log('INSERT', 'Orcamento', null, orcamento[0]);
-    await JornadaService.logClienteEvento({
-      clienteId: orcamento[0].clienteId,
-      projetoId: orcamento[0].projetoId || null,
-      orcamentoId: orcamento[0].id,
-      tipo: 'Orçamento',
-      titulo: `Orçamento criado: ${orcamento[0].codigoOrcamento || orcamento[0].descricao || orcamento[0].id.slice(0, 8)}`,
-      categoria: 'Orçamento',
-      descricao: [
-        `Valor: ${formatCurrency(orcamento[0].valorTotal)}`,
-        `Status: ${orcamento[0].status}`,
-        orcamento[0].dataOrcamento ? `Data: ${orcamento[0].dataOrcamento}` : null,
-        orcamento[0].formaDePagamento ? `Pagamento: ${orcamento[0].formaDePagamento}` : null
-      ].filter(Boolean).join('\n')
     });
     return orcamento[0];
   });
@@ -221,38 +238,30 @@ export async function financeiroRoutes(server: FastifyInstance) {
     schema: {
       params: z.object({ id: z.string().uuid() }),
       body: z.object({
-        clienteId: z.string().optional(),
-        projetoId: z.string().nullable().optional(),
-        valorTotal: z.number().min(0, 'Valor não pode ser negativo').optional(),
-        status: z.string().optional(),
-        descricao: z.string().min(1, 'Descrição não pode ser vazia').optional(),
-        anotacoes: z.string().nullable().optional(),
-        formaDePagamento: z.string().nullable().optional(),
-        desconto: z.number().nullable().optional(),
-        codigoOrcamento: z.string().nullable().optional(),
-        dataOrcamento: z.string().nullable().optional(),
-        dataCompetencia: z.string().nullable().optional(),
-        dataPagamento: z.string().nullable().optional(),
-        itens: z.array(z.object({
-          descricao: z.string(),
-          quantidade: z.number(),
-          valorUnitario: z.number(),
-          total: z.number()
-        })).optional(),
+        clienteId: z.string().uuid('Cliente inválido').optional(),
+        projetoId: z.string().uuid('Projeto inválido').nullable().optional(),
+        valorTotal: centsSchema.optional(),
+        status: z.string().max(50).optional(),
+        descricao: z.string().trim().min(1, 'Descrição não pode ser vazia').max(2_000).optional(),
+        anotacoes: z.string().max(20_000).nullable().optional(),
+        formaDePagamento: z.string().max(200).nullable().optional(),
+        desconto: nullableCentsSchema,
+        codigoOrcamento: z.string().max(100).nullable().optional(),
+        dataOrcamento: nullableDateSchema,
+        dataCompetencia: nullableDateSchema,
+        dataPagamento: nullableDateSchema,
+        itens: z.array(legacyBudgetItemSchema).max(500).optional(),
         possuiMarco: z.boolean().optional(),
-        marcoQtd: z.number().nullable().optional(),
-        marcoValor: z.number().nullable().optional(),
+        marcoQtd: z.number().int().min(0).max(1_000_000).nullable().optional(),
+        marcoValor: nullableCentsSchema,
         possuiImposto: z.boolean().optional(),
-        impostoPorcentagem: z.number().nullable().optional(),
-        impostoValor: z.number().nullable().optional(),
+        impostoPorcentagem: z.number().finite().min(0).max(100).nullable().optional(),
+        impostoValor: nullableCentsSchema,
         impostoRetido: z.boolean().optional(),
-        centroCusto: z.string().nullable().optional(),
+        centroCusto: z.string().max(200).nullable().optional(),
         possuiArt: z.boolean().optional(),
-        artValor: z.number().nullable().optional(),
-        despesas: z.array(z.object({
-          descricao: z.string(),
-          valor: z.number()
-        })).optional()
+        artValor: nullableCentsSchema,
+        despesas: z.array(legacyBudgetCostSchema).max(500).optional()
       })
     }
   }, async (request, reply) => {
@@ -265,8 +274,24 @@ export async function financeiroRoutes(server: FastifyInstance) {
         return reply.status(404).send({ error: 'Orçamento não encontrado' });
       }
 
+      const currentStatus = normalizeBudgetStatus(oldOrcamento[0].status);
+      if (currentStatus !== 'rascunho') {
+        return reply.status(409).send({
+          error: 'Somente rascunhos podem ser editados. Use o módulo Orçamentos para transições, aprovação ou revisão formal.'
+        });
+      }
+      if (data.status !== undefined && normalizeBudgetStatus(data.status) !== currentStatus) {
+        return reply.status(409).send({
+          error: 'Mudanças de status devem usar a máquina de estados do módulo Orçamentos.'
+        });
+      }
+
       const nextClienteId = data.clienteId !== undefined ? data.clienteId : oldOrcamento[0].clienteId;
       const nextProjetoId = data.projetoId !== undefined ? (data.projetoId || null) : oldOrcamento[0].projetoId;
+
+      const nextCliente = await db.select({ id: schema.clientes.id }).from(schema.clientes)
+        .where(and(eq(schema.clientes.id, nextClienteId), isNull(schema.clientes.deletedAt))).limit(1);
+      if (!nextCliente.length) return reply.status(400).send({ error: 'Cliente não encontrado' });
 
       if (nextProjetoId) {
         const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, nextProjetoId)).limit(1);
@@ -278,12 +303,26 @@ export async function financeiroRoutes(server: FastifyInstance) {
         }
       }
 
+      const changes: string[] = [];
+      if (data.valorTotal !== undefined && data.valorTotal !== oldOrcamento[0].valorTotal) {
+        changes.push(`Valor: ${formatCurrency(oldOrcamento[0].valorTotal)} -> ${formatCurrency(data.valorTotal)}`);
+      }
+      if (data.dataOrcamento !== undefined && data.dataOrcamento !== oldOrcamento[0].dataOrcamento) {
+        changes.push(`Data do orçamento: ${oldOrcamento[0].dataOrcamento || 'não informada'} -> ${data.dataOrcamento || 'não informada'}`);
+      }
+      if (data.dataPagamento !== undefined && data.dataPagamento !== oldOrcamento[0].dataPagamento) {
+        changes.push(`Data de pagamento: ${oldOrcamento[0].dataPagamento || 'não informada'} -> ${data.dataPagamento || 'não informada'}`);
+      }
+      if (data.impostoValor !== undefined && data.impostoValor !== oldOrcamento[0].impostoValor) {
+        changes.push(`Imposto: ${formatCurrency(oldOrcamento[0].impostoValor || 0)} -> ${formatCurrency(data.impostoValor || 0)}`);
+      }
+
       const orcamentoAtualizado = await db.transaction(async (tx) => {
         const orc = await tx.update(schema.orcamentos).set({
           clienteId: data.clienteId !== undefined ? data.clienteId : undefined,
           projetoId: data.projetoId !== undefined ? (data.projetoId || null) : undefined,
           valorTotal: data.valorTotal !== undefined ? data.valorTotal : undefined,
-          status: data.status !== undefined ? data.status : undefined,
+          status: undefined,
           descricao: data.descricao !== undefined ? data.descricao : undefined,
           anotacoes: data.anotacoes !== undefined ? data.anotacoes : undefined,
           formaDePagamento: data.formaDePagamento !== undefined ? data.formaDePagamento : undefined,
@@ -291,11 +330,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
           codigoOrcamento: data.codigoOrcamento !== undefined ? data.codigoOrcamento : undefined,
           dataOrcamento: data.dataOrcamento !== undefined ? data.dataOrcamento : undefined,
           dataCompetencia: data.dataCompetencia !== undefined ? data.dataCompetencia : undefined,
-          dataPagamento: data.dataPagamento !== undefined
-            ? data.dataPagamento
-            : data.status === 'Pago' && !oldOrcamento[0].dataPagamento
-              ? todayKey()
-              : undefined,
+          dataPagamento: data.dataPagamento !== undefined ? data.dataPagamento : undefined,
           possuiMarco: data.possuiMarco !== undefined ? data.possuiMarco : undefined,
           marcoQtd: data.marcoQtd !== undefined ? data.marcoQtd : undefined,
           marcoValor: data.marcoValor !== undefined ? data.marcoValor : undefined,
@@ -318,7 +353,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
               descricao: item.descricao,
               quantidade: item.quantidade,
               valorUnitario: item.valorUnitario,
-              total: item.total
+              total: calculatedLegacyItemTotal(item)
             });
           }
         }
@@ -334,40 +369,20 @@ export async function financeiroRoutes(server: FastifyInstance) {
             });
           }
         }
+        await AuditLogService.log('UPDATE', 'Orcamento', oldOrcamento[0], orc[0], tx);
+        if (changes.length) {
+          await JornadaService.logClienteEvento({
+            clienteId: orc[0].clienteId,
+            projetoId: orc[0].projetoId || null,
+            orcamentoId: orc[0].id,
+            tipo: 'Orçamento',
+            titulo: `Orçamento atualizado: ${orc[0].codigoOrcamento || orc[0].descricao || orc[0].id.slice(0, 8)}`,
+            categoria: 'Orçamento',
+            descricao: changes.join('\n')
+          }, tx);
+        }
         return orc;
       });
-
-      await AuditLogService.log('UPDATE', 'Orcamento', oldOrcamento[0], orcamentoAtualizado[0]);
-
-      const changes: string[] = [];
-      if (data.status !== undefined && data.status !== oldOrcamento[0].status) {
-        changes.push(`Status: ${oldOrcamento[0].status} -> ${data.status}`);
-      }
-      if (data.valorTotal !== undefined && data.valorTotal !== oldOrcamento[0].valorTotal) {
-        changes.push(`Valor: ${formatCurrency(oldOrcamento[0].valorTotal)} -> ${formatCurrency(data.valorTotal)}`);
-      }
-      if (data.dataOrcamento !== undefined && data.dataOrcamento !== oldOrcamento[0].dataOrcamento) {
-        changes.push(`Data do orçamento: ${oldOrcamento[0].dataOrcamento || 'não informada'} -> ${data.dataOrcamento || 'não informada'}`);
-      }
-
-      if (data.dataPagamento !== undefined && data.dataPagamento !== oldOrcamento[0].dataPagamento) {
-        changes.push(`Data de pagamento: ${oldOrcamento[0].dataPagamento || 'nao informada'} -> ${data.dataPagamento || 'nao informada'}`);
-      }
-      if (data.impostoValor !== undefined && data.impostoValor !== oldOrcamento[0].impostoValor) {
-        changes.push(`Imposto: ${formatCurrency(oldOrcamento[0].impostoValor || 0)} -> ${formatCurrency(data.impostoValor || 0)}`);
-      }
-
-      if (changes.length) {
-        await JornadaService.logClienteEvento({
-          clienteId: orcamentoAtualizado[0].clienteId,
-          projetoId: orcamentoAtualizado[0].projetoId || null,
-          orcamentoId: orcamentoAtualizado[0].id,
-          tipo: 'Orçamento',
-          titulo: `Orçamento atualizado: ${orcamentoAtualizado[0].codigoOrcamento || orcamentoAtualizado[0].descricao || orcamentoAtualizado[0].id.slice(0, 8)}`,
-          categoria: 'Orçamento',
-          descricao: changes.join('\n')
-        });
-      }
 
       return reply.send(orcamentoAtualizado[0]);
     } catch (err) {
@@ -383,6 +398,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         id: schema.parcelas.id,
         orcamentoId: schema.parcelas.orcamentoId,
         valor: schema.parcelas.valor,
+        valorPago: schema.parcelas.valorPago,
         dataVencimento: schema.parcelas.dataVencimento,
         dataPagamento: schema.parcelas.dataPagamento,
         statusPagamento: schema.parcelas.statusPagamento,
@@ -392,13 +408,22 @@ export async function financeiroRoutes(server: FastifyInstance) {
       })
       .from(schema.parcelas)
       .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
-      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id));
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .where(and(
+        isNull(schema.parcelas.deletedAt),
+        isNull(schema.parcelas.canceladaEm),
+        isNull(schema.orcamentos.deletedAt),
+        sql`(${schema.parcelas.statusPagamento} = 'Pago' OR lower(${schema.orcamentos.status}) IN ('aprovado', 'pago'))`
+      ));
     return data;
   });
 
   server.get('/parcelas/:orcamentoId', async (request, reply) => {
     const { orcamentoId } = request.params as any;
-    const data = await db.select().from(schema.parcelas).where(eq(schema.parcelas.orcamentoId, orcamentoId));
+    const data = await db.select().from(schema.parcelas).where(and(
+      eq(schema.parcelas.orcamentoId, orcamentoId),
+      isNull(schema.parcelas.deletedAt)
+    ));
     return data;
   });
 
@@ -417,13 +442,22 @@ export async function financeiroRoutes(server: FastifyInstance) {
     }
 
     const data = parseResult.data;
+    const sourceBudget = await db.select().from(schema.orcamentos)
+      .where(and(eq(schema.orcamentos.id, data.orcamentoId), isNull(schema.orcamentos.deletedAt)))
+      .limit(1);
+    if (!sourceBudget.length) return reply.status(404).send({ error: 'Orçamento não encontrado' });
+    if (normalizeBudgetStatus(sourceBudget[0].status) !== 'aprovado') {
+      return reply.status(409).send({ error: 'Contas a receber só podem ser criadas para orçamentos aprovados.' });
+    }
     const parcela = await db.insert(schema.parcelas).values({
       id: crypto.randomUUID(),
       orcamentoId: data.orcamentoId,
       valor: data.valor,
       dataVencimento: data.dataVencimento,
       dataPagamento: data.dataPagamento || (data.statusPagamento === 'Pago' ? todayKey() : null),
-      statusPagamento: data.statusPagamento || 'Pendente'
+      statusPagamento: data.statusPagamento || 'Pendente',
+      valorPago: data.statusPagamento === 'Pago' ? data.valor : 0,
+      tipoValor: 'recebivel_previsto'
     }).returning();
 
     const orcamento = await db.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, parcela[0].orcamentoId)).limit(1);
@@ -445,7 +479,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const { id } = request.params as any;
     
     const bodySchema = z.object({
-      statusPagamento: z.string().optional(),
+      statusPagamento: z.enum(['Pendente', 'Pago']).optional(),
       dataPagamento: z.string().nullable().optional()
     });
 
@@ -459,9 +493,17 @@ export async function financeiroRoutes(server: FastifyInstance) {
     if (!parcelaAnterior.length) {
       return reply.status(404).send({ error: 'Parcela nao encontrada' });
     }
+    if (parcelaAnterior[0].canceladaEm) {
+      return reply.status(409).send({ error: 'Uma parcela cancelada não pode ser liquidada ou reaberta.' });
+    }
 
     const parcela = await db.update(schema.parcelas).set({
       statusPagamento: data.statusPagamento,
+      valorPago: data.statusPagamento === 'Pago'
+        ? parcelaAnterior[0].valor
+        : data.statusPagamento
+          ? 0
+          : undefined,
       dataPagamento: data.dataPagamento !== undefined
         ? data.dataPagamento
         : data.statusPagamento === 'Pago'
@@ -722,6 +764,15 @@ export async function financeiroRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const { id } = request.params;
     try {
+      const existing = await db.select().from(schema.orcamentos)
+        .where(and(eq(schema.orcamentos.id, id), isNull(schema.orcamentos.deletedAt)))
+        .limit(1);
+      if (!existing.length) return reply.status(204).send();
+      if (normalizeBudgetStatus(existing[0].status) !== 'rascunho') {
+        return reply.status(409).send({
+          error: 'Somente orçamentos em rascunho podem ser excluídos. Cancele o orçamento para preservar o histórico.'
+        });
+      }
       await db.transaction(async (tx) => {
         const oldOrcamento = await tx.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, id)).limit(1);
         if (!oldOrcamento.length || oldOrcamento[0].deletedAt) return;
@@ -798,7 +849,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const despesasData = await db.select().from(schema.despesas)
       .where(isNull(schema.despesas.deletedAt));
     const parcelasData = await db.select().from(schema.parcelas)
-      .where(isNull(schema.parcelas.deletedAt));
+      .where(and(isNull(schema.parcelas.deletedAt), isNull(schema.parcelas.canceladaEm)));
 
     const monthlyData: Record<string, { receitas: number, despesas: number }> = {};
 
@@ -822,12 +873,12 @@ export async function financeiroRoutes(server: FastifyInstance) {
       const dateValue = parcela.dataPagamento || parcela.dataVencimento;
       const key = dateValue && dateValue.length >= 7 ? dateValue.substring(0, 7) : '';
       if (key && monthlyData[key] !== undefined) {
-        monthlyData[key].receitas += parcela.valor;
+        monthlyData[key].receitas += parcela.valorPago || parcela.valor;
       }
     });
 
     orcamentosData.forEach(orc => {
-      if (orc.status === 'Pago' && !orcamentosComParcelas.has(orc.id)) {
+      if (normalizeBudgetStatus(orc.status) === 'aprovado' && orc.dataPagamento && !orcamentosComParcelas.has(orc.id)) {
         let key = '';
         const dateValue = orc.dataPagamento || orc.dataOrcamento;
         if (dateValue && dateValue.length >= 7) {
@@ -870,7 +921,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const despesasData = await db.select().from(schema.despesas)
       .where(isNull(schema.despesas.deletedAt));
     const parcelasData = await db.select().from(schema.parcelas)
-      .where(isNull(schema.parcelas.deletedAt));
+      .where(and(isNull(schema.parcelas.deletedAt), isNull(schema.parcelas.canceladaEm)));
     const clientesData = await db.select().from(schema.clientes)
       .where(isNull(schema.clientes.deletedAt));
     const clientesMap = new Map(clientesData.map(c => [c.id, c.nome]));
@@ -899,13 +950,15 @@ export async function financeiroRoutes(server: FastifyInstance) {
       const clienteAgg = getClienteAgg(orc?.clienteId);
 
       if (p.statusPagamento === 'Pago') {
-        receitasPagas += p.valor;
-        if (clienteAgg) clienteAgg.receitas += p.valor;
+        const received = p.valorPago || p.valor;
+        receitasPagas += received;
+        if (clienteAgg) clienteAgg.receitas += received;
       } else {
-        contasAReceber += p.valor;
+        const outstanding = Math.max(0, p.valor - (p.valorPago || 0));
+        contasAReceber += outstanding;
         const venc = p.dataVencimento || '';
         if (venc < hoje && venc !== '') {
-          inadimplencia += p.valor;
+          inadimplencia += outstanding;
         }
       }
     });
@@ -915,10 +968,10 @@ export async function financeiroRoutes(server: FastifyInstance) {
       if (orcamentosComParcelas.has(orc.id)) return;
       const clienteAgg = getClienteAgg(orc.clienteId);
 
-      if (orc.status === 'Pago') {
+      if (normalizeBudgetStatus(orc.status) === 'aprovado' && orc.dataPagamento) {
         receitasPagas += orc.valorTotal;
         if (clienteAgg) clienteAgg.receitas += orc.valorTotal;
-      } else if (orc.status === 'Aprovado' || orc.status === 'Enviado' || orc.status === 'Pendente') {
+      } else if (normalizeBudgetStatus(orc.status) === 'aprovado') {
         contasAReceber += orc.valorTotal;
         const v = orc.dataPagamento || orc.dataCompetencia || '';
         if (v < hoje && v !== '') {

@@ -1,3 +1,4 @@
+import { DatePickerField } from '../../components/Form';
 import { useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
@@ -162,15 +163,13 @@ export function Faturas() {
                 className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-3 text-xs font-semibold text-zinc-700 outline-none transition-all placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               />
             </div>
-            <input
-              type="date"
+            <DatePickerField
               value={dataInicioFilter}
               onChange={(event) => setDataInicioFilter(event.target.value)}
               className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-all focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               aria-label="Vencimento inicial"
             />
-            <input
-              type="date"
+            <DatePickerField
               value={dataFimFilter}
               onChange={(event) => setDataFimFilter(event.target.value)}
               className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-all focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"

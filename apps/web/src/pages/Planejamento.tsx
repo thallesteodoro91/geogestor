@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { apiClient } from '../services/apiClient';
 import { useQuery } from '@tanstack/react-query';
+import { isActiveOpportunityStage, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { Layout } from '../components/Layout';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -24,7 +25,7 @@ import { formatarMoeda, formatarPercentual, calcularDesvioOrcamentario, calcular
 import { geoHoverTransition, geoViewTransition } from '../utils/motion';
 import { RichTooltip } from '../components/charts/RichTooltip';
 import { cn } from '../utils/cn';
-import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeIconClass, geoOrangeSurfaceWithAccentClass, geoPurpleIconClass, geoPurpleSurfaceWithAccentClass, geoTabButtonClass, geoTabListClass } from '../utils/geoTheme';
+import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeIconClass, geoOrangeSurfaceWithAccentClass, geoPurpleIconClass, geoPurpleSurfaceWithAccentClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../utils/geoTheme';
 
 // Local UI Components to keep Page self-contained and clean
 interface KPICardProps {
@@ -213,9 +214,9 @@ export function Planejamento() {
   });
 
   // Fetch opportunities for Pipeline Funnel
-  const { data: opportunities = [], isLoading: loadingOpportunities } = useQuery<Array<{ id: string; estagio: string; valorEstimado: number | null }>>({
-    queryKey: ['oportunidades'],
-    queryFn: () => apiClient.get<Array<{ id: string; estagio: string; valorEstimado: number | null }>>('/api/oportunidades')
+  const { data: opportunities = [], isLoading: loadingOpportunities } = useQuery<OpportunityListItem[]>({
+    queryKey: ['opportunities'],
+    queryFn: () => apiClient.get<OpportunityListItem[]>('/api/oportunidades')
   });
 
   const loading = loadingDRE || loadingOpportunities;
@@ -337,11 +338,11 @@ export function Planejamento() {
     let totalValue = 0;
 
     opportunities.forEach(o => {
-      const stage = o.estagio as keyof typeof counts;
+      const stage = o.estagio as OpportunityStage;
       if (stage in counts) {
         counts[stage]++;
       }
-      totalValue += (o.valorEstimado || 0) / 100;
+      if (isActiveOpportunityStage(stage)) totalValue += (o.valorEstimado || 0) / 100;
     });
 
     const funnelData = [
@@ -351,8 +352,8 @@ export function Planejamento() {
       { name: 'Fechados (Ganho)', value: counts.Ganho, fill: '#10b981' }
     ];
 
-    const totalLeads = counts.Prospectado + counts.Contato + counts.Proposta + counts.Ganho + counts.Perdido;
-    const rate = calcularTaxaConversao(counts.Ganho, totalLeads);
+    const totalClosed = counts.Ganho + counts.Perdido;
+    const rate = calcularTaxaConversao(counts.Ganho, totalClosed);
 
     return {
       pipelineChartData: funnelData,
@@ -432,7 +433,7 @@ export function Planejamento() {
               onClick={() => setActiveTab('orcamento')}
               className={geoTabButtonClass(activeTab === 'orcamento', 'finance', 'px-6')}
             >
-              <FileText weight={activeTab === 'orcamento' ? 'fill' : 'regular'} className="w-5 h-5" /> Metas Orçamentárias
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'orcamento', 'system')}><FileText weight={activeTab === 'orcamento' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Metas Orçamentárias
             </button>
             <button 
               role="tab"
@@ -440,7 +441,7 @@ export function Planejamento() {
               onClick={() => setActiveTab('equilibrio')}
               className={geoTabButtonClass(activeTab === 'equilibrio', 'finance', 'px-6')}
             >
-              <TrendUp weight={activeTab === 'equilibrio' ? 'fill' : 'regular'} className="w-5 h-5" /> Ponto de Equilíbrio
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'equilibrio', 'success')}><TrendUp weight={activeTab === 'equilibrio' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Ponto de Equilíbrio
             </button>
             <button 
               role="tab"
@@ -448,7 +449,7 @@ export function Planejamento() {
               onClick={() => setActiveTab('pipeline')}
               className={geoTabButtonClass(activeTab === 'pipeline', 'finance', 'px-6')}
             >
-              <Funnel weight={activeTab === 'pipeline' ? 'fill' : 'regular'} className="w-5 h-5" /> Funil Comercial (Pipeline)
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'pipeline', 'warning')}><Funnel weight={activeTab === 'pipeline' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Funil Comercial (Pipeline)
             </button>
           </div>
 

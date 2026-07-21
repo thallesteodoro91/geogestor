@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation } from 'react-router-dom';
-import { z } from 'zod';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
+import { DatePickerField, FormFooter, FormSelect } from '../../components/Form';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient, getDownloadUrl } from '../../services/apiClient';
@@ -18,10 +19,24 @@ import { RichTooltip } from '../../components/charts/RichTooltip';
 import { cn } from '../../utils/cn';
 import { useDebounce } from '../../hooks/useDebounce';
 import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
-import { geoFieldClass, geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeIconClass, geoOrangeLabelClass, geoOrangeSurfaceWithAccentClass, geoOrangeValueClass, geoPurpleSurfaceClass, geoTabButtonClass, geoTabListClass } from '../../utils/geoTheme';
+import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
+import { ProjetoFormFields } from './ProjetoFormFields';
+import { QuickClientModal, type CreatedProjectClient } from './QuickClientModal';
+import {
+  createEmptyProjectForm,
+  projectFieldTab,
+  projectFormFingerprint,
+  projectRecordToForm,
+  validateProjectForm,
+  type ProjectFormErrors,
+  type ProjectFormState,
+  type ProjectModalContext,
+  type ProjectModalTab
+} from './projectForm';
+import type { ProjetoPayload } from '@geogestor/contracts';
 
 import { CustomSelect } from '../../components/CustomSelect';
-import { MetricCard } from '../../components/MetricCard';
 import {
   filterBarClass,
   filterControlClass,
@@ -31,9 +46,6 @@ import editIcon from '../../assets/magnific-icons/writing_3215063.svg';
 import trashIcon from '../../assets/magnific-icons/trash-bin_5510130.svg';
 import pdfIcon from '../../assets/magnific-icons/notes_8079875.svg';
 import folderIcon from '../../assets/magnific-icons/project_folder.svg';
-import clockIcon from '../../assets/magnific-icons/clock_2924574.svg';
-import warningIcon from '../../assets/magnific-icons/warning-sign_11318030.svg';
-import checkIcon from '../../assets/magnific-icons/good-review_4820567.svg';
 import windowsIcon from '../../assets/magnific-icons/laptop_5938907.svg';
 import filterIcon from '../../assets/magnific-icons/filter_9757817.svg';
 
@@ -76,29 +88,13 @@ interface Projeto {
   longitude?: number | null;
   possuiMemorialDescritivo?: string | null;
   observacoes?: string | null;
-}
-
-interface ProjetoPayload {
-  nome: string;
-  descricao?: string | null;
-  clienteId: string;
-  status: string;
-  dataInicio?: string | null;
-  dataEntrega?: string | null;
-  areaHa?: number | null;
-  matricula?: string | null;
-  car?: string | null;
-  ccir?: string | null;
-  itr?: string | null;
-  cidade?: string | null;
-  municipio?: string | null;
-  situacaoImovel?: string | null;
-  tipo?: string | null;
-  averbacao?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  possuiMemorialDescritivo?: string | null;
-  observacoes?: string | null;
+  orgaoAmbiental?: string | null;
+  tipoDemanda?: string | null;
+  tipoLicenca?: string | null;
+  protocolo?: string | null;
+  numeroProcesso?: string | null;
+  tipoPericia?: string | null;
+  dataVistoria?: string | null;
 }
 
 interface ProjetoArquivo {
@@ -109,57 +105,147 @@ interface ProjetoArquivo {
   modifiedAt: string;
 }
 
-const projectFieldClass = cn(geoFieldClass, 'w-full h-12 px-4 font-medium');
-const projectSelectClass = cn(projectFieldClass, 'cursor-pointer');
-const projectTextareaClass = cn(geoFieldClass, 'w-full min-h-[100px] resize-none px-4 py-3 font-medium leading-relaxed');
-const projectMetricPanelClass = 'geo-card flex flex-col justify-between p-6';
-const projectIconButtonClass = 'geo-focus-ring rounded-lg p-1 transition-[background-color,transform] duration-150 hover:bg-brand-surface-subtle hover:scale-110 active:scale-95 dark:hover:bg-brand-surface-muted';
+const projectSelectClass = cn(geoFieldClass, 'h-12 w-full cursor-pointer px-4 font-medium');
+const projectIconButtonClass = 'geo-focus-ring rounded-lg p-1 transition-[background-color,transform] duration-150 hover:bg-brand-surface-subtle hover:scale-110 active:scale-95 disabled:cursor-wait disabled:opacity-50 disabled:hover:scale-100 dark:hover:bg-brand-surface-muted';
+
+const numberFormatter = new Intl.NumberFormat('pt-BR');
+const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+const formatBRL = (cents: number) => currencyFormatter.format(cents / 100);
+const formatProjectCount = (count: number) => `${numberFormatter.format(count)} ${count === 1 ? 'projeto' : 'projetos'}`;
+
+type ProjectMetricTone = 'brand' | 'neutral' | 'positive' | 'warning' | 'danger';
+
+const projectMetricToneClasses: Record<ProjectMetricTone, { accent: string; icon: string }> = {
+  brand: {
+    accent: 'bg-brand-primary-500',
+    icon: 'bg-brand-primary-400/10 text-brand-primary-700 ring-brand-primary-300/30 dark:text-brand-primary-200'
+  },
+  neutral: {
+    accent: 'bg-brand-blue-500',
+    icon: 'bg-brand-blue-400/10 text-brand-blue-700 ring-brand-blue-300/30 dark:text-brand-blue-200'
+  },
+  positive: {
+    accent: 'bg-emerald-500',
+    icon: 'bg-emerald-400/10 text-emerald-700 ring-emerald-300/30 dark:text-emerald-200'
+  },
+  warning: {
+    accent: 'bg-amber-500',
+    icon: 'bg-amber-400/10 text-amber-700 ring-amber-300/30 dark:text-amber-200'
+  },
+  danger: {
+    accent: 'bg-red-500',
+    icon: 'bg-red-400/10 text-red-700 ring-red-300/30 dark:text-red-200'
+  }
+};
+
+function ProjectMetricCard({
+  label,
+  value,
+  helper,
+  icon,
+  tone = 'neutral'
+}: {
+  label: string;
+  value: ReactNode;
+  helper?: string;
+  icon: ReactNode;
+  tone?: ProjectMetricTone;
+}) {
+  const toneClasses = projectMetricToneClasses[tone];
+
+  return (
+    <article className="geo-card relative flex min-h-[132px] min-w-0 flex-col justify-between overflow-hidden p-5">
+      <span aria-hidden="true" className={cn('absolute inset-y-0 left-0 w-1', toneClasses.accent)} />
+      <div className="flex items-start justify-between gap-4">
+        <h3 className="min-w-0 text-xs font-semibold leading-5 text-zinc-600 dark:text-zinc-300">{label}</h3>
+        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1', toneClasses.icon)}>
+          {icon}
+        </span>
+      </div>
+      <div className="mt-4 min-w-0">
+        <p className="break-words text-2xl font-semibold tracking-tight text-zinc-950 tabular-nums dark:text-white">{value}</p>
+        {helper && <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{helper}</p>}
+      </div>
+    </article>
+  );
+}
+
+function ProjectsPageSkeleton() {
+  return (
+    <div aria-label="Carregando projetos" aria-busy="true" className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="geo-card h-[132px] animate-pulse bg-brand-surface-subtle motion-reduce:animate-none" />
+        ))}
+      </div>
+      <div className="geo-surface h-16 animate-pulse rounded-lg bg-brand-surface-subtle motion-reduce:animate-none" />
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 3 }, (_, index) => (
+          <div key={index} className="geo-card h-[320px] animate-pulse bg-brand-surface-subtle motion-reduce:animate-none" />
+        ))}
+      </div>
+      <span className="sr-only">Carregando…</span>
+    </div>
+  );
+}
 
 export function ListagemProjetos() {
   const queryClient = useQueryClient();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const handledRouteActionRef = useRef(false);
 
   const [showModal, setShowModal] = useState(false);
   const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
-  const [modalContext, setModalContext] = useState<string>('projeto');
-  const [activeTab, setActiveTab] = useState<'projeto' | 'propriedade' | 'geoloc'>('projeto');
-  const [viewMode, setViewMode] = useState<'grid' | 'map' | 'operacional'>('grid');
+  const [modalContext, setModalContext] = useState<ProjectModalContext>('projeto');
+  const [activeTab, setActiveTab] = useState<ProjectModalTab>('projeto');
   const [categoriaFilter, setCategoriaFilter] = useState('todos');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('Todos');
-  const [tipoFilter, setTipoFilter] = useState('Todos');
-  const [dataInicioFilter, setDataInicioFilter] = useState('');
-  const [dataFimFilter, setDataFimFilter] = useState('');
+  const [projectForm, setProjectForm] = useState<ProjectFormState>(() => createEmptyProjectForm());
+  const [projectFormErrors, setProjectFormErrors] = useState<ProjectFormErrors>({});
+  const [projectFormDirty, setProjectFormDirty] = useState(false);
+  const [projectSuccessMessage, setProjectSuccessMessage] = useState('');
+  const [showQuickClientModal, setShowQuickClientModal] = useState(false);
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const initialProjectFormRef = useRef(projectFormFingerprint(createEmptyProjectForm()));
 
-  // Form states
-  const [nome, setNome] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [clienteId, setClienteId] = useState('');
-  const [status, setStatus] = useState('Em Andamento');
-  const [dataInicio, setDataInicio] = useState('');
-  const [dataEntrega, setDataEntrega] = useState('');
+  const viewParam = searchParams.get('visualizacao');
+  const viewMode: 'grid' | 'map' | 'operacional' = viewParam === 'mapa'
+    ? 'map'
+    : viewParam === 'estatisticas'
+      ? 'operacional'
+      : 'grid';
+  const searchTerm = searchParams.get('busca') || '';
+  const statusFilter = searchParams.get('status') || 'Todos';
+  const tipoFilter = searchParams.get('tipo') || 'Todos';
+  const dataInicioFilter = searchParams.get('inicio') || '';
+  const dataFimFilter = searchParams.get('fim') || '';
 
-  // Audited property states
-  const [areaHa, setAreaHa] = useState('');
-  
-  // Ambiental & Licenciamento specific fields
-  const [tipoServicoLicenca, setTipoServicoLicenca] = useState('');
-  const [orgaoAmbiental, setOrgaoAmbiental] = useState('');
-  const [numeroProcesso, setNumeroProcesso] = useState('');
-  const [matricula, setMatricula] = useState('');
-  const [car, setCar] = useState('');
-  const [ccir, setCcir] = useState('');
-  const [itr, setItr] = useState('');
-  const [cidade, setCidade] = useState('');
-  const [municipio, setMunicipio] = useState('');
-  const [situacaoImovel, setSituacaoImovel] = useState('');
-  const [tipo, setTipo] = useState('Rural');
-  const [averbacao, setAverbacao] = useState('');
-  const [latitude, setLatitude] = useState('');
-  const [longitude, setLongitude] = useState('');
-  const [possuiMemorialDescritivo, setPossuiMemorialDescritivo] = useState('Não');
-  const [observacoes, setObservacoes] = useState('');
+  const updateProjectQuery = useCallback((key: string, value: string, defaultValue = '') => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (!value || value === defaultValue) next.delete(key);
+      else next.set(key, value);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const setViewMode = useCallback((mode: 'grid' | 'map' | 'operacional') => {
+    const urlValue = mode === 'map' ? 'mapa' : mode === 'operacional' ? 'estatisticas' : '';
+    updateProjectQuery('visualizacao', urlValue);
+  }, [updateProjectQuery]);
+  const setSearchTerm = useCallback((value: string) => updateProjectQuery('busca', value), [updateProjectQuery]);
+  const setStatusFilter = useCallback((value: string) => updateProjectQuery('status', value, 'Todos'), [updateProjectQuery]);
+  const setTipoFilter = useCallback((value: string) => updateProjectQuery('tipo', value, 'Todos'), [updateProjectQuery]);
+  const setDataInicioFilter = useCallback((value: string) => updateProjectQuery('inicio', value), [updateProjectQuery]);
+  const setDataFimFilter = useCallback((value: string) => updateProjectQuery('fim', value), [updateProjectQuery]);
+  const clearProjectFilters = useCallback(() => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      ['busca', 'status', 'tipo', 'inicio', 'fim'].forEach((key) => next.delete(key));
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
 
   // Local files preview states
   const [showArquivosModal, setShowArquivosModal] = useState<string | null>(null);
@@ -168,38 +254,64 @@ export function ListagemProjetos() {
     isOpen: boolean;
     title: string;
     description: string;
+    confirmText: string;
     onConfirm: () => void;
   }>({
     isOpen: false,
     title: '',
     description: '',
+    confirmText: 'Excluir',
     onConfirm: () => {}
   });
 
   // Queries
-  const { data: projetos = [], isLoading: projectsLoading } = useQuery<Projeto[]>({
+  const {
+    data: projetos = [],
+    isLoading: projectsLoading,
+    isError: projectsError,
+    error: projectsErrorDetails,
+    refetch: refetchProjects
+  } = useQuery<Projeto[]>({
     queryKey: ['projetos'],
     queryFn: () => apiClient.get<Projeto[]>('/api/projetos')
   });
 
-  const { data: clientes = [], isLoading: clientsLoading } = useQuery<Cliente[]>({
+  const {
+    data: clientes = [],
+    isLoading: clientsLoading,
+    isError: clientsError,
+    refetch: refetchClients
+  } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
     queryFn: () => apiClient.get<Cliente[]>('/api/clientes')
   });
 
   const loading = projectsLoading || clientsLoading;
+  const pageError = projectsError || clientsError;
 
-  const { data: orcamentos = [] } = useQuery<OrcamentoInfo[]>({
+  const {
+    data: orcamentos = [],
+    isLoading: budgetsLoading,
+    isError: budgetsError,
+    refetch: refetchBudgets
+  } = useQuery<OrcamentoInfo[]>({
     queryKey: ['orcamentos-financeiro'],
     queryFn: () => apiClient.get<OrcamentoInfo[]>('/api/financeiro/orcamentos'),
     enabled: viewMode === 'operacional'
   });
 
-  const { data: despesas = [] } = useQuery<DespesaInfo[]>({
+  const {
+    data: despesas = [],
+    isLoading: expensesLoading,
+    isError: expensesError,
+    refetch: refetchExpenses
+  } = useQuery<DespesaInfo[]>({
     queryKey: ['despesas-financeiro'],
     queryFn: () => apiClient.get<DespesaInfo[]>('/api/financeiro/despesas'),
     enabled: viewMode === 'operacional'
   });
+  const operationalLoading = budgetsLoading || expensesLoading;
+  const operationalError = budgetsError || expensesError;
 
   // Calculate Operational Stats
   const totalProjetos = projetos.length;
@@ -289,16 +401,16 @@ export function ListagemProjetos() {
       countConcluidos++;
     }
   });
-  const avgCompletionTime = countConcluidos > 0 ? Math.round(totalDays / countConcluidos) : 0;
-  const productivityRate = totalProjetos > 0 ? Math.round((projetosConcluidos / totalProjetos) * 100) : 0;
+  const avgCompletionTime = countConcluidos > 0 ? Math.round(totalDays / countConcluidos) : null;
+  const productivityRate = totalProjetos > 0 ? Math.round((projetosConcluidos / totalProjetos) * 100) : null;
 
-  const approvedBudgets = orcamentos.filter((o) => o.status === 'Pago' || o.status === 'Aprovado');
-  const avgTicket = approvedBudgets.length > 0 
+  const approvedBudgets = orcamentos.filter((o) => isApprovedBudgetStatus(o.status));
+  const avgTicket = approvedBudgets.length > 0
     ? Math.round(approvedBudgets.reduce((acc: number, curr) => acc + curr.valorTotal, 0) / approvedBudgets.length) 
-    : 0;
+    : null;
 
   const projectComparisonData = projetos.map((proj) => {
-    const relatedBudgets = orcamentos.filter((o) => o.clienteId === proj.clienteId);
+    const relatedBudgets = orcamentos.filter((o) => o.clienteId === proj.clienteId && isApprovedBudgetStatus(o.status));
     const clientProjects = projetos.filter((p) => p.clienteId === proj.clienteId).length;
     const estimatedReceita = relatedBudgets.reduce((acc: number, o) => acc + o.valorTotal, 0) / (clientProjects || 1);
 
@@ -319,12 +431,9 @@ export function ListagemProjetos() {
     : projectComparisonData.filter((d) => d.tipo === categoriaFilter);
 
   const topProjectsData = filteredComparisonData
+    .filter((item) => item.Receita !== 0 || item.Custo !== 0 || item.Lucro !== 0)
     .sort((a, b) => b.Receita - a.Receita)
     .slice(0, 5);
-
-  const formatBRL = (cents: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-  };
 
   const projectTypes = Array.from(new Set(projetos.map((projeto) => projeto.tipo || 'Rural'))).sort();
   const projectTypeStats = projectTypes
@@ -359,6 +468,9 @@ export function ListagemProjetos() {
     return matchesSearch && matchesStatus && matchesTipo && matchesStart && matchesEnd;
   });
   const hasProjectFilters = Boolean(searchTerm || statusFilter !== 'Todos' || tipoFilter !== 'Todos' || dataInicioFilter || dataFimFilter);
+  const filteredProjectsLabel = filteredProjetos.length === 0
+    ? 'Nenhum projeto exibido'
+    : `${numberFormatter.format(filteredProjetos.length)} ${filteredProjetos.length === 1 ? 'projeto exibido' : 'projetos exibidos'}`;
 
   const { data: filesData = { files: [], path: '' }, isLoading: arquivosLoading } = useQuery<{ files: ProjetoArquivo[], path: string }>({
     queryKey: ['projeto-arquivos', showArquivosModal],
@@ -383,6 +495,7 @@ export function ListagemProjetos() {
       await apiClient.delete(`/api/projetos/${id}`);
     },
     onSuccess: () => {
+      setConfirmData(prev => ({ ...prev, isOpen: false }));
       queryClient.invalidateQueries({ queryKey: ['projetos'] });
       queryClient.invalidateQueries({ queryKey: ['stats-geral'] });
       queryClient.invalidateQueries({ queryKey: ['projetos-notificacoes'] });
@@ -401,14 +514,18 @@ export function ListagemProjetos() {
       return await apiClient.post('/api/projetos', payload);
     },
     onSuccess: () => {
+      const feedbackMessage = selectedProjeto ? 'Projeto atualizado com sucesso.' : 'Projeto criado com sucesso.';
+      setProjectSuccessMessage(feedbackMessage);
+      setProjectFormDirty(false);
       setShowModal(false);
       queryClient.invalidateQueries({ queryKey: ['projetos'] });
       queryClient.invalidateQueries({ queryKey: ['stats-geral'] });
       queryClient.invalidateQueries({ queryKey: ['projetos-notificacoes'] });
+      toast.success(feedbackMessage);
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : (selectedProjeto ? 'Erro ao atualizar projeto' : 'Erro ao criar projeto');
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -422,6 +539,7 @@ export function ListagemProjetos() {
       await apiClient.post('/api/arquivos/upload/stream', formData);
     },
     onSuccess: () => {
+      setConfirmData(prev => ({ ...prev, isOpen: false }));
       queryClient.invalidateQueries({ queryKey: ['projeto-arquivos', showArquivosModal] });
     },
     onError: (err: unknown) => {
@@ -447,80 +565,99 @@ export function ListagemProjetos() {
   });
 
   // Action methods
-  const openCreateModal = useCallback((initialClienteId?: string, initialTab: 'projeto' | 'propriedade' | 'geoloc' = 'projeto', contexto: string = 'projeto') => {
-    setSelectedProjeto(null);
-    setModalContext(contexto);
-    setNome('');
-    setDescricao('');
-    setTipoServicoLicenca('');
-    setOrgaoAmbiental('');
-    setNumeroProcesso('');
+  const openCreateModal = useCallback((initialClienteId?: string, initialTab: ProjectModalTab = 'projeto', contexto: ProjectModalContext = 'projeto') => {
     const nextClienteId = initialClienteId && clientes.some((cliente) => cliente.id === initialClienteId)
       ? initialClienteId
-      : clientes[0]?.id || '';
-    setClienteId(nextClienteId);
-    setStatus('Em Andamento');
-    setDataInicio('');
-    setDataEntrega('');
-    setAreaHa('');
-    setMatricula('');
-    setCar('');
-    setCcir('');
-    setItr('');
-    setCidade('');
-    setMunicipio('');
-    setSituacaoImovel('Regularizado');
-    setTipo(contexto === 'licenciamento' ? 'Licenciamento' : contexto === 'ambiental' ? 'Ambiental' : 'Rural');
-    setAverbacao('');
-    setLatitude('');
-    setLongitude('');
-    setPossuiMemorialDescritivo('Não');
-    setObservacoes('');
+      : '';
+    const nextForm = createEmptyProjectForm(contexto, nextClienteId);
+    setSelectedProjeto(null);
+    setModalContext(contexto);
+    setProjectForm(nextForm);
+    setProjectFormErrors({});
+    initialProjectFormRef.current = projectFormFingerprint(nextForm);
+    setProjectFormDirty(false);
     setActiveTab(initialTab);
+    setShowQuickClientModal(false);
     setShowModal(true);
   }, [clientes]);
 
-  const openEditModal = (proj: Projeto) => {
-    setDescricao(proj.descricao || '');
-    setClienteId(proj.clienteId || '');
-    setStatus(proj.status || 'Em Andamento');
-    setDataInicio(proj.dataInicio || '');
-    setDataEntrega(proj.dataEntrega || '');
-    setAreaHa(proj.areaHa !== null && proj.areaHa !== undefined ? proj.areaHa.toString() : '');
-    setMatricula(proj.matricula || '');
-    setCar(proj.car || '');
-    setCcir(proj.ccir || '');
-    setItr(proj.itr || '');
-    setCidade(proj.cidade || '');
-    setMunicipio(proj.municipio || '');
-    setSituacaoImovel(proj.situacaoImovel || 'Regularizado');
-    setTipo(proj.tipo || 'Rural');
-    setAverbacao(proj.averbacao || '');
-    setLatitude(proj.latitude !== null && proj.latitude !== undefined ? proj.latitude.toString() : '');
-    setLongitude(proj.longitude !== null && proj.longitude !== undefined ? proj.longitude.toString() : '');
-    setPossuiMemorialDescritivo(proj.possuiMemorialDescritivo || 'Não');
-    setObservacoes(proj.observacoes || '');
-    setActiveTab('projeto');
-    setShowModal(true);
+  const openEditModal = async (proj: Projeto) => {
+    setEditingProjectId(proj.id);
+    try {
+      const detailedProject = await apiClient.get<Projeto>(`/api/projetos/${proj.id}`);
+      const nextForm = projectRecordToForm(detailedProject);
+      const nextContext: ProjectModalContext = detailedProject.tipo === 'Ambiental'
+        ? 'ambiental'
+        : detailedProject.tipo === 'Licenciamento'
+          ? 'licenciamento'
+          : 'projeto';
+      setSelectedProjeto(detailedProject);
+      setModalContext(nextContext);
+      setProjectForm(nextForm);
+      setProjectFormErrors({});
+      initialProjectFormRef.current = projectFormFingerprint(nextForm);
+      setProjectFormDirty(false);
+      setActiveTab('projeto');
+      setShowQuickClientModal(false);
+      setShowModal(true);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar os dados completos do projeto.');
+    } finally {
+      setEditingProjectId(null);
+    }
+  };
+
+  const closeProjectModal = () => {
+    if (projectFormDirty && !submitProjectMutation.isPending && !window.confirm('Descartar as alterações não salvas deste projeto?')) return;
+    setShowQuickClientModal(false);
+    setShowModal(false);
+  };
+
+  const closeQuickClientModal = () => {
+    setShowQuickClientModal(false);
+    window.setTimeout(() => document.getElementById('project-create-client')?.focus(), 80);
+  };
+
+  const handleQuickClientCreated = (client: CreatedProjectClient) => {
+    setProjectForm((current) => ({ ...current, clienteId: client.id }));
+    clearProjectFormErrors('clienteId');
+    setShowQuickClientModal(false);
+    window.setTimeout(() => document.getElementById('project-clienteId')?.focus(), 80);
   };
 
   useEffect(() => {
-    const routeState = location.state as { createForClienteId?: string; modalTab?: 'projeto' | 'propriedade' | 'geoloc'; openCreateModal?: boolean; contexto?: string } | null;
+    if (!showModal) return;
+    setProjectFormDirty(projectFormFingerprint(projectForm) !== initialProjectFormRef.current);
+  }, [projectForm, showModal]);
+
+  useEffect(() => {
+    if (!projectFormDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [projectFormDirty]);
+
+  useEffect(() => {
+    const routeState = location.state as { createForClienteId?: string; modalTab?: ProjectModalTab; openCreateModal?: boolean; contexto?: string } | null;
     if (handledRouteActionRef.current || (!routeState?.createForClienteId && !routeState?.openCreateModal) || clientsLoading) return;
 
     handledRouteActionRef.current = true;
-    openCreateModal(routeState.createForClienteId, routeState.modalTab || 'projeto', routeState.contexto);
+    const routeContext: ProjectModalContext = routeState.contexto === 'ambiental' || routeState.contexto === 'licenciamento'
+      ? routeState.contexto
+      : 'projeto';
+    openCreateModal(routeState.createForClienteId, routeState.modalTab || 'projeto', routeContext);
   }, [clientsLoading, clientes, location.state, openCreateModal]);
 
   const handleDelete = (id: string, name: string) => {
     setConfirmData({
       isOpen: true,
-      title: 'Excluir Projeto',
-      description: `Tem certeza que deseja excluir o projeto "${name}"? Esta ação não poderá ser desfeita.`,
-      onConfirm: () => {
-        deleteProjectMutation.mutate(id);
-        setConfirmData(prev => ({ ...prev, isOpen: false }));
-      }
+      title: `Excluir projeto “${name}”?`,
+      description: `O projeto “${name}” será removido do GeoGestor. Revise seus vínculos e documentos antes de continuar. Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir projeto',
+      onConfirm: () => deleteProjectMutation.mutate(id)
     });
   };
 
@@ -533,57 +670,68 @@ export function ListagemProjetos() {
     }
   };
 
+  const clearProjectFormErrors = (...fields: Array<keyof ProjectFormState>) => {
+    setProjectFormErrors((current) => {
+      if (!fields.some((field) => current[field])) return current;
+      const next = { ...current };
+      fields.forEach((field) => delete next[field]);
+      return next;
+    });
+  };
+
+  const projectTabOrder: ProjectModalTab[] = ['projeto', 'propriedade', 'geoloc'];
+
+  const activateProjectTab = (tab: ProjectModalTab, moveFocus = false) => {
+    setActiveTab(tab);
+    window.setTimeout(() => {
+      const scrollRegion = document.getElementById('project-form-scroll-region');
+      if (scrollRegion) scrollRegion.scrollTop = 0;
+      if (moveFocus) document.getElementById(`project-tab-${tab}`)?.focus();
+    }, 0);
+  };
+
+  const handleProjectTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentTab: ProjectModalTab) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = projectTabOrder.indexOf(currentTab);
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = projectTabOrder.length - 1;
+    else if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % projectTabOrder.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + projectTabOrder.length) % projectTabOrder.length;
+    activateProjectTab(projectTabOrder[nextIndex], true);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clienteId) {
-      alert('Por favor, cadastre ou selecione um cliente primeiro.');
+
+    if (activeTab !== 'geoloc') {
+      const validation = validateProjectForm(projectForm);
+      const currentTabErrors = Object.entries(validation.errors).filter(([field]) => (
+        projectFieldTab[field as keyof ProjectFormState] === activeTab
+      ));
+      if (currentTabErrors.length > 0) {
+        setProjectFormErrors(validation.errors);
+        const [firstField] = currentTabErrors[0] as [keyof ProjectFormState, string];
+        window.setTimeout(() => document.getElementById(`project-${firstField}`)?.focus(), 0);
+        return;
+      }
+      const currentIndex = projectTabOrder.indexOf(activeTab);
+      activateProjectTab(projectTabOrder[currentIndex + 1]);
       return;
     }
 
-    const payload = {
-      nome,
-      clienteId,
-      descricao: descricao || null,
-      status: status || 'Em Andamento',
-      dataInicio: dataInicio || null,
-      dataEntrega: dataEntrega || null,
-      areaHa: areaHa ? parseFloat(areaHa) : null,
-      matricula: matricula || null,
-      car: car || null,
-      ccir: ccir || null,
-      itr: itr || null,
-      cidade: cidade || null,
-      municipio: municipio || null,
-      situacaoImovel: situacaoImovel || null,
-      tipo: tipo || null,
-      averbacao: averbacao || null,
-      latitude: latitude ? parseFloat(latitude) : null,
-      longitude: longitude ? parseFloat(longitude) : null,
-      possuiMemorialDescritivo: possuiMemorialDescritivo || null,
-      observacoes: observacoes || null,
-      orgaoAmbiental: orgaoAmbiental || null,
-      tipoDemanda: modalContext === 'ambiental' ? tipoServicoLicenca || null : null,
-      tipoLicenca: modalContext === 'licenciamento' ? tipoServicoLicenca || null : null,
-      numeroProcesso: numeroProcesso || null,
-      protocolo: numeroProcesso || null
-    };
-
-    // Zod Validation
-    const schema = z.object({
-      nome: z.string().min(1, 'Nome do projeto é obrigatório'),
-      clienteId: z.string().min(1, 'Selecione um cliente'),
-      latitude: z.number().nullable().optional(),
-      longitude: z.number().nullable().optional(),
-      areaHa: z.number().nullable().optional()
-    });
-
-    const validation = schema.safeParse(payload);
-    if (!validation.success) {
-      alert(validation.error.issues[0].message);
+    const validation = validateProjectForm(projectForm);
+    setProjectFormErrors(validation.errors);
+    if (!validation.valid) {
+      const firstField = Object.keys(validation.errors)[0] as keyof ProjectFormState | undefined;
+      const firstTab = firstField ? projectFieldTab[firstField] || 'projeto' : 'projeto';
+      activateProjectTab(firstTab);
+      window.setTimeout(() => document.getElementById(firstField ? `project-${firstField}` : 'project-nome')?.focus(), 0);
       return;
     }
 
-    submitProjectMutation.mutate(payload);
+    submitProjectMutation.mutate(validation.payload);
   };
 
   const handleAbrirPasta = async (id: string) => {
@@ -608,154 +756,203 @@ export function ListagemProjetos() {
   const handleFileDelete = (filePath: string) => {
     setConfirmData({
       isOpen: true,
-      title: 'Excluir Arquivo',
-      description: 'Tem certeza que deseja excluir permanentemente este arquivo do disco local?',
-      onConfirm: () => {
-        deleteFileMutation.mutate(filePath);
-        setConfirmData(prev => ({ ...prev, isOpen: false }));
-      }
+      title: `Excluir arquivo “${filePath.split(/[\\/]/).pop() || 'arquivo'}”?`,
+      description: 'O arquivo será removido permanentemente do disco local e deixará de aparecer nos documentos do projeto. Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir arquivo',
+      onConfirm: () => deleteFileMutation.mutate(filePath)
     });
   };
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
-        <div>
-          <span className={cn(geoKickerClass, 'mb-4')}>
-            Operações
-          </span>
-          <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Projetos
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
+      <header className="mb-8 min-w-0 max-w-full">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <span className={cn(geoKickerClass, 'mb-2')}>Operações</span>
+            <h1 className="text-4xl font-semibold tracking-tighter text-zinc-950 dark:text-white sm:text-5xl">Projetos</h1>
+          </div>
+          <button
+            type="button"
+            onClick={() => openCreateModal()}
+            className={cn(primaryActionButtonClass, 'min-h-11 shrink-0 gap-2.5 px-5 py-2.5 text-sm font-bold')}
+          >
+            <span>Novo Projeto</span>
+            <span aria-hidden="true" className={cn(primaryActionIconClass, 'h-5 w-5 group-hover:translate-x-0.5')}>
+              <Plus weight="bold" className="h-3.5 w-3.5" />
+            </span>
+          </button>
+        </div>
+        <div className="mt-3 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <p className="min-w-0 max-w-2xl break-words text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
             Monitoramento de processos ambientais, georreferenciamento e topografia.
           </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className={cn(geoTabListClass, 'flex rounded-full')}>
-            <button 
+          <div aria-label="Selecionar visualização" className={cn(geoTabListClass, 'grid w-full min-w-0 max-w-full grid-cols-3 overflow-hidden rounded-lg sm:w-auto')}>
+            <button
+              type="button"
+              aria-pressed={viewMode === 'grid'}
               onClick={() => setViewMode('grid')}
-              className={geoTabButtonClass(viewMode === 'grid', 'system', 'min-h-10 rounded-full px-5 py-2 text-sm')}
+              className={geoTabButtonClass(viewMode === 'grid', 'system', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
             >
-              <SquaresFour weight={viewMode === 'grid' ? 'fill' : 'regular'} className="w-4.5 h-4.5" />
-              <span>Cards</span>
+              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'grid', 'system', 'h-6 w-6 rounded-md')}><SquaresFour weight={viewMode === 'grid' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
+              <span>Projetos</span>
             </button>
-            <button 
+            <button
+              type="button"
+              aria-pressed={viewMode === 'map'}
               onClick={() => setViewMode('map')}
-              className={geoTabButtonClass(viewMode === 'map', 'field', 'min-h-10 rounded-full px-5 py-2 text-sm')}
+              className={geoTabButtonClass(viewMode === 'map', 'field', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
             >
-              <MapTrifold weight={viewMode === 'map' ? 'fill' : 'regular'} className="w-4.5 h-4.5" />
+              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'map', 'field', 'h-6 w-6 rounded-md')}><MapTrifold weight={viewMode === 'map' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
               <span>Mapa</span>
             </button>
-            <button 
+            <button
+              type="button"
+              aria-pressed={viewMode === 'operacional'}
               onClick={() => setViewMode('operacional')}
-              className={geoTabButtonClass(viewMode === 'operacional', 'finance', 'min-h-10 rounded-full px-5 py-2 text-sm')}
+              className={geoTabButtonClass(viewMode === 'operacional', 'finance', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
             >
-              <ChartBar weight={viewMode === 'operacional' ? 'fill' : 'regular'} className="w-4.5 h-4.5" />
+              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'operacional', 'finance', 'h-6 w-6 rounded-md')}><ChartBar weight={viewMode === 'operacional' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
               <span>Estatísticas</span>
             </button>
           </div>
-          <button 
-            onClick={() => openCreateModal()}
-            className={cn(primaryActionButtonClass, 'gap-2.5 px-6 py-3 text-sm font-bold shrink-0')}
+        </div>
+      </header>
+
+      {loading ? (
+        <ProjectsPageSkeleton />
+      ) : pageError ? (
+        <section role="alert" className="geo-card flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-red-400/10 text-red-600 ring-1 ring-red-400/20 dark:text-red-300">
+            <Warning aria-hidden="true" weight="duotone" className="h-7 w-7" />
+          </span>
+          <h2 className="mt-5 text-xl font-semibold text-zinc-950 dark:text-white">Não foi possível carregar os projetos</h2>
+          <p className="mt-2 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+            Verifique se o serviço local está em execução e tente novamente.
+            {projectsErrorDetails instanceof Error && <span className="sr-only"> {projectsErrorDetails.message}</span>}
+          </p>
+          <button
+            type="button"
+            onClick={() => void Promise.all([refetchProjects(), refetchClients()])}
+            className={cn(secondarySmallActionButtonClass, 'mt-6 min-h-11 px-5')}
           >
-            <span>Novo Projeto</span>
-            <div className={cn(primaryActionIconClass, 'h-5 w-5 group-hover:translate-x-0.5')}>
-              <Plus weight="bold" className="w-3.5 h-3.5" />
-            </div>
+            Tentar novamente
           </button>
-        </div>
-      </div>
+        </section>
+      ) : totalProjetos === 0 ? (
+        <section className="geo-card flex min-h-[380px] min-w-0 max-w-full flex-col items-center justify-center px-6 py-14 text-center">
+          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-primary-400/10 text-brand-primary-700 ring-1 ring-brand-primary-300/25 dark:text-brand-primary-200">
+            <FolderOpen aria-hidden="true" weight="duotone" className="h-8 w-8" />
+          </span>
+          <h2 className="mt-6 max-w-full break-words text-xl font-semibold text-zinc-950 dark:text-white sm:text-2xl">Você ainda não possui projetos cadastrados</h2>
+          <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
+            Crie seu primeiro projeto para acompanhar produtividade, custos, receitas e prazos.
+          </p>
+          <button
+            type="button"
+            onClick={() => openCreateModal()}
+            className={cn(primarySmallActionButtonClass, 'mt-7 min-h-11 px-5')}
+          >
+            <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
+            Criar primeiro projeto
+          </button>
+        </section>
+      ) : (
+        <>
+          {viewMode !== 'operacional' && (
+            <>
+              <section aria-label="Resumo dos projetos" className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <ProjectMetricCard label="Total de projetos" value={numberFormatter.format(totalProjetos)} tone="brand" icon={<Folder aria-hidden="true" className="h-5 w-5" />} />
+                <ProjectMetricCard label="Em andamento" value={numberFormatter.format(projetosEmAndamento)} tone="warning" icon={<Clock aria-hidden="true" className="h-5 w-5" />} />
+                <ProjectMetricCard label="Atrasados" value={numberFormatter.format(projetosAtrasados)} tone={projetosAtrasados > 0 ? 'danger' : 'neutral'} icon={<Warning aria-hidden="true" className="h-5 w-5" />} />
+                <ProjectMetricCard label="Concluídos" value={numberFormatter.format(projetosConcluidos)} tone="positive" icon={<CheckCircle aria-hidden="true" className="h-5 w-5" />} />
+              </section>
 
-      {/* Top Metrics Row */}
-      {viewMode !== 'operacional' && (
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard label="Total de Projetos" value={totalProjetos} tone="geral" icon={<img src={folderIcon} alt="" width={28} height={28} className="h-7 w-7 object-contain" />} />
-          <MetricCard label="Em Andamento" value={projetosEmAndamento} tone="topografia" delay={0.05} icon={<img src={clockIcon} alt="" width={28} height={28} className="h-7 w-7 object-contain" />} />
-          <MetricCard label="Atrasados" value={projetosAtrasados} tone="danger" delay={0.1} icon={<img src={warningIcon} alt="" width={28} height={28} className="h-7 w-7 object-contain" />} />
-          <MetricCard label="Concluídos" value={projetosConcluidos} tone="ambiental" surfaceTone="success" delay={0.15} icon={<img src={checkIcon} alt="" width={28} height={28} className="h-7 w-7 object-contain" />} />
-        </div>
-      )}
+              <section aria-labelledby="project-filters-title" className={cn('mb-3', filterBarClass)}>
+                <h2 id="project-filters-title" className="sr-only">Filtros dos projetos</h2>
+                <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(280px,1fr)_auto_auto_auto] xl:items-center">
+                  <div className="relative min-w-0">
+                    <label htmlFor="project-search" className="sr-only">Buscar projetos</label>
+                    <MagnifyingGlass aria-hidden="true" className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                    <input
+                      id="project-search"
+                      name="busca-projetos"
+                      type="search"
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-label="Buscar projetos"
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Buscar por projeto, cliente, cidade, matrícula ou CAR…"
+                      className={filterSearchInputClass}
+                    />
+                  </div>
 
-      <div className={cn('mb-6', filterBarClass)}>
-        <div className="flex flex-col items-center gap-3 xl:flex-row">
-          {/* Search bar */}
-          <div className="relative w-full xl:max-w-md shrink-0">
-            <MagnifyingGlass className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por projeto, cliente, cidade, matrícula, CAR..."
-              className={filterSearchInputClass}
-            />
-          </div>
+                  <div className="grid min-w-0 grid-cols-2 gap-3">
+                    <CustomSelect
+                      id="project-status-filter"
+                      name="status-projeto"
+                      ariaLabel="Filtrar por status"
+                      className="min-w-0"
+                      value={statusFilter}
+                      onChange={setStatusFilter}
+                      placeholder="Todos os status"
+                      options={[
+                        { label: 'Todos os status', value: 'Todos' },
+                        ...projectStatuses.map((projectStatus) => ({ label: projectStatus, value: projectStatus }))
+                      ]}
+                    />
+                    <CustomSelect
+                      id="project-type-filter"
+                      name="tipo-projeto"
+                      ariaLabel="Filtrar por tipo"
+                      className="min-w-0"
+                      value={tipoFilter}
+                      onChange={setTipoFilter}
+                      placeholder="Todos os tipos"
+                      options={[
+                        { label: 'Todos os tipos', value: 'Todos' },
+                        ...projectTypes.map((projectType) => ({ label: projectType, value: projectType }))
+                      ]}
+                    />
+                  </div>
 
-          {/* Filters */}
-          <div className="flex w-full flex-wrap items-center gap-3 xl:ml-auto xl:w-auto xl:flex-nowrap">
-            <CustomSelect
-              value={statusFilter}
-              onChange={setStatusFilter}
-              placeholder="Status (Todos)"
-              options={[
-                { label: 'Status (Todos)', value: 'Todos' },
-                ...projectStatuses.map(s => ({ label: s, value: s }))
-              ]}
-            />
-            
-            <CustomSelect
-              value={tipoFilter}
-              onChange={setTipoFilter}
-              placeholder="Tipos (Todos)"
-              options={[
-                { label: 'Tipos (Todos)', value: 'Todos' },
-                ...projectTypes.map(t => ({ label: t, value: t }))
-              ]}
-            />
+                  <div aria-label="Período do projeto" className="grid grid-cols-2 gap-3">
+                    <label className={cn(filterControlClass, 'flex min-w-0 items-center gap-2 px-3 focus-within:border-brand-primary-400/70 focus-within:ring-4 focus-within:ring-brand-primary-400/15')}>
+                      <span className="shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400">Inicial</span>
+                      <DatePickerField
+                        name="data-inicial-projeto"
+                        autoComplete="off"
+                        value={dataInicioFilter}
+                        onChange={(event) => setDataInicioFilter(event.target.value)}
+                        className="min-w-0 flex-1 cursor-pointer bg-transparent text-xs font-semibold text-zinc-700 focus-visible:outline-none dark:text-zinc-200 [&::-webkit-calendar-picker-indicator]:dark:invert"
+                        aria-label="Data inicial do projeto"
+                      />
+                    </label>
+                    <label className={cn(filterControlClass, 'flex min-w-0 items-center gap-2 px-3 focus-within:border-brand-primary-400/70 focus-within:ring-4 focus-within:ring-brand-primary-400/15')}>
+                      <span className="shrink-0 text-[11px] text-zinc-500 dark:text-zinc-400">Final</span>
+                      <DatePickerField
+                        name="data-final-projeto"
+                        autoComplete="off"
+                        value={dataFimFilter}
+                        onChange={(event) => setDataFimFilter(event.target.value)}
+                        className="min-w-0 flex-1 cursor-pointer bg-transparent text-xs font-semibold text-zinc-700 focus-visible:outline-none dark:text-zinc-200 [&::-webkit-calendar-picker-indicator]:dark:invert"
+                        aria-label="Data final do projeto"
+                      />
+                    </label>
+                  </div>
 
-            <div className={cn(filterControlClass, 'flex flex-1 items-center gap-3 pl-4 pr-5 sm:flex-initial min-w-[290px]')}>
-              <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-200 shrink-0">Período:</span>
-              <input
-                type="date"
-                value={dataInicioFilter}
-                onChange={(event) => setDataInicioFilter(event.target.value)}
-                className="w-full !bg-transparent text-xs font-semibold text-zinc-700 dark:text-zinc-200 outline-none [&::-webkit-calendar-picker-indicator]:dark:invert cursor-pointer pr-1"
-                aria-label="Data inicial"
-              />
-              <span className="text-zinc-300 dark:text-zinc-600">-</span>
-              <input
-                type="date"
-                value={dataFimFilter}
-                onChange={(event) => setDataFimFilter(event.target.value)}
-                className="w-full !bg-transparent text-xs font-semibold text-zinc-700 dark:text-zinc-200 outline-none [&::-webkit-calendar-picker-indicator]:dark:invert cursor-pointer pr-1"
-                aria-label="Data final"
-              />
-            </div>
+                  {hasProjectFilters && (
+                    <button type="button" onClick={clearProjectFilters} className={cn(secondarySmallActionButtonClass, 'min-h-10 w-full px-4 text-xs xl:w-auto')}>
+                      Limpar filtros
+                    </button>
+                  )}
+                </div>
+              </section>
+              <p aria-live="polite" className="mb-6 px-1 text-xs font-semibold text-zinc-500 tabular-nums dark:text-zinc-400">{filteredProjectsLabel}</p>
+            </>
+          )}
 
-            {hasProjectFilters && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('Todos');
-                  setTipoFilter('Todos');
-                  setDataInicioFilter('');
-                  setDataFimFilter('');
-                }}
-                className="geo-focus-ring flex h-10 shrink-0 items-center gap-2 rounded-lg border border-brand-red-200 bg-brand-red-50 px-4 text-xs font-semibold text-brand-red-700 shadow-sm transition-[background-color,color,border-color,transform] hover:bg-brand-red-100 hover:text-brand-red-800 active:scale-95 dark:border-brand-red-400/20 dark:bg-brand-red-400/10 dark:text-brand-red-100"
-              >
-                <Trash weight="bold" className="w-3.5 h-3.5" />
-                Limpar
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-      <p className="px-6 mb-6 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-        {filteredProjetos.length} de {projetos.length} projeto(s) exibidos
-      </p>
-
-      <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait">
         {viewMode === 'operacional' && (
           <motion.div
             key="operacional"
@@ -765,131 +962,113 @@ export function ListagemProjetos() {
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
-          {/* Top Bento Cards row */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <div className={cn(projectMetricPanelClass, geoOrangeSurfaceWithAccentClass)}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={cn('text-xs font-semibold uppercase tracking-wider', geoOrangeLabelClass)}>Total Projetos</span>
-                <div className={cn(geoOrangeIconClass, 'flex h-10 w-10 items-center justify-center rounded-xl')}>
-                  <Folder className="w-5 h-5" />
-                </div>
-              </div>
-              <div>
-                <span className={cn('text-3xl font-bold tracking-tight tabular-nums', geoOrangeValueClass)}>
-                  {totalProjetos}
-                </span>
-                <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-orange-100/70">CADASTRADOS NO SISTEMA</p>
-              </div>
-            </div>
+          {operationalLoading ? (
+            <ProjectsPageSkeleton />
+          ) : operationalError ? (
+            <section role="alert" className="geo-card flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
+              <Warning aria-hidden="true" weight="duotone" className="h-8 w-8 text-red-500" />
+              <h2 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">Não foi possível carregar os indicadores financeiros</h2>
+              <p className="mt-2 max-w-lg text-sm text-zinc-500 dark:text-zinc-400">Os projetos continuam disponíveis. Tente carregar novamente os dados de custos e receitas.</p>
+              <button type="button" onClick={() => void Promise.all([refetchBudgets(), refetchExpenses()])} className={cn(secondarySmallActionButtonClass, 'mt-5 min-h-11 px-5')}>Tentar novamente</button>
+            </section>
+          ) : (
+            <>
+          <section aria-label="Indicadores operacionais" className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ProjectMetricCard label="Total de projetos" value={numberFormatter.format(totalProjetos)} helper="Cadastrados no sistema" tone="brand" icon={<Folder aria-hidden="true" className="h-5 w-5" />} />
+            <ProjectMetricCard
+              label="Tempo médio de entrega"
+              value={avgCompletionTime === null ? '—' : `${numberFormatter.format(avgCompletionTime)} ${avgCompletionTime === 1 ? 'dia' : 'dias'}`}
+              helper={avgCompletionTime === null ? 'Sem dados suficientes' : 'Média dos projetos concluídos'}
+              tone="neutral"
+              icon={<Clock aria-hidden="true" className="h-5 w-5" />}
+            />
+            <ProjectMetricCard
+              label="Produtividade"
+              value={productivityRate === null ? '—' : `${numberFormatter.format(productivityRate)}%`}
+              helper={productivityRate === null ? 'Sem dados suficientes' : 'Taxa geral de conclusão'}
+              tone="positive"
+              icon={<CheckCircle aria-hidden="true" className="h-5 w-5" />}
+            />
+            <ProjectMetricCard
+              label="Valor médio dos projetos aprovados"
+              value={avgTicket === null ? '—' : formatBRL(avgTicket)}
+              helper={avgTicket === null ? 'Sem dados suficientes' : 'Com base em orçamentos aprovados'}
+              tone="neutral"
+              icon={<TrendUp aria-hidden="true" className="h-5 w-5" />}
+            />
+          </section>
 
-            <div className={cn(projectMetricPanelClass, geoOrangeSurfaceWithAccentClass)}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={cn('text-xs font-semibold uppercase tracking-wider', geoOrangeLabelClass)}>Tempo de Entrega</span>
-                <div className={cn(geoOrangeIconClass, 'flex h-10 w-10 items-center justify-center rounded-xl')}>
-                  <Clock className="w-5 h-5" />
-                </div>
-              </div>
-              <div>
-                <span className={cn('text-3xl font-bold tracking-tight tabular-nums', geoOrangeValueClass)}>
-                  {avgCompletionTime} dias
-                </span>
-                <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-orange-100/70">MÉDIA DE CONCLUSÃO</p>
-              </div>
-            </div>
-
-            <div className={cn(projectMetricPanelClass, geoGreenSurfaceWithAccentClass)}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Produtividade</span>
-                <div className={cn(geoGreenIconClass, 'flex h-10 w-10 items-center justify-center rounded-xl')}>
-                  <CheckCircle className="w-5 h-5" />
-                </div>
-              </div>
-              <div>
-                <span className={cn('text-3xl font-bold tracking-tight tabular-nums', geoGreenValueClass)}>
-                  {productivityRate}%
-                </span>
-                <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100/70">TAXA DE CONCLUSÃO GERAL</p>
-              </div>
-            </div>
-
-            <div className={cn(projectMetricPanelClass, geoGreenSurfaceWithAccentClass)}>
-              <div className="flex items-center justify-between mb-4">
-                <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Ticket Médio</span>
-                <div className={cn(geoGreenIconClass, 'flex h-10 w-10 items-center justify-center rounded-lg')}>
-                  <TrendUp className="w-5 h-5" />
-                </div>
-              </div>
-              <div>
-                <span className={cn('text-3xl font-bold tracking-tight tabular-nums', geoGreenValueClass)}>
-                  {formatBRL(avgTicket)}
-                </span>
-                <p className="mt-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-100/70">POR ORÇAMENTO APROVADO</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Productivity insights story card */}
-          <div className={cn(geoPurpleSurfaceClass, 'geo-card relative overflow-hidden p-6 text-white')}>
-            <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-zinc-100">
-              <PresentationChart className="h-5 w-5 text-brand-primary-200" />
-              <span>Visão Geral Operacional</span>
-            </h3>
-            <div className="text-sm text-zinc-300 space-y-2 leading-relaxed">
+          <section aria-labelledby="operational-overview-title" aria-live="polite" className="geo-card border-l-4 border-l-brand-primary-500 p-5 sm:p-6">
+            <h2 id="operational-overview-title" className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
+              <PresentationChart aria-hidden="true" className="h-5 w-5 text-brand-primary-600 dark:text-brand-primary-200" />
+              Visão Geral Operacional
+            </h2>
+            <div className="mt-3 space-y-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
               <p>
-                A produtividade das equipes está em <strong className="text-brand-primary-200 tabular-nums">{productivityRate}%</strong> neste período — <strong className="text-zinc-100 tabular-nums">{projetosConcluidos}</strong> de <strong className="text-zinc-100 tabular-nums">{totalProjetos}</strong> projetos foram concluídos, com tempo médio de <strong className="text-zinc-100 tabular-nums">{avgCompletionTime} dias</strong>.
+                A produtividade geral é de <strong className="text-zinc-950 tabular-nums dark:text-white">{numberFormatter.format(productivityRate ?? 0)}%</strong>.{' '}
+                <strong className="text-zinc-950 tabular-nums dark:text-white">{formatProjectCount(projetosConcluidos)}</strong> {projetosConcluidos === 1 ? 'foi concluído' : 'foram concluídos'} e{' '}
+                <strong className="text-zinc-950 tabular-nums dark:text-white">{formatProjectCount(projetosEmAndamento)}</strong> {projetosEmAndamento === 1 ? 'está em andamento' : 'estão em andamento'}.
               </p>
               <p>
-                Atualmente, <strong className="text-zinc-100 tabular-nums">{projetosEmAndamento}</strong> projetos estão em andamento e <strong className="text-zinc-100 tabular-nums">{projetosOutros}</strong> aguardam início ou estão sob revisão.
+                {avgCompletionTime === null
+                  ? 'Ainda não há dados suficientes para calcular o tempo médio de entrega.'
+                  : <>O tempo médio de entrega é de <strong className="text-zinc-950 tabular-nums dark:text-white">{numberFormatter.format(avgCompletionTime)} {avgCompletionTime === 1 ? 'dia' : 'dias'}</strong>.</>}
+                {projetosOutros > 0 && <> Outros <strong className="text-zinc-950 tabular-nums dark:text-white">{formatProjectCount(projetosOutros)}</strong> aguardam início ou estão sob revisão.</>}
               </p>
               {projectTypeStats.length > 0 && (
-                <div className="flex flex-wrap gap-2 pt-2">
+                <div className="flex flex-wrap gap-2 pt-1">
                   {projectTypeStats.map((item) => (
-                    <span
-                      key={item.type}
-                      className="geo-badge-base geo-badge-on-dark px-2.5 py-1 text-xs uppercase tracking-wider"
-                    >
-                      {item.type}: <span className="tabular-nums">{item.count}</span>
+                    <span key={item.type} className="geo-badge-base geo-badge-neutral px-2.5 py-1 text-xs">
+                      {item.type}: <span className="tabular-nums">{numberFormatter.format(item.count)}</span>
                     </span>
                   ))}
                 </div>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
             
             {/* Custo vs Receita por Projeto */}
-            <div className="geo-card col-span-1 flex flex-col justify-between p-6 md:col-span-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <section aria-labelledby="cost-revenue-title" className="geo-card col-span-1 flex min-w-0 flex-col p-5 sm:p-6 md:col-span-8">
+              <div className="mb-5 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-                  <h3 className="text-base font-bold text-zinc-900 dark:text-zinc-100">Análise de Custos vs Receita Estimada (Top 5)</h3>
-                  <p className="text-xs text-zinc-400 dark:text-zinc-505 font-medium mt-0.5">Comparação direta de faturamento e despesas associadas por projeto.</p>
+                  <h2 id="cost-revenue-title" className="text-base font-semibold text-zinc-950 dark:text-white">Custos versus receita estimada</h2>
+                  <p className="mt-1 text-xs font-medium leading-5 text-zinc-500 dark:text-zinc-400">Comparação dos cinco projetos com maior receita estimada.</p>
                 </div>
-                
-                <select 
-                  value={categoriaFilter} 
-                  onChange={e => setCategoriaFilter(e.target.value)} 
+                <FormSelect
+                  name="tipo-grafico-projetos"
+                  aria-label="Filtrar gráfico por tipo de projeto"
+                  autoComplete="off"
+                  value={categoriaFilter}
+                  onChange={(event) => setCategoriaFilter(event.target.value)}
                   className={cn(projectSelectClass, 'h-10 w-auto px-3 py-2 text-xs')}
                 >
-                  <option value="todos">Todos os Tipos</option>
+                  <option value="todos">Todos os tipos</option>
                   {projectTypes.map((type) => (
                     <option key={type} value={type}>{type}</option>
                   ))}
-                </select>
+                </FormSelect>
               </div>
-              
-              <div className="flex-1 w-full h-[280px]">
-                {topProjectsData.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-zinc-400 text-sm">
-                    Nenhum projeto faturado ou com custos neste filtro.
-                  </div>
-                ) : (
+
+              {topProjectsData.length === 0 ? (
+                <div className="geo-empty-state flex min-h-[180px] flex-col items-center justify-center px-5 py-7 text-center">
+                  <ChartBar aria-hidden="true" weight="duotone" className="h-8 w-8 text-zinc-400" />
+                  <h3 className="mt-3 text-sm font-semibold text-zinc-800 dark:text-zinc-200">Sem dados financeiros para exibir</h3>
+                  <p className="mt-1 max-w-sm text-xs leading-5 text-zinc-500 dark:text-zinc-400">Registre custos ou uma receita estimada para gerar esta comparação.</p>
+                  {categoriaFilter !== 'todos' ? (
+                    <button type="button" onClick={() => setCategoriaFilter('todos')} className={cn(secondarySmallActionButtonClass, 'mt-4 min-h-10 px-4 text-xs')}>Ver todos os tipos</button>
+                  ) : (
+                    <Link to="/financeiro" className={cn(secondarySmallActionButtonClass, 'mt-4 min-h-10 px-4 text-xs')}>Abrir Financeiro</Link>
+                  )}
+                </div>
+              ) : (
+                <div className="h-[280px] w-full min-w-0">
                   <ResponsiveContainer {...responsiveChartProps}>
                     <BarChart data={topProjectsData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
                       <XAxis dataKey="name" tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${v}`} />
+                      <YAxis tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(value) => currencyFormatter.format(Number(value))} />
                       <RechartsTooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
                       <Legend wrapperStyle={chartLegendStyle} />
                       <Bar dataKey="Receita" fill={chartColors.positive} radius={[4, 4, 0, 0]} />
@@ -897,21 +1076,18 @@ export function ListagemProjetos() {
                       <Bar dataKey="Lucro" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
+            </section>
 
             {/* Status dos Projetos Pie */}
-            <div className="geo-card col-span-1 flex flex-col justify-between p-6 md:col-span-4">
+            <section aria-labelledby="project-status-title" className="geo-card col-span-1 flex min-w-0 flex-col justify-between p-5 sm:p-6 md:col-span-4">
               <div>
-                <h3 className="text-base font-bold text-zinc-900 dark:text-white">Distribuição por Status</h3>
-                <p className="text-xs text-zinc-400 dark:text-zinc-505 font-medium mt-0.5">Situação dos projetos ativos e entregues.</p>
+                <h2 id="project-status-title" className="text-base font-semibold text-zinc-950 dark:text-white">Distribuição por status</h2>
+                <p className="mt-1 text-xs font-medium leading-5 text-zinc-500 dark:text-zinc-400">Situação dos projetos ativos e entregues.</p>
               </div>
 
-              <div className="w-full h-[200px] relative flex items-center justify-center">
-                {statusPieData.length === 0 ? (
-                  <p className="text-zinc-400 text-sm">Sem projetos.</p>
-                ) : (
+              <div className="relative flex h-[220px] w-full items-center justify-center">
                   <ResponsiveContainer {...responsiveChartProps}>
                     <PieChart>
                       <Pie
@@ -927,24 +1103,25 @@ export function ListagemProjetos() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <RechartsTooltip content={<DynamicTooltip formatter={(v) => `${v} projetos`} />} />
+                      <RechartsTooltip content={<DynamicTooltip formatter={(value) => formatProjectCount(Number(value))} />} />
                     </PieChart>
                   </ResponsiveContainer>
-                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 border-t border-brand-border pt-4 text-center text-xs font-semibold text-zinc-600">
                 {statusPieData.map(item => (
                   <div key={item.name} className="flex flex-col items-center">
-                    <span className="w-2 h-2 rounded-full mb-1" style={{ backgroundColor: item.color }} />
+                    <span aria-hidden="true" className="mb-1 h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
                     <span className="text-[10px] text-zinc-500 dark:text-zinc-400 uppercase tracking-wider font-semibold">{item.name}</span>
                     <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mt-0.5 tabular-nums">{item.value}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
           </div>
+            </>
+          )}
           </motion.div>
         )}
         
@@ -957,37 +1134,19 @@ export function ListagemProjetos() {
             transition={{ duration: 0.25 }}
             className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
           >
-        {loading ? (
-          <div className="col-span-full py-24 flex justify-center">
-            <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="h-8 w-8 animate-spin rounded-full border-2 border-brand-border border-t-brand-primary-600" />
-          </div>
-        ) : projetos.length === 0 ? (
-          <div className="geo-empty-state col-span-full flex flex-col items-center justify-center p-20 text-center">
-            <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-950 rounded-full flex items-center justify-center mb-6 ring-8 ring-zinc-50/50 dark:ring-zinc-950/50">
-              <FolderOpen weight="duotone" className="w-10 h-10 text-zinc-400" />
-            </div>
-            <h3 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">Nenhum projeto encontrado</h3>
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm max-w-md mx-auto mb-8">Comece criando o seu primeiro projeto para gerenciar operações, mapas e estatísticas em um só lugar.</p>
-            <button
-              onClick={() => openCreateModal()}
-              className={primarySmallActionButtonClass}
-            >
-              <Plus weight="bold" className="w-4 h-4" />
-              Criar Primeiro Projeto
-            </button>
-          </div>
-        ) : filteredProjetos.length === 0 ? (
+        {filteredProjetos.length === 0 ? (
           <div className="geo-empty-state col-span-full flex flex-col items-center justify-center p-16 text-center">
             <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-950 rounded-full flex items-center justify-center mb-6 ring-8 ring-zinc-50/50 dark:ring-zinc-950/50">
-              <img src={filterIcon} alt="Vazio" className="w-10 h-10 object-contain opacity-40 grayscale" />
+              <img src={filterIcon} alt="" aria-hidden="true" className="w-10 h-10 object-contain opacity-40 grayscale" />
             </div>
             <h3 className="text-xl font-semibold text-zinc-900 dark:text-white mb-2">Nenhum resultado</h3>
             <p className="text-zinc-500 dark:text-zinc-400 text-sm max-w-md mx-auto mb-8">Sua busca não encontrou nenhum projeto correspondente. Tente ajustar os filtros ou os termos pesquisados.</p>
-            <button 
-              onClick={() => { setSearchTerm(''); setStatusFilter('Todos'); setTipoFilter('Todos'); setCategoriaFilter('todos'); }}
+            <button
+              type="button"
+              onClick={clearProjectFilters}
               className={secondarySmallActionButtonClass}
             >
-              Limpar Filtros
+              Limpar filtros
             </button>
           </div>
         ) : (
@@ -1009,23 +1168,28 @@ export function ListagemProjetos() {
                     <button
                       onClick={() => handleGenerateProjectPdf(projeto)}
                       className={projectIconButtonClass}
-                      title="Baixar Relatório PDF"
+                      aria-label={`Baixar relatório PDF de ${projeto.nome}`}
+                      title="Baixar relatório PDF"
                     >
-                      <img src={pdfIcon} alt="PDF" className="w-6 h-6 object-contain opacity-80" />
+                      <img src={pdfIcon} alt="" aria-hidden="true" className="w-6 h-6 object-contain opacity-80" />
                     </button>
                     <button 
                       onClick={() => openEditModal(projeto)}
+                      disabled={editingProjectId === projeto.id}
+                      aria-busy={editingProjectId === projeto.id}
                       className={projectIconButtonClass}
-                      title="Editar Projeto"
+                      aria-label={`Editar ${projeto.nome}`}
+                      title="Editar projeto"
                     >
-                      <img src={editIcon} alt="Editar" className="w-6 h-6 object-contain opacity-80" />
+                      <img src={editIcon} alt="" aria-hidden="true" className="w-6 h-6 object-contain opacity-80" />
                     </button>
                     <button 
                       onClick={() => handleDelete(projeto.id, projeto.nome)}
                       className={projectIconButtonClass}
-                      title="Excluir Projeto"
+                      aria-label={`Excluir ${projeto.nome}`}
+                      title="Excluir projeto"
                     >
-                      <img src={trashIcon} alt="Excluir" className="w-6 h-6 object-contain opacity-80" />
+                      <img src={trashIcon} alt="" aria-hidden="true" className="w-6 h-6 object-contain opacity-80" />
                     </button>
                   </div>
                 </div>
@@ -1045,12 +1209,12 @@ export function ListagemProjetos() {
                 <div className="flex flex-wrap gap-2 mt-4">
                   {projeto.areaHa && (
                     <span className="geo-badge-base geo-badge-neutral px-2.5 py-1 text-xs">
-                      <Compass className="w-3.5 h-3.5 text-zinc-400" /> {projeto.areaHa} ha
+                      <Compass aria-hidden="true" className="w-3.5 h-3.5 text-zinc-400" /> {numberFormatter.format(projeto.areaHa)} ha
                     </span>
                   )}
                   {projeto.car && (
                     <span className="geo-badge-base geo-badge-neutral px-2.5 py-1 text-xs" title={`CAR: ${projeto.car}`}>
-                      CAR: {projeto.car.substring(0, 10)}...
+                      CAR: {projeto.car.substring(0, 10)}…
                     </span>
                   )}
                   {projeto.matricula && (
@@ -1060,7 +1224,7 @@ export function ListagemProjetos() {
                   )}
                   {projeto.municipio && (
                     <span className="geo-badge-base geo-badge-neutral px-2.5 py-1 text-xs">
-                      <MapPin className="w-3.5 h-3.5 text-zinc-400" /> {projeto.municipio}
+                       <MapPin aria-hidden="true" className="w-3.5 h-3.5 text-zinc-400" /> {projeto.municipio}
                     </span>
                   )}
                 </div>
@@ -1072,10 +1236,10 @@ export function ListagemProjetos() {
                   className={cn(primarySmallActionButtonClass, 'group w-full justify-between px-4 py-3')}
                 >
                   <span className="text-sm font-semibold text-white flex items-center gap-3">
-                    <img src={folderIcon} alt="Folder" className="w-5 h-5 object-contain invert opacity-90" /> Acessar Projeto
+                    <img src={folderIcon} alt="" aria-hidden="true" className="w-5 h-5 object-contain invert opacity-90" /> Acessar projeto
                   </span>
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/15 transition-transform group-hover:translate-x-1">
-                    <ArrowUpRight weight="bold" className="w-3.5 h-3.5 text-white" />
+                    <ArrowUpRight aria-hidden="true" weight="bold" className="w-3.5 h-3.5 text-white" />
                   </div>
                 </Link>
                 <button 
@@ -1083,10 +1247,10 @@ export function ListagemProjetos() {
                   className={cn(secondarySmallActionButtonClass, 'group w-full justify-between px-4 py-3')}
                 >
                   <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 flex items-center gap-3">
-                    <img src={windowsIcon} alt="Windows" className="w-5 h-5 object-contain opacity-70" /> Abrir no Windows
+                    <img src={windowsIcon} alt="" aria-hidden="true" className="w-5 h-5 object-contain opacity-70" /> Abrir no Windows
                   </span>
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm transition-transform group-hover:translate-x-1 group-hover:-translate-y-0.5 dark:bg-zinc-900">
-                    <ArrowUpRight weight="bold" className="w-3.5 h-3.5 text-zinc-900 dark:text-zinc-100" />
+                    <ArrowUpRight aria-hidden="true" weight="bold" className="w-3.5 h-3.5 text-zinc-900 dark:text-zinc-100" />
                   </div>
                 </button>
               </div>
@@ -1105,242 +1269,157 @@ export function ListagemProjetos() {
             transition={{ duration: 0.25 }}
             className="w-full"
           >
-            <ProjetosMap projetos={filteredProjetos} />
+            {filteredProjetos.length === 0 ? (
+              <div className="geo-empty-state flex min-h-[300px] flex-col items-center justify-center p-10 text-center">
+                <MapTrifold aria-hidden="true" weight="duotone" className="h-9 w-9 text-zinc-400" />
+                <h2 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">Nenhum projeto para mostrar no mapa</h2>
+                <p className="mt-2 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">Ajuste os filtros para voltar a exibir projetos.</p>
+                <button type="button" onClick={clearProjectFilters} className={cn(secondarySmallActionButtonClass, 'mt-5 min-h-11 px-5')}>Limpar filtros</button>
+              </div>
+            ) : (
+              <ProjetosMap projetos={filteredProjetos} />
+            )}
           </motion.div>
         )}
-      </AnimatePresence>
+          </AnimatePresence>
+        </>
+      )}
 
-      {/* Morphing Modal Expansion */}
+      {/* Cadastro e edição de projetos */}
       <Modal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title={selectedProjeto ? 'Editar Projeto' : (modalContext === 'ambiental' || modalContext === 'licenciamento') ? 'Nova Demanda Ambiental' : 'Novo Projeto'}
-        maxWidth="max-w-5xl w-full min-h-[660px]"
+        isOpen={showModal && !showQuickClientModal}
+        onClose={closeProjectModal}
+        title={(
+          <span className="flex flex-wrap items-center gap-2">
+            <span>
+              {selectedProjeto
+                ? 'Editar projeto'
+                : modalContext === 'ambiental' || modalContext === 'licenciamento'
+                  ? 'Nova demanda ambiental'
+                  : 'Novo projeto'}
+            </span>
+            {projectFormDirty && (
+              <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">
+                Alterações não salvas
+              </span>
+            )}
+          </span>
+        )}
+        maxWidth="max-w-[960px]"
+        panelClassName="h-[min(760px,88dvh)]"
+        contentScrollable={false}
+        initialFocusId="project-nome"
       >
-        {/* Tabs Navigation */}
-        <div role="tablist" aria-label="Abas do projeto" className={cn(geoTabListClass, 'mb-6 flex shrink-0 gap-2 overflow-x-auto')}>
-          <button 
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'projeto'}
-            onClick={() => setActiveTab('projeto')}
-            className={geoTabButtonClass(activeTab === 'projeto', 'system', 'px-4 py-2')}
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="relative mb-4 shrink-0">
+            <div className="overflow-x-auto pb-1">
+              <div role="tablist" aria-label="Etapas do formulário de projeto" className={cn(geoTabListClass, 'flex w-max min-w-full gap-1.5 sm:min-w-0')}>
+                {([
+                  ['projeto', 'Dados essenciais'],
+                  ['propriedade', 'Imóvel e documentação'],
+                  ['geoloc', 'Localização e notas']
+                ] as Array<[ProjectModalTab, string]>).map(([tab, label], index) => {
+                  const active = activeTab === tab;
+                  return (
+                    <button
+                      key={tab}
+                      id={`project-tab-${tab}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      aria-controls={`project-panel-${tab}`}
+                      tabIndex={active ? 0 : -1}
+                      onClick={() => activateProjectTab(tab)}
+                      onKeyDown={(event) => handleProjectTabKeyDown(event, tab)}
+                      className={geoTabButtonClass(active, 'system', 'px-3.5 py-2')}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={cn(
+                          'flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ring-1',
+                          active
+                            ? 'bg-brand-primary-600 text-white ring-brand-primary-500/50'
+                            : 'bg-brand-surface-subtle text-zinc-500 ring-brand-border dark:text-zinc-300'
+                        )}
+                      >
+                        {index + 1}
+                      </span>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-brand-surface to-transparent sm:hidden" />
+          </div>
+
+          <form
+            id={`project-panel-${activeTab}`}
+            role="tabpanel"
+            aria-labelledby={`project-tab-${activeTab}`}
+            onSubmit={handleSubmit}
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
           >
-            <PresentationChart className="w-4 h-4" /> Dados do Projeto
-          </button>
-          <button 
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'propriedade'}
-            onClick={() => setActiveTab('propriedade')}
-            className={geoTabButtonClass(activeTab === 'propriedade', 'field', 'px-4 py-2')}
-          >
-            <Compass className="w-4 h-4" /> Propriedade
-          </button>
-          <button 
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'geoloc'}
-            onClick={() => setActiveTab('geoloc')}
-            className={geoTabButtonClass(activeTab === 'geoloc', 'success', 'px-4 py-2')}
-          >
-            <MapPin className="w-4 h-4" /> Geoloc & Notas
-          </button>
+            <div id="project-form-scroll-region" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-5 pr-1">
+              <ProjetoFormFields
+                form={projectForm}
+                setForm={setProjectForm}
+                errors={projectFormErrors}
+                activeTab={activeTab}
+                clientes={clientes}
+                onClearErrors={clearProjectFormErrors}
+                onCreateClient={() => setShowQuickClientModal(true)}
+              />
+            </div>
+
+            <FormFooter className="relative z-0 mt-0 flex-shrink-0 flex-wrap py-4 sm:flex-nowrap">
+              <p className="mr-auto w-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 sm:w-auto" role="status" aria-live="polite">
+                Etapa {projectTabOrder.indexOf(activeTab) + 1} de {projectTabOrder.length}
+                {activeTab === 'projeto' ? ' · campos obrigatórios marcados com *' : ' · preenchimento opcional'}
+              </p>
+              <button type="button" onClick={closeProjectModal} disabled={submitProjectMutation.isPending} className={secondarySmallActionButtonClass}>
+                Cancelar
+              </button>
+              {activeTab !== 'projeto' && (
+                <button
+                  type="button"
+                  onClick={() => activateProjectTab(projectTabOrder[projectTabOrder.indexOf(activeTab) - 1])}
+                  disabled={submitProjectMutation.isPending}
+                  className={secondarySmallActionButtonClass}
+                >
+                  Voltar
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={submitProjectMutation.isPending}
+                aria-busy={submitProjectMutation.isPending}
+                className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}
+              >
+                {submitProjectMutation.isPending
+                  ? 'Salvando…'
+                  : activeTab === 'geoloc'
+                    ? selectedProjeto
+                      ? 'Salvar alterações'
+                      : 'Criar projeto'
+                    : 'Continuar'}
+              </button>
+            </FormFooter>
+          </form>
+
+          {projectTabOrder
+            .filter((tab) => tab !== activeTab)
+            .map((tab) => (
+              <div key={tab} id={`project-panel-${tab}`} role="tabpanel" aria-labelledby={`project-tab-${tab}`} hidden />
+            ))}
         </div>
-
-        {(() => {
-          const inputClass = projectFieldClass;
-          const selectClass = projectSelectClass;
-          const textareaClass = projectTextareaClass;
-
-          return (
-            <form onSubmit={handleSubmit} className="flex flex-col flex-1 h-full">
-              <div className="flex-1 space-y-5 pb-6">
-                {activeTab === 'projeto' && (
-                  <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div>
-                      <label htmlFor="projeto-nome" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Nome do Projeto</label>
-                      <input id="projeto-nome" type="text" required value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: Levantamento Lote 5" className={inputClass} />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div>
-                        <label htmlFor="projeto-cliente" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Cliente Vinculado</label>
-                        <select id="projeto-cliente" required value={clienteId} onChange={e => setClienteId(e.target.value)} className={selectClass}>
-                          <option value="">Selecione um cliente...</option>
-                          {clientes.map((c: Cliente) => (
-                            <option key={c.id} value={c.id}>{c.nome}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-status" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Status do Projeto</label>
-                        <select id="projeto-status" value={status} onChange={e => setStatus(e.target.value)} className={selectClass}>
-                          <option value="Em Análise">Em Análise</option>
-                          <option value="Em Andamento">Em Andamento</option>
-                          <option value="Aguardando Órgão">Aguardando Órgão</option>
-                          <option value="Finalizado">Finalizado</option>
-                          <option value="Cancelado">Cancelado</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {(modalContext === 'ambiental' || modalContext === 'licenciamento') && (
-                      <div className="geo-card grid grid-cols-1 gap-5 bg-brand-green-50/50 p-4 dark:bg-brand-green-400/10 md:grid-cols-3">
-                        <div>
-                          <label htmlFor="ambiental-tipo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tipo de Serviço/Licença</label>
-                          <select id="ambiental-tipo" value={tipoServicoLicenca} onChange={e => setTipoServicoLicenca(e.target.value)} className={selectClass}>
-                            <option value="">Selecione...</option>
-                            <option value="LP">Licença Prévia - LP</option>
-                            <option value="LI">Licença de Instalação - LI</option>
-                            <option value="LO">Licença de Operação - LO</option>
-                            <option value="Renovação">Renovação</option>
-                            <option value="Laudo Pericial">Laudo Pericial</option>
-                            <option value="Outros">Outros</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label htmlFor="ambiental-orgao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Órgão Ambiental Destino</label>
-                          <input id="ambiental-orgao" type="text" value={orgaoAmbiental} onChange={e => setOrgaoAmbiental(e.target.value)} placeholder="Ex: IBAMA, SEMA, etc." className={inputClass} />
-                        </div>
-                        <div>
-                          <label htmlFor="ambiental-processo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Processo / Protocolo</label>
-                          <input id="ambiental-processo" type="text" value={numeroProcesso} onChange={e => setNumeroProcesso(e.target.value)} placeholder="Opcional" className={inputClass} />
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div>
-                        <label htmlFor="projeto-data-inicio" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data de Início</label>
-                        <input id="projeto-data-inicio" type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-data-entrega" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Previsão de Entrega</label>
-                        <input id="projeto-data-entrega" type="date" value={dataEntrega} onChange={e => setDataEntrega(e.target.value)} className={inputClass} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="projeto-descricao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Descrição Curta</label>
-                      <textarea id="projeto-descricao" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Breve resumo da finalidade do projeto..." rows={3} className={textareaClass} />
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'propriedade' && (
-                  <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                      <div>
-                        <label htmlFor="projeto-tipo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tipo de Área / Empreendimento</label>
-                        <select id="projeto-tipo" value={tipo} onChange={e => setTipo(e.target.value)} className={selectClass}>
-                          <option value="Rural">Rural</option>
-                          <option value="Urbano">Urbano</option>
-                          <option value="Comercial">Comercial</option>
-                          <option value="Industrial">Industrial</option>
-                          <option value="Ambiental">Ambiental</option>
-                          <option value="Institucional">Institucional</option>
-                          <option value="Outro">Outro</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-area" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Área (hectares)</label>
-                        <input id="projeto-area" type="number" step="0.0001" value={areaHa} onChange={e => setAreaHa(e.target.value)} placeholder="Ex: 120.4500" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-situacao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Situação Fundiária</label>
-                        <select id="projeto-situacao" value={situacaoImovel} onChange={e => setSituacaoImovel(e.target.value)} className={selectClass}>
-                          <option value="Regularizado">Regularizado</option>
-                          <option value="Pendente">Pendente</option>
-                          <option value="Posse">Posse</option>
-                          <option value="Arrendado">Arrendado</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div>
-                        <label htmlFor="projeto-matricula" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Número da Matrícula</label>
-                        <input id="projeto-matricula" type="text" value={matricula} onChange={e => setMatricula(e.target.value)} placeholder="Ex: Matrícula 12.345" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-averbacao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Averbação</label>
-                        <input id="projeto-averbacao" type="text" value={averbacao} onChange={e => setAverbacao(e.target.value)} placeholder="Ex: AV-3-12.345" className={inputClass} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                      <div>
-                        <label htmlFor="projeto-car" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">CAR (Cadastro Ambiental)</label>
-                        <input id="projeto-car" type="text" value={car} onChange={e => setCar(e.target.value)} placeholder="Código CAR" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-ccir" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">CCIR</label>
-                        <input id="projeto-ccir" type="text" value={ccir} onChange={e => setCcir(e.target.value)} placeholder="Código CCIR" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-itr" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">ITR (Nirf)</label>
-                        <input id="projeto-itr" type="text" value={itr} onChange={e => setItr(e.target.value)} placeholder="Código ITR" className={inputClass} />
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'geoloc' && (
-                  <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div>
-                        <label htmlFor="projeto-municipio" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Município</label>
-                        <input id="projeto-municipio" type="text" value={municipio} onChange={e => setMunicipio(e.target.value)} placeholder="Nome do município" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-cidade" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Cidade / UF</label>
-                        <input id="projeto-cidade" type="text" value={cidade} onChange={e => setCidade(e.target.value)} placeholder="Ex: Curitiba - PR" className={inputClass} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                      <div>
-                        <label htmlFor="projeto-latitude" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Latitude</label>
-                        <input id="projeto-latitude" type="number" step="0.000000000000001" value={latitude} onChange={e => setLatitude(e.target.value)} placeholder="Latitude DD" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-longitude" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Longitude</label>
-                        <input id="projeto-longitude" type="number" step="0.000000000000001" value={longitude} onChange={e => setLongitude(e.target.value)} placeholder="Longitude DD" className={inputClass} />
-                      </div>
-                      <div>
-                        <label htmlFor="projeto-memorial" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Possui Memorial Descritivo?</label>
-                        <select id="projeto-memorial" value={possuiMemorialDescritivo} onChange={e => setPossuiMemorialDescritivo(e.target.value)} className={selectClass}>
-                          <option value="Sim">Sim</option>
-                          <option value="Não">Não</option>
-                          <option value="Em Confecção">Em Confecção</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="projeto-observacoes" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Anotações / Observações Adicionais</label>
-                      <textarea id="projeto-observacoes" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Escreva observações técnicas sobre o imóvel, limites, marcos ou trâmites de cartório..." rows={4} className={textareaClass} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="sticky bottom-0 z-10 mt-auto flex items-center justify-end gap-3 border-t border-brand-border bg-brand-surface pt-4 pb-2 dark:bg-brand-surface-muted">
-                <button type="button" onClick={() => setShowModal(false)} className={secondarySmallActionButtonClass}>
-                  Cancelar
-                </button>
-                <button type="submit" disabled={submitProjectMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3 flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed')}>
-                  {submitProjectMutation.isPending && (
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  )}
-                  {selectedProjeto ? 'Salvar Alterações' : modalContext === 'ambiental' || modalContext === 'licenciamento' ? 'Criar Demanda' : 'Criar Projeto'}
-                </button>
-              </div>
-            </form>
-          );
-        })()}
       </Modal>
+
+      <QuickClientModal
+        isOpen={showModal && showQuickClientModal}
+        onClose={closeQuickClientModal}
+        onCreated={handleQuickClientCreated}
+      />
 
       {/* Modal Arquivos Locais */}
       <Modal
@@ -1350,7 +1429,7 @@ export function ListagemProjetos() {
         maxWidth="max-w-5xl"
       >
         <p className="text-sm text-zinc-500 dark:text-zinc-400 truncate max-w-sm -mt-4 mb-6" title={arquivosPasta}>
-          {arquivosPasta || 'Buscando no disco local...'}
+          {arquivosPasta || 'Buscando no disco local…'}
         </p>
 
         {/* Drag and Drop Zone */}
@@ -1430,8 +1509,10 @@ export function ListagemProjetos() {
         onConfirm={confirmData.onConfirm}
         title={confirmData.title}
         description={confirmData.description}
+        confirmText={confirmData.confirmText}
         loading={deleteProjectMutation.isPending || deleteFileMutation.isPending}
       />
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{projectSuccessMessage}</div>
     </Layout>
   );
 }

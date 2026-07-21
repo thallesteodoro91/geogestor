@@ -30,6 +30,39 @@ export function geoTabButtonClass(active: boolean, tone: GeoTone = 'system', cla
   );
 }
 
+const tabIconTone: Record<GeoTone, string> = {
+  system:
+    'bg-brand-indigo-100/80 text-brand-indigo-700 ring-brand-indigo-200/80 dark:bg-brand-indigo-400/15 dark:text-brand-indigo-200 dark:ring-brand-indigo-300/20',
+  field:
+    'bg-brand-turquoise-100/80 text-brand-turquoise-800 ring-brand-turquoise-200/80 dark:bg-brand-turquoise-400/15 dark:text-brand-turquoise-200 dark:ring-brand-turquoise-300/20',
+  finance:
+    'bg-brand-green-100/80 text-brand-green-700 ring-brand-green-200/80 dark:bg-brand-green-400/15 dark:text-brand-green-200 dark:ring-brand-green-300/20',
+  success:
+    'bg-brand-green-100/80 text-brand-green-700 ring-brand-green-200/80 dark:bg-brand-green-400/15 dark:text-brand-green-200 dark:ring-brand-green-300/20',
+  warning:
+    'bg-brand-rajah-100/80 text-brand-rajah-900 ring-brand-rajah-300/70 dark:bg-brand-rajah-400/15 dark:text-brand-rajah-100 dark:ring-brand-rajah-300/20',
+  danger:
+    'bg-brand-red-100/80 text-brand-red-700 ring-brand-red-200/80 dark:bg-brand-red-400/15 dark:text-brand-red-200 dark:ring-brand-red-300/20',
+};
+
+const activeTabIconTone: Record<GeoTone, string> = {
+  system: 'bg-brand-indigo-200 text-brand-indigo-800 dark:bg-brand-indigo-400/25 dark:text-brand-indigo-100',
+  field: 'bg-brand-turquoise-200 text-brand-turquoise-900 dark:bg-brand-turquoise-400/25 dark:text-brand-turquoise-100',
+  finance: 'bg-brand-green-200 text-brand-green-800 dark:bg-brand-green-400/25 dark:text-brand-green-100',
+  success: 'bg-brand-green-200 text-brand-green-800 dark:bg-brand-green-400/25 dark:text-brand-green-100',
+  warning: 'bg-brand-rajah-200 text-brand-rajah-950 dark:bg-brand-rajah-400/25 dark:text-brand-rajah-50',
+  danger: 'bg-brand-red-200 text-brand-red-800 dark:bg-brand-red-400/25 dark:text-brand-red-100',
+};
+
+export function geoTabIconClass(active: boolean, tone: GeoTone = 'system', className?: string) {
+  return cn(
+    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition-[background-color,color,box-shadow,transform] duration-150',
+    active ? activeTabIconTone[tone] : tabIconTone[tone],
+    active && 'scale-[1.04] shadow-sm ring-current/20',
+    className
+  );
+}
+
 export const geoFieldClass =
   'geo-field outline-none placeholder:text-zinc-400 disabled:cursor-not-allowed disabled:opacity-60 dark:placeholder:text-zinc-400';
 

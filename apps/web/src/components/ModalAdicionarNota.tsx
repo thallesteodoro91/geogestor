@@ -1,3 +1,4 @@
+import { DatePickerField, FormSelect } from './Form';
 import { apiClient } from '../services/apiClient';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
@@ -241,10 +242,9 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
           <div>
             <label className="block text-xs font-bold text-zinc-300 mb-1.5">Data do Evento</label>
             <div className="relative">
-              <input
+              <DatePickerField
                 id="nota-data-evento"
                 name="dataEvento"
-                type="date"
                 aria-label="Data do evento"
                 value={dataEvento}
                 onChange={e => setDataEvento(e.target.value)}
@@ -258,7 +258,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
           <div>
             <label className="block text-xs font-bold text-zinc-300 mb-1.5">Categoria *</label>
             <div className="flex gap-2.5">
-              <select
+              <FormSelect
                 id="nota-categoria"
                 name="categoria"
                 aria-label="Categoria da nota"
@@ -271,7 +271,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
                     {c.nome}
                   </option>
                 ))}
-              </select>
+              </FormSelect>
               <button
                 type="button"
                 onClick={() => { setShowCatCreator(!showCatCreator); setShowIconPicker(false); setShowColorPicker(false); }}

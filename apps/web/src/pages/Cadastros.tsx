@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Layout } from '../components/Layout';
 import { Modal } from '../components/Modal';
-import { FormError, FormFooter, FormSection } from '../components/Form';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { FormError, FormFooter, FormSection, FormSelect } from '../components/Form';
 import { 
   Plus, 
   Trash, 
@@ -37,6 +38,7 @@ export function Cadastros() {
   const [showModal, setShowModal] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; type: 'servicos' | 'despesas' } | null>(null);
 
   // Form states - Servico
   const [servNome, setServNome] = useState('');
@@ -118,14 +120,19 @@ export function Cadastros() {
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!confirm(`Deseja excluir permanentemente o cadastro "${name}"?`)) return;
-    if (activeTab === 'servicos') {
-      const updated = servicos.filter(s => s.id !== id);
+    setDeleteTarget({ id, name, type: activeTab });
+  };
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.type === 'servicos') {
+      const updated = servicos.filter(s => s.id !== deleteTarget.id);
       saveServicos(updated);
     } else {
-      const updated = despesas.filter(d => d.id !== id);
+      const updated = despesas.filter(d => d.id !== deleteTarget.id);
       saveDespesas(updated);
     }
+    setDeleteTarget(null);
   };
 
   const parseCurrencyToCents = (value: string) => {
@@ -448,7 +455,7 @@ export function Cadastros() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="cadastro-serv-cat" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Categoria</label>
-                  <select 
+                  <FormSelect
                     id="cadastro-serv-cat"
                     value={servCategoria} 
                     onChange={e => setServCategoria(e.target.value)} 
@@ -459,7 +466,7 @@ export function Cadastros() {
                     <option value="Regularização">Regularização</option>
                     <option value="Consultoria">Consultoria</option>
                     <option value="Outro">Outro</option>
-                  </select>
+                  </FormSelect>
                 </div>
 
                 <div>
@@ -483,7 +490,7 @@ export function Cadastros() {
             <>
               <div>
                 <label htmlFor="cadastro-desp-cat" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Categoria da Despesa</label>
-                <select 
+                <FormSelect
                   id="cadastro-desp-cat"
                   value={despCategoria} 
                   onChange={e => setDespCategoria(e.target.value)} 
@@ -495,7 +502,7 @@ export function Cadastros() {
                   <option value="Equipamento">Equipamento</option>
                   <option value="Salários/Diárias">Salários/Diárias</option>
                   <option value="Outro">Outro</option>
-                </select>
+                </FormSelect>
               </div>
 
               <div>
@@ -534,6 +541,16 @@ export function Cadastros() {
           </FormFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Excluir ${deleteTarget?.type === 'servicos' ? 'serviço' : 'tipo de despesa'}${deleteTarget?.name ? ` “${deleteTarget.name}”` : ''}?`}
+        description={deleteTarget?.type === 'servicos'
+          ? 'O serviço deixará de aparecer neste cadastro auxiliar e nas seleções futuras. Os registros já existentes não serão alterados. Esta ação não pode ser desfeita.'
+          : 'O tipo de despesa deixará de aparecer neste cadastro auxiliar e nas seleções futuras. As despesas já registradas não serão alteradas. Esta ação não pode ser desfeita.'}
+        confirmText={deleteTarget?.type === 'servicos' ? 'Excluir serviço' : 'Excluir tipo de despesa'}
+      />
     </Layout>
   );
 }

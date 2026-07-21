@@ -55,6 +55,10 @@ export function calcularDistanciaGeografica(
   lat2: number,
   lon2: number
 ): number {
+  if (!validarCoordenadas(lat1, lon1) || !validarCoordenadas(lat2, lon2)) {
+    return Number.NaN;
+  }
+
   const R = 6371000; // Raio da Terra em metros
   const φ1 = (lat1 * Math.PI) / 180;
   const φ2 = (lat2 * Math.PI) / 180;
@@ -64,7 +68,8 @@ export function calcularDistanciaGeografica(
   const a =
     Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
     Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const aLimitado = Math.min(1, Math.max(0, a));
+  const c = 2 * Math.atan2(Math.sqrt(aLimitado), Math.sqrt(1 - aLimitado));
 
   return R * c;
 }
@@ -78,7 +83,12 @@ export function calcularDistanciaGeografica(
 export function calcularAreaPoligono(
   coordenadas: Array<{ x: number; y: number }>
 ): number {
-  if (coordenadas.length < 3) return 0;
+  if (
+    coordenadas.length < 3 ||
+    coordenadas.some(({ x, y }) => !Number.isFinite(x) || !Number.isFinite(y))
+  ) {
+    return 0;
+  }
 
   let area = 0;
   const n = coordenadas.length;
@@ -100,7 +110,12 @@ export function calcularAreaPoligono(
 export function calcularPerimetro(
   coordenadas: Array<{ x: number; y: number }>
 ): number {
-  if (coordenadas.length < 2) return 0;
+  if (
+    coordenadas.length < 2 ||
+    coordenadas.some(({ x, y }) => !Number.isFinite(x) || !Number.isFinite(y))
+  ) {
+    return 0;
+  }
 
   let perimetro = 0;
   const n = coordenadas.length;
@@ -125,7 +140,115 @@ export function calcularPerimetro(
  * @returns true se coordenadas são válidas
  */
 export function validarCoordenadas(latitude: number, longitude: number): boolean {
-  return latitude >= -90 && latitude <= 90 && longitude >= -180 && longitude <= 180;
+  return (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    longitude >= -180 &&
+    longitude <= 180
+  );
+}
+
+/**
+ * Calcula o azimute inicial entre dois pontos geográficos em um modelo esférico.
+ * O resultado é referenciado ao norte verdadeiro e não substitui uma solução
+ * geodésica elipsoidal ou um azimute de quadrícula em um SRC projetado.
+ */
+export function calcularAzimuteGeodesicoInicial(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  if (!validarCoordenadas(lat1, lon1) || !validarCoordenadas(lat2, lon2)) {
+    return Number.NaN;
+  }
+
+  if (lat1 === lat2 && lon1 === lon2) {
+    return Number.NaN;
+  }
+
+  const phi1 = (lat1 * Math.PI) / 180;
+  const phi2 = (lat2 * Math.PI) / 180;
+  const deltaLambda = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+  return (((Math.atan2(y, x) * 180) / Math.PI) + 360) % 360;
+}
+
+/**
+ * Estima a área de um polígono geográfico em uma projeção equiretangular local.
+ * Adequado somente para uma prévia de polígonos pequenos, longe dos polos.
+ */
+export function calcularAreaGeograficaEstimada(
+  coordenadas: Array<{ lat: number; lng: number }>
+): number {
+  const coordenadasPlanas = projetarCoordenadasGeograficasLocalmente(coordenadas);
+  return calcularAreaPoligono(coordenadasPlanas);
+}
+
+/**
+ * Calcula o perímetro aproximado de um polígono geográfico pela soma de arcos
+ * Haversine em uma Terra esférica.
+ */
+export function calcularPerimetroGeografico(
+  coordenadas: Array<{ lat: number; lng: number }>
+): number {
+  if (
+    coordenadas.length < 2 ||
+    coordenadas.some(({ lat, lng }) => !validarCoordenadas(lat, lng))
+  ) {
+    return 0;
+  }
+
+  let perimetro = 0;
+  for (let i = 0; i < coordenadas.length; i++) {
+    const atual = coordenadas[i];
+    const seguinte = coordenadas[(i + 1) % coordenadas.length];
+    perimetro += calcularDistanciaGeografica(
+      atual.lat,
+      atual.lng,
+      seguinte.lat,
+      seguinte.lng
+    );
+  }
+
+  return Number.isFinite(perimetro) ? perimetro : 0;
+}
+
+function projetarCoordenadasGeograficasLocalmente(
+  coordenadas: Array<{ lat: number; lng: number }>
+): Array<{ x: number; y: number }> {
+  if (
+    coordenadas.length < 3 ||
+    coordenadas.some(({ lat, lng }) => !validarCoordenadas(lat, lng))
+  ) {
+    return [];
+  }
+
+  const raioTerra = 6371000;
+  const latitudeReferencia =
+    coordenadas.reduce((total, ponto) => total + ponto.lat, 0) / coordenadas.length;
+  const longitudeOrigem = coordenadas[0].lng;
+  const latitudeReferenciaRad = (latitudeReferencia * Math.PI) / 180;
+
+  return coordenadas.map(({ lat, lng }) => {
+    let diferencaLongitude = lng - longitudeOrigem;
+    if (diferencaLongitude > 180) diferencaLongitude -= 360;
+    if (diferencaLongitude < -180) diferencaLongitude += 360;
+
+    return {
+      x:
+        ((diferencaLongitude * Math.PI) / 180) *
+        raioTerra *
+        Math.cos(latitudeReferenciaRad),
+      y: ((lat - latitudeReferencia) * Math.PI * raioTerra) / 180,
+    };
+  });
 }
 
 /**

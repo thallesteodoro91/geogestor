@@ -27,9 +27,13 @@ fs.writeFileSync(
   "exports.default = async function beforeBuild() { return false; };\n"
 );
 
+const sourcePackageJson = JSON.parse(
+  fs.readFileSync(path.join(desktopDir, 'package.json'), 'utf8')
+);
+
 const packageJson = {
   name: 'geogestor-desktop',
-  version: '1.1.0',
+  version: sourcePackageJson.version,
   description: 'GeoGestor - Gestao para Topografia (Desktop)',
   main: 'main.js',
   author: 'GeoGestor',
@@ -62,10 +66,6 @@ const packageJson = {
         from: '../../web/dist',
         to: 'web',
         filter: ['**/*']
-      },
-      {
-        from: '../../../data/geogestor.db',
-        to: 'data/geogestor.db'
       }
     ],
     win: {

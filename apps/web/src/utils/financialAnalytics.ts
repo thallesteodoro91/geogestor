@@ -13,6 +13,7 @@ export type OrcamentoFinanceiro = {
   possuiImposto?: boolean | number | null;
   impostoPorcentagem?: number | null;
   impostoValor?: number | null;
+  impostosPrevistos?: number | null;
   impostoRetido?: boolean | number | null;
   centroCusto?: string | null;
   descricao?: string | null;
@@ -210,7 +211,11 @@ const isAprovado = (status?: string | null) => {
 };
 const isRejeitado = (status?: string | null) => {
   const normalized = normalizeText(status);
-  return normalized === 'rejeitado' || normalized === 'cancelado' || normalized === 'perdido';
+  return normalized === 'rejeitado'
+    || normalized === 'cancelado'
+    || normalized === 'perdido'
+    || normalized === 'expirado'
+    || normalized === 'substituido';
 };
 
 export const getParcelaStatusFiscal = (parcela: ParcelaFinanceira, todayKey = toLocalDateKey(new Date())) => {
@@ -258,6 +263,8 @@ export const inferTipoCusto = (despesa: DespesaFinanceira) => {
 };
 
 const getOrcamentoImposto = (orcamento: OrcamentoFinanceiro) => {
+  const calculatedValue = Number(orcamento.impostosPrevistos) || 0;
+  if (calculatedValue > 0) return calculatedValue;
   const explicitValue = Number(orcamento.impostoValor) || 0;
   if (explicitValue > 0) return explicitValue;
   const percent = Number(orcamento.impostoPorcentagem) || 0;

@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { useState } from 'react';
+import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
 import { apiFetch, apiClient, getDownloadUrl } from '../../services/apiClient';
 import { getTaskPriorityTone } from '../../utils/taskPriority';
 import { geoViewTransition } from '../../utils/motion';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
-import { geoFieldClass, geoPurpleSurfaceClass, geoTabButtonClass, geoTabListClass } from '../../utils/geoTheme';
+import { geoFieldClass, geoPurpleSurfaceClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -96,6 +98,12 @@ export function ProjetoDetalhes() {
   // File upload state
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'task'; item: Tarefa }
+    | { type: 'expense'; item: Despesa }
+    | { type: 'file'; filePath: string; fileName: string }
+    | null
+  >(null);
 
   // New task form state
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
@@ -192,6 +200,7 @@ export function ProjetoDetalhes() {
       return res.json();
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', id] });
     },
     onError: () => {
@@ -244,6 +253,7 @@ export function ProjetoDetalhes() {
       if (!res.ok) throw new Error('Erro ao excluir despesa');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
     },
     onError: () => {
@@ -267,6 +277,7 @@ export function ProjetoDetalhes() {
       }
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['projeto-arquivos', id] });
     },
     onError: (err: Error) => {
@@ -345,9 +356,8 @@ export function ProjetoDetalhes() {
     }
   };
 
-  const handleFileDelete = async (filePath: string) => {
-    if (!confirm('Tem certeza que deseja excluir permanentemente este arquivo do disco local?')) return;
-    deleteFileMutation.mutate(filePath);
+  const handleFileDelete = (filePath: string, fileName: string) => {
+    setDeleteTarget({ type: 'file', filePath, fileName });
   };
 
   const handleAddTask = (e: React.FormEvent) => {
@@ -605,7 +615,7 @@ export function ProjetoDetalhes() {
               onClick={() => setActiveTab('tarefas')}
               className={geoTabButtonClass(activeTab === 'tarefas', 'system', 'px-4 py-2.5')}
             >
-              <CheckSquare weight={activeTab === 'tarefas' ? 'fill' : 'regular'} className="w-5 h-5" />
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'tarefas', 'system')}><CheckSquare weight={activeTab === 'tarefas' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
               Checklist ({tarefas.length})
             </button>
             <button 
@@ -614,7 +624,7 @@ export function ProjetoDetalhes() {
               onClick={() => setActiveTab('arquivos')}
               className={geoTabButtonClass(activeTab === 'arquivos', 'field', 'px-4 py-2.5')}
             >
-              <Folder weight={activeTab === 'arquivos' ? 'fill' : 'regular'} className="w-5 h-5" />
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'arquivos', 'field')}><Folder weight={activeTab === 'arquivos' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
               Documentos ({projetoFiles.length})
             </button>
             <button 
@@ -623,7 +633,7 @@ export function ProjetoDetalhes() {
               onClick={() => setActiveTab('financeiro')}
               className={geoTabButtonClass(activeTab === 'financeiro', 'finance', 'px-4 py-2.5')}
             >
-              <CurrencyDollar weight={activeTab === 'financeiro' ? 'fill' : 'regular'} className="w-5 h-5" />
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'financeiro', 'danger')}><CurrencyDollar weight={activeTab === 'financeiro' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
               Despesas ({projectDespesas.length})
             </button>
           </div>
@@ -671,7 +681,7 @@ export function ProjetoDetalhes() {
 
                           <div>
                             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Prioridade</label>
-                            <select 
+                            <FormSelect
                               value={taskPrioridade}
                               onChange={(e) => setTaskPrioridade(e.target.value)}
                               className={projectDetailSelectClass}
@@ -679,13 +689,12 @@ export function ProjetoDetalhes() {
                               <option value="Baixa">Baixa</option>
                               <option value="Média">Média</option>
                               <option value="Alta">Alta</option>
-                            </select>
+                            </FormSelect>
                           </div>
 
                           <div>
                             <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Data Limite</label>
-                            <input 
-                              type="date" 
+                            <DatePickerField
                               value={taskDataLimite} 
                               onChange={(e) => setTaskDataLimite(e.target.value)}
                               className={projectDetailSelectClass}
@@ -742,14 +751,13 @@ export function ProjetoDetalhes() {
                           className={`geo-card-interactive flex items-center justify-between border-l-4 p-4 motion-gpu motion-standard ${priorityTone.cardClass}`}
                         >
                           <div className="flex items-center gap-3">
-                            <input 
-                              type="checkbox"
+                            <CheckboxField
+                              id={`project-task-${task.id}`}
+                              label={`Marcar ${task.titulo} como concluída`}
                               checked={task.status === 'Concluído'}
-                              onChange={(e) => updateTaskMutation.mutate({ 
-                                taskId: task.id, 
-                                status: e.target.checked ? 'Concluído' : 'A Fazer' 
-                              })}
-                              className="h-4 w-4 cursor-pointer rounded border-brand-border text-brand-primary-600 focus:ring-brand-primary-400"
+                              onChange={(checked) => updateTaskMutation.mutate({ taskId: task.id, status: checked ? 'Concluído' : 'A Fazer' })}
+                              compact
+                              labelHidden
                             />
                             
                             <div>
@@ -774,9 +782,7 @@ export function ProjetoDetalhes() {
                           </div>
 
                           <button 
-                            onClick={() => {
-                              if (confirm('Excluir esta tarefa?')) deleteTaskMutation.mutate(task.id);
-                            }}
+                            onClick={() => setDeleteTarget({ type: 'task', item: task })}
                             className="geo-focus-ring flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-[background-color,color,transform] hover:bg-brand-red-50 hover:text-brand-red-600 active:scale-95 dark:hover:bg-brand-red-400/10"
                           >
                             <Trash className="w-4 h-4" />
@@ -887,7 +893,7 @@ export function ProjetoDetalhes() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => handleFileDelete(file.path)}
+                              onClick={() => handleFileDelete(file.path, file.name)}
                               className="geo-focus-ring flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-[background-color,color,transform] hover:bg-brand-red-50 hover:text-brand-red-600 active:scale-95 dark:hover:bg-brand-red-400/10"
                               title="Excluir Arquivo"
                             >
@@ -938,8 +944,7 @@ export function ProjetoDetalhes() {
 
                       <div>
                         <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Data</label>
-                        <input 
-                          type="date" 
+                        <DatePickerField
                           value={expData} 
                           onChange={(e) => setExpData(e.target.value)}
                           className={projectDetailSelectClass}
@@ -949,7 +954,7 @@ export function ProjetoDetalhes() {
 
                     <div>
                       <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">Categoria</label>
-                      <select 
+                      <FormSelect
                         value={expCategoria}
                         onChange={(e) => setExpCategoria(e.target.value)}
                         className={projectDetailSelectClass}
@@ -959,7 +964,7 @@ export function ProjetoDetalhes() {
                         <option value="Alimentação">Alimentação</option>
                         <option value="Equipamento">Equipamento</option>
                         <option value="Outro">Outro</option>
-                      </select>
+                      </FormSelect>
                     </div>
 
                     <div>
@@ -1022,9 +1027,7 @@ export function ProjetoDetalhes() {
                             <div className="flex items-center gap-3">
                               <span className="text-sm font-bold text-red-600">{formatCurrency(exp.valor)}</span>
                               <button 
-                                onClick={() => {
-                                  if (confirm('Tem certeza que deseja excluir esta despesa?')) deleteExpenseMutation.mutate(exp.id);
-                                }}
+                                onClick={() => setDeleteTarget({ type: 'expense', item: exp })}
                                 className="geo-focus-ring flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-[background-color,color,transform] hover:bg-brand-red-50 hover:text-brand-red-600 active:scale-95 dark:hover:bg-brand-red-400/10"
                               >
                                 <Trash className="w-4 h-4" />
@@ -1041,6 +1044,27 @@ export function ProjetoDetalhes() {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget?.type === 'task') deleteTaskMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'expense') deleteExpenseMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'file') deleteFileMutation.mutate(deleteTarget.filePath);
+        }}
+        title={deleteTarget?.type === 'task'
+          ? `Excluir tarefa “${deleteTarget.item.titulo}”?`
+          : deleteTarget?.type === 'expense'
+            ? `Excluir despesa “${deleteTarget.item.descricao}”?`
+            : `Excluir arquivo${deleteTarget?.fileName ? ` “${deleteTarget.fileName}”` : ''}?`}
+        description={deleteTarget?.type === 'task'
+          ? 'A tarefa será removida deste projeto e deixará de aparecer nos demais contextos vinculados. O projeto será preservado. Esta ação não pode ser desfeita.'
+          : deleteTarget?.type === 'expense'
+            ? 'A despesa será removida do projeto e os totais financeiros e indicadores da DRE serão recalculados. O projeto será preservado. Esta ação não pode ser desfeita.'
+            : 'O arquivo será removido permanentemente do disco local e deixará de aparecer nos documentos do projeto. Esta ação não pode ser desfeita.'}
+        confirmText={deleteTarget?.type === 'task' ? 'Excluir tarefa' : deleteTarget?.type === 'expense' ? 'Excluir despesa' : 'Excluir arquivo'}
+        loading={deleteTaskMutation.isPending || deleteExpenseMutation.isPending || deleteFileMutation.isPending}
+      />
     </Layout>
   );
 }

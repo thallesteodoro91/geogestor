@@ -1,6 +1,6 @@
 {
   "name": "geogestor-desktop",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "GeoGestor - Gestao para Topografia (Desktop)",
   "main": "main.js",
   "author": "GeoGestor",

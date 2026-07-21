@@ -1,11 +1,23 @@
 import { spawnSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
+function git(args) {
+  return spawnSync('git', args, { cwd: rootDir, encoding: 'utf8', shell: false });
+}
+
+const commitResult = git(['rev-parse', 'HEAD']);
+const statusResult = git(['status', '--porcelain']);
+if (commitResult.status !== 0) throw new Error('Não foi possível identificar o commit do build.');
+
 const env = { ...process.env };
+env.GEOGESTOR_BUILD_COMMIT = commitResult.stdout.trim();
+env.GEOGESTOR_BUILD_DIRTY = String(Boolean(statusResult.stdout.trim()));
+env.GEOGESTOR_BUILD_VERSION = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')).version;
 for (const key of Object.keys(env)) {
   if (/^npm_/i.test(key) || /^PNPM_/i.test(key) || ['INIT_CWD', 'NODE_PATH', 'NODE_OPTIONS', 'ESBUILD_BINARY_PATH'].includes(key)) {
     delete env[key];

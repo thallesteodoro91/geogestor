@@ -1,3 +1,4 @@
+import { FormSelect } from '../../components/Form';
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -41,7 +42,7 @@ const entityOptions: Record<EntityKey, { label: string; description: string; rou
   contatos: {
     label: 'Contatos',
     description: 'Leads e CRM',
-    route: '/contatos'
+    route: '/crm?view=leads'
   }
 };
 
@@ -384,7 +385,7 @@ export function ImportacaoDados() {
               </p>
 
               <div className="relative mt-3">
-                <select
+                <FormSelect
                   id="import-entity"
                   name="entidade"
                   value={entity}
@@ -396,7 +397,7 @@ export function ImportacaoDados() {
                       {option.label} - {option.description}
                     </option>
                   ))}
-                </select>
+                </FormSelect>
                 <CaretDown
                   size={16}
                   aria-hidden="true"
@@ -586,7 +587,7 @@ export function ImportacaoDados() {
                         </span>
                       </div>
                       <div className="relative">
-                        <select
+                        <FormSelect
                           id={fieldId}
                           name={`mapeamento-${field.key}`}
                           value={mapping[field.key] || ''}
@@ -599,7 +600,7 @@ export function ImportacaoDados() {
                               {header}
                             </option>
                           ))}
-                        </select>
+                        </FormSelect>
                         <CaretDown
                           size={15}
                           aria-hidden="true"

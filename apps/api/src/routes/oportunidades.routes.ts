@@ -1,157 +1,116 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { db } from '../db';
-import { schema } from '@geogestor/database';
-import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
-import { JornadaService } from '../services/jornada.service';
+import type { FastifyInstance } from 'fastify';
+import {
+  OpportunityConvertProjectSchema,
+  OpportunityLinkBudgetSchema,
+  OpportunityPayloadSchema,
+  OpportunityReorderSchema,
+  OpportunityTransitionSchema,
+  OpportunityUpdateSchema
+} from '@geogestor/contracts';
+import {
+  convertOpportunityToProject,
+  createOpportunity,
+  deleteOpportunity,
+  getOpportunity,
+  getOpportunityAnalytics,
+  getOpportunityOptions,
+  linkOpportunityBudget,
+  listOpportunities,
+  reorderOpportunities,
+  transitionOpportunity,
+  updateOpportunity
+} from '../services/oportunidades.service';
 
 type IdParams = { id: string };
-type Payload = Record<string, any>;
+
+function validationMessage(error: { issues: Array<{ message: string }> }) {
+  return error.issues.map((issue) => issue.message).join(' ');
+}
+
+function sendError(reply: any, error: unknown) {
+  const message = error instanceof Error ? error.message : 'Não foi possível concluir a operação.';
+  const status = /não encontrad/i.test(message) ? 404 : 400;
+  return reply.status(status).send({ error: message });
+}
 
 export async function oportunidadesRoutes(server: FastifyInstance) {
-  
-  // Buscar todas as oportunidades (Cards do Kanban)
-  server.get('/', async (request, reply) => {
-    const data = await db
-      .select({
-        id: schema.oportunidades.id,
-        clienteId: schema.oportunidades.clienteId,
-        clienteNome: schema.clientes.nome,
-        titulo: schema.oportunidades.titulo,
-        valorEstimado: schema.oportunidades.valorEstimado,
-        estagio: schema.oportunidades.estagio,
-        ordem: schema.oportunidades.ordem,
-        createdAt: schema.oportunidades.createdAt
-      })
-      .from(schema.oportunidades)
-      .innerJoin(schema.clientes, eq(schema.oportunidades.clienteId, schema.clientes.id));
-    return data;
+  server.get('/', async () => listOpportunities());
+  server.get('/analytics', async () => getOpportunityAnalytics());
+  server.get('/options', async () => getOpportunityOptions());
+  server.get('/:id', async (request, reply) => {
+    try {
+      return await getOpportunity((request.params as IdParams).id);
+    } catch (error) {
+      return sendError(reply, error);
+    }
   });
 
-  // Criar nova oportunidade
   server.post('/', async (request, reply) => {
-    const data = request.body as any;
-    
-    // Pegar a maior ordem atual para o estágio "Prospect"
-    const existingInStage = await db.select().from(schema.oportunidades).where(eq(schema.oportunidades.estagio, 'Prospect'));
-    const maxOrdem = existingInStage.length > 0 ? Math.max(...existingInStage.map(o => o.ordem)) : -1;
-
-    const oportunidade = await db.insert(schema.oportunidades).values({
-      id: crypto.randomUUID(),
-      clienteId: data.clienteId,
-      titulo: data.titulo,
-      valorEstimado: data.valorEstimado || null,
-      estagio: 'Prospect',
-      ordem: maxOrdem + 1
-    }).returning();
-    
-    if (oportunidade[0] && data.clienteId) {
-      await JornadaService.logClienteEvento({
-        clienteId: data.clienteId,
-        tipo: 'Oportunidade',
-        titulo: `Nova oportunidade criada: ${data.titulo}`,
-        categoria: 'Comercial',
-        descricao: `Estágio: Prospect | Valor estimado: R$ ${data.valorEstimado || 0}`
-      });
-    }
-
-    return oportunidade[0];
-  });
-
-  // Atualizar oportunidade (Edição normal)
-  server.patch('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as IdParams;
-    const data = request.body as Payload;
-    
+    const parsed = OpportunityPayloadSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      const oportunidadeAtualizada = await db.update(schema.oportunidades).set({
-        clienteId: data.clienteId !== undefined ? data.clienteId : undefined,
-        titulo: data.titulo !== undefined ? data.titulo : undefined,
-        valorEstimado: data.valorEstimado !== undefined ? data.valorEstimado : undefined,
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.oportunidades.id, id)).returning();
-
-      if (!oportunidadeAtualizada.length) {
-        return reply.status(404).send({ error: 'Oportunidade não encontrada' });
-      }
-
-      if (oportunidadeAtualizada[0].clienteId) {
-        await JornadaService.logClienteEvento({
-          clienteId: oportunidadeAtualizada[0].clienteId,
-          tipo: 'Oportunidade',
-          titulo: `Oportunidade atualizada: ${oportunidadeAtualizada[0].titulo}`,
-          categoria: 'Comercial',
-          descricao: `Valor estimado: R$ ${oportunidadeAtualizada[0].valorEstimado || 0}`
-        });
-      }
-
-      return reply.send(oportunidadeAtualizada[0]);
-    } catch (err) {
-      server.log.error(err);
-      return reply.status(500).send({ error: 'Erro ao atualizar oportunidade' });
+      return reply.status(201).send(await createOpportunity(parsed.data));
+    } catch (error) {
+      return sendError(reply, error);
     }
   });
 
-  // Reordenar após Drag and Drop
   server.patch('/reorder', async (request, reply) => {
-    const items = request.body as { id: string, estagio: string, ordem: number }[];
-    
+    const parsed = OpportunityReorderSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      const oldOportunidades = await db.select().from(schema.oportunidades);
-      const oldMap = new Map(oldOportunidades.map(o => [o.id, o]));
-
-      await db.transaction(async (tx) => {
-        for (const item of items) {
-          await tx.update(schema.oportunidades).set({
-            estagio: item.estagio,
-            ordem: item.ordem,
-            updatedAt: new Date().toISOString()
-          }).where(eq(schema.oportunidades.id, item.id));
-        }
-      });
-
-      for (const item of items) {
-        const old = oldMap.get(item.id);
-        if (old && old.estagio !== item.estagio && old.clienteId) {
-          await JornadaService.logClienteEvento({
-            clienteId: old.clienteId,
-            tipo: 'Oportunidade',
-            titulo: `Oportunidade "${old.titulo}" moveu de estágio`,
-            categoria: 'Comercial',
-            descricao: `De: ${old.estagio} -> Para: ${item.estagio}`
-          });
-        }
-      }
-
-      return reply.send({ success: true });
-    } catch (err) {
-      server.log.error(err);
-      return reply.status(500).send({ error: 'Erro ao reordenar' });
+      return await reorderOpportunities(parsed.data);
+    } catch (error) {
+      return sendError(reply, error);
     }
   });
 
-  // Excluir
-  server.delete('/:id', async (request: FastifyRequest, reply: FastifyReply) => {
-    const { id } = request.params as IdParams;
+  server.patch('/:id', async (request, reply) => {
+    const parsed = OpportunityUpdateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      const old = await db.select().from(schema.oportunidades).where(eq(schema.oportunidades.id, id));
-      
-      await db.delete(schema.oportunidades).where(eq(schema.oportunidades.id, id));
+      return await updateOpportunity((request.params as IdParams).id, parsed.data);
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
 
-      if (old.length > 0 && old[0].clienteId) {
-        await JornadaService.logClienteEvento({
-          clienteId: old[0].clienteId,
-          tipo: 'Oportunidade',
-          titulo: `Oportunidade excluída: ${old[0].titulo}`,
-          categoria: 'Comercial',
-          descricao: `Estágio anterior: ${old[0].estagio}`
-        });
-      }
+  server.patch('/:id/transition', async (request, reply) => {
+    const parsed = OpportunityTransitionSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
+    try {
+      return await transitionOpportunity((request.params as IdParams).id, parsed.data);
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
 
+  server.post('/:id/link-budget', async (request, reply) => {
+    const parsed = OpportunityLinkBudgetSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
+    try {
+      return await linkOpportunityBudget((request.params as IdParams).id, parsed.data.orcamentoId);
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  server.post('/:id/convert-project', async (request, reply) => {
+    const parsed = OpportunityConvertProjectSchema.safeParse(request.body || {});
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
+    try {
+      return await convertOpportunityToProject((request.params as IdParams).id, parsed.data.nomeProjeto);
+    } catch (error) {
+      return sendError(reply, error);
+    }
+  });
+
+  server.delete('/:id', async (request, reply) => {
+    try {
+      await deleteOpportunity((request.params as IdParams).id);
       return reply.status(204).send();
-    } catch (err) {
-      server.log.error(err);
-      return reply.status(500).send({ error: 'Erro ao excluir oportunidade' });
+    } catch (error) {
+      return sendError(reply, error);
     }
   });
 }

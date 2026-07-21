@@ -5,12 +5,10 @@ import { preloadRoute } from '../utils/routePreloaders';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
 import projectsIcon from '../assets/magnific-icons/project_folder.svg';
 import clientsIcon from '../assets/magnific-icons/user_3237472.svg';
-import contactsIcon from '../assets/magnific-icons/adress-book_4962039.svg';
 import crmIcon from '../assets/magnific-icons/filter_9757817.svg';
 import calendarIcon from '../assets/magnific-icons/calendar_5684639.svg';
 import topographyIcon from '../assets/magnific-icons/theodolite_7504749.svg';
 import ambientalIcon from '../assets/magnific-icons/plant_2786614.svg';
-import calculatorIcon from '../assets/magnific-icons/calculator_9264106.svg';
 import budgetsIcon from '../assets/magnific-icons/profit_6919960.svg';
 import financeIcon from '../assets/magnific-icons/money_7190332.svg';
 import reportsIcon from '../assets/magnific-icons/invoice_9510031.svg';
@@ -137,13 +135,10 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         { name: 'Visão Geral', path: '/', icon: dashboardIcon, created: true },
         { name: 'Projetos', path: '/projetos', icon: projectsIcon, created: true },
         { name: 'Clientes', path: '/clientes', icon: clientsIcon, created: true },
-        { name: 'Contatos (Leads)', path: '/contatos', icon: contactsIcon, created: true },
-        { name: 'CRM (Funil)', path: '/crm', icon: crmIcon, created: true },
+        { name: 'CRM', path: '/crm', icon: crmIcon, created: true },
         { name: 'Calendário', path: '/calendario', icon: calendarIcon, created: true },
         { name: 'Topografia', path: '/topografia', icon: topographyIcon, created: true },
         { name: 'Ambiental', path: '/ambiental', icon: ambientalIcon, created: true },
-        { name: 'Calculadora CAR', path: '/calculadora-ambiental', icon: calculatorIcon, created: true },
-
         { name: 'Orçamentos', path: '/orcamentos', icon: budgetsIcon, created: true },
       ],
     },
@@ -196,7 +191,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   GeoGestor
                 </div>
                 <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tighter text-emerald-600 dark:text-emerald-400">
-                  v1.1.0
+                  v1.1.1
                 </span>
               </div>
               <p className="mt-1 truncate text-xs font-medium leading-4 text-zinc-500 dark:text-zinc-400">
@@ -286,9 +281,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               US
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
-              <h4 className="truncate text-sm font-semibold leading-5 text-zinc-800 dark:text-zinc-200">
+              <p className="truncate text-sm font-semibold leading-5 text-zinc-800 dark:text-zinc-200">
                 Usuário
-              </h4>
+              </p>
               <span className="block truncate text-xs leading-4 text-zinc-500">demo@geogestor.com</span>
             </div>
           </div>

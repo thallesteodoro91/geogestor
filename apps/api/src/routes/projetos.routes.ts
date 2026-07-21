@@ -7,42 +7,8 @@ import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import crypto from 'crypto';
 import { z } from 'zod';
+import { ProjetoPayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-
-const ProjetoPayloadSchema = z.object({
-  clienteId: z.string().uuid(),
-  nome: z.string().min(1),
-  descricao: z.string().nullable().optional(),
-  status: z.string().optional(),
-  dataInicio: z.string().nullable().optional(),
-  dataEntrega: z.string().nullable().optional(),
-  areaHa: z.number().nullable().optional(),
-  matricula: z.string().nullable().optional(),
-  car: z.string().nullable().optional(),
-  ccir: z.string().nullable().optional(),
-  itr: z.string().nullable().optional(),
-  cidade: z.string().nullable().optional(),
-  municipio: z.string().nullable().optional(),
-  situacaoImovel: z.string().nullable().optional(),
-  tipo: z.string().nullable().optional(),
-  averbacao: z.string().nullable().optional(),
-  latitude: z.number().nullable().optional(),
-  longitude: z.number().nullable().optional(),
-  possuiMemorialDescritivo: z.string().nullable().optional(),
-  observacoes: z.string().nullable().optional(),
-  // Campos Unificados
-  propriedadeId: z.string().uuid().nullable().optional(),
-  orgaoAmbiental: z.string().nullable().optional(),
-  tipoDemanda: z.string().nullable().optional(),
-  protocolo: z.string().nullable().optional(),
-  numeroProcesso: z.string().nullable().optional(),
-  numeroLicenca: z.string().nullable().optional(),
-  dataEmissao: z.string().nullable().optional(),
-  dataVencimentoLicenca: z.string().nullable().optional(),
-  tipoLicenca: z.string().nullable().optional(),
-  tipoPericia: z.string().nullable().optional(),
-  dataVistoria: z.string().nullable().optional()
-});
 
 const ProjetoLotePayloadSchema = z.array(z.object({
   clienteId: z.string().uuid(),
@@ -151,9 +117,30 @@ export async function projetosRoutes(server: FastifyInstance) {
         return reply.status(404).send({ error: 'Projeto não encontrado' });
       }
 
+      const [licenseRows, environmentalRows, expertAssessmentRows] = await Promise.all([
+        db.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1),
+        db.select().from(schema.ambiental).where(eq(schema.ambiental.projetoId, id)).limit(1),
+        db.select().from(schema.pericias).where(eq(schema.pericias.projetoId, id)).limit(1)
+      ]);
+      const license = licenseRows[0];
+      const environmental = environmentalRows[0];
+      const expertAssessment = expertAssessmentRows[0];
+
       return {
         ...result[0].projeto,
-        clienteNome: result[0].cliente?.nome
+        clienteNome: result[0].cliente?.nome,
+        orgaoAmbiental: environmental?.orgaoAmbiental || license?.orgao || null,
+        tipoDemanda: environmental?.tipoDemanda || null,
+        tipoLicenca: license?.tipoLicenca || null,
+        protocolo: environmental?.protocolo || license?.protocolo || null,
+        numeroLicenca: license?.numero || null,
+        dataEmissao: license?.dataEmissao || null,
+        dataVencimentoLicenca: license?.dataVencimento || null,
+        statusLicenca: license?.status || null,
+        observacoesLicenca: license?.observacoes || null,
+        tipoPericia: expertAssessment?.tipoPericia || null,
+        numeroProcesso: expertAssessment?.numeroProcesso || null,
+        dataVistoria: expertAssessment?.dataVistoria || null
       };
     } catch (err) {
       server.log.error(err);
@@ -167,6 +154,9 @@ export async function projetosRoutes(server: FastifyInstance) {
     }
   }, async (request, reply) => {
     const data = request.body;
+    if (data.tipo === 'Licenciamento' && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataVencimentoLicenca)) {
+      return reply.status(400).send({ error: 'Número, órgão, tipo e vencimento da licença são obrigatórios.' });
+    }
     try {
       const novoProjeto = await db.transaction(async (tx) => {
         const result = await tx.insert(schema.projetos).values({
@@ -177,7 +167,7 @@ export async function projetosRoutes(server: FastifyInstance) {
           status: data.status || 'Em Andamento',
           dataInicio: data.dataInicio || null,
           dataEntrega: data.dataEntrega || null,
-          areaHa: data.areaHa || null,
+          areaHa: data.areaHa ?? null,
           matricula: data.matricula || null,
           car: data.car || null,
           ccir: data.ccir || null,
@@ -187,8 +177,8 @@ export async function projetosRoutes(server: FastifyInstance) {
           situacaoImovel: data.situacaoImovel || null,
           tipo: data.tipo || null,
           averbacao: data.averbacao || null,
-          latitude: data.latitude || null,
-          longitude: data.longitude || null,
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
           possuiMemorialDescritivo: data.possuiMemorialDescritivo || null,
           observacoes: data.observacoes || null,
           propriedadeId: data.propriedadeId || null
@@ -200,13 +190,14 @@ export async function projetosRoutes(server: FastifyInstance) {
             id: crypto.randomUUID(),
             projetoId: result[0].id,
             clienteId: data.clienteId,
-            numero: data.numeroLicenca || 'S/N',
+            numero: data.numeroLicenca!,
             protocolo: data.protocolo || null,
-            orgao: data.orgaoAmbiental || 'Não informado',
-            tipoLicenca: data.tipoLicenca || null,
+            orgao: data.orgaoAmbiental!,
+            tipoLicenca: data.tipoLicenca!,
             dataEmissao: data.dataEmissao || null,
-            dataVencimento: data.dataVencimentoLicenca || data.dataEntrega || new Date().toISOString(),
-            status: 'Válida'
+            dataVencimento: data.dataVencimentoLicenca!,
+            status: data.statusLicenca || 'Em análise',
+            observacoes: data.observacoesLicenca || null
           });
         } else if (data.tipo === 'Ambiental') {
           await tx.insert(schema.ambiental).values({
@@ -263,7 +254,7 @@ export async function projetosRoutes(server: FastifyInstance) {
       body: ProjetoLotePayloadSchema
     }
   }, async (request, reply) => {
-    const data = request.body;
+      const data = request.body;
 
     if (data.length === 0) {
       return reply.status(400).send({ error: 'Payload deve conter pelo menos um projeto' });
@@ -354,10 +345,23 @@ export async function projetosRoutes(server: FastifyInstance) {
       if (!oldProjeto.length || oldProjeto[0].deletedAt) {
         return reply.status(404).send({ error: 'Projeto não encontrado' });
       }
+      const requestedType = data.tipo !== undefined ? data.tipo : oldProjeto[0].tipo;
+      if (requestedType === 'Licenciamento') {
+        const existingLicense = await db.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1);
+        if (!existingLicense.length && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataVencimentoLicenca)) {
+          return reply.status(400).send({ error: 'Número, órgão, tipo e vencimento da licença são obrigatórios.' });
+        }
+      }
 
       const updateData: any = { updatedAt: new Date().toISOString() };
+      const projectFields = new Set([
+        'clienteId', 'nome', 'descricao', 'status', 'dataInicio', 'dataEntrega',
+        'areaHa', 'matricula', 'car', 'ccir', 'itr', 'cidade', 'municipio',
+        'situacaoImovel', 'tipo', 'averbacao', 'latitude', 'longitude',
+        'possuiMemorialDescritivo', 'observacoes', 'propriedadeId'
+      ]);
       for (const key of Object.keys(data)) {
-        updateData[key] = (data as any)[key] ?? null;
+        if (projectFields.has(key)) updateData[key] = (data as any)[key] ?? null;
       }
 
       const projetoAtualizado = await db.transaction(async (tx) => {
@@ -365,6 +369,101 @@ export async function projetosRoutes(server: FastifyInstance) {
           .set(updateData)
           .where(eq(schema.projetos.id, id))
           .returning();
+
+        const currentType = data.tipo !== undefined ? data.tipo : oldProjeto[0].tipo;
+        const specializedUpdatedAt = new Date().toISOString();
+
+        if (currentType !== 'Licenciamento') {
+          await tx.delete(schema.licencas).where(eq(schema.licencas.projetoId, id));
+        }
+        if (currentType !== 'Ambiental') {
+          await tx.delete(schema.ambiental).where(eq(schema.ambiental.projetoId, id));
+        }
+        if (currentType !== 'Perícia') {
+          await tx.delete(schema.pericias).where(eq(schema.pericias.projetoId, id));
+        }
+
+        if (currentType === 'Licenciamento') {
+          const existing = await tx.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1);
+          if (existing.length) {
+            await tx.update(schema.licencas).set({
+              clienteId: result[0].clienteId,
+              ...(data.numeroLicenca !== undefined && data.numeroLicenca ? { numero: data.numeroLicenca } : {}),
+              ...(data.protocolo !== undefined ? { protocolo: data.protocolo ?? null } : {}),
+              ...(data.orgaoAmbiental !== undefined ? { orgao: data.orgaoAmbiental || 'Não informado' } : {}),
+              ...(data.tipoLicenca !== undefined ? { tipoLicenca: data.tipoLicenca ?? null } : {}),
+              ...(data.dataEmissao !== undefined ? { dataEmissao: data.dataEmissao ?? null } : {}),
+              ...(data.dataVencimentoLicenca ? { dataVencimento: data.dataVencimentoLicenca } : {}),
+              ...(data.statusLicenca !== undefined ? { status: data.statusLicenca || 'Em análise' } : {}),
+              ...(data.observacoesLicenca !== undefined ? { observacoes: data.observacoesLicenca ?? null } : {}),
+              updatedAt: specializedUpdatedAt
+            }).where(eq(schema.licencas.id, existing[0].id));
+          } else {
+            await tx.insert(schema.licencas).values({
+              id: crypto.randomUUID(),
+              projetoId: id,
+              clienteId: result[0].clienteId,
+              numero: data.numeroLicenca!,
+              protocolo: data.protocolo || null,
+              orgao: data.orgaoAmbiental!,
+              tipoLicenca: data.tipoLicenca!,
+              dataEmissao: data.dataEmissao || null,
+              dataVencimento: data.dataVencimentoLicenca!,
+              status: data.statusLicenca || 'Em análise',
+              observacoes: data.observacoesLicenca || null
+            });
+          }
+        }
+
+        if (currentType === 'Ambiental') {
+          const existing = await tx.select().from(schema.ambiental).where(eq(schema.ambiental.projetoId, id)).limit(1);
+          if (existing.length) {
+            await tx.update(schema.ambiental).set({
+              clienteId: result[0].clienteId,
+              propriedadeId: result[0].propriedadeId,
+              ...(data.orgaoAmbiental !== undefined ? { orgaoAmbiental: data.orgaoAmbiental ?? null } : {}),
+              ...(data.tipoDemanda !== undefined ? { tipoDemanda: data.tipoDemanda ?? null } : {}),
+              ...(data.protocolo !== undefined ? { protocolo: data.protocolo ?? null } : {}),
+              updatedAt: specializedUpdatedAt
+            }).where(eq(schema.ambiental.id, existing[0].id));
+          } else {
+            await tx.insert(schema.ambiental).values({
+              id: crypto.randomUUID(),
+              projetoId: id,
+              clienteId: result[0].clienteId,
+              propriedadeId: result[0].propriedadeId,
+              orgaoAmbiental: data.orgaoAmbiental || null,
+              tipoDemanda: data.tipoDemanda || null,
+              protocolo: data.protocolo || null,
+              statusFase: 'Inicial'
+            });
+          }
+        }
+
+        if (currentType === 'Perícia') {
+          const existing = await tx.select().from(schema.pericias).where(eq(schema.pericias.projetoId, id)).limit(1);
+          if (existing.length) {
+            await tx.update(schema.pericias).set({
+              clienteId: result[0].clienteId,
+              propriedadeId: result[0].propriedadeId,
+              ...(data.tipoPericia !== undefined ? { tipoPericia: data.tipoPericia ?? null } : {}),
+              ...(data.numeroProcesso !== undefined ? { numeroProcesso: data.numeroProcesso ?? null } : {}),
+              ...(data.dataVistoria !== undefined ? { dataVistoria: data.dataVistoria ?? null } : {}),
+              updatedAt: specializedUpdatedAt
+            }).where(eq(schema.pericias.id, existing[0].id));
+          } else {
+            await tx.insert(schema.pericias).values({
+              id: crypto.randomUUID(),
+              projetoId: id,
+              clienteId: result[0].clienteId,
+              propriedadeId: result[0].propriedadeId,
+              tipoPericia: data.tipoPericia || null,
+              numeroProcesso: data.numeroProcesso || null,
+              dataVistoria: data.dataVistoria || null,
+              status: 'Agendada'
+            });
+          }
+        }
           
         await AuditLogService.log('UPDATE', 'Projeto', oldProjeto[0], result[0], tx);
 

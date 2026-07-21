@@ -1,62 +1,82 @@
+import { DatePickerField, FormSelect } from '../../components/Form';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { z } from 'zod';
+import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient } from '../../services/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, EnvelopeSimple, Phone, Trash, Note, Tag, Info, Users, ClockCounterClockwise, WhatsappLogo, Envelope, UsersThree, ChatText, FolderSimple, DownloadSimple, FilePdf, FileDoc, FileText, FileDashed, Files, MagnifyingGlass } from '@phosphor-icons/react';
+import { motion } from 'framer-motion';
+import { Plus, EnvelopeSimple, Phone, Trash, Note, Info, Users, ClockCounterClockwise, WhatsappLogo, Envelope, UsersThree, ChatText, FolderSimple, DownloadSimple, FilePdf, FileDoc, FileText, FileDashed, Files, MagnifyingGlass, DotsThree, PencilSimple, ArrowSquareOut, X, ArrowsDownUp, WarningCircle } from '@phosphor-icons/react';
 import {
   CLIENT_CATEGORY_OPTIONS,
   CLIENT_ORIGIN_OPTIONS,
-  CLIENT_SERVICOS_BY_CATEGORY,
-  CLIENT_STATUS_OPTIONS,
-  getClientCategoryTagClass,
-  getClientOriginTagClass,
-  getClientStatusTagClass,
-  getClientServicoTagClass
+  getClientCategoryTagClass
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
-import { formatCnpj, formatCpf, formatPhoneBR } from '../../utils/formatters';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { getDownloadUrl } from '../../services/apiClient';
-import eyeIcon from '../../assets/magnific-icons/eye-tracking_8052980.svg';
-import editIcon from '../../assets/magnific-icons/writing_3215063.svg';
-import trashIcon from '../../assets/magnific-icons/trash-bin_5510130.svg';
 import { CustomSelect } from '../../components/CustomSelect';
+import { ClienteFormFields } from './ClienteFormFields';
+import {
+  applyClientPrefill,
+  clientFormFingerprint,
+  clientFormToPayload,
+  clientRecordToForm,
+  createEmptyClientForm,
+  validateClientForm,
+  type ClientFormErrors,
+  type ClientFormState,
+  type PersonType
+} from './clientForm';
 import {
   filterBarClass,
   filterClearButtonClass,
   filterSearchInputClass
 } from '../../utils/filterStyles';
-import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabListClass } from '../../utils/geoTheme';
+import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 
 export interface Cliente {
   id: string;
   nome: string;
+  tipoPessoa?: PersonType | null;
   documento?: string | null;
   email?: string | null;
   telefone?: string | null;
   endereco?: string | null;
   numero?: string | null;
+  semNumero?: boolean | null;
+  complemento?: string | null;
   bairro?: string | null;
+  municipio?: string | null;
+  uf?: string | null;
+  cep?: string | null;
   celular?: string | null;
+  celularWhatsapp?: boolean | null;
   cpf?: string | null;
+  rg?: string | null;
   cnpj?: string | null;
+  inscricaoEstadual?: string | null;
   origem?: string | null;
+  origemPrincipal?: string | null;
+  origemDetalhe?: string | null;
+  indicadoPor?: string | null;
   categoria?: string | null;
+  perfis?: string | null;
   anotacoes?: string | null;
   situacao?: string | null;
   previsaoEntrega?: string | null;
   servicos?: string | null;
   ultimaInteracao?: string | null;
+  propriedadesCount?: number;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
+
+type ClientModalTab = 'basico' | 'notas' | 'historico' | 'arquivos';
 
 const splitClientTags = (value?: string | null) =>
   (value || '')
@@ -65,12 +85,241 @@ const splitClientTags = (value?: string | null) =>
     .filter(Boolean);
 
 const clienteFieldClass = cn(geoFieldClass, 'w-full px-4 py-2.5 text-sm font-medium');
-const clienteCompactFieldClass = cn(geoFieldClass, 'w-full px-4 py-2 text-sm font-medium');
 const clienteTextareaClass = cn(geoFieldClass, 'w-full resize-none px-4 py-3 font-medium leading-relaxed');
-const clientePanelClass = 'geo-card space-y-4 p-5';
-const clienteChecklistClass = 'grid max-h-40 gap-2 overflow-y-auto rounded-lg border border-brand-border bg-brand-surface p-3';
-const clienteCheckboxClass = 'h-4 w-4 rounded border-brand-border text-brand-primary-600 focus:ring-brand-primary-400';
-const clienteActionLinkClass = 'geo-focus-ring flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-[background-color,color,transform] duration-150 active:scale-95';
+
+const BRAZILIAN_AREA_CODES = new Set([
+  '11', '12', '13', '14', '15', '16', '17', '18', '19',
+  '21', '22', '24', '27', '28',
+  '31', '32', '33', '34', '35', '37', '38',
+  '41', '42', '43', '44', '45', '46', '47', '48', '49',
+  '51', '53', '54', '55',
+  '61', '62', '63', '64', '65', '66', '67', '68', '69',
+  '71', '73', '74', '75', '77', '79',
+  '81', '82', '83', '84', '85', '86', '87', '88', '89',
+  '91', '92', '93', '94', '95', '96', '97', '98', '99'
+]);
+
+type FormattedPhone = {
+  display: string;
+  href?: string;
+  valid: boolean;
+};
+
+const formatBrazilianPhone = (value?: string | null): FormattedPhone | null => {
+  if (!value?.trim()) return null;
+
+  const original = value.trim();
+  const explicitlyInternational = original.startsWith('+');
+  let digits = original.replace(/\D/g, '');
+
+  if (explicitlyInternational && !digits.startsWith('55')) {
+    return { display: original, valid: false };
+  }
+
+  if (digits.length === 12 || digits.length === 13) {
+    if (!digits.startsWith('55')) return { display: original, valid: false };
+    digits = digits.slice(2);
+  }
+
+  // Prefixos nacionais antigos como 0XX devem ser removidos antes de validar o DDD.
+  if ((digits.length === 11 || digits.length === 12) && digits.startsWith('0')) {
+    digits = digits.slice(1);
+  }
+
+  if (digits.length !== 10 && digits.length !== 11) {
+    return { display: original, valid: false };
+  }
+
+  const areaCode = digits.slice(0, 2);
+  const subscriber = digits.slice(2);
+  const isMobile = subscriber.length === 9;
+  const validSubscriber = isMobile
+    ? subscriber.startsWith('9')
+    : /^[2-5]/.test(subscriber);
+
+  if (!BRAZILIAN_AREA_CODES.has(areaCode) || !validSubscriber) {
+    return { display: original, valid: false };
+  }
+
+  const formattedSubscriber = isMobile
+    ? `${subscriber.slice(0, 5)}-${subscriber.slice(5)}`
+    : `${subscriber.slice(0, 4)}-${subscriber.slice(4)}`;
+
+  return {
+    display: `+55 (${areaCode}) ${formattedSubscriber}`,
+    href: `tel:+55${digits}`,
+    valid: true
+  };
+};
+
+const isValidEmail = (value?: string | null) =>
+  Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'long',
+  timeStyle: 'short'
+});
+
+const relativeTimeFormatter = new Intl.RelativeTimeFormat('pt-BR', { numeric: 'auto' });
+const clientCountFormatter = new Intl.NumberFormat('pt-BR');
+
+const formatPropertyCountLabel = (value: number) =>
+  `${clientCountFormatter.format(value)} ${value === 1 ? 'propriedade vinculada' : 'propriedades vinculadas'}`;
+
+const formatLastInteraction = (value?: string | null) => {
+  if (!value) return { relative: 'Sem interações' };
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { relative: 'Sem interações' };
+
+  const differenceInSeconds = (date.getTime() - Date.now()) / 1000;
+  const absoluteSeconds = Math.abs(differenceInSeconds);
+  let unit: Intl.RelativeTimeFormatUnit = 'second';
+  let divisor = 1;
+
+  if (absoluteSeconds >= 31_536_000) {
+    unit = 'year';
+    divisor = 31_536_000;
+  } else if (absoluteSeconds >= 2_592_000) {
+    unit = 'month';
+    divisor = 2_592_000;
+  } else if (absoluteSeconds >= 604_800) {
+    unit = 'week';
+    divisor = 604_800;
+  } else if (absoluteSeconds >= 86_400) {
+    unit = 'day';
+    divisor = 86_400;
+  } else if (absoluteSeconds >= 3_600) {
+    unit = 'hour';
+    divisor = 3_600;
+  } else if (absoluteSeconds >= 60) {
+    unit = 'minute';
+    divisor = 60;
+  }
+
+  return {
+    relative: relativeTimeFormatter.format(Math.round(differenceInSeconds / divisor), unit),
+    full: dateTimeFormatter.format(date)
+  };
+};
+
+const getClientCategory = (cliente: Cliente) =>
+  cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural');
+
+const splitClientName = (value: string) => {
+  const match = value.trim().match(/^(Srta?\.|Sra\.|Dra?\.|Profa?\.)\s+(.+)$/i);
+  return match
+    ? { honorific: match[1], name: match[2] }
+    : { honorific: null, name: value };
+};
+
+const clientListTagClass = 'inline-flex min-h-6 items-center rounded-full border px-2.5 py-0.5 text-xs font-bold leading-4';
+
+const getClientListStatusClass = (status: string) => cn(
+  clientListTagClass,
+  status === 'Inativo'
+    ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-400/40 dark:bg-amber-500/20 dark:text-amber-100'
+    : status === 'Ativo'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-100'
+      : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-400/40 dark:bg-sky-500/20 dark:text-sky-100'
+);
+
+interface ClientActionsMenuProps {
+  cliente: Cliente;
+  returnTo: string;
+  onEdit: (cliente: Cliente) => void;
+  onDelete: (id: string, name: string) => void;
+}
+
+function ClientActionsMenu({ cliente, returnTo, onEdit, onDelete }: ClientActionsMenuProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setIsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+
+  return (
+    <div ref={menuRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setIsOpen((current) => !current)}
+        aria-label={`Ações de ${cliente.nome}`}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-zinc-600 transition-[background-color,color] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white"
+      >
+        <DotsThree aria-hidden="true" weight="bold" className="h-5 w-5" />
+      </button>
+      {isOpen && (
+        <div
+          role="menu"
+          className="geo-surface-raised absolute right-0 top-full z-40 mt-1.5 w-48 overflow-hidden p-1.5"
+        >
+          <Link
+            to={`/clientes/${cliente.id}`}
+            state={{ clientesReturnTo: returnTo }}
+            role="menuitem"
+            onClick={() => setIsOpen(false)}
+            className="geo-focus-ring flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-zinc-700 transition-[background-color,color] hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-200 dark:hover:bg-brand-surface-muted dark:hover:text-white"
+          >
+            <ArrowSquareOut aria-hidden="true" className="h-4 w-4" />
+            Abrir cadastro
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false);
+              onEdit(cliente);
+            }}
+            className="geo-focus-ring flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-zinc-700 transition-[background-color,color] hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-200 dark:hover:bg-brand-surface-muted dark:hover:text-white"
+          >
+            <PencilSimple aria-hidden="true" className="h-4 w-4" />
+            Editar
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setIsOpen(false);
+              onDelete(cliente.id, cliente.nome);
+            }}
+            className="geo-focus-ring flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-brand-red-700 transition-[background-color,color] hover:bg-brand-red-50 dark:text-brand-red-200 dark:hover:bg-brand-red-500/12"
+          >
+            <Trash aria-hidden="true" className="h-4 w-4" />
+            Excluir
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const readInitialListValue = (search: string, key: string, fallback: string) => {
+  const valueFromUrl = new URLSearchParams(search).get(key);
+  if (valueFromUrl) return valueFromUrl;
+
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem('geogestor:clientes:list-state') || '{}') as Record<string, string>;
+    return stored[key] || fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 export function ListagemClientes() {
   const queryClient = useQueryClient();
@@ -81,12 +330,12 @@ export function ListagemClientes() {
 
   const [showModal, setShowModal] = useState(false);
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null);
-  const [activeTab, setActiveTab] = useState<'basico' | 'contato' | 'notas' | 'historico' | 'arquivos'>('basico');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [situacaoFilter, setSituacaoFilter] = useState('Todos');
-  const [categoriaFilter, setCategoriaFilter] = useState('Todos');
-  const [origemFilter, setOrigemFilter] = useState('Todos');
-  const [sortOrder, setSortOrder] = useState('recentes');
+  const [activeTab, setActiveTab] = useState<ClientModalTab>('basico');
+  const [searchTerm, setSearchTerm] = useState(() => readInitialListValue(location.search, 'q', ''));
+  const [situacaoFilter, setSituacaoFilter] = useState(() => readInitialListValue(location.search, 'status', 'Todos'));
+  const [categoriaFilter, setCategoriaFilter] = useState(() => readInitialListValue(location.search, 'categoria', 'Todos'));
+  const [origemFilter, setOrigemFilter] = useState(() => readInitialListValue(location.search, 'origem', 'Todos'));
+  const [sortOrder, setSortOrder] = useState(() => readInitialListValue(location.search, 'ordenar', 'recentes'));
   const [visibleCount, setVisibleCount] = useState(15);
 
   // Client files states
@@ -95,32 +344,21 @@ export function ListagemClientes() {
     isOpen: boolean;
     title: string;
     description: string;
+    confirmText: string;
     onConfirm: () => void;
   }>({
     isOpen: false,
     title: '',
     description: '',
+    confirmText: 'Excluir',
     onConfirm: () => {}
   });
 
-  // Form states
-  const [nome, setNome] = useState('');
-  const [documento, setDocumento] = useState('');
-  const [email, setEmail] = useState('');
-  const [telefone, setTelefone] = useState('');
-  const [endereco, setEndereco] = useState('');
-  const [numero, setNumero] = useState('');
-  const [bairro, setBairro] = useState('');
-  const [celular, setCelular] = useState('');
-  const [cpf, setCpf] = useState('');
-  const [cnpj, setCnpj] = useState('');
-  const [origem, setOrigem] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [anotacoes, setAnotacoes] = useState('');
-  const [situacao, setSituacao] = useState('Ativo');
-  const [previsaoEntrega, setPrevisaoEntrega] = useState('');
-  const [servicos, setServicos] = useState('');
-  const [activeServicoTab, setActiveServicoTab] = useState<string>('Ambiental');
+  const [clientForm, setClientForm] = useState<ClientFormState>(() => createEmptyClientForm());
+  const [clientFormErrors, setClientFormErrors] = useState<ClientFormErrors>({});
+  const [clientFormDirty, setClientFormDirty] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const initialClientFormRef = useRef(clientFormFingerprint(createEmptyClientForm()));
 
   // Historico CRM form states
   const [histTipo, setHistTipo] = useState('Whatsapp');
@@ -128,9 +366,9 @@ export function ListagemClientes() {
   const [histDescricao, setHistDescricao] = useState('');
 
   // 1. Fetching client list
-  const { data: clientes = [], isLoading: loading } = useQuery<Cliente[]>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get<Cliente[]>('/api/clientes')
+  const { data: clientes = [], isLoading: loading, isError: hasLoadError, isFetching, refetch } = useQuery<Cliente[]>({
+    queryKey: ['clientes', 'directory', 500],
+    queryFn: () => apiClient.get<Cliente[]>('/api/clientes?limit=500')
   });
 
   // 2. Fetching history list
@@ -172,9 +410,6 @@ export function ListagemClientes() {
 
   const clientFiles = filesData.files;
   const clientFilesPasta = filesData.path;
-  const selectedCategorias = splitClientTags(categoria);
-  const selectedOrigens = splitClientTags(origem);
-  const selectedServicos = splitClientTags(servicos);
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const filteredClientes = useMemo(() => {
     const query = deferredSearchTerm.trim().toLowerCase();
@@ -192,12 +427,12 @@ export function ListagemClientes() {
         cliente.numero,
         cliente.bairro,
         (cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural')),
-        cliente.origem
+        cliente.origemPrincipal || cliente.origem
       ].filter(Boolean).join(' ').toLowerCase();
       const matchesSearch = !query || searchable.includes(query);
       const matchesSituacao = situacaoFilter === 'Todos' || (cliente.situacao || 'Ativo') === situacaoFilter;
       const matchesCategoria = categoriaFilter === 'Todos' || splitClientTags((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural'))).includes(categoriaFilter);
-      const matchesOrigem = origemFilter === 'Todos' || splitClientTags(cliente.origem).includes(origemFilter);
+      const matchesOrigem = origemFilter === 'Todos' || (cliente.origemPrincipal || splitClientTags(cliente.origem)[0]) === origemFilter;
       return matchesSearch && matchesSituacao && matchesCategoria && matchesOrigem;
     }).sort((a, b) => {
       if (sortOrder === 'az') return a.nome.localeCompare(b.nome);
@@ -210,17 +445,11 @@ export function ListagemClientes() {
   }, [categoriaFilter, clientes, deferredSearchTerm, origemFilter, situacaoFilter, sortOrder]);
   const paginatedClientes = useMemo(() => filteredClientes.slice(0, visibleCount), [filteredClientes, visibleCount]);
   const hasClientFilters = Boolean(searchTerm || situacaoFilter !== 'Todos' || categoriaFilter !== 'Todos' || origemFilter !== 'Todos');
-
-  const toggleTagValue = (
-    value: string,
-    selectedValues: string[],
-    setValue: React.Dispatch<React.SetStateAction<string>>
-  ) => {
-    const nextValues = selectedValues.includes(value)
-      ? selectedValues.filter((item) => item !== value)
-      : [...selectedValues, value];
-    setValue(nextValues.join(', '));
-  };
+  const activeFilterChips = [
+    situacaoFilter !== 'Todos' ? { key: 'status', label: `Status: ${situacaoFilter}`, clear: () => setSituacaoFilter('Todos') } : null,
+    categoriaFilter !== 'Todos' ? { key: 'categoria', label: `Categoria: ${categoriaFilter}`, clear: () => setCategoriaFilter('Todos') } : null,
+    origemFilter !== 'Todos' ? { key: 'origem', label: `Origem: ${origemFilter}`, clear: () => setOrigemFilter('Todos') } : null
+  ].filter((chip): chip is { key: string; label: string; clear: () => void } => Boolean(chip));
 
   // 4. Mutations
   const deleteClientMutation = useMutation({
@@ -228,25 +457,31 @@ export function ListagemClientes() {
       await apiClient.delete(`/api/clientes/${id}`);
     },
     onSuccess: () => {
+      setConfirmData(prev => ({ ...prev, isOpen: false }));
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      toast.success('Cliente excluído com sucesso.');
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao excluir cliente';
-      alert(msg);
+      toast.error(msg);
     }
   });
 
   const submitClientMutation = useMutation({
-    mutationFn: async (payload: Partial<Cliente>) => {
+    mutationFn: async (payload: ReturnType<typeof clientFormToPayload>) => {
       if (selectedCliente) {
         return await apiClient.patch(`/api/clientes/${selectedCliente.id}`, payload);
       }
       return await apiClient.post('/api/clientes', payload);
     },
     onSuccess: () => {
+      const feedbackMessage = selectedCliente ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.';
+      setSuccessMessage(feedbackMessage);
+      setClientFormDirty(false);
       setShowModal(false);
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['cliente-dashboard', selectedCliente?.id] });
+      toast.success(feedbackMessage);
       if (selectedCliente && editReturnClienteIdRef.current) {
         const returnId = editReturnClienteIdRef.current;
         editReturnClienteIdRef.current = null;
@@ -255,7 +490,7 @@ export function ListagemClientes() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : (selectedCliente ? 'Erro ao atualizar cliente' : 'Erro ao criar cliente');
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -284,6 +519,7 @@ export function ListagemClientes() {
       await apiClient.post('/api/arquivos/upload/stream', formData);
     },
     onSuccess: () => {
+      setConfirmData(prev => ({ ...prev, isOpen: false }));
       queryClient.invalidateQueries({ queryKey: ['cliente-arquivos', selectedCliente?.id] });
       queryClient.invalidateQueries({ queryKey: ['cliente-geo', selectedCliente?.id] });
     },
@@ -325,61 +561,38 @@ export function ListagemClientes() {
   const handleClientFileDelete = (filePath: string) => {
     setConfirmData({
       isOpen: true,
-      title: 'Excluir Arquivo',
-      description: 'Tem certeza que deseja excluir permanentemente este arquivo do disco local?',
-      onConfirm: () => {
-        deleteFileMutation.mutate(filePath);
-        setConfirmData(prev => ({ ...prev, isOpen: false }));
-      }
+      title: `Excluir arquivo “${filePath.split(/[\\/]/).pop() || 'arquivo'}”?`,
+      description: 'O arquivo será removido permanentemente do disco local e deixará de aparecer nos documentos do cliente. Esta ação não pode ser desfeita.',
+      confirmText: 'Excluir arquivo',
+      onConfirm: () => deleteFileMutation.mutate(filePath)
     });
   };
 
-  const openCreateModal = () => {
+  const openCreateModal = (prefill?: Record<string, string>) => {
+    const nextForm = applyClientPrefill(createEmptyClientForm(), prefill);
     setSelectedCliente(null);
-    setNome('');
-    setDocumento('');
-    setEmail('');
-    setTelefone('');
-    setEndereco('');
-    setNumero('');
-    setBairro('');
-    setCelular('');
-    setCpf('');
-    setCnpj('');
-    setOrigem('');
-    setCategoria('Pessoa Física');
-    setAnotacoes('');
-    setSituacao('Ativo');
-    setPrevisaoEntrega('');
-    setServicos('');
+    setClientForm(nextForm);
+    setClientFormErrors({});
+    initialClientFormRef.current = clientFormFingerprint(nextForm);
+    setClientFormDirty(false);
     setActiveTab('basico');
     editReturnClienteIdRef.current = null;
     setShowModal(true);
   };
 
   const openEditModal = (cliente: Cliente) => {
+    const nextForm = clientRecordToForm(cliente);
     setSelectedCliente(cliente);
-    setNome(cliente.nome || '');
-    setDocumento(cliente.documento || '');
-    setEmail(cliente.email || '');
-    setTelefone(formatPhoneBR(cliente.telefone || ''));
-    setEndereco(cliente.endereco || '');
-    setNumero(cliente.numero || '');
-    setBairro(cliente.bairro || '');
-    setCelular(formatPhoneBR(cliente.celular || ''));
-    setCpf(formatCpf(cliente.cpf || ''));
-    setCnpj(formatCnpj(cliente.cnpj || ''));
-    setOrigem(cliente.origem || '');
-    setCategoria((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural')) || 'Pessoa Física');
-    setAnotacoes(cliente.anotacoes || '');
-    setSituacao(cliente.situacao || 'Ativo');
-    setPrevisaoEntrega(cliente.previsaoEntrega || '');
-    setServicos(cliente.servicos || '');
+    setClientForm(nextForm);
+    setClientFormErrors({});
+    initialClientFormRef.current = clientFormFingerprint(nextForm);
+    setClientFormDirty(false);
     setActiveTab('basico');
     setShowModal(true);
   };
 
   const closeClientModal = () => {
+    if (clientFormDirty && !submitClientMutation.isPending && !window.confirm('Descartar as alterações não salvas deste cliente?')) return;
     editReturnClienteIdRef.current = null;
     setShowModal(false);
   };
@@ -391,22 +604,26 @@ export function ListagemClientes() {
       openNewClientModal?: boolean;
       prefillClientData?: Record<string, string>;
     } | null;
-    if (handledRouteActionRef.current || !routeState) return;
+    if (handledRouteActionRef.current) return;
+
+    const routeParams = new URLSearchParams(location.search);
+    if (routeParams.get('novo') === '1') {
+      handledRouteActionRef.current = true;
+      routeParams.delete('novo');
+      setTimeout(() => {
+        openCreateModal();
+        navigate({ pathname: location.pathname, search: routeParams.toString() ? `?${routeParams}` : '' }, { replace: true });
+      }, 0);
+      return;
+    }
+
+    if (!routeState) return;
 
     if (routeState.openNewClientModal && routeState.prefillClientData) {
       handledRouteActionRef.current = true;
       const pre = routeState.prefillClientData;
       setTimeout(() => {
-        openCreateModal();
-        if (pre.nome) setNome(pre.nome);
-        if (pre.email) setEmail(pre.email);
-        if (pre.telefone) setTelefone(formatPhoneBR(pre.telefone));
-        if (pre.endereco) setEndereco(pre.endereco);
-        if (pre.numero) setNumero(pre.numero);
-        if (pre.bairro) setBairro(pre.bairro);
-        if (pre.documento) setDocumento(pre.documento);
-        if (pre.cpf) setCpf(formatCpf(pre.cpf));
-        if (pre.cnpj) setCnpj(formatCnpj(pre.cnpj));
+        openCreateModal(pre);
         navigate(location.pathname, { replace: true, state: {} });
       }, 0);
       return;
@@ -423,7 +640,22 @@ export function ListagemClientes() {
         }, 0);
       }
     }
-  }, [clientes, loading, location.pathname, location.state, navigate]);
+  }, [clientes, loading, location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    setClientFormDirty(clientFormFingerprint(clientForm) !== initialClientFormRef.current);
+  }, [clientForm, showModal]);
+
+  useEffect(() => {
+    if (!clientFormDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [clientFormDirty]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -433,53 +665,89 @@ export function ListagemClientes() {
     return () => window.clearTimeout(timeoutId);
   }, [categoriaFilter, deferredSearchTerm, origemFilter, situacaoFilter, sortOrder]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const setOrDelete = (key: string, value: string, defaultValue = '') => {
+      if (!value || value === defaultValue) params.delete(key);
+      else params.set(key, value);
+    };
+
+    setOrDelete('q', searchTerm);
+    setOrDelete('status', situacaoFilter, 'Todos');
+    setOrDelete('categoria', categoriaFilter, 'Todos');
+    setOrDelete('origem', origemFilter, 'Todos');
+    setOrDelete('ordenar', sortOrder, 'recentes');
+
+    const nextSearch = params.toString();
+    const currentSearch = location.search.replace(/^\?/, '');
+    if (nextSearch !== currentSearch) {
+      navigate({ pathname: location.pathname, search: nextSearch ? `?${nextSearch}` : '' }, { replace: true });
+    }
+
+    window.sessionStorage.setItem('geogestor:clientes:list-state', JSON.stringify({
+      q: searchTerm,
+      status: situacaoFilter,
+      categoria: categoriaFilter,
+      origem: origemFilter,
+      ordenar: sortOrder
+    }));
+  }, [categoriaFilter, location.pathname, location.search, navigate, origemFilter, searchTerm, situacaoFilter, sortOrder]);
+
   const handleDelete = (id: string, name: string) => {
     setConfirmData({
       isOpen: true,
-      title: 'Excluir Cliente',
-      description: `Tem certeza que deseja excluir o cliente "${name}"? Cadastros, histórico e vínculos serão removidos do GeoGestor. Por segurança, os arquivos da pasta local serão preservados.`,
-      onConfirm: () => {
-        deleteClientMutation.mutate(id);
-        setConfirmData(prev => ({ ...prev, isOpen: false }));
-      }
+      title: `Excluir ${name}?`,
+      description: `O cliente “${name}”, seu histórico e seus vínculos serão removidos do GeoGestor. Por segurança, os arquivos da pasta local serão preservados. Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir cliente',
+      onConfirm: () => deleteClientMutation.mutate(id)
     });
+  };
+
+  const clearClientFormErrors = (...fields: Array<keyof ClientFormState>) => {
+    setClientFormErrors((current) => {
+      if (!fields.some((field) => current[field])) return current;
+      const next = { ...current };
+      fields.forEach((field) => delete next[field]);
+      return next;
+    });
+  };
+
+  const activateClientTab = (tab: ClientModalTab, moveFocus = false) => {
+    setActiveTab(tab);
+    window.setTimeout(() => {
+      const scrollRegion = document.getElementById('client-form-scroll-region');
+      if (scrollRegion) scrollRegion.scrollTop = 0;
+      if (moveFocus) document.getElementById(`client-tab-${tab}`)?.focus();
+    }, 0);
+  };
+
+  const handleClientTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentTab: ClientModalTab) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const tabOrder: ClientModalTab[] = selectedCliente
+      ? ['basico', 'notas', 'historico', 'arquivos']
+      : ['basico', 'notas'];
+    const currentIndex = tabOrder.indexOf(currentTab);
+    let nextIndex = currentIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabOrder.length - 1;
+    else if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabOrder.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabOrder.length) % tabOrder.length;
+    activateClientTab(tabOrder[nextIndex], true);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Zod validation
-    const payload = {
-      nome,
-      documento: documento || (selectedCategorias.includes('Pessoa Jurídica') ? cnpj : cpf) || null,
-      email: email || null,
-      telefone: telefone || null,
-      endereco: endereco || null,
-      numero: numero || null,
-      bairro: bairro || null,
-      celular: celular || null,
-      cpf: cpf || null,
-      cnpj: cnpj || null,
-      origem: origem || null,
-      categoria: categoria || null,
-      anotacoes: anotacoes || null,
-      situacao: situacao || 'Ativo',
-      previsaoEntrega: previsaoEntrega || null,
-      servicos: servicos || null
-    };
-
-    const schema = z.object({
-      nome: z.string().min(1, 'Razão Social / Nome Completo é obrigatório'),
-      email: z.string().email('E-mail inválido').optional().or(z.literal('')).nullable(),
-    });
-
-    const validation = schema.safeParse(payload);
-    if (!validation.success) {
-      alert(validation.error.issues[0].message);
+    const validation = validateClientForm(clientForm, selectedCliente);
+    setClientFormErrors(validation.errors);
+    if (!validation.valid) {
+      activateClientTab('basico');
+      const firstField = Object.keys(validation.errors)[0] as keyof ClientFormState | undefined;
+      const fieldId = firstField === 'tipoPessoa' ? 'client-tipo-pf' : firstField ? `client-${firstField}` : 'client-nome';
+      window.setTimeout(() => document.getElementById(fieldId)?.focus(), 0);
       return;
     }
-
-    submitClientMutation.mutate(payload);
+    submitClientMutation.mutate(validation.payload);
   };
 
   const handleAddHistorico = (e: React.FormEvent) => {
@@ -490,11 +758,6 @@ export function ListagemClientes() {
       data: histData,
       descricao: histDescricao
     });
-  };
-
-  // Helper values for background styles of situation
-  const getStatusColor = (status: string) => {
-    return getClientStatusTagClass(status);
   };
 
   const getInteractionIcon = (tipo: string) => {
@@ -519,82 +782,107 @@ export function ListagemClientes() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <span className={cn(geoKickerClass, 'mb-4')}>
+          <span className={cn(geoKickerClass, 'mb-2')}>
             Diretório
           </span>
-          <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Clientes
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
+            Clientes <span className="text-zinc-400 dark:text-zinc-500">· {clientes.length}</span>
           </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Carteira de clientes ativos, contatos e propriedades integradas.
+          <p className="mt-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-300 sm:text-base">
+            Gerencie clientes, contatos, propriedades e histórico de interações.
           </p>
         </div>
         
         <button 
-          onClick={openCreateModal}
-          className={primaryActionButtonClass}
+          type="button"
+          onClick={() => openCreateModal()}
+          className={cn(primaryActionButtonClass, 'shadow-sm hover:shadow-md')}
         >
-          <span>Novo Cliente</span>
+          <span>Novo cliente</span>
           <div className={primaryActionIconClass}>
-            <Plus weight="bold" className="w-4 h-4" />
+            <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
           </div>
         </button>
       </div>
 
-      <div className={cn('mb-6', filterBarClass)}>
-        <div className="flex flex-col lg:flex-row flex-wrap items-stretch lg:items-center gap-3">
-          <div className="relative flex-1 min-w-[260px]">
-            <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+      <div className={cn('mb-4', filterBarClass)}>
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
+          <div className="min-w-[260px] flex-1">
+            <label htmlFor="client-search" className="sr-only">Buscar clientes</label>
+            <div className="relative">
+              <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
             <input
+              id="client-search"
+              name="client-search"
               type="text"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por nome, e-mail, telefone, CPF/CNPJ ou endereço..."
+              placeholder="Buscar clientes por nome, documento ou contato…"
+              autoComplete="off"
               className={filterSearchInputClass}
             />
+            </div>
           </div>
-          <CustomSelect
-            value={situacaoFilter}
-            onChange={setSituacaoFilter}
-            placeholder="Situações"
-            options={[
-              { label: 'Situações', value: 'Todos' },
-              { label: 'Ativo', value: 'Ativo' },
-              { label: 'Inativo', value: 'Inativo' },
-              { label: 'Prospectado', value: 'Prospectado' }
-            ]}
-          />
-          <CustomSelect
-            value={categoriaFilter}
-            onChange={setCategoriaFilter}
-            placeholder="Categorias"
-            options={[
-              { label: 'Categorias', value: 'Todos' },
-              ...CLIENT_CATEGORY_OPTIONS.map(opt => ({ label: opt, value: opt }))
-            ]}
-          />
-          <CustomSelect
-            value={origemFilter}
-            onChange={setOrigemFilter}
-            placeholder="Origens"
-            options={[
-              { label: 'Origens', value: 'Todos' },
-              ...CLIENT_ORIGIN_OPTIONS.map(opt => ({ label: opt, value: opt }))
-            ]}
-          />
-          <CustomSelect
-            value={sortOrder}
-            onChange={setSortOrder}
-            placeholder="Ordenar"
-            options={[
-              { label: 'Mais Recentes', value: 'recentes' },
-              { label: 'Mais Antigos', value: 'antigos' },
-              { label: 'A-Z', value: 'az' },
-              { label: 'Z-A', value: 'za' }
-            ]}
-          />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:flex">
+            <CustomSelect
+              id="client-status-filter"
+              ariaLabel="Filtrar por status"
+              value={situacaoFilter}
+              onChange={setSituacaoFilter}
+              placeholder="Status"
+              className="min-w-0 xl:min-w-[140px]"
+              options={[
+                { label: 'Todos os status', value: 'Todos' },
+                { label: 'Ativo', value: 'Ativo' },
+                { label: 'Inativo', value: 'Inativo' },
+                { label: 'Prospectado', value: 'Prospectado' }
+              ]}
+            />
+            <CustomSelect
+              id="client-category-filter"
+              ariaLabel="Filtrar por categoria"
+              value={categoriaFilter}
+              onChange={setCategoriaFilter}
+              placeholder="Categoria"
+              className="min-w-0 xl:min-w-[150px]"
+              options={[
+                { label: 'Todas as categorias', value: 'Todos' },
+                ...CLIENT_CATEGORY_OPTIONS.map(opt => ({ label: opt, value: opt }))
+              ]}
+            />
+            <CustomSelect
+              id="client-origin-filter"
+              ariaLabel="Filtrar por origem"
+              value={origemFilter}
+              onChange={setOrigemFilter}
+              placeholder="Origem"
+              className="min-w-0 xl:min-w-[140px]"
+              options={[
+                { label: 'Todas as origens', value: 'Todos' },
+                ...CLIENT_ORIGIN_OPTIONS.map(opt => ({ label: opt, value: opt }))
+              ]}
+            />
+            <div className="relative min-w-0 xl:min-w-[210px]">
+              <ArrowsDownUp aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <CustomSelect
+                id="client-sort-order"
+                ariaLabel="Ordenar clientes"
+                value={sortOrder}
+                onChange={setSortOrder}
+                placeholder="Ordenar por"
+                className="min-w-0"
+                buttonClassName="pl-9"
+                options={[
+                  { label: 'Cadastro mais recente', value: 'recentes' },
+                  { label: 'Cadastro mais antigo', value: 'antigos' },
+                  { label: 'Nome (A–Z)', value: 'az' },
+                  { label: 'Nome (Z–A)', value: 'za' }
+                ]}
+              />
+            </div>
+          </div>
           {hasClientFilters && (
             <button
               type="button"
@@ -603,124 +891,283 @@ export function ListagemClientes() {
                 setSituacaoFilter('Todos');
                 setCategoriaFilter('Todos');
                 setOrigemFilter('Todos');
-                setSortOrder('recentes');
               }}
               className={filterClearButtonClass}
             >
-              Limpar
+              Limpar filtros
             </button>
           )}
         </div>
+        {activeFilterChips.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Filtros ativos">
+            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Filtros ativos:</span>
+            {activeFilterChips.map((chip) => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={chip.clear}
+                className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-primary-200 bg-brand-primary-50 px-2.5 py-1 text-xs font-semibold text-brand-primary-800 transition-[background-color,border-color] hover:bg-brand-primary-100 dark:border-brand-primary-300/25 dark:bg-brand-primary-400/12 dark:text-brand-primary-100 dark:hover:bg-brand-primary-400/20"
+                aria-label={`Remover filtro ${chip.label}`}
+              >
+                {chip.label}
+                <X aria-hidden="true" className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      <div className="space-y-4">
-        {loading ? (
-          <div className="flex h-64 items-center justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div>
+      <div className="mb-3 flex min-h-6 items-center justify-between gap-3 text-xs font-medium text-zinc-600 dark:text-zinc-300" role="status" aria-live="polite" aria-atomic="true">
+        <span>{filteredClientes.length} {filteredClientes.length === 1 ? 'resultado encontrado' : 'resultados encontrados'}</span>
+        {isFetching && !loading && <span>Atualizando…</span>}
+      </div>
+
+      <div>
+        {hasLoadError ? (
+          <div className="geo-empty-state p-10 text-center" role="alert">
+            <WarningCircle aria-hidden="true" weight="duotone" className="mx-auto mb-3 h-9 w-9 text-brand-red-600 dark:text-brand-red-200" />
+            <h2 className="text-lg font-semibold text-zinc-950 dark:text-white">Não foi possível carregar os clientes</h2>
+            <p className="mx-auto mt-1 max-w-md text-sm text-zinc-600 dark:text-zinc-300">Verifique a conexão com o GeoGestor e tente novamente.</p>
+            <button type="button" onClick={() => refetch()} className={cn(secondarySmallActionButtonClass, 'mt-5')}>
+              Tentar novamente
+            </button>
+          </div>
+        ) : loading ? (
+          <div className="geo-card overflow-hidden" aria-busy="true" aria-label="Carregando clientes">
+            <div className="sr-only" role="status">Carregando clientes…</div>
+            {[0, 1, 2, 3, 4].map((item) => (
+              <div key={item} className="flex items-center gap-4 border-b border-brand-border px-4 py-3 last:border-b-0">
+                <div className="h-10 w-10 shrink-0 animate-pulse rounded-lg bg-brand-surface-muted motion-reduce:animate-none" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <div className="h-3 w-40 animate-pulse rounded bg-brand-surface-muted motion-reduce:animate-none" />
+                  <div className="h-2.5 w-24 animate-pulse rounded bg-brand-surface-muted motion-reduce:animate-none" />
+                </div>
+                <div className="hidden h-3 w-44 animate-pulse rounded bg-brand-surface-muted motion-reduce:animate-none sm:block" />
+              </div>
+            ))}
           </div>
         ) : clientes.length === 0 ? (
-          <div className="geo-card mx-auto max-w-lg p-12 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-lg border border-brand-primary-200 bg-brand-primary-50 text-brand-primary-600 dark:border-brand-primary-300/25 dark:bg-brand-primary-400/12 dark:text-brand-primary-100">
-              <Users weight="duotone" className="w-8 h-8" />
+          <div className="geo-card mx-auto max-w-lg p-10 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-brand-primary-200 bg-brand-primary-50 text-brand-primary-600 dark:border-brand-primary-300/25 dark:bg-brand-primary-400/12 dark:text-brand-primary-100">
+              <Users aria-hidden="true" weight="duotone" className="h-7 w-7" />
             </div>
-            <h3 className="text-xl font-bold text-zinc-900 dark:text-white mb-2">Nenhum cliente cadastrado</h3>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Cadastre seu primeiro cliente para gerenciar projetos, orçamentos e histórico de relacionamento.</p>
-            <button onClick={openCreateModal} className={cn(primarySmallActionButtonClass, 'px-6 py-3')}>
-              Cadastrar Primeiro Cliente
+            <h2 className="text-xl font-bold text-zinc-950 dark:text-white">Nenhum cliente cadastrado</h2>
+            <p className="mb-6 mt-2 text-sm text-zinc-600 dark:text-zinc-300">Cadastre seu primeiro cliente para gerenciar projetos, orçamentos e histórico de relacionamento.</p>
+            <button type="button" onClick={() => openCreateModal()} className={cn(primarySmallActionButtonClass, 'px-6 py-3')}>
+              Novo cliente
             </button>
           </div>
         ) : filteredClientes.length === 0 ? (
           <div className="geo-empty-state p-10 text-center">
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">Nenhum cliente encontrado com os filtros selecionados.</p>
+            <h2 className="text-lg font-semibold text-zinc-950 dark:text-white">Nenhum cliente encontrado</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Ajuste a busca ou remova os filtros aplicados.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setSituacaoFilter('Todos');
+                setCategoriaFilter('Todos');
+                setOrigemFilter('Todos');
+              }}
+              className={cn(secondarySmallActionButtonClass, 'mt-5')}
+            >
+              Limpar filtros
+            </button>
           </div>
         ) : (
           <>
-            {paginatedClientes.map((cliente) => (
-              <div 
-                key={cliente.id}
-                className="geo-card-interactive group motion-gpu content-auto flex flex-col justify-between gap-6 p-6 md:flex-row md:items-center"
-              >
-              <div className="flex-1 flex flex-col md:flex-row md:items-center gap-6">
-                <div className={`w-14 h-14 flex items-center justify-center flex-shrink-0 ${getClientCategoryColorClass((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural')))}`}>
-                  {getClientCategoryIcon((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural')), "w-11 h-11")}
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
-                  <div>
-                    <div className="flex items-center gap-2.5">
-                      <h3 className="text-xl font-medium tracking-tight text-zinc-950 dark:text-white">{cliente.nome}</h3>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold tracking-wider uppercase ${getStatusColor(cliente.situacao || 'Ativo')}`}>
-                        {cliente.situacao || 'Ativo'}
+            <div className="hidden lg:block">
+              <table className="w-full table-fixed border-separate border-spacing-x-0 border-spacing-y-2 text-left">
+                <thead className="border-b border-brand-border bg-brand-surface-subtle/70">
+                  <tr className="text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">
+                    <th scope="col" className="w-[35%] px-4 py-2.5">Cliente</th>
+                    <th scope="col" className="w-[27%] px-4 py-2.5">Contato</th>
+                    <th scope="col" className="w-[13%] px-4 py-2.5 text-center">Propriedades</th>
+                    <th scope="col" className="w-[18%] px-4 py-2.5">Última interação</th>
+                    <th scope="col" className="w-[7%] px-3 py-2.5 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedClientes.map((cliente) => {
+                    const clientName = splitClientName(cliente.nome);
+                    const category = getClientCategory(cliente);
+                    const categories = splitClientTags(category);
+                    const status = cliente.situacao || 'Ativo';
+                    const phone = formatBrazilianPhone(cliente.celular || cliente.telefone);
+                    const interaction = formatLastInteraction(cliente.ultimaInteracao);
+                    const propertyCount = cliente.propriedadesCount ?? 0;
+                    const detailPath = `/clientes/${cliente.id}`;
+                    const returnTo = `${location.pathname}${location.search}`;
+
+                    return (
+                      <tr key={cliente.id} className="group shadow-sm transition-shadow duration-150 hover:shadow-md">
+                        <td className="rounded-l-lg border-y border-l border-brand-border bg-brand-surface px-4 py-4 align-middle transition-colors duration-150 group-hover:bg-brand-surface-subtle">
+                          <div className="flex min-w-0 items-center gap-3.5">
+                            <span aria-hidden="true" className={`flex h-11 w-11 shrink-0 items-center justify-center ${getClientCategoryColorClass(category)}`}>
+                              {getClientCategoryIcon(category, 'h-10 w-10')}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex min-w-0 items-center gap-2">
+                                {clientName.honorific && (
+                                  <span aria-label={`Tratamento: ${clientName.honorific}`} title="Tratamento" className="shrink-0 rounded bg-brand-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
+                                    {clientName.honorific}
+                                  </span>
+                                )}
+                                <Link
+                                  to={detailPath}
+                                  state={{ clientesReturnTo: returnTo }}
+                                  className="geo-focus-ring min-w-0 truncate rounded text-[15px] font-semibold text-zinc-950 transition-colors hover:text-brand-primary-700 hover:underline dark:text-white dark:hover:text-brand-primary-100"
+                                  aria-label={`Abrir cadastro de ${clientName.name}`}
+                                >
+                                  {clientName.name}
+                                </Link>
+                              </div>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5" title={categories.join(', ')}>
+                                {categories.length > 0 ? categories.map((item) => (
+                                  <span key={item} className={cn(clientListTagClass, getClientCategoryTagClass(item))}>
+                                    {item}
+                                  </span>
+                                )) : (
+                                  <span className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>Sem categoria</span>
+                                )}
+                                <span className={getClientListStatusClass(status)}>{status}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="border-y border-brand-border bg-brand-surface px-4 py-4 align-middle transition-colors duration-150 group-hover:bg-brand-surface-subtle">
+                          <div className="min-w-0 space-y-1 text-[13px]">
+                            {cliente.email ? (
+                              isValidEmail(cliente.email) ? (
+                                <a href={`mailto:${cliente.email}`} className="geo-focus-ring flex min-w-0 items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
+                                  <EnvelopeSimple aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{cliente.email}</span>
+                                </a>
+                              ) : (
+                                <span className="flex min-w-0 items-center gap-1.5 text-amber-800 dark:text-amber-200" title="O e-mail precisa ser revisado">
+                                  <WarningCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{cliente.email} · Revisar</span>
+                                </span>
+                              )
+                            ) : <span className="text-zinc-500 dark:text-zinc-400">Sem e-mail</span>}
+                            {phone ? (
+                              phone.valid ? (
+                                <a href={phone.href} className="geo-focus-ring flex items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
+                                  <Phone aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                  {phone.display}
+                                </a>
+                              ) : (
+                                <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-200" title="DDD ou quantidade de dígitos inválida">
+                                  <WarningCircle aria-hidden="true" className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{phone.display} · Revisar telefone</span>
+                                </span>
+                              )
+                            ) : <span className="text-zinc-500 dark:text-zinc-400">Sem telefone</span>}
+                          </div>
+                        </td>
+                        <td className="border-y border-brand-border bg-brand-surface px-4 py-4 text-center align-middle text-[15px] font-semibold tabular-nums text-zinc-700 transition-colors duration-150 group-hover:bg-brand-surface-subtle dark:text-zinc-200" title={formatPropertyCountLabel(propertyCount)}>
+                          <span aria-hidden="true">{clientCountFormatter.format(propertyCount)}</span>
+                          <span className="sr-only">{formatPropertyCountLabel(propertyCount)}</span>
+                        </td>
+                        <td className="border-y border-brand-border bg-brand-surface px-4 py-4 align-middle transition-colors duration-150 group-hover:bg-brand-surface-subtle">
+                          <span className="text-[13px] font-medium text-zinc-700 dark:text-zinc-200" title={interaction.full}>
+                            {interaction.relative}
+                          </span>
+                        </td>
+                        <td className="rounded-r-lg border-y border-r border-brand-border bg-brand-surface px-3 py-4 text-right align-middle transition-colors duration-150 group-hover:bg-brand-surface-subtle">
+                          <ClientActionsMenu cliente={cliente} returnTo={returnTo} onEdit={openEditModal} onDelete={handleDelete} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="space-y-2 lg:hidden">
+              {paginatedClientes.map((cliente) => {
+                const clientName = splitClientName(cliente.nome);
+                const category = getClientCategory(cliente);
+                const categories = splitClientTags(category);
+                const status = cliente.situacao || 'Ativo';
+                const phone = formatBrazilianPhone(cliente.celular || cliente.telefone);
+                const interaction = formatLastInteraction(cliente.ultimaInteracao);
+                const propertyCount = cliente.propriedadesCount ?? 0;
+                const returnTo = `${location.pathname}${location.search}`;
+
+                return (
+                  <article key={cliente.id} className="geo-card p-[1.125rem]">
+                    <div className="flex items-start gap-3.5">
+                      <span aria-hidden="true" className={`flex h-12 w-12 shrink-0 items-center justify-center ${getClientCategoryColorClass(category)}`}>
+                        {getClientCategoryIcon(category, 'h-11 w-11')}
                       </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      {splitClientTags((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural'))).map((category) => (
-                        <span key={category} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${getClientCategoryTagClass(category)}`}>
-                          <Tag className="h-3 w-3" /> {category}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col justify-center space-y-1">
-                    {cliente.email ? (
-                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400 truncate">
-                        <EnvelopeSimple weight="duotone" className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-                        <span className="truncate">{cliente.email}</span>
+                      <div className="min-w-0 flex-1">
+                        {clientName.honorific && (
+                          <span aria-label={`Tratamento: ${clientName.honorific}`} title="Tratamento" className="mb-1 inline-flex rounded bg-brand-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-zinc-600 dark:text-zinc-300">
+                            {clientName.honorific}
+                          </span>
+                        )}
+                        <Link
+                          to={`/clientes/${cliente.id}`}
+                          state={{ clientesReturnTo: returnTo }}
+                          className="geo-focus-ring block truncate rounded text-base font-semibold text-zinc-950 hover:text-brand-primary-700 hover:underline dark:text-white dark:hover:text-brand-primary-100"
+                          aria-label={`Abrir cadastro de ${clientName.name}`}
+                        >
+                          {clientName.name}
+                        </Link>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {categories.length > 0 ? categories.map((item) => (
+                            <span key={item} className={cn(clientListTagClass, getClientCategoryTagClass(item))}>
+                              {item}
+                            </span>
+                          )) : (
+                            <span className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>Sem categoria</span>
+                          )}
+                          <span className={getClientListStatusClass(status)}>{status}</span>
+                        </div>
                       </div>
-                    ) : (
-                      <span className="text-xs text-zinc-400 italic">Sem e-mail cadastrado</span>
-                    )}
-                    {cliente.telefone && (
-                      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                        <Phone weight="duotone" className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-                        <span>{cliente.telefone}</span>
+                      <ClientActionsMenu cliente={cliente} returnTo={returnTo} onEdit={openEditModal} onDelete={handleDelete} />
+                    </div>
+
+                    <dl className="mt-3.5 grid gap-3.5 border-t border-brand-border pt-3.5 text-[13px] sm:grid-cols-2">
+                      <div className="min-w-0">
+                        <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Contato</dt>
+                        <dd className="mt-1 min-w-0 space-y-1 text-zinc-700 dark:text-zinc-200">
+                          {cliente.email ? (
+                            isValidEmail(cliente.email)
+                              ? <a href={`mailto:${cliente.email}`} className="geo-focus-ring block truncate rounded hover:text-brand-primary-700 hover:underline">{cliente.email}</a>
+                              : <span className="block truncate text-amber-800 dark:text-amber-200">{cliente.email} · Revisar</span>
+                          ) : <span>Sem e-mail</span>}
+                          {phone ? (
+                            phone.valid
+                              ? <a href={phone.href} className="geo-focus-ring block rounded hover:text-brand-primary-700 hover:underline">{phone.display}</a>
+                              : <span className="block truncate text-amber-800 dark:text-amber-200">{phone.display} · Revisar telefone</span>
+                          ) : <span>Sem telefone</span>}
+                        </dd>
                       </div>
-                    )}
-                  </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Propriedades</dt>
+                          <dd className="mt-1 font-semibold tabular-nums text-zinc-700 dark:text-zinc-200" title={formatPropertyCountLabel(propertyCount)}>
+                            <span aria-hidden="true">{clientCountFormatter.format(propertyCount)}</span>
+                            <span className="sr-only">{formatPropertyCountLabel(propertyCount)}</span>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Última interação</dt>
+                          <dd className="mt-1 font-medium text-zinc-700 dark:text-zinc-200" title={interaction.full}>{interaction.relative}</dd>
+                        </div>
+                      </div>
+                    </dl>
+                  </article>
+                );
+              })}
+            </div>
 
-                  <div className="flex flex-col justify-center">
-                    <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider">Última Interação</span>
-                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      {cliente.ultimaInteracao ? new Date(cliente.ultimaInteracao).toLocaleDateString('pt-BR') : 'Recém cadastrado'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-1 border-t border-brand-border pt-4 md:border-t-0 md:pt-0">
-                <Link
-                  to={`/clientes/${cliente.id}`}
-                  className={cn(clienteActionLinkClass, 'text-brand-primary-600 hover:bg-brand-primary-50 dark:text-brand-primary-200 dark:hover:bg-brand-primary-400/12')}
-                >
-                  <img src={eyeIcon} alt="" className="w-6 h-6 object-contain opacity-80" />
-                  Ver Perfil
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => openEditModal(cliente)}
-                  className={cn(clienteActionLinkClass, 'text-zinc-600 hover:bg-brand-surface-subtle hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100')}
-                >
-                  <img src={editIcon} alt="" className="w-6 h-6 object-contain opacity-80" />
-                  Editar
-                </button>
-                <button 
-                  onClick={() => handleDelete(cliente.id, cliente.nome)}
-                  className="geo-focus-ring flex h-8 w-8 items-center justify-center rounded-lg transition-transform hover:scale-110 active:scale-95"
-                  title="Excluir Cliente"
-                >
-                  <img src={trashIcon} alt="Excluir" className="w-6 h-6 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]" />
-                </button>
-              </div>
-              </div>
-            ))}
-            
             {visibleCount < filteredClientes.length && (
-              <div className="pt-6 flex justify-center">
-                <button
-                  onClick={() => setVisibleCount(v => v + 15)}
-                  className={secondarySmallActionButtonClass}
-                >
+              <div className="flex flex-col items-center gap-2 pt-5">
+                <span className="text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300">Mostrando {paginatedClientes.length} de {filteredClientes.length}</span>
+                <button type="button" onClick={() => setVisibleCount((value) => value + 15)} className={secondarySmallActionButtonClass}>
                   Carregar mais clientes
                 </button>
               </div>
@@ -733,58 +1180,89 @@ export function ListagemClientes() {
       <Modal
         isOpen={showModal}
         onClose={closeClientModal}
-        title={selectedCliente ? 'Perfil Completo do Cliente' : 'Novo Cliente'}
-        maxWidth="max-w-5xl"
+        title={(
+          <span className="flex flex-wrap items-center gap-2">
+            <span>{selectedCliente ? 'Editar cliente' : 'Novo cliente'}</span>
+            {clientFormDirty && (
+              <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">
+                Alterações não salvas
+              </span>
+            )}
+          </span>
+        )}
+        maxWidth="max-w-[960px]"
+        contentScrollable={false}
+        initialFocusId="client-nome"
       >
+        <div className="flex min-h-0 flex-1 flex-col">
         {/* Tabs Navigation */}
-        <div role="tablist" aria-label="Navegação de abas do cliente" className={cn(geoTabListClass, 'mb-6 flex gap-2 overflow-x-auto hide-scrollbar')}>
+        <div className="relative mb-4 shrink-0">
+        <div className="overflow-x-auto pb-1">
+        <div role="tablist" aria-label="Navegação de abas do cliente" className={cn(geoTabListClass, 'flex w-max min-w-full gap-1.5 sm:min-w-0')}>
           <button 
+            id="client-tab-basico"
             type="button"
             role="tab"
             aria-selected={activeTab === 'basico'}
-            onClick={() => setActiveTab('basico')}
+            aria-controls="client-panel-basico"
+            tabIndex={activeTab === 'basico' ? 0 : -1}
+            onClick={() => activateClientTab('basico')}
+            onKeyDown={(event) => handleClientTabKeyDown(event, 'basico')}
             className={geoTabButtonClass(activeTab === 'basico', 'system', 'px-4 py-2')}
           >
-            <Info weight={activeTab === 'basico' ? 'fill' : 'regular'} className="w-4 h-4" /> Dados e Contato
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'basico', 'system')}><Info weight={activeTab === 'basico' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Cadastro
           </button>
           <button 
+            id="client-tab-notas"
             type="button"
             role="tab"
             aria-selected={activeTab === 'notas'}
-            onClick={() => setActiveTab('notas')}
+            aria-controls="client-panel-notas"
+            tabIndex={activeTab === 'notas' ? 0 : -1}
+            onClick={() => activateClientTab('notas')}
+            onKeyDown={(event) => handleClientTabKeyDown(event, 'notas')}
             className={geoTabButtonClass(activeTab === 'notas', 'system', 'px-4 py-2')}
           >
-            <Note weight={activeTab === 'notas' ? 'fill' : 'regular'} className="w-4 h-4" /> Anotações Fixas
+            <span aria-hidden="true" className={geoTabIconClass(activeTab === 'notas', 'system')}><Note weight={activeTab === 'notas' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Anotações fixas
           </button>
           {selectedCliente && (
             <button 
+              id="client-tab-historico"
               type="button"
               role="tab"
               aria-selected={activeTab === 'historico'}
-              onClick={() => setActiveTab('historico')}
+              aria-controls="client-panel-historico"
+              tabIndex={activeTab === 'historico' ? 0 : -1}
+              onClick={() => activateClientTab('historico')}
+              onKeyDown={(event) => handleClientTabKeyDown(event, 'historico')}
               className={geoTabButtonClass(activeTab === 'historico', 'field', 'px-4 py-2')}
             >
-              <ClockCounterClockwise weight={activeTab === 'historico' ? 'bold' : 'regular'} className="w-4 h-4" /> Histórico CRM
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'historico', 'field')}><ClockCounterClockwise weight={activeTab === 'historico' ? 'bold' : 'regular'} className="h-4 w-4" /></span> Histórico CRM
             </button>
           )}
           {selectedCliente && (
             <button 
+              id="client-tab-arquivos"
               type="button"
               role="tab"
               aria-selected={activeTab === 'arquivos'}
-              onClick={() => {
-                setActiveTab('arquivos');
-              }}
+              aria-controls="client-panel-arquivos"
+              tabIndex={activeTab === 'arquivos' ? 0 : -1}
+              onClick={() => activateClientTab('arquivos')}
+              onKeyDown={(event) => handleClientTabKeyDown(event, 'arquivos')}
               className={geoTabButtonClass(activeTab === 'arquivos', 'success', 'px-4 py-2')}
             >
-              <FolderSimple weight={activeTab === 'arquivos' ? 'bold' : 'regular'} className="w-4 h-4" /> Arquivos
+              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'arquivos', 'success')}><FolderSimple weight={activeTab === 'arquivos' ? 'bold' : 'regular'} className="h-4 w-4" /></span> Arquivos
             </button>
           )}
+        </div>
+        </div>
+        {selectedCliente && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-brand-surface to-transparent sm:hidden" />}
         </div>
 
         {activeTab === 'arquivos' ? (
           // TAB: ARQUIVOS DO CLIENTE
-          <div className="flex flex-col h-full pb-6">
+          <div id="client-panel-arquivos" role="tabpanel" aria-labelledby="client-tab-arquivos" className="min-h-0 flex-1 overflow-y-auto pb-6 pr-1">
             <div className="mb-2">
               <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate" title={clientFilesPasta}>
                 Pasta do Cliente: <span className="font-mono">{clientFilesPasta || 'Buscando...'}</span>
@@ -843,7 +1321,8 @@ export function ListagemClientes() {
                         <button
                           type="button"
                           onClick={() => window.open(getDownloadUrl(file.path))}
-                          className="w-9 h-9 rounded-xl flex items-center justify-center bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 border border-sky-200/80 dark:border-sky-800/60 text-sky-600 dark:text-sky-300 transition-all shadow-sm"
+                          aria-label={`Baixar arquivo ${file.name}`}
+                          className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-sky-200/80 bg-sky-50 text-sky-600 shadow-sm transition-[background-color,border-color,color] hover:bg-sky-100 dark:border-sky-800/60 dark:bg-sky-950/40 dark:text-sky-300"
                           title="Baixar Arquivo"
                         >
                           <DownloadSimple weight="bold" className="w-4 h-4" />
@@ -851,7 +1330,8 @@ export function ListagemClientes() {
                         <button
                           type="button"
                           onClick={() => handleClientFileDelete(file.path)}
-                          className="w-9 h-9 rounded-xl flex items-center justify-center bg-red-50 dark:bg-red-950/40 hover:bg-red-100 border border-red-200/80 dark:border-red-800/60 text-red-600 dark:text-red-400 transition-all shadow-sm"
+                          aria-label={`Excluir arquivo ${file.name}`}
+                          className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-red-200/80 bg-red-50 text-red-600 shadow-sm transition-[background-color,border-color,color] hover:bg-red-100 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-400"
                           title="Excluir Arquivo"
                         >
                           <Trash weight="bold" className="w-4 h-4" />
@@ -865,14 +1345,14 @@ export function ListagemClientes() {
           </div>
         ) : activeTab === 'historico' ? (
           // TAB: HISTORICO CRM TIMELINE
-          <div className="flex flex-col h-full pb-6">
+          <div id="client-panel-historico" role="tabpanel" aria-labelledby="client-tab-historico" className="min-h-0 flex-1 overflow-y-auto pb-6 pr-1">
             {/* Formulario de Nova Interação */}
             <form onSubmit={handleAddHistorico} className="geo-card mb-8 flex-shrink-0 p-5">
               <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 mb-4 flex items-center gap-2">
                 <Plus className="w-4 h-4 text-indigo-500" /> Registrar Nova Interação
               </h4>
               <div className="flex flex-col md:flex-row gap-4 mb-4">
-                <select 
+                <FormSelect
                   value={histTipo} 
                   onChange={e => setHistTipo(e.target.value)} 
                   aria-label="Tipo de Interação"
@@ -883,9 +1363,8 @@ export function ListagemClientes() {
                   <option value="Reunião">Reunião Presencial/Online</option>
                   <option value="Email">E-mail</option>
                   <option value="Observação">Anotação Interna</option>
-                </select>
-                <input 
-                  type="date" 
+                </FormSelect>
+                <DatePickerField
                   required 
                   value={histData} 
                   onChange={e => setHistData(e.target.value)} 
@@ -940,220 +1419,51 @@ export function ListagemClientes() {
           </div>
         ) : (
           // TABS COMUNS: Formulario Basico/Contato/Notas
-          <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
-            <div className="space-y-5 pb-6">
-              {activeTab === 'basico' && (
-                <div className="space-y-6">
-                  {/* Card 1: Cadastro & Contato Unificados */}
-                  <div className={clientePanelClass}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">Dados Gerais e Contato</h4>
-                    <div>
-                      <label htmlFor="cliente-nome" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Razão Social / Nome Completo</label>
-                      <input id="cliente-nome" type="text" required value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex: João da Silva ou Agropecuária XYZ" className={clienteFieldClass} />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {selectedCategorias.includes('Pessoa Jurídica') || selectedCategorias.includes('Empresa') ? (
-                        <div>
-                          <label htmlFor="cliente-cnpj" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">CNPJ</label>
-                          <input id="cliente-cnpj" type="text" value={cnpj} onChange={e => setCnpj(formatCnpj(e.target.value))} placeholder="00.000.000/0000-00" maxLength={18} className={clienteFieldClass} />
-                        </div>
-                      ) : (
-                        <div>
-                          <label htmlFor="cliente-cpf" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">CPF</label>
-                          <input id="cliente-cpf" type="text" value={cpf} onChange={e => setCpf(formatCpf(e.target.value))} placeholder="000.000.000-00" maxLength={14} className={clienteFieldClass} />
-                        </div>
-                      )}
-                      <div>
-                        <label htmlFor="cliente-documento" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Doc. Alternativo / RG</label>
-                        <input id="cliente-documento" type="text" value={documento} onChange={e => setDocumento(e.target.value)} placeholder="Ex: RG, Inscrição Estadual" className={clienteFieldClass} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-                      <div className="md:col-span-5">
-                        <label htmlFor="cliente-email" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">E-mail</label>
-                        <input id="cliente-email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="exemplo@email.com" className={clienteFieldClass} />
-                      </div>
-                      <div className="md:col-span-3">
-                        <label htmlFor="cliente-celular" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Celular / WhatsApp</label>
-                        <input id="cliente-celular" type="text" value={celular} onChange={e => setCelular(formatPhoneBR(e.target.value))} placeholder="(00) 90000-0000" maxLength={15} className={clienteFieldClass} />
-                      </div>
-                      <div className="md:col-span-4">
-                        <label htmlFor="cliente-telefone" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Telefone Fixo</label>
-                        <input id="cliente-telefone" type="text" value={telefone} onChange={e => setTelefone(formatPhoneBR(e.target.value))} placeholder="(00) 0000-0000" maxLength={15} className={clienteFieldClass} />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-                      <div className="md:col-span-6">
-                        <label htmlFor="cliente-endereco" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Endereço Completo</label>
-                        <input id="cliente-endereco" type="text" value={endereco} onChange={e => setEndereco(e.target.value)} placeholder="Rua, avenida, estrada ou localidade" className={clienteFieldClass} />
-                      </div>
-                      <div className="md:col-span-2">
-                        <label htmlFor="cliente-numero" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Número</label>
-                        <input id="cliente-numero" type="text" value={numero} onChange={e => setNumero(e.target.value)} placeholder="S/N" className={clienteFieldClass} />
-                      </div>
-                      <div className="md:col-span-4">
-                        <label htmlFor="cliente-bairro" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Bairro</label>
-                        <input id="cliente-bairro" type="text" value={bairro} onChange={e => setBairro(e.target.value)} placeholder="Bairro ou comunidade" className={clienteFieldClass} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 2: Classificação & Canal */}
-                  <div className={clientePanelClass}>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Categorização e Origem</h4>
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-                      <div className="md:row-span-2">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tipo / Categoria</label>
-                        <div className={clienteChecklistClass}>
-                          {CLIENT_CATEGORY_OPTIONS.map((option) => (
-                            <label key={option} className="flex cursor-pointer items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedCategorias.includes(option)}
-                                onChange={() => toggleTagValue(option, selectedCategorias, setCategoria)}
-                                className={clienteCheckboxClass}
-                              />
-                              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${getClientCategoryTagClass(option)}`}>
-                                {option}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="md:row-span-2">
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Origem / Canal</label>
-                        <div className={clienteChecklistClass}>
-                          {CLIENT_ORIGIN_OPTIONS.map((option) => (
-                            <label key={option} className="flex cursor-pointer items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={selectedOrigens.includes(option)}
-                                onChange={() => toggleTagValue(option, selectedOrigens, setOrigem)}
-                                className={clienteCheckboxClass}
-                              />
-                              <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${getClientOriginTagClass(option)}`}>
-                                {option}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label htmlFor="cliente-previsao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Previsão de Entrega</label>
-                        <input type="date" id="cliente-previsao" value={previsaoEntrega} onChange={e => setPrevisaoEntrega(e.target.value)} className={clienteCompactFieldClass} />
-                      </div>
-                      <div className="md:col-start-3">
-                        <label htmlFor="cliente-situacao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Situação</label>
-                        <select
-                          id="cliente-situacao"
-                          name="situacao"
-                          value={situacao}
-                          onChange={e => setSituacao(e.target.value)}
-                          className={clienteCompactFieldClass}
-                        >
-                          {CLIENT_STATUS_OPTIONS.map((option) => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Card 3: Serviços Principais */}
-                  <div className={clientePanelClass}>
-                    <div>
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Serviços Principais</h4>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Selecione os serviços divididos por setor:</p>
-                    </div>
-                    
-                    {/* Tabs / Category Selector */}
-                    <div className="flex flex-wrap gap-2 border-b border-zinc-200 dark:border-zinc-800 pb-3">
-                      {(Object.keys(CLIENT_SERVICOS_BY_CATEGORY) as Array<keyof typeof CLIENT_SERVICOS_BY_CATEGORY>).map((categoria) => (
-                        <button
-                          key={categoria}
-                          type="button"
-                          onClick={() => setActiveServicoTab(categoria)}
-                          className={cn(
-                            "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border",
-                            activeServicoTab === categoria
-                              ? "bg-brand-primary-500 text-white border-brand-primary-500 shadow-brand-primary"
-                              : "bg-brand-surface text-zinc-600 border-brand-border hover:bg-brand-surface-subtle dark:bg-brand-surface-muted dark:text-zinc-300 dark:hover:bg-brand-surface"
-                          )}
-                        >
-                          {categoria}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Services by Category with Animation */}
-                    <div className="relative min-h-[80px]">
-                      <AnimatePresence mode="wait">
-                        <motion.div
-                          key={activeServicoTab}
-                          initial={{ opacity: 0, y: 5 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -5 }}
-                          transition={{ duration: 0.2 }}
-                          className="flex flex-wrap gap-2 pt-1"
-                        >
-                          {CLIENT_SERVICOS_BY_CATEGORY[activeServicoTab as keyof typeof CLIENT_SERVICOS_BY_CATEGORY].map((opt) => {
-                            const isSelected = selectedServicos.includes(opt);
-                            return (
-                              <label 
-                                key={opt} 
-                                className={cn(
-                                  "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 transition-all select-none hover:border-brand-primary-300/55 active:scale-[0.97]",
-                                  isSelected 
-                                    ? "bg-brand-primary-50/70 dark:bg-brand-primary-400/10 border-brand-primary-300/70 shadow-brand" 
-                                    : "bg-brand-surface border-brand-border"
-                                )}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => toggleTagValue(opt, selectedServicos, setServicos)}
-                                  className={cn(clienteCheckboxClass, 'h-3.5 w-3.5 cursor-pointer')}
-                                />
-                                <span className={cn(
-                                  "inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold truncate transition-all",
-                                  getClientServicoTagClass(opt),
-                                  !isSelected && "opacity-60 saturate-50"
-                                )}>
-                                  {opt}
-                                </span>
-                              </label>
-                            );
-                          })}
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'notas' && (
-                <div>
-                  <label htmlFor="cliente-anotacoes" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Observações / Anotações Fixas</label>
-                  <textarea id="cliente-anotacoes" value={anotacoes} onChange={e => setAnotacoes(e.target.value)} placeholder="Escreva observações comerciais contínuas ou detalhes contratuais..." rows={8} className={clienteTextareaClass} />
-                </div>
-              )}
+          <form
+            id={`client-panel-${activeTab}`}
+            role="tabpanel"
+            aria-labelledby={`client-tab-${activeTab}`}
+            onSubmit={handleSubmit}
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+          >
+            <div id="client-form-scroll-region" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-5 pr-1">
+              <ClienteFormFields
+                form={clientForm}
+                setForm={setClientForm}
+                errors={clientFormErrors}
+                activeSection={activeTab === 'notas' ? 'notas' : 'basico'}
+                editing={Boolean(selectedCliente)}
+                onClearErrors={clearClientFormErrors}
+              />
             </div>
 
-            <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-brand-border pt-6">
+            <div className="-mx-1 flex flex-shrink-0 flex-wrap items-center justify-end gap-3 border-t border-brand-border bg-brand-surface/95 px-1 pb-1 pt-4 backdrop-blur supports-[backdrop-filter]:bg-brand-surface/85 sm:flex-nowrap">
+              <p className="mr-auto w-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 sm:w-auto" role="status" aria-live="polite">
+                {clientForm.perfis.length === 0 && clientForm.servicos.length === 0
+                  ? 'Nenhum perfil ou serviço selecionado'
+                  : `${clientForm.perfis.length} ${clientForm.perfis.length === 1 ? 'perfil' : 'perfis'} · ${clientForm.servicos.length} ${clientForm.servicos.length === 1 ? 'serviço' : 'serviços'}`}
+              </p>
               <button type="button" onClick={closeClientModal} className={secondarySmallActionButtonClass}>
                 Cancelar
               </button>
-              <button type="submit" className={cn(primarySubmitButtonClass, 'px-6 py-3')}>
-                {selectedCliente ? 'Salvar Perfil' : 'Cadastrar'}
+              <button type="submit" disabled={submitClientMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}>
+                {submitClientMutation.isPending ? 'Salvando…' : 'Salvar cliente'}
               </button>
             </div>
           </form>
         )}
+        {(['basico', 'notas', ...(selectedCliente ? ['historico', 'arquivos'] : [])] as ClientModalTab[])
+          .filter((tab) => tab !== activeTab)
+          .map((tab) => (
+            <div
+              key={tab}
+              id={`client-panel-${tab}`}
+              role="tabpanel"
+              aria-labelledby={`client-tab-${tab}`}
+              hidden
+            />
+          ))}
+        </div>
       </Modal>
 
       <ConfirmDialog
@@ -1162,8 +1472,10 @@ export function ListagemClientes() {
         onConfirm={confirmData.onConfirm}
         title={confirmData.title}
         description={confirmData.description}
+        confirmText={confirmData.confirmText}
         loading={deleteClientMutation.isPending || deleteFileMutation.isPending}
       />
+      <div className="sr-only" aria-live="polite" aria-atomic="true">{successMessage}</div>
     </Layout>
   );
 }

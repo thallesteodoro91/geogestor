@@ -10,10 +10,12 @@ import bellIcon from '../assets/magnific-icons/bell_10953632.svg';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
+import { cn } from '../utils/cn';
 
 interface LayoutProps {
   children: ReactNode;
   contentClassName?: string;
+  compactBottom?: boolean;
 }
 
 interface ProjetoNotificacao {
@@ -23,7 +25,7 @@ interface ProjetoNotificacao {
   dataEntrega?: string | null;
 }
 
-export function Layout({ children, contentClassName = 'max-w-[1400px]' }: LayoutProps) {
+export function Layout({ children, contentClassName = 'max-w-[1400px]', compactBottom = false }: LayoutProps) {
   const navigate = useNavigate();
   const alertDays = Number(localStorage.getItem('geogestor_alerta_dias') || '7');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -137,7 +139,7 @@ export function Layout({ children, contentClassName = 'max-w-[1400px]' }: Layout
             <div className="w-3.5 h-3.5 rounded bg-white dark:bg-zinc-900"></div>
           </div>
           <div>
-            <h1 className="font-heading font-semibold text-zinc-900 dark:text-white leading-none text-sm">GeoGestor</h1>
+            <p className="font-heading text-sm font-semibold leading-none text-zinc-900 dark:text-white">GeoGestor</p>
             <span className="text-[9px] text-zinc-500 font-sans tracking-wide">GESTÃO</span>
           </div>
         </div>
@@ -228,7 +230,14 @@ export function Layout({ children, contentClassName = 'max-w-[1400px]' }: Layout
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       {/* Main Content Area */}
-      <main id="main-content" tabIndex={-1} className="relative z-10 min-h-screen min-w-0 flex-1 overflow-y-auto p-4 sm:p-6 md:p-12 focus:outline-none">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={cn(
+          'relative z-10 min-h-screen min-w-0 flex-1 overflow-y-auto p-4 focus:outline-none sm:p-6 md:p-12 md:pt-24 lg:pt-12',
+          compactBottom && 'md:pb-0'
+        )}
+      >
         <div className="hidden md:block absolute top-8 right-12 z-30">
           <button
             onClick={toggleTheme}

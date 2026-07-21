@@ -15,6 +15,48 @@
       "when": 1782589490270,
       "tag": "0001_magical_karma",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783981644128,
+      "tag": "0002_integrated-budgets",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784078111394,
+      "tag": "0003_commercial-pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784156400000,
+      "tag": "0004_structured-client-registration",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1784242800000,
+      "tag": "0005_crm-lead-opportunity-links",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784329200000,
+      "tag": "0006_crm-conversion-integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1784415600000,
+      "tag": "0007_ambiental_operacional",
+      "breakpoints": true
     }
   ]
 }

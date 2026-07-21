@@ -1,3 +1,4 @@
+import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { useEffect, useRef, useState, useMemo, type ElementType } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -49,6 +50,7 @@ import {
 } from '@phosphor-icons/react';
 import { ClienteCentralControle } from './ClienteCentralControle';
 import { Modal } from '../../components/Modal';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
@@ -62,7 +64,8 @@ import { formatCnpj, formatCpf, formatPhoneBR } from '../../utils/formatters';
 import { apiFetch, getDownloadUrl, getPreviewUrl } from '../../services/apiClient';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
-import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoTabButtonClass, geoTabListClass, type GeoTone } from '../../utils/geoTheme';
+import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoTabButtonClass, geoTabIconClass, geoTabListClass, type GeoTone } from '../../utils/geoTheme';
+import { getBudgetStatusLabel, isApprovedBudgetStatus, isClosedBudgetStatus } from '../../utils/budgetStatus';
 
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -645,6 +648,13 @@ export function ClienteDetalhes() {
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('ha');
   const [copiedContactField, setCopiedContactField] = useState<string | null>(null);
   const [showAlertasModal, setShowAlertasModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'task'; item: ClienteTask }
+    | { type: 'agenda'; item: ClienteCompromisso }
+    | { type: 'category'; item: DocumentoCategoria }
+    | { type: 'file'; filePath: string; fileName: string }
+    | null
+  >(null);
 
   const routeParams = new URLSearchParams(location.search);
   const focusedDocumentId = routeParams.get('documentId');
@@ -961,6 +971,7 @@ export function ClienteDetalhes() {
       if (!res.ok) throw new Error('Erro ao excluir tarefa');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', id] });
     },
     onError: () => alert('Erro ao excluir tarefa.')
@@ -1051,6 +1062,7 @@ export function ClienteDetalhes() {
       if (!res.ok) throw new Error('Erro ao excluir compromisso');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', id] });
     },
     onError: () => alert('Erro ao excluir compromisso.')
@@ -1195,6 +1207,7 @@ export function ClienteDetalhes() {
       return res.json() as Promise<DocumentoCategoria>;
     },
     onSuccess: (category) => {
+      setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['documento-categorias'] });
       setDocumentUploadCategory(category.nome);
       setNewDocumentCategoryName('');
@@ -1309,6 +1322,7 @@ export function ClienteDetalhes() {
       if (!res.ok) throw new Error('Erro ao excluir o arquivo');
     },
     onSuccess: () => {
+      setDeleteTarget(null);
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['cliente-arquivos', id] });
       }, 10);
@@ -1394,8 +1408,7 @@ export function ClienteDetalhes() {
       return;
     }
 
-    if (!confirm(`Apagar a categoria "${category.nome}"?`)) return;
-    deleteDocumentCategoryMutation.mutate(category);
+    setDeleteTarget({ type: 'category', item: category });
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -1417,9 +1430,8 @@ export function ClienteDetalhes() {
     }
   };
 
-  const handleFileDelete = async (filePath: string) => {
-    if (!confirm('Tem certeza que deseja excluir permanentemente este arquivo do disco local?')) return;
-    deleteFileMutation.mutate(filePath);
+  const handleFileDelete = (filePath: string, fileName: string) => {
+    setDeleteTarget({ type: 'file', filePath, fileName });
   };
 
   const handleOpenFile = async (filePath: string) => {
@@ -1513,12 +1525,22 @@ export function ClienteDetalhes() {
       ? 'Informada no cadastro'
       : 'Sem área informada';
   const featuredProject = clientProjetos.find((project) => ['Ativo', 'Em Andamento'].includes(project.status || '')) || clientProjetos[0] || null;
-  const fullAddressValue = [cliente.endereco, cliente.numero, cliente.bairro].filter(Boolean).join(', ');
+  const addressNumber = cliente.semNumero ? 'S/N' : cliente.numero;
+  const cityState = [cliente.municipio, cliente.uf].filter(Boolean).join(' / ');
+  const fullAddressValue = [
+    cliente.endereco,
+    addressNumber,
+    cliente.complemento,
+    cliente.bairro,
+    cityState,
+    cliente.cep
+  ].filter(Boolean).join(', ');
   const featuredProjectLocation = featuredProject
     ? [featuredProject.cidade, featuredProject.municipio].filter(Boolean).join(' / ') || fullAddressValue || 'Localidade não informada'
     : fullAddressValue || 'Localidade não informada';
   const operationalProjectName = featuredProject?.nome || 'Cliente sem projeto vinculado';
-  const deliveryForecast = cliente.previsaoEntrega || featuredProject?.dataEntrega || '';
+  // A data pertence ao projeto; o campo do cliente é apenas um fallback para cadastros legados.
+  const deliveryForecast = featuredProject?.dataEntrega || cliente.previsaoEntrega || '';
   const featuredProjectRegistries = featuredProject
     ? [
         { label: 'CAR', value: featuredProject.car },
@@ -1533,11 +1555,11 @@ export function ClienteDetalhes() {
     className: getClientServicoTagClass(svc).replace('ring-1', 'border border-current/10')
   }));
   const totalReceita = clientOrcamentos
-    .filter((o) => o.status === 'Pago' || o.status === 'Aprovado')
+    .filter((o) => isApprovedBudgetStatus(o.status))
     .reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
-  const orcamentosConfirmados = clientOrcamentos.filter((o) => o.status === 'Pago' || o.status === 'Aprovado');
-  const orcamentosEmAberto = clientOrcamentos.filter((o) => o.status !== 'Pago' && o.status !== 'Aprovado' && o.status !== 'Rejeitado');
-  const pipelineTotal = clientOrcamentos.reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
+  const orcamentosConfirmados = clientOrcamentos.filter((o) => isApprovedBudgetStatus(o.status));
+  const orcamentosEmAberto = clientOrcamentos.filter((o) => !isClosedBudgetStatus(o.status));
+  const pipelineTotal = orcamentosEmAberto.reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
   const ticketMedio = orcamentosConfirmados.length > 0 ? totalReceita / orcamentosConfirmados.length : 0;
   const taxaConversao = clientOrcamentos.length > 0 ? Math.round((orcamentosConfirmados.length / clientOrcamentos.length) * 100) : 0;
   const orcamentosPorStatus = clientOrcamentos.reduce<Record<string, { count: number; total: number }>>((acc, orc) => {
@@ -1756,7 +1778,7 @@ export function ClienteDetalhes() {
                       'h-11 min-w-max flex-1 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs xl:min-w-0 2xl:text-[13px]'
                     )}
                   >
-                    <span aria-hidden="true" className={cn('shrink-0', tab.iconTone)}>
+                    <span aria-hidden="true" className={geoTabIconClass(isActive, CLIENT_DETAIL_TAB_TONES[tab.id], 'h-8 w-8')}>
                       {tab.icon}
                     </span>
                     <span className="whitespace-nowrap">{tab.label}</span>
@@ -2008,14 +2030,14 @@ export function ClienteDetalhes() {
                       <MapTrifold weight="duotone" className="h-3.5 w-3.5 text-emerald-400" />
                       Área Total Mapeada
                     </p>
-                    <select
+                    <FormSelect
                       value={areaUnit}
                       onChange={(event) => setAreaUnit(event.target.value as AreaUnit)}
                       className="h-7 rounded-xl border border-emerald-400/20 bg-stone-900 px-2 text-xs font-semibold text-stone-100 outline-none transition-colors focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
                     >
                       <option value="ha">ha</option>
                       <option value="m2">m²</option>
-                    </select>
+                    </FormSelect>
                   </div>
                   <p className="text-2xl font-bold tracking-tight text-emerald-400">
                     {formatAreaValue(totalAreaMapeadaM2, areaUnit)} {areaUnit === 'ha' ? 'ha' : 'm²'}
@@ -2176,7 +2198,7 @@ export function ClienteDetalhes() {
 
           {showTaskForm && (
             <form onSubmit={handleAddTask} className="mt-4 space-y-3 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/90 p-4 shadow-sm">
-              <select
+              <FormSelect
                 value={taskProjetoId}
                 onChange={event => setTaskProjetoId(event.target.value)}
                 className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -2185,7 +2207,7 @@ export function ClienteDetalhes() {
                 {clientProjetos.map((projeto) => (
                   <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
                 ))}
-              </select>
+              </FormSelect>
               <input
                 value={taskTitulo}
                 onChange={event => setTaskTitulo(event.target.value)}
@@ -2193,7 +2215,7 @@ export function ClienteDetalhes() {
                 className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
               />
               <div className="grid grid-cols-2 gap-2">
-                <select
+                <FormSelect
                   value={taskPrioridade}
                   onChange={event => setTaskPrioridade(event.target.value as TaskPriority)}
                   className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -2201,9 +2223,8 @@ export function ClienteDetalhes() {
                   <option value="Baixa">Baixa</option>
                   <option value="Média">Média</option>
                   <option value="Alta">Alta</option>
-                </select>
-                <input
-                  type="date"
+                </FormSelect>
+                <DatePickerField
                   value={taskDataLimite}
                   onChange={event => setTaskDataLimite(event.target.value)}
                   className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -2262,11 +2283,7 @@ export function ClienteDetalhes() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (window.confirm(`Excluir a tarefa "${tarefa.titulo}"?`)) {
-                            deleteTaskMutation.mutate(tarefa.id);
-                          }
-                        }}
+                        onClick={() => setDeleteTarget({ type: 'task', item: tarefa })}
                         disabled={deleteTaskMutation.isPending}
                         className="w-8 h-8 rounded-lg flex items-center justify-center text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-all disabled:cursor-wait disabled:opacity-50"
                         aria-label={`Excluir tarefa ${tarefa.titulo}`}
@@ -2309,19 +2326,17 @@ export function ClienteDetalhes() {
                 className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
               />
               <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
+                <DatePickerField
                   value={agendaData}
                   onChange={event => setAgendaData(event.target.value)}
                   className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                 />
-                <input
-                  type="time"
+                <TimePickerField
                   value={agendaHora}
                   onChange={event => setAgendaHora(event.target.value)}
                   className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
                 />
-                <select
+                <FormSelect
                   value={agendaTipo}
                   onChange={event => setAgendaTipo(event.target.value)}
                   className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -2331,9 +2346,9 @@ export function ClienteDetalhes() {
                   <option value="Cartório">Cartório</option>
                   <option value="Entrega">Entrega</option>
                   <option value="Outro">Outro</option>
-                </select>
+                </FormSelect>
               </div>
-              <select
+              <FormSelect
                 value={agendaProjetoId}
                 onChange={event => setAgendaProjetoId(event.target.value)}
                 className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
@@ -2342,7 +2357,7 @@ export function ClienteDetalhes() {
                 {clientProjetos.map((projeto) => (
                   <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
                 ))}
-              </select>
+              </FormSelect>
               <textarea
                 value={agendaDescricao}
                 onChange={event => setAgendaDescricao(event.target.value)}
@@ -2387,11 +2402,7 @@ export function ClienteDetalhes() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (window.confirm(`Excluir o compromisso "${compromisso.titulo}"?`)) {
-                                deleteAgendaMutation.mutate(compromisso.id);
-                              }
-                            }}
+                            onClick={() => setDeleteTarget({ type: 'agenda', item: compromisso })}
                             disabled={deleteAgendaMutation.isPending}
                             className="w-7 h-7 rounded-md text-zinc-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 flex items-center justify-center flex-shrink-0 transition-colors disabled:cursor-wait disabled:opacity-50"
                             title="Excluir compromisso"
@@ -2644,12 +2655,11 @@ export function ClienteDetalhes() {
 
                   <div className="flex items-center gap-4 flex-shrink-0">
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ${
-                      orc.status === 'Pago' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/10' :
-                      orc.status === 'Aprovado' ? 'bg-blue-50 text-blue-700 ring-blue-600/10' :
+                      isApprovedBudgetStatus(orc.status) ? 'bg-blue-50 text-blue-700 ring-blue-600/10' :
                       orc.status === 'Rejeitado' ? 'bg-red-50 text-red-700 ring-red-600/10' :
                       'bg-amber-50 text-amber-700 ring-amber-600/10'
                     }`}>
-                      {orc.status}
+                      {getBudgetStatusLabel(orc.status)}
                     </span>
                     
                     {/* Local PDF generation could go here, or simple alert/download */}
@@ -2872,7 +2882,7 @@ export function ClienteDetalhes() {
                       placeholder="Ex.: Certidões"
                       className="h-10 w-full min-w-0 rounded-lg border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 outline-none transition-[border-color,box-shadow] duration-150 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
                     />
-                    <select
+                    <FormSelect
                       aria-label="Ícone da categoria"
                       value={newDocumentCategoryIcon}
                       onChange={(event) => setNewDocumentCategoryIcon(event.target.value)}
@@ -2881,8 +2891,8 @@ export function ClienteDetalhes() {
                       {documentCategoryIconOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
-                    </select>
-                    <select
+                    </FormSelect>
+                    <FormSelect
                       aria-label="Cor da categoria"
                       value={newDocumentCategoryTone}
                       onChange={(event) => setNewDocumentCategoryTone(event.target.value)}
@@ -2891,7 +2901,7 @@ export function ClienteDetalhes() {
                       {documentCategoryToneOptions.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
-                    </select>
+                    </FormSelect>
                     <div className="flex gap-2 md:justify-end">
                       <button
                         type="submit"
@@ -3008,7 +3018,7 @@ export function ClienteDetalhes() {
 
               <div className="ml-auto flex w-full flex-col items-start gap-2.5 border-t border-zinc-200 pt-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between lg:w-auto lg:justify-end lg:border-t-0 lg:pt-0">
                 <span className="shrink-0 text-xs font-bold uppercase tracking-wider text-zinc-500">Pasta destino:</span>
-                <select
+                <FormSelect
                   aria-label="Pasta destino do upload"
                   value={documentUploadCategory}
                   onChange={(event) => setDocumentUploadCategory(event.target.value)}
@@ -3017,7 +3027,7 @@ export function ClienteDetalhes() {
                   {documentCategories.map((category) => (
                     <option key={category} value={category}>{category}</option>
                   ))}
-                </select>
+                </FormSelect>
               </div>
             </div>
 
@@ -3154,7 +3164,7 @@ export function ClienteDetalhes() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleFileDelete(file.path)}
+                          onClick={() => handleFileDelete(file.path, file.name)}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 dark:bg-red-950/40 hover:bg-red-100 border border-red-200/80 dark:border-red-800/60 text-red-600 dark:text-red-400 transition-all shadow-sm"
                           title="Excluir Arquivo"
                         >
@@ -3253,6 +3263,39 @@ export function ClienteDetalhes() {
           )}
         </div>
       </Modal>
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget?.type === 'task') deleteTaskMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'agenda') deleteAgendaMutation.mutate(deleteTarget.item.id);
+          if (deleteTarget?.type === 'category') deleteDocumentCategoryMutation.mutate(deleteTarget.item);
+          if (deleteTarget?.type === 'file') deleteFileMutation.mutate(deleteTarget.filePath);
+        }}
+        title={deleteTarget?.type === 'task'
+          ? `Excluir tarefa “${deleteTarget.item.titulo}”?`
+          : deleteTarget?.type === 'agenda'
+            ? `Excluir compromisso “${deleteTarget.item.titulo}”?`
+            : deleteTarget?.type === 'category'
+              ? `Excluir categoria “${deleteTarget.item.nome}”?`
+              : `Excluir arquivo${deleteTarget?.fileName ? ` “${deleteTarget.fileName}”` : ''}?`}
+        description={deleteTarget?.type === 'task'
+          ? 'A tarefa será removida da central do cliente e do projeto vinculado, quando houver. Os cadastros relacionados serão preservados. Esta ação não pode ser desfeita.'
+          : deleteTarget?.type === 'agenda'
+            ? 'O compromisso será removido da agenda e da central do cliente. Os cadastros relacionados serão preservados. Esta ação não pode ser desfeita.'
+            : deleteTarget?.type === 'category'
+              ? 'A categoria será removida das opções documentais. Esta exclusão só é permitida quando nenhum arquivo está vinculado a ela. Esta ação não pode ser desfeita.'
+              : 'O arquivo será removido permanentemente do disco local e deixará de aparecer nos documentos do cliente. Esta ação não pode ser desfeita.'}
+        confirmText={deleteTarget?.type === 'task'
+          ? 'Excluir tarefa'
+          : deleteTarget?.type === 'agenda'
+            ? 'Excluir compromisso'
+            : deleteTarget?.type === 'category'
+              ? 'Excluir categoria'
+              : 'Excluir arquivo'}
+        loading={deleteTaskMutation.isPending || deleteAgendaMutation.isPending || deleteDocumentCategoryMutation.isPending || deleteFileMutation.isPending}
+      />
 
     </Layout>
   );

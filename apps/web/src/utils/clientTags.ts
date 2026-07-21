@@ -9,6 +9,23 @@ export const CLIENT_CATEGORY_OPTIONS = [
   'Comércio'
 ];
 
+export const CLIENT_PROFILE_OPTIONS = [
+  'Produtor Rural',
+  'Parceiro',
+  'Órgão Público',
+  'Indústria',
+  'Comércio'
+];
+
+export const CLIENT_PRIMARY_ORIGIN_OPTIONS = [
+  'Site',
+  'Indicação',
+  'Instagram',
+  'Google',
+  'WhatsApp',
+  'Outro'
+];
+
 export const CLIENT_ORIGIN_OPTIONS = [
   'Site',
   'Indicação',

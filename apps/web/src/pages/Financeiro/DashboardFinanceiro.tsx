@@ -21,6 +21,7 @@ import {
 } from '../../utils/financialAnalytics';
 import { cn } from '../../utils/cn';
 import { apiClient } from '../../services/apiClient';
+import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
 import {
   geoGreenIconClass,
   geoGreenLabelClass,
@@ -204,7 +205,7 @@ export function DashboardFinanceiro() {
 
   // Add revenues per client
   orcamentos.forEach((orc) => {
-    if (orc.status === 'Pago' || orc.status === 'Aprovado') {
+    if (isApprovedBudgetStatus(orc.status)) {
       const clientName = orc.clienteNome || 'Cliente Não Identificado';
       const current = clientProfitMap.get(orc.clienteId) || { nome: clientName, receita: 0, despesa: 0 };
       current.receita += orc.valorTotal / 100;

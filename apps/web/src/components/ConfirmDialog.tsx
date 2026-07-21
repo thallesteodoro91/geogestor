@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useId } from 'react';
 import { Modal } from './Modal';
 import { WarningCircle, Info, Trash } from '@phosphor-icons/react';
 
@@ -12,6 +12,7 @@ export interface ConfirmDialogProps {
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
   loading?: boolean;
+  loadingText?: string;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -23,18 +24,22 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   confirmText = 'Confirmar exclusão',
   cancelText = 'Cancelar',
   variant = 'danger',
-  loading = false
+  loading = false,
+  loadingText
 }) => {
+  const cancelButtonId = useId();
+  const pendingLabel = loadingText ?? (variant === 'danger' ? 'Excluindo…' : 'Processando…');
+
   const getIcon = () => {
-    if (variant === 'danger') return <Trash aria-hidden="true" weight="duotone" className="w-6 h-6 text-brand-red-600 dark:text-brand-red-100" />;
-    if (variant === 'warning') return <WarningCircle aria-hidden="true" weight="duotone" className="w-6 h-6 text-brand-rajah-800 dark:text-brand-rajah-100" />;
-    return <Info aria-hidden="true" weight="duotone" className="w-6 h-6 text-brand-turquoise-700 dark:text-brand-turquoise-100" />;
+    if (variant === 'danger') return <Trash aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-red-800 dark:text-brand-red-200" />;
+    if (variant === 'warning') return <WarningCircle aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-rajah-900 dark:text-brand-rajah-200" />;
+    return <Info aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-turquoise-900 dark:text-brand-turquoise-200" />;
   };
 
   const getBadgeBg = () => {
-    if (variant === 'danger') return 'bg-brand-red-50 dark:bg-brand-red-500/12 border-brand-red-200 dark:border-brand-red-300/25';
-    if (variant === 'warning') return 'bg-brand-rajah-50 dark:bg-brand-rajah-500/12 border-brand-rajah-300 dark:border-brand-rajah-300/25';
-    return 'bg-brand-turquoise-50 dark:bg-brand-turquoise-500/12 border-brand-turquoise-200 dark:border-brand-turquoise-300/25';
+    if (variant === 'danger') return 'border-brand-red-200 bg-brand-red-50 dark:border-brand-red-500/45 dark:bg-brand-red-900/55';
+    if (variant === 'warning') return 'border-brand-rajah-300 bg-brand-rajah-50 dark:border-brand-rajah-500/45 dark:bg-brand-rajah-900/45';
+    return 'border-brand-turquoise-200 bg-brand-turquoise-50 dark:border-brand-turquoise-500/45 dark:bg-brand-turquoise-900/55';
   };
 
   const getButtonBg = () => {
@@ -44,7 +49,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={loading ? () => {} : onClose} title={title} maxWidth="max-w-md">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={title}
+      maxWidth="max-w-md"
+      initialFocusId={cancelButtonId}
+      closeDisabled={loading}
+      dialogRole="alertdialog"
+    >
       <div className="space-y-6 pt-2">
         <div className="flex items-start gap-4">
           <div className={`w-12 h-12 rounded-lg flex items-center justify-center border shrink-0 ${getBadgeBg()}`}>
@@ -59,6 +72,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-brand-border">
           <button
+            id={cancelButtonId}
             type="button"
             onClick={onClose}
             disabled={loading}
@@ -80,7 +94,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               />
             )}
             {loading && <span className="sr-only">Processando confirmação…</span>}
-            {confirmText}
+            {loading ? pendingLabel : confirmText}
           </button>
         </div>
       </div>

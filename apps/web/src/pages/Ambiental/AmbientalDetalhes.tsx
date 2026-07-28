@@ -101,7 +101,7 @@ export function AmbientalDetalhes() {
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['ambiental-detail', id] }),
-      queryClient.invalidateQueries({ queryKey: ['ambiental-demands'] })
+      queryClient.invalidateQueries({ queryKey: ['ambiental-demandas'] })
     ]);
   };
 

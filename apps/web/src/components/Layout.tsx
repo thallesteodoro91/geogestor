@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { GlobalSearch } from './GlobalSearch';
@@ -32,7 +32,7 @@ export function Layout({ children, contentClassName = 'max-w-[1400px]', compactB
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
   const { data: projetos = [] } = useQuery<ProjetoNotificacao[]>({
-    queryKey: ['projetos-notificacoes'],
+    queryKey: ['projetos'],
     queryFn: () => apiClient.get<ProjetoNotificacao[]>('/api/projetos'),
     staleTime: 60_000,
   });
@@ -42,7 +42,7 @@ export function Layout({ children, contentClassName = 'max-w-[1400px]', compactB
     return saved ? JSON.parse(saved) : [];
   });
 
-  const activeNotifications = (() => {
+  const activeNotifications = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -78,7 +78,7 @@ export function Layout({ children, contentClassName = 'max-w-[1400px]', compactB
     });
 
     return list;
-  })();
+  }, [alertDays, clearedNotifications, projetos]);
 
   const handleClearNotification = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();

@@ -44,6 +44,7 @@ export const clientes = sqliteTable('clientes', {
   cpf: text('cpf'),
   rg: text('rg'),
   cnpj: text('cnpj'),
+  documentoNormalizado: text('documento_normalizado'),
   inscricaoEstadual: text('inscricao_estadual'),
   origem: text('origem'),
   origemPrincipal: text('origem_principal'),
@@ -60,6 +61,12 @@ export const clientes = sqliteTable('clientes', {
   return {
     nomeIdx: index('idx_clientes_nome').on(table.nome),
     docIdx: index('idx_clientes_documento').on(table.documento),
+    normalizedDocIdx: index('idx_clientes_documento_normalizado')
+      .on(table.documentoNormalizado)
+      .where(sql`${table.deletedAt} IS NULL`),
+    activeCreatedAtIdx: index('idx_clientes_active_created_at')
+      .on(table.createdAt)
+      .where(sql`${table.deletedAt} IS NULL`),
   };
 });
 
@@ -388,10 +395,34 @@ export const orcamentoProjetos = sqliteTable('orcamento_projetos', {
   orcamentoProjetoIdx: uniqueIndex('uq_orcamento_projeto').on(table.orcamentoId, table.projetoId)
 }));
 
+export const viagens = sqliteTable('viagens', {
+  id: text('id').primaryKey(),
+  clienteId: text('cliente_id').references(() => clientes.id),
+  projetoId: text('projeto_id').references(() => projetos.id),
+  finalidade: text('finalidade').notNull(),
+  destino: text('destino').notNull(),
+  dataInicio: text('data_inicio').notNull(),
+  dataFim: text('data_fim'),
+  responsavel: text('responsavel'),
+  adiantamento: integer('adiantamento').default(0).notNull(),
+  quilometragem: real('quilometragem').default(0).notNull(),
+  valorReembolsavel: integer('valor_reembolsavel').default(0).notNull(),
+  status: text('status').default('planejada').notNull(),
+  observacoes: text('observacoes'),
+  encerradaEm: text('encerrada_em'),
+  ...timestamps
+}, (table) => ({
+  clienteIdIdx: index('idx_viagens_cliente_id').on(table.clienteId),
+  projetoIdIdx: index('idx_viagens_projeto_id').on(table.projetoId),
+  periodoIdx: index('idx_viagens_periodo').on(table.dataInicio, table.dataFim),
+  statusIdx: index('idx_viagens_status').on(table.status)
+}));
+
 export const despesas = sqliteTable('despesas', {
   id: text('id').primaryKey(),
   clienteId: text('cliente_id').references(() => clientes.id),
   projetoId: text('projeto_id').references(() => projetos.id), // Pode ser uma despesa solta ou ligada a projeto
+  viagemId: text('viagem_id').references(() => viagens.id),
   descricao: text('descricao').notNull(),
   fornecedor: text('fornecedor'),
   numeroDocumento: text('numero_documento'),
@@ -404,14 +435,20 @@ export const despesas = sqliteTable('despesas', {
   reembolsavel: integer('reembolsavel', { mode: 'boolean' }).default(false),
   comprovanteDocumentoId: text('comprovante_documento_id'),
   categoria: text('categoria').notNull(), // Combustível, Cartório, Alimentação, Equipamento
+  categoriaCodigo: text('categoria_codigo').default('outros').notNull(),
   observacoes: text('observacoes'),
   status: text('status'),
   formaPagamento: text('forma_pagamento'),
+  canceladaEm: text('cancelada_em'),
+  motivoCancelamento: text('motivo_cancelamento'),
+  estornadaEm: text('estornada_em'),
+  motivoEstorno: text('motivo_estorno'),
   ...timestamps
 }, (table) => {
   return {
     clienteIdIdx: index('idx_despesas_cliente_id').on(table.clienteId),
     projetoIdIdx: index('idx_despesas_projeto_id').on(table.projetoId),
+    viagemIdIdx: index('idx_despesas_viagem_id').on(table.viagemId),
     dataIdx: index('idx_despesas_data').on(table.data),
     statusIdx: index('idx_despesas_status').on(table.status),
   };
@@ -560,6 +597,95 @@ export const documentos = sqliteTable('documentos', {
   };
 });
 
+export const recebimentos = sqliteTable('recebimentos', {
+  id: text('id').primaryKey(),
+  parcelaId: text('parcela_id').references(() => parcelas.id).notNull(),
+  valorPrincipal: integer('valor_principal').notNull(),
+  juros: integer('juros').default(0).notNull(),
+  multa: integer('multa').default(0).notNull(),
+  desconto: integer('desconto').default(0).notNull(),
+  taxas: integer('taxas').default(0).notNull(),
+  valorRecebido: integer('valor_recebido').notNull(),
+  dataRecebimento: text('data_recebimento').notNull(),
+  meioPagamento: text('meio_pagamento'),
+  observacoes: text('observacoes'),
+  comprovanteDocumentoId: text('comprovante_documento_id').references(() => documentos.id),
+  estornadoEm: text('estornado_em'),
+  motivoEstorno: text('motivo_estorno'),
+  usuarioId: text('usuario_id').default('admin').notNull(),
+  ...timestamps
+}, (table) => ({
+  parcelaIdIdx: index('idx_recebimentos_parcela_id').on(table.parcelaId),
+  dataIdx: index('idx_recebimentos_data').on(table.dataRecebimento)
+}));
+
+export const despesaDocumentos = sqliteTable('despesa_documentos', {
+  id: text('id').primaryKey(),
+  despesaId: text('despesa_id').references(() => despesas.id, { onDelete: 'cascade' }).notNull(),
+  documentoId: text('documento_id').references(() => documentos.id).notNull(),
+  tipo: text('tipo').default('comprovante').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  vinculoIdx: uniqueIndex('uq_despesa_documento').on(table.despesaId, table.documentoId),
+  documentoIdx: index('idx_despesa_documentos_documento').on(table.documentoId)
+}));
+
+export const notasFiscais = sqliteTable('notas_fiscais', {
+  id: text('id').primaryKey(),
+  clienteId: text('cliente_id').references(() => clientes.id).notNull(),
+  projetoId: text('projeto_id').references(() => projetos.id),
+  orcamentoId: text('orcamento_id').references(() => orcamentos.id),
+  documentoId: text('documento_id').references(() => documentos.id),
+  numero: text('numero').notNull(),
+  codigoVerificacao: text('codigo_verificacao'),
+  dataEmissao: text('data_emissao').notNull(),
+  valor: integer('valor').notNull(),
+  status: text('status').default('emitida').notNull(),
+  municipio: text('municipio'),
+  link: text('link'),
+  substituiNotaId: text('substitui_nota_id'),
+  canceladaEm: text('cancelada_em'),
+  motivoCancelamento: text('motivo_cancelamento'),
+  ...timestamps
+}, (table) => ({
+  clienteIdx: index('idx_notas_fiscais_cliente').on(table.clienteId),
+  orcamentoIdx: index('idx_notas_fiscais_orcamento').on(table.orcamentoId),
+  emissaoIdx: index('idx_notas_fiscais_emissao').on(table.dataEmissao)
+}));
+
+export const financeiroEventos = sqliteTable('financeiro_eventos', {
+  id: text('id').primaryKey(),
+  tipo: text('tipo').notNull(),
+  entidade: text('entidade').notNull(),
+  entidadeId: text('entidade_id').notNull(),
+  clienteId: text('cliente_id').references(() => clientes.id),
+  projetoId: text('projeto_id').references(() => projetos.id),
+  valor: integer('valor').default(0).notNull(),
+  dataEvento: text('data_evento').notNull(),
+  motivo: text('motivo'),
+  metadataJson: text('metadata_json'),
+  usuarioId: text('usuario_id').default('admin').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  entidadeIdx: index('idx_financeiro_eventos_entidade').on(table.entidade, table.entidadeId),
+  clienteIdx: index('idx_financeiro_eventos_cliente').on(table.clienteId, table.dataEvento)
+}));
+
+export const projetoFinanceiroDecisoes = sqliteTable('projeto_financeiro_decisoes', {
+  id: text('id').primaryKey(),
+  projetoId: text('projeto_id').references(() => projetos.id).notNull(),
+  clienteId: text('cliente_id').references(() => clientes.id).notNull(),
+  tipo: text('tipo').notNull(),
+  percentualExecutado: real('percentual_executado'),
+  valorExecutado: integer('valor_executado'),
+  cancelarParcelasFuturas: integer('cancelar_parcelas_futuras', { mode: 'boolean' }).default(false).notNull(),
+  motivo: text('motivo').notNull(),
+  usuarioId: text('usuario_id').default('admin').notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  projetoIdx: index('idx_projeto_financeiro_decisoes_projeto').on(table.projetoId, table.createdAt)
+}));
+
 export const auditLogs = sqliteTable('audit_logs', {
   id: text('id').primaryKey(),
   action: text('action').notNull(), // INSERT, UPDATE, DELETE
@@ -569,6 +695,29 @@ export const auditLogs = sqliteTable('audit_logs', {
   newData: text('new_data'), // JSON string
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
 });
+
+export const filesystemOperations = sqliteTable('filesystem_operations', {
+  id: text('id').primaryKey(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  operationType: text('operation_type').notNull(),
+  aggregateType: text('aggregate_type').notNull(),
+  aggregateId: text('aggregate_id').notNull(),
+  payload: text('payload').notNull(),
+  status: text('status').default('pending').notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  maxAttempts: integer('max_attempts').default(8).notNull(),
+  nextAttemptAt: text('next_attempt_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lockedAt: text('locked_at'),
+  lockOwner: text('lock_owner'),
+  lastError: text('last_error'),
+  completedAt: text('completed_at'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  idempotencyKeyUnique: uniqueIndex('uq_filesystem_operations_idempotency_key').on(table.idempotencyKey),
+  pendingIdx: index('idx_filesystem_operations_pending').on(table.status, table.nextAttemptAt),
+  aggregateIdx: index('idx_filesystem_operations_aggregate').on(table.aggregateType, table.aggregateId)
+}));
 
 export const contatos = sqliteTable('contatos', {
   id: text('id').primaryKey(),

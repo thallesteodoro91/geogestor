@@ -13,11 +13,16 @@ function git(args) {
 const commitResult = git(['rev-parse', 'HEAD']);
 const statusResult = git(['status', '--porcelain']);
 if (commitResult.status !== 0) throw new Error('Não foi possível identificar o commit do build.');
+const rootPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+const desktopPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'desktop', 'package.json'), 'utf8'));
+if (rootPackage.version !== desktopPackage.version) {
+  throw new Error(`Versões divergentes: raiz ${rootPackage.version}, desktop ${desktopPackage.version}.`);
+}
 
 const env = { ...process.env };
 env.GEOGESTOR_BUILD_COMMIT = commitResult.stdout.trim();
 env.GEOGESTOR_BUILD_DIRTY = String(Boolean(statusResult.stdout.trim()));
-env.GEOGESTOR_BUILD_VERSION = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8')).version;
+env.GEOGESTOR_BUILD_VERSION = rootPackage.version;
 for (const key of Object.keys(env)) {
   if (/^npm_/i.test(key) || /^PNPM_/i.test(key) || ['INIT_CWD', 'NODE_PATH', 'NODE_OPTIONS', 'ESBUILD_BINARY_PATH'].includes(key)) {
     delete env[key];

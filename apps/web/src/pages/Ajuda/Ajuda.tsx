@@ -6,6 +6,7 @@ import {
   type Icon
 } from '@phosphor-icons/react';
 import { motion } from 'framer-motion';
+import { APP_VERSION } from '../../version';
 
 interface HelpArticle {
   id: string;
@@ -287,7 +288,7 @@ export function Ajuda() {
               </div>
 
               <div className="mt-12 pt-8 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                <span>Última atualização local: GeoGestor v1.1.1</span>
+                <span>Versão instalada: GeoGestor v{APP_VERSION}</span>
                 <span>GeoGestor Desktop</span>
               </div>
             </motion.div>

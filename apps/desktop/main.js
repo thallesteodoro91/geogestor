@@ -4,7 +4,7 @@ const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
-const http = require('http');
+const { performance } = require('perf_hooks');
 
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
@@ -15,6 +15,9 @@ app.commandLine.appendSwitch('high-dpi-support', '1');
 
 const apiToken = crypto.randomUUID();
 let apiPort = 3001;
+let localSessionToken = '';
+const startupStartedAt = performance.now();
+const reportedStartupMilestones = new Set();
 
 ipcMain.on('get-api-token', (event) => {
   event.returnValue = apiToken;
@@ -24,11 +27,56 @@ ipcMain.on('get-api-port', (event) => {
   event.returnValue = apiPort;
 });
 
+ipcMain.on('set-local-session-token', (_event, token) => {
+  localSessionToken = typeof token === 'string' && token.length <= 256 ? token : '';
+});
+
 const isDev = !app.isPackaged;
 
 let mainWindow = null;
 let apiProcess = null;
 let securityHeadersInstalled = false;
+let isQuitting = false;
+let restoreRestartInProgress = false;
+let apiRestartHistory = [];
+let apiRestartTimer = null;
+
+function reportStartupMilestone(name) {
+  if (reportedStartupMilestones.has(name)) return;
+  reportedStartupMilestones.add(name);
+  const elapsedMs = Math.round((performance.now() - startupStartedAt) * 100) / 100;
+  console.log(`[Startup] ${name} +${elapsedMs}ms`);
+}
+
+ipcMain.on('startup-milestone', (_event, name) => {
+  if (name === 'first-route-usable') {
+    reportStartupMilestone(name);
+  }
+});
+
+ipcMain.handle('select-backup-bundle', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecione um backup completo do GeoGestor',
+    defaultPath: path.join(app.getPath('userData'), 'backups'),
+    properties: ['openDirectory']
+  });
+  return result.canceled ? null : result.filePaths[0] || null;
+});
+
+ipcMain.handle('open-diagnostics-folder', async () => {
+  const diagnosticsPath = app.getPath('userData');
+  await shell.openPath(diagnosticsPath);
+});
+
+function writeApiProcessLog(level, data) {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'api-process.log');
+    const line = `[${new Date().toISOString()}] [${level}] ${String(data).trim()}\n`;
+    fs.appendFileSync(logPath, line, { encoding: 'utf8' });
+  } catch (error) {
+    console.error('[Electron] Não foi possível registrar o log da API:', error);
+  }
+}
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
@@ -62,25 +110,69 @@ function findFreePort(preferredPort = 3001) {
   });
 }
 
-function checkApiHealth(port) {
+function waitForTcpServer(port, timeoutMs = 15000) {
   return new Promise((resolve, reject) => {
-    const startTime = Date.now();
-    const interval = setInterval(() => {
-      if (Date.now() - startTime > 15000) {
-        clearInterval(interval);
-        reject(new Error(`Timeout de 15 segundos aguardando resposta da API na porta ${port}`));
-        return;
-      }
+    const startedAt = performance.now();
+    let retryTimer = null;
 
-      const req = http.get(`http://127.0.0.1:${port}/api/health`, { headers: { 'x-api-token': apiToken } }, (res) => {
-        if (res.statusCode === 200) {
-          clearInterval(interval);
-          resolve(port);
-        }
+    const attemptConnection = () => {
+      const socket = net.createConnection({ host: '127.0.0.1', port });
+      socket.setTimeout(500);
+      socket.once('connect', () => {
+        if (retryTimer) clearTimeout(retryTimer);
+        socket.destroy();
+        resolve(port);
       });
-      req.on('error', () => {});
-      req.end();
-    }, 500);
+      const retry = () => {
+        socket.destroy();
+        if (performance.now() - startedAt >= timeoutMs) {
+          reject(new Error(`Timeout de ${Math.round(timeoutMs / 1000)} segundos aguardando a API na porta ${port}`));
+          return;
+        }
+        retryTimer = setTimeout(attemptConnection, 100);
+      };
+      socket.once('error', retry);
+      socket.once('timeout', retry);
+    };
+
+    attemptConnection();
+  });
+}
+
+function waitForManagedApiReady(child, port, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      finish(new Error(`Timeout de ${Math.round(timeoutMs / 1000)} segundos aguardando a inicialização da API na porta ${port}`));
+    }, timeoutMs);
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      child.off('message', onMessage);
+      child.off('error', onError);
+      child.off('exit', onExit);
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve(port);
+    };
+    const onMessage = (message) => {
+      if (message === 'ready') finish();
+    };
+    const onError = (error) => {
+      finish(new Error(`Falha ao iniciar o processo da API: ${error.message}`));
+    };
+    const onExit = (code, signal) => {
+      const detail = signal ? `sinal ${signal}` : `código ${code ?? 'desconhecido'}`;
+      finish(new Error(`A API encerrou antes de ficar pronta (${detail}).`));
+    };
+
+    child.on('message', onMessage);
+    child.on('error', onError);
+    child.on('exit', onExit);
   });
 }
 
@@ -101,12 +193,36 @@ function getOrCreateSecretKey() {
 }
 
 function installSecurityHeaders() {
-  if (securityHeadersInstalled || isDev) return;
+  if (securityHeadersInstalled) return;
   securityHeadersInstalled = true;
+
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ['http://127.0.0.1:*/*'] },
+    (details, callback) => {
+      try {
+        const target = new URL(details.url);
+        if (target.hostname === '127.0.0.1' && target.port === String(apiPort)) {
+          const existingHeader = Object.keys(details.requestHeaders)
+            .find((header) => header.toLowerCase() === 'x-api-token');
+          details.requestHeaders[existingHeader || 'x-api-token'] = apiToken;
+          if (localSessionToken) {
+            const sessionHeader = Object.keys(details.requestHeaders)
+              .find((header) => header.toLowerCase() === 'x-local-session');
+            details.requestHeaders[sessionHeader || 'x-local-session'] = localSessionToken;
+          }
+        }
+      } catch {
+        // Keep invalid URLs untouched.
+      }
+      callback({ requestHeaders: details.requestHeaders });
+    }
+  );
+
+  if (isDev) return;
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const responseHeaders = { ...(details.responseHeaders || {}) };
     responseHeaders['Content-Security-Policy'] = [
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     ];
     responseHeaders['X-Content-Type-Options'] = ['nosniff'];
     responseHeaders['Referrer-Policy'] = ['no-referrer'];
@@ -115,18 +231,21 @@ function installSecurityHeaders() {
 }
 
 async function startApiServer() {
-  const port = await findFreePort(3001);
+  reportStartupMilestone('api-start-requested');
+  const port = isDev
+    ? Number(process.env.GEOGESTOR_API_PORT) || 3001
+    : await findFreePort(3001);
   apiPort = port;
 
   return new Promise((resolve, reject) => {
     let serverScript;
 
     if (isDev) {
-      console.log(`[Electron] Dev mode - checking API health on port ${port}...`);
-      checkApiHealth(port).then(resolve).catch((err) => {
-        console.warn('[Electron] Health check failed in dev mode, using preferred port:', err.message);
-        resolve(port);
-      });
+      console.log(`[Electron] Dev mode - waiting for API listener on port ${port}...`);
+      waitForTcpServer(port).then((readyPort) => {
+        reportStartupMilestone('api-ready');
+        resolve(readyPort);
+      }).catch(reject);
       return;
     }
 
@@ -155,6 +274,7 @@ async function startApiServer() {
       GEOGESTOR_WEB_DIST: path.join(process.resourcesPath, 'web'),
       GEOGESTOR_API_TOKEN: apiToken,
       GEOGESTOR_SECRET_KEY: secretKey,
+      GEOGESTOR_DESKTOP_MANAGED: '1',
       NODE_PATH: [
         path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules'),
         path.join(process.resourcesPath, 'api', 'node_modules'),
@@ -166,29 +286,39 @@ async function startApiServer() {
       env,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });
+    reportStartupMilestone('api-process-forked');
 
     apiProcess.stdout.on('data', (data) => {
       console.log(`[API] ${data.toString()}`);
+      writeApiProcessLog('INFO', data);
     });
 
     apiProcess.stderr.on('data', (data) => {
       console.error(`[API Error] ${data}`);
+      writeApiProcessLog('ERROR', data);
     });
 
     apiProcess.on('error', (err) => {
-      console.error('[Electron] Failed to start API:', err);
-      reject(err);
+      console.error('[Electron] API process error:', err);
     });
 
     apiProcess.on('exit', (code) => {
       console.log(`[Electron] API process exited with code ${code}`);
       apiProcess = null;
+      if (!isQuitting && (code === 75 || code === 76)) {
+        void restartAfterRestore(code);
+      } else if (!isQuitting && mainWindow && !mainWindow.isDestroyed()) {
+        scheduleApiRecovery(code);
+      }
     });
 
-    checkApiHealth(port)
-      .then((p) => resolve(p))
+    waitForManagedApiReady(apiProcess, port)
+      .then((readyPort) => {
+        reportStartupMilestone('api-ready');
+        resolve(readyPort);
+      })
       .catch((err) => {
-        console.error('[Electron] Health check failed:', err);
+        console.error('[Electron] API readiness failed:', err);
         if (apiProcess) {
           try {
             apiProcess.kill('SIGTERM');
@@ -198,6 +328,68 @@ async function startApiServer() {
         reject(err);
       });
   });
+}
+
+function scheduleApiRecovery(exitCode) {
+  if (apiRestartTimer || isQuitting || restoreRestartInProgress) return;
+  const attemptNumber = registerApiRecoveryAttempt();
+  if (attemptNumber === null) {
+    writeApiProcessLog('FATAL', `Recuperação automática interrompida após 3 tentativas. Último código: ${exitCode ?? 'desconhecido'}.`);
+    return;
+  }
+  const delayMs = Math.min(5000, attemptNumber * 1000);
+  writeApiProcessLog('WARN', `API interrompida. Tentativa controlada ${attemptNumber}/3 em ${delayMs} ms.`);
+  apiRestartTimer = setTimeout(async () => {
+    apiRestartTimer = null;
+    try {
+      const port = await startApiServer();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+      }
+      writeApiProcessLog('INFO', 'Conexão com a API local recuperada.');
+    } catch (error) {
+      writeApiProcessLog('ERROR', error instanceof Error ? error.message : String(error));
+      scheduleApiRecovery('startup-failed');
+    }
+  }, delayMs);
+}
+
+function registerApiRecoveryAttempt(now = Date.now()) {
+  apiRestartHistory = apiRestartHistory.filter((timestamp) => timestamp > now - 5 * 60 * 1000);
+  if (apiRestartHistory.length >= 3) {
+    return null;
+  }
+  apiRestartHistory.push(now);
+  return apiRestartHistory.length;
+}
+
+async function restartAfterRestore(exitCode) {
+  if (restoreRestartInProgress) return;
+  restoreRestartInProgress = true;
+  try {
+    const port = await startApiServer();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      await mainWindow.loadURL(`http://127.0.0.1:${port}`);
+    }
+    const resultPath = path.join(app.getPath('userData'), 'last-restore-result.json');
+    let detail = exitCode === 75
+      ? 'O backup foi restaurado e o GeoGestor foi reiniciado.'
+      : 'A restauração falhou. O GeoGestor recuperou o banco anterior quando possível.';
+    try {
+      const result = JSON.parse(fs.readFileSync(resultPath, 'utf8'));
+      if (typeof result.message === 'string') detail = result.message;
+    } catch {}
+    await dialog.showMessageBox(mainWindow, {
+      type: exitCode === 75 ? 'info' : 'error',
+      title: exitCode === 75 ? 'Restauração concluída' : 'Restauração não concluída',
+      message: detail
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    dialog.showErrorBox('Erro ao reiniciar o GeoGestor', message);
+  } finally {
+    restoreRestartInProgress = false;
+  }
 }
 
 function stopApiServer() {
@@ -211,6 +403,7 @@ function stopApiServer() {
 
 function createWindow(port) {
   installSecurityHeaders();
+  reportStartupMilestone('window-create-requested');
   mainWindow = new BrowserWindow({
     width: 1120,
     height: 680,
@@ -237,6 +430,7 @@ function createWindow(port) {
 
   console.log(`[Electron] Loading: ${url}`);
   mainWindow.loadURL(url);
+  reportStartupMilestone('window-load-requested');
 
   mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
     const allowedOrigins = isDev
@@ -264,8 +458,13 @@ function createWindow(port) {
   });
 
   mainWindow.once('ready-to-show', () => {
+    reportStartupMilestone('window-ready-to-show');
     mainWindow.maximize();
     mainWindow.show();
+  });
+
+  mainWindow.webContents.once('dom-ready', () => {
+    reportStartupMilestone('window-dom-ready');
   });
 
   if (isDev || process.env.GEOGESTOR_OPEN_DEVTOOLS === '1') {
@@ -293,6 +492,7 @@ function createWindow(port) {
 }
 
 app.whenReady().then(async () => {
+  reportStartupMilestone('app-ready');
   try {
     const port = await startApiServer();
     createWindow(port);
@@ -321,5 +521,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
+  if (apiRestartTimer) clearTimeout(apiRestartTimer);
   stopApiServer();
 });

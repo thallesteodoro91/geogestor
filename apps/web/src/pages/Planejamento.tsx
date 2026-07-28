@@ -207,10 +207,10 @@ export function Planejamento() {
   const [activeTab, setActiveTab] = useState<'orcamento' | 'equilibrio' | 'pipeline'>('orcamento');
   const [zoomPeriod, setZoomPeriod] = useState<'6m' | '12m' | 'all'>('all');
 
-  // Fetch DRE data
-  const { data: dre = [], isLoading: loadingDRE } = useQuery<Array<{ mes: string; receitas: number; despesas: number; lucro: number }>>({
-    queryKey: ['dre-financeiro'],
-    queryFn: () => apiClient.get<Array<{ mes: string; receitas: number; despesas: number; lucro: number }>>('/api/financeiro/dre')
+  // Busca o fluxo de caixa mensal gerencial.
+  const { data: monthlyCashFlow = [], isLoading: loadingMonthlyCashFlow } = useQuery<Array<{ mes: string; receitas: number; despesas: number; lucro: number }>>({
+    queryKey: ['resumo-mensal-financeiro'],
+    queryFn: () => apiClient.get<Array<{ mes: string; receitas: number; despesas: number; lucro: number }>>('/api/financeiro/resumo-mensal')
   });
 
   // Fetch opportunities for Pipeline Funnel
@@ -219,20 +219,20 @@ export function Planejamento() {
     queryFn: () => apiClient.get<OpportunityListItem[]>('/api/oportunidades')
   });
 
-  const loading = loadingDRE || loadingOpportunities;
+  const loading = loadingMonthlyCashFlow || loadingOpportunities;
 
-  const filteredDre = useMemo(() => {
-    if (zoomPeriod === 'all') return dre;
+  const filteredMonthlyCashFlow = useMemo(() => {
+    if (zoomPeriod === 'all') return monthlyCashFlow;
     const count = zoomPeriod === '6m' ? 6 : 12;
-    return dre.slice(-count);
-  }, [dre, zoomPeriod]);
+    return monthlyCashFlow.slice(-count);
+  }, [monthlyCashFlow, zoomPeriod]);
 
   // Process data for Orçamento tab
   const { orcamentoChartData, desvioChartData, desvioMedio, totalReceitasReal, totalDespesasReal } = useMemo(() => {
-    const totalReceitasReal = filteredDre.reduce((sum, d) => sum + (d.receitas / 100), 0);
-    const totalDespesasReal = filteredDre.reduce((sum, d) => sum + (d.despesas / 100), 0);
+    const totalReceitasReal = filteredMonthlyCashFlow.reduce((sum, d) => sum + (d.receitas / 100), 0);
+    const totalDespesasReal = filteredMonthlyCashFlow.reduce((sum, d) => sum + (d.despesas / 100), 0);
 
-    const data = filteredDre.map(d => {
+    const data = filteredMonthlyCashFlow.map(d => {
       const rec = d.receitas / 100;
       const desp = d.despesas / 100;
 
@@ -273,11 +273,11 @@ export function Planejamento() {
       totalReceitasReal,
       totalDespesasReal
     };
-  }, [filteredDre]);
+  }, [filteredMonthlyCashFlow]);
 
   // Process data for Ponto de Equilíbrio tab
   const { equilibrioChartData, custoFixoVariavelChartData, pontoEquilibrioMedio, margemContribuiçãoMedia } = useMemo(() => {
-    const data = filteredDre.map(d => {
+    const data = filteredMonthlyCashFlow.map(d => {
       const rec = d.receitas / 100;
       const desp = d.despesas / 100;
 
@@ -323,7 +323,7 @@ export function Planejamento() {
       pontoEquilibrioMedio,
       margemContribuiçãoMedia
     };
-  }, [filteredDre]);
+  }, [filteredMonthlyCashFlow]);
 
   // Process data for Pipeline Funnel
   const { pipelineChartData, pipelineTotalValue, taxaConversaoComercial } = useMemo(() => {
@@ -390,7 +390,7 @@ export function Planejamento() {
             icon={Target}
             iconTone="warning"
             calculation="((Realizado - Orçado) / Orçado) × 100"
-            warning={dre.length === 0 ? "Aguardando registros financeiros reais para cálculo dinâmico." : undefined}
+            warning={monthlyCashFlow.length === 0 ? "Aguardando registros financeiros reais para cálculo dinâmico." : undefined}
           />
           <KPICard
             title="Margem de contribuição"

@@ -6,7 +6,7 @@ import test from 'node:test';
 import { eq } from 'drizzle-orm';
 import { normalizeLicenseStatus } from '@geogestor/contracts';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `environmental-${process.pid}`);
 const dbPath = path.join(testRoot, `environmental.integration.${process.pid}.test.db`);
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 const authHeaders = { 'content-type': 'application/json', 'x-api-token': 'test-token' };

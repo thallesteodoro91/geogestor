@@ -290,7 +290,7 @@ function groupLogsByDate(logs: AuditLog[], today: Date): GroupedLogs[] {
 function ActionBadge({ action }: { action: string }) {
   if (action === 'INSERT') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-600 ring-1 ring-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-800/40" aria-label="Criação">
+      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/40" aria-label="Criação">
         <Plus weight="bold" className="h-3 w-3" aria-hidden="true" />
         Novo
       </span>
@@ -298,14 +298,14 @@ function ActionBadge({ action }: { action: string }) {
   }
   if (action === 'UPDATE') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-600 ring-1 ring-amber-200/60 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-800/40" aria-label="Edição">
+      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/40" aria-label="Edição">
         <PencilSimple weight="bold" className="h-3 w-3" aria-hidden="true" />
         Editado
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-600 ring-1 ring-rose-200/60 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-800/40" aria-label="Exclusão">
+    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800/40" aria-label="Exclusão">
       <Trash weight="bold" className="h-3 w-3" aria-hidden="true" />
       Removido
     </span>
@@ -367,7 +367,7 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
 
       {/* Metadata column */}
       <div className="flex flex-col items-end gap-1.5 shrink-0 pt-0.5">
-        <span className="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 whitespace-nowrap tabular-nums">
+        <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 whitespace-nowrap tabular-nums">
           {formatRelativeTime(date, now)}
         </span>
         <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center" title={userName}>
@@ -435,10 +435,10 @@ export function RecentActivities() {
             role="tab"
             aria-selected={activeFilter === filter}
             onClick={() => setActiveFilter(filter)}
-            className={`px-3 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+            className={`geo-focus-ring rounded-lg px-3 py-1 text-[11px] font-semibold transition-[color,background-color,box-shadow] ${
               activeFilter === filter
                 ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
-                : 'bg-zinc-100 dark:bg-zinc-800/60 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 hover:text-zinc-700 dark:hover:text-zinc-200'
+                : 'bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 hover:text-zinc-800 dark:hover:text-white'
             }`}
           >
             {filter}
@@ -460,7 +460,7 @@ export function RecentActivities() {
           groupedLogs.map((group) => (
             <div key={group.label}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-600 dark:text-zinc-300">
                   {group.label}
                 </span>
                 <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />

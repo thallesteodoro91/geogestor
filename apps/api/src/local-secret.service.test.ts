@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import test from 'node:test';
 
-process.env.GEOGESTOR_DB_PATH = path.resolve(process.cwd(), 'scratch', 'api-tests', 'local-secret.service.test.db');
+process.env.GEOGESTOR_DB_PATH = path.resolve(process.cwd(), 'scratch', `local-secret-${process.pid}`, 'geogestor.db');
 process.env.GEOGESTOR_SECRET_KEY = crypto.randomBytes(32).toString('base64');
 
 test('segredo local é autenticado, cifrado e reversível somente com a chave correta', async () => {

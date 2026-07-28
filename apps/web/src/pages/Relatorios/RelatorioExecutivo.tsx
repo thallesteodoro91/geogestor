@@ -85,9 +85,11 @@ export function RelatorioExecutivo() {
   const runningProjects = projetosPorStatus.find((p: ProjetoStatusStat) => p.status === 'Em Andamento')?.count || 0;
 
   // Process financial KPIs
-  const totalBudgets = orcamentosStats.reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
   const approvedBudgets = orcamentosStats.filter((o: OrcamentoStat) => isApprovedBudgetStatus(o.status)).reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
-  const conversionRate = totalBudgets > 0 ? (approvedBudgets / totalBudgets) * 100 : 0;
+  const decidedBudgets = orcamentosStats
+    .filter((o: OrcamentoStat) => ['aprovado', 'pago', 'rejeitado', 'expirado'].includes((o.status || '').toLowerCase()))
+    .reduce((acc: number, curr: OrcamentoStat) => acc + curr.count, 0);
+  const conversionRate = decidedBudgets > 0 ? (approvedBudgets / decidedBudgets) * 100 : 0;
 
   const totalRevenue = orcamentosStats
     .filter((o: OrcamentoStat) => isApprovedBudgetStatus(o.status))
@@ -145,15 +147,15 @@ export function RelatorioExecutivo() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Aprovado / Pago</span>
+                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Valor contratado</span>
                   <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100 block mt-1">{formatCurrency(totalRevenue)}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Despesas Totais</span>
+                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Despesas lançadas</span>
                   <span className="text-xl font-bold text-red-600 block mt-1">-{formatCurrency(totalExpense)}</span>
                 </div>
                 <div>
-                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Lucro Líquido</span>
+                  <span className="text-xs text-text-secondary uppercase font-bold tracking-wide">Resultado gerencial estimado</span>
                   <span className={`text-xl font-bold block mt-1 ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {formatCurrency(netProfit)}
                   </span>
@@ -161,9 +163,9 @@ export function RelatorioExecutivo() {
               </div>
             </div>
             <div className="mt-8 pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-              <span>Balanço total obtido a partir do banco de dados local.</span>
+              <span>Estimativa gerencial: contratos menos despesas lançadas. Não é DRE contábil.</span>
               <span className="flex items-center gap-1 text-emerald-600">
-                <TrendUp className="w-3.5 h-3.5" /> Margem positiva
+                <TrendUp className="w-3.5 h-3.5" /> Resultado positivo
               </span>
             </div>
           </div>
@@ -184,7 +186,7 @@ export function RelatorioExecutivo() {
               </p>
             </div>
             <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 text-xs font-bold text-zinc-700">
-              {approvedBudgets} de {totalBudgets} orçamentos convertidos
+              {approvedBudgets} de {decidedBudgets} orçamentos encerrados com decisão
             </div>
           </div>
 

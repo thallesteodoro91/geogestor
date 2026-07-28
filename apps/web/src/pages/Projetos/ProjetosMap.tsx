@@ -5,6 +5,8 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 import { apiFetch } from '../../services/apiClient';
+import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
+import { MAP_TILE_ATTRIBUTION, MAP_TILE_URL } from '../../utils/mapTiles';
 
 // @ts-expect-error - Leaflet _getIconUrl is an internal property without official TypeScript definitions
 delete L.Icon.Default.prototype._getIconUrl;
@@ -54,6 +56,19 @@ const getCustomIcon = (status?: string) => {
 export function ProjetosMap({ projetos }: ProjetosMapProps) {
   const [geoFeatures, setGeoFeatures] = useState<Record<string, unknown>[]>([]);
   const [loadingGeo, setLoadingGeo] = useState(false);
+  const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
+  const [tileRetryKey, setTileRetryKey] = useState(0);
+
+  useEffect(() => {
+    const offline = () => setBaseMapUnavailable(true);
+    const online = () => setTileRetryKey((value) => value + 1);
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+    };
+  }, []);
 
   useEffect(() => {
     if (projetos.length === 0) return;
@@ -98,14 +113,26 @@ export function ProjetosMap({ projetos }: ProjetosMapProps) {
           <span className="text-xs font-medium text-zinc-600">Carregando polígonos...</span>
         </div>
       )}
+      <MapBaseNotice
+        unavailable={baseMapUnavailable}
+        onRetry={() => {
+          setBaseMapUnavailable(!navigator.onLine);
+          setTileRetryKey((value) => value + 1);
+        }}
+      />
       <MapContainer 
         center={center} 
         zoom={zoom} 
         style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          key={tileRetryKey}
+          attribution={MAP_TILE_ATTRIBUTION}
+          url={MAP_TILE_URL}
+          eventHandlers={{
+            tileerror: () => setBaseMapUnavailable(true),
+            load: () => setBaseMapUnavailable(false)
+          }}
         />
         {mapProjetos.map((projeto) => (
           <Marker 

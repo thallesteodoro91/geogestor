@@ -124,30 +124,35 @@ export function Dashboard() {
   const [projetoFilterMode, setProjetoFilterMode] = useState<'macro' | 'unitario'>('macro');
   const [selectedProjetoTipo, setSelectedProjetoTipo] = useState<string>('');
 
-  const { data: clientes = [], isLoading: loadingClientes } = useQuery<ClienteResumo[]>({
+  const { data: clientesData, isLoading: loadingClientes, isError: clientesError } = useQuery<ClienteResumo[]>({
     queryKey: ['clientes'],
     queryFn: () => apiClient.get<ClienteResumo[]>('/api/clientes')
   });
 
-  const { data: projetos = [], isLoading: loadingProjetos } = useQuery<ProjetoResumo[]>({
+  const { data: projetosData, isLoading: loadingProjetos, isError: projetosError } = useQuery<ProjetoResumo[]>({
     queryKey: ['projetos'],
-    queryFn: () => apiClient.get<ProjetoResumo[]>('/api/projetos')
+    queryFn: () => apiClient.get<ProjetoResumo[]>('/api/projetos'),
+    staleTime: 60_000,
   });
 
-  const { data: tasks = [] } = useQuery<TaskItem[]>({
+  const { data: tasksData, isError: tasksError } = useQuery<TaskItem[]>({
     queryKey: ['tarefas'],
     queryFn: () => apiClient.get<TaskItem[]>('/api/tarefas')
   });
 
-  const { data: stats, isLoading: loadingStats } = useQuery<StatsGeral>({
+  const { data: stats, isLoading: loadingStats, isError: statsError } = useQuery<StatsGeral>({
     queryKey: ['stats-geral'],
     queryFn: () => apiClient.get<StatsGeral>('/api/relatorios/geral')
   });
 
-  const { data: licencas = [] } = useQuery<LicencaItem[]>({
+  const { data: licencasData, isError: licencasError } = useQuery<LicencaItem[]>({
     queryKey: ['licencas'],
     queryFn: () => apiClient.get<LicencaItem[]>('/api/licencas')
   });
+  const clientes = useMemo(() => clientesData ?? [], [clientesData]);
+  const projetos = useMemo(() => projetosData ?? [], [projetosData]);
+  const tasks = useMemo(() => tasksData ?? [], [tasksData]);
+  const licencas = useMemo(() => licencasData ?? [], [licencasData]);
 
   // Calcular balanço financeiro
   const { netProfit, areaTotal } = useMemo(() => {
@@ -270,6 +275,25 @@ export function Dashboard() {
 
     return items.sort((a, b) => a.data.getTime() - b.data.getTime()).slice(0, 5);
   }, [tasks, licencas, projetos]);
+  const failedWithoutData = (clientesError && !clientesData)
+    || (projetosError && !projetosData)
+    || (tasksError && !tasksData)
+    || (statsError && !stats)
+    || (licencasError && !licencasData);
+
+  if (failedWithoutData) {
+    return (
+      <Layout>
+        <section role="alert" className="rounded-xl border border-red-300 bg-red-50 p-6 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-100">
+          <h1 className="text-2xl font-bold">Não foi possível carregar o painel</h1>
+          <p className="mt-2 text-sm leading-6">
+            Os indicadores não foram substituídos por zeros. Tente novamente depois que o serviço e o banco locais estiverem disponíveis.
+          </p>
+        </section>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:pt-10 lg:mb-10 xl:pt-0">
@@ -325,7 +349,7 @@ export function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} opacity={0.4} />
                 <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} tickFormatter={(value) => `R$ ${value}`} />
-                <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Lucro Estimado" format="currency" />} />
+                <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
                 <Area type="monotone" name="Receita" dataKey="receita" stroke={chartColors.primary} strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
                 <Area type="monotone" name="Despesa" dataKey="despesa" stroke={chartColors.negative} strokeWidth={3} fillOpacity={1} fill="url(#colorDespesa)" />
               </AreaChart>
@@ -430,7 +454,7 @@ export function Dashboard() {
 
             <div className="space-y-3">
               {upcomingItems.length === 0 ? (
-                <div className="py-12 text-center text-zinc-400 dark:text-zinc-500 text-sm">
+                <div className="py-12 text-center text-zinc-600 dark:text-zinc-300 text-sm">
                   Nenhum vencimento pendente para os próximos dias.
                 </div>
               ) : (
@@ -548,7 +572,7 @@ export function Dashboard() {
                   type="button"
                   onClick={() => setProjetoFilterMode('macro')} 
                   aria-pressed={projetoFilterMode === 'macro'}
-                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'macro' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
+                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'macro' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-600 hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-white'}`}
                 >
                   Todos
                 </button>
@@ -556,7 +580,7 @@ export function Dashboard() {
                   type="button"
                   onClick={() => setProjetoFilterMode('unitario')} 
                   aria-pressed={projetoFilterMode === 'unitario'}
-                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'unitario' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'}`}
+                  className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'unitario' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-600 hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-white'}`}
                 >
                   Unitário
                 </button>

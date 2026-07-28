@@ -10,6 +10,10 @@ declare global {
     electronAPI?: {
       getApiToken: () => string;
       getApiPort?: () => number;
+      setLocalSessionToken?: (token: string) => void;
+      selectBackupBundle?: () => Promise<string | null>;
+      openDiagnosticsFolder?: () => Promise<void>;
+      reportStartupMilestone?: (milestone: 'first-route-usable') => void;
     };
   }
 }

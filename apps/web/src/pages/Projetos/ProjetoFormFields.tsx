@@ -4,7 +4,7 @@ import { DatePickerField, FormField, FormSection, FormSelect } from '../../compo
 import { cn } from '../../utils/cn';
 import { secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
-import type { ProjectFormErrors, ProjectFormState, ProjectModalTab } from './projectForm';
+import { resolveProjectFormCopy, type ProjectFormErrors, type ProjectFormState, type ProjectModalContext, type ProjectModalTab } from './projectForm';
 
 interface ProjectClientOption {
   id: string;
@@ -16,6 +16,7 @@ interface ProjetoFormFieldsProps {
   setForm: Dispatch<SetStateAction<ProjectFormState>>;
   errors: ProjectFormErrors;
   activeTab: ProjectModalTab;
+  context?: ProjectModalContext;
   clientes: ProjectClientOption[];
   onClearErrors: (...fields: Array<keyof ProjectFormState>) => void;
   onCreateClient: () => void;
@@ -34,6 +35,7 @@ export function ProjetoFormFields({
   setForm,
   errors,
   activeTab,
+  context = 'projeto',
   clientes,
   onClearErrors,
   onCreateClient
@@ -46,16 +48,32 @@ export function ProjetoFormFields({
   if (activeTab === 'projeto') {
     const isEnvironmental = form.tipo === 'Ambiental' || form.tipo === 'Licenciamento';
     const isExpertAssessment = form.tipo === 'Perícia';
+    const copy = resolveProjectFormCopy(context, form.tipo);
+    const projectTypeOptions = context === 'ambiental'
+      ? [['Ambiental', 'Demanda ambiental'], ['Perícia', 'Perícia']] as const
+      : context === 'licenciamento'
+        ? [['Licenciamento', 'Licenciamento']] as const
+        : [
+            ['Rural', 'Rural'],
+            ['Urbano', 'Urbano'],
+            ['Comercial', 'Comercial'],
+            ['Industrial', 'Industrial'],
+            ['Ambiental', 'Ambiental'],
+            ['Licenciamento', 'Licenciamento'],
+            ['Perícia', 'Perícia'],
+            ['Institucional', 'Institucional'],
+            ['Outro', 'Outro']
+          ] as const;
     return (
       <div className="space-y-4">
         <FormSection
           sectionId="project-section-essential"
-          title="Identificação e planejamento"
-          description="Defina o cliente, o escopo resumido e as datas principais do trabalho."
+          title={context === 'projeto' ? 'Identificação e planejamento' : 'Identificação da demanda'}
+          description={context === 'projeto' ? 'Defina o cliente, o escopo resumido e as datas principais do trabalho.' : 'Defina o cliente, a natureza, o escopo resumido e as datas principais da demanda.'}
           icon={<PresentationChart className="h-5 w-5" weight="duotone" />}
           tone="indigo"
         >
-          <FormField htmlFor="project-nome" label="Nome do projeto" required error={errors.nome} className="min-w-0">
+          <FormField htmlFor="project-nome" label={copy.nameLabel} required error={errors.nome} className="min-w-0">
             <input
               id="project-nome"
               name="nome"
@@ -63,7 +81,7 @@ export function ProjetoFormFields({
               autoComplete="off"
               value={form.nome}
               onChange={(event) => update('nome', event.target.value)}
-              placeholder="Ex.: Levantamento planialtimétrico — Lote 5"
+              placeholder={copy.namePlaceholder}
               maxLength={160}
               aria-invalid={Boolean(errors.nome)}
               aria-describedby={describedBy('nome', errors)}
@@ -98,7 +116,7 @@ export function ProjetoFormFields({
                 </button>
               </div>
             </FormField>
-            <FormField htmlFor="project-tipo" label="Tipo do projeto ou serviço" required error={errors.tipo}>
+            <FormField htmlFor="project-tipo" label={copy.typeLabel} required error={errors.tipo}>
               <FormSelect
                 id="project-tipo"
                 name="tipo"
@@ -110,15 +128,7 @@ export function ProjetoFormFields({
                 className={cn(fieldClass, 'geo-native-select cursor-pointer')}
               >
                 <option value="">Selecione…</option>
-                <option value="Rural">Rural</option>
-                <option value="Urbano">Urbano</option>
-                <option value="Comercial">Comercial</option>
-                <option value="Industrial">Industrial</option>
-                <option value="Ambiental">Ambiental</option>
-                <option value="Licenciamento">Licenciamento</option>
-                <option value="Perícia">Perícia</option>
-                <option value="Institucional">Institucional</option>
-                <option value="Outro">Outro</option>
+                {projectTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </FormSelect>
             </FormField>
             <FormField htmlFor="project-status" label="Status inicial">
@@ -143,8 +153,8 @@ export function ProjetoFormFields({
             </FormField>
           </div>
 
-          <FormField htmlFor="project-descricao" label="Descrição curta" hint={`${form.descricao.length}/500 caracteres`}>
-            <textarea id="project-descricao" name="descricao" value={form.descricao} onChange={(event) => update('descricao', event.target.value)} placeholder="Resuma a finalidade, o escopo e o principal produto a entregar." rows={4} maxLength={500} aria-describedby="project-descricao-hint" className={textareaClass} />
+          <FormField htmlFor="project-descricao" label={copy.descriptionLabel} hint={`${form.descricao.length}/500 caracteres`}>
+            <textarea id="project-descricao" name="descricao" value={form.descricao} onChange={(event) => update('descricao', event.target.value)} placeholder={copy.descriptionPlaceholder} rows={4} maxLength={500} aria-describedby="project-descricao-hint" className={textareaClass} />
           </FormField>
         </FormSection>
 

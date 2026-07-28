@@ -1,8 +1,10 @@
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
-import { useEffect, useRef, useState, useMemo, type ElementType } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo, type ElementType } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
+import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
+import { createBaseTileLayer } from '../../utils/mapTiles';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -65,7 +67,7 @@ import { apiFetch, getDownloadUrl, getPreviewUrl } from '../../services/apiClien
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoTabButtonClass, geoTabIconClass, geoTabListClass, type GeoTone } from '../../utils/geoTheme';
-import { getBudgetStatusLabel, isApprovedBudgetStatus, isClosedBudgetStatus } from '../../utils/budgetStatus';
+import { getBudgetStatusLabel, isApprovedBudgetStatus } from '../../utils/budgetStatus';
 
 delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -339,11 +341,36 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const geojsonLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const baseTileLayerRef = useRef<L.TileLayer | null>(null);
   const queryClient = useQueryClient();
   
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const reloadBaseMap = useCallback(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (baseTileLayerRef.current) map.removeLayer(baseTileLayerRef.current);
+    setBaseMapUnavailable(!navigator.onLine);
+    baseTileLayerRef.current = createBaseTileLayer(
+      map,
+      () => setBaseMapUnavailable(true),
+      () => setBaseMapUnavailable(false)
+    );
+  }, []);
+
+  useEffect(() => {
+    const offline = () => setBaseMapUnavailable(true);
+    const online = () => reloadBaseMap();
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+    };
+  }, [reloadBaseMap]);
 
   const { data: geoFiles = [], isLoading } = useQuery<ClienteGeoFileItem[]>({
     queryKey: ['cliente-geo', clienteId],
@@ -429,7 +456,11 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
         attributionControl: false
       }).setView([-15.793889, -47.882778], 4);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      baseTileLayerRef.current = createBaseTileLayer(
+        map,
+        () => setBaseMapUnavailable(true),
+        () => setBaseMapUnavailable(false)
+      );
 
       const layerGroup = L.layerGroup().addTo(map);
       geojsonLayerGroupRef.current = layerGroup;
@@ -448,9 +479,10 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        baseTileLayerRef.current = null;
       }
     };
-  }, []);
+  }, [reloadBaseMap]);
 
   useEffect(() => {
     if (!mapInstanceRef.current || !geojsonLayerGroupRef.current) return;
@@ -559,6 +591,7 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
+        <MapBaseNotice unavailable={baseMapUnavailable} onRetry={reloadBaseMap} />
         <div ref={mapContainerRef} className="h-full w-full" />
         
         {/* Drag & Drop Overlay */}
@@ -1557,11 +1590,7 @@ export function ClienteDetalhes() {
   const totalReceita = clientOrcamentos
     .filter((o) => isApprovedBudgetStatus(o.status))
     .reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
-  const orcamentosConfirmados = clientOrcamentos.filter((o) => isApprovedBudgetStatus(o.status));
-  const orcamentosEmAberto = clientOrcamentos.filter((o) => !isClosedBudgetStatus(o.status));
-  const pipelineTotal = orcamentosEmAberto.reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
-  const ticketMedio = orcamentosConfirmados.length > 0 ? totalReceita / orcamentosConfirmados.length : 0;
-  const taxaConversao = clientOrcamentos.length > 0 ? Math.round((orcamentosConfirmados.length / clientOrcamentos.length) * 100) : 0;
+  const clientFinancialKpis = dashboardData?.kpis || {};
   const orcamentosPorStatus = clientOrcamentos.reduce<Record<string, { count: number; total: number }>>((acc, orc) => {
     const status = orc.status || 'Sem status';
     if (!acc[status]) acc[status] = { count: 0, total: 0 };
@@ -2683,9 +2712,9 @@ export function ClienteDetalhes() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
-                  label: 'Receita confirmada',
-                  value: formatCurrency(totalReceita),
-                  helper: `${orcamentosConfirmados.length} orçamento(s) aprovado(s) ou pago(s)`,
+                  label: 'Valor contratado',
+                  value: formatCurrency(Number(clientFinancialKpis.valorContratado) || 0),
+                  helper: 'Orçamentos aprovados ou pagos',
                   icon: <CurrencyDollar weight="duotone" className="h-5 w-5" />,
                   card: geoGreenSurfaceClass,
                   accent: geoGreenIconClass,
@@ -2693,9 +2722,9 @@ export function ClienteDetalhes() {
                   glow: undefined
                 },
                 {
-                  label: 'Pipeline total',
-                  value: formatCurrency(pipelineTotal),
-                  helper: `${orcamentosEmAberto.length} orçamento(s) em aberto`,
+                  label: 'Recebido no caixa',
+                  value: formatCurrency(Number(clientFinancialKpis.valorRecebido) || 0),
+                  helper: 'Recebimentos ativos vinculados ao cliente',
                   icon: <Briefcase weight="duotone" className="h-5 w-5" />,
                   card: geoGreenSurfaceClass,
                   accent: geoGreenIconClass,
@@ -2703,9 +2732,9 @@ export function ClienteDetalhes() {
                   glow: undefined
                 },
                 {
-                  label: 'Ticket médio',
-                  value: formatCurrency(ticketMedio),
-                  helper: 'Média dos orçamentos confirmados',
+                  label: 'Saldo a receber',
+                  value: formatCurrency(Number(clientFinancialKpis.valorPendente) || 0),
+                  helper: 'Principal ainda não liquidado',
                   icon: <Receipt weight="duotone" className="h-5 w-5" />,
                   card: geoGreenSurfaceClass,
                   accent: geoGreenIconClass,
@@ -2713,9 +2742,9 @@ export function ClienteDetalhes() {
                   glow: undefined
                 },
                 {
-                  label: 'Conversão',
-                  value: `${taxaConversao}%`,
-                  helper: 'Confirmados sobre emitidos',
+                  label: 'Resultado de caixa',
+                  value: formatCurrency(Number(clientFinancialKpis.resultadoCaixa) || 0),
+                  helper: 'Recebido menos despesas pagas',
                   icon: <CheckCircle weight="duotone" className="h-5 w-5" />,
                   card: geoGreenSurfaceClass,
                   accent: geoGreenIconClass,
@@ -2750,6 +2779,28 @@ export function ClienteDetalhes() {
                     </div>
                   </div>
                 </article>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/75 sm:grid-cols-2 xl:grid-cols-4">
+              {[
+                ['Valor orçado', formatCurrency(Number(clientFinancialKpis.valorOrcado) || 0)],
+                ['Valor executado informado', clientFinancialKpis.execucaoInformada
+                  ? formatCurrency(Number(clientFinancialKpis.valorExecutadoInformado) || 0)
+                  : 'Não informado'],
+                ['Documentos fiscais informados', formatCurrency(Number(clientFinancialKpis.valorFaturado) || 0)],
+                ['Saldo vencido', formatCurrency(Number(clientFinancialKpis.valorVencido) || 0)],
+                ['Despesas lançadas', formatCurrency(Number(clientFinancialKpis.despesasValor) || 0)],
+                ['Despesas pagas', formatCurrency(Number(clientFinancialKpis.despesasPagas) || 0)],
+                ['Despesas reembolsáveis', formatCurrency(Number(clientFinancialKpis.despesasReembolsaveis) || 0)],
+                ['Impostos estimados', formatCurrency(Number(clientFinancialKpis.impostosEstimados) || 0)],
+                ['Créditos registrados', formatCurrency(Number(clientFinancialKpis.creditos) || 0)],
+                ['Devoluções registradas', formatCurrency(Number(clientFinancialKpis.devolucoes) || 0)]
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">{label}</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950 dark:text-white">{value}</p>
+                </div>
               ))}
             </div>
 

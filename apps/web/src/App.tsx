@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { TypeUIPanel } from './components/TypeUIPanel';
 import { Toaster, toast } from 'sonner';
 
 // Intercept global alert to use Sonner (Lovable style)
@@ -22,6 +21,10 @@ if (typeof window !== 'undefined') {
 
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { apiClient } from './services/apiClient';
+import { clearLocalSessionToken } from './services/apiClient';
+import { ApiAvailability } from './components/ApiAvailability';
+import { DesbloqueioLocal } from './pages/DesbloqueioLocal';
+import { AppSessionProvider, type AppIdentity } from './contexts/AppSessionContext';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const ListagemClientes = lazy(() => import('./pages/Clientes/ListagemClientes').then((module) => ({ default: module.ListagemClientes })));
@@ -31,6 +34,7 @@ const ProjetoDetalhes = lazy(() => import('./pages/Projetos/ProjetoDetalhes').th
 const Orcamentos = lazy(() => import('./pages/Orcamentos/Orcamentos').then((module) => ({ default: module.Orcamentos })));
 const Financeiro = lazy(() => import('./pages/Financeiro/Financeiro').then((module) => ({ default: module.Financeiro })));
 const DashboardFinanceiro = lazy(() => import('./pages/Financeiro/DashboardFinanceiro').then((module) => ({ default: module.DashboardFinanceiro })));
+const GestaoFinanceira = lazy(() => import('./pages/Financeiro/GestaoFinanceira').then((module) => ({ default: module.GestaoFinanceira })));
 const Despesas = lazy(() => import('./pages/Despesas/Despesas').then((module) => ({ default: module.Despesas })));
 const ImportacaoDados = lazy(() => import('./pages/Importacao/ImportacaoDados').then((module) => ({ default: module.ImportacaoDados })));
 const EsquemasImportacao = lazy(() => import('./pages/Importacao/EsquemasImportacao').then((module) => ({ default: module.EsquemasImportacao })));
@@ -52,6 +56,11 @@ const AuditLogs = lazy(() => import('./pages/Relatorios/AuditLogs').then((module
 const Ajuda = lazy(() => import('./pages/Ajuda/Ajuda').then((module) => ({ default: module.Ajuda })));
 const Planejamento = lazy(() => import('./pages/Planejamento').then((module) => ({ default: module.Planejamento })));
 const ConfiguracaoInicial = lazy(() => import('./pages/ConfiguracaoInicial').then((module) => ({ default: module.ConfiguracaoInicial })));
+const DevTypeUIPanel = import.meta.env.DEV
+  ? lazy(() => import('./components/TypeUIPanel').then((module) => ({ default: module.TypeUIPanel })))
+  : null;
+
+let hasReportedFirstRouteUsable = false;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -73,6 +82,22 @@ function AppLoading() {
 }
 
 function RouteTransition({ children }: { children: React.ReactNode }) {
+  useEffect(() => {
+    const reportStartupMilestone = (
+      window.electronAPI as typeof window.electronAPI & {
+        reportStartupMilestone?: (milestone: string) => void;
+      }
+    )?.reportStartupMilestone;
+
+    if (!reportStartupMilestone || hasReportedFirstRouteUsable) return;
+
+    requestAnimationFrame(() => {
+      if (hasReportedFirstRouteUsable) return;
+      hasReportedFirstRouteUsable = true;
+      reportStartupMilestone('first-route-usable');
+    });
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -101,6 +126,7 @@ function AppRoutes() {
         <Route path="/orcamentos" element={<RouteTransition><Orcamentos /></RouteTransition>} />
         <Route path="/financeiro" element={<RouteTransition><Financeiro /></RouteTransition>} />
         <Route path="/dashboard-financeiro" element={<RouteTransition><DashboardFinanceiro /></RouteTransition>} />
+        <Route path="/gestao-financeira" element={<RouteTransition><GestaoFinanceira /></RouteTransition>} />
         <Route path="/despesas" element={<RouteTransition><Despesas /></RouteTransition>} />
         <Route path="/importacao" element={<RouteTransition><ImportacaoDados /></RouteTransition>} />
         <Route path="/importacao/esquemas" element={<RouteTransition><EsquemasImportacao /></RouteTransition>} />
@@ -131,23 +157,117 @@ function AppRoutes() {
 
 function SetupGate() {
   const location = useLocation();
-  const { data: config, isLoading, isError } = useQuery<unknown | null>({
-    queryKey: ['configuracoes-bootstrap'],
-    queryFn: () => apiClient.get<unknown | null>('/api/configuracoes'),
-    retry: 1
+  const [forcedLocked, setForcedLocked] = useState(false);
+  const [connectionError, setConnectionError] = useState<unknown>(null);
+  const statusQuery = useQuery<{
+    setupRequired: boolean;
+    locked: boolean;
+    idleMinutes: number;
+    identity: AppIdentity | null;
+  }>({
+    queryKey: ['auth-status'],
+    queryFn: () => apiClient.get('/api/auth/status', { timeoutMs: 2_500 }),
+    retry: false,
+    refetchInterval: 2_000,
+    refetchIntervalInBackground: true
   });
 
-  if (isLoading) return <AppLoading />;
+  const retryConnection = useCallback(async () => {
+    setConnectionError(connectionError || new Error('Reconexão solicitada.'));
+    const result = await statusQuery.refetch();
+    if (result.isSuccess) {
+      setConnectionError(null);
+      await queryClient.invalidateQueries({
+        predicate: (query) => query.queryKey[0] !== 'auth-status'
+      });
+    }
+  }, [connectionError, statusQuery]);
+
+  useEffect(() => {
+    const handleUnavailable = () => {
+      setConnectionError(new Error('O serviço local interrompeu a resposta durante o uso.'));
+      void statusQuery.refetch().then(async (result) => {
+        if (!result.isSuccess) return;
+        setConnectionError(null);
+        await queryClient.invalidateQueries({
+          predicate: (query) => query.queryKey[0] !== 'auth-status'
+        });
+      });
+    };
+    const handleLocked = () => setForcedLocked(true);
+    window.addEventListener('geogestor:api-unavailable', handleUnavailable);
+    window.addEventListener('geogestor:session-locked', handleLocked);
+    return () => {
+      window.removeEventListener('geogestor:api-unavailable', handleUnavailable);
+      window.removeEventListener('geogestor:session-locked', handleLocked);
+    };
+  }, [statusQuery]);
+
+  const lock = useCallback(async () => {
+    try {
+      await apiClient.post('/api/auth/lock');
+    } finally {
+      clearLocalSessionToken();
+      setForcedLocked(true);
+      await queryClient.cancelQueries();
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[0] !== 'auth-status'
+      });
+    }
+  }, []);
+
+  const sessionValue = useMemo(() => ({
+    identity: statusQuery.data?.identity || null,
+    lock
+  }), [lock, statusQuery.data?.identity]);
+
+  if (statusQuery.isLoading) return <AppLoading />;
+
+  const unavailableError = statusQuery.error || connectionError;
+  if (unavailableError && !statusQuery.data) {
+    return (
+      <ApiAvailability
+        error={unavailableError}
+        reconnecting={statusQuery.isFetching}
+        onRetry={() => void retryConnection()}
+        fullScreen
+      />
+    );
+  }
 
   const isSetupRoute = location.pathname === '/configuracoes-iniciais';
-  if (!isError && !config && !isSetupRoute) {
+  if (statusQuery.data?.setupRequired && !isSetupRoute) {
     return <Navigate to="/configuracoes-iniciais" replace />;
   }
-  if (!isError && config && isSetupRoute) {
+  if (!statusQuery.data?.setupRequired && isSetupRoute) {
     return <Navigate to="/" replace />;
   }
 
-  return <AppRoutes />;
+  if (!statusQuery.data?.setupRequired && (forcedLocked || statusQuery.data?.locked)) {
+    return (
+      <DesbloqueioLocal
+        idleMinutes={statusQuery.data?.idleMinutes || 15}
+        onUnlocked={async () => {
+          setForcedLocked(false);
+          await statusQuery.refetch();
+          await queryClient.invalidateQueries();
+        }}
+      />
+    );
+  }
+
+  return (
+    <AppSessionProvider value={sessionValue}>
+      {Boolean(unavailableError) && (
+        <ApiAvailability
+          error={unavailableError}
+          reconnecting={statusQuery.isFetching}
+          onRetry={() => void retryConnection()}
+        />
+      )}
+      <AppRoutes />
+    </AppSessionProvider>
+  );
 }
 
 export default function App() {
@@ -164,7 +284,11 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Toaster position="top-right" richColors closeButton />
-      <TypeUIPanel />
+      {DevTypeUIPanel && (
+        <Suspense fallback={null}>
+          <DevTypeUIPanel />
+        </Suspense>
+      )}
       <BrowserRouter>
         <Suspense fallback={<AppLoading />}>
           <ErrorBoundary>

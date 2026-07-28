@@ -55,13 +55,13 @@ export function calcularLucroBruto(receita: number, custosDiretos: number): numb
 }
 
 /**
- * Calcula lucro líquido
+ * Calcula resultado gerencial após custos e despesas
  * @param receita - Receita total
  * @param custoTotal - Custos totais
  * @param despesas - Despesas operacionais
- * @returns Valor do lucro líquido
+ * @returns Resultado gerencial
  */
-export function calcularLucroLiquido(
+export function calcularResultadoGerencial(
   receita: number,
   custoTotal: number,
   despesas: number

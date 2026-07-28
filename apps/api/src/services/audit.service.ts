@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import crypto from 'crypto';
+import { OperationalLogService } from './operational-log.service';
 
 const REDACTED = '[REDACTED]';
 const SENSITIVE_KEY = /(senha|password|secret|token|cpf|cnpj|documento|email|telefone|celular|endereco|cep|rg|inscricao)/i;
@@ -19,6 +20,15 @@ function sanitizeAuditValue(value: unknown, depth = 0): unknown {
 }
 
 export class AuditLogService {
+  private static failureInjector: ((action: string, entity: string) => void | Promise<void>) | null = null;
+
+  static setFailureInjectorForTests(injector: ((action: string, entity: string) => void | Promise<void>) | null) {
+    if (process.env.NODE_ENV !== 'test' && !process.env.GEOGESTOR_DB_PATH?.includes('scratch')) {
+      throw new Error('A injeção de falhas de auditoria é permitida somente em ambiente de teste.');
+    }
+    this.failureInjector = injector;
+  }
+
   static async log(
     action: 'INSERT' | 'UPDATE' | 'DELETE' | 'DELETE (SOFT)', 
     entity: string, 
@@ -27,6 +37,7 @@ export class AuditLogService {
     dbOrTx: any = db
   ) {
     try {
+      await this.failureInjector?.(action, entity);
       await (dbOrTx || db).insert(schema.auditLogs).values({
         id: crypto.randomUUID(),
         action,
@@ -36,7 +47,7 @@ export class AuditLogService {
         newData: newData ? JSON.stringify(sanitizeAuditValue(newData)) : null
       });
     } catch (err) {
-      console.error('Erro ao salvar log de auditoria:', err);
+      await OperationalLogService.error('audit-write-failed', { entity, action, error: err });
       if (dbOrTx !== db) throw err;
     }
   }

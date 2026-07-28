@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
+import { APP_VERSION } from '../version';
 import { Layout } from '../components/Layout';
 import { motion } from 'framer-motion';
 import { 
@@ -64,12 +65,16 @@ export function Configuracoes() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetInputText, setResetInputText] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreBundlePath, setRestoreBundlePath] = useState('');
+  const [restoreInputText, setRestoreInputText] = useState('');
+  const [restoring, setRestoring] = useState(false);
 
   const handleResetSistema = async () => {
-    if (resetInputText.trim().toUpperCase() !== 'APAGAR') return;
+    if (resetInputText.trim().toUpperCase() !== 'APAGAR DADOS DO GEOGESTOR') return;
     setResetting(true);
     try {
-      await apiClient.delete('/api/sistema/reset');
+      await apiClient.post('/api/sistema/reset-dados', { confirmation: 'APAGAR DADOS DO GEOGESTOR' });
       queryClient.invalidateQueries();
       setShowResetModal(false);
       setResetInputText('');
@@ -78,6 +83,33 @@ export function Configuracoes() {
       alert(`Erro ao apagar informações: ${err instanceof Error ? err.message : 'Falha de comunicação'}`);
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleChooseRestoreBundle = async () => {
+    if (!window.electronAPI?.selectBackupBundle) {
+      alert('A seleção de backup está disponível somente no aplicativo desktop.');
+      return;
+    }
+    const selected = await window.electronAPI.selectBackupBundle();
+    if (!selected) return;
+    setRestoreBundlePath(selected);
+    setRestoreInputText('');
+    setShowRestoreModal(true);
+  };
+
+  const handleRestoreBackup = async () => {
+    if (restoreInputText.trim().toUpperCase() !== 'RESTAURAR BACKUP DO GEOGESTOR') return;
+    setRestoring(true);
+    try {
+      await apiClient.post('/api/sistema/restaurar-backup', {
+        bundlePath: restoreBundlePath,
+        confirmation: 'RESTAURAR BACKUP DO GEOGESTOR'
+      }, { timeoutMs: 60_000 });
+      alert('Backup validado. O GeoGestor será reiniciado para concluir a restauração.');
+    } catch (error) {
+      setRestoring(false);
+      alert(error instanceof Error ? error.message : 'Não foi possível restaurar o backup.');
     }
   };
 
@@ -143,7 +175,7 @@ export function Configuracoes() {
   const { data: config, isLoading } = useQuery({
     queryKey: ['configuracoes'],
     queryFn: async () => {
-      const res = await apiClient.get<ConfiguracaoConfig & { googleClientId?: string; googleClientSecret?: string }>('/api/configuracoes');
+      const res = await apiClient.get<ConfiguracaoConfig & { googleClientId?: string; googleClientSecretConfigured?: boolean }>('/api/configuracoes');
       return res;
     },
   });
@@ -210,7 +242,7 @@ export function Configuracoes() {
         setAdminNome(config.adminNome || '');
         setAdminEmail(config.adminEmail || '');
         setGoogleClientId(config.googleClientId || '');
-        setGoogleClientSecret(config.googleClientSecret || '');
+        setGoogleClientSecret('');
       });
     }
   }, [config]);
@@ -270,12 +302,17 @@ export function Configuracoes() {
 
   const handleSaveGoogleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!googleClientSecret.trim() && !config?.googleClientSecretConfigured) {
+      alert('Informe a Chave Secreta do Cliente para configurar a integração.');
+      return;
+    }
     try {
       await apiClient.patch('/api/configuracoes', {
         googleClientId,
         googleClientSecret
       });
       fetchGoogleStatus();
+      setGoogleClientSecret('');
       alert('Credenciais da Google Agenda salvas com sucesso!');
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erro ao salvar credenciais.');
@@ -674,7 +711,7 @@ export function Configuracoes() {
                       <div className="bg-emerald-500/10 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/20">
                         <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Versão do Aplicativo</p>
                         <p className="text-base font-heading font-extrabold text-emerald-950 dark:text-emerald-100 mt-0.5 flex items-center gap-2">
-                          v1.1.1 <span className="text-[9px] font-mono font-bold bg-emerald-500 text-white px-2 py-0.5 rounded-full">Atualizado</span>
+                          v{APP_VERSION} <span className="text-[9px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">Atualizado</span>
                         </p>
                       </div>
                       <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -706,7 +743,7 @@ export function Configuracoes() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
                 <button
                   type="button"
                   onClick={() => createBackupMutation.mutate()}
@@ -722,6 +759,25 @@ export function Configuracoes() {
                     </span>
                     <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
                       Copia o banco local para a pasta de backups com data e hora.
+                    </span>
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleChooseRestoreBundle}
+                  disabled={restoring}
+                  className={systemActionCardClass}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                    <UploadSimple className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span>
+                    <span className="block text-xs font-semibold text-zinc-950 dark:text-white">
+                      {restoring ? 'Restaurando backup…' : 'Restaurar backup'}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Valida o backup e reinicia o aplicativo com os dados restaurados.
                     </span>
                   </span>
                 </button>
@@ -945,7 +1001,7 @@ export function Configuracoes() {
                       type="password"
                       value={googleClientSecret}
                       onChange={(e) => setGoogleClientSecret(e.target.value)}
-                      placeholder="Cole a Client Secret aqui..."
+                      placeholder={config?.googleClientSecretConfigured ? 'Segredo já configurado; deixe vazio para preservar' : 'Cole a Client Secret aqui…'}
                       className={cn(geoFieldClass, 'w-full px-4 py-2.5 text-sm font-medium')}
                     />
                   </div>
@@ -1068,13 +1124,13 @@ export function Configuracoes() {
 
             <div>
               <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                Digite <span className="font-mono font-bold text-red-600 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded">APAGAR</span> para confirmar:
+                Digite <span className="font-mono font-bold text-red-600 bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded">APAGAR DADOS DO GEOGESTOR</span> para confirmar:
               </label>
               <input
                 type="text"
                 value={resetInputText}
                 onChange={e => setResetInputText(e.target.value.toUpperCase())}
-                placeholder="Digite APAGAR"
+                placeholder="Digite APAGAR DADOS DO GEOGESTOR"
                 className="w-full h-10 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl px-3 text-xs font-bold text-zinc-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
@@ -1089,11 +1145,53 @@ export function Configuracoes() {
               </button>
               <button
                 type="button"
-                disabled={resetInputText.trim().toUpperCase() !== 'APAGAR' || resetting}
+                disabled={resetInputText.trim().toUpperCase() !== 'APAGAR DADOS DO GEOGESTOR' || resetting}
                 onClick={handleResetSistema}
                 className="h-9 px-5 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:pointer-events-none text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-2"
               >
                 {resetting ? 'Apagando dados...' : 'Confirmar Exclusão Total'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          isOpen={showRestoreModal}
+          onClose={() => { if (!restoring) setShowRestoreModal(false); }}
+          title="Restaurar Backup"
+          maxWidth="max-w-lg"
+        >
+          <div className="space-y-4 pt-2">
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              A restauração substituirá o banco e, em backups completos, os arquivos dos clientes. O GeoGestor criará cópias de segurança e reiniciará automaticamente.
+            </div>
+            <div>
+              <label htmlFor="restore-bundle-path" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Backup selecionado</label>
+              <input id="restore-bundle-path" value={restoreBundlePath} readOnly className={systemFieldMonoClass} />
+            </div>
+            <div>
+              <label htmlFor="restore-confirmation" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                Digite <span className="font-mono font-bold text-amber-700">RESTAURAR BACKUP DO GEOGESTOR</span> para confirmar:
+              </label>
+              <input
+                id="restore-confirmation"
+                type="text"
+                value={restoreInputText}
+                onChange={(event) => setRestoreInputText(event.target.value.toUpperCase())}
+                autoComplete="off"
+                placeholder="Digite a frase de confirmação"
+                className={systemFieldClass}
+              />
+            </div>
+            <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+              <button type="button" onClick={() => setShowRestoreModal(false)} disabled={restoring} className="h-9 rounded-xl px-4 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-800">Cancelar</button>
+              <button
+                type="button"
+                onClick={handleRestoreBackup}
+                disabled={restoring || restoreInputText.trim().toUpperCase() !== 'RESTAURAR BACKUP DO GEOGESTOR'}
+                className="h-9 rounded-xl bg-amber-600 px-5 text-xs font-bold text-white hover:bg-amber-700 disabled:pointer-events-none disabled:opacity-40"
+              >
+                {restoring ? 'Restaurando…' : 'Validar e restaurar'}
               </button>
             </div>
           </div>

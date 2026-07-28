@@ -350,7 +350,10 @@ export function calculateBudget(input: BudgetCalculationInput): BudgetCalculatio
   const total = adjustedTotalBeforeTaxes + outsideTaxes;
   const estimatedTaxes = includedTaxes + outsideTaxes;
   const grossFees = subtotalServices;
-  const netFees = adjustedServices - estimatedTaxes;
+  // Tributos cobrados por fora aumentam o total pago pelo cliente e não
+  // reduzem novamente a receita própria do serviço. Apenas os tributos já
+  // incluídos no preço compõem a dedução dos honorários líquidos.
+  const netFees = adjustedServices - includedTaxes;
   const consideredRevenue = total - outsideTaxes - reimbursable - passedFees - itemFees;
   const estimatedProfit = consideredRevenue - itemCosts - ownCosts - includedTaxes;
   const margin = consideredRevenue === 0n

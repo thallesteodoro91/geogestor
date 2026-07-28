@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 
-process.env.GEOGESTOR_DB_PATH = path.resolve(process.cwd(), 'scratch', 'api-tests', 'local-api-security.test.db');
+process.env.GEOGESTOR_DB_PATH = path.resolve(process.cwd(), 'scratch', `local-api-security-${process.pid}`, 'geogestor.db');
 process.env.GEOGESTOR_API_TOKEN = 'token-sintetico';
 process.env.PORT = '3001';
 

@@ -1,17 +1,59 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, isNull, desc, count, sum, not, inArray, and, sql } from 'drizzle-orm';
+import { eq, isNull, desc, count, sum, not, and, sql, getTableColumns } from 'drizzle-orm';
 import { z } from 'zod';
 import { ClientePatchPayloadSchema, ClientePayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { FileSystemService } from '../services/fs.service';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
+import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 
 type IdParams = { id: string };
 type HistoricoParams = { id: string; historicoId: string };
 type Payload = Record<string, any>;
+
+const normalizeDocument = (value?: string | null) => value?.replace(/\D/g, '') || null;
+
+function getClientDocument(input: {
+  tipoPessoa?: string | null;
+  cpf?: string | null;
+  cnpj?: string | null;
+  documento?: string | null;
+}) {
+  const selected = input.tipoPessoa === 'PJ' ? input.cnpj : input.cpf;
+  return normalizeDocument(selected) || normalizeDocument(input.documento);
+}
+
+class ClientDocumentConflictError extends Error {
+  constructor() {
+    super('Já existe um cliente ativo com este CPF/CNPJ.');
+    this.name = 'ClientDocumentConflictError';
+  }
+}
+
+function isClientDocumentConflict(error: unknown) {
+  return error instanceof ClientDocumentConflictError
+    || (error instanceof Error && error.message.includes('CLIENT_DOCUMENT_CONFLICT'));
+}
+
+async function assertDocumentAvailable(
+  document: string | null,
+  dbOrTx: any,
+  excludedClientId?: string
+) {
+  if (!document) return;
+  const conditions = [
+    eq(schema.clientes.documentoNormalizado, document),
+    isNull(schema.clientes.deletedAt)
+  ];
+  if (excludedClientId) conditions.push(not(eq(schema.clientes.id, excludedClientId)));
+  const existing = await dbOrTx.select({ id: schema.clientes.id })
+    .from(schema.clientes)
+    .where(and(...conditions))
+    .limit(1);
+  if (existing.length) throw new ClientDocumentConflictError();
+}
 
 const historyBodySchema = z.object({
   projetoId: z.string().uuid().nullable().optional(),
@@ -83,48 +125,25 @@ export async function clientesRoutes(server: FastifyInstance) {
     const { page, limit } = request.query;
     try {
       const offset = (page - 1) * limit;
-      const clientesList = await db.select().from(schema.clientes)
+      const clientesList = await db.select({
+        ...getTableColumns(schema.clientes),
+        propriedadesCount: sql<number>`CAST(
+          (SELECT COUNT(*) FROM propriedades AS structured_properties
+            WHERE structured_properties.cliente_id = clientes.id
+              AND structured_properties.deleted_at IS NULL)
+          +
+          (SELECT COUNT(*) FROM projetos AS legacy_projects
+            WHERE legacy_projects.cliente_id = clientes.id
+              AND legacy_projects.propriedade_id IS NULL
+              AND legacy_projects.deleted_at IS NULL)
+          AS INTEGER
+        )`
+      }).from(schema.clientes)
         .where(isNull(schema.clientes.deletedAt))
         .limit(limit)
         .offset(offset)
         .orderBy(desc(schema.clientes.createdAt));
-
-      const clientIds = clientesList.map((cliente) => cliente.id);
-      if (clientIds.length === 0) return [];
-
-      const [structuredPropertyCounts, legacyPropertyCounts] = await Promise.all([
-        db.select({ clienteId: schema.propriedades.clienteId, value: count() })
-          .from(schema.propriedades)
-          .where(and(
-            inArray(schema.propriedades.clienteId, clientIds),
-            isNull(schema.propriedades.deletedAt)
-          ))
-          .groupBy(schema.propriedades.clienteId),
-        db.select({ clienteId: schema.projetos.clienteId, value: count() })
-          .from(schema.projetos)
-          .where(and(
-            inArray(schema.projetos.clienteId, clientIds),
-            isNull(schema.projetos.propriedadeId),
-            isNull(schema.projetos.deletedAt)
-          ))
-          .groupBy(schema.projetos.clienteId)
-      ]);
-
-      const propertyCountByClient = new Map<string, number>();
-      for (const item of structuredPropertyCounts) {
-        propertyCountByClient.set(item.clienteId, Number(item.value));
-      }
-      for (const item of legacyPropertyCounts) {
-        propertyCountByClient.set(
-          item.clienteId,
-          (propertyCountByClient.get(item.clienteId) || 0) + Number(item.value)
-        );
-      }
-
-      return clientesList.map((cliente) => ({
-        ...cliente,
-        propriedadesCount: propertyCountByClient.get(cliente.id) || 0
-      }));
+      return clientesList;
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao buscar clientes' });
@@ -173,25 +192,168 @@ export async function clientesRoutes(server: FastifyInstance) {
       const [
         totalProjetos,
         totalTarefasPendentes,
-        totalOrcamentos,
+        totalOrcamentosEmitidos,
+        totalOrcamentosContratados,
+        totalRecebido,
+        totalPendente,
+        totalVencido,
         totalDespesas,
-        totalDocumentos
+        totalDespesasPagas,
+        totalDespesasReembolsaveis,
+        totalDocumentos,
+        totalFaturado,
+        totalImpostosEstimados,
+        totalCreditos,
+        totalDevolucoes,
+        totalExecutadoInformado
       ] = await Promise.all([
-        db.select({ value: count() }).from(schema.projetos).where(eq(schema.projetos.clienteId, id)),
+        db.select({ value: count() }).from(schema.projetos).where(and(
+          eq(schema.projetos.clienteId, id),
+          isNull(schema.projetos.deletedAt)
+        )),
         db.select({ value: count() }).from(schema.tarefas).where(
-          sql`${schema.tarefas.clienteId} = ${id} AND ${schema.tarefas.status} != 'Concluído' AND ${schema.tarefas.status} != 'Concluido'`
+          sql`${schema.tarefas.clienteId} = ${id} AND ${schema.tarefas.deletedAt} is null
+            AND ${schema.tarefas.status} != 'Concluído' AND ${schema.tarefas.status} != 'Concluido'`
         ),
-        db.select({ valor: sum(schema.orcamentos.valorTotal), count: count() }).from(schema.orcamentos).where(eq(schema.orcamentos.clienteId, id)),
-        db.select({ valor: sum(schema.despesas.valor) }).from(schema.despesas).where(eq(schema.despesas.clienteId, id)),
-        db.select({ value: count() }).from(schema.documentos).where(eq(schema.documentos.clienteId, id))
+        db.select({ valor: sum(schema.orcamentos.valorTotal), count: count() }).from(schema.orcamentos).where(and(
+          eq(schema.orcamentos.clienteId, id),
+          isNull(schema.orcamentos.deletedAt),
+          sql`lower(${schema.orcamentos.status}) not in ('rascunho', 'cancelado', 'cancelada', 'substituido')`
+        )),
+        db.select({ valor: sum(schema.orcamentos.valorTotal), count: count() }).from(schema.orcamentos).where(and(
+          eq(schema.orcamentos.clienteId, id),
+          isNull(schema.orcamentos.deletedAt),
+          sql`lower(${schema.orcamentos.status}) in ('aprovado', 'pago')`
+        )),
+        db.select({ valor: sum(schema.recebimentos.valorRecebido) })
+          .from(schema.recebimentos)
+          .innerJoin(schema.parcelas, eq(schema.recebimentos.parcelaId, schema.parcelas.id))
+          .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+          .where(and(
+            eq(schema.orcamentos.clienteId, id),
+            isNull(schema.recebimentos.deletedAt),
+            isNull(schema.recebimentos.estornadoEm),
+            isNull(schema.parcelas.deletedAt),
+            isNull(schema.orcamentos.deletedAt)
+          )),
+        db.select({ valor: sql<number>`sum(max(0, ${schema.parcelas.valor} - ${schema.parcelas.valorPago}))` })
+          .from(schema.parcelas)
+          .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+          .where(and(
+            eq(schema.orcamentos.clienteId, id),
+            isNull(schema.parcelas.deletedAt),
+            isNull(schema.parcelas.canceladaEm),
+            isNull(schema.orcamentos.deletedAt),
+            sql`${schema.parcelas.dataVencimento} >= date('now', 'localtime')`
+          )),
+        db.select({ valor: sql<number>`sum(max(0, ${schema.parcelas.valor} - ${schema.parcelas.valorPago}))` })
+          .from(schema.parcelas)
+          .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+          .where(and(
+            eq(schema.orcamentos.clienteId, id),
+            isNull(schema.parcelas.deletedAt),
+            isNull(schema.parcelas.canceladaEm),
+            isNull(schema.orcamentos.deletedAt),
+            sql`${schema.parcelas.dataVencimento} < date('now', 'localtime')`
+          )),
+        db.select({ valor: sum(schema.despesas.valor) }).from(schema.despesas)
+          .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+          .where(and(
+            sql`coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId}) = ${id}`,
+            isNull(schema.despesas.deletedAt),
+            isNull(schema.despesas.canceladaEm),
+            isNull(schema.despesas.estornadaEm)
+          )),
+        db.select({ valor: sum(schema.despesas.valor) }).from(schema.despesas)
+          .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+          .where(and(
+            sql`coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId}) = ${id}`,
+            isNull(schema.despesas.deletedAt),
+            isNull(schema.despesas.canceladaEm),
+            isNull(schema.despesas.estornadaEm),
+            sql`lower(${schema.despesas.status}) = 'pago'`
+          )),
+        db.select({ valor: sum(schema.despesas.valor) }).from(schema.despesas)
+          .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+          .where(and(
+            sql`coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId}) = ${id}`,
+            isNull(schema.despesas.deletedAt),
+            isNull(schema.despesas.canceladaEm),
+            isNull(schema.despesas.estornadaEm),
+            eq(schema.despesas.reembolsavel, true)
+          )),
+        db.select({ value: count() }).from(schema.documentos).where(and(
+          eq(schema.documentos.clienteId, id),
+          isNull(schema.documentos.deletedAt)
+        )),
+        db.select({ valor: sum(schema.notasFiscais.valor), count: count() }).from(schema.notasFiscais).where(and(
+          eq(schema.notasFiscais.clienteId, id),
+          isNull(schema.notasFiscais.deletedAt),
+          isNull(schema.notasFiscais.canceladaEm)
+        )),
+        db.select({
+          valor: sql<number>`sum(case
+            when coalesce(${schema.orcamentos.impostosPrevistos}, 0) > 0
+              then ${schema.orcamentos.impostosPrevistos}
+            else coalesce(${schema.orcamentos.impostoValor}, 0)
+          end)`
+        }).from(schema.orcamentos).where(and(
+          eq(schema.orcamentos.clienteId, id),
+          isNull(schema.orcamentos.deletedAt),
+          sql`lower(${schema.orcamentos.status}) in ('aprovado', 'pago')`
+        )),
+        db.select({ valor: sum(schema.projetoFinanceiroDecisoes.valorExecutado) })
+          .from(schema.projetoFinanceiroDecisoes)
+          .where(and(
+            eq(schema.projetoFinanceiroDecisoes.clienteId, id),
+            eq(schema.projetoFinanceiroDecisoes.tipo, 'registrar_credito')
+          )),
+        db.select({ valor: sum(schema.projetoFinanceiroDecisoes.valorExecutado) })
+          .from(schema.projetoFinanceiroDecisoes)
+          .where(and(
+            eq(schema.projetoFinanceiroDecisoes.clienteId, id),
+            eq(schema.projetoFinanceiroDecisoes.tipo, 'registrar_devolucao')
+          )),
+        db.select({
+          projetoId: schema.projetoFinanceiroDecisoes.projetoId,
+          valor: schema.projetoFinanceiroDecisoes.valorExecutado
+        })
+          .from(schema.projetoFinanceiroDecisoes)
+          .where(and(
+            eq(schema.projetoFinanceiroDecisoes.clienteId, id),
+            eq(schema.projetoFinanceiroDecisoes.tipo, 'cobranca_parcial')
+          ))
+          .orderBy(desc(schema.projetoFinanceiroDecisoes.createdAt))
       ]);
 
+      const latestExecutionByProject = new Map<string, number>();
+      for (const decision of totalExecutadoInformado) {
+        if (!latestExecutionByProject.has(decision.projetoId) && decision.valor != null) {
+          latestExecutionByProject.set(decision.projetoId, decision.valor);
+        }
+      }
       const kpis = {
         projetos: totalProjetos[0]?.value || 0,
         tarefasPendentes: totalTarefasPendentes[0]?.value || 0,
-        orcamentosQtd: totalOrcamentos[0]?.count || 0,
-        orcamentosValor: totalOrcamentos[0]?.valor || 0,
+        orcamentosQtd: totalOrcamentosEmitidos[0]?.count || 0,
+        orcamentosValor: totalOrcamentosContratados[0]?.valor || 0,
+        valorOrcado: totalOrcamentosEmitidos[0]?.valor || 0,
+        valorContratado: totalOrcamentosContratados[0]?.valor || 0,
+        valorFaturado: totalFaturado[0]?.valor || 0,
+        notasFiscaisQtd: totalFaturado[0]?.count || 0,
+        valorRecebido: totalRecebido[0]?.valor || 0,
+        valorPendente: totalPendente[0]?.valor || 0,
+        valorVencido: totalVencido[0]?.valor || 0,
         despesasValor: totalDespesas[0]?.valor || 0,
+        despesasPagas: totalDespesasPagas[0]?.valor || 0,
+        despesasReembolsaveis: totalDespesasReembolsaveis[0]?.valor || 0,
+        impostosEstimados: totalImpostosEstimados[0]?.valor || 0,
+        creditos: totalCreditos[0]?.valor || 0,
+        devolucoes: totalDevolucoes[0]?.valor || 0,
+        valorExecutadoInformado: [...latestExecutionByProject.values()]
+          .reduce((sumValue, value) => sumValue + value, 0),
+        execucaoInformada: latestExecutionByProject.size > 0,
+        resultadoCaixa: Number(totalRecebido[0]?.valor || 0) - Number(totalDespesasPagas[0]?.valor || 0),
         documentos: totalDocumentos[0]?.value || 0
       };
 
@@ -214,12 +376,15 @@ export async function clientesRoutes(server: FastifyInstance) {
     const data = request.body;
     try {
       const novoCliente = await db.transaction(async (tx) => {
+        const documentoNormalizado = getClientDocument(data);
+        await assertDocumentAvailable(documentoNormalizado, tx);
         // 1. Criar no banco de dados
         const result = await tx.insert(schema.clientes).values({
           id: crypto.randomUUID(),
           nome: data.nome,
           tipoPessoa: data.tipoPessoa,
-          documento: data.documento || null,
+          documento: data.documento?.trim() || (data.tipoPessoa === 'PJ' ? data.cnpj : data.cpf)?.trim() || null,
+          documentoNormalizado,
           email: data.email || null,
           telefone: data.telefone || null,
           endereco: data.endereco || null,
@@ -265,18 +430,23 @@ export async function clientesRoutes(server: FastifyInstance) {
           ].filter(Boolean).join('\n') || 'Cadastro inicial do cliente no GeoGestor.'
         }, tx);
 
+        await FileSystemOutboxService.enqueue({
+          idempotencyKey: `client-folder:create:${result[0].id}:${result[0].nome}`,
+          operationType: 'create-client-folder',
+          aggregateType: 'client',
+          aggregateId: result[0].id,
+          payload: { clientId: result[0].id, clientName: result[0].nome }
+        }, tx);
+
         return result[0];
       });
-
-      // 2. Criar a pasta do cliente no sistema
-      try {
-        await FileSystemService.getClientFolder(data.nome);
-      } catch (fsErr) {
-        server.log.error({ err: fsErr }, `Falha ao criar pasta para cliente ${data.nome}`);
-      }
+      await FileSystemOutboxService.processPending();
 
       return reply.status(201).send(novoCliente);
     } catch (err) {
+      if (isClientDocumentConflict(err)) {
+        return reply.status(409).send({ error: 'Já existe um cliente ativo com este CPF/CNPJ.' });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao criar cliente' });
     }
@@ -298,10 +468,20 @@ export async function clientesRoutes(server: FastifyInstance) {
       }
 
       const clienteAtualizado = await db.transaction(async (tx) => {
+        const documentChanged = ['tipoPessoa', 'cpf', 'cnpj', 'documento']
+          .some((field) => data[field as keyof typeof data] !== undefined);
+        const documentoNormalizado = documentChanged ? getClientDocument({
+          tipoPessoa: data.tipoPessoa ?? oldCliente[0].tipoPessoa,
+          cpf: data.cpf !== undefined ? data.cpf : oldCliente[0].cpf,
+          cnpj: data.cnpj !== undefined ? data.cnpj : oldCliente[0].cnpj,
+          documento: data.documento !== undefined ? data.documento : oldCliente[0].documento
+        }) : undefined;
+        if (documentChanged) await assertDocumentAvailable(documentoNormalizado ?? null, tx, id);
         const result = await tx.update(schema.clientes).set({
           nome: data.nome !== undefined ? data.nome : undefined,
           tipoPessoa: data.tipoPessoa !== undefined ? data.tipoPessoa : undefined,
           documento: data.documento !== undefined ? data.documento : undefined,
+          documentoNormalizado,
           email: data.email !== undefined ? data.email : undefined,
           telefone: data.telefone !== undefined ? data.telefone : undefined,
           endereco: data.endereco !== undefined ? data.endereco : undefined,
@@ -347,18 +527,25 @@ export async function clientesRoutes(server: FastifyInstance) {
         }
 
         if (data.nome !== undefined && data.nome && data.nome !== oldCliente[0].nome) {
-          try {
-            await FileSystemService.renameClientFolder(oldCliente[0].nome, data.nome, id, tx);
-          } catch (fsErr) {
-            server.log.error({ err: fsErr }, `Falha ao renomear pasta do cliente ${oldCliente[0].nome}`);
-          }
+          await FileSystemOutboxService.enqueue({
+            idempotencyKey: `client-folder:rename:${id}:${oldCliente[0].nome}:${data.nome}`,
+            operationType: 'rename-client-folder',
+            aggregateType: 'client',
+            aggregateId: id,
+            payload: { clientId: id, oldClientName: oldCliente[0].nome, newClientName: data.nome }
+          }, tx);
         }
 
         return result[0];
       });
 
+      await FileSystemOutboxService.processPending();
+
       return clienteAtualizado;
     } catch (err) {
+      if (isClientDocumentConflict(err)) {
+        return reply.status(409).send({ error: 'Já existe um cliente ativo com este CPF/CNPJ.' });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao atualizar cliente' });
     }
@@ -380,6 +567,8 @@ export async function clientesRoutes(server: FastifyInstance) {
         await tx.update(schema.clientes)
           .set({ deletedAt: new Date().toISOString() })
           .where(eq(schema.clientes.id, id));
+
+        await FileSystemOutboxService.cancelAggregate('client', id, tx);
 
         await AuditLogService.log('DELETE (SOFT)', 'Cliente', oldCliente[0], null, tx);
       });
@@ -491,10 +680,9 @@ export async function clientesRoutes(server: FastifyInstance) {
     schema: { body: z.array(z.unknown()).min(1).max(500) }
   }, async (request, reply) => {
     try {
-      const existing = await db.select({ cpf: schema.clientes.cpf, cnpj: schema.clientes.cnpj })
+      const existing = await db.select({ documentoNormalizado: schema.clientes.documentoNormalizado })
         .from(schema.clientes).where(isNull(schema.clientes.deletedAt));
-      const knownDocuments = new Set(existing.flatMap((item) => [item.cpf, item.cnpj])
-        .filter(Boolean).map((value) => String(value).replace(/\D/g, '')));
+      const knownDocuments = new Set(existing.map((item) => item.documentoNormalizado).filter(Boolean));
       const accepted: Array<{ index: number; data: z.infer<typeof ClientePayloadSchema>; id: string }> = [];
       const results: Array<{ index: number; status: 'success' | 'failed'; id?: string; errors?: string[] }> = [];
 
@@ -504,7 +692,11 @@ export async function clientesRoutes(server: FastifyInstance) {
           results.push({ index, status: 'failed', errors: parsed.error.issues.map((issue) => issue.message) });
           return;
         }
-        const document = String(parsed.data.tipoPessoa === 'PJ' ? parsed.data.cnpj : parsed.data.cpf).replace(/\D/g, '');
+        const document = getClientDocument(parsed.data);
+        if (!document) {
+          results.push({ index, status: 'failed', errors: ['Informe um CPF/CNPJ válido.'] });
+          return;
+        }
         if (knownDocuments.has(document)) {
           results.push({ index, status: 'failed', errors: ['CPF/CNPJ já cadastrado ou repetido neste lote.'] });
           return;
@@ -521,7 +713,8 @@ export async function clientesRoutes(server: FastifyInstance) {
               id: item.id,
               nome: data.nome,
               tipoPessoa: data.tipoPessoa,
-              documento: data.documento || null,
+              documento: data.documento?.trim() || (data.tipoPessoa === 'PJ' ? data.cnpj : data.cpf)?.trim() || null,
+              documentoNormalizado: getClientDocument(data),
               email: data.email || null,
               telefone: data.telefone || null,
               endereco: data.endereco || null,
@@ -549,6 +742,13 @@ export async function clientesRoutes(server: FastifyInstance) {
               previsaoEntrega: data.previsaoEntrega || null,
               servicos: data.servicos || null
             });
+            await FileSystemOutboxService.enqueue({
+              idempotencyKey: `client-folder:create:${item.id}:${data.nome}`,
+              operationType: 'create-client-folder',
+              aggregateType: 'client',
+              aggregateId: item.id,
+              payload: { clientId: item.id, clientName: data.nome }
+            }, tx);
             results.push({ index: item.index, status: 'success', id: item.id });
           }
           await AuditLogService.log('INSERT', 'Cliente', null, {
@@ -558,11 +758,7 @@ export async function clientesRoutes(server: FastifyInstance) {
           }, tx);
         });
 
-        void Promise.allSettled(accepted.map((item) => FileSystemService.getClientFolder(item.data.nome)))
-          .then((folderResults) => {
-            const failed = folderResults.filter((result) => result.status === 'rejected').length;
-            if (failed) server.log.error({ failed }, 'Falha ao criar pastas de clientes importados');
-          });
+        await FileSystemOutboxService.processPending();
       }
 
       results.sort((a, b) => a.index - b.index);
@@ -573,6 +769,9 @@ export async function clientesRoutes(server: FastifyInstance) {
         results
       });
     } catch (err) {
+      if (isClientDocumentConflict(err)) {
+        return reply.status(409).send({ error: 'CPF/CNPJ já cadastrado ou repetido durante a importação.' });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar em lote' });
     }

@@ -2,12 +2,12 @@ import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq, and, isNull, desc } from 'drizzle-orm';
-import { FileSystemService } from '../services/fs.service';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
+import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { ProjetoPayloadSchema } from '@geogestor/contracts';
+import { normalizeBudgetStatus, ProjetoPayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
 const ProjetoLotePayloadSchema = z.array(z.object({
@@ -233,14 +233,27 @@ export async function projetosRoutes(server: FastifyInstance) {
           descricao: `Tipo: ${result[0].tipo || 'Não informado'} | Status: ${result[0].status}`
         }, tx);
 
-        // Setup inicial de pastas
+        // A operação física ocorre somente após o commit e sobrevive a reinicializações.
         const cliente = await tx.select().from(schema.clientes).where(eq(schema.clientes.id, data.clienteId)).limit(1);
         if (cliente.length && cliente[0].nome) {
-          await FileSystemService.getProjectFolder(cliente[0].nome, result[0].nome);
+          await FileSystemOutboxService.enqueue({
+            idempotencyKey: `project-folder:create:${result[0].id}:${cliente[0].nome}:${result[0].nome}`,
+            operationType: 'create-project-folder',
+            aggregateType: 'project',
+            aggregateId: result[0].id,
+            payload: {
+              clientId: result[0].clienteId,
+              projectId: result[0].id,
+              clientName: cliente[0].nome,
+              projectName: result[0].nome
+            }
+          }, tx);
         }
 
         return result[0];
       });
+
+      await FileSystemOutboxService.processPending();
 
       return reply.status(201).send(novoProjeto);
     } catch (err) {
@@ -303,6 +316,22 @@ export async function projetosRoutes(server: FastifyInstance) {
             descricao: `Status: ${result[0].status}`
           }, tx);
 
+          const clienteNome = clientesById.get(item.clienteId);
+          if (clienteNome) {
+            await FileSystemOutboxService.enqueue({
+              idempotencyKey: `project-folder:create:${result[0].id}:${clienteNome}:${result[0].nome}`,
+              operationType: 'create-project-folder',
+              aggregateType: 'project',
+              aggregateId: result[0].id,
+              payload: {
+                clientId: item.clienteId,
+                projectId: result[0].id,
+                clientName: clienteNome,
+                projectName: result[0].nome
+              }
+            }, tx);
+          }
+
           created.push(result[0]);
         }
 
@@ -315,12 +344,7 @@ export async function projetosRoutes(server: FastifyInstance) {
         return created;
       });
 
-      Promise.allSettled(
-        projetosCriados.map(projeto => {
-          const clienteNome = clientesById.get(projeto.clienteId);
-          return clienteNome ? FileSystemService.getProjectFolder(clienteNome, projeto.nome) : Promise.resolve();
-        })
-      ).catch(e => server.log.error('Erro criando pastas de projetos em lote', e));
+      await FileSystemOutboxService.processPending();
 
       return reply.status(201).send({
         message: `${projetosCriados.length} projetos importados com sucesso`,
@@ -478,14 +502,259 @@ export async function projetosRoutes(server: FastifyInstance) {
             descricao: changes.join('\n')
           }, tx);
         }
+
+        const projectWasCancelled = oldProjeto[0].status !== 'Cancelado'
+          && result[0].status === 'Cancelado';
+        if (projectWasCancelled) {
+          const timestamp = new Date().toISOString();
+          await tx.insert(schema.financeiroEventos).values({
+            id: crypto.randomUUID(),
+            tipo: 'cancelamento_projeto_pendente',
+            entidade: 'projeto',
+            entidadeId: id,
+            clienteId: result[0].clienteId,
+            projetoId: id,
+            valor: 0,
+            dataEvento: timestamp.slice(0, 10),
+            motivo: 'Projeto cancelado; decisão financeira pendente.',
+            metadataJson: JSON.stringify({
+              statusAnterior: oldProjeto[0].status,
+              statusAtual: result[0].status
+            }),
+            createdAt: timestamp
+          });
+        }
+
+        const folderIdentityChanged = result[0].nome !== oldProjeto[0].nome
+          || result[0].clienteId !== oldProjeto[0].clienteId;
+        if (folderIdentityChanged) {
+          const [oldClient] = await tx.select({ nome: schema.clientes.nome })
+            .from(schema.clientes).where(eq(schema.clientes.id, oldProjeto[0].clienteId)).limit(1);
+          const [newClient] = await tx.select({ nome: schema.clientes.nome })
+            .from(schema.clientes).where(eq(schema.clientes.id, result[0].clienteId)).limit(1);
+          if (oldClient && newClient) {
+            await FileSystemOutboxService.enqueue({
+              idempotencyKey: `project-folder:rename:${id}:${oldClient.nome}:${oldProjeto[0].nome}:${newClient.nome}:${result[0].nome}`,
+              operationType: 'rename-project-folder',
+              aggregateType: 'project',
+              aggregateId: id,
+              payload: {
+                projectId: id,
+                oldClientName: oldClient.nome,
+                newClientName: newClient.nome,
+                oldProjectName: oldProjeto[0].nome,
+                newProjectName: result[0].nome
+              }
+            }, tx);
+          }
+        }
         return result[0];
       });
+
+      await FileSystemOutboxService.processPending();
 
       return projetoAtualizado;
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao atualizar projeto' });
     }
+  });
+
+  zServer.get('/:id/contexto-financeiro', {
+    schema: { params: z.object({ id: z.string().uuid() }) }
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const [project] = await db.select().from(schema.projetos).where(and(
+      eq(schema.projetos.id, id),
+      isNull(schema.projetos.deletedAt)
+    )).limit(1);
+    if (!project) return reply.status(404).send({ error: 'Projeto não encontrado' });
+    const budgets = await db.select().from(schema.orcamentos).where(and(
+      eq(schema.orcamentos.projetoId, id),
+      isNull(schema.orcamentos.deletedAt)
+    ));
+    const installments = budgets.length
+      ? (await Promise.all(budgets.map((budget) => db.select().from(schema.parcelas).where(and(
+        eq(schema.parcelas.orcamentoId, budget.id),
+        isNull(schema.parcelas.deletedAt)
+      ))))).flat()
+      : [];
+    const expenses = await db.select().from(schema.despesas).where(and(
+      eq(schema.despesas.projetoId, id),
+      isNull(schema.despesas.deletedAt)
+    ));
+    const decisions = await db.select().from(schema.projetoFinanceiroDecisoes)
+      .where(eq(schema.projetoFinanceiroDecisoes.projetoId, id))
+      .orderBy(desc(schema.projetoFinanceiroDecisoes.createdAt));
+    const financialEvents = await db.select().from(schema.financeiroEventos)
+      .where(eq(schema.financeiroEventos.projetoId, id))
+      .orderBy(desc(schema.financeiroEventos.createdAt))
+      .limit(100);
+    const fiscalNotes = await db.select().from(schema.notasFiscais).where(and(
+      eq(schema.notasFiscais.projetoId, id),
+      isNull(schema.notasFiscais.deletedAt),
+      isNull(schema.notasFiscais.canceladaEm)
+    ));
+    const budgetedBudgets = budgets.filter((budget) => (
+      !['rascunho', 'cancelado', 'substituido'].includes(normalizeBudgetStatus(budget.status))
+    ));
+    const contractedBudgets = budgets
+      .filter((budget) => ['aprovado', 'pago'].includes((budget.status || '').toLowerCase()));
+    const valorContratado = contractedBudgets
+      .reduce((sum, budget) => sum + budget.valorTotal, 0);
+    const latestExecutionDecision = decisions.find((decision) => (
+      decision.tipo === 'cobranca_parcial'
+      && (decision.valorExecutado != null || decision.percentualExecutado != null)
+    ));
+    const valorExecutadoInformado = latestExecutionDecision
+      ? latestExecutionDecision.valorExecutado
+        ?? Math.round(valorContratado * (latestExecutionDecision.percentualExecutado || 0) / 100)
+      : null;
+    const latestPendingCancellation = financialEvents.find((event) => event.tipo === 'cancelamento_projeto_pendente');
+    const latestFinancialDecision = financialEvents.find((event) => event.tipo === 'decisao_financeira_projeto');
+    const decisaoFinanceiraPendente = project.status === 'Cancelado' && (
+      (!latestPendingCancellation && !decisions.length)
+      || Boolean(
+        latestPendingCancellation
+        && (!latestFinancialDecision || latestPendingCancellation.createdAt > latestFinancialDecision.createdAt)
+      )
+    );
+    const activeExpenses = expenses.filter((expense) => !expense.canceladaEm && !expense.estornadaEm);
+    const custoPrevisto = contractedBudgets
+      .reduce((sum, budget) => sum + (budget.custoTotalEstimado || 0), 0);
+    const custoRealizado = activeExpenses.reduce((sum, expense) => sum + expense.valor, 0);
+    return {
+      projeto: { id: project.id, status: project.status },
+      orcamentos: budgets.length,
+      valorOrcado: budgetedBudgets.reduce((sum, budget) => sum + budget.valorTotal, 0),
+      valorContratado,
+      valorFaturado: fiscalNotes.reduce((sum, note) => sum + note.valor, 0),
+      valorExecutadoInformado,
+      valorRecebido: installments.reduce((sum, installment) => sum + installment.valorPago, 0),
+      saldoAberto: installments
+        .filter((installment) => !installment.canceladaEm)
+        .reduce((sum, installment) => sum + Math.max(0, installment.valor - installment.valorPago), 0),
+      despesasLancadas: custoRealizado,
+      despesasPagas: activeExpenses
+        .filter((expense) => (expense.status || '').toLowerCase() === 'pago')
+        .reduce((sum, expense) => sum + expense.valor, 0),
+      custoPrevisto,
+      custoRealizado,
+      desvioCusto: custoRealizado - custoPrevisto,
+      percentualCustoConsumido: custoPrevisto > 0
+        ? Math.round((custoRealizado / custoPrevisto) * 10_000) / 100
+        : null,
+      despesasSemPrevisao: custoPrevisto === 0 && custoRealizado > 0,
+      decisaoFinanceiraPendente,
+      parcelas: installments,
+      eventosFinanceiros: financialEvents,
+      ultimaDecisao: decisions[0] || null
+    };
+  });
+
+  zServer.post('/:id/decisao-financeira', {
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      body: z.object({
+        tipo: z.enum([
+          'manter_sem_alteracao',
+          'cancelar_parcelas_futuras',
+          'cobranca_parcial',
+          'registrar_devolucao',
+          'registrar_credito'
+        ]),
+        percentualExecutado: z.number().min(0).max(100).nullable().optional(),
+        valorExecutado: z.number().int().min(0).nullable().optional(),
+        motivo: z.string().trim().min(5).max(2000)
+      })
+    }
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const input = request.body;
+    const [project] = await db.select().from(schema.projetos).where(and(
+      eq(schema.projetos.id, id),
+      isNull(schema.projetos.deletedAt)
+    )).limit(1);
+    if (!project) return reply.status(404).send({ error: 'Projeto não encontrado' });
+    if (input.tipo === 'cobranca_parcial' && input.percentualExecutado == null && input.valorExecutado == null) {
+      return reply.status(400).send({ error: 'Informe o percentual ou o valor executado para a cobrança parcial.' });
+    }
+    if (['registrar_devolucao', 'registrar_credito'].includes(input.tipo) && !input.valorExecutado) {
+      return reply.status(400).send({ error: 'Informe o valor da devolução ou do crédito.' });
+    }
+    const budgets = await db.select({
+      id: schema.orcamentos.id,
+      status: schema.orcamentos.status,
+      valorTotal: schema.orcamentos.valorTotal
+    }).from(schema.orcamentos).where(and(
+      eq(schema.orcamentos.projetoId, id),
+      isNull(schema.orcamentos.deletedAt)
+    ));
+    const contractedTotal = budgets
+      .filter((budget) => ['aprovado', 'pago'].includes(normalizeBudgetStatus(budget.status)))
+      .reduce((sum, budget) => sum + budget.valorTotal, 0);
+    const resolvedExecutedValue = input.tipo === 'cobranca_parcial'
+      ? input.valorExecutado
+        ?? (input.percentualExecutado == null
+          ? null
+          : Math.round(contractedTotal * input.percentualExecutado / 100))
+      : input.valorExecutado ?? null;
+    const decisionTimestamp = new Date().toISOString();
+    const decision = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(schema.projetoFinanceiroDecisoes).values({
+        id: crypto.randomUUID(),
+        projetoId: id,
+        clienteId: project.clienteId,
+        tipo: input.tipo,
+        percentualExecutado: input.percentualExecutado ?? null,
+        valorExecutado: resolvedExecutedValue,
+        cancelarParcelasFuturas: input.tipo === 'cancelar_parcelas_futuras',
+        motivo: input.motivo,
+        createdAt: decisionTimestamp
+      }).returning();
+      if (input.tipo === 'cancelar_parcelas_futuras') {
+        const timestamp = new Date().toISOString();
+        for (const budget of budgets) {
+          const installments = await tx.select().from(schema.parcelas).where(and(
+            eq(schema.parcelas.orcamentoId, budget.id),
+            isNull(schema.parcelas.deletedAt),
+            isNull(schema.parcelas.canceladaEm)
+          ));
+          for (const installment of installments.filter((item) => item.valorPago < item.valor)) {
+            await tx.update(schema.parcelas).set({
+              statusPagamento: 'Cancelado',
+              canceladaEm: timestamp,
+              motivoCancelamento: input.motivo,
+              updatedAt: timestamp
+            }).where(eq(schema.parcelas.id, installment.id));
+          }
+        }
+      }
+      await tx.insert(schema.financeiroEventos).values({
+        id: crypto.randomUUID(),
+        tipo: 'decisao_financeira_projeto',
+        entidade: 'projeto',
+        entidadeId: id,
+        clienteId: project.clienteId,
+        projetoId: id,
+        valor: resolvedExecutedValue || 0,
+        dataEvento: decisionTimestamp.slice(0, 10),
+        motivo: input.motivo,
+        metadataJson: JSON.stringify(input),
+        createdAt: decisionTimestamp
+      });
+      await JornadaService.logClienteEvento({
+        clienteId: project.clienteId,
+        projetoId: id,
+        tipo: 'Financeiro',
+        titulo: 'Tratamento financeiro do projeto definido',
+        categoria: 'Projeto',
+        descricao: `${input.tipo}\n${input.motivo}`
+      }, tx);
+      await AuditLogService.log('INSERT', 'ProjetoDecisaoFinanceira', null, created, tx);
+      return created;
+    });
+    return reply.status(201).send(decision);
   });
 
   zServer.delete('/:id', {
@@ -502,6 +771,8 @@ export async function projetosRoutes(server: FastifyInstance) {
         await tx.update(schema.projetos)
           .set({ deletedAt: new Date().toISOString() })
           .where(eq(schema.projetos.id, id));
+
+        await FileSystemOutboxService.cancelAggregate('project', id, tx);
 
         await AuditLogService.log('DELETE (SOFT)', 'Projeto', oldProjeto[0], null, tx);
       });

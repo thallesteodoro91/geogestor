@@ -57,6 +57,20 @@
       "when": 1784415600000,
       "tag": "0007_ambiental_operacional",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1784771000000,
+      "tag": "0008_client_document_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1785034800000,
+      "tag": "0009_managerial_finance",
+      "breakpoints": true
     }
   ]
 }

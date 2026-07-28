@@ -10,6 +10,7 @@ import { geoViewTransition } from '../../utils/motion';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { geoFieldClass, geoPurpleSurfaceClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -84,9 +85,58 @@ interface Despesa {
   status?: string;
 }
 
+type ProjectFinancialDecision =
+  | 'manter_sem_alteracao'
+  | 'cancelar_parcelas_futuras'
+  | 'cobranca_parcial'
+  | 'registrar_devolucao'
+  | 'registrar_credito';
+
+interface ProjectFinancialContext {
+  valorOrcado: number;
+  valorContratado: number;
+  valorFaturado: number;
+  valorExecutadoInformado: number | null;
+  valorRecebido: number;
+  saldoAberto: number;
+  despesasLancadas: number;
+  despesasPagas: number;
+  custoPrevisto: number;
+  custoRealizado: number;
+  desvioCusto: number;
+  percentualCustoConsumido: number | null;
+  despesasSemPrevisao: boolean;
+  decisaoFinanceiraPendente: boolean;
+  eventosFinanceiros: Array<{
+    id: string;
+    tipo: string;
+    entidade: string;
+    entidadeId: string;
+    valor: number;
+    dataEvento: string;
+    motivo?: string | null;
+    metadataJson?: string | null;
+    usuarioId: string;
+    createdAt: string;
+  }>;
+  ultimaDecisao?: {
+    tipo: ProjectFinancialDecision;
+    motivo: string;
+    createdAt: string;
+  } | null;
+}
+
 const projectDetailFieldClass = cn(geoFieldClass, 'w-full p-3 text-sm font-medium');
 const projectDetailSelectClass = cn(projectDetailFieldClass, 'font-semibold');
 const projectDetailCardClass = 'geo-card p-6';
+const financialEventLabels: Record<string, string> = {
+  recebimento: 'Recebimento',
+  estorno_recebimento: 'Estorno de recebimento',
+  cancelamento_despesa: 'Cancelamento de despesa',
+  estorno_despesa: 'Estorno de despesa',
+  decisao_financeira_projeto: 'Decisão financeira',
+  cancelamento_projeto_pendente: 'Cancelamento aguardando decisão'
+};
 
 export function ProjetoDetalhes() {
   const { id } = useParams<{ id: string }>();
@@ -117,6 +167,10 @@ export function ProjetoDetalhes() {
   const [expData, setExpData] = useState(new Date().toISOString().split('T')[0]);
   const [expCategoria, setExpCategoria] = useState('Combustível');
   const [expObservacoes, setExpObservacoes] = useState('');
+  const [financialDecision, setFinancialDecision] = useState<ProjectFinancialDecision>('manter_sem_alteracao');
+  const [financialDecisionReason, setFinancialDecisionReason] = useState('');
+  const [executedPercentage, setExecutedPercentage] = useState('');
+  const [executedValue, setExecutedValue] = useState('');
 
   // 1. Fetch Project Details (which includes clientNome)
   const { data: projeto, isLoading: loadingProjeto } = useQuery<Projeto>({
@@ -164,6 +218,12 @@ export function ProjetoDetalhes() {
   });
 
   const projectDespesas = despesas.filter((d: Despesa) => d.projetoId === id);
+
+  const { data: financialContext } = useQuery<ProjectFinancialContext>({
+    queryKey: ['projeto-contexto-financeiro', id],
+    queryFn: () => apiClient.get<ProjectFinancialContext>(`/api/projetos/${id}/contexto-financeiro`),
+    enabled: !!id
+  });
 
   // Mutations
   const addTaskMutation = useMutation({
@@ -259,6 +319,41 @@ export function ProjetoDetalhes() {
     onError: () => {
       alert('Erro ao excluir despesa.');
     }
+  });
+
+  const financialDecisionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiFetch(`/api/projetos/${id}/decisao-financeira`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tipo: financialDecision,
+          motivo: financialDecisionReason,
+          percentualExecutado: financialDecision === 'cobranca_parcial' && executedPercentage
+            ? Number(executedPercentage.replace(',', '.'))
+            : null,
+          valorExecutado: ['cobranca_parcial', 'registrar_devolucao', 'registrar_credito'].includes(financialDecision) && executedValue
+            ? Math.round(Number(executedValue.replace(/\./g, '').replace(',', '.')) * 100)
+            : null
+        })
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || 'Não foi possível registrar a decisão financeira.');
+      }
+      return response.json();
+    },
+    onSuccess: async () => {
+      setFinancialDecisionReason('');
+      setExecutedPercentage('');
+      setExecutedValue('');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['projeto-contexto-financeiro', id] }),
+        queryClient.invalidateQueries({ queryKey: ['parcelas'] }),
+        invalidateFinancialQueries(queryClient)
+      ]);
+    },
+    onError: (error: Error) => alert(error.message)
   });
 
   const uploadFileMutation = useMutation({
@@ -910,6 +1005,182 @@ export function ProjetoDetalhes() {
 
             {activeTab === 'financeiro' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {financialContext?.decisaoFinanceiraPendente && (
+                  <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100 lg:col-span-3">
+                    <p className="font-semibold">Decisão financeira pendente</p>
+                    <p className="mt-1 leading-6">O projeto foi cancelado, mas o tratamento das cobranças, créditos ou devoluções ainda não foi definido. Preencha o formulário abaixo.</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-3 lg:col-span-3 lg:grid-cols-4">
+                  {[
+                    ['Orçado', financialContext?.valorOrcado ?? 0],
+                    ['Contratado', financialContext?.valorContratado || 0],
+                    ['Executado informado', financialContext?.valorExecutadoInformado],
+                    ['Faturado', financialContext?.valorFaturado || 0],
+                    ['Recebido', financialContext?.valorRecebido || 0],
+                    ['Saldo aberto', financialContext?.saldoAberto || 0],
+                    ['Custo previsto', financialContext?.custoPrevisto || 0],
+                    ['Custo realizado', financialContext?.custoRealizado || 0]
+                  ].map(([label, value]) => (
+                    <div key={String(label)} className="geo-card p-4">
+                      <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">{label}</p>
+                      <p className="mt-1 text-lg font-bold tabular-nums text-zinc-950 dark:text-white">
+                        {value == null ? 'Não informado' : formatCurrency(Number(value))}
+                      </p>
+                    </div>
+                  ))}
+                  <div className="col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950 lg:col-span-4">
+                    <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                      Desvio de custo: {formatCurrency(financialContext?.desvioCusto || 0)}
+                    </span>
+                    <span className="ml-3 text-zinc-500 dark:text-zinc-400">
+                      {financialContext?.percentualCustoConsumido == null
+                        ? financialContext?.despesasSemPrevisao
+                          ? 'Há despesas sem custo previsto no orçamento.'
+                          : 'Sem custo previsto informado.'
+                        : `${financialContext.percentualCustoConsumido}% do custo previsto consumido.`}
+                    </span>
+                  </div>
+                </div>
+
+                <form
+                  className="geo-card space-y-4 p-6 lg:col-span-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    financialDecisionMutation.mutate();
+                  }}
+                >
+                  <div>
+                    <h3 className="text-lg font-semibold text-zinc-950 dark:text-white">Tratamento financeiro do projeto</h3>
+                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                      Use este registro quando o projeto for cancelado, interrompido ou exigir ajuste comercial. A decisão não apaga recebimentos nem despesas.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="space-y-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                      <span>Decisão</span>
+                      <FormSelect
+                        value={financialDecision}
+                        onChange={(event) => setFinancialDecision(event.target.value as ProjectFinancialDecision)}
+                        className={projectDetailSelectClass}
+                      >
+                        <option value="manter_sem_alteracao">Manter cobranças sem alteração</option>
+                        <option value="cancelar_parcelas_futuras">Cancelar parcelas futuras em aberto</option>
+                        <option value="cobranca_parcial">Registrar cobrança parcial pelo executado</option>
+                        <option value="registrar_devolucao">Registrar decisão de devolução</option>
+                        <option value="registrar_credito">Registrar crédito ao cliente</option>
+                      </FormSelect>
+                    </label>
+                    {['cobranca_parcial', 'registrar_devolucao', 'registrar_credito'].includes(financialDecision) && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {financialDecision === 'cobranca_parcial' && (
+                          <label className="space-y-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                            <span>Executado (%)</span>
+                            <input
+                              inputMode="decimal"
+                              value={executedPercentage}
+                              onChange={(event) => setExecutedPercentage(event.target.value)}
+                              className={projectDetailFieldClass}
+                              placeholder="Ex.: 40"
+                            />
+                          </label>
+                        )}
+                        <label className="space-y-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                          <span>{financialDecision === 'cobranca_parcial' ? 'Valor executado' : 'Valor'} (R$)</span>
+                          <input
+                            inputMode="decimal"
+                            value={executedValue}
+                            onChange={(event) => setExecutedValue(event.target.value)}
+                            className={projectDetailFieldClass}
+                            placeholder="0,00"
+                            required={financialDecision !== 'cobranca_parcial'}
+                          />
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                  <label className="block space-y-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                    <span>Motivo e memória da decisão</span>
+                    <textarea
+                      value={financialDecisionReason}
+                      onChange={(event) => setFinancialDecisionReason(event.target.value)}
+                      rows={3}
+                      minLength={5}
+                      required
+                      className={projectDetailFieldClass}
+                      placeholder="Descreva o que foi executado e como o saldo deve ser tratado."
+                    />
+                  </label>
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      {financialContext?.ultimaDecisao
+                        ? `Última decisão: ${financialContext.ultimaDecisao.tipo}.`
+                        : 'Nenhuma decisão financeira registrada para este projeto.'}
+                    </p>
+                    <button
+                      type="submit"
+                      disabled={financialDecisionMutation.isPending}
+                      className={cn(primarySmallActionButtonClass, 'shrink-0 px-4 py-2.5')}
+                    >
+                      {financialDecisionMutation.isPending ? 'Registrando…' : 'Registrar decisão'}
+                    </button>
+                  </div>
+                </form>
+
+                <section className="geo-card p-6 lg:col-span-3" aria-labelledby="financial-timeline-heading">
+                  <div>
+                    <h3 id="financial-timeline-heading" className="text-lg font-semibold text-zinc-950 dark:text-white">Linha do tempo financeira</h3>
+                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Recebimentos, estornos, cancelamentos e decisões registrados para este projeto.</p>
+                  </div>
+                  {!financialContext?.eventosFinanceiros?.length ? (
+                    <div className="mt-5 rounded-2xl border border-dashed border-zinc-200 p-8 text-center text-sm text-zinc-500 dark:border-zinc-800">
+                      Nenhum evento financeiro registrado.
+                    </div>
+                  ) : (
+                    <ol className="relative mt-6 space-y-5 border-l border-zinc-200 pl-6 dark:border-zinc-700">
+                      {financialContext.eventosFinanceiros.map((event) => {
+                        const isReversal = event.tipo.startsWith('estorno_');
+                        const isPending = event.tipo === 'cancelamento_projeto_pendente'
+                          && financialContext.decisaoFinanceiraPendente;
+                        return (
+                          <li key={event.id} className="relative">
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'absolute -left-[30px] top-1.5 h-3 w-3 rounded-full ring-4 ring-white dark:ring-zinc-900',
+                                isPending ? 'bg-amber-500' : isReversal ? 'bg-rose-500' : 'bg-emerald-500'
+                              )}
+                            />
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-semibold text-zinc-950 dark:text-white">
+                                  {financialEventLabels[event.tipo] || event.tipo.replaceAll('_', ' ')}
+                                </p>
+                                {event.motivo && <p className="mt-1 break-words text-sm text-zinc-500 dark:text-zinc-400">{event.motivo}</p>}
+                              </div>
+                              <div className="shrink-0 text-right">
+                                {event.valor !== 0 && (
+                                  <p className={cn('font-semibold tabular-nums', event.valor < 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                                    {formatCurrency(event.valor)}
+                                  </p>
+                                )}
+                                <time dateTime={event.dataEvento} className="text-xs text-zinc-500">
+                                  {new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${event.dataEvento}T00:00:00Z`))}
+                                </time>
+                              </div>
+                            </div>
+                            <p className="mt-1 text-[11px] text-zinc-400">
+                              {isPending ? 'Pendente' : isReversal ? 'Reversão' : event.tipo === 'decisao_financeira_projeto' ? 'Informativo' : 'Ativo'}
+                              {' · '}{event.usuarioId || 'Usuário local'}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  )}
+                </section>
+
                 {/* Add Expense Form */}
                 <div className={cn(projectDetailCardClass, 'h-fit')}>
                   <h3 className="text-lg font-semibold text-zinc-950 dark:text-white mb-4 flex items-center gap-2">
@@ -1060,7 +1331,7 @@ export function ProjetoDetalhes() {
         description={deleteTarget?.type === 'task'
           ? 'A tarefa será removida deste projeto e deixará de aparecer nos demais contextos vinculados. O projeto será preservado. Esta ação não pode ser desfeita.'
           : deleteTarget?.type === 'expense'
-            ? 'A despesa será removida do projeto e os totais financeiros e indicadores da DRE serão recalculados. O projeto será preservado. Esta ação não pode ser desfeita.'
+            ? 'Somente despesas ainda não pagas podem ser excluídas. Despesas pagas exigem estorno para preservar o histórico do projeto.'
             : 'O arquivo será removido permanentemente do disco local e deixará de aparecer nos documentos do projeto. Esta ação não pode ser desfeita.'}
         confirmText={deleteTarget?.type === 'task' ? 'Excluir tarefa' : deleteTarget?.type === 'expense' ? 'Excluir despesa' : 'Excluir arquivo'}
         loading={deleteTaskMutation.isPending || deleteExpenseMutation.isPending || deleteFileMutation.isPending}

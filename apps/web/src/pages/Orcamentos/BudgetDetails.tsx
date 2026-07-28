@@ -12,6 +12,7 @@ import { geoFieldClass } from '../../utils/geoTheme';
 import { formatBasisPoints, formatCurrency, formatDate, formatDateTime } from './budgetForm';
 import { generateProfessionalBudgetPdf } from './budgetPdfGenerator';
 import type { BudgetDetail, BudgetOptions } from './types';
+import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 
 interface BudgetDetailsProps {
   detail: BudgetDetail | null;
@@ -61,6 +62,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
       queryClient.invalidateQueries({ queryKey: ['parcelas'] }),
       queryClient.invalidateQueries({ queryKey: ['projetos'] })
     ]);
+    await invalidateFinancialQueries(queryClient);
   };
 
   const transitionMutation = useMutation({

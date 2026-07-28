@@ -1,7 +1,7 @@
 import { CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
-import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
+import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import { MetricCard } from '../../components/MetricCard';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -10,9 +10,11 @@ import { z } from 'zod';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
-import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
+import { useEffect, useState } from 'react';
+import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect } from '../../components/Form';
 import { apiFetch, apiClient } from '../../services/apiClient';
+import { notifications } from '../../services/notifications';
+import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import {
   filterBarClass,
   filterClearButtonClass,
@@ -20,15 +22,16 @@ import {
   filterSearchInputClass
 } from '../../utils/filterStyles';
 
-const TIPOS_CUSTO = ['Fixo', 'Variavel de campo', 'Cartorio e taxas', 'Tributario', 'Operacional', 'Reembolsavel'];
-const CENTROS_CUSTO = ['Administrativo', 'Campo', 'Cartorio', 'Tributos', 'Software', 'Equipamentos', 'Servicos'];
+const TIPOS_CUSTO = ['Fixo', 'Variável de campo', 'Cartório e taxas', 'Tributário', 'Operacional', 'Reembolsável'];
+const CENTROS_CUSTO = ['Administrativo', 'Campo', 'Cartório', 'Tributos', 'Software', 'Equipamentos', 'Serviços'];
 
-const CATEGORIAS = ['Combustível', 'Cartório', 'Alimentação', 'Equipamento', 'Viagem', 'Impostos', 'Salários', 'Outros'];
+const CATEGORIAS = ['Combustível', 'Pedágio', 'Hospedagem', 'Alimentação', 'Viagem e transporte', 'Cartório e taxas', 'Documentos', 'Equipamentos', 'Software e licenças', 'Tributos', 'Outros'];
 
 export interface DespesaItem {
   id: string;
   projetoId?: string | null;
   projetoNome?: string;
+  viagemId?: string | null;
   descricao: string;
   fornecedor?: string | null;
   numeroDocumento?: string | null;
@@ -50,14 +53,25 @@ export interface ProjetoMin {
   nome: string;
 }
 
+interface ViagemMin {
+  id: string;
+  finalidade: string;
+  destino: string;
+  projetoId?: string | null;
+  status: string;
+}
+
 export function Despesas() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
+  const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [initialFormFingerprint, setInitialFormFingerprint] = useState('');
   const [selectedDespesa, setSelectedDespesa] = useState<DespesaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DespesaItem | null>(null);
 
   // Form states
   const [projetoId, setProjetoId] = useState('');
+  const [viagemId, setViagemId] = useState('');
   const [descricao, setDescricao] = useState('');
   const [fornecedor, setFornecedor] = useState('');
   const [numeroDocumento, setNumeroDocumento] = useState('');
@@ -66,7 +80,7 @@ export function Despesas() {
   const [dataCompetencia, setDataCompetencia] = useState(new Date().toISOString().split('T')[0]);
   const [dataPagamento, setDataPagamento] = useState('');
   const [categoria, setCategoria] = useState('Combustível');
-  const [tipoCusto, setTipoCusto] = useState('Variavel de campo');
+  const [tipoCusto, setTipoCusto] = useState('Variável de campo');
   const [centroCusto, setCentroCusto] = useState('Campo');
   const [reembolsavel, setReembolsavel] = useState(false);
   const [observacoes, setObservacoes] = useState('');
@@ -91,8 +105,41 @@ export function Despesas() {
     queryKey: ['projetos'],
     queryFn: () => apiClient.get<ProjetoMin[]>('/api/projetos')
   });
+  const { data: viagens = [], isLoading: viagensLoading } = useQuery<ViagemMin[]>({
+    queryKey: ['viagens'],
+    queryFn: () => apiClient.get<ViagemMin[]>('/api/financeiro/viagens')
+  });
 
-  const loading = despesasLoading || projetosLoading;
+  const loading = despesasLoading || projetosLoading || viagensLoading;
+  const formFingerprint = JSON.stringify({
+    projetoId,
+    viagemId,
+    descricao,
+    fornecedor,
+    numeroDocumento,
+    valor,
+    data,
+    dataCompetencia,
+    dataPagamento,
+    categoria,
+    tipoCusto,
+    centroCusto,
+    reembolsavel,
+    observacoes,
+    status,
+    formaPagamento
+  });
+  const hasUnsavedExpense = showModal && Boolean(initialFormFingerprint) && formFingerprint !== initialFormFingerprint;
+
+  useEffect(() => {
+    if (!hasUnsavedExpense) return undefined;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', protectDraft);
+    return () => window.removeEventListener('beforeunload', protectDraft);
+  }, [hasUnsavedExpense]);
 
   const filteredDespesas = despesas.filter((desp) => {
     const linkedProj = projetos.find((p) => p.id === desp.projetoId);
@@ -143,15 +190,17 @@ export function Despesas() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await apiFetch(`/api/financeiro/despesas/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Erro ao excluir despesa');
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.error || 'Erro ao excluir despesa');
+      }
     },
     onSuccess: () => {
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['despesas'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
-    onError: () => {
-      alert('Erro ao excluir despesa');
+    onError: (error) => {
+      notifications.error(error instanceof Error ? error.message : 'Erro ao excluir despesa');
     }
   });
 
@@ -174,38 +223,78 @@ export function Despesas() {
     },
     onSuccess: () => {
       setShowModal(false);
-      queryClient.invalidateQueries({ queryKey: ['despesas'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      setInitialFormFingerprint('');
+      invalidateFinancialQueries(queryClient);
     },
     onError: (err) => {
-      alert(err instanceof Error ? err.message : 'Erro ao salvar despesa.');
+      notifications.error(err instanceof Error ? err.message : 'Erro ao salvar despesa.');
     }
   });
 
   // Actions
   const openCreateModal = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const initialValues = {
+      projetoId: '',
+      viagemId: '',
+      descricao: '',
+      fornecedor: '',
+      numeroDocumento: '',
+      valor: '',
+      data: today,
+      dataCompetencia: today,
+      dataPagamento: '',
+      categoria: 'CombustÃ­vel',
+      tipoCusto: 'VariÃ¡vel de campo',
+      centroCusto: 'Campo',
+      reembolsavel: false,
+      observacoes: '',
+      status: 'Pendente',
+      formaPagamento: 'Pix'
+    };
     setSelectedDespesa(null);
     setDespProjetoId('');
+    setViagemId('');
     setDescricao('');
     setFornecedor('');
     setNumeroDocumento('');
     setValor('');
-    setData(new Date().toISOString().split('T')[0]);
-    setDataCompetencia(new Date().toISOString().split('T')[0]);
+    setData(today);
+    setDataCompetencia(today);
     setDataPagamento('');
     setCategoria('Combustível');
-    setTipoCusto('Variavel de campo');
+    setTipoCusto('Variável de campo');
     setCentroCusto('Campo');
     setReembolsavel(false);
     setObservacoes('');
     setStatus('Pendente');
     setFormaPagamento('Pix');
+    setInitialFormFingerprint(JSON.stringify(initialValues));
     setShowModal(true);
   };
 
   const openEditModal = (desp: DespesaItem) => {
+    const initialValues = {
+      projetoId: desp.projetoId || '',
+      viagemId: desp.viagemId || '',
+      descricao: desp.descricao || '',
+      fornecedor: desp.fornecedor || '',
+      numeroDocumento: desp.numeroDocumento || '',
+      valor: (desp.valor / 100).toString(),
+      data: desp.data || '',
+      dataCompetencia: desp.dataCompetencia || desp.data || '',
+      dataPagamento: desp.dataPagamento || '',
+      categoria: desp.categoria || 'CombustÃ­vel',
+      tipoCusto: desp.tipoCusto || 'Operacional',
+      centroCusto: desp.centroCusto || 'Administrativo',
+      reembolsavel: Boolean(desp.reembolsavel),
+      observacoes: desp.observacoes || '',
+      status: desp.status || 'Pendente',
+      formaPagamento: desp.formaPagamento || 'Pix'
+    };
     setSelectedDespesa(desp);
     setDespProjetoId(desp.projetoId || '');
+    setViagemId(desp.viagemId || '');
     setDescricao(desp.descricao || '');
     setFornecedor(desp.fornecedor || '');
     setNumeroDocumento(desp.numeroDocumento || '');
@@ -220,7 +309,22 @@ export function Despesas() {
     setObservacoes(desp.observacoes || '');
     setStatus(desp.status || 'Pendente');
     setFormaPagamento(desp.formaPagamento || 'Pix');
+    setInitialFormFingerprint(JSON.stringify(initialValues));
     setShowModal(true);
+  };
+
+  const closeExpenseModal = () => {
+    setShowModal(false);
+    setInitialFormFingerprint('');
+  };
+
+  const requestCloseExpenseModal = () => {
+    if (submitMutation.isPending) return;
+    if (hasUnsavedExpense) {
+      setShowDiscardDialog(true);
+      return;
+    }
+    closeExpenseModal();
   };
 
   const handleDelete = (id: string) => {
@@ -231,6 +335,7 @@ export function Despesas() {
     e.preventDefault();
     const payload = {
       projetoId: projetoId || null,
+      viagemId: viagemId || null,
       descricao,
       fornecedor: fornecedor || null,
       numeroDocumento: numeroDocumento || null,
@@ -256,7 +361,7 @@ export function Despesas() {
 
     const validation = schema.safeParse(payload);
     if (!validation.success) {
-      alert(validation.error.issues[0].message);
+      notifications.warning(validation.error.issues[0].message);
       return;
     }
 
@@ -490,211 +595,124 @@ export function Despesas() {
       {/* Modal structure */}
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={requestCloseExpenseModal}
+        closeDisabled={submitMutation.isPending}
         title={selectedDespesa ? 'Editar Despesa' : 'Nova Despesa'}
         maxWidth="max-w-5xl"
       >
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label htmlFor="despesa-desc" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Descrição *</label>
-            <input 
-              id="despesa-desc"
-              type="text" 
-              required 
-              value={descricao} 
-              onChange={e => setDescricao(e.target.value)} 
-              placeholder="Ex: Combustível viagem de campo" 
-              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium" 
-            />
-          </div>
+          <FormSection sectionId="expense-identification" title="Identificação e documento" description="Descreva a despesa e registre o fornecedor ou comprovante relacionado." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo">
+            <div>
+              <label htmlFor="despesa-desc" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Descrição *</label>
+              <input id="despesa-desc" name="descricao" type="text" required autoComplete="off" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex.: Combustível para viagem de campo" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+            </div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label htmlFor="despesa-fornecedor" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Fornecedor</label>
+                <input id="despesa-fornecedor" name="fornecedor" type="text" autoComplete="organization" value={fornecedor} onChange={e => setFornecedor(e.target.value)} placeholder="Cartório, prefeitura, posto…" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+              <div>
+                <label htmlFor="despesa-numero-documento" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Documento / comprovante</label>
+                <input id="despesa-numero-documento" name="numeroDocumento" type="text" autoComplete="off" spellCheck={false} value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} placeholder="NF, recibo, guia ou protocolo" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+            </div>
+          </FormSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="despesa-fornecedor" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Fornecedor</label>
-              <input
-                id="despesa-fornecedor"
-                type="text"
-                value={fornecedor}
-                onChange={e => setFornecedor(e.target.value)}
-                placeholder="Cartorio, prefeitura, posto..."
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
-              />
+          <FormSection sectionId="expense-value-dates" title="Valor e datas" description="Informe o valor, a competência e as datas efetivas da despesa." icon={<CurrencyDollar className="h-5 w-5" weight="duotone" />} tone="indigo">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label htmlFor="despesa-valor" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Valor (R$) *</label>
+                <input id="despesa-valor" name="valor" type="number" inputMode="decimal" step="0.01" required autoComplete="off" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium tabular-nums text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+              <div>
+                <label htmlFor="despesa-data" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Data *</label>
+                <DatePickerField id="despesa-data" name="data" required autoComplete="off" value={data} onChange={e => setData(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+              <div>
+                <label htmlFor="despesa-competencia" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Competência</label>
+                <DatePickerField id="despesa-competencia" name="dataCompetencia" autoComplete="off" value={dataCompetencia} onChange={e => setDataCompetencia(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+              <div>
+                <label htmlFor="despesa-data-pagamento" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Data de pagamento</label>
+                <DatePickerField id="despesa-data-pagamento" name="dataPagamento" autoComplete="off" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
             </div>
-            <div>
-              <label htmlFor="despesa-numero-documento" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Documento / comprovante</label>
-              <input
-                id="despesa-numero-documento"
-                type="text"
-                value={numeroDocumento}
-                onChange={e => setNumeroDocumento(e.target.value)}
-                placeholder="NF, recibo, guia ou protocolo"
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
-              />
-            </div>
-            <div>
-              <label htmlFor="despesa-valor" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Valor (R$) *</label>
-              <input 
-                id="despesa-valor"
-                type="number" 
-                step="0.01" 
-                required 
-                value={valor} 
-                onChange={e => setValor(e.target.value)} 
-                placeholder="0.00" 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium" 
-              />
-            </div>
-            <div>
-              <label htmlFor="despesa-data" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data *</label>
-              <DatePickerField
-                id="despesa-data"
-                required 
-                value={data} 
-                onChange={e => setData(e.target.value)} 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium" 
-              />
-            </div>
-            <div>
-              <label htmlFor="despesa-competencia" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Competencia</label>
-              <DatePickerField
-                id="despesa-competencia"
-                value={dataCompetencia}
-                onChange={e => setDataCompetencia(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
-              />
-            </div>
-            <div>
-              <label htmlFor="despesa-data-pagamento" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data de pagamento</label>
-              <DatePickerField
-                id="despesa-data-pagamento"
-                value={dataPagamento}
-                onChange={e => setDataPagamento(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium"
-              />
-            </div>
-          </div>
+          </FormSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="despesa-categoria" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Categoria</label>
-              <FormSelect
-                id="despesa-categoria"
-                value={categoria} 
-                onChange={e => setCategoria(e.target.value)} 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                {CATEGORIAS.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </FormSelect>
+          <FormSection sectionId="expense-classification" title="Classificação e vínculo" description="Associe a despesa ao projeto e à estrutura gerencial correta." icon={<FolderSimple className="h-5 w-5" weight="duotone" />} tone="indigo">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label htmlFor="despesa-categoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Categoria</label>
+                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-projeto" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Projeto vinculado</label>
+                <FormSelect id="despesa-projeto" name="projetoId" value={projetoId} onChange={e => setProjetoId(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="">Nenhum</option>{projetos.map((proj) => <option key={proj.id} value={proj.id}>{proj.nome}</option>)}</FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-viagem" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Viagem / prestação de contas</label>
+                <FormSelect id="despesa-viagem" name="viagemId" value={viagemId} onChange={e => setViagemId(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                  <option value="">Nenhuma</option>
+                  {viagens
+                    .filter((viagem) => viagem.status !== 'encerrada' && (!projetoId || !viagem.projetoId || viagem.projetoId === projetoId))
+                    .map((viagem) => <option key={viagem.id} value={viagem.id}>{viagem.finalidade} · {viagem.destino}</option>)}
+                </FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-tipo-custo" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tipo de custo</label>
+                <FormSelect id="despesa-tipo-custo" name="tipoCusto" value={tipoCusto} onChange={e => setTipoCusto(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{TIPOS_CUSTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-centro-custo" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Centro de custo</label>
+                <FormSelect id="despesa-centro-custo" name="centroCusto" value={centroCusto} onChange={e => setCentroCusto(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{CENTROS_CUSTO.map((centro) => <option key={centro} value={centro}>{centro}</option>)}</FormSelect>
+              </div>
             </div>
-            <div>
-              <label htmlFor="despesa-projeto" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Projeto Vinculado</label>
-              <FormSelect
-                id="despesa-projeto"
-                value={projetoId} 
-                onChange={e => setProjetoId(e.target.value)} 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                <option value="">Nenhum</option>
-                {projetos.map((proj) => (
-                  <option key={proj.id} value={proj.id}>{proj.nome}</option>
-                ))}
-              </FormSelect>
-            </div>
-            <div>
-              <label htmlFor="despesa-tipo-custo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tipo de custo</label>
-              <FormSelect
-                id="despesa-tipo-custo"
-                value={tipoCusto}
-                onChange={e => setTipoCusto(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                {TIPOS_CUSTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-              </FormSelect>
-            </div>
-            <div>
-              <label htmlFor="despesa-centro-custo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Centro de custo</label>
-              <FormSelect
-                id="despesa-centro-custo"
-                value={centroCusto}
-                onChange={e => setCentroCusto(e.target.value)}
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                {CENTROS_CUSTO.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </FormSelect>
-            </div>
-          </div>
+          </FormSection>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="despesa-status" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Status Pagamento</label>
-              <FormSelect
-                id="despesa-status"
-                value={status} 
-                onChange={e => setStatus(e.target.value)} 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                <option value="Pendente">Pendente</option>
-                <option value="Pago">Pago</option>
-                <option value="Atrasado">Atrasado</option>
-              </FormSelect>
+          <FormSection sectionId="expense-payment" title="Pagamento e reembolso" description="Controle a situação financeira e se o valor será reembolsado pelo cliente." icon={<Tag className="h-5 w-5" weight="duotone" />} tone="indigo">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label htmlFor="despesa-status" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status do pagamento</label>
+                <FormSelect id="despesa-status" name="status" value={status} onChange={e => setStatus(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="Pendente">Pendente</option><option value="Pago">Pago</option><option value="Atrasado">Atrasado</option></FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-forma" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Forma de pagamento</label>
+                <FormSelect id="despesa-forma" name="formaPagamento" value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="Pix">Pix</option><option value="Dinheiro">Dinheiro</option><option value="Cartão de Crédito">Cartão de crédito</option><option value="Boleto">Boleto</option><option value="Transferência">Transferência bancária</option></FormSelect>
+              </div>
             </div>
-            <div>
-              <label htmlFor="despesa-forma" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Forma de Pagamento</label>
-              <FormSelect
-                id="despesa-forma"
-                value={formaPagamento} 
-                onChange={e => setFormaPagamento(e.target.value)} 
-                className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all font-medium appearance-none"
-              >
-                <option value="Pix">Pix</option>
-                <option value="Dinheiro">Dinheiro</option>
-                <option value="Cartão de Crédito">Cartão de Crédito</option>
-                <option value="Boleto">Boleto</option>
-                <option value="Transferência">Transferência Bancária</option>
-              </FormSelect>
-            </div>
-          </div>
+            <CheckboxField id="despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={reembolsavel} onChange={setReembolsavel} className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200" />
+          </FormSection>
 
-          <CheckboxField id="despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={reembolsavel} onChange={setReembolsavel} className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200" />
+          <FormSection sectionId="expense-notes" title="Observações" description="Registre detalhes úteis para conferência ou prestação de contas." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo" optional>
+            <label htmlFor="despesa-obs" className="sr-only">Observações</label>
+            <textarea id="despesa-obs" name="observacoes" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Adicione notas adicionais sobre a despesa…" rows={4} className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium leading-relaxed text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+          </FormSection>
 
-          <div>
-            <label htmlFor="despesa-obs" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Observações</label>
-            <textarea 
-              id="despesa-obs"
-              value={observacoes} 
-              onChange={e => setObservacoes(e.target.value)} 
-              placeholder="Adicione notas adicionais sobre a despesa..." 
-              rows={3} 
-              className="w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 focus:border-indigo-400 transition-all resize-none font-medium leading-relaxed" 
-            />
-          </div>
-
-          <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3">
-            <button 
-              type="button" 
-              onClick={() => setShowModal(false)} 
-              className="px-6 py-3 rounded-full text-zinc-500 dark:text-zinc-400 font-semibold hover:text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button 
-              type="submit" 
-              disabled={submitMutation.isPending}
-              className={cn(primarySubmitButtonClass, 'px-6 py-3')}
-            >
-              {selectedDespesa ? 'Salvar Despesa' : 'Cadastrar'}
-            </button>
-          </div>
+          <FormFooter>
+            <button type="button" onClick={requestCloseExpenseModal} className={cn(secondarySmallActionButtonClass, 'px-6 py-3')}>Cancelar</button>
+            <button type="submit" disabled={submitMutation.isPending} aria-busy={submitMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}>{submitMutation.isPending ? 'Salvando…' : selectedDespesa ? 'Salvar despesa' : 'Cadastrar despesa'}</button>
+          </FormFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={showDiscardDialog}
+        onClose={() => setShowDiscardDialog(false)}
+        onConfirm={() => {
+          setShowDiscardDialog(false);
+          closeExpenseModal();
+        }}
+        title="Descartar alterações?"
+        description="As informações preenchidas nesta despesa ainda não foram salvas."
+        confirmText="Descartar alterações"
+        cancelText="Continuar editando"
+        variant="warning"
+      />
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }}
         title={`Excluir despesa${deleteTarget?.descricao ? ` “${deleteTarget.descricao}”` : ''}?`}
-        description="A despesa será removida e os totais financeiros e indicadores da DRE serão recalculados. Os vínculos com projeto e cliente serão preservados. Esta ação não pode ser desfeita."
+        description="Somente despesas ainda não pagas podem ser excluídas. Para uma despesa paga, registre um estorno e preserve o histórico financeiro."
         confirmText="Excluir despesa"
         loading={deleteMutation.isPending}
       />

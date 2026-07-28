@@ -4,6 +4,88 @@ export type ProjectModalTab = 'projeto' | 'propriedade' | 'geoloc';
 export type ProjectModalContext = 'projeto' | 'ambiental' | 'licenciamento';
 export type ProjectAreaUnit = 'ha' | 'm2';
 
+export interface ProjectFormCopy {
+  createTitle: string;
+  editTitle: string;
+  nameLabel: string;
+  namePlaceholder: string;
+  typeLabel: string;
+  descriptionLabel: string;
+  descriptionPlaceholder: string;
+  createAction: string;
+  createSuccess: string;
+  updateSuccess: string;
+  discardMessage: string;
+}
+
+const projectContextCopy: Record<ProjectModalContext | 'pericia', ProjectFormCopy> = {
+  projeto: {
+    createTitle: 'Novo projeto',
+    editTitle: 'Editar projeto',
+    nameLabel: 'Nome do projeto',
+    namePlaceholder: 'Ex.: Levantamento planialtimétrico — Lote 5',
+    typeLabel: 'Tipo do projeto ou serviço',
+    descriptionLabel: 'Descrição curta',
+    descriptionPlaceholder: 'Resuma a finalidade, o escopo e o principal produto a entregar.',
+    createAction: 'Criar projeto',
+    createSuccess: 'Projeto criado com sucesso.',
+    updateSuccess: 'Projeto atualizado com sucesso.',
+    discardMessage: 'Descartar as alterações não salvas deste projeto?'
+  },
+  ambiental: {
+    createTitle: 'Nova demanda ambiental',
+    editTitle: 'Editar demanda ambiental',
+    nameLabel: 'Nome da demanda',
+    namePlaceholder: 'Ex.: Regularização ambiental — Fazenda Boa Vista',
+    typeLabel: 'Tipo de demanda ambiental',
+    descriptionLabel: 'Finalidade e escopo da demanda',
+    descriptionPlaceholder: 'Resuma a finalidade ambiental, o escopo e o principal produto a entregar.',
+    createAction: 'Criar demanda',
+    createSuccess: 'Demanda ambiental criada com sucesso.',
+    updateSuccess: 'Demanda ambiental atualizada com sucesso.',
+    discardMessage: 'Descartar as alterações não salvas desta demanda ambiental?'
+  },
+  licenciamento: {
+    createTitle: 'Novo processo de licenciamento',
+    editTitle: 'Editar processo de licenciamento',
+    nameLabel: 'Nome do processo',
+    namePlaceholder: 'Ex.: Licenciamento ambiental — Unidade Florianópolis',
+    typeLabel: 'Categoria do registro',
+    descriptionLabel: 'Finalidade e escopo do licenciamento',
+    descriptionPlaceholder: 'Resuma o empreendimento, o escopo do processo e a licença pretendida.',
+    createAction: 'Criar processo',
+    createSuccess: 'Processo de licenciamento criado com sucesso.',
+    updateSuccess: 'Processo de licenciamento atualizado com sucesso.',
+    discardMessage: 'Descartar as alterações não salvas deste processo de licenciamento?'
+  },
+  pericia: {
+    createTitle: 'Nova perícia',
+    editTitle: 'Editar perícia',
+    nameLabel: 'Nome da perícia',
+    namePlaceholder: 'Ex.: Perícia ambiental — Processo 5001234-56.2026',
+    typeLabel: 'Categoria da demanda',
+    descriptionLabel: 'Objeto e escopo da perícia',
+    descriptionPlaceholder: 'Resuma o objeto, o escopo técnico e o produto pericial esperado.',
+    createAction: 'Criar perícia',
+    createSuccess: 'Perícia criada com sucesso.',
+    updateSuccess: 'Perícia atualizada com sucesso.',
+    discardMessage: 'Descartar as alterações não salvas desta perícia?'
+  }
+};
+
+export const resolveProjectFormCopy = (
+  context: ProjectModalContext,
+  projectType?: string | null
+): ProjectFormCopy => (
+  projectType === 'Perícia'
+    ? projectContextCopy.pericia
+    : projectType === 'Licenciamento'
+      ? projectContextCopy.licenciamento
+      : projectType === 'Ambiental'
+        ? projectContextCopy.ambiental
+        : projectContextCopy[context]
+);
+
 export interface ProjectRecordForForm {
   nome?: string | null;
   clienteId?: string | null;

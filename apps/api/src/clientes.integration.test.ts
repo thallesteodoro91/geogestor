@@ -3,9 +3,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `clientes-${process.pid}`);
 const dbPath = path.join(testRoot, 'clientes.integration.test.db');
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 const authHeaders = { 'content-type': 'application/json', 'x-api-token': 'test-token' };
@@ -117,12 +117,13 @@ test('cria PF estruturada e edita cadastro legado sem perder categoria ou origem
     await db.insert(schema.clientes).values({
       id: legacyId,
       nome: 'Empresa Legada',
-      documento: '11.222.333/0001-81',
+      documento: '45.723.174/0001-10',
       categoria: 'Empresa, Parceiro',
       origem: 'Evento, Telefone',
       celular: '(48) 99999-8888'
     });
     await db.update(schema.clientes).set({ tipoPessoa: null, origemPrincipal: null, origemDetalhe: null }).where(eq(schema.clientes.id, legacyId));
+    await db.run(sql.raw("UPDATE schema_migrations SET status = 'failed' WHERE version = 4"));
     await runRuntimeMigrations();
 
     const migrated = await request({ method: 'GET', url: `/api/clientes/${legacyId}` });
@@ -140,8 +141,8 @@ test('cria PF estruturada e edita cadastro legado sem perder categoria ou origem
       payload: {
         tipoPessoa: 'PJ',
         nome: 'Empresa Legada Atualizada',
-        cnpj: '11.222.333/0001-81',
-        documento: '11.222.333/0001-81',
+        cnpj: '45.723.174/0001-10',
+        documento: '45.723.174/0001-10',
         celular: '(48) 99999-8888',
         origem: 'Evento, Telefone',
         origemPrincipal: 'Google',

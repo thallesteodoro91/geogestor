@@ -22,7 +22,8 @@ export function initDb(dbPath: string) {
 
   return {
     db: drizzle(client, { schema }),
-    ready
+    ready,
+    close: () => client.close()
   };
 }
 

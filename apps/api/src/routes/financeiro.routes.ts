@@ -8,6 +8,12 @@ import { JornadaService } from '../services/jornada.service';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { normalizeBudgetStatus } from '@geogestor/contracts';
+import { LegacyFinanceDomainService } from '../services/legacy-finance-domain.service';
+import {
+  calculateInstallmentSettlement,
+  calculateReceiptCash,
+  normalizeExpenseCategoryCode
+} from '../services/managerial-finance-domain.service';
 
 const formatCurrency = (valueInCents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((valueInCents || 0) / 100);
@@ -35,8 +41,33 @@ const legacyBudgetCostSchema = z.object({
   valor: centsSchema
 });
 
-function calculatedLegacyItemTotal(item: z.infer<typeof legacyBudgetItemSchema>) {
-  return Math.round(item.quantidade * item.valorUnitario);
+async function syncInstallmentSettlement(tx: any, parcelaId: string) {
+  const [parcela] = await tx.select().from(schema.parcelas)
+    .where(eq(schema.parcelas.id, parcelaId)).limit(1);
+  if (!parcela) throw new Error('Parcela não encontrada');
+
+  const activeReceipts = await tx.select().from(schema.recebimentos).where(and(
+    eq(schema.recebimentos.parcelaId, parcelaId),
+    isNull(schema.recebimentos.deletedAt),
+    isNull(schema.recebimentos.estornadoEm)
+  ));
+  const settlement = calculateInstallmentSettlement(
+    parcela.valor,
+    activeReceipts.map((item: typeof schema.recebimentos.$inferSelect) => item.valorPrincipal)
+  );
+  const lastReceipt = activeReceipts
+    .slice()
+    .sort((a: typeof schema.recebimentos.$inferSelect, b: typeof schema.recebimentos.$inferSelect) =>
+      b.dataRecebimento.localeCompare(a.dataRecebimento)
+    )[0];
+
+  const [updated] = await tx.update(schema.parcelas).set({
+    valorPago: settlement.valorPago,
+    statusPagamento: settlement.status,
+    dataPagamento: settlement.status === 'Pago' ? lastReceipt?.dataRecebimento || null : null,
+    updatedAt: new Date().toISOString()
+  }).where(eq(schema.parcelas.id, parcelaId)).returning();
+  return updated;
 }
 
 export async function financeiroRoutes(server: FastifyInstance) {
@@ -163,12 +194,18 @@ export async function financeiroRoutes(server: FastifyInstance) {
       }
     }
 
+    const calculation = LegacyFinanceDomainService.calculate({
+      requestedTotalCents: data.valorTotal,
+      discountCents: data.desconto,
+      items: data.itens,
+      costs: data.despesas
+    });
     const orcamento = await db.transaction(async (tx) => {
       const orc = await tx.insert(schema.orcamentos).values({
         id: crypto.randomUUID(),
         clienteId: data.clienteId,
         projetoId,
-        valorTotal: data.valorTotal,
+        valorTotal: calculation.totalCents,
         status: 'rascunho',
         descricao: data.descricao,
         anotacoes: data.anotacoes || null,
@@ -191,14 +228,14 @@ export async function financeiroRoutes(server: FastifyInstance) {
       }).returning();
 
       if (data.itens && data.itens.length > 0) {
-        for (const item of data.itens) {
+        for (const [index, item] of data.itens.entries()) {
           await tx.insert(schema.orcamento_itens).values({
             id: crypto.randomUUID(),
             orcamentoId: orc[0].id,
             descricao: item.descricao,
             quantidade: item.quantidade,
             valorUnitario: item.valorUnitario,
-            total: calculatedLegacyItemTotal(item)
+            total: calculation.itemTotals[index]
           });
         }
       }
@@ -304,8 +341,17 @@ export async function financeiroRoutes(server: FastifyInstance) {
       }
 
       const changes: string[] = [];
-      if (data.valorTotal !== undefined && data.valorTotal !== oldOrcamento[0].valorTotal) {
-        changes.push(`Valor: ${formatCurrency(oldOrcamento[0].valorTotal)} -> ${formatCurrency(data.valorTotal)}`);
+      const calculation = data.itens !== undefined
+        ? LegacyFinanceDomainService.calculate({
+            requestedTotalCents: data.valorTotal ?? oldOrcamento[0].valorTotal,
+            discountCents: data.desconto !== undefined ? data.desconto : oldOrcamento[0].desconto,
+            items: data.itens,
+            costs: data.despesas
+          })
+        : null;
+      const nextTotal = calculation?.totalCents ?? data.valorTotal;
+      if (nextTotal !== undefined && nextTotal !== oldOrcamento[0].valorTotal) {
+        changes.push(`Valor: ${formatCurrency(oldOrcamento[0].valorTotal)} -> ${formatCurrency(nextTotal)}`);
       }
       if (data.dataOrcamento !== undefined && data.dataOrcamento !== oldOrcamento[0].dataOrcamento) {
         changes.push(`Data do orçamento: ${oldOrcamento[0].dataOrcamento || 'não informada'} -> ${data.dataOrcamento || 'não informada'}`);
@@ -321,7 +367,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         const orc = await tx.update(schema.orcamentos).set({
           clienteId: data.clienteId !== undefined ? data.clienteId : undefined,
           projetoId: data.projetoId !== undefined ? (data.projetoId || null) : undefined,
-          valorTotal: data.valorTotal !== undefined ? data.valorTotal : undefined,
+          valorTotal: nextTotal !== undefined ? nextTotal : undefined,
           status: undefined,
           descricao: data.descricao !== undefined ? data.descricao : undefined,
           anotacoes: data.anotacoes !== undefined ? data.anotacoes : undefined,
@@ -346,14 +392,14 @@ export async function financeiroRoutes(server: FastifyInstance) {
 
         if (data.itens !== undefined) {
           await tx.delete(schema.orcamento_itens).where(eq(schema.orcamento_itens.orcamentoId, id));
-          for (const item of data.itens) {
+          for (const [index, item] of data.itens.entries()) {
             await tx.insert(schema.orcamento_itens).values({
               id: crypto.randomUUID(),
               orcamentoId: id,
               descricao: item.descricao,
               quantidade: item.quantidade,
               valorUnitario: item.valorUnitario,
-              total: calculatedLegacyItemTotal(item)
+              total: calculation?.itemTotals[index] ?? Math.round(item.quantidade * item.valorUnitario)
             });
           }
         }
@@ -399,11 +445,19 @@ export async function financeiroRoutes(server: FastifyInstance) {
         orcamentoId: schema.parcelas.orcamentoId,
         valor: schema.parcelas.valor,
         valorPago: schema.parcelas.valorPago,
+        recebidoCaixa: sql<number>`coalesce((
+          select sum(r.valor_recebido)
+          from recebimentos r
+          where r.parcela_id = ${schema.parcelas.id}
+            and r.deleted_at is null
+            and r.estornado_em is null
+        ), 0)`,
         dataVencimento: schema.parcelas.dataVencimento,
         dataPagamento: schema.parcelas.dataPagamento,
         statusPagamento: schema.parcelas.statusPagamento,
         clienteNome: schema.clientes.nome,
         clienteId: schema.clientes.id,
+        projetoId: schema.orcamentos.projetoId,
         orcamentoDescricao: schema.orcamentos.descricao
       })
       .from(schema.parcelas)
@@ -433,7 +487,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
       valor: z.number().min(1, 'Valor inválido'),
       dataVencimento: z.string().min(1, 'Data de vencimento é obrigatória'),
       dataPagamento: z.string().nullable().optional(),
-      statusPagamento: z.string().optional()
+      statusPagamento: z.enum(['Pendente', 'Pago']).optional()
     });
 
     const parseResult = bodySchema.safeParse(request.body);
@@ -449,30 +503,68 @@ export async function financeiroRoutes(server: FastifyInstance) {
     if (normalizeBudgetStatus(sourceBudget[0].status) !== 'aprovado') {
       return reply.status(409).send({ error: 'Contas a receber só podem ser criadas para orçamentos aprovados.' });
     }
-    const parcela = await db.insert(schema.parcelas).values({
-      id: crypto.randomUUID(),
-      orcamentoId: data.orcamentoId,
-      valor: data.valor,
-      dataVencimento: data.dataVencimento,
-      dataPagamento: data.dataPagamento || (data.statusPagamento === 'Pago' ? todayKey() : null),
-      statusPagamento: data.statusPagamento || 'Pendente',
-      valorPago: data.statusPagamento === 'Pago' ? data.valor : 0,
-      tipoValor: 'recebivel_previsto'
-    }).returning();
-
-    const orcamento = await db.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, parcela[0].orcamentoId)).limit(1);
-    if (orcamento.length) {
-      await JornadaService.logClienteEvento({
-        clienteId: orcamento[0].clienteId,
-        projetoId: orcamento[0].projetoId || null,
-        orcamentoId: orcamento[0].id,
-        tipo: 'Financeiro',
-        titulo: `Parcela registrada: ${formatCurrency(parcela[0].valor)}`,
-        categoria: 'Fatura',
-        descricao: `Vencimento: ${parcela[0].dataVencimento}\nStatus: ${parcela[0].statusPagamento}`
+    const existingInstallments = await db.select().from(schema.parcelas).where(and(
+      eq(schema.parcelas.orcamentoId, data.orcamentoId),
+      isNull(schema.parcelas.deletedAt),
+      isNull(schema.parcelas.canceladaEm)
+    ));
+    const scheduledTotal = existingInstallments.reduce((sum, item) => sum + item.valor, 0);
+    if (scheduledTotal + data.valor > sourceBudget[0].valorTotal) {
+      return reply.status(409).send({
+        error: `A nova parcela ultrapassa o saldo contratual de ${formatCurrency(sourceBudget[0].valorTotal - scheduledTotal)}.`
       });
     }
-    return parcela[0];
+    const parcela = await db.transaction(async (tx) => {
+      const [created] = await tx.insert(schema.parcelas).values({
+        id: crypto.randomUUID(),
+        orcamentoId: data.orcamentoId,
+        valor: data.valor,
+        dataVencimento: data.dataVencimento,
+        dataPagamento: null,
+        statusPagamento: 'Pendente',
+        valorPago: 0,
+        tipoValor: 'recebivel_previsto'
+      }).returning();
+      let settled = created;
+      if (data.statusPagamento === 'Pago') {
+        const receiptData = calculateReceiptCash({ valorPrincipal: data.valor });
+        const [receipt] = await tx.insert(schema.recebimentos).values({
+          id: crypto.randomUUID(),
+          parcelaId: created.id,
+          ...receiptData,
+          dataRecebimento: data.dataPagamento || todayKey(),
+          observacoes: 'Recebimento registrado com a criação da conta a receber.'
+        }).returning();
+        await tx.insert(schema.financeiroEventos).values({
+          id: crypto.randomUUID(),
+          tipo: 'recebimento',
+          entidade: 'recebimento',
+          entidadeId: receipt.id,
+          clienteId: sourceBudget[0].clienteId,
+          projetoId: sourceBudget[0].projetoId,
+          valor: receipt.valorRecebido,
+          dataEvento: receipt.dataRecebimento,
+          motivo: 'Recebimento registrado com a criação da conta a receber'
+        });
+        settled = await syncInstallmentSettlement(tx, created.id);
+      }
+      const [orcamento] = await tx.select().from(schema.orcamentos)
+        .where(eq(schema.orcamentos.id, created.orcamentoId)).limit(1);
+      await AuditLogService.log('INSERT', 'Parcela', null, settled, tx);
+      if (orcamento) {
+        await JornadaService.logClienteEvento({
+          clienteId: orcamento.clienteId,
+          projetoId: orcamento.projetoId || null,
+          orcamentoId: orcamento.id,
+          tipo: 'Financeiro',
+          titulo: `Parcela registrada: ${formatCurrency(settled.valor)}`,
+          categoria: 'Fatura',
+          descricao: `Vencimento: ${settled.dataVencimento}\nStatus: ${settled.statusPagamento}`
+        }, tx);
+      }
+      return settled;
+    });
+    return parcela;
   });
 
   server.patch('/parcelas/:id', async (request, reply) => {
@@ -496,41 +588,250 @@ export async function financeiroRoutes(server: FastifyInstance) {
     if (parcelaAnterior[0].canceladaEm) {
       return reply.status(409).send({ error: 'Uma parcela cancelada não pode ser liquidada ou reaberta.' });
     }
+    if (data.statusPagamento === 'Pendente' && parcelaAnterior[0].valorPago > 0) {
+      return reply.status(409).send({
+        error: 'Uma parcela com recebimento não pode ser reaberta diretamente. Estorne os recebimentos vinculados.'
+      });
+    }
 
-    const parcela = await db.update(schema.parcelas).set({
-      statusPagamento: data.statusPagamento,
-      valorPago: data.statusPagamento === 'Pago'
-        ? parcelaAnterior[0].valor
-        : data.statusPagamento
-          ? 0
-          : undefined,
-      dataPagamento: data.dataPagamento !== undefined
-        ? data.dataPagamento
-        : data.statusPagamento === 'Pago'
-          ? parcelaAnterior[0].dataPagamento || todayKey()
-          : data.statusPagamento
-            ? null
-            : undefined,
-      updatedAt: new Date().toISOString()
-    }).where(eq(schema.parcelas.id, id)).returning();
+    const parcela = await db.transaction(async (tx) => {
+      if (data.statusPagamento === 'Pago') {
+        const saldo = parcelaAnterior[0].valor - parcelaAnterior[0].valorPago;
+        if (saldo > 0) {
+          const receiptData = calculateReceiptCash({ valorPrincipal: saldo });
+          const [orcamentoOrigem] = await tx.select().from(schema.orcamentos)
+            .where(eq(schema.orcamentos.id, parcelaAnterior[0].orcamentoId)).limit(1);
+          const [receipt] = await tx.insert(schema.recebimentos).values({
+            id: crypto.randomUUID(),
+            parcelaId: id,
+            ...receiptData,
+            dataRecebimento: data.dataPagamento || todayKey(),
+            meioPagamento: parcelaAnterior[0].meioPagamento || null,
+            observacoes: 'Liquidação integral registrada pela ação rápida.'
+          }).returning();
+          await tx.insert(schema.financeiroEventos).values({
+            id: crypto.randomUUID(),
+            tipo: 'recebimento',
+            entidade: 'recebimento',
+            entidadeId: receipt.id,
+            clienteId: orcamentoOrigem?.clienteId || null,
+            projetoId: orcamentoOrigem?.projetoId || null,
+            valor: receipt.valorRecebido,
+            dataEvento: receipt.dataRecebimento,
+            motivo: 'Liquidação integral da conta a receber'
+          });
+          await AuditLogService.log('INSERT', 'Recebimento', null, receipt, tx);
+        }
+      }
+      const updated = data.statusPagamento === 'Pago'
+        ? await syncInstallmentSettlement(tx, id)
+        : (await tx.update(schema.parcelas).set({
+          dataPagamento: data.dataPagamento !== undefined ? data.dataPagamento : undefined,
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.parcelas.id, id)).returning())[0];
+      await AuditLogService.log('UPDATE', 'Parcela', parcelaAnterior[0], updated, tx);
+      if (data.statusPagamento !== parcelaAnterior[0].statusPagamento) {
+        const [orcamento] = await tx.select().from(schema.orcamentos)
+          .where(eq(schema.orcamentos.id, updated.orcamentoId)).limit(1);
+        if (orcamento) {
+          await JornadaService.logClienteEvento({
+            clienteId: orcamento.clienteId,
+            projetoId: orcamento.projetoId || null,
+            orcamentoId: orcamento.id,
+            tipo: 'Financeiro',
+            titulo: data.statusPagamento === 'Pago'
+              ? `Pagamento confirmado: ${formatCurrency(updated.valorPago)}`
+              : `Status da fatura atualizado: ${data.statusPagamento}`,
+            categoria: 'Fatura',
+            descricao: `Parcela com vencimento em ${updated.dataVencimento}\nStatus: ${parcelaAnterior[0].statusPagamento} -> ${updated.statusPagamento}`
+          }, tx);
+        }
+      }
+      return updated;
+    });
+    return parcela;
+  });
 
-    if (parcela.length && parcelaAnterior.length && data.statusPagamento !== parcelaAnterior[0].statusPagamento) {
-      const orcamento = await db.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, parcela[0].orcamentoId)).limit(1);
-      if (orcamento.length) {
-        await JornadaService.logClienteEvento({
-          clienteId: orcamento[0].clienteId,
-          projetoId: orcamento[0].projetoId || null,
-          orcamentoId: orcamento[0].id,
-          tipo: 'Financeiro',
-          titulo: data.statusPagamento === 'Pago'
-            ? `Pagamento confirmado: ${formatCurrency(parcela[0].valor)}`
-            : `Status da fatura atualizado: ${data.statusPagamento}`,
-          categoria: 'Fatura',
-          descricao: `Parcela com vencimento em ${parcela[0].dataVencimento}\nStatus: ${parcelaAnterior[0].statusPagamento} -> ${parcela[0].statusPagamento}`
-        });
+  server.get('/parcelas/:id/recebimentos', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parcela = await db.select({ id: schema.parcelas.id }).from(schema.parcelas)
+      .where(and(eq(schema.parcelas.id, id), isNull(schema.parcelas.deletedAt))).limit(1);
+    if (!parcela.length) return reply.status(404).send({ error: 'Parcela não encontrada' });
+    return db.select().from(schema.recebimentos)
+      .where(and(eq(schema.recebimentos.parcelaId, id), isNull(schema.recebimentos.deletedAt)))
+      .orderBy(desc(schema.recebimentos.dataRecebimento), desc(schema.recebimentos.createdAt));
+  });
+
+  zServer.get('/comprovantes', {
+    schema: {
+      querystring: z.object({
+        clienteId: z.string().uuid(),
+        projetoId: z.string().uuid().optional()
+      })
+    }
+  }, async (request) => {
+    const { clienteId, projetoId } = request.query;
+    return db.select({
+      id: schema.documentos.id,
+      nome: schema.documentos.nome,
+      extensao: schema.documentos.extensao,
+      projetoId: schema.documentos.projetoId,
+      tamanhoBytes: schema.documentos.tamanhoBytes,
+      updatedAt: schema.documentos.updatedAt
+    }).from(schema.documentos).where(and(
+      eq(schema.documentos.clienteId, clienteId),
+      isNull(schema.documentos.deletedAt),
+      projetoId
+        ? sql`${schema.documentos.projetoId} is null OR ${schema.documentos.projetoId} = ${projetoId}`
+        : isNull(schema.documentos.projetoId)
+    )).orderBy(desc(schema.documentos.updatedAt));
+  });
+
+  server.post('/parcelas/:id/recebimentos', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const bodySchema = z.object({
+      valorPrincipal: centsSchema.refine((value) => value > 0, 'Informe um valor principal maior que zero.'),
+      juros: centsSchema.optional().default(0),
+      multa: centsSchema.optional().default(0),
+      desconto: centsSchema.optional().default(0),
+      taxas: centsSchema.optional().default(0),
+      valorRecebido: centsSchema.optional(),
+      dataRecebimento: isoDateSchema,
+      meioPagamento: z.string().trim().max(100).nullable().optional(),
+      observacoes: z.string().trim().max(2000).nullable().optional(),
+      comprovanteDocumentoId: z.string().uuid().nullable().optional()
+    });
+    const parsed = bodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    }
+    const input = parsed.data;
+    let receiptData: ReturnType<typeof calculateReceiptCash>;
+    try {
+      receiptData = calculateReceiptCash(input);
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Recebimento inválido' });
+    }
+    if (input.valorRecebido !== undefined && input.valorRecebido !== receiptData.valorRecebido) {
+      return reply.status(400).send({
+        error: 'O valor recebido deve corresponder ao principal, juros, multa, desconto e taxas informados.'
+      });
+    }
+
+    const [source] = await db.select({
+      parcela: schema.parcelas,
+      clienteId: schema.orcamentos.clienteId,
+      projetoId: schema.orcamentos.projetoId
+    }).from(schema.parcelas)
+      .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+      .where(and(
+        eq(schema.parcelas.id, id),
+        isNull(schema.parcelas.deletedAt),
+        isNull(schema.parcelas.canceladaEm),
+        isNull(schema.orcamentos.deletedAt)
+      )).limit(1);
+    if (!source) return reply.status(404).send({ error: 'Conta a receber não encontrada' });
+
+    if (input.comprovanteDocumentoId) {
+      const [document] = await db.select().from(schema.documentos).where(and(
+        eq(schema.documentos.id, input.comprovanteDocumentoId),
+        isNull(schema.documentos.deletedAt)
+      )).limit(1);
+      if (!document) return reply.status(400).send({ error: 'Comprovante não encontrado' });
+      if (document.clienteId !== source.clienteId) {
+        return reply.status(400).send({ error: 'O comprovante não pertence ao cliente da conta a receber.' });
+      }
+      if (document.projetoId && source.projetoId && document.projetoId !== source.projetoId) {
+        return reply.status(400).send({ error: 'O comprovante pertence a outro projeto.' });
       }
     }
-    return parcela[0];
+
+    const activeReceipts = await db.select().from(schema.recebimentos).where(and(
+      eq(schema.recebimentos.parcelaId, id),
+      isNull(schema.recebimentos.deletedAt),
+      isNull(schema.recebimentos.estornadoEm)
+    ));
+    const principalPaid = activeReceipts.reduce((sum, item) => sum + item.valorPrincipal, 0);
+    if (principalPaid + input.valorPrincipal > source.parcela.valor) {
+      return reply.status(409).send({
+        error: `O recebimento ultrapassa o saldo principal de ${formatCurrency(source.parcela.valor - principalPaid)}.`
+      });
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [receipt] = await tx.insert(schema.recebimentos).values({
+        id: crypto.randomUUID(),
+        parcelaId: id,
+        ...receiptData,
+        dataRecebimento: input.dataRecebimento,
+        meioPagamento: input.meioPagamento || null,
+        observacoes: input.observacoes || null,
+        comprovanteDocumentoId: input.comprovanteDocumentoId || null
+      }).returning();
+      await tx.insert(schema.financeiroEventos).values({
+        id: crypto.randomUUID(),
+        tipo: 'recebimento',
+        entidade: 'recebimento',
+        entidadeId: receipt.id,
+        clienteId: source.clienteId,
+        projetoId: source.projetoId,
+        valor: receipt.valorRecebido,
+        dataEvento: receipt.dataRecebimento,
+        motivo: 'Recebimento registrado'
+      });
+      const installment = await syncInstallmentSettlement(tx, id);
+      await AuditLogService.log('INSERT', 'Recebimento', null, receipt, tx);
+      return { recebimento: receipt, parcela: installment };
+    });
+    return reply.status(201).send(result);
+  });
+
+  server.post('/recebimentos/:id/estorno', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      motivo: z.string().trim().min(5, 'Informe o motivo do estorno.').max(1000),
+      dataEstorno: isoDateSchema.optional()
+    }).safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    }
+    const [receipt] = await db.select().from(schema.recebimentos).where(and(
+      eq(schema.recebimentos.id, id),
+      isNull(schema.recebimentos.deletedAt)
+    )).limit(1);
+    if (!receipt) return reply.status(404).send({ error: 'Recebimento não encontrado' });
+    if (receipt.estornadoEm) return reply.status(409).send({ error: 'Este recebimento já foi estornado.' });
+
+    const [source] = await db.select({
+      clienteId: schema.orcamentos.clienteId,
+      projetoId: schema.orcamentos.projetoId
+    }).from(schema.parcelas)
+      .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+      .where(eq(schema.parcelas.id, receipt.parcelaId)).limit(1);
+    const estornadoEm = parsed.data.dataEstorno || todayKey();
+    const result = await db.transaction(async (tx) => {
+      const [updatedReceipt] = await tx.update(schema.recebimentos).set({
+        estornadoEm,
+        motivoEstorno: parsed.data.motivo,
+        updatedAt: new Date().toISOString()
+      }).where(eq(schema.recebimentos.id, id)).returning();
+      await tx.insert(schema.financeiroEventos).values({
+        id: crypto.randomUUID(),
+        tipo: 'estorno_recebimento',
+        entidade: 'recebimento',
+        entidadeId: id,
+        clienteId: source?.clienteId || null,
+        projetoId: source?.projetoId || null,
+        valor: -receipt.valorRecebido,
+        dataEvento: estornadoEm,
+        motivo: parsed.data.motivo,
+        metadataJson: JSON.stringify({ recebimentoOriginalId: id })
+      });
+      const installment = await syncInstallmentSettlement(tx, receipt.parcelaId);
+      await AuditLogService.log('UPDATE', 'Recebimento', receipt, updatedReceipt, tx);
+      return { recebimento: updatedReceipt, parcela: installment };
+    });
+    return result;
   });
 
   // Despesas
@@ -542,6 +843,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         clienteNome: schema.clientes.nome,
         projetoId: schema.despesas.projetoId,
         projetoNome: schema.projetos.nome,
+        viagemId: schema.despesas.viagemId,
         descricao: schema.despesas.descricao,
         fornecedor: schema.despesas.fornecedor,
         numeroDocumento: schema.despesas.numeroDocumento,
@@ -550,6 +852,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         dataCompetencia: schema.despesas.dataCompetencia,
         dataPagamento: schema.despesas.dataPagamento,
         categoria: schema.despesas.categoria,
+        categoriaCodigo: schema.despesas.categoriaCodigo,
         tipoCusto: schema.despesas.tipoCusto,
         centroCusto: schema.despesas.centroCusto,
         reembolsavel: schema.despesas.reembolsavel,
@@ -557,12 +860,17 @@ export async function financeiroRoutes(server: FastifyInstance) {
         observacoes: schema.despesas.observacoes,
         status: schema.despesas.status,
         formaPagamento: schema.despesas.formaPagamento,
+        canceladaEm: schema.despesas.canceladaEm,
+        motivoCancelamento: schema.despesas.motivoCancelamento,
+        estornadaEm: schema.despesas.estornadaEm,
+        motivoEstorno: schema.despesas.motivoEstorno,
         createdAt: schema.despesas.createdAt,
         updatedAt: schema.despesas.updatedAt
       })
       .from(schema.despesas)
       .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
-      .leftJoin(schema.clientes, sql`${schema.clientes.id} = coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId})`);
+      .leftJoin(schema.clientes, sql`${schema.clientes.id} = coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId})`)
+      .where(isNull(schema.despesas.deletedAt));
     return data;
   });
 
@@ -570,6 +878,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const bodySchema = z.object({
       clienteId: z.string().nullable().optional(),
       projetoId: z.string().nullable().optional(),
+      viagemId: z.string().uuid().nullable().optional(),
       descricao: z.string().min(1, 'Descrição é obrigatória'),
       fornecedor: z.string().nullable().optional(),
       numeroDocumento: z.string().nullable().optional(),
@@ -578,10 +887,12 @@ export async function financeiroRoutes(server: FastifyInstance) {
       dataCompetencia: z.string().nullable().optional(),
       dataPagamento: z.string().nullable().optional(),
       categoria: z.string().min(1, 'Categoria é obrigatória'),
+      categoriaCodigo: z.string().trim().max(80).nullable().optional(),
       tipoCusto: z.string().nullable().optional(),
       centroCusto: z.string().nullable().optional(),
       reembolsavel: z.boolean().optional(),
       comprovanteDocumentoId: z.string().nullable().optional(),
+      documentoIds: z.array(z.string().uuid()).max(20).optional(),
       observacoes: z.string().nullable().optional(),
       status: z.string().optional(),
       formaPagamento: z.string().nullable().optional()
@@ -607,46 +918,93 @@ export async function financeiroRoutes(server: FastifyInstance) {
       clienteId = clienteId || projeto[0].clienteId;
     }
 
-    const despesa = await db.insert(schema.despesas).values({
-      id: crypto.randomUUID(),
-      clienteId,
-      projetoId,
-      descricao: data.descricao,
-      fornecedor: data.fornecedor || null,
-      numeroDocumento: data.numeroDocumento || null,
-      valor: data.valor,
-      data: data.data,
-      dataCompetencia: data.dataCompetencia || null,
-      dataPagamento: data.dataPagamento || (data.status === 'Pago' ? todayKey() : null),
-      categoria: data.categoria,
-      tipoCusto: data.tipoCusto || null,
-      centroCusto: data.centroCusto || null,
-      reembolsavel: data.reembolsavel !== undefined ? data.reembolsavel : false,
-      comprovanteDocumentoId: data.comprovanteDocumentoId || null,
-      observacoes: data.observacoes || null,
-      status: data.status || 'Pendente',
-      formaPagamento: data.formaPagamento || null
-    }).returning();
-
-    await AuditLogService.log('INSERT', 'Despesa', null, despesa[0]);
-    if (despesa[0].clienteId) {
-      await JornadaService.logClienteEvento({
-        clienteId: despesa[0].clienteId,
-        projetoId: despesa[0].projetoId || null,
-        tipo: 'Financeiro',
-        titulo: `Despesa registrada: ${despesa[0].descricao}`,
-        categoria: 'Despesa',
-        descricao: [
-          `Valor: ${formatCurrency(despesa[0].valor)}`,
-          `Categoria: ${despesa[0].categoria}`,
-          despesa[0].tipoCusto ? `Tipo de custo: ${despesa[0].tipoCusto}` : null,
-          despesa[0].centroCusto ? `Centro de custo: ${despesa[0].centroCusto}` : null,
-          `Vencimento: ${despesa[0].data}`,
-          `Status: ${despesa[0].status || 'Pendente'}`
-        ].filter(Boolean).join('\n')
-      });
+    if (data.viagemId) {
+      const [viagem] = await db.select().from(schema.viagens).where(and(
+        eq(schema.viagens.id, data.viagemId),
+        isNull(schema.viagens.deletedAt)
+      )).limit(1);
+      if (!viagem) return reply.status(400).send({ error: 'Viagem vinculada não encontrada.' });
+      if (projetoId && viagem.projetoId && viagem.projetoId !== projetoId) {
+        return reply.status(400).send({ error: 'A viagem pertence a outro projeto.' });
+      }
+      if (clienteId && viagem.clienteId && viagem.clienteId !== clienteId) {
+        return reply.status(400).send({ error: 'A viagem pertence a outro cliente.' });
+      }
+      clienteId = clienteId || viagem.clienteId;
     }
-    return despesa[0];
+
+    const documentIds = Array.from(new Set([
+      ...(data.documentoIds || []),
+      ...(data.comprovanteDocumentoId ? [data.comprovanteDocumentoId] : [])
+    ]));
+    const validatedDocuments: Array<typeof schema.documentos.$inferSelect> = [];
+    for (const documentId of documentIds) {
+      const [document] = await db.select().from(schema.documentos).where(and(
+        eq(schema.documentos.id, documentId),
+        isNull(schema.documentos.deletedAt)
+      )).limit(1);
+      if (!document) return reply.status(400).send({ error: 'Um dos comprovantes não foi encontrado.' });
+      if (clienteId && document.clienteId !== clienteId) {
+        return reply.status(400).send({ error: 'O comprovante não pertence ao cliente da despesa.' });
+      }
+      if (projetoId && document.projetoId && document.projetoId !== projetoId) {
+        return reply.status(400).send({ error: 'O comprovante pertence a outro projeto.' });
+      }
+      validatedDocuments.push(document);
+    }
+
+    const despesa = await db.transaction(async (tx) => {
+      const created = await tx.insert(schema.despesas).values({
+        id: crypto.randomUUID(),
+        clienteId,
+        projetoId,
+        viagemId: data.viagemId || null,
+        descricao: data.descricao,
+        fornecedor: data.fornecedor || null,
+        numeroDocumento: data.numeroDocumento || null,
+        valor: data.valor,
+        data: data.data,
+        dataCompetencia: data.dataCompetencia || null,
+        dataPagamento: data.dataPagamento || (data.status === 'Pago' ? todayKey() : null),
+        categoria: data.categoria,
+        categoriaCodigo: data.categoriaCodigo || normalizeExpenseCategoryCode(data.categoria),
+        tipoCusto: data.tipoCusto || null,
+        centroCusto: data.centroCusto || null,
+        reembolsavel: data.reembolsavel !== undefined ? data.reembolsavel : false,
+        comprovanteDocumentoId: data.comprovanteDocumentoId || null,
+        observacoes: data.observacoes || null,
+        status: data.status || 'Pendente',
+        formaPagamento: data.formaPagamento || null
+      }).returning();
+      for (const document of validatedDocuments) {
+        await tx.insert(schema.despesaDocumentos).values({
+          id: crypto.randomUUID(),
+          despesaId: created[0].id,
+          documentoId: document.id,
+          tipo: 'comprovante'
+        });
+      }
+      await AuditLogService.log('INSERT', 'Despesa', null, created[0], tx);
+      if (created[0].clienteId) {
+        await JornadaService.logClienteEvento({
+          clienteId: created[0].clienteId,
+          projetoId: created[0].projetoId || null,
+          tipo: 'Financeiro',
+          titulo: `Despesa registrada: ${created[0].descricao}`,
+          categoria: 'Despesa',
+          descricao: [
+            `Valor: ${formatCurrency(created[0].valor)}`,
+            `Categoria: ${created[0].categoria}`,
+            created[0].tipoCusto ? `Tipo de custo: ${created[0].tipoCusto}` : null,
+            created[0].centroCusto ? `Centro de custo: ${created[0].centroCusto}` : null,
+            `Vencimento: ${created[0].data}`,
+            `Status: ${created[0].status || 'Pendente'}`
+          ].filter(Boolean).join('\n')
+        }, tx);
+      }
+      return created[0];
+    });
+    return despesa;
   });
 
   server.patch('/despesas/:id', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -655,6 +1013,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const bodySchema = z.object({
       clienteId: z.string().nullable().optional(),
       projetoId: z.string().nullable().optional(),
+      viagemId: z.string().uuid().nullable().optional(),
       descricao: z.string().min(1, 'Descrição não pode ser vazia').optional(),
       fornecedor: z.string().nullable().optional(),
       numeroDocumento: z.string().nullable().optional(),
@@ -663,6 +1022,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
       dataCompetencia: z.string().nullable().optional(),
       dataPagamento: z.string().nullable().optional(),
       categoria: z.string().min(1, 'Categoria não pode ser vazia').optional(),
+      categoriaCodigo: z.string().trim().max(80).nullable().optional(),
       tipoCusto: z.string().nullable().optional(),
       centroCusto: z.string().nullable().optional(),
       reembolsavel: z.boolean().optional(),
@@ -683,6 +1043,18 @@ export async function financeiroRoutes(server: FastifyInstance) {
       if (!oldDespesa.length) {
         return reply.status(404).send({ error: 'Despesa não encontrada' });
       }
+      if (oldDespesa[0].deletedAt || oldDespesa[0].canceladaEm || oldDespesa[0].estornadaEm) {
+        return reply.status(409).send({ error: 'Uma despesa cancelada, estornada ou excluída não pode ser editada.' });
+      }
+      if ((oldDespesa[0].status || '').toLowerCase() === 'pago' && (
+        data.valor !== undefined
+        || (data.status !== undefined && data.status !== 'Pago')
+        || data.dataPagamento !== undefined
+      )) {
+        return reply.status(409).send({
+          error: 'Valores e baixa de uma despesa paga não podem ser reescritos. Registre um estorno.'
+        });
+      }
 
       const nextProjetoId = data.projetoId !== undefined ? (data.projetoId || null) : oldDespesa[0].projetoId;
       let nextClienteId = data.clienteId !== undefined ? (data.clienteId || null) : oldDespesa[0].clienteId;
@@ -697,10 +1069,36 @@ export async function financeiroRoutes(server: FastifyInstance) {
         }
         nextClienteId = nextClienteId || projeto[0].clienteId;
       }
+      if (data.viagemId) {
+        const [viagem] = await db.select().from(schema.viagens).where(and(
+          eq(schema.viagens.id, data.viagemId),
+          isNull(schema.viagens.deletedAt)
+        )).limit(1);
+        if (!viagem) return reply.status(400).send({ error: 'Viagem vinculada não encontrada.' });
+        if (nextProjetoId && viagem.projetoId && viagem.projetoId !== nextProjetoId) {
+          return reply.status(400).send({ error: 'A viagem pertence a outro projeto.' });
+        }
+        if (nextClienteId && viagem.clienteId && viagem.clienteId !== nextClienteId) {
+          return reply.status(400).send({ error: 'A viagem pertence a outro cliente.' });
+        }
+        nextClienteId = nextClienteId || viagem.clienteId;
+      }
+      if (data.comprovanteDocumentoId) {
+        const [document] = await db.select().from(schema.documentos).where(and(
+          eq(schema.documentos.id, data.comprovanteDocumentoId),
+          isNull(schema.documentos.deletedAt)
+        )).limit(1);
+        if (!document) return reply.status(400).send({ error: 'Comprovante não encontrado.' });
+        if (nextClienteId && document.clienteId !== nextClienteId) {
+          return reply.status(400).send({ error: 'O comprovante não pertence ao cliente da despesa.' });
+        }
+      }
 
-      const despesaAtualizada = await db.update(schema.despesas).set({
-        clienteId: data.clienteId !== undefined || data.projetoId !== undefined ? nextClienteId : undefined,
+      const despesaAtualizada = await db.transaction(async (tx) => {
+        const updated = await tx.update(schema.despesas).set({
+        clienteId: data.clienteId !== undefined || data.projetoId !== undefined || data.viagemId !== undefined ? nextClienteId : undefined,
         projetoId: data.projetoId !== undefined ? (data.projetoId || null) : undefined,
+        viagemId: data.viagemId !== undefined ? (data.viagemId || null) : undefined,
         descricao: data.descricao !== undefined ? data.descricao : undefined,
         fornecedor: data.fornecedor !== undefined ? data.fornecedor : undefined,
         numeroDocumento: data.numeroDocumento !== undefined ? data.numeroDocumento : undefined,
@@ -715,6 +1113,11 @@ export async function financeiroRoutes(server: FastifyInstance) {
               ? null
               : undefined,
         categoria: data.categoria !== undefined ? data.categoria : undefined,
+        categoriaCodigo: data.categoriaCodigo !== undefined
+          ? (data.categoriaCodigo || normalizeExpenseCategoryCode(data.categoria || oldDespesa[0].categoria))
+          : data.categoria !== undefined
+            ? normalizeExpenseCategoryCode(data.categoria)
+            : undefined,
         tipoCusto: data.tipoCusto !== undefined ? data.tipoCusto : undefined,
         centroCusto: data.centroCusto !== undefined ? data.centroCusto : undefined,
         reembolsavel: data.reembolsavel !== undefined ? data.reembolsavel : undefined,
@@ -723,9 +1126,25 @@ export async function financeiroRoutes(server: FastifyInstance) {
         status: data.status !== undefined ? data.status : undefined,
         formaPagamento: data.formaPagamento !== undefined ? data.formaPagamento : undefined,
         updatedAt: new Date().toISOString()
-      }).where(eq(schema.despesas.id, id)).returning();
+        }).where(eq(schema.despesas.id, id)).returning();
 
-      await AuditLogService.log('UPDATE', 'Despesa', oldDespesa[0], despesaAtualizada[0]);
+        if (data.comprovanteDocumentoId) {
+          const existingLink = await tx.select({ id: schema.despesaDocumentos.id })
+            .from(schema.despesaDocumentos)
+            .where(and(
+              eq(schema.despesaDocumentos.despesaId, id),
+              eq(schema.despesaDocumentos.documentoId, data.comprovanteDocumentoId)
+            )).limit(1);
+          if (!existingLink.length) {
+            await tx.insert(schema.despesaDocumentos).values({
+              id: crypto.randomUUID(),
+              despesaId: id,
+              documentoId: data.comprovanteDocumentoId,
+              tipo: 'comprovante'
+            });
+          }
+        }
+        await AuditLogService.log('UPDATE', 'Despesa', oldDespesa[0], updated[0], tx);
 
       const changes: string[] = [];
       if (data.status !== undefined && data.status !== oldDespesa[0].status) {
@@ -738,22 +1157,161 @@ export async function financeiroRoutes(server: FastifyInstance) {
         changes.push(`Data de pagamento: ${oldDespesa[0].dataPagamento || 'nao informada'} -> ${data.dataPagamento || 'nao informada'}`);
       }
 
-      if (changes.length && despesaAtualizada[0].clienteId) {
-        await JornadaService.logClienteEvento({
-          clienteId: despesaAtualizada[0].clienteId,
-          projetoId: despesaAtualizada[0].projetoId || null,
+        if (changes.length && updated[0].clienteId) {
+          await JornadaService.logClienteEvento({
+          clienteId: updated[0].clienteId,
+          projetoId: updated[0].projetoId || null,
           tipo: 'Financeiro',
-          titulo: `Despesa atualizada: ${despesaAtualizada[0].descricao}`,
+          titulo: `Despesa atualizada: ${updated[0].descricao}`,
           categoria: 'Despesa',
           descricao: changes.join('\n')
-        });
-      }
+          }, tx);
+        }
+        return updated[0];
+      });
 
-      return reply.send(despesaAtualizada[0]);
+      return reply.send(despesaAtualizada);
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao atualizar despesa' });
     }
+  });
+
+  server.get('/despesas/:id/documentos', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    return db.select({
+      id: schema.documentos.id,
+      nome: schema.documentos.nome,
+      extensao: schema.documentos.extensao,
+      status: schema.documentos.status,
+      deletedAt: schema.documentos.deletedAt,
+      tipo: schema.despesaDocumentos.tipo,
+      vinculoId: schema.despesaDocumentos.id
+    }).from(schema.despesaDocumentos)
+      .innerJoin(schema.documentos, eq(schema.despesaDocumentos.documentoId, schema.documentos.id))
+      .where(eq(schema.despesaDocumentos.despesaId, id));
+  });
+
+  server.post('/despesas/:id/documentos', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      documentoId: z.string().uuid(),
+      tipo: z.string().trim().max(80).optional().default('comprovante')
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const [expense] = await db.select().from(schema.despesas).where(and(
+      eq(schema.despesas.id, id),
+      isNull(schema.despesas.deletedAt)
+    )).limit(1);
+    if (!expense) return reply.status(404).send({ error: 'Despesa não encontrada' });
+    const [document] = await db.select().from(schema.documentos).where(and(
+      eq(schema.documentos.id, parsed.data.documentoId),
+      isNull(schema.documentos.deletedAt)
+    )).limit(1);
+    if (!document) return reply.status(404).send({ error: 'Documento não encontrado' });
+    if (expense.clienteId && document.clienteId !== expense.clienteId) {
+      return reply.status(400).send({ error: 'O documento não pertence ao cliente da despesa.' });
+    }
+    if (expense.projetoId && document.projetoId && document.projetoId !== expense.projetoId) {
+      return reply.status(400).send({ error: 'O documento pertence a outro projeto.' });
+    }
+    const existing = await db.select().from(schema.despesaDocumentos).where(and(
+      eq(schema.despesaDocumentos.despesaId, id),
+      eq(schema.despesaDocumentos.documentoId, document.id)
+    )).limit(1);
+    if (existing.length) return existing[0];
+    const [created] = await db.insert(schema.despesaDocumentos).values({
+      id: crypto.randomUUID(),
+      despesaId: id,
+      documentoId: document.id,
+      tipo: parsed.data.tipo
+    }).returning();
+    return reply.status(201).send(created);
+  });
+
+  server.post('/despesas/:id/cancelamento', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      motivo: z.string().trim().min(5, 'Informe o motivo do cancelamento.').max(1000),
+      dataCancelamento: isoDateSchema.optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const [expense] = await db.select().from(schema.despesas).where(and(
+      eq(schema.despesas.id, id),
+      isNull(schema.despesas.deletedAt)
+    )).limit(1);
+    if (!expense) return reply.status(404).send({ error: 'Despesa não encontrada' });
+    if ((expense.status || '').toLowerCase() === 'pago' || expense.dataPagamento) {
+      return reply.status(409).send({ error: 'Uma despesa paga deve ser estornada, não cancelada.' });
+    }
+    if (expense.canceladaEm || expense.estornadaEm) {
+      return reply.status(409).send({ error: 'A despesa já foi cancelada ou estornada.' });
+    }
+    const canceladaEm = parsed.data.dataCancelamento || todayKey();
+    const [updated] = await db.transaction(async (tx) => {
+      const result = await tx.update(schema.despesas).set({
+        status: 'Cancelado',
+        canceladaEm,
+        motivoCancelamento: parsed.data.motivo,
+        updatedAt: new Date().toISOString()
+      }).where(eq(schema.despesas.id, id)).returning();
+      await tx.insert(schema.financeiroEventos).values({
+        id: crypto.randomUUID(),
+        tipo: 'cancelamento_despesa',
+        entidade: 'despesa',
+        entidadeId: id,
+        clienteId: expense.clienteId,
+        projetoId: expense.projetoId,
+        valor: 0,
+        dataEvento: canceladaEm,
+        motivo: parsed.data.motivo
+      });
+      await AuditLogService.log('UPDATE', 'Despesa', expense, result[0], tx);
+      return result;
+    });
+    return updated;
+  });
+
+  server.post('/despesas/:id/estorno', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      motivo: z.string().trim().min(5, 'Informe o motivo do estorno.').max(1000),
+      dataEstorno: isoDateSchema.optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const [expense] = await db.select().from(schema.despesas).where(and(
+      eq(schema.despesas.id, id),
+      isNull(schema.despesas.deletedAt)
+    )).limit(1);
+    if (!expense) return reply.status(404).send({ error: 'Despesa não encontrada' });
+    if ((expense.status || '').toLowerCase() !== 'pago' || !expense.dataPagamento) {
+      return reply.status(409).send({ error: 'Somente uma despesa paga pode ser estornada.' });
+    }
+    if (expense.estornadaEm) return reply.status(409).send({ error: 'A despesa já foi estornada.' });
+    const estornadaEm = parsed.data.dataEstorno || todayKey();
+    const [updated] = await db.transaction(async (tx) => {
+      const result = await tx.update(schema.despesas).set({
+        status: 'Estornado',
+        estornadaEm,
+        motivoEstorno: parsed.data.motivo,
+        updatedAt: new Date().toISOString()
+      }).where(eq(schema.despesas.id, id)).returning();
+      await tx.insert(schema.financeiroEventos).values({
+        id: crypto.randomUUID(),
+        tipo: 'estorno_despesa',
+        entidade: 'despesa',
+        entidadeId: id,
+        clienteId: expense.clienteId,
+        projetoId: expense.projetoId,
+        valor: -expense.valor,
+        dataEvento: estornadaEm,
+        motivo: parsed.data.motivo,
+        metadataJson: JSON.stringify({ despesaOriginalId: id })
+      });
+      await AuditLogService.log('UPDATE', 'Despesa', expense, result[0], tx);
+      return result;
+    });
+    return updated;
   });
 
   // Excluir orçamento
@@ -812,27 +1370,35 @@ export async function financeiroRoutes(server: FastifyInstance) {
   server.delete('/despesas/:id', async (request: FastifyRequest, reply: FastifyReply) => {
     const { id } = request.params as IdParams;
     try {
+      const [oldDespesa] = await db.select().from(schema.despesas)
+        .where(and(eq(schema.despesas.id, id), isNull(schema.despesas.deletedAt))).limit(1);
+      if (!oldDespesa) return reply.status(204).send();
+      const status = (oldDespesa.status || 'Pendente').toLowerCase();
+      if (status === 'pago' || oldDespesa.dataPagamento || oldDespesa.canceladaEm || oldDespesa.estornadaEm) {
+        return reply.status(409).send({
+          error: 'Esta despesa possui histórico financeiro e não pode ser excluída. Use cancelamento ou estorno.'
+        });
+      }
       await db.transaction(async (tx) => {
-        const oldDespesa = await tx.select().from(schema.despesas).where(eq(schema.despesas.id, id)).limit(1);
-        if (!oldDespesa.length) return;
-
-        if (oldDespesa[0].clienteId) {
+        if (oldDespesa.clienteId) {
           await JornadaService.logClienteEvento({
-            clienteId: oldDespesa[0].clienteId,
-            projetoId: oldDespesa[0].projetoId || null,
+            clienteId: oldDespesa.clienteId,
+            projetoId: oldDespesa.projetoId || null,
             tipo: 'Financeiro',
-            titulo: `Despesa excluída: ${oldDespesa[0].descricao}`,
+            titulo: `Despesa excluída: ${oldDespesa.descricao}`,
             categoria: 'Despesa',
             descricao: [
-              `Valor: ${formatCurrency(oldDespesa[0].valor)}`,
-              `Categoria: ${oldDespesa[0].categoria}`,
-              `Status anterior: ${oldDespesa[0].status || 'Pendente'}`
+              `Valor: ${formatCurrency(oldDespesa.valor)}`,
+              `Categoria: ${oldDespesa.categoria}`,
+              `Status anterior: ${oldDespesa.status || 'Pendente'}`
             ].join('\n')
           }, tx);
         }
 
-        await tx.delete(schema.despesas).where(eq(schema.despesas.id, id));
-        await AuditLogService.log('DELETE', 'Despesa', oldDespesa[0], null, tx);
+        const deletedAt = new Date().toISOString();
+        await tx.update(schema.despesas).set({ deletedAt, updatedAt: deletedAt })
+          .where(eq(schema.despesas.id, id));
+        await AuditLogService.log('DELETE (SOFT)', 'Despesa', oldDespesa, null, tx);
       });
 
       return reply.status(204).send();
@@ -842,14 +1408,20 @@ export async function financeiroRoutes(server: FastifyInstance) {
     }
   });
 
-  // DRE Aggregation (Visão 360)
-  server.get('/dre', async (request, reply) => {
+  // Fluxo de caixa mensal gerencial. O endpoint /dre permanece apenas como alias legado.
+  const monthlyCashFlowHandler = async () => {
     const orcamentosData = await db.select().from(schema.orcamentos)
       .where(isNull(schema.orcamentos.deletedAt));
     const despesasData = await db.select().from(schema.despesas)
-      .where(isNull(schema.despesas.deletedAt));
+      .where(and(
+        isNull(schema.despesas.deletedAt),
+        isNull(schema.despesas.canceladaEm),
+        isNull(schema.despesas.estornadaEm)
+      ));
     const parcelasData = await db.select().from(schema.parcelas)
       .where(and(isNull(schema.parcelas.deletedAt), isNull(schema.parcelas.canceladaEm)));
+    const recebimentosData = await db.select().from(schema.recebimentos)
+      .where(and(isNull(schema.recebimentos.deletedAt), isNull(schema.recebimentos.estornadoEm)));
 
     const monthlyData: Record<string, { receitas: number, despesas: number }> = {};
 
@@ -868,8 +1440,16 @@ export async function financeiroRoutes(server: FastifyInstance) {
     // Aggregate Receitas (Orçamentos pagos/aprovados)
     const orcamentosComParcelas = new Set(parcelasData.map((parcela) => parcela.orcamentoId));
 
+    recebimentosData.forEach((recebimento) => {
+      const dateValue = recebimento.dataRecebimento;
+      const key = dateValue && dateValue.length >= 7 ? dateValue.substring(0, 7) : '';
+      if (key && monthlyData[key] !== undefined) {
+        monthlyData[key].receitas += recebimento.valorRecebido;
+      }
+    });
+    const parcelasComRecebimento = new Set(recebimentosData.map((item) => item.parcelaId));
     parcelasData.forEach((parcela) => {
-      if (parcela.statusPagamento !== 'Pago') return;
+      if (parcela.statusPagamento !== 'Pago' || parcelasComRecebimento.has(parcela.id)) return;
       const dateValue = parcela.dataPagamento || parcela.dataVencimento;
       const key = dateValue && dateValue.length >= 7 ? dateValue.substring(0, 7) : '';
       if (key && monthlyData[key] !== undefined) {
@@ -912,16 +1492,24 @@ export async function financeiroRoutes(server: FastifyInstance) {
     })).sort((a, b) => a.mes.localeCompare(b.mes));
 
     return result;
-  });
+  };
+  server.get('/resumo-mensal', monthlyCashFlowHandler);
+  server.get('/dre', monthlyCashFlowHandler);
 
   // Resumo Gerencial Avançado (KPIs, Contas a Pagar/Receber, Inadimplência, Margem por Cliente)
   server.get('/resumo-gerencial', async (request, reply) => {
     const orcamentosData = await db.select().from(schema.orcamentos)
       .where(isNull(schema.orcamentos.deletedAt));
     const despesasData = await db.select().from(schema.despesas)
-      .where(isNull(schema.despesas.deletedAt));
+      .where(and(
+        isNull(schema.despesas.deletedAt),
+        isNull(schema.despesas.canceladaEm),
+        isNull(schema.despesas.estornadaEm)
+      ));
     const parcelasData = await db.select().from(schema.parcelas)
       .where(and(isNull(schema.parcelas.deletedAt), isNull(schema.parcelas.canceladaEm)));
+    const recebimentosData = await db.select().from(schema.recebimentos)
+      .where(and(isNull(schema.recebimentos.deletedAt), isNull(schema.recebimentos.estornadoEm)));
     const clientesData = await db.select().from(schema.clientes)
       .where(isNull(schema.clientes.deletedAt));
     const clientesMap = new Map(clientesData.map(c => [c.id, c.nome]));
@@ -943,18 +1531,28 @@ export async function financeiroRoutes(server: FastifyInstance) {
       return clienteFinanceiroMap.get(clienteId)!;
     };
 
-    // Agregar Parcelas de Orçamentos
-    parcelasData.forEach(p => {
-      // Tentar resolver clienteId através do orçamento
-      const orc = orcamentosData.find(o => o.id === p.orcamentoId);
+    // Agregar caixa recebido por eventos de recebimento, inclusive pagamentos parciais.
+    recebimentosData.forEach(recebimento => {
+      const parcela = parcelasData.find(item => item.id === recebimento.parcelaId);
+      const orc = parcela ? orcamentosData.find(item => item.id === parcela.orcamentoId) : undefined;
       const clienteAgg = getClienteAgg(orc?.clienteId);
+      receitasPagas += recebimento.valorRecebido;
+      if (clienteAgg) clienteAgg.receitas += recebimento.valorRecebido;
+    });
+    const parcelasComRecebimento = new Set(recebimentosData.map((item) => item.parcelaId));
+    parcelasData.forEach((parcela) => {
+      if (parcela.statusPagamento !== 'Pago' || parcelasComRecebimento.has(parcela.id)) return;
+      const orc = orcamentosData.find(item => item.id === parcela.orcamentoId);
+      const clienteAgg = getClienteAgg(orc?.clienteId);
+      const legacyReceived = parcela.valorPago || parcela.valor;
+      receitasPagas += legacyReceived;
+      if (clienteAgg) clienteAgg.receitas += legacyReceived;
+    });
 
-      if (p.statusPagamento === 'Pago') {
-        const received = p.valorPago || p.valor;
-        receitasPagas += received;
-        if (clienteAgg) clienteAgg.receitas += received;
-      } else {
-        const outstanding = Math.max(0, p.valor - (p.valorPago || 0));
+    // Agregar saldos principais das contas a receber.
+    parcelasData.forEach(p => {
+      if (p.statusPagamento !== 'Pago') {
+        const outstanding = Math.max(0, p.valor - p.valorPago);
         contasAReceber += outstanding;
         const venc = p.dataVencimento || '';
         if (venc < hoje && venc !== '') {
@@ -1036,6 +1634,306 @@ export async function financeiroRoutes(server: FastifyInstance) {
         reembolsaveis
       },
       margemPorCliente
+    };
+  });
+
+  server.get('/viagens', async () => {
+    const [travelRows, expenseRows] = await Promise.all([
+      db.select({
+        viagem: schema.viagens,
+        clienteNome: schema.clientes.nome,
+        projetoNome: schema.projetos.nome
+      }).from(schema.viagens)
+        .leftJoin(schema.clientes, eq(schema.viagens.clienteId, schema.clientes.id))
+        .leftJoin(schema.projetos, eq(schema.viagens.projetoId, schema.projetos.id))
+        .where(isNull(schema.viagens.deletedAt))
+        .orderBy(desc(schema.viagens.dataInicio)),
+      db.select().from(schema.despesas).where(and(
+        isNull(schema.despesas.deletedAt),
+        isNull(schema.despesas.canceladaEm),
+        isNull(schema.despesas.estornadaEm)
+      ))
+    ]);
+    return travelRows.map(({ viagem, clienteNome, projetoNome }) => {
+      const related = expenseRows.filter((expense) => expense.viagemId === viagem.id);
+      const totalGasto = related.reduce((sum, expense) => sum + expense.valor, 0);
+      return {
+        ...viagem,
+        clienteNome,
+        projetoNome,
+        totalGasto,
+        saldoPrestacao: viagem.adiantamento - totalGasto,
+        despesasQuantidade: related.length
+      };
+    });
+  });
+
+  server.post('/viagens', async (request, reply) => {
+    const parsed = z.object({
+      clienteId: z.string().uuid().nullable().optional(),
+      projetoId: z.string().uuid().nullable().optional(),
+      finalidade: z.string().trim().min(1).max(300),
+      destino: z.string().trim().min(1).max(300),
+      dataInicio: isoDateSchema,
+      dataFim: isoDateSchema.nullable().optional(),
+      responsavel: z.string().trim().max(200).nullable().optional(),
+      adiantamento: centsSchema.optional().default(0),
+      quilometragem: z.number().min(0).max(1_000_000).optional().default(0),
+      valorReembolsavel: centsSchema.optional().default(0),
+      status: z.enum(['planejada', 'em_andamento', 'prestacao_pendente', 'encerrada', 'cancelada']).optional(),
+      observacoes: z.string().trim().max(3000).nullable().optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    let clienteId = parsed.data.clienteId || null;
+    if (parsed.data.dataFim && parsed.data.dataFim < parsed.data.dataInicio) {
+      return reply.status(400).send({ error: 'A data final não pode ser anterior à data inicial.' });
+    }
+    if (parsed.data.projetoId) {
+      const [project] = await db.select().from(schema.projetos).where(and(
+        eq(schema.projetos.id, parsed.data.projetoId),
+        isNull(schema.projetos.deletedAt)
+      )).limit(1);
+      if (!project) return reply.status(400).send({ error: 'Projeto não encontrado.' });
+      if (clienteId && clienteId !== project.clienteId) {
+        return reply.status(400).send({ error: 'O projeto não pertence ao cliente informado.' });
+      }
+      clienteId = project.clienteId;
+    }
+    const [created] = await db.transaction(async (tx) => {
+      const result = await tx.insert(schema.viagens).values({
+        id: crypto.randomUUID(),
+        ...parsed.data,
+        clienteId,
+        projetoId: parsed.data.projetoId || null,
+        dataFim: parsed.data.dataFim || null,
+        responsavel: parsed.data.responsavel || null,
+        status: parsed.data.status || 'planejada',
+        observacoes: parsed.data.observacoes || null
+      }).returning();
+      await AuditLogService.log('INSERT', 'Viagem', null, result[0], tx);
+      return result;
+    });
+    return reply.status(201).send(created);
+  });
+
+  server.patch('/viagens/:id', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      finalidade: z.string().trim().min(1).max(300).optional(),
+      destino: z.string().trim().min(1).max(300).optional(),
+      dataInicio: isoDateSchema.optional(),
+      dataFim: isoDateSchema.nullable().optional(),
+      responsavel: z.string().trim().max(200).nullable().optional(),
+      adiantamento: centsSchema.optional(),
+      quilometragem: z.number().min(0).max(1_000_000).optional(),
+      valorReembolsavel: centsSchema.optional(),
+      status: z.enum(['planejada', 'em_andamento', 'prestacao_pendente', 'encerrada', 'cancelada']).optional(),
+      observacoes: z.string().trim().max(3000).nullable().optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const [old] = await db.select().from(schema.viagens).where(and(
+      eq(schema.viagens.id, id),
+      isNull(schema.viagens.deletedAt)
+    )).limit(1);
+    if (!old) return reply.status(404).send({ error: 'Viagem não encontrada' });
+    const nextStart = parsed.data.dataInicio || old.dataInicio;
+    const nextEnd = parsed.data.dataFim !== undefined ? parsed.data.dataFim : old.dataFim;
+    if (nextEnd && nextEnd < nextStart) {
+      return reply.status(400).send({ error: 'A data final não pode ser anterior à data inicial.' });
+    }
+    const [updated] = await db.transaction(async (tx) => {
+      const result = await tx.update(schema.viagens).set({
+        ...parsed.data,
+        encerradaEm: parsed.data.status === 'encerrada' ? new Date().toISOString() : undefined,
+        updatedAt: new Date().toISOString()
+      }).where(eq(schema.viagens.id, id)).returning();
+      await AuditLogService.log('UPDATE', 'Viagem', old, result[0], tx);
+      return result;
+    });
+    return updated;
+  });
+
+  server.get('/notas-fiscais', async () => {
+    return db.select({
+      nota: schema.notasFiscais,
+      clienteNome: schema.clientes.nome,
+      projetoNome: schema.projetos.nome,
+      orcamentoCodigo: schema.orcamentos.codigoOrcamento
+    }).from(schema.notasFiscais)
+      .innerJoin(schema.clientes, eq(schema.notasFiscais.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.notasFiscais.projetoId, schema.projetos.id))
+      .leftJoin(schema.orcamentos, eq(schema.notasFiscais.orcamentoId, schema.orcamentos.id))
+      .where(isNull(schema.notasFiscais.deletedAt))
+      .orderBy(desc(schema.notasFiscais.dataEmissao));
+  });
+
+  server.post('/notas-fiscais', async (request, reply) => {
+    const parsed = z.object({
+      clienteId: z.string().uuid(),
+      projetoId: z.string().uuid().nullable().optional(),
+      orcamentoId: z.string().uuid().nullable().optional(),
+      documentoId: z.string().uuid().nullable().optional(),
+      numero: z.string().trim().min(1).max(100),
+      codigoVerificacao: z.string().trim().max(200).nullable().optional(),
+      dataEmissao: isoDateSchema,
+      valor: centsSchema.refine((value) => value > 0, 'O valor deve ser maior que zero.'),
+      status: z.enum(['emitida', 'cancelada', 'substituida']).optional(),
+      municipio: z.string().trim().max(200).nullable().optional(),
+      link: z.string().url().max(2000).nullable().optional(),
+      substituiNotaId: z.string().uuid().nullable().optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const input = parsed.data;
+    if (input.projetoId) {
+      const [project] = await db.select().from(schema.projetos).where(eq(schema.projetos.id, input.projetoId)).limit(1);
+      if (!project || project.clienteId !== input.clienteId) {
+        return reply.status(400).send({ error: 'O projeto não pertence ao cliente informado.' });
+      }
+    }
+    if (input.orcamentoId) {
+      const [budget] = await db.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, input.orcamentoId)).limit(1);
+      if (!budget || budget.clienteId !== input.clienteId) {
+        return reply.status(400).send({ error: 'O orçamento não pertence ao cliente informado.' });
+      }
+    }
+    if (input.documentoId) {
+      const [document] = await db.select().from(schema.documentos).where(eq(schema.documentos.id, input.documentoId)).limit(1);
+      if (!document || document.clienteId !== input.clienteId) {
+        return reply.status(400).send({ error: 'O documento não pertence ao cliente informado.' });
+      }
+    }
+    const [created] = await db.transaction(async (tx) => {
+      const result = await tx.insert(schema.notasFiscais).values({
+        id: crypto.randomUUID(),
+        ...input,
+        projetoId: input.projetoId || null,
+        orcamentoId: input.orcamentoId || null,
+        documentoId: input.documentoId || null,
+        codigoVerificacao: input.codigoVerificacao || null,
+        status: input.status || 'emitida',
+        municipio: input.municipio || null,
+        link: input.link || null,
+        substituiNotaId: input.substituiNotaId || null
+      }).returning();
+      await AuditLogService.log('INSERT', 'NotaFiscalInformada', null, result[0], tx);
+      return result;
+    });
+    return reply.status(201).send(created);
+  });
+
+  server.post('/notas-fiscais/:id/cancelamento', async (request, reply) => {
+    const { id } = request.params as IdParams;
+    const parsed = z.object({
+      motivo: z.string().trim().min(5).max(1000),
+      dataCancelamento: isoDateSchema.optional()
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
+    const [old] = await db.select().from(schema.notasFiscais).where(and(
+      eq(schema.notasFiscais.id, id),
+      isNull(schema.notasFiscais.deletedAt)
+    )).limit(1);
+    if (!old) return reply.status(404).send({ error: 'Documento fiscal não encontrado.' });
+    if (old.canceladaEm) return reply.status(409).send({ error: 'O documento fiscal já está cancelado.' });
+    const [updated] = await db.transaction(async (tx) => {
+      const result = await tx.update(schema.notasFiscais).set({
+        status: 'cancelada',
+        canceladaEm: parsed.data.dataCancelamento || todayKey(),
+        motivoCancelamento: parsed.data.motivo,
+        updatedAt: new Date().toISOString()
+      }).where(eq(schema.notasFiscais.id, id)).returning();
+      await AuditLogService.log('UPDATE', 'NotaFiscalInformada', old, result[0], tx);
+      return result;
+    });
+    return updated;
+  });
+
+  server.get('/diagnostico-vinculos', async () => {
+    const [
+      despesasSemCliente,
+      despesasProjetoOutroCliente,
+      orcamentosProjetoOutroCliente,
+      comprovantesOrfaos,
+      documentosInconsistentes,
+      decisoesCancelamentoPendentes
+    ] = await Promise.all([
+      db.select({ id: schema.despesas.id, descricao: schema.despesas.descricao })
+        .from(schema.despesas)
+        .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+        .where(and(
+          isNull(schema.despesas.deletedAt),
+          sql`coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId}) is null`
+        )),
+      db.select({ id: schema.despesas.id, clienteId: schema.despesas.clienteId, projetoId: schema.despesas.projetoId })
+        .from(schema.despesas)
+        .innerJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+        .where(and(
+          isNull(schema.despesas.deletedAt),
+          sql`${schema.despesas.clienteId} is not null and ${schema.despesas.clienteId} <> ${schema.projetos.clienteId}`
+        )),
+      db.select({ id: schema.orcamentos.id, clienteId: schema.orcamentos.clienteId, projetoId: schema.orcamentos.projetoId })
+        .from(schema.orcamentos)
+        .innerJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+        .where(and(
+          isNull(schema.orcamentos.deletedAt),
+          sql`${schema.orcamentos.clienteId} <> ${schema.projetos.clienteId}`
+        )),
+      db.select({ id: schema.despesaDocumentos.id, documentoId: schema.despesaDocumentos.documentoId })
+        .from(schema.despesaDocumentos)
+        .leftJoin(schema.documentos, eq(schema.despesaDocumentos.documentoId, schema.documentos.id))
+        .where(sql`${schema.documentos.id} is null`),
+      db.select({
+        vinculoId: schema.despesaDocumentos.id,
+        despesaId: schema.despesas.id,
+        documentoId: schema.documentos.id
+      }).from(schema.despesaDocumentos)
+        .innerJoin(schema.despesas, eq(schema.despesaDocumentos.despesaId, schema.despesas.id))
+        .innerJoin(schema.documentos, eq(schema.despesaDocumentos.documentoId, schema.documentos.id))
+        .where(sql`${schema.despesas.clienteId} is not null and ${schema.despesas.clienteId} <> ${schema.documentos.clienteId}`),
+      db.select({ id: schema.projetos.id, nome: schema.projetos.nome })
+        .from(schema.projetos)
+        .where(and(
+          isNull(schema.projetos.deletedAt),
+          sql`lower(${schema.projetos.status}) = 'cancelado'`,
+          sql`not exists (
+            select 1
+            from projeto_financeiro_decisoes d
+            where d.projeto_id = ${schema.projetos.id}
+              and d.created_at >= coalesce((
+                select max(e.created_at)
+                from financeiro_eventos e
+                where e.projeto_id = ${schema.projetos.id}
+                  and e.tipo = 'cancelamento_projeto_pendente'
+              ), '')
+          )`
+        ))
+    ]);
+    return {
+      geradoEm: new Date().toISOString(),
+      somenteDiagnostico: true,
+      totais: {
+        despesasSemCliente: despesasSemCliente.length,
+        despesasProjetoOutroCliente: despesasProjetoOutroCliente.length,
+        orcamentosProjetoOutroCliente: orcamentosProjetoOutroCliente.length,
+        comprovantesOrfaos: comprovantesOrfaos.length,
+        documentosInconsistentes: documentosInconsistentes.length,
+        decisoesCancelamentoPendentes: decisoesCancelamentoPendentes.length
+      },
+      orientacoes: {
+        despesasSemCliente: 'Despesas administrativas podem permanecer sem cliente; revise apenas quando o vínculo era esperado.',
+        despesasProjetoOutroCliente: 'O cliente da despesa diverge do cliente do projeto e pode distorcer os painéis.',
+        orcamentosProjetoOutroCliente: 'O orçamento e o projeto pertencem a clientes diferentes; corrija manualmente o vínculo.',
+        comprovantesOrfaos: 'Há vínculo apontando para documento inexistente; localize ou remova somente o vínculo.',
+        documentosInconsistentes: 'O comprovante pertence a outro cliente e não deve compor este lançamento.',
+        decisoesCancelamentoPendentes: 'Abra o projeto cancelado e registre como cobranças, créditos ou devoluções devem ser tratados.'
+      },
+      registros: {
+        despesasSemCliente,
+        despesasProjetoOutroCliente,
+        orcamentosProjetoOutroCliente,
+        comprovantesOrfaos,
+        documentosInconsistentes,
+        decisoesCancelamentoPendentes
+      }
     };
   });
 }

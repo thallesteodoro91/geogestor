@@ -4,14 +4,14 @@ import path from 'node:path';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `financeiro-reports-${process.pid}`);
 const dbPath = path.join(testRoot, `financeiro-reports.${process.pid}.test.db`);
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 
 process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_API_TOKEN = 'test-token';
 
-test('DRE ignora orcamentos e parcelas excluidos', async () => {
+test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () => {
   await fs.mkdir(testRoot, { recursive: true });
   await Promise.all(dbFiles.map((file) => fs.rm(file, { force: true })));
 
@@ -76,7 +76,7 @@ test('DRE ignora orcamentos e parcelas excluidos', async () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/api/financeiro/dre',
+      url: '/api/financeiro/resumo-mensal',
       headers: { 'x-api-token': 'test-token' }
     });
 

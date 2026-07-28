@@ -1,6 +1,6 @@
 {
   "name": "geogestor-local",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "scripts": {
     "dev": "concurrently \"pnpm --filter api dev\" \"pnpm --filter web dev\"",
@@ -13,8 +13,14 @@
     "release:verify-candidate": "node scripts/release-verify.mjs --package --allow-dirty",
     "release:evidence": "node scripts/release-evidence.mjs",
     "release:verify-signature": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-authenticode.ps1",
+    "release:build-candidate": "node scripts/release-candidate.mjs",
     "release:smoke-package": "node scripts/smoke-packaged-api.mjs",
     "lint": "pnpm --filter web lint",
+    "typecheck": "pnpm --filter web typecheck && pnpm --filter api typecheck",
+    "test:web": "pnpm --filter web test",
+    "test:api": "pnpm --filter api test",
+    "test:electron": "node --test apps/desktop/main.test.cjs apps/desktop/preload.test.cjs",
+    "test:e2e": "node scripts/run-commercial-e2e.mjs",
     "build": "node scripts/build.mjs",
     "db:generate": "pnpm --filter database generate",
     "db:push": "pnpm --filter database push",
@@ -23,6 +29,8 @@
     "db:studio": "pnpm --filter database studio"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.62.0",
     "concurrently": "^8.2.2",
     "electron": "^35.7.5",
     "typescript": "^5.2.2"

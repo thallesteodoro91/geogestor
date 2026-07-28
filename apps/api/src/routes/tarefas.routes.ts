@@ -4,6 +4,7 @@ import { schema } from '@geogestor/database';
 import { eq, or, and, isNull, desc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
+import { AuditLogService } from '../services/audit.service';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 
@@ -95,36 +96,39 @@ export async function tarefasRoutes(server: FastifyInstance) {
       clienteId = projeto[0].clienteId;
     }
 
-    const novaTarefa = await db.insert(schema.tarefas).values({
-      id: crypto.randomUUID(),
-      clienteId,
-      projetoId,
-      titulo: body.titulo,
-      descricao: body.descricao || '',
-      status: body.status || 'A Fazer',
-      prioridade: body.prioridade || 'Média',
-      categoria: body.categoria || (projetoId ? 'Trabalho' : 'Interno'),
-      contextoTipo: projetoId ? 'projeto' : 'cliente',
-      dataLimite: body.dataLimite || ''
-    }).returning();
+    const novaTarefa = await db.transaction(async (tx) => {
+      const created = await tx.insert(schema.tarefas).values({
+        id: crypto.randomUUID(),
+        clienteId,
+        projetoId,
+        titulo: body.titulo,
+        descricao: body.descricao || '',
+        status: body.status || 'A Fazer',
+        prioridade: body.prioridade || 'Média',
+        categoria: body.categoria || (projetoId ? 'Trabalho' : 'Interno'),
+        contextoTipo: projetoId ? 'projeto' : 'cliente',
+        dataLimite: body.dataLimite || ''
+      }).returning();
+      await AuditLogService.log('INSERT', 'Tarefa', null, created[0], tx);
+      if (created[0].clienteId) {
+        await JornadaService.logClienteEvento({
+          clienteId: created[0].clienteId,
+          projetoId: created[0].projetoId || null,
+          tipo: 'Checklist',
+          titulo: `Tarefa criada: ${created[0].titulo}`,
+          categoria: created[0].categoria || 'Tarefa',
+          descricao: [
+            `Status: ${created[0].status}`,
+            `Prioridade: ${created[0].prioridade}`,
+            created[0].dataLimite ? `Prazo: ${created[0].dataLimite}` : null,
+            created[0].descricao || null
+          ].filter(Boolean).join('\n')
+        }, tx);
+      }
+      return created[0];
+    });
 
-    if (novaTarefa[0].clienteId) {
-      await JornadaService.logClienteEvento({
-        clienteId: novaTarefa[0].clienteId,
-        projetoId: novaTarefa[0].projetoId || null,
-        tipo: 'Checklist',
-        titulo: `Tarefa criada: ${novaTarefa[0].titulo}`,
-        categoria: novaTarefa[0].categoria || 'Tarefa',
-        descricao: [
-          `Status: ${novaTarefa[0].status}`,
-          `Prioridade: ${novaTarefa[0].prioridade}`,
-          novaTarefa[0].dataLimite ? `Prazo: ${novaTarefa[0].dataLimite}` : null,
-          novaTarefa[0].descricao || null
-        ].filter(Boolean).join('\n')
-      });
-    }
-
-    return novaTarefa[0];
+    return novaTarefa;
   });
 
   zServer.patch('/:id', {
@@ -173,27 +177,27 @@ export async function tarefasRoutes(server: FastifyInstance) {
 
     updateFields.updatedAt = new Date().toISOString();
 
-    const tarefaAtualizada = await db.update(schema.tarefas)
-      .set(updateFields)
-      .where(eq(schema.tarefas.id, id))
-      .returning();
-
-    if (!tarefaAtualizada.length) {
-      return reply.status(404).send({ error: 'Tarefa nao encontrada' });
-    }
-
-    if (body.status === 'Concluído' && tarefaAnterior[0].status !== 'Concluído' && tarefaAtualizada[0].clienteId) {
-      await JornadaService.logClienteEvento({
-        clienteId: tarefaAtualizada[0].clienteId,
-        projetoId: tarefaAtualizada[0].projetoId || null,
-        tipo: 'Checklist',
-        titulo: `Tarefa concluída: ${tarefaAtualizada[0].titulo}`,
-        categoria: tarefaAtualizada[0].categoria || 'Tarefa',
-        descricao: `${tarefaAtualizada[0].titulo}${tarefaAtualizada[0].descricao ? `\n${tarefaAtualizada[0].descricao}` : ''}`
-      });
-    }
-
-    return tarefaAtualizada[0];
+    const tarefaAtualizada = await db.transaction(async (tx) => {
+      const updated = await tx.update(schema.tarefas)
+        .set(updateFields)
+        .where(eq(schema.tarefas.id, id))
+        .returning();
+      if (!updated.length) return null;
+      await AuditLogService.log('UPDATE', 'Tarefa', tarefaAnterior[0], updated[0], tx);
+      if (body.status === 'Concluído' && tarefaAnterior[0].status !== 'Concluído' && updated[0].clienteId) {
+        await JornadaService.logClienteEvento({
+          clienteId: updated[0].clienteId,
+          projetoId: updated[0].projetoId || null,
+          tipo: 'Checklist',
+          titulo: `Tarefa concluída: ${updated[0].titulo}`,
+          categoria: updated[0].categoria || 'Tarefa',
+          descricao: `${updated[0].titulo}${updated[0].descricao ? `\n${updated[0].descricao}` : ''}`
+        }, tx);
+      }
+      return updated[0];
+    });
+    if (!tarefaAtualizada) return reply.status(404).send({ error: 'Tarefa nao encontrada' });
+    return tarefaAtualizada;
   });
 
   zServer.delete('/:id', {
@@ -203,10 +207,14 @@ export async function tarefasRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const deletado = await db.update(schema.tarefas)
-      .set({ deletedAt: new Date().toISOString() })
-      .where(eq(schema.tarefas.id, id))
-      .returning();
+    const deletado = await db.transaction(async (tx) => {
+      const removed = await tx.update(schema.tarefas)
+        .set({ deletedAt: new Date().toISOString() })
+        .where(eq(schema.tarefas.id, id))
+        .returning();
+      if (removed.length) await AuditLogService.log('DELETE (SOFT)', 'Tarefa', removed[0], null, tx);
+      return removed;
+    });
 
     if (!deletado.length) {
       return reply.status(404).send({ error: 'Tarefa nao encontrada' });

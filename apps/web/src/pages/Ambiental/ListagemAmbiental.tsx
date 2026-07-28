@@ -22,6 +22,7 @@ import { Layout } from '../../components/Layout';
 import { apiClient } from '../../services/apiClient';
 import { Licenciamento } from '../Licenciamento/Licenciamento';
 import { CalculadoraAmbiental } from '../Calculadoras/CalculadoraAmbiental';
+import { ProjectFormModal } from '../Projetos/ProjectFormModal';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
@@ -63,6 +64,7 @@ export function ListagemAmbiental() {
   const inicio = searchParams.get('inicio') || '';
   const fim = searchParams.get('fim') || '';
   const searchTerm = searchParams.get('q') || '';
+  const demandFormOpen = activeTab === 'ambiental' && searchParams.get('action') === 'new';
 
   useEffect(() => {
     const index = environmentalTabs.indexOf(activeTab);
@@ -128,6 +130,11 @@ export function ListagemAmbiental() {
     queryFn: () => apiClient.get<EnvironmentalDemandListResponse>(`/api/ambiental?${queryString}`),
     enabled: activeTab === 'ambiental'
   });
+  const clientsQuery = useQuery<Array<{ id: string; nome: string }>>({
+    queryKey: ['clientes'],
+    queryFn: () => apiClient.get<Array<{ id: string; nome: string }>>('/api/clientes'),
+    enabled: demandFormOpen
+  });
 
   const hasFilters = Boolean(searchParams.get('q') || status || tipo || inicio || fim);
   const totalPages = Math.max(1, Math.ceil((demandsQuery.data?.total || 0) / 24));
@@ -178,7 +185,7 @@ export function ListagemAmbiental() {
           {activeTab === 'ambiental' && (
             <button
               type="button"
-              onClick={() => navigate('/projetos', { state: { openCreateModal: true, contexto: 'ambiental' } })}
+              onClick={() => updateParam('action', 'new')}
               className={cn(primaryActionButtonClass, headerActionButtonClass)}
             >
               <span>Nova demanda</span>
@@ -394,6 +401,14 @@ export function ListagemAmbiental() {
       <section id="ambiental-panel-car" role="tabpanel" aria-labelledby="ambiental-tab-car" hidden={activeTab !== 'car'}>
         {activeTab === 'car' && <CalculadoraAmbiental embedded showHeader={false} />}
       </section>
+
+      <ProjectFormModal
+        isOpen={demandFormOpen}
+        onClose={() => updateParam('action', '', true)}
+        clientes={clientsQuery.data || []}
+        context="ambiental"
+        onSaved={(project) => navigate(`/ambiental/${project.id}`)}
+      />
     </Layout>
   );
 }

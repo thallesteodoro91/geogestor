@@ -5,7 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { eq } from 'drizzle-orm';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `oportunidades-${process.pid}`);
 const dbPath = path.join(testRoot, 'oportunidades.integration.test.db');
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 const authHeaders = { 'content-type': 'application/json', 'x-api-token': 'test-token' };

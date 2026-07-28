@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { eq } from 'drizzle-orm';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `orcamentos-${process.pid}`);
 const dbPath = path.join(testRoot, `orcamentos.integration.${process.pid}.test.db`);
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 const authHeaders = { 'content-type': 'application/json', 'x-api-token': 'test-token' };
@@ -311,6 +311,95 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.deepEqual(installmentsAfterApproval.map((entry) => entry.valor), [42_000, 63_000]);
     assert.ok(installmentsAfterApproval.every((entry) => entry.valorPago === 0 && entry.statusPagamento === 'Pendente'));
 
+    const travelResponse = await request({
+      method: 'POST',
+      url: '/api/financeiro/viagens',
+      payload: {
+        clienteId: clientId,
+        projetoId: approval.projectId,
+        finalidade: 'Levantamento de campo',
+        destino: 'Florianópolis/SC',
+        dataInicio: '2026-07-18',
+        dataFim: '2026-07-19',
+        adiantamento: 30_000,
+        status: 'prestacao_pendente'
+      }
+    });
+    assert.equal(travelResponse.statusCode, 201, travelResponse.body);
+    const travel = travelResponse.json<{ id: string }>();
+
+    const expenseResponse = await request({
+      method: 'POST',
+      url: '/api/financeiro/despesas',
+      payload: {
+        clienteId: clientId,
+        projetoId: approval.projectId,
+        viagemId: travel.id,
+        descricao: 'Hospedagem da equipe',
+        valor: 18_000,
+        data: '2026-07-19',
+        dataPagamento: '2026-07-19',
+        categoria: 'Hospedagem',
+        status: 'Pago',
+        formaPagamento: 'Cartão'
+      }
+    });
+    assert.equal(expenseResponse.statusCode, 200, expenseResponse.body);
+    const expense = expenseResponse.json<{ id: string; categoriaCodigo: string }>();
+    assert.equal(expense.categoriaCodigo, 'hospedagem');
+
+    const travelsWithExpense = await request({ method: 'GET', url: '/api/financeiro/viagens' });
+    const travelSummary = travelsWithExpense.json<Array<{ id: string; totalGasto: number; saldoPrestacao: number }>>()
+      .find((entry) => entry.id === travel.id);
+    assert.equal(travelSummary?.totalGasto, 18_000);
+    assert.equal(travelSummary?.saldoPrestacao, 12_000);
+
+    const deletePaidExpense = await request({
+      method: 'DELETE',
+      url: `/api/financeiro/despesas/${expense.id}`
+    });
+    assert.equal(deletePaidExpense.statusCode, 409, deletePaidExpense.body);
+    const reversePaidExpense = await request({
+      method: 'POST',
+      url: `/api/financeiro/despesas/${expense.id}/estorno`,
+      payload: { motivo: 'Pagamento da hospedagem devolvido para teste' }
+    });
+    assert.equal(reversePaidExpense.statusCode, 200, reversePaidExpense.body);
+    assert.equal(reversePaidExpense.json<{ status: string }>().status, 'Estornado');
+
+    const fiscalDocumentResponse = await request({
+      method: 'POST',
+      url: '/api/financeiro/notas-fiscais',
+      payload: {
+        clienteId: clientId,
+        projetoId: approval.projectId,
+        orcamentoId: created.id,
+        numero: 'NFS-TESTE-001',
+        dataEmissao: '2026-07-20',
+        valor: 105_000,
+        municipio: 'Florianópolis'
+      }
+    });
+    assert.equal(fiscalDocumentResponse.statusCode, 201, fiscalDocumentResponse.body);
+
+    const projectFinancialContext = await request({
+      method: 'GET',
+      url: `/api/projetos/${approval.projectId}/contexto-financeiro`
+    });
+    assert.equal(projectFinancialContext.statusCode, 200, projectFinancialContext.body);
+    assert.ok(projectFinancialContext.json<{ custoPrevisto: number }>().custoPrevisto > 0);
+    assert.equal(projectFinancialContext.json<{ custoRealizado: number }>().custoRealizado, 0);
+
+    const projectFinancialDecision = await request({
+      method: 'POST',
+      url: `/api/projetos/${approval.projectId}/decisao-financeira`,
+      payload: {
+        tipo: 'manter_sem_alteracao',
+        motivo: 'Contrato e parcelas permanecem válidos após a revisão operacional.'
+      }
+    });
+    assert.equal(projectFinancialDecision.statusCode, 201, projectFinancialDecision.body);
+
     const initialKpis = await request({ method: 'GET', url: '/api/orcamentos/kpis' });
     assert.equal(initialKpis.statusCode, 200, initialKpis.body);
     assert.deepEqual(
@@ -319,6 +408,36 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
       ),
       { totalApprovedCents: 105_000, accountsReceivableCents: 105_000, receivedCents: 0 }
     );
+
+    const partialResponse = await request({
+      method: 'POST',
+      url: `/api/financeiro/parcelas/${approval.installmentIds[0]}/recebimentos`,
+      payload: {
+        valorPrincipal: 20_000,
+        juros: 0,
+        multa: 0,
+        desconto: 0,
+        taxas: 0,
+        dataRecebimento: '2026-07-20'
+      }
+    });
+    assert.equal(partialResponse.statusCode, 201, partialResponse.body);
+    assert.equal(partialResponse.json<{ parcela: { valorPago: number; statusPagamento: string } }>().parcela.valorPago, 20_000);
+    assert.equal(partialResponse.json<{ parcela: { valorPago: number; statusPagamento: string } }>().parcela.statusPagamento, 'Parcialmente pago');
+
+    const overpaymentResponse = await request({
+      method: 'POST',
+      url: `/api/financeiro/parcelas/${approval.installmentIds[0]}/recebimentos`,
+      payload: {
+        valorPrincipal: 22_001,
+        dataRecebimento: '2026-07-20'
+      }
+    });
+    assert.equal(overpaymentResponse.statusCode, 409, overpaymentResponse.body);
+
+    const partialKpis = await request({ method: 'GET', url: '/api/orcamentos/kpis' });
+    assert.equal(partialKpis.json<{ receivedCents: number; accountsReceivableCents: number }>().receivedCents, 20_000);
+    assert.equal(partialKpis.json<{ receivedCents: number; accountsReceivableCents: number }>().accountsReceivableCents, 85_000);
 
     const paidResponse = await request({
       method: 'PATCH',
@@ -332,14 +451,24 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.equal(paidKpis.json<{ receivedCents: number; accountsReceivableCents: number }>().receivedCents, 42_000);
     assert.equal(paidKpis.json<{ receivedCents: number; accountsReceivableCents: number }>().accountsReceivableCents, 63_000);
 
-    const chargebackResponse = await request({
-      method: 'PATCH',
-      url: `/api/financeiro/parcelas/${approval.installmentIds[0]}`,
-      payload: { statusPagamento: 'Pendente' }
+    const receiptsResponse = await request({
+      method: 'GET',
+      url: `/api/financeiro/parcelas/${approval.installmentIds[0]}/recebimentos`
     });
-    assert.equal(chargebackResponse.statusCode, 200, chargebackResponse.body);
-    assert.equal(chargebackResponse.json<{ valorPago: number; dataPagamento: string | null }>().valorPago, 0);
-    assert.equal(chargebackResponse.json<{ valorPago: number; dataPagamento: string | null }>().dataPagamento, null);
+    assert.equal(receiptsResponse.statusCode, 200, receiptsResponse.body);
+    const receipts = receiptsResponse.json<Array<{ id: string }>>();
+    let lastChargeback: { parcela: { valorPago: number; dataPagamento: string | null } } | undefined;
+    for (const receipt of receipts) {
+      const chargebackResponse = await request({
+        method: 'POST',
+        url: `/api/financeiro/recebimentos/${receipt.id}/estorno`,
+        payload: { motivo: 'Pagamento devolvido ao cliente para teste' }
+      });
+      assert.equal(chargebackResponse.statusCode, 200, chargebackResponse.body);
+      lastChargeback = chargebackResponse.json<{ parcela: { valorPago: number; dataPagamento: string | null } }>();
+    }
+    assert.equal(lastChargeback?.parcela.valorPago, 0);
+    assert.equal(lastChargeback?.parcela.dataPagamento, null);
 
     const paidAgainResponse = await request({
       method: 'PATCH',

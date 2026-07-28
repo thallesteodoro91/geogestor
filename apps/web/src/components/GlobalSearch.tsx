@@ -130,7 +130,7 @@ export function GlobalSearch() {
           <MagnifyingGlass className="h-4 w-4 text-brand-primary-500 dark:text-brand-primary-200" />
           Buscar no GeoGestor
         </span>
-        <kbd className="rounded-full border border-brand-border bg-brand-surface-subtle px-2 py-0.5 text-xs font-bold text-zinc-400 dark:bg-brand-surface-muted dark:text-zinc-300">
+        <kbd className="rounded-full border border-brand-border bg-brand-surface-subtle px-2 py-0.5 text-xs font-bold text-zinc-700 dark:bg-brand-surface-muted dark:text-zinc-200">
           Ctrl K
         </kbd>
       </button>

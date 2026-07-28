@@ -4,7 +4,7 @@ import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
-import { DatePickerField, FormFooter, FormSelect } from '../../components/Form';
+import { DatePickerField, FormSelect } from '../../components/Form';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient, getDownloadUrl } from '../../services/apiClient';
@@ -18,23 +18,11 @@ import { DynamicTooltip } from '../../components/charts/DynamicTooltip';
 import { RichTooltip } from '../../components/charts/RichTooltip';
 import { cn } from '../../utils/cn';
 import { useDebounce } from '../../hooks/useDebounce';
-import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
-import { ProjetoFormFields } from './ProjetoFormFields';
-import { QuickClientModal, type CreatedProjectClient } from './QuickClientModal';
-import {
-  createEmptyProjectForm,
-  projectFieldTab,
-  projectFormFingerprint,
-  projectRecordToForm,
-  validateProjectForm,
-  type ProjectFormErrors,
-  type ProjectFormState,
-  type ProjectModalContext,
-  type ProjectModalTab
-} from './projectForm';
-import type { ProjetoPayload } from '@geogestor/contracts';
+import { ProjectFormModal } from './ProjectFormModal';
+import { resolveProjectFormCopy, type ProjectModalContext, type ProjectModalTab } from './projectForm';
 
 import { CustomSelect } from '../../components/CustomSelect';
 import {
@@ -199,15 +187,11 @@ export function ListagemProjetos() {
   const [showModal, setShowModal] = useState(false);
   const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
   const [modalContext, setModalContext] = useState<ProjectModalContext>('projeto');
-  const [activeTab, setActiveTab] = useState<ProjectModalTab>('projeto');
+  const [initialProjectTab, setInitialProjectTab] = useState<ProjectModalTab>('projeto');
+  const [initialProjectClientId, setInitialProjectClientId] = useState('');
   const [categoriaFilter, setCategoriaFilter] = useState('todos');
-  const [projectForm, setProjectForm] = useState<ProjectFormState>(() => createEmptyProjectForm());
-  const [projectFormErrors, setProjectFormErrors] = useState<ProjectFormErrors>({});
-  const [projectFormDirty, setProjectFormDirty] = useState(false);
   const [projectSuccessMessage, setProjectSuccessMessage] = useState('');
-  const [showQuickClientModal, setShowQuickClientModal] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
-  const initialProjectFormRef = useRef(projectFormFingerprint(createEmptyProjectForm()));
 
   const viewParam = searchParams.get('visualizacao');
   const viewMode: 'grid' | 'map' | 'operacional' = viewParam === 'mapa'
@@ -506,29 +490,6 @@ export function ListagemProjetos() {
     }
   });
 
-  const submitProjectMutation = useMutation({
-    mutationFn: async (payload: ProjetoPayload) => {
-      if (selectedProjeto) {
-        return await apiClient.patch(`/api/projetos/${selectedProjeto.id}`, payload);
-      }
-      return await apiClient.post('/api/projetos', payload);
-    },
-    onSuccess: () => {
-      const feedbackMessage = selectedProjeto ? 'Projeto atualizado com sucesso.' : 'Projeto criado com sucesso.';
-      setProjectSuccessMessage(feedbackMessage);
-      setProjectFormDirty(false);
-      setShowModal(false);
-      queryClient.invalidateQueries({ queryKey: ['projetos'] });
-      queryClient.invalidateQueries({ queryKey: ['stats-geral'] });
-      queryClient.invalidateQueries({ queryKey: ['projetos-notificacoes'] });
-      toast.success(feedbackMessage);
-    },
-    onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : (selectedProjeto ? 'Erro ao atualizar projeto' : 'Erro ao criar projeto');
-      toast.error(msg);
-    }
-  });
-
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!showArquivosModal) return;
@@ -569,15 +530,10 @@ export function ListagemProjetos() {
     const nextClienteId = initialClienteId && clientes.some((cliente) => cliente.id === initialClienteId)
       ? initialClienteId
       : '';
-    const nextForm = createEmptyProjectForm(contexto, nextClienteId);
     setSelectedProjeto(null);
     setModalContext(contexto);
-    setProjectForm(nextForm);
-    setProjectFormErrors({});
-    initialProjectFormRef.current = projectFormFingerprint(nextForm);
-    setProjectFormDirty(false);
-    setActiveTab(initialTab);
-    setShowQuickClientModal(false);
+    setInitialProjectClientId(nextClienteId);
+    setInitialProjectTab(initialTab);
     setShowModal(true);
   }, [clientes]);
 
@@ -585,7 +541,6 @@ export function ListagemProjetos() {
     setEditingProjectId(proj.id);
     try {
       const detailedProject = await apiClient.get<Projeto>(`/api/projetos/${proj.id}`);
-      const nextForm = projectRecordToForm(detailedProject);
       const nextContext: ProjectModalContext = detailedProject.tipo === 'Ambiental'
         ? 'ambiental'
         : detailedProject.tipo === 'Licenciamento'
@@ -593,12 +548,8 @@ export function ListagemProjetos() {
           : 'projeto';
       setSelectedProjeto(detailedProject);
       setModalContext(nextContext);
-      setProjectForm(nextForm);
-      setProjectFormErrors({});
-      initialProjectFormRef.current = projectFormFingerprint(nextForm);
-      setProjectFormDirty(false);
-      setActiveTab('projeto');
-      setShowQuickClientModal(false);
+      setInitialProjectClientId('');
+      setInitialProjectTab('projeto');
       setShowModal(true);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'Erro ao carregar os dados completos do projeto.');
@@ -606,39 +557,6 @@ export function ListagemProjetos() {
       setEditingProjectId(null);
     }
   };
-
-  const closeProjectModal = () => {
-    if (projectFormDirty && !submitProjectMutation.isPending && !window.confirm('Descartar as alterações não salvas deste projeto?')) return;
-    setShowQuickClientModal(false);
-    setShowModal(false);
-  };
-
-  const closeQuickClientModal = () => {
-    setShowQuickClientModal(false);
-    window.setTimeout(() => document.getElementById('project-create-client')?.focus(), 80);
-  };
-
-  const handleQuickClientCreated = (client: CreatedProjectClient) => {
-    setProjectForm((current) => ({ ...current, clienteId: client.id }));
-    clearProjectFormErrors('clienteId');
-    setShowQuickClientModal(false);
-    window.setTimeout(() => document.getElementById('project-clienteId')?.focus(), 80);
-  };
-
-  useEffect(() => {
-    if (!showModal) return;
-    setProjectFormDirty(projectFormFingerprint(projectForm) !== initialProjectFormRef.current);
-  }, [projectForm, showModal]);
-
-  useEffect(() => {
-    if (!projectFormDirty) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [projectFormDirty]);
 
   useEffect(() => {
     const routeState = location.state as { createForClienteId?: string; modalTab?: ProjectModalTab; openCreateModal?: boolean; contexto?: string } | null;
@@ -668,70 +586,6 @@ export function ListagemProjetos() {
     } catch {
       alert('Erro ao gerar o PDF do projeto.');
     }
-  };
-
-  const clearProjectFormErrors = (...fields: Array<keyof ProjectFormState>) => {
-    setProjectFormErrors((current) => {
-      if (!fields.some((field) => current[field])) return current;
-      const next = { ...current };
-      fields.forEach((field) => delete next[field]);
-      return next;
-    });
-  };
-
-  const projectTabOrder: ProjectModalTab[] = ['projeto', 'propriedade', 'geoloc'];
-
-  const activateProjectTab = (tab: ProjectModalTab, moveFocus = false) => {
-    setActiveTab(tab);
-    window.setTimeout(() => {
-      const scrollRegion = document.getElementById('project-form-scroll-region');
-      if (scrollRegion) scrollRegion.scrollTop = 0;
-      if (moveFocus) document.getElementById(`project-tab-${tab}`)?.focus();
-    }, 0);
-  };
-
-  const handleProjectTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, currentTab: ProjectModalTab) => {
-    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const currentIndex = projectTabOrder.indexOf(currentTab);
-    let nextIndex = currentIndex;
-    if (event.key === 'Home') nextIndex = 0;
-    else if (event.key === 'End') nextIndex = projectTabOrder.length - 1;
-    else if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % projectTabOrder.length;
-    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + projectTabOrder.length) % projectTabOrder.length;
-    activateProjectTab(projectTabOrder[nextIndex], true);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (activeTab !== 'geoloc') {
-      const validation = validateProjectForm(projectForm);
-      const currentTabErrors = Object.entries(validation.errors).filter(([field]) => (
-        projectFieldTab[field as keyof ProjectFormState] === activeTab
-      ));
-      if (currentTabErrors.length > 0) {
-        setProjectFormErrors(validation.errors);
-        const [firstField] = currentTabErrors[0] as [keyof ProjectFormState, string];
-        window.setTimeout(() => document.getElementById(`project-${firstField}`)?.focus(), 0);
-        return;
-      }
-      const currentIndex = projectTabOrder.indexOf(activeTab);
-      activateProjectTab(projectTabOrder[currentIndex + 1]);
-      return;
-    }
-
-    const validation = validateProjectForm(projectForm);
-    setProjectFormErrors(validation.errors);
-    if (!validation.valid) {
-      const firstField = Object.keys(validation.errors)[0] as keyof ProjectFormState | undefined;
-      const firstTab = firstField ? projectFieldTab[firstField] || 'projeto' : 'projeto';
-      activateProjectTab(firstTab);
-      window.setTimeout(() => document.getElementById(firstField ? `project-${firstField}` : 'project-nome')?.focus(), 0);
-      return;
-    }
-
-    submitProjectMutation.mutate(validation.payload);
   };
 
   const handleAbrirPasta = async (id: string) => {
@@ -1198,7 +1052,12 @@ export function ListagemProjetos() {
                   <Link to={`/projetos/${projeto.id}`}>{projeto.nome}</Link>
                 </h3>
                 <p className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-4">
-                  <Link to={`/clientes/${projeto.clienteId}`} className="hover:text-zinc-600 hover:underline">{projeto.clienteNome}</Link>
+                  <Link
+                    to={`/clientes/${projeto.clienteId}`}
+                    className="geo-focus-ring rounded text-zinc-700 underline-offset-2 hover:text-zinc-950 hover:underline dark:text-zinc-300 dark:hover:text-white"
+                  >
+                    {projeto.clienteNome}
+                  </Link>
                 </p>
                 
                 {projeto.descricao && (
@@ -1286,139 +1145,18 @@ export function ListagemProjetos() {
       )}
 
       {/* Cadastro e edição de projetos */}
-      <Modal
-        isOpen={showModal && !showQuickClientModal}
-        onClose={closeProjectModal}
-        title={(
-          <span className="flex flex-wrap items-center gap-2">
-            <span>
-              {selectedProjeto
-                ? 'Editar projeto'
-                : modalContext === 'ambiental' || modalContext === 'licenciamento'
-                  ? 'Nova demanda ambiental'
-                  : 'Novo projeto'}
-            </span>
-            {projectFormDirty && (
-              <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">
-                Alterações não salvas
-              </span>
-            )}
-          </span>
-        )}
-        maxWidth="max-w-[960px]"
-        panelClassName="h-[min(760px,88dvh)]"
-        contentScrollable={false}
-        initialFocusId="project-nome"
-      >
-        <div className="flex min-h-0 flex-1 flex-col">
-          <div className="relative mb-4 shrink-0">
-            <div className="overflow-x-auto pb-1">
-              <div role="tablist" aria-label="Etapas do formulário de projeto" className={cn(geoTabListClass, 'flex w-max min-w-full gap-1.5 sm:min-w-0')}>
-                {([
-                  ['projeto', 'Dados essenciais'],
-                  ['propriedade', 'Imóvel e documentação'],
-                  ['geoloc', 'Localização e notas']
-                ] as Array<[ProjectModalTab, string]>).map(([tab, label], index) => {
-                  const active = activeTab === tab;
-                  return (
-                    <button
-                      key={tab}
-                      id={`project-tab-${tab}`}
-                      type="button"
-                      role="tab"
-                      aria-selected={active}
-                      aria-controls={`project-panel-${tab}`}
-                      tabIndex={active ? 0 : -1}
-                      onClick={() => activateProjectTab(tab)}
-                      onKeyDown={(event) => handleProjectTabKeyDown(event, tab)}
-                      className={geoTabButtonClass(active, 'system', 'px-3.5 py-2')}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ring-1',
-                          active
-                            ? 'bg-brand-primary-600 text-white ring-brand-primary-500/50'
-                            : 'bg-brand-surface-subtle text-zinc-500 ring-brand-border dark:text-zinc-300'
-                        )}
-                      >
-                        {index + 1}
-                      </span>
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-brand-surface to-transparent sm:hidden" />
-          </div>
-
-          <form
-            id={`project-panel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`project-tab-${activeTab}`}
-            onSubmit={handleSubmit}
-            className="flex min-h-0 min-w-0 flex-1 flex-col"
-          >
-            <div id="project-form-scroll-region" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-5 pr-1">
-              <ProjetoFormFields
-                form={projectForm}
-                setForm={setProjectForm}
-                errors={projectFormErrors}
-                activeTab={activeTab}
-                clientes={clientes}
-                onClearErrors={clearProjectFormErrors}
-                onCreateClient={() => setShowQuickClientModal(true)}
-              />
-            </div>
-
-            <FormFooter className="relative z-0 mt-0 flex-shrink-0 flex-wrap py-4 sm:flex-nowrap">
-              <p className="mr-auto w-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 sm:w-auto" role="status" aria-live="polite">
-                Etapa {projectTabOrder.indexOf(activeTab) + 1} de {projectTabOrder.length}
-                {activeTab === 'projeto' ? ' · campos obrigatórios marcados com *' : ' · preenchimento opcional'}
-              </p>
-              <button type="button" onClick={closeProjectModal} disabled={submitProjectMutation.isPending} className={secondarySmallActionButtonClass}>
-                Cancelar
-              </button>
-              {activeTab !== 'projeto' && (
-                <button
-                  type="button"
-                  onClick={() => activateProjectTab(projectTabOrder[projectTabOrder.indexOf(activeTab) - 1])}
-                  disabled={submitProjectMutation.isPending}
-                  className={secondarySmallActionButtonClass}
-                >
-                  Voltar
-                </button>
-              )}
-              <button
-                type="submit"
-                disabled={submitProjectMutation.isPending}
-                aria-busy={submitProjectMutation.isPending}
-                className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}
-              >
-                {submitProjectMutation.isPending
-                  ? 'Salvando…'
-                  : activeTab === 'geoloc'
-                    ? selectedProjeto
-                      ? 'Salvar alterações'
-                      : 'Criar projeto'
-                    : 'Continuar'}
-              </button>
-            </FormFooter>
-          </form>
-
-          {projectTabOrder
-            .filter((tab) => tab !== activeTab)
-            .map((tab) => (
-              <div key={tab} id={`project-panel-${tab}`} role="tabpanel" aria-labelledby={`project-tab-${tab}`} hidden />
-            ))}
-        </div>
-      </Modal>
-
-      <QuickClientModal
-        isOpen={showModal && showQuickClientModal}
-        onClose={closeQuickClientModal}
-        onCreated={handleQuickClientCreated}
+      <ProjectFormModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        clientes={clientes}
+        context={modalContext}
+        project={selectedProjeto}
+        initialClientId={initialProjectClientId}
+        initialTab={initialProjectTab}
+        onSaved={(savedProject, savedContext) => {
+          const copy = resolveProjectFormCopy(savedContext, savedProject.tipo);
+          setProjectSuccessMessage(selectedProjeto ? copy.updateSuccess : copy.createSuccess);
+        }}
       />
 
       {/* Modal Arquivos Locais */}

@@ -1,19 +1,24 @@
 import { FormSelect } from '../../components/Form';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { Layout } from '../../components/Layout';
 import { Globe, Compass, CloudArrowUp, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { apiFetch } from '../../services/apiClient';
+import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
+import { createBaseTileLayer } from '../../utils/mapTiles';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 // Corrigir ícones do Leaflet padrão
 // @ts-expect-error - Leaflet _getIconUrl is an internal property without official TypeScript definitions
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
 });
 
 interface ClienteItem {
@@ -37,10 +42,35 @@ export function MapaVisualizador() {
   const [dragActive, setDragActive] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [uploadMessage, setUploadMessage] = useState('');
+  const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const geojsonLayerGroupRef = useRef<L.LayerGroup | null>(null);
+  const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+
+  const reloadBaseMap = useCallback(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    if (baseTileLayerRef.current) map.removeLayer(baseTileLayerRef.current);
+    setBaseMapUnavailable(!navigator.onLine);
+    baseTileLayerRef.current = createBaseTileLayer(
+      map,
+      () => setBaseMapUnavailable(true),
+      () => setBaseMapUnavailable(false)
+    );
+  }, []);
+
+  useEffect(() => {
+    const offline = () => setBaseMapUnavailable(true);
+    const online = () => reloadBaseMap();
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+    };
+  }, [reloadBaseMap]);
 
   // 1. Fetch clientes
   useEffect(() => {
@@ -61,9 +91,11 @@ export function MapaVisualizador() {
       const map = L.map(mapContainerRef.current).setView([-15.793889, -47.882778], 4);
       
       // Adicionar camada do OpenStreetMap
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-      }).addTo(map);
+      baseTileLayerRef.current = createBaseTileLayer(
+        map,
+        () => setBaseMapUnavailable(true),
+        () => setBaseMapUnavailable(false)
+      );
 
       // Camada para GeoJSONs/Polígonos do projeto
       const layerGroup = L.layerGroup().addTo(map);
@@ -323,7 +355,8 @@ export function MapaVisualizador() {
         </div>
 
         {/* Map Container */}
-        <div className="lg:col-span-3">
+        <div className="relative lg:col-span-3">
+          <MapBaseNotice unavailable={baseMapUnavailable} onRetry={reloadBaseMap} />
           <div 
             ref={mapContainerRef} 
             className="h-[600px] w-full rounded-[2.5rem] overflow-hidden ring-1 ring-zinc-900/5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] z-10"

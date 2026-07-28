@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createClient } from '@libsql/client';
 
-const testRoot = path.resolve(process.cwd(), 'scratch', 'api-tests');
+const testRoot = path.resolve(process.cwd(), 'scratch', `crm-migration-${process.pid}`);
 const dbPath = path.join(testRoot, 'crm-migration.integration.test.db');
 const dbFiles = [dbPath, `${dbPath}-shm`, `${dbPath}-wal`];
 
@@ -60,6 +60,7 @@ test('migração do CRM preserva oportunidades e habilita vínculo opcional com 
     sql: 'INSERT INTO oportunidades (id, cliente_id, titulo, valor_estimado) VALUES (?, ?, ?, ?)',
     args: ['oportunidade-legada', 'cliente-legado', 'Levantamento legado', 150_000]
   });
+  await legacyClient.execute("UPDATE schema_migrations SET status = 'failed' WHERE version = 4");
   await legacyClient.close();
 
   await runRuntimeMigrations();

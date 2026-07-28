@@ -258,9 +258,9 @@ export async function ambientalRoutes(server: FastifyInstance) {
           data: updatedAt.slice(0, 10),
           descricao: `A demanda ambiental avançou para a fase ${request.body.statusFase}.`
         });
+        await AuditLogService.log('UPDATE', 'Demanda Ambiental', current[0], environmental[0], tx);
         return environmental[0];
       });
-      await AuditLogService.log('UPDATE', 'Demanda Ambiental', current[0], updated);
       return updated;
     } catch (error) {
       server.log.error(error);
@@ -279,18 +279,21 @@ export async function ambientalRoutes(server: FastifyInstance) {
           isNull(schema.projetos.deletedAt)
         )).limit(1);
       if (!project.length) return reply.status(404).send({ error: 'Demanda ambiental não encontrada.' });
-      const created = await db.insert(schema.interacoes_cliente).values({
-        id: crypto.randomUUID(),
-        clienteId: project[0].clienteId,
-        projetoId: project[0].id,
-        tipo: 'Ambiental',
-        titulo: request.body.titulo,
-        categoria: request.body.categoria,
-        manual: true,
-        data: request.body.data,
-        descricao: request.body.descricao
-      }).returning();
-      await AuditLogService.log('INSERT', 'Andamento Ambiental', null, created[0]);
+      const created = await db.transaction(async (tx) => {
+        const progress = await tx.insert(schema.interacoes_cliente).values({
+          id: crypto.randomUUID(),
+          clienteId: project[0].clienteId,
+          projetoId: project[0].id,
+          tipo: 'Ambiental',
+          titulo: request.body.titulo,
+          categoria: request.body.categoria,
+          manual: true,
+          data: request.body.data,
+          descricao: request.body.descricao
+        }).returning();
+        await AuditLogService.log('INSERT', 'Andamento Ambiental', null, progress[0], tx);
+        return progress;
+      });
       return reply.status(201).send(created[0]);
     } catch (error) {
       server.log.error(error);

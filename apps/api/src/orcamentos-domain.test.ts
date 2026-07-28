@@ -67,6 +67,15 @@ test('recusa ajustes negativos e desconto percentual acima de 100%', () => {
   }), /Acréscimo não pode ser negativo/);
 });
 
+test('permite desconto de 100% e mantém o total exatamente em zero', () => {
+  const result = calculate({
+    globalDiscount: { type: 'percentual', value: '100' }
+  });
+  assert.equal(result.globalDiscountCents, 10_000);
+  assert.equal(result.totalCents, 0);
+  assert.equal(result.estimatedMarginBasisPoints, null);
+});
+
 test('permite acréscimo percentual acima de 100% sem impor limite comercial arbitrário', () => {
   const result = calculate({ globalAddition: { type: 'percentual', value: '125' } });
   assert.equal(result.globalAdditionCents, 12_500);
@@ -91,6 +100,8 @@ test('distingue imposto incluso no preço de imposto cobrado por fora', () => {
   });
   assert.equal(outside.outsideTaxesCents, 1_000);
   assert.equal(outside.totalCents, 11_000);
+  assert.equal(outside.netFeesCents, 10_000);
+  assert.equal(included.netFeesCents, 10_000);
 
   assert.throws(() => calculate({
     taxes: [{

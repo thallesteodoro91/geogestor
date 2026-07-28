@@ -26,6 +26,8 @@ export type ParcelaFinanceira = {
   clienteId?: string | null;
   clienteNome?: string | null;
   valor: number;
+  valorPago?: number | null;
+  recebidoCaixa?: number | null;
   dataVencimento: string;
   dataPagamento?: string | null;
   statusPagamento: string;
@@ -52,6 +54,9 @@ export type DespesaFinanceira = {
   fornecedor?: string | null;
   numeroDocumento?: string | null;
   comprovanteDocumentoId?: string | null;
+  categoriaCodigo?: string | null;
+  canceladaEm?: string | null;
+  estornadaEm?: string | null;
 };
 
 export type ClienteFinanceiro = {
@@ -178,7 +183,7 @@ const getMonthKey = (dateValue?: string | null) => {
 };
 
 const dateInRange = (dateValue: string | null | undefined, filters: FinancialFilters) => {
-  if (!dateValue) return true;
+  if (!dateValue) return !filters.dataInicio && !filters.dataFim;
   const key = dateValue.slice(0, 10);
   if (filters.dataInicio && key < filters.dataInicio) return false;
   if (filters.dataFim && key > filters.dataFim) return false;
@@ -217,9 +222,21 @@ const isRejeitado = (status?: string | null) => {
     || normalized === 'expirado'
     || normalized === 'substituido';
 };
+const isEncerradoComDecisao = (status?: string | null) => {
+  const normalized = normalizeText(status);
+  return normalized === 'aprovado'
+    || normalized === 'pago'
+    || normalized === 'rejeitado'
+    || normalized === 'expirado';
+};
 
 export const getParcelaStatusFiscal = (parcela: ParcelaFinanceira, todayKey = toLocalDateKey(new Date())) => {
   if (isPago(parcela.statusPagamento)) return 'Pago';
+  if ((Number(parcela.valorPago) || 0) > 0) {
+    return parcela.dataVencimento && parcela.dataVencimento.slice(0, 10) < todayKey
+      ? 'Atrasado'
+      : 'Parcialmente pago';
+  }
   return parcela.dataVencimento && parcela.dataVencimento.slice(0, 10) < todayKey ? 'Atrasado' : 'Pendente';
 };
 
@@ -230,6 +247,11 @@ export const getDespesaStatusFiscal = (despesa: DespesaFinanceira, todayKey = to
 
 export const inferTipoCusto = (despesa: DespesaFinanceira) => {
   if (despesa.reembolsavel) return 'Reembolsável';
+  if (despesa.categoriaCodigo === 'cartorio_taxas') return 'Cartório e taxas';
+  if (despesa.categoriaCodigo === 'tributos') return 'Tributário';
+  if (['combustivel', 'pedagio', 'hospedagem', 'alimentacao', 'viagem_transporte'].includes(despesa.categoriaCodigo || '')) {
+    return 'Variável de campo';
+  }
   if (despesa.tipoCusto) {
     const norm = normalizeText(despesa.tipoCusto);
     if (norm === 'variavel de campo') return 'Variável de campo';
@@ -328,6 +350,7 @@ export function buildFinancialAnalytics(params: {
   });
 
   const despesas = params.despesas.filter((despesa) => {
+    if (despesa.canceladaEm || despesa.estornadaEm) return false;
     if (!dateInRange(despesa.dataPagamento || getDespesaCompetenciaDate(despesa), filters)) return false;
     if (filters.clienteId && getClienteIdFromDespesa(despesa, projetoById) !== filters.clienteId) return false;
     if (filters.categoria && filters.categoria !== 'Todas' && despesa.categoria !== filters.categoria) return false;
@@ -353,20 +376,22 @@ export function buildFinancialAnalytics(params: {
   const receitaContratada = orcamentosAprovados.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
   const receitaPipeline = orcamentosPipeline.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
   const receitaRecebidaParcelas = parcelas
-    .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Pago')
-    .reduce((sum, item) => sum + (Number(item.valor) || 0), 0);
+    .reduce((sum, item) => sum + (Number(item.recebidoCaixa) || Number(item.valorPago) || 0), 0);
   const receitaRecebidaOrcamentos = orcamentosPagosSemParcelas.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
   const receitaRecebida = receitaRecebidaParcelas + receitaRecebidaOrcamentos;
   const receitaPendenteParcelas = parcelas
     .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Pendente')
-    .reduce((sum, item) => sum + (Number(item.valor) || 0), 0);
+    .reduce((sum, item) => sum + Math.max(0, (Number(item.valor) || 0) - (Number(item.valorPago) || 0)), 0);
   const receitaAtrasada = parcelas
     .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Atrasado')
-    .reduce((sum, item) => sum + (Number(item.valor) || 0), 0);
+    .reduce((sum, item) => sum + Math.max(0, (Number(item.valor) || 0) - (Number(item.valorPago) || 0)), 0);
+  const receitaParcialPendente = parcelas
+    .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Parcialmente pago')
+    .reduce((sum, item) => sum + Math.max(0, (Number(item.valor) || 0) - (Number(item.valorPago) || 0)), 0);
   const receitaPendenteSemParcelas = orcamentosAprovadosSemParcelas
     .filter((orcamento) => !isPago(orcamento.status))
     .reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
-  const receitaPendente = receitaPendenteParcelas + receitaPendenteSemParcelas;
+  const receitaPendente = receitaPendenteParcelas + receitaParcialPendente + receitaPendenteSemParcelas;
 
   const despesasLancadas = despesas.reduce((sum, item) => sum + (Number(item.valor) || 0), 0);
   const despesasPagas = despesas
@@ -393,16 +418,16 @@ export function buildFinancialAnalytics(params: {
   // Custos Variáveis são todas as despesas exceto as fixas e tributárias
   const custosVariaveis = despesasLancadas - custosFixos - custosTributarios;
 
-  // Os impostos estimados via orçamento servem de base, mas se o usuário já lançou despesas tributárias maiores, usamos elas
+  // A previsão comercial de impostos e as despesas tributárias realizadas
+  // permanecem separadas; uma não substitui a outra.
   const impostosEstimados = orcamentosAprovados.reduce((sum, orcamento) => sum + getOrcamentoImposto(orcamento), 0);
-  const impostosTotais = Math.max(impostosEstimados, custosTributarios);
 
-  const receitaLiquidaEstimada = Math.max(0, receitaContratada - impostosTotais);
+  const receitaLiquidaEstimada = Math.max(0, receitaContratada - impostosEstimados);
   const margemContribuicaoValor = receitaLiquidaEstimada - custosVariaveis;
   
   const resultadoCaixa = receitaRecebida - despesasPagas;
   
-  // O Resultado de Competência (Lucro Operacional / EBITDA) é a Margem de Contribuição menos Custos Fixos
+  // Resultado gerencial contratado; não é DRE contábil nem competência oficial.
   const resultadoCompetencia = margemContribuicaoValor - custosFixos;
   
   const margemCaixa = receitaRecebida > 0 ? (resultadoCaixa / receitaRecebida) * 100 : 0;
@@ -411,7 +436,10 @@ export function buildFinancialAnalytics(params: {
   const pontoEquilibrio = margemContribuicao > 0 ? custosFixos / (margemContribuicao / 100) : 0;
   
   const ticketMedioContratado = orcamentosAprovados.length > 0 ? receitaContratada / orcamentosAprovados.length : 0;
-  const taxaConversao = orcamentos.length > 0 ? (orcamentosAprovados.length / orcamentos.length) * 100 : 0;
+  const orcamentosEncerrados = orcamentos.filter((orcamento) => isEncerradoComDecisao(orcamento.status));
+  const taxaConversao = orcamentosEncerrados.length > 0
+    ? (orcamentosAprovados.length / orcamentosEncerrados.length) * 100
+    : 0;
 
   const monthlyArray = monthRange(12, params.now || new Date());
   const monthlyMap = new Map(monthlyArray.map((item) => [item.mes, item]));
@@ -425,9 +453,14 @@ export function buildFinancialAnalytics(params: {
   });
 
   parcelas
-    .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Pago')
+    .filter((parcela) => (Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0) > 0)
     .forEach((parcela) => {
-      addToMonth(monthlyMap, getMonthKey(parcela.dataPagamento || parcela.dataVencimento), 'receitaRecebida', parcela.valor || 0);
+      addToMonth(
+        monthlyMap,
+        getMonthKey(parcela.dataPagamento || parcela.dataVencimento),
+        'receitaRecebida',
+        Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0
+      );
     });
 
   despesas.forEach((despesa) => {
@@ -490,10 +523,10 @@ export function buildFinancialAnalytics(params: {
   });
 
   parcelas
-    .filter((parcela) => getParcelaStatusFiscal(parcela, todayKey) === 'Pago')
+    .filter((parcela) => (Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0) > 0)
     .forEach((parcela) => {
       const current = ensureClient(parcela.clienteId, parcela.clienteNome);
-      current.receitaRecebida += parcela.valor || 0;
+      current.receitaRecebida += Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0;
     });
 
   orcamentosPagosSemParcelas.forEach((orcamento) => {
@@ -501,11 +534,13 @@ export function buildFinancialAnalytics(params: {
     current.receitaRecebida += orcamento.valorTotal || 0;
   });
 
-  despesas.forEach((despesa) => {
-    const clienteId = getClienteIdFromDespesa(despesa, projetoById);
-    const current = ensureClient(clienteId);
-    current.despesas += despesa.valor || 0;
-  });
+  despesas
+    .filter((despesa) => getDespesaStatusFiscal(despesa, todayKey) === 'Pago')
+    .forEach((despesa) => {
+      const clienteId = getClienteIdFromDespesa(despesa, projetoById);
+      const current = ensureClient(clienteId);
+      current.despesas += despesa.valor || 0;
+    });
 
   const clientes = Array.from(clientTotals.values())
     .map((item) => ({

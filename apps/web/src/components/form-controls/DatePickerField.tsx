@@ -168,7 +168,7 @@ export function DatePickerField({
         className={cn(geoFieldClass, 'geo-date-trigger flex w-full items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60', className)}
       >
         <CalendarBlank aria-hidden="true" weight="duotone" className="h-4 w-4 shrink-0 text-brand-primary-600 dark:text-brand-primary-300" />
-        <span className={cn('min-w-0 flex-1 truncate font-medium tabular-nums', !selectedDate && 'text-zinc-400')}>{valueLabel}</span>
+        <span className={cn('min-w-0 flex-1 truncate font-medium tabular-nums', !selectedDate && 'text-zinc-600 dark:text-zinc-300')}>{valueLabel}</span>
         <CaretDown aria-hidden="true" weight="bold" className={cn('h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
       </button>
 

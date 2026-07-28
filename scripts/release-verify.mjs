@@ -3,6 +3,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { verifyArtifactHashes } from './release-integrity.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const desktopDist = path.join(rootDir, 'apps', 'desktop', 'dist');
@@ -68,6 +69,7 @@ if (mode === 'source') {
     if (!metadata.commit || metadata.commit === 'unknown') errors.push('Commit do pacote não identificado.');
     if (metadata.dirty && !allowDirty) errors.push('O pacote foi gerado a partir de worktree sujo; gere o release final a partir de commit/tag limpo.');
   }
+  errors.push(...verifyArtifactHashes(desktopDist));
 }
 
 fs.mkdirSync(desktopDist, { recursive: true });

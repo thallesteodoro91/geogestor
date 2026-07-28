@@ -1,5 +1,5 @@
 import { FormSelect } from '../../components/Form';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -16,6 +16,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Layout } from '../../components/Layout';
+import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
+import { createBaseTileLayer } from '../../utils/mapTiles';
 import {
   calcularAreaGeograficaEstimada,
   calcularAreaPoligono,
@@ -272,6 +274,31 @@ export function CalculadoraTopografica() {
   const miniMapContainerRef = useRef<HTMLDivElement>(null);
   const miniMapInstanceRef = useRef<L.Map | null>(null);
   const geometryLayerRef = useRef<L.LayerGroup | null>(null);
+  const baseTileLayerRef = useRef<L.TileLayer | null>(null);
+  const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
+
+  const reloadBaseMap = useCallback(() => {
+    const map = miniMapInstanceRef.current;
+    if (!map) return;
+    if (baseTileLayerRef.current) map.removeLayer(baseTileLayerRef.current);
+    setBaseMapUnavailable(!navigator.onLine);
+    baseTileLayerRef.current = createBaseTileLayer(
+      map,
+      () => setBaseMapUnavailable(true),
+      () => setBaseMapUnavailable(false)
+    );
+  }, []);
+
+  useEffect(() => {
+    const offline = () => setBaseMapUnavailable(true);
+    const online = () => reloadBaseMap();
+    window.addEventListener('offline', offline);
+    window.addEventListener('online', online);
+    return () => {
+      window.removeEventListener('offline', offline);
+      window.removeEventListener('online', online);
+    };
+  }, [reloadBaseMap]);
 
   const maxDegrees = coordinateKind === 'latitude' ? 90 : 180;
   const degrees = parseNumericInput(degreesInput);
@@ -387,10 +414,11 @@ export function CalculadoraTopografica() {
       attributionControl: true,
     }).setView([-15.793889, -47.882778], 14);
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    baseTileLayerRef.current = createBaseTileLayer(
+      map,
+      () => setBaseMapUnavailable(true),
+      () => setBaseMapUnavailable(false)
+    );
 
     miniMapInstanceRef.current = map;
     geometryLayerRef.current = L.layerGroup().addTo(map);
@@ -400,6 +428,7 @@ export function CalculadoraTopografica() {
       map.remove();
       miniMapInstanceRef.current = null;
       geometryLayerRef.current = null;
+      baseTileLayerRef.current = null;
     };
   }, [activeTab, polygonMode]);
 
@@ -826,6 +855,7 @@ export function CalculadoraTopografica() {
             >
               {polygonMode === 'geografica' ? (
                 <>
+                  <MapBaseNotice unavailable={baseMapUnavailable} onRetry={reloadBaseMap} />
                   <div
                     ref={miniMapContainerRef}
                     role="region"

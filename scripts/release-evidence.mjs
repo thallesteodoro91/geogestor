@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
+import { describeArtifact } from './release-integrity.mjs';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const distDir = path.join(rootDir, 'apps', 'desktop', 'dist');
@@ -28,10 +28,7 @@ fs.writeFileSync(path.join(distDir, 'sbom.json'), `${JSON.stringify({
 
 const artifacts = fs.readdirSync(distDir)
   .filter((name) => name === `GeoGestor Setup ${desktopPackage.version}.exe`)
-  .map((name) => {
-    const content = fs.readFileSync(path.join(distDir, name));
-    return { name, bytes: content.length, sha256: crypto.createHash('sha256').update(content).digest('hex') };
-  });
+  .map((name) => describeArtifact(path.join(distDir, name)));
 fs.writeFileSync(path.join(distDir, 'artifact-hashes.json'), `${JSON.stringify({
   generatedAt: new Date().toISOString(),
   artifacts

@@ -2,6 +2,7 @@ import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { and, eq, like } from 'drizzle-orm';
 import crypto from 'crypto';
+import { OperationalLogService } from './operational-log.service';
 
 type JornadaEventInput = {
   clienteId: string;
@@ -41,7 +42,7 @@ export class JornadaService {
         descricao: input.descricao
       });
     } catch (err) {
-      console.error('Erro ao registrar evento na Jornada do cliente:', err);
+      await OperationalLogService.error('journey-write-failed', { type: input.tipo, error: err });
       if (dbOrTx) throw err;
     }
   }
@@ -115,7 +116,7 @@ export class JornadaService {
         descricao: descInicial
       });
     } catch (err) {
-      console.error('Erro ao registrar documento agrupado na Jornada:', err);
+      await OperationalLogService.error('journey-document-write-failed', { category: input.categoria, error: err });
       if (dbOrTx) throw err;
     }
   }

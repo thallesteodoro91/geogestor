@@ -788,7 +788,7 @@ export function ListagemClientes() {
             Diretório
           </span>
           <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Clientes <span className="text-zinc-400 dark:text-zinc-500">· {clientes.length}</span>
+            Clientes <span className="text-zinc-600 dark:text-zinc-300">· {clientes.length}</span>
           </h1>
           <p className="mt-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-300 sm:text-base">
             Gerencie clientes, contatos, propriedades e histórico de interações.
@@ -1129,8 +1129,8 @@ export function ListagemClientes() {
                       <ClientActionsMenu cliente={cliente} returnTo={returnTo} onEdit={openEditModal} onDelete={handleDelete} />
                     </div>
 
-                    <dl className="mt-3.5 grid gap-3.5 border-t border-brand-border pt-3.5 text-[13px] sm:grid-cols-2">
-                      <div className="min-w-0">
+                    <dl className="mt-3.5 grid gap-3.5 border-t border-brand-border pt-3.5 text-[13px] sm:grid-cols-4">
+                      <div className="min-w-0 sm:col-span-2">
                         <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Contato</dt>
                         <dd className="mt-1 min-w-0 space-y-1 text-zinc-700 dark:text-zinc-200">
                           {cliente.email ? (
@@ -1145,18 +1145,16 @@ export function ListagemClientes() {
                           ) : <span>Sem telefone</span>}
                         </dd>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Propriedades</dt>
-                          <dd className="mt-1 font-semibold tabular-nums text-zinc-700 dark:text-zinc-200" title={formatPropertyCountLabel(propertyCount)}>
-                            <span aria-hidden="true">{clientCountFormatter.format(propertyCount)}</span>
-                            <span className="sr-only">{formatPropertyCountLabel(propertyCount)}</span>
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Última interação</dt>
-                          <dd className="mt-1 font-medium text-zinc-700 dark:text-zinc-200" title={interaction.full}>{interaction.relative}</dd>
-                        </div>
+                      <div>
+                        <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Propriedades</dt>
+                        <dd className="mt-1 font-semibold tabular-nums text-zinc-700 dark:text-zinc-200" title={formatPropertyCountLabel(propertyCount)}>
+                          <span aria-hidden="true">{clientCountFormatter.format(propertyCount)}</span>
+                          <span className="sr-only">{formatPropertyCountLabel(propertyCount)}</span>
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Última interação</dt>
+                        <dd className="mt-1 font-medium text-zinc-700 dark:text-zinc-200" title={interaction.full}>{interaction.relative}</dd>
                       </div>
                     </dl>
                   </article>

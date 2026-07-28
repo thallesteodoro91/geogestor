@@ -25,11 +25,12 @@ interface QuickClientModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreated: (client: CreatedProjectClient) => void;
+  contextLabel?: string;
 }
 
 const emptyClientFingerprint = clientFormFingerprint(createEmptyClientForm());
 
-function QuickClientModalContent({ isOpen, onClose, onCreated }: QuickClientModalProps) {
+function QuickClientModalContent({ isOpen, onClose, onCreated, contextLabel = 'projeto' }: QuickClientModalProps) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<ClientFormState>(() => createEmptyClientForm());
   const [errors, setErrors] = useState<ClientFormErrors>({});
@@ -50,7 +51,7 @@ function QuickClientModalContent({ isOpen, onClose, onCreated }: QuickClientModa
     ),
     onSuccess: (client) => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
-      toast.success('Cliente cadastrado e selecionado no projeto.');
+      toast.success('Cliente cadastrado e selecionado no formulário.');
       onCreated(client);
     },
     onError: (error: unknown) => {
@@ -82,7 +83,7 @@ function QuickClientModalContent({ isOpen, onClose, onCreated }: QuickClientModa
       onClose={close}
       title={(
         <span className="flex flex-wrap items-center gap-2">
-          <span>Novo cliente para o projeto</span>
+          <span>Novo cliente para {contextLabel === 'demanda ambiental' ? 'a' : 'o'} {contextLabel}</span>
           {dirty && (
             <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">
               Alterações não salvas
@@ -112,7 +113,7 @@ function QuickClientModalContent({ isOpen, onClose, onCreated }: QuickClientModa
             Após salvar, o cliente será selecionado automaticamente.
           </p>
           <button type="button" onClick={close} disabled={createClientMutation.isPending} className={secondarySmallActionButtonClass}>
-            Voltar ao projeto
+            Voltar ao formulário
           </button>
           <button
             type="submit"

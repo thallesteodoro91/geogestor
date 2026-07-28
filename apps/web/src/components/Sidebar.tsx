@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { X } from '@phosphor-icons/react';
+import { LockKey, X } from '@phosphor-icons/react';
 import { preloadRoute } from '../utils/routePreloaders';
+import { useAppSession } from '../contexts/AppSessionContext';
+import { APP_VERSION } from '../version';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
 import projectsIcon from '../assets/magnific-icons/project_folder.svg';
 import clientsIcon from '../assets/magnific-icons/user_3237472.svg';
@@ -88,6 +90,7 @@ function SidebarIcon({
 }
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
+  const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -147,6 +150,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       tone: 'finance',
       items: [
         { name: 'Financeiro', path: '/financeiro', icon: financeIcon, created: true },
+        { name: 'Contas a receber', path: '/faturas', icon: budgetsIcon, created: true },
+        { name: 'Viagens e documentos fiscais', path: '/gestao-financeira', icon: reportsIcon, created: true },
         { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
         { name: 'Planejamento Estratégico', path: '/planejamento', icon: planningIcon, created: true },
       ],
@@ -190,8 +195,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 <div className="font-heading text-lg font-semibold leading-none text-zinc-900 dark:text-white">
                   GeoGestor
                 </div>
-                <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tighter text-emerald-600 dark:text-emerald-400">
-                  v1.1.1
+                <span className="rounded-md border border-emerald-600/30 bg-emerald-50 px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tighter text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950 dark:text-emerald-300">
+                  v{APP_VERSION}
                 </span>
               </div>
               <p className="mt-1 truncate text-xs font-medium leading-4 text-zinc-500 dark:text-zinc-400">
@@ -217,7 +222,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         >
           {sections.map((section) => (
             <div key={section.title} className="space-y-2">
-              <span className="block px-3 font-heading text-[11px] font-bold tracking-[0.16em] text-zinc-400 dark:text-zinc-500">
+              <span className="block px-3 font-heading text-[11px] font-bold tracking-[0.16em] text-zinc-600 dark:text-zinc-400">
                 {section.title}
               </span>
               <div className="space-y-1">
@@ -278,14 +283,23 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         <div className="border-t border-zinc-100 p-4 dark:border-zinc-800">
           <div className="flex items-center gap-3 rounded-lg border border-zinc-200/70 bg-zinc-50 p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 font-heading text-sm font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
-              US
+              {(identity?.name || 'GG').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
               <p className="truncate text-sm font-semibold leading-5 text-zinc-800 dark:text-zinc-200">
-                Usuário
+                {identity?.name || 'Administrador'}
               </p>
-              <span className="block truncate text-xs leading-4 text-zinc-500">demo@geogestor.com</span>
+              <span className="block truncate text-xs leading-4 text-zinc-600 dark:text-zinc-400">{identity?.email || 'Sessão local'}</span>
             </div>
+            <button
+              type="button"
+              onClick={() => void lock()}
+              className="geo-focus-ring flex min-h-11 min-w-11 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+              aria-label="Bloquear sessão"
+              title="Bloquear sessão"
+            >
+              <LockKey aria-hidden="true" size={18} />
+            </button>
           </div>
         </div>
       </aside>

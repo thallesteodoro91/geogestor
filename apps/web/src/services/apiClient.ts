@@ -10,6 +10,23 @@ export class ApiError extends Error {
   }
 }
 
+let localSessionToken = '';
+let lastConnectionLogAt = 0;
+
+export function setLocalSessionToken(token: string) {
+  localSessionToken = token;
+  window.electronAPI?.setLocalSessionToken?.(token);
+}
+
+export function clearLocalSessionToken() {
+  localSessionToken = '';
+  window.electronAPI?.setLocalSessionToken?.('');
+}
+
+export function hasLocalSessionToken() {
+  return Boolean(localSessionToken);
+}
+
 interface RequestOptions extends RequestInit {
   timeoutMs?: number;
 }
@@ -36,23 +53,11 @@ export function getBaseUrl(): string {
 }
 
 export function getDownloadUrl(filePath: string): string {
-  const baseUrl = getBaseUrl();
-  let token = '';
-  if (typeof window !== 'undefined' && window.electronAPI?.getApiToken) {
-    token = window.electronAPI.getApiToken() || '';
-  }
-  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-  return `${baseUrl}/api/arquivos/download?path=${encodeURIComponent(filePath)}${tokenParam}`;
+  return `${getBaseUrl()}/api/arquivos/download?path=${encodeURIComponent(filePath)}`;
 }
 
 export function getPreviewUrl(filePath: string): string {
-  const baseUrl = getBaseUrl();
-  let token = '';
-  if (typeof window !== 'undefined' && window.electronAPI?.getApiToken) {
-    token = window.electronAPI.getApiToken() || '';
-  }
-  const tokenParam = token ? `&token=${encodeURIComponent(token)}` : '';
-  return `${baseUrl}/api/arquivos/preview?path=${encodeURIComponent(filePath)}${tokenParam}`;
+  return `${getBaseUrl()}/api/arquivos/preview?path=${encodeURIComponent(filePath)}`;
 }
 
 function getAuthHeaders(customHeaders?: HeadersInit): Headers {
@@ -62,6 +67,9 @@ function getAuthHeaders(customHeaders?: HeadersInit): Headers {
     if (token && !headers.has('x-api-token')) {
       headers.set('x-api-token', token);
     }
+  }
+  if (localSessionToken && !headers.has('x-local-session')) {
+    headers.set('x-local-session', localSessionToken);
   }
   return headers;
 }
@@ -117,7 +125,10 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
     if (response.status === 400) {
       errorMessage = `Dados inválidos: ${errorMessage}`;
-    } else if (response.status === 401 || response.status === 403) {
+    } else if (
+      (response.status === 401 || response.status === 403)
+      && !(payload && typeof payload === 'object' && 'code' in payload)
+    ) {
       errorMessage = 'Acesso negado pela segurança local do sistema.';
     } else if (response.status === 404) {
       errorMessage = 'O registro ou arquivo solicitado não foi encontrado.';
@@ -144,7 +155,6 @@ export const apiClient = {
     const baseUrl = getBaseUrl();
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
     
-    fetchOptions.headers = getAuthHeaders(fetchOptions.headers);
     fetchOptions.signal = controller.signal;
 
     try {
@@ -153,15 +163,33 @@ export const apiClient = {
       return await handleResponse<T>(response);
     } catch (error: unknown) {
       clearTimeout(id);
-      console.error('[API_CLIENT_ERROR]', { url, method: fetchOptions.method, error });
       if (error instanceof ApiError) {
+        if (error.status === 423) {
+          clearLocalSessionToken();
+          window.dispatchEvent(new CustomEvent('geogestor:session-locked'));
+        }
         throw error;
       }
       if (error instanceof Error && error.name === 'AbortError') {
-        throw new ApiError('A requisição demorou muito tempo e foi cancelada (Timeout).', 408);
+        window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
+        throw new ApiError('Não foi possível conectar ao serviço local do GeoGestor no tempo esperado.', 0, {
+          endpoint: new URL(url).pathname,
+          reason: 'Tempo limite de conexão excedido.'
+        });
       }
-      const message = error instanceof Error ? error.message : 'Falha na conexão de rede local.';
-      throw new ApiError(`Erro de conexão: ${message} (URL: ${url})`, 0);
+      const now = Date.now();
+      if (now - lastConnectionLogAt > 10_000) {
+        console.warn('[API_UNAVAILABLE]', {
+          endpoint: new URL(url).pathname,
+          reason: error instanceof Error ? error.message : 'network-error'
+        });
+        lastConnectionLogAt = now;
+      }
+      window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
+      throw new ApiError('Não foi possível conectar ao serviço local do GeoGestor.', 0, {
+        endpoint: new URL(url).pathname,
+        reason: error instanceof Error ? error.message : 'Falha na conexão de rede local.'
+      });
     }
   },
 

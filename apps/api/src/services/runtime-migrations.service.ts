@@ -2,10 +2,21 @@ import { createClient, type Client } from '@libsql/client';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'node:fs/promises';
+import {
+  ensureFilesystemOperations,
+  FILESYSTEM_OUTBOX_MIGRATION
+} from './runtime-migrations/v2-filesystem-outbox';
+import { ensureClientDocumentIntegrity } from './runtime-migrations/v3-client-document-integrity';
+import {
+  ensureManagerialFinance,
+  MANAGERIAL_FINANCE_MIGRATION
+} from './runtime-migrations/v4-managerial-finance';
+import { MaintenanceCoordinator } from './maintenance-coordinator.service';
+import { OperationalLogService } from './operational-log.service';
 
 const dbPath = process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
-const RUNTIME_MIGRATION_VERSION = 1;
-const RUNTIME_MIGRATION_NAME = 'backend-hardening-2026-07-21';
+const RUNTIME_MIGRATION_VERSION = MANAGERIAL_FINANCE_MIGRATION.version;
+const RUNTIME_MIGRATION_NAME = MANAGERIAL_FINANCE_MIGRATION.name;
 const MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 
 type ColumnInfo = {
@@ -1135,7 +1146,7 @@ async function createPreMigrationBackup(client: Client) {
       throw new Error('O snapshot pré-migração não passou nas verificações de integridade.');
     }
   } finally {
-    backupClient.close();
+    await backupClient.close();
   }
   return backupPath;
 }
@@ -1250,7 +1261,29 @@ async function migrateLegacyBudgetJson(client: Client) {
   }
 }
 
-export async function runRuntimeMigrations() {
+async function isCurrentMigrationApplied(client: Client) {
+  const ledger = await client.execute(`
+    SELECT 1
+    FROM sqlite_master
+    WHERE type = 'table' AND name = 'schema_migrations'
+    LIMIT 1
+  `);
+  if (ledger.rows.length === 0) return false;
+
+  const [migration, userVersion] = await Promise.all([
+    client.execute({
+      sql: 'SELECT status FROM schema_migrations WHERE version = ?',
+      args: [RUNTIME_MIGRATION_VERSION]
+    }),
+    client.execute('PRAGMA user_version;')
+  ]);
+
+  return migration.rows[0]?.status === 'success'
+    && Number(userVersion.rows[0]?.user_version ?? 0) === RUNTIME_MIGRATION_VERSION;
+}
+
+async function executeRuntimeMigrations() {
+  const startedAtMs = performance.now();
   const client = createClient({
     url: `file:${dbPath}`
   });
@@ -1262,6 +1295,15 @@ export async function runRuntimeMigrations() {
     await client.execute('PRAGMA journal_mode = WAL;');
     await client.execute('PRAGMA busy_timeout = 5000;');
     await client.execute('PRAGMA foreign_keys = ON;');
+    if (await isCurrentMigrationApplied(client)) {
+      await OperationalLogService.info('runtime-migration-completed', {
+        durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+        fastPath: true,
+        schemaVersion: RUNTIME_MIGRATION_VERSION
+      });
+      return { fastPath: true, schemaVersion: RUNTIME_MIGRATION_VERSION };
+    }
+
     await assertDatabasePreflight(client);
     await ensureMigrationLedger(client);
     migrationLedgerReady = true;
@@ -1419,6 +1461,7 @@ export async function runRuntimeMigrations() {
     await ensureDocumentoCategorias(client);
     await ensureDocumentos(client);
     await ensureAuditLogs(client);
+    await ensureFilesystemOperations(client);
     await ensureConfiguracoesSingleton(client);
     await ensureContatos(client);
 
@@ -1431,6 +1474,7 @@ export async function runRuntimeMigrations() {
     for (const table of tablesWithSoftDelete) {
       await addColumnIfTableExists(client, table, 'deleted_at', 'TEXT');
     }
+    await ensureClientDocumentIntegrity(client);
 
     // Normalização de Orçamentos
     await client.execute(`
@@ -1461,49 +1505,14 @@ export async function runRuntimeMigrations() {
 
     await migrateLegacyBudgetJson(client);
 
-    try {
-      // Migrar dados JSON para tabelas
-      const orcamentosWithJson = await client.execute("SELECT id, itens_json, despesas_json FROM orcamentos WHERE itens_json IS NOT NULL OR despesas_json IS NOT NULL");
-      
-      for (const orc of orcamentosWithJson.rows) {
-        if (orc.itens_json && typeof orc.itens_json === 'string' && orc.itens_json.trim() !== '') {
-          try {
-            const itens = JSON.parse(orc.itens_json);
-            for (const item of itens) {
-              await client.execute({
-                sql: "INSERT OR IGNORE INTO orcamento_itens (id, orcamento_id, descricao, quantidade, valor_unitario, total) VALUES (?, ?, ?, ?, ?, ?)",
-                args: [crypto.randomUUID(), orc.id as string, item.descricao || 'Item Sem Descrição', item.quantidade || 1, item.valorUnitario || 0, item.total || 0]
-              });
-            }
-          } catch (e) {
-            console.error('Falha ao migrar itens_json do orcamento', orc.id);
-          }
-        }
-
-        if (orc.despesas_json && typeof orc.despesas_json === 'string' && orc.despesas_json.trim() !== '') {
-          try {
-            const despesas = JSON.parse(orc.despesas_json);
-            for (const desp of despesas) {
-              await client.execute({
-                sql: "INSERT OR IGNORE INTO orcamento_despesas (id, orcamento_id, descricao, valor) VALUES (?, ?, ?, ?)",
-                args: [crypto.randomUUID(), orc.id as string, desp.descricao || 'Despesa Sem Descrição', desp.valor || 0]
-              });
-            }
-          } catch (e) {
-            console.error('Falha ao migrar despesas_json do orcamento', orc.id);
-          }
-        }
-      }
-    } catch (e) {
-      console.log('Skipping JSON migration for orcamentos as columns orcamentos.itens_json or orcamentos.despesas_json are missing in the schema.');
-    }
-
     await ensureBudgetModule(client);
+    await ensureManagerialFinance(client);
 
     // Após migrar, os campos originais poderiam ser descartados, mas o SQLite não permite DROP COLUMN facilmente.
     // Vamos apenas deixá-los null ou ignora-los nas queries futuras.
 
     // Índices de otimização para chaves estrangeiras e filtros frequentes
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_clientes_active_created_at ON clientes(created_at DESC) WHERE deleted_at IS NULL;');
     await client.execute('CREATE INDEX IF NOT EXISTS idx_projetos_cliente_status_data ON projetos(cliente_id, status, data_entrega);');
     await client.execute('CREATE INDEX IF NOT EXISTS idx_orcamentos_cliente_projeto_status ON orcamentos(cliente_id, projeto_id, status, data_competencia);');
     await client.execute('CREATE INDEX IF NOT EXISTS idx_parcelas_orcamento_status_data ON parcelas(orcamento_id, status_pagamento, data_vencimento);');
@@ -1514,6 +1523,18 @@ export async function runRuntimeMigrations() {
     await assertForeignKeyIntegrity(client);
     const appliedAt = new Date().toISOString();
     await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (1, 'backend-hardening-2026-07-21', 'success', NULL, NULL, ?, ?, ?)`,
+      args: [appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [FILESYSTEM_OUTBOX_MIGRATION.version, FILESYSTEM_OUTBOX_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
       sql: `UPDATE schema_migrations
         SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
         WHERE version = ?`,
@@ -1522,6 +1543,12 @@ export async function runRuntimeMigrations() {
     await client.execute(`PRAGMA user_version = ${RUNTIME_MIGRATION_VERSION};`);
     await client.execute('COMMIT;');
     transactionStarted = false;
+    await OperationalLogService.info('runtime-migration-completed', {
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      fastPath: false,
+      schemaVersion: RUNTIME_MIGRATION_VERSION
+    });
+    return { fastPath: false, schemaVersion: RUNTIME_MIGRATION_VERSION };
   } catch (error) {
     if (transactionStarted) {
       try {
@@ -1545,8 +1572,17 @@ export async function runRuntimeMigrations() {
         // A falha original é mais relevante; o próximo preflight reavaliará o banco.
       }
     }
+    await OperationalLogService.warn('runtime-migration-failed', {
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      schemaVersion: RUNTIME_MIGRATION_VERSION,
+      error
+    });
     throw error;
   } finally {
-    client.close();
+    await client.close();
   }
+}
+
+export function runRuntimeMigrations() {
+  return MaintenanceCoordinator.runExclusive('migration', executeRuntimeMigrations);
 }

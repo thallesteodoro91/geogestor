@@ -280,9 +280,12 @@ export interface Tarefa {
   dataLimite?: string;
 }
 
-export interface DRE {
+export interface MonthlyCashFlowSummary {
   mes: string;
   receitas: number;
   despesas: number;
   lucro: number;
 }
+
+/** @deprecated Use MonthlyCashFlowSummary. Mantido para consumidores legados. */
+export type DRE = MonthlyCashFlowSummary;

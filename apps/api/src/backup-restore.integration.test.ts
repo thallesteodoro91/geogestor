@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createClient } from '@libsql/client';
 
-const root = path.resolve(process.cwd(), 'scratch', 'backup-restore-test');
+const root = path.resolve(process.cwd(), 'scratch', `backup-restore-${process.pid}`);
 const dbPath = path.join(root, 'source', 'geogestor.db');
 const filesRoot = path.join(root, 'source-files');
 const restoredDbPath = path.join(root, 'restored', 'geogestor.db');
@@ -41,6 +41,23 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.equal(validation.foreignKeyViolations, 0);
   assert.equal(validation.manifest.type, 'complete');
 
+  const corruptBundle = `${backup.bundlePath}-corrupt`;
+  await fs.cp(backup.bundlePath, corruptBundle, { recursive: true });
+  await fs.appendFile(path.join(corruptBundle, 'database.db'), 'corrupção sintética');
+  await assert.rejects(BackupService.validateBackup(corruptBundle), /Tamanho divergente|Checksum divergente/);
+
+  const incompatibleBundle = `${backup.bundlePath}-incompatible`;
+  await fs.cp(backup.bundlePath, incompatibleBundle, { recursive: true });
+  const incompatibleManifestPath = path.join(incompatibleBundle, 'manifest.json');
+  const incompatibleManifest = JSON.parse(await fs.readFile(incompatibleManifestPath, 'utf8'));
+  incompatibleManifest.schemaVersion = 999;
+  await fs.writeFile(incompatibleManifestPath, JSON.stringify(incompatibleManifest), 'utf8');
+  await assert.rejects(BackupService.validateBackup(incompatibleBundle), /versão mais nova/);
+
+  const legacyBackup = path.join(path.dirname(backup.bundlePath), 'backup-legado.db');
+  await fs.copyFile(path.join(backup.bundlePath, 'database.db'), legacyBackup);
+  await assert.rejects(BackupService.validateBackup(legacyBackup), /Backup legado \.db/);
+
   await assert.rejects(
     BackupService.restoreBackup({
       bundlePath: backup.bundlePath,
@@ -74,5 +91,27 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.equal(await fs.readFile(path.join(restoredFilesRoot, 'documento.txt'), 'utf8'), 'versão preservada');
 
   await restoredClient.close();
+  const beforeFailureClient = createClient({ url: `file:${restoredDbPath}` });
+  await beforeFailureClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-anterior', 'Estado anterior'] });
+  await beforeFailureClient.close();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await fs.writeFile(path.join(restoredFilesRoot, 'documento.txt'), 'estado anterior', 'utf8');
+  BackupService.setRestoreFailureInjectorForTests((stage) => {
+    if (stage === 'files-installed') throw new Error('Falha sintética após instalar arquivos');
+  });
+  await assert.rejects(BackupService.restoreBackup({
+    bundlePath: backup.bundlePath,
+    targetDatabasePath: restoredDbPath,
+    targetFilesRoot: restoredFilesRoot,
+    confirmation: 'RESTORE_GEOGESTOR'
+  }), /Falha sintética/);
+  BackupService.setRestoreFailureInjectorForTests(null);
+
+  const rolledBackClient = createClient({ url: `file:${restoredDbPath}` });
+  const rolledBackClients = await rolledBackClient.execute('SELECT id FROM clientes ORDER BY id');
+  assert.deepEqual(rolledBackClients.rows.map((row) => row.id), ['cliente-anterior', 'cliente-backup']);
+  assert.equal(await fs.readFile(path.join(restoredFilesRoot, 'documento.txt'), 'utf8'), 'estado anterior');
+  assert.equal((await rolledBackClient.execute('PRAGMA quick_check')).rows[0]?.quick_check, 'ok');
+  await rolledBackClient.close();
   await sourceClient.close();
 });

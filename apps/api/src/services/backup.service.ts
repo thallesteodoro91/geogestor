@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createClient } from '@libsql/client';
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
+import { MaintenanceCoordinator } from './maintenance-coordinator.service';
+import { MANAGERIAL_FINANCE_MIGRATION } from './runtime-migrations/v4-managerial-finance';
 
 const BACKUP_FORMAT_VERSION = 1;
 const DEFAULT_RETENTION = 10;
@@ -86,6 +88,15 @@ async function inspectDatabase(databasePath: string) {
 }
 
 export class BackupService {
+  private static restoreFailureInjector: ((stage: string) => void | Promise<void>) | null = null;
+
+  static setRestoreFailureInjectorForTests(injector: ((stage: string) => void | Promise<void>) | null) {
+    if (process.env.NODE_ENV !== 'test' && !process.env.GEOGESTOR_DB_PATH?.includes('scratch')) {
+      throw new Error('A injeção de falha de restauração é permitida somente em ambiente de teste.');
+    }
+    this.restoreFailureInjector = injector;
+  }
+
   static getDatabasePath(): string {
     return process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
   }
@@ -105,11 +116,11 @@ export class BackupService {
     copiedFiles: string[];
     validation: { quickCheck: 'ok'; foreignKeyViolations: 0 };
   }> {
-    return this.createBackupBundle({ type: 'database' });
+    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'database' }));
   }
 
   static async createCompleteBackup(filesRootDirectory: string) {
-    return this.createBackupBundle({ type: 'complete', filesRootDirectory });
+    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'complete', filesRootDirectory }));
   }
 
   private static async createBackupBundle(input: { type: 'database' | 'complete'; filesRootDirectory?: string }) {
@@ -207,6 +218,11 @@ export class BackupService {
     const resolvedBundle = path.resolve(bundlePath);
     const backupDirectory = path.resolve(this.getBackupDirectory());
     assertInside(resolvedBundle, backupDirectory);
+    const bundleStats = await fs.stat(resolvedBundle);
+    if (bundleStats.isFile()) {
+      throw new Error('Backup legado .db sem manifesto não pode ser restaurado automaticamente. Crie ou selecione um bundle validado do GeoGestor.');
+    }
+    if (!bundleStats.isDirectory()) throw new Error('O backup selecionado não é um diretório válido.');
     try {
       await fs.access(path.join(resolvedBundle, 'PENDING'));
       throw new Error('O backup ainda está incompleto.');
@@ -217,6 +233,15 @@ export class BackupService {
     const manifest = JSON.parse(await fs.readFile(path.join(resolvedBundle, 'manifest.json'), 'utf8')) as BackupManifest;
     if (manifest.formatVersion !== BACKUP_FORMAT_VERSION || manifest.application !== 'GeoGestor') {
       throw new Error('Formato de backup incompatível.');
+    }
+    if (!Number.isInteger(manifest.schemaVersion) || manifest.schemaVersion < 0) {
+      throw new Error('Versão de schema inválida no manifesto do backup.');
+    }
+    if (manifest.schemaVersion > MANAGERIAL_FINANCE_MIGRATION.version) {
+      throw new Error('Este backup foi criado por uma versão mais nova do GeoGestor. Atualize o aplicativo antes de restaurar.');
+    }
+    if (!Array.isArray(manifest.files) || !manifest.totals || !Number.isInteger(manifest.totals.files)) {
+      throw new Error('Manifesto de backup inválido ou incompleto.');
     }
 
     let totalBytes = 0;
@@ -265,13 +290,20 @@ export class BackupService {
     const targetFilesRoot = input.targetFilesRoot ? path.resolve(input.targetFilesRoot) : null;
     try {
       try {
-        await fs.rename(targetDatabasePath, safetyDatabasePath);
+        await fs.access(targetDatabasePath);
+        await inspectDatabase(targetDatabasePath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      try {
+        await renameWithRetry(targetDatabasePath, safetyDatabasePath);
         databaseMovedToSafety = true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
       }
       await renameWithRetry(pendingDatabasePath, targetDatabasePath);
       databaseInstalled = true;
+      await this.restoreFailureInjector?.('database-installed');
 
       if (validation.manifest.type === 'complete' && targetFilesRoot) {
         const sourceFiles = path.join(path.resolve(input.bundlePath), 'files');
@@ -279,16 +311,18 @@ export class BackupService {
         safetyFilesPath = `${targetFilesRoot}.before-restore-${operationId}`;
         await fs.cp(sourceFiles, pendingFilesPath, { recursive: true, force: false });
         try {
-          await fs.rename(targetFilesRoot, safetyFilesPath);
+          await renameWithRetry(targetFilesRoot, safetyFilesPath);
           filesMovedToSafety = true;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
         }
-        await fs.rename(pendingFilesPath, targetFilesRoot);
+        await renameWithRetry(pendingFilesPath, targetFilesRoot);
         filesInstalled = true;
+        await this.restoreFailureInjector?.('files-installed');
       }
 
       await inspectDatabase(targetDatabasePath);
+      await this.restoreFailureInjector?.('validated');
       return {
         restored: true,
         schemaVersion: validation.manifest.schemaVersion,
@@ -297,9 +331,9 @@ export class BackupService {
       };
     } catch (error) {
       if (filesInstalled && targetFilesRoot) await fs.rm(targetFilesRoot, { recursive: true, force: true }).catch(() => undefined);
-      if (filesMovedToSafety && targetFilesRoot && safetyFilesPath) await fs.rename(safetyFilesPath, targetFilesRoot).catch(() => undefined);
+      if (filesMovedToSafety && targetFilesRoot && safetyFilesPath) await renameWithRetry(safetyFilesPath, targetFilesRoot).catch(() => undefined);
       if (databaseInstalled) await fs.rm(targetDatabasePath, { force: true }).catch(() => undefined);
-      if (databaseMovedToSafety) await fs.rename(safetyDatabasePath, targetDatabasePath).catch(() => undefined);
+      if (databaseMovedToSafety) await renameWithRetry(safetyDatabasePath, targetDatabasePath).catch(() => undefined);
       if (pendingFilesPath) await fs.rm(pendingFilesPath, { recursive: true, force: true }).catch(() => undefined);
       await fs.rm(pendingDatabasePath, { force: true }).catch(() => undefined);
       throw error;

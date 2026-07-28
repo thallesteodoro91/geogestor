@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { z } from 'zod';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { useEffect, useState } from 'react';
-import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
+import { useEffect, useMemo, useState } from 'react';
+import { CheckboxField, DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect } from '../../components/Form';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CurrencyDollar, Plus, TrendUp, TrendDown, Wallet, PencilSimple, Trash, ChartBar, Receipt, Calendar, Check, MagnifyingGlass, Printer, Briefcase } from '@phosphor-icons/react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -24,6 +23,18 @@ import {
   filterClearButtonClass,
   filterControlClass
 } from '../../utils/filterStyles';
+import {
+  buildPayablePayload,
+  buildRevenuePayload,
+  payableFormFingerprint,
+  revenueFormFingerprint,
+  validatePayableForm,
+  validateRevenueForm,
+  type PayableFormValues,
+  type RevenueFormValues
+} from './financeForm';
+import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
+import { notifications } from '../../services/notifications';
 
 export interface Orcamento {
   id: string;
@@ -84,7 +95,7 @@ export interface Projeto {
   clienteNome?: string | null;
 }
 
-export interface DREItem {
+export interface MonthlyCashFlowItem {
   mes: string;
   receitas: number;
   despesas: number;
@@ -100,6 +111,8 @@ export interface Parcela {
   numeroParcela?: number;
   totalParcelas?: number;
   valor: number; // in cents
+  valorPago?: number | null;
+  recebidoCaixa?: number | null;
   dataVencimento: string;
   dataPagamento?: string | null;
   statusPagamento: string;
@@ -186,7 +199,10 @@ export function Financeiro() {
   const [orcDataPagamento, setOrcDataPagamento] = useState('');
   const [orcImpostoValor, setOrcImpostoValor] = useState('');
   const [orcImpostoRetido, setOrcImpostoRetido] = useState(false);
-  const [orcCentroCusto, setOrcCentroCusto] = useState('Servicos');
+  const [orcCentroCusto, setOrcCentroCusto] = useState('Serviços');
+  const [orcFormErrors, setOrcFormErrors] = useState<Partial<Record<'clienteId' | 'descricao' | 'valorTotal' | 'dataCompetencia' | 'dataPagamento', string>>>({});
+  const [orcFormError, setOrcFormError] = useState('');
+  const [orcInitialFingerprint, setOrcInitialFingerprint] = useState('');
 
   // Despesa Modal States
   const [showDespesaModal, setShowDespesaModal] = useState(false);
@@ -201,12 +217,16 @@ export function Financeiro() {
   const [despDataCompetencia, setDespDataCompetencia] = useState('');
   const [despDataPagamento, setDespDataPagamento] = useState('');
   const [despCategoria, setDespCategoria] = useState('Combustível');
-  const [despTipoCusto, setDespTipoCusto] = useState('Variavel de campo');
+  const [despTipoCusto, setDespTipoCusto] = useState('Variável de campo');
   const [despCentroCusto, setDespCentroCusto] = useState('Campo');
   const [despReembolsavel, setDespReembolsavel] = useState(false);
   const [despObservacoes, setDespObservacoes] = useState('');
   const [despStatus, setDespStatus] = useState('Pendente');
   const [despFormaPagamento, setDespFormaPagamento] = useState('Pix');
+  const [despFormErrors, setDespFormErrors] = useState<Partial<Record<'descricao' | 'valor' | 'data' | 'dataCompetencia' | 'dataPagamento', string>>>({});
+  const [despFormError, setDespFormError] = useState('');
+  const [despInitialFingerprint, setDespInitialFingerprint] = useState('');
+  const [discardTarget, setDiscardTarget] = useState<'receita' | 'despesa' | null>(null);
 
   // Faturas sub-tab States
   const [faturasSearch, setFaturasSearch] = useState('');
@@ -219,43 +239,48 @@ export function Financeiro() {
   const [reportType, setReportType] = useState<'financeiro' | 'projetos'>('financeiro');
 
   // Queries
-  const { data: orcamentos = [], isLoading: orcamentosLoading } = useQuery<Orcamento[]>({
+  const { data: orcamentosData, isLoading: orcamentosLoading, isError: orcamentosError } = useQuery<Orcamento[]>({
     queryKey: ['orcamentos-financeiro'],
     queryFn: () => apiClient.get<Orcamento[]>('/api/financeiro/orcamentos')
   });
 
-  const { data: despesas = [], isLoading: despesasLoading } = useQuery<Despesa[]>({
+  const { data: despesasData, isLoading: despesasLoading, isError: despesasError } = useQuery<Despesa[]>({
     queryKey: ['despesas-financeiro'],
     queryFn: () => apiClient.get<Despesa[]>('/api/financeiro/despesas')
   });
 
-  const { data: clientes = [], isLoading: clientesLoading } = useQuery<Cliente[]>({
+  const { data: clientesData, isLoading: clientesLoading, isError: clientesError } = useQuery<Cliente[]>({
     queryKey: ['clientes'],
     queryFn: () => apiClient.get<Cliente[]>('/api/clientes')
   });
 
-  const { data: projetos = [], isLoading: projetosLoading } = useQuery<Projeto[]>({
+  const { data: projetosData, isLoading: projetosLoading, isError: projetosError } = useQuery<Projeto[]>({
     queryKey: ['projetos'],
     queryFn: () => apiClient.get<Projeto[]>('/api/projetos')
   });
 
-  const { isLoading: dreLoading } = useQuery<DREItem[]>({
-    queryKey: ['dre-financeiro'],
-    queryFn: () => apiClient.get<DREItem[]>('/api/financeiro/dre')
+  const { data: monthlyCashFlowData, isLoading: monthlyCashFlowLoading, isError: monthlyCashFlowError } = useQuery<MonthlyCashFlowItem[]>({
+    queryKey: ['resumo-mensal-financeiro'],
+    queryFn: () => apiClient.get<MonthlyCashFlowItem[]>('/api/financeiro/resumo-mensal')
   });
 
-  const { data: parcelas = [], isLoading: parcelasLoading } = useQuery<Parcela[]>({
+  const { data: parcelasData, isLoading: parcelasLoading, isError: parcelasError } = useQuery<Parcela[]>({
     queryKey: ['parcelas-financeiro'],
     queryFn: () => apiClient.get<Parcela[]>('/api/financeiro/parcelas')
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery<RelatorioStats>({
+  const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery<RelatorioStats>({
     queryKey: ['relatorio-geral'],
     queryFn: () => apiClient.get<RelatorioStats>('/api/relatorios/geral'),
     enabled: activeTab === 'relatorios'
   });
+  const orcamentos = useMemo(() => orcamentosData ?? [], [orcamentosData]);
+  const despesas = useMemo(() => despesasData ?? [], [despesasData]);
+  const clientes = useMemo(() => clientesData ?? [], [clientesData]);
+  const projetos = useMemo(() => projetosData ?? [], [projetosData]);
+  const parcelas = useMemo(() => parcelasData ?? [], [parcelasData]);
 
-  const loading = orcamentosLoading || despesasLoading || clientesLoading || projetosLoading || dreLoading || parcelasLoading;
+  const loading = orcamentosLoading || despesasLoading || clientesLoading || projetosLoading || monthlyCashFlowLoading || parcelasLoading;
   const projetosDoCliente = projetos.filter((projeto) => projeto.clienteId === orcClienteId);
   const projetosDaDespesa = despClienteId ? projetos.filter((projeto) => projeto.clienteId === despClienteId) : projetos;
   const financialFilters: FinancialFilters = {
@@ -278,6 +303,54 @@ export function Financeiro() {
   const tiposCusto = ['Fixo', 'Variável de campo', 'Cartório e taxas', 'Tributário', 'Operacional', 'Reembolsável'];
   const centrosCusto = ['Administrativo', 'Campo', 'Cartório', 'Tributos', 'Software', 'Equipamentos', 'Serviços'];
   const centrosCustoDisponiveis = Array.from(new Set([...centrosCusto, ...despesas.map((despesa) => despesa.centroCusto || '').filter(Boolean), ...orcamentos.map((orcamento) => orcamento.centroCusto || '').filter(Boolean)])).sort();
+  const revenueFormValues: RevenueFormValues = {
+    clienteId: orcClienteId,
+    projetoId: orcProjetoId,
+    valorTotal: orcValorTotal,
+    status: orcStatus,
+    descricao: orcDescricao,
+    anotacoes: orcAnotacoes,
+    formaDePagamento: orcFormaPagamento,
+    desconto: orcDesconto,
+    codigoOrcamento: orcCodigo,
+    dataCompetencia: orcDataCompetencia,
+    dataPagamento: orcDataPagamento,
+    impostoValor: orcImpostoValor,
+    impostoRetido: orcImpostoRetido,
+    centroCusto: orcCentroCusto
+  };
+  const payableFormValues: PayableFormValues = {
+    clienteId: despClienteId,
+    projetoId: despProjetoId,
+    descricao: despDescricao,
+    fornecedor: despFornecedor,
+    numeroDocumento: despNumeroDocumento,
+    valor: despValor,
+    data: despData,
+    dataCompetencia: despDataCompetencia,
+    dataPagamento: despDataPagamento,
+    categoria: despCategoria,
+    tipoCusto: despTipoCusto,
+    centroCusto: despCentroCusto,
+    reembolsavel: despReembolsavel,
+    observacoes: despObservacoes,
+    status: despStatus,
+    formaPagamento: despFormaPagamento
+  };
+  const revenueDirty = showOrcamentoModal
+    && revenueFormFingerprint(revenueFormValues) !== orcInitialFingerprint;
+  const payableDirty = showDespesaModal
+    && payableFormFingerprint(payableFormValues) !== despInitialFingerprint;
+
+  useEffect(() => {
+    if (!revenueDirty && !payableDirty) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [payableDirty, revenueDirty]);
 
   useEffect(() => {
     if (!orcProjetoId) return;
@@ -311,7 +384,7 @@ export function Financeiro() {
     }
   }, [despStatus, despDataPagamento]);
 
-  // Process DRE Chart Data with comparisons
+  // Processa os dados mensais do fluxo de caixa para comparação.
   const mainPeriod = analytics.monthly.slice(-6); // last 6 months
   const dreChartData = mainPeriod.map((item) => {
     const [yearStr, monthStr] = item.mes.split('-');
@@ -370,11 +443,10 @@ export function Financeiro() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['parcelas-financeiro'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
     onError: () => {
-      alert('Erro ao atualizar status do pagamento.');
+      notifications.error('Não foi possível atualizar o status do pagamento.');
     }
   });
 
@@ -385,11 +457,10 @@ export function Financeiro() {
     },
     onSuccess: () => {
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['orcamentos-financeiro'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
     onError: () => {
-      alert('Erro ao excluir orçamento');
+      notifications.error('Não foi possível excluir o orçamento.');
     }
   });
 
@@ -409,11 +480,10 @@ export function Financeiro() {
     },
     onSuccess: () => {
       setShowOrcamentoModal(false);
-      queryClient.invalidateQueries({ queryKey: ['orcamentos-financeiro'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
-    onError: () => {
-      alert('Erro de conexão.');
+    onError: (error: unknown) => {
+      setOrcFormError(error instanceof Error ? error.message : 'Não foi possível salvar o recebimento.');
     }
   });
 
@@ -424,11 +494,10 @@ export function Financeiro() {
     },
     onSuccess: () => {
       setDeleteTarget(null);
-      queryClient.invalidateQueries({ queryKey: ['despesas-financeiro'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
     onError: () => {
-      alert('Erro ao excluir despesa');
+      notifications.error('Não foi possível excluir a despesa.');
     }
   });
 
@@ -448,18 +517,33 @@ export function Financeiro() {
     },
     onSuccess: () => {
       setShowDespesaModal(false);
-      queryClient.invalidateQueries({ queryKey: ['despesas-financeiro'] });
-      queryClient.invalidateQueries({ queryKey: ['dre-financeiro'] });
+      invalidateFinancialQueries(queryClient);
     },
-    onError: () => {
-      alert('Erro de conexão.');
+    onError: (error: unknown) => {
+      setDespFormError(error instanceof Error ? error.message : 'Não foi possível salvar a conta a pagar.');
     }
   });
 
   // Action methods
   const openCreateOrcamento = () => {
+    const initialValues: RevenueFormValues = {
+      clienteId: '',
+      projetoId: '',
+      valorTotal: '',
+      status: 'Em Análise',
+      descricao: '',
+      anotacoes: '',
+      formaDePagamento: 'Pix',
+      desconto: '',
+      codigoOrcamento: '',
+      dataCompetencia: new Date().toISOString().split('T')[0],
+      dataPagamento: '',
+      impostoValor: '',
+      impostoRetido: false,
+      centroCusto: 'Serviços'
+    };
     setSelectedOrcamento(null);
-    setOrcClienteId(clientes.length > 0 ? clientes[0].id : '');
+    setOrcClienteId(initialValues.clienteId);
     setOrcProjetoId('');
     setOrcValorTotal('');
     setOrcStatus('Em Análise');
@@ -468,15 +552,34 @@ export function Financeiro() {
     setOrcFormaPagamento('Pix');
     setOrcDesconto('');
     setOrcCodigo('');
-    setOrcDataCompetencia(new Date().toISOString().split('T')[0]);
+    setOrcDataCompetencia(initialValues.dataCompetencia);
     setOrcDataPagamento('');
     setOrcImpostoValor('');
     setOrcImpostoRetido(false);
-    setOrcCentroCusto('Servicos');
+    setOrcCentroCusto('Serviços');
+    setOrcFormErrors({});
+    setOrcFormError('');
+    setOrcInitialFingerprint(revenueFormFingerprint(initialValues));
     setShowOrcamentoModal(true);
   };
 
   const openEditOrcamento = (orc: Orcamento) => {
+    const initialValues: RevenueFormValues = {
+      clienteId: orc.clienteId || '',
+      projetoId: orc.projetoId || '',
+      valorTotal: (orc.valorTotal / 100).toString(),
+      status: orc.status || 'Em Análise',
+      descricao: orc.descricao || '',
+      anotacoes: orc.anotacoes || '',
+      formaDePagamento: orc.formaDePagamento || 'Pix',
+      desconto: orc.desconto ? (orc.desconto / 100).toString() : '',
+      codigoOrcamento: orc.codigoOrcamento || '',
+      dataCompetencia: orc.dataCompetencia || orc.dataOrcamento || '',
+      dataPagamento: orc.dataPagamento || '',
+      impostoValor: orc.impostoValor ? (orc.impostoValor / 100).toString() : '',
+      impostoRetido: Boolean(orc.impostoRetido),
+      centroCusto: orc.centroCusto || 'Serviços'
+    };
     setSelectedOrcamento(orc);
     setOrcClienteId(orc.clienteId || '');
     setOrcProjetoId(orc.projetoId || '');
@@ -491,7 +594,10 @@ export function Financeiro() {
     setOrcDataPagamento(orc.dataPagamento || '');
     setOrcImpostoValor(orc.impostoValor ? (orc.impostoValor / 100).toString() : '');
     setOrcImpostoRetido(Boolean(orc.impostoRetido));
-    setOrcCentroCusto(orc.centroCusto || 'Servicos');
+    setOrcCentroCusto(orc.centroCusto || 'Serviços');
+    setOrcFormErrors({});
+    setOrcFormError('');
+    setOrcInitialFingerprint(revenueFormFingerprint(initialValues));
     setShowOrcamentoModal(true);
   };
 
@@ -502,44 +608,49 @@ export function Financeiro() {
 
   const handleOrcamentoSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orcClienteId) {
-      alert('Selecione um cliente para vincular ao orçamento.');
+    const nextErrors = validateRevenueForm(revenueFormValues);
+    if (Object.keys(nextErrors).length > 0) {
+      setOrcFormErrors(nextErrors);
+      setOrcFormError('Revise os campos destacados antes de salvar.');
+      const firstField = Object.keys(nextErrors)[0];
+      const fieldId = firstField === 'clienteId'
+        ? 'orcClienteId'
+        : firstField === 'descricao'
+          ? 'orcDescricao'
+          : firstField === 'dataCompetencia'
+            ? 'orcDataCompetencia'
+            : firstField === 'dataPagamento'
+              ? 'orcDataPagamento'
+              : 'orcValorTotal';
+      window.setTimeout(() => document.getElementById(fieldId)?.focus(), 0);
       return;
     }
 
-    const payload = {
-      clienteId: orcClienteId,
-      projetoId: orcProjetoId || null,
-      valorTotal: Math.round(parseFloat(orcValorTotal) * 100),
-      status: orcStatus,
-      descricao: orcDescricao || null,
-      anotacoes: orcAnotacoes || null,
-      formaDePagamento: orcFormaPagamento || null,
-      desconto: orcDesconto ? Math.round(parseFloat(orcDesconto) * 100) : null,
-      codigoOrcamento: orcCodigo || null,
-      dataCompetencia: orcDataCompetencia || null,
-      dataPagamento: orcDataPagamento || null,
-      impostoValor: orcImpostoValor ? Math.round(parseFloat(orcImpostoValor) * 100) : null,
-      impostoRetido: orcImpostoRetido,
-      centroCusto: orcCentroCusto || null
-    };
-
-    // Zod validation
-    const schema = z.object({
-      clienteId: z.string().min(1, 'Selecione um cliente'),
-      valorTotal: z.number().min(1, 'Valor total inválido'),
-    });
-
-    const validation = schema.safeParse(payload);
-    if (!validation.success) {
-      alert(validation.error.issues[0].message);
-      return;
-    }
-
-    submitOrcamentoMutation.mutate(payload);
+    setOrcFormErrors({});
+    setOrcFormError('');
+    submitOrcamentoMutation.mutate(buildRevenuePayload(revenueFormValues));
   };
 
   const openCreateDespesa = () => {
+    const today = new Date().toISOString().split('T')[0];
+    const initialValues: PayableFormValues = {
+      clienteId: '',
+      projetoId: '',
+      descricao: '',
+      fornecedor: '',
+      numeroDocumento: '',
+      valor: '',
+      data: today,
+      dataCompetencia: today,
+      dataPagamento: '',
+      categoria: 'Combustível',
+      tipoCusto: 'Variável de campo',
+      centroCusto: 'Campo',
+      reembolsavel: false,
+      observacoes: '',
+      status: 'Pendente',
+      formaPagamento: 'Pix'
+    };
     setSelectedDespesa(null);
     setDespClienteId('');
     setDespProjetoId('');
@@ -547,20 +658,41 @@ export function Financeiro() {
     setDespFornecedor('');
     setDespNumeroDocumento('');
     setDespValor('');
-    setDespData(new Date().toISOString().split('T')[0]);
-    setDespDataCompetencia(new Date().toISOString().split('T')[0]);
+    setDespData(today);
+    setDespDataCompetencia(today);
     setDespDataPagamento('');
     setDespCategoria('Combustível');
-    setDespTipoCusto('Variavel de campo');
+    setDespTipoCusto('Variável de campo');
     setDespCentroCusto('Campo');
     setDespReembolsavel(false);
     setDespObservacoes('');
     setDespStatus('Pendente');
     setDespFormaPagamento('Pix');
+    setDespFormErrors({});
+    setDespFormError('');
+    setDespInitialFingerprint(payableFormFingerprint(initialValues));
     setShowDespesaModal(true);
   };
 
   const openEditDespesa = (desp: Despesa) => {
+    const initialValues: PayableFormValues = {
+      clienteId: desp.clienteId || '',
+      projetoId: desp.projetoId || '',
+      descricao: desp.descricao || '',
+      fornecedor: desp.fornecedor || '',
+      numeroDocumento: desp.numeroDocumento || '',
+      valor: (desp.valor / 100).toString(),
+      data: desp.data || '',
+      dataCompetencia: desp.dataCompetencia || desp.data || '',
+      dataPagamento: desp.dataPagamento || '',
+      categoria: desp.categoria || 'Combustível',
+      tipoCusto: desp.tipoCusto || 'Operacional',
+      centroCusto: desp.centroCusto || 'Administrativo',
+      reembolsavel: Boolean(desp.reembolsavel),
+      observacoes: desp.observacoes || '',
+      status: desp.status || 'Pendente',
+      formaPagamento: desp.formaPagamento || 'Pix'
+    };
     setSelectedDespesa(desp);
     setDespClienteId(desp.clienteId || '');
     setDespProjetoId(desp.projetoId || '');
@@ -578,6 +710,9 @@ export function Financeiro() {
     setDespObservacoes(desp.observacoes || '');
     setDespStatus(desp.status || 'Pendente');
     setDespFormaPagamento(desp.formaPagamento || 'Pix');
+    setDespFormErrors({});
+    setDespFormError('');
+    setDespInitialFingerprint(payableFormFingerprint(initialValues));
     setShowDespesaModal(true);
   };
 
@@ -588,39 +723,45 @@ export function Financeiro() {
 
   const handleDespesaSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      clienteId: despClienteId || null,
-      projetoId: despProjetoId || null,
-      descricao: despDescricao,
-      fornecedor: despFornecedor || null,
-      numeroDocumento: despNumeroDocumento || null,
-      valor: Math.round(parseFloat(despValor) * 100),
-      data: despData,
-      dataCompetencia: despDataCompetencia || despData,
-      dataPagamento: despDataPagamento || null,
-      categoria: despCategoria,
-      tipoCusto: despTipoCusto || null,
-      centroCusto: despCentroCusto || null,
-      reembolsavel: despReembolsavel,
-      observacoes: despObservacoes || null,
-      status: despStatus,
-      formaPagamento: despFormaPagamento || null
-    };
-
-    // Zod validation
-    const schema = z.object({
-      descricao: z.string().min(1, 'Descrição é obrigatória'),
-      valor: z.number().min(1, 'Valor inválido'),
-      data: z.string().min(1, 'Selecione uma data')
-    });
-
-    const validation = schema.safeParse(payload);
-    if (!validation.success) {
-      alert(validation.error.issues[0].message);
+    const nextErrors = validatePayableForm(payableFormValues);
+    if (Object.keys(nextErrors).length > 0) {
+      setDespFormErrors(nextErrors);
+      setDespFormError('Revise os campos destacados antes de salvar.');
+      const firstField = Object.keys(nextErrors)[0];
+      const fieldId = firstField === 'descricao'
+        ? 'despDescricao'
+        : firstField === 'valor'
+          ? 'despValor'
+          : firstField === 'dataCompetencia'
+            ? 'despDataCompetencia'
+            : firstField === 'dataPagamento'
+              ? 'despDataPagamento'
+              : 'despData';
+      window.setTimeout(() => document.getElementById(fieldId)?.focus(), 0);
       return;
     }
 
-    submitDespesaMutation.mutate(payload);
+    setDespFormErrors({});
+    setDespFormError('');
+    submitDespesaMutation.mutate(buildPayablePayload(payableFormValues));
+  };
+
+  const requestCloseRevenue = () => {
+    if (submitOrcamentoMutation.isPending) return;
+    if (revenueDirty) {
+      setDiscardTarget('receita');
+      return;
+    }
+    setShowOrcamentoModal(false);
+  };
+
+  const requestClosePayable = () => {
+    if (submitDespesaMutation.isPending) return;
+    if (payableDirty) {
+      setDiscardTarget('despesa');
+      return;
+    }
+    setShowDespesaModal(false);
   };
 
   const formatCurrency = (cents: number) => {
@@ -666,6 +807,27 @@ export function Financeiro() {
     updateParcelaMutation.mutate({ id, statusPagamento: 'Pago' });
   };
 
+  const failedWithoutData = (orcamentosError && !orcamentosData)
+    || (despesasError && !despesasData)
+    || (clientesError && !clientesData)
+    || (projetosError && !projetosData)
+    || (monthlyCashFlowError && !monthlyCashFlowData)
+    || (parcelasError && !parcelasData)
+    || (activeTab === 'relatorios' && statsError && !stats);
+
+  if (failedWithoutData) {
+    return (
+      <Layout>
+        <section role="alert" className="rounded-xl border border-red-300 bg-red-50 p-6 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-100">
+          <h1 className="text-2xl font-bold">Dados financeiros indisponíveis</h1>
+          <p className="mt-2 text-sm leading-6">
+            Nenhum saldo, receita ou despesa foi substituído por zero. Restabeleça a conexão com o serviço local e tente novamente.
+          </p>
+        </section>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-6">
@@ -674,10 +836,10 @@ export function Financeiro() {
             Módulo Financeiro
           </span>
           <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Contabilidade 360
+            Gestão financeira 360
           </h1>
           <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Monitoramento de rentabilidade (DRE), orçamentos e custos operacionais.
+            Acompanhe contratos, contas a receber, despesas e resultado gerencial.
           </p>
         </div>
         <div className="flex gap-3">
@@ -706,23 +868,29 @@ export function Financeiro() {
       <div className={cn('mb-6', filterBarClass)}>
         <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[repeat(6,minmax(140px,1fr))_auto] items-end">
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Data inicial</label>
+            <label htmlFor="finance-date-start" className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Data inicial</label>
             <DatePickerField
+              id="finance-date-start"
+              name="financeDataInicio"
+              aria-label="Data inicial"
               value={financeDataInicio}
               onChange={(event) => setFinanceDataInicio(event.target.value)}
               className={cn(filterControlClass, 'w-full')}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Data final</label>
+            <label htmlFor="finance-date-end" className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Data final</label>
             <DatePickerField
+              id="finance-date-end"
+              name="financeDataFim"
+              aria-label="Data final"
               value={financeDataFim}
               onChange={(event) => setFinanceDataFim(event.target.value)}
               className={cn(filterControlClass, 'w-full')}
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Cliente</label>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Cliente</label>
             <CustomSelect
               value={financeClienteId}
               onChange={setFinanceClienteId}
@@ -733,7 +901,7 @@ export function Financeiro() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Categoria</label>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Categoria</label>
             <CustomSelect
               value={financeCategoria}
               onChange={setFinanceCategoria}
@@ -744,7 +912,7 @@ export function Financeiro() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Tipo de custo</label>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Tipo de custo</label>
             <CustomSelect
               value={financeTipoCusto}
               onChange={setFinanceTipoCusto}
@@ -755,7 +923,7 @@ export function Financeiro() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-400">Centro de custo</label>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Centro de custo</label>
             <CustomSelect
               value={financeCentroCusto}
               onChange={setFinanceCentroCusto}
@@ -795,7 +963,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('visao')}
           className={geoTabButtonClass(activeTab === 'visao', 'finance')}
         >
-          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'visao', 'system')}><ChartBar weight={activeTab === 'visao' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Visão 360 (DRE)
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'visao', 'system')}><ChartBar weight={activeTab === 'visao' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Visão financeira
         </button>
         <button 
           role="tab"
@@ -819,7 +987,7 @@ export function Financeiro() {
           onClick={() => setActiveTab('faturas')}
           className={geoTabButtonClass(activeTab === 'faturas', 'finance')}
         >
-          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'faturas', 'warning')}><Receipt weight={activeTab === 'faturas' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Faturas & Parcelas
+          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'faturas', 'warning')}><Receipt weight={activeTab === 'faturas' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Contas a receber
         </button>
         <button 
           role="tab"
@@ -872,7 +1040,7 @@ export function Financeiro() {
                       <div className={cn(geoGreenIconClass, 'flex h-10 w-10 items-center justify-center rounded-full')}>
                         <ChartBar weight="duotone" className="h-5 w-5" />
                       </div>
-                      <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Margem de Lucro</span>
+                      <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Margem de caixa</span>
                     </div>
                     <span className={cn('block text-3xl font-semibold tracking-tight', geoGreenValueClass)}>{kpiMargemLucroReal}%</span>
                   </div>
@@ -885,7 +1053,7 @@ export function Financeiro() {
                       <div className={cn(geoGreenIconClass, 'flex h-10 w-10 items-center justify-center rounded-full')}>
                         <Wallet weight="duotone" className="w-5 h-5" />
                       </div>
-                      <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Lucro Líquido Real</span>
+                      <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Resultado de caixa</span>
                     </div>
                     <span className="text-3xl font-semibold tracking-tight text-white block">{formatCurrency(kpiLucroLiquidoReal)}</span>
                   </div>
@@ -927,7 +1095,7 @@ export function Financeiro() {
               <div className="geo-card mb-12 p-6">
                 <div className="mb-5 flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-950 dark:text-white">Composição de custos</h3>
+                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white">Composição de custos</h2>
                     <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Separação fiscal para campo, cartório, tributos, fixos e reembolsos.</p>
                   </div>
                   <span className="geo-badge-base bg-brand-surface px-3 py-1 text-xs font-bold text-zinc-600 dark:bg-brand-surface-muted dark:text-zinc-300">
@@ -989,11 +1157,11 @@ export function Financeiro() {
                 </div>
               </div>
 
-              {/* DRE Chart */}
+              {/* Gráfico do fluxo de caixa mensal */}
               <div className="geo-card mb-12 p-8 md:p-10">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                   <div>
-                    <h3 className="text-2xl font-semibold text-zinc-950 dark:text-white">Demonstrativo de Resultados (DRE)</h3>
+                    <h2 className="text-2xl font-semibold text-zinc-950 dark:text-white">Fluxo de caixa mensal</h2>
                     <p className="text-zinc-500 dark:text-zinc-400 font-medium mt-1">Fluxo de Caixa Realizado (Regime de Caixa)</p>
                   </div>
                   <div className="flex items-center gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60">
@@ -1026,7 +1194,7 @@ export function Financeiro() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12, fontWeight: 600 }} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12, fontWeight: 500 }} tickFormatter={(val) => `R$ ${val.toLocaleString('pt-BR')}`} />
-                      <Tooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Balanço (DRE)" format="currency" />} />
+                      <Tooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
                       <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
                       <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={40} />
                       <Bar dataKey="Contratado" fill={chartColors.primary} opacity={0.35} radius={[6, 6, 0, 0]} maxBarSize={32} />
@@ -1053,9 +1221,9 @@ export function Financeiro() {
           {activeTab === 'receber' && (
             <motion.div key="receber" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
               <div className="geo-card p-8">
-                <h3 className="text-xl font-semibold text-zinc-950 dark:text-white mb-8 flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-zinc-950 dark:text-white mb-8 flex items-center gap-3">
                   <CurrencyDollar weight="duotone" className="w-6 h-6 text-zinc-400" /> Contas a Receber (Orçamentos)
-                </h3>
+                </h2>
                 <div className="space-y-4">
                   {analytics.orcamentos.length === 0 ? <p className="text-zinc-500 dark:text-zinc-400 text-sm">Nenhum orçamento lançado.</p> : (
                     analytics.orcamentos.map((orc) => (
@@ -1124,9 +1292,9 @@ export function Financeiro() {
           {activeTab === 'pagar' && (
             <motion.div key="pagar" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
               <div className="geo-card p-8">
-                <h3 className="text-xl font-semibold text-zinc-950 dark:text-white mb-8 flex items-center gap-3">
+                <h2 className="text-xl font-semibold text-zinc-950 dark:text-white mb-8 flex items-center gap-3">
                   <Receipt weight="duotone" className="w-6 h-6 text-zinc-400" /> Contas a Pagar (Despesas Operacionais)
-                </h3>
+                </h2>
                 <div className="space-y-4">
                   {analytics.despesas.length === 0 ? <p className="text-zinc-500 dark:text-zinc-400 text-sm">Nenhuma despesa lançada.</p> : (
                     analytics.despesas.map((desp) => (
@@ -1142,7 +1310,7 @@ export function Financeiro() {
                               <span className="font-medium text-sky-600 px-2 py-0.5 bg-sky-50 rounded-md dark:bg-sky-500/10 dark:text-sky-300">{desp.centroCusto}</span>
                             )}
                             {desp.reembolsavel && (
-                              <span className="font-medium text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-md dark:bg-emerald-500/10 dark:text-emerald-300">Reembolsavel</span>
+                              <span className="font-medium text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded-md dark:bg-emerald-500/10 dark:text-emerald-300">Reembolsável</span>
                             )}
                             <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {desp.data ? new Date(desp.data).toLocaleDateString('pt-BR') : 'Sem data'}</span>
                           </div>
@@ -1189,7 +1357,7 @@ export function Financeiro() {
               {/* Bento Grid Stats for Faturas */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 <div className={cn(geoGreenSurfaceClass, 'geo-card p-6')}>
-                  <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total Faturado</span>
+                  <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total previsto</span>
                   <p className={cn('mt-2 text-3xl font-bold', geoGreenValueClass)}>{formatCurrency(parcelas.reduce((acc, curr) => acc + curr.valor, 0))}</p>
                 </div>
                 <div className={cn(geoGreenSurfaceClass, 'geo-card p-6')}>
@@ -1213,7 +1381,7 @@ export function Financeiro() {
                     onClick={() => setFaturasActiveTab('pendentes')}
                     className={financePillButtonClass(faturasActiveTab === 'pendentes')}
                   >
-                    Faturas em Aberto
+                    Parcelas em aberto
                   </button>
                   <button 
                     onClick={() => setFaturasActiveTab('recebidas')}
@@ -1296,7 +1464,7 @@ export function Financeiro() {
                                 onClick={() => setSelectedFatura(item)}
                                 className={cn(secondarySmallActionButtonClass, 'min-h-9 px-3 py-2')}
                               >
-                                Ver Recibo
+                                {status === 'Pago' ? 'Ver recibo' : 'Ver cobrança'}
                               </button>
                               {status !== 'Pago' && (
                                 <button 
@@ -1461,7 +1629,7 @@ export function Financeiro() {
       <Modal
         isOpen={!!selectedFatura}
         onClose={() => setSelectedFatura(null)}
-        title="GeoGestor • Fatura / Recibo"
+        title={selectedFatura?.statusPagamento === 'Pago' ? 'GeoGestor • Recibo' : 'GeoGestor • Demonstrativo de cobrança'}
         maxWidth="max-w-2xl"
       >
         {selectedFatura && (
@@ -1491,16 +1659,28 @@ export function Financeiro() {
               
               <div className="flex justify-between items-center pt-4 border-t border-zinc-200/60 dark:border-zinc-800 text-sm">
                 <span className="text-zinc-500 dark:text-zinc-400">Parcela de Orçamento (Ref: #{selectedFatura.orcamentoId.substring(0, 8)})</span>
-                <span className="font-bold text-zinc-900 dark:text-white">{formatCurrency(selectedFatura.valor)}</span>
+                <span className="font-bold text-zinc-900 dark:text-white">
+                  {formatCurrency(
+                    selectedFatura.statusPagamento === 'Pago'
+                      ? selectedFatura.recebidoCaixa || selectedFatura.valorPago || selectedFatura.valor
+                      : selectedFatura.valor
+                  )}
+                </span>
               </div>
             </div>
+
+            <p className="mb-5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {selectedFatura.statusPagamento === 'Pago'
+                ? 'Este recibo confirma o recebimento financeiro e não substitui documento fiscal quando ele for exigido.'
+                : 'Este demonstrativo é uma cobrança interna. Ele não é nota fiscal nem comprova pagamento.'}
+            </p>
 
             <div className="flex items-center justify-between pt-6 border-t border-zinc-100 dark:border-zinc-800 print:hidden">
               <button 
                 onClick={() => window.print()}
                 className="flex items-center gap-2 bg-zinc-900 text-white rounded-full px-5 py-3 text-xs font-semibold hover:bg-zinc-800"
               >
-                <Printer className="w-4 h-4" /> Imprimir Recibo
+                <Printer className="w-4 h-4" /> {selectedFatura.statusPagamento === 'Pago' ? 'Imprimir recibo' : 'Imprimir cobrança'}
               </button>
               
               {selectedFatura.statusPagamento !== 'Pago' && (
@@ -1522,196 +1702,202 @@ export function Financeiro() {
       {/* Modal Orçamento */}
       <Modal
         isOpen={showOrcamentoModal}
-        onClose={() => setShowOrcamentoModal(false)}
-        title={selectedOrcamento ? 'Editar Recebimento' : 'Novo Recebimento'}
+        onClose={requestCloseRevenue}
+        closeDisabled={submitOrcamentoMutation.isPending || discardTarget === 'receita'}
+        title={<span className="flex flex-wrap items-center gap-2"><span>{selectedOrcamento ? 'Editar Recebimento' : 'Novo Recebimento'}</span>{revenueDirty && <span className="geo-badge-base geo-badge-unsaved px-2 py-1 text-[11px]">Alterações não salvas</span>}</span>}
         maxWidth="max-w-3xl"
+        initialFocusId="orcCodigo"
       >
-        <form onSubmit={handleOrcamentoSubmit} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="orcCodigo" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Código Interno</label>
-              <input id="orcCodigo" type="text" value={orcCodigo} onChange={e => setOrcCodigo(e.target.value)} placeholder="Ex: ORC-2026-001" className={financeFieldClass} />
+        <form onSubmit={handleOrcamentoSubmit} className="space-y-5" noValidate>
+          <FormError message={orcFormError} />
+
+          <FormSection sectionId="revenue-identification" title="Identificação e vínculo" description="Defina o cliente, o projeto e a origem do recebimento." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="emerald">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField htmlFor="orcCodigo" label="Código interno">
+                <input id="orcCodigo" name="codigoOrcamento" type="text" autoComplete="off" spellCheck={false} value={orcCodigo} onChange={e => setOrcCodigo(e.target.value)} placeholder="Ex.: ORC-2026-001" className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="orcClienteId" label="Cliente vinculado" required error={orcFormErrors.clienteId}>
+                <FormSelect id="orcClienteId" name="clienteId" autoComplete="off" value={orcClienteId} onChange={e => { setOrcClienteId(e.target.value); setOrcFormErrors(current => ({ ...current, clienteId: undefined })); setOrcFormError(''); }} aria-invalid={Boolean(orcFormErrors.clienteId)} aria-describedby={orcFormErrors.clienteId ? 'orcClienteId-error' : undefined} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="">Selecione um cliente…</option>
+                  {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="orcProjetoId" label="Propriedade ou projeto">
+                <FormSelect id="orcProjetoId" name="projetoId" autoComplete="off" value={orcProjetoId} onChange={e => setOrcProjetoId(e.target.value)} disabled={!orcClienteId} className={cn(financeFieldClass, 'appearance-none disabled:cursor-not-allowed disabled:opacity-60')}>
+                  <option value="">Recebimento geral do cliente</option>
+                  {projetosDoCliente.map((projeto) => <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="orcDescricao" label="Descrição ou serviço" required error={orcFormErrors.descricao}>
+                <input id="orcDescricao" name="descricao" type="text" autoComplete="off" value={orcDescricao} onChange={e => { setOrcDescricao(e.target.value); setOrcFormErrors(current => ({ ...current, descricao: undefined })); setOrcFormError(''); }} placeholder="Ex.: Levantamento topográfico — Fazenda Esperança" aria-invalid={Boolean(orcFormErrors.descricao)} aria-describedby={orcFormErrors.descricao ? 'orcDescricao-error' : undefined} className={financeFieldClass} />
+              </FormField>
             </div>
-            <div>
-              <label htmlFor="orcClienteId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Cliente Vinculado</label>
-              <FormSelect id="orcClienteId" required value={orcClienteId} onChange={e => setOrcClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="">Selecione um cliente...</option>
-                {clientes.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </FormSelect>
+          </FormSection>
+
+          <FormSection sectionId="revenue-values" title="Valores e classificação" description="Informe o valor contratado, os ajustes e a classificação gerencial." icon={<CurrencyDollar className="h-5 w-5" weight="duotone" />} tone="emerald">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <FormField htmlFor="orcValorTotal" label="Valor total (R$)" required error={orcFormErrors.valorTotal}>
+                <input id="orcValorTotal" name="valorTotal" type="number" inputMode="decimal" min="0.01" step="0.01" value={orcValorTotal} onChange={e => { setOrcValorTotal(e.target.value); setOrcFormErrors(current => ({ ...current, valorTotal: undefined })); setOrcFormError(''); }} placeholder="0,00" aria-invalid={Boolean(orcFormErrors.valorTotal)} aria-describedby={orcFormErrors.valorTotal ? 'orcValorTotal-error' : undefined} className={cn(financeFieldClass, 'font-mono text-lg font-bold tabular-nums text-brand-green-700')} />
+              </FormField>
+              <FormField htmlFor="orcDesconto" label="Desconto (R$)">
+                <input id="orcDesconto" name="desconto" type="number" inputMode="decimal" min="0" step="0.01" value={orcDesconto} onChange={e => setOrcDesconto(e.target.value)} placeholder="0,00" className={cn(financeFieldClass, 'font-mono tabular-nums')} />
+              </FormField>
+              <FormField htmlFor="orcImpostoValor" label="Imposto ou retenção (R$)">
+                <input id="orcImpostoValor" name="impostoValor" type="number" inputMode="decimal" min="0" step="0.01" value={orcImpostoValor} onChange={e => setOrcImpostoValor(e.target.value)} placeholder="0,00" className={cn(financeFieldClass, 'font-mono tabular-nums')} />
+              </FormField>
+              <FormField htmlFor="orcCentroCusto" label="Centro de custo" className="md:col-span-2 lg:col-span-1">
+                <FormSelect id="orcCentroCusto" name="centroCusto" autoComplete="off" value={orcCentroCusto} onChange={e => setOrcCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
+                </FormSelect>
+              </FormField>
+              <div className="flex items-end md:col-span-2">
+                <CheckboxField id="financeiro-imposto-retido" name="impostoRetido" label="Imposto retido na fonte" checked={orcImpostoRetido} onChange={setOrcImpostoRetido} className="rounded-lg border border-brand-border bg-brand-surface-subtle/35 px-2" />
+              </div>
             </div>
-            <div className="md:col-span-2">
-              <label htmlFor="orcProjetoId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Propriedade / Projeto</label>
-              <FormSelect
-                id="orcProjetoId"
-                value={orcProjetoId}
-                onChange={e => setOrcProjetoId(e.target.value)}
-                disabled={!orcClienteId}
-                className={cn(financeFieldClass, 'appearance-none disabled:cursor-not-allowed disabled:opacity-60')}
-              >
-                <option value="">Recebimento geral do cliente</option>
-                {projetosDoCliente.map((projeto) => (
-                  <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
-                ))}
-              </FormSelect>
+          </FormSection>
+
+          <FormSection sectionId="revenue-settlement" title="Competência e recebimento" description="Controle a situação, as condições e as datas financeiras." icon={<Calendar className="h-5 w-5" weight="duotone" />} tone="emerald">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField htmlFor="orcStatus" label="Situação">
+                <FormSelect id="orcStatus" name="status" autoComplete="off" value={orcStatus} onChange={e => setOrcStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="Em Análise">Em Análise</option><option value="Aprovado">Aprovado</option><option value="Rejeitado">Rejeitado</option><option value="Pago">Pago</option>
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="orcFormaPagamento" label="Forma e condições de pagamento">
+                <input id="orcFormaPagamento" name="formaDePagamento" type="text" autoComplete="off" value={orcFormaPagamento} onChange={e => setOrcFormaPagamento(e.target.value)} placeholder="Ex.: Pix ou entrada de 50% + 2 boletos" className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="orcDataCompetencia" label="Competência" error={orcFormErrors.dataCompetencia}>
+                <DatePickerField id="orcDataCompetencia" name="dataCompetencia" autoComplete="off" value={orcDataCompetencia} onChange={e => { setOrcDataCompetencia(e.target.value); setOrcFormErrors(current => ({ ...current, dataCompetencia: undefined })); }} aria-invalid={Boolean(orcFormErrors.dataCompetencia)} aria-describedby={orcFormErrors.dataCompetencia ? 'orcDataCompetencia-error' : undefined} className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="orcDataPagamento" label="Data de pagamento" error={orcFormErrors.dataPagamento}>
+                <DatePickerField id="orcDataPagamento" name="dataPagamento" autoComplete="off" value={orcDataPagamento} onChange={e => { setOrcDataPagamento(e.target.value); setOrcFormErrors(current => ({ ...current, dataPagamento: undefined })); }} aria-invalid={Boolean(orcFormErrors.dataPagamento)} aria-describedby={orcFormErrors.dataPagamento ? 'orcDataPagamento-error' : undefined} className={financeFieldClass} />
+              </FormField>
             </div>
-          </div>
-          <div>
-            <label htmlFor="orcDescricao" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Descrição / Serviço</label>
-            <input id="orcDescricao" type="text" required value={orcDescricao} onChange={e => setOrcDescricao(e.target.value)} placeholder="Ex: Levantamento Topográfico Fazenda Esperança" className={financeFieldClass} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label htmlFor="orcValorTotal" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Valor Total (BRL)</label>
-              <input id="orcValorTotal" type="number" step="0.01" required value={orcValorTotal} onChange={e => setOrcValorTotal(e.target.value)} placeholder="R$ 0,00" className={cn(financeFieldClass, 'text-lg font-bold text-brand-green-700')} />
-            </div>
-            <div>
-              <label htmlFor="orcDesconto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Desconto (BRL)</label>
-              <input id="orcDesconto" type="number" step="0.01" value={orcDesconto} onChange={e => setOrcDesconto(e.target.value)} placeholder="R$ 0,00" className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="orcStatus" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Status</label>
-              <FormSelect id="orcStatus" value={orcStatus} onChange={e => setOrcStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="Em Análise">Em Análise</option>
-                <option value="Aprovado">Aprovado</option>
-                <option value="Rejeitado">Rejeitado</option>
-                <option value="Pago">Pago</option>
-              </FormSelect>
-            </div>
-          </div>
-          <div>
-            <label htmlFor="orcFormaPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Forma de Pagamento / Condições</label>
-            <input id="orcFormaPagamento" type="text" value={orcFormaPagamento} onChange={e => setOrcFormaPagamento(e.target.value)} placeholder="Ex: Pix, Entrada 50% + 2x Boleto" className={financeFieldClass} />
-          </div>
-          <div>
-            <label htmlFor="orcAnotacoes" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Observações / Notas</label>
-            <textarea id="orcAnotacoes" value={orcAnotacoes} onChange={e => setOrcAnotacoes(e.target.value)} placeholder="Detalhes para cobrança..." rows={3} className={financeTextareaClass} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="orcDataCompetencia" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Competencia</label>
-              <DatePickerField id="orcDataCompetencia" value={orcDataCompetencia} onChange={e => setOrcDataCompetencia(e.target.value)} className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="orcDataPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data de pagamento</label>
-              <DatePickerField id="orcDataPagamento" value={orcDataPagamento} onChange={e => setOrcDataPagamento(e.target.value)} className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="orcCentroCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Centro de custo</label>
-              <FormSelect id="orcCentroCusto" value={orcCentroCusto} onChange={e => setOrcCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </FormSelect>
-            </div>
-            <div>
-              <label htmlFor="orcImpostoValor" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Imposto / retencao (BRL)</label>
-              <input id="orcImpostoValor" type="number" step="0.01" value={orcImpostoValor} onChange={e => setOrcImpostoValor(e.target.value)} placeholder="R$ 0,00" className={financeFieldClass} />
-            </div>
-          </div>
-          <CheckboxField id="financeiro-imposto-retido" label="Imposto retido na fonte" checked={orcImpostoRetido} onChange={setOrcImpostoRetido} className="geo-card px-3" />
-          <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3 flex-shrink-0">
-            <button type="button" onClick={() => setShowOrcamentoModal(false)} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
-            <button type="submit" className={cn(primarySubmitButtonClass, 'px-6 py-3')}>Salvar</button>
-          </div>
+          </FormSection>
+
+          <FormSection sectionId="revenue-notes" title="Observações" description="Registre informações adicionais para cobrança ou conferência." icon={<PencilSimple className="h-5 w-5" weight="duotone" />} tone="emerald" optional>
+            <FormField htmlFor="orcAnotacoes" label="Notas internas">
+              <textarea id="orcAnotacoes" name="anotacoes" value={orcAnotacoes} onChange={e => setOrcAnotacoes(e.target.value)} placeholder="Detalhes para cobrança…" rows={3} className={financeTextareaClass} />
+            </FormField>
+          </FormSection>
+
+          <FormFooter>
+            <button type="button" onClick={requestCloseRevenue} disabled={submitOrcamentoMutation.isPending} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
+            <button type="submit" disabled={submitOrcamentoMutation.isPending} aria-busy={submitOrcamentoMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3')}>{submitOrcamentoMutation.isPending ? 'Salvando…' : 'Salvar recebimento'}</button>
+          </FormFooter>
         </form>
       </Modal>
 
       {/* Modal Despesa */}
       <Modal
         isOpen={showDespesaModal}
-        onClose={() => setShowDespesaModal(false)}
-        title={selectedDespesa ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'}
+        onClose={requestClosePayable}
+        closeDisabled={submitDespesaMutation.isPending || discardTarget === 'despesa'}
+        title={<span className="flex flex-wrap items-center gap-2"><span>{selectedDespesa ? 'Editar Conta a Pagar' : 'Nova Conta a Pagar'}</span>{payableDirty && <span className="geo-badge-base geo-badge-unsaved px-2 py-1 text-[11px]">Alterações não salvas</span>}</span>}
         maxWidth="max-w-3xl"
+        initialFocusId="despDescricao"
       >
-        <form onSubmit={handleDespesaSubmit} className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label htmlFor="despClienteId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Cliente vinculado</label>
-              <FormSelect id="despClienteId" value={despClienteId} onChange={e => setDespClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="">Administrativo / sem cliente</option>
-                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
-              </FormSelect>
+        <form onSubmit={handleDespesaSubmit} className="space-y-5" noValidate>
+          <FormError message={despFormError} />
+
+          <FormSection sectionId="payable-identification" title="Identificação e documento" description="Descreva a obrigação e registre o fornecedor ou comprovante relacionado." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="amber">
+            <FormField htmlFor="despDescricao" label="Descrição" required error={despFormErrors.descricao}>
+              <input id="despDescricao" name="descricao" type="text" autoComplete="off" value={despDescricao} onChange={e => { setDespDescricao(e.target.value); setDespFormErrors(current => ({ ...current, descricao: undefined })); setDespFormError(''); }} placeholder="Ex.: Combustível para viagem de campo" aria-invalid={Boolean(despFormErrors.descricao)} aria-describedby={despFormErrors.descricao ? 'despDescricao-error' : undefined} className={financeFieldClass} />
+            </FormField>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField htmlFor="despFornecedor" label="Fornecedor">
+                <input id="despFornecedor" name="fornecedor" type="text" autoComplete="organization" value={despFornecedor} onChange={e => setDespFornecedor(e.target.value)} placeholder="Ex.: Cartório, prefeitura ou posto" className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="despNumeroDocumento" label="Documento ou comprovante">
+                <input id="despNumeroDocumento" name="numeroDocumento" type="text" autoComplete="off" spellCheck={false} value={despNumeroDocumento} onChange={e => setDespNumeroDocumento(e.target.value)} placeholder="NF, recibo, guia ou protocolo" className={financeFieldClass} />
+              </FormField>
             </div>
-            <div>
-              <label htmlFor="despProjetoId" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Projeto Vinculado</label>
-              <FormSelect id="despProjetoId" value={despProjetoId} onChange={e => setDespProjetoId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="">Nenhum / custo geral</option>
-                {projetosDaDespesa.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-              </FormSelect>
+          </FormSection>
+
+          <FormSection sectionId="payable-classification" title="Classificação e vínculo" description="Associe a despesa à estrutura gerencial, ao cliente e ao projeto corretos." icon={<Briefcase className="h-5 w-5" weight="duotone" />} tone="amber">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <FormField htmlFor="despClienteId" label="Cliente vinculado">
+                <FormSelect id="despClienteId" name="clienteId" autoComplete="off" value={despClienteId} onChange={e => setDespClienteId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="">Administrativo ou sem cliente</option>
+                  {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="despProjetoId" label="Projeto vinculado">
+                <FormSelect id="despProjetoId" name="projetoId" autoComplete="off" value={despProjetoId} onChange={e => setDespProjetoId(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="">Nenhum ou custo geral</option>
+                  {projetosDaDespesa.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="despCategoria" label="Categoria gerencial">
+                <FormSelect id="despCategoria" name="categoria" autoComplete="off" value={despCategoria} onChange={e => setDespCategoria(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="Combustível">Combustível</option><option value="Pedágio">Pedágio</option><option value="Hospedagem">Hospedagem</option><option value="Alimentação">Alimentação</option><option value="Viagem e transporte">Viagem e transporte</option><option value="Cartório e taxas">Cartório e taxas</option><option value="Documentos">Documentos</option><option value="Equipamentos">Equipamentos</option><option value="Tributos">Tributos</option><option value="Software e licenças">Software e licenças</option><option value="Outros">Outros</option>
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="despTipoCusto" label="Tipo de custo">
+                <FormSelect id="despTipoCusto" name="tipoCusto" autoComplete="off" value={despTipoCusto} onChange={e => setDespTipoCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  {tiposCusto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="despCentroCusto" label="Centro de custo" className="md:col-span-2">
+                <FormSelect id="despCentroCusto" name="centroCusto" autoComplete="off" value={despCentroCusto} onChange={e => setDespCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
+                </FormSelect>
+              </FormField>
             </div>
-            <div>
-              <label htmlFor="despCategoria" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Plano de Contas</label>
-              <FormSelect id="despCategoria" value={despCategoria} onChange={e => setDespCategoria(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="Combustível">Combustível e Transporte</option>
-                <option value="Cartório">Emolumentos (Cartório)</option>
-                <option value="Alimentação">Alimentação e Hospedagem</option>
-                <option value="Equipamento">Manutenção de Equipamento</option>
-                <option value="Impostos">Impostos e Taxas</option>
-                <option value="Salários">Folha de Pagamento</option>
-                <option value="Software">Softwares / Licenças</option>
-                <option value="Outros">Despesas Gerais</option>
-              </FormSelect>
+          </FormSection>
+
+          <FormSection sectionId="payable-values" title="Valor, datas e pagamento" description="Controle o valor, a competência, o vencimento e a baixa financeira." icon={<Calendar className="h-5 w-5" weight="duotone" />} tone="amber">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <FormField htmlFor="despValor" label="Valor (R$)" required error={despFormErrors.valor}>
+                <input id="despValor" name="valor" type="number" inputMode="decimal" min="0.01" step="0.01" value={despValor} onChange={e => { setDespValor(e.target.value); setDespFormErrors(current => ({ ...current, valor: undefined })); setDespFormError(''); }} placeholder="0,00" aria-invalid={Boolean(despFormErrors.valor)} aria-describedby={despFormErrors.valor ? 'despValor-error' : undefined} className={cn(financeFieldClass, 'font-mono text-lg font-bold tabular-nums text-brand-red-700')} />
+              </FormField>
+              <FormField htmlFor="despData" label="Data de vencimento" required error={despFormErrors.data}>
+                <DatePickerField id="despData" name="data" autoComplete="off" value={despData} onChange={e => { setDespData(e.target.value); setDespFormErrors(current => ({ ...current, data: undefined })); setDespFormError(''); }} aria-invalid={Boolean(despFormErrors.data)} aria-describedby={despFormErrors.data ? 'despData-error' : undefined} className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="despDataCompetencia" label="Competência" error={despFormErrors.dataCompetencia}>
+                <DatePickerField id="despDataCompetencia" name="dataCompetencia" autoComplete="off" value={despDataCompetencia} onChange={e => { setDespDataCompetencia(e.target.value); setDespFormErrors(current => ({ ...current, dataCompetencia: undefined })); }} aria-invalid={Boolean(despFormErrors.dataCompetencia)} aria-describedby={despFormErrors.dataCompetencia ? 'despDataCompetencia-error' : undefined} className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="despStatus" label="Situação">
+                <FormSelect id="despStatus" name="status" autoComplete="off" value={despStatus} onChange={e => setDespStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
+                  <option value="Pendente">Pendente</option><option value="Pago">Pago</option><option value="Atrasado">Atrasado</option>
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="despFormaPagamento" label="Forma de pagamento">
+                <input id="despFormaPagamento" name="formaPagamento" type="text" autoComplete="off" value={despFormaPagamento} onChange={e => setDespFormaPagamento(e.target.value)} placeholder="Pix, boleto, cartão ou dinheiro" className={financeFieldClass} />
+              </FormField>
+              <FormField htmlFor="despDataPagamento" label="Data de pagamento" error={despFormErrors.dataPagamento}>
+                <DatePickerField id="despDataPagamento" name="dataPagamento" autoComplete="off" value={despDataPagamento} onChange={e => { setDespDataPagamento(e.target.value); setDespFormErrors(current => ({ ...current, dataPagamento: undefined })); }} aria-invalid={Boolean(despFormErrors.dataPagamento)} aria-describedby={despFormErrors.dataPagamento ? 'despDataPagamento-error' : undefined} className={financeFieldClass} />
+              </FormField>
             </div>
-            <div>
-              <label htmlFor="despTipoCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Tipo de custo</label>
-              <FormSelect id="despTipoCusto" value={despTipoCusto} onChange={e => setDespTipoCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                {tiposCusto.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}
-              </FormSelect>
-            </div>
-            <div>
-              <label htmlFor="despCentroCusto" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Centro de custo</label>
-              <FormSelect id="despCentroCusto" value={despCentroCusto} onChange={e => setDespCentroCusto(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                {centrosCustoDisponiveis.map((centro) => <option key={centro} value={centro}>{centro}</option>)}
-              </FormSelect>
-            </div>
-          </div>
-          <div>
-            <label htmlFor="despDescricao" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Descrição / Fornecedor</label>
-            <input id="despDescricao" type="text" required value={despDescricao} onChange={e => setDespDescricao(e.target.value)} placeholder="Ex: Posto Ipiranga ou Boleto Internet" className={financeFieldClass} />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div>
-              <label htmlFor="despFornecedor" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Fornecedor</label>
-              <input id="despFornecedor" type="text" value={despFornecedor} onChange={e => setDespFornecedor(e.target.value)} placeholder="Ex: Cartorio, prefeitura, posto" className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despNumeroDocumento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Documento / comprovante</label>
-              <input id="despNumeroDocumento" type="text" value={despNumeroDocumento} onChange={e => setDespNumeroDocumento(e.target.value)} placeholder="NF, recibo, guia ou protocolo" className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despValor" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Valor (BRL)</label>
-              <input id="despValor" type="number" step="0.01" required value={despValor} onChange={e => setDespValor(e.target.value)} placeholder="R$ 0,00" className={cn(financeFieldClass, 'text-lg font-bold text-brand-red-700')} />
-            </div>
-            <div>
-              <label htmlFor="despData" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data Vencimento</label>
-              <DatePickerField id="despData" required value={despData} onChange={e => setDespData(e.target.value)} className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despDataCompetencia" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Competencia</label>
-              <DatePickerField id="despDataCompetencia" value={despDataCompetencia} onChange={e => setDespDataCompetencia(e.target.value)} className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despDataPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Data de pagamento</label>
-              <DatePickerField id="despDataPagamento" value={despDataPagamento} onChange={e => setDespDataPagamento(e.target.value)} className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despFormaPagamento" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Forma de pagamento</label>
-              <input id="despFormaPagamento" type="text" value={despFormaPagamento} onChange={e => setDespFormaPagamento(e.target.value)} placeholder="Pix, boleto, cartao, dinheiro" className={financeFieldClass} />
-            </div>
-            <div>
-              <label htmlFor="despStatus" className="block text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Status</label>
-              <FormSelect id="despStatus" value={despStatus} onChange={e => setDespStatus(e.target.value)} className={cn(financeFieldClass, 'appearance-none')}>
-                <option value="Pendente">Pendente</option>
-                <option value="Pago">Pago</option>
-                <option value="Atrasado">Atrasado</option>
-              </FormSelect>
-            </div>
-          </div>
-          <CheckboxField id="financeiro-despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={despReembolsavel} onChange={setDespReembolsavel} className="geo-card border-brand-green-200 bg-brand-green-50 px-3 text-brand-green-800 dark:border-brand-green-300/20 dark:bg-brand-green-400/10 dark:text-brand-green-100" />
-          <div className="pt-6 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-end gap-3">
-            <button type="button" onClick={() => setShowDespesaModal(false)} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
-            <button type="submit" className={cn(primarySubmitButtonClass, 'px-6 py-3')}>Salvar</button>
-          </div>
+          </FormSection>
+
+          <FormSection sectionId="payable-notes" title="Reembolso e observações" description="Indique se o valor será reembolsado e registre informações de conferência." icon={<PencilSimple className="h-5 w-5" weight="duotone" />} tone="amber" optional>
+            <CheckboxField id="financeiro-despesa-reembolsavel" name="reembolsavel" label="Despesa reembolsável pelo cliente" checked={despReembolsavel} onChange={setDespReembolsavel} className="rounded-lg border border-brand-border bg-brand-surface-subtle/35 px-2" />
+            <FormField htmlFor="despObservacoes" label="Observações">
+              <textarea id="despObservacoes" name="observacoes" value={despObservacoes} onChange={e => setDespObservacoes(e.target.value)} placeholder="Detalhes para conferência, reembolso ou prestação de contas…" rows={3} className={financeTextareaClass} />
+            </FormField>
+          </FormSection>
+
+          <FormFooter>
+            <button type="button" onClick={requestClosePayable} disabled={submitDespesaMutation.isPending} className={cn(secondarySmallActionButtonClass, 'px-6 py-3 font-semibold')}>Cancelar</button>
+            <button type="submit" disabled={submitDespesaMutation.isPending} aria-busy={submitDespesaMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3')}>{submitDespesaMutation.isPending ? 'Salvando…' : 'Salvar conta a pagar'}</button>
+          </FormFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={Boolean(discardTarget)}
+        onClose={() => setDiscardTarget(null)}
+        onConfirm={() => {
+          if (discardTarget === 'receita') setShowOrcamentoModal(false);
+          if (discardTarget === 'despesa') setShowDespesaModal(false);
+          setDiscardTarget(null);
+        }}
+        title="Descartar alterações?"
+        description="Os dados preenchidos desde a abertura deste formulário serão perdidos."
+        confirmText="Descartar alterações"
+        cancelText="Continuar editando"
+        variant="warning"
+      />
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
@@ -1723,8 +1909,8 @@ export function Financeiro() {
           ? `Excluir orçamento${deleteTarget.item.codigoOrcamento ? ` ${deleteTarget.item.codigoOrcamento}` : ''}?`
           : `Excluir despesa${deleteTarget?.item.descricao ? ` “${deleteTarget.item.descricao}”` : ''}?`}
         description={deleteTarget?.type === 'orcamento'
-          ? 'O orçamento financeiro e todas as parcelas vinculadas serão removidos. Os indicadores financeiros e a DRE serão recalculados. Esta ação não pode ser desfeita.'
-          : 'A despesa será removida e os totais financeiros e indicadores da DRE serão recalculados. Os cadastros de cliente e projeto vinculados serão preservados. Esta ação não pode ser desfeita.'}
+          ? 'O orçamento em rascunho e suas parcelas serão removidos. Os indicadores financeiros serão recalculados.'
+          : 'Somente despesas sem pagamento podem ser excluídas. Despesas pagas exigem estorno para preservar o histórico.'}
         confirmText={deleteTarget?.type === 'orcamento' ? 'Excluir orçamento' : 'Excluir despesa'}
         loading={deleteOrcamentoMutation.isPending || deleteDespesaMutation.isPending}
       />

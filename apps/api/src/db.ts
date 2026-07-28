@@ -6,3 +6,4 @@ const database = initDb(dbPath);
 
 export const db = database.db;
 export const dbReady = database.ready;
+export const closeDb = database.close;

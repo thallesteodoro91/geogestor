@@ -1,5 +1,5 @@
 import { DatePickerField } from '../../components/Form';
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { Check, Printer, MagnifyingGlass } from '@phosphor-icons/react';
@@ -24,11 +24,22 @@ interface Parcela {
   orcamentoDescricao?: string;
   clienteNome: string;
   clienteId: string;
+  projetoId?: string | null;
   numeroParcela: number;
   totalParcelas: number;
   valor: number; // in cents
+  valorPago?: number | null;
+  recebidoCaixa?: number | null;
   dataVencimento: string;
   statusPagamento: string;
+}
+
+interface ReceiptDocument {
+  id: string;
+  nome: string;
+  extensao: string;
+  projetoId?: string | null;
+  tamanhoBytes: number;
 }
 
 export function Faturas() {
@@ -36,6 +47,21 @@ export function Faturas() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
   const [selectedFatura, setSelectedFatura] = useState<Parcela | null>(null);
+  const [receivingFatura, setReceivingFatura] = useState<Parcela | null>(null);
+  const [receiptForm, setReceiptForm] = useState({
+    valorPrincipal: '',
+    juros: '0',
+    multa: '0',
+    desconto: '0',
+    taxas: '0',
+    dataRecebimento: new Date().toISOString().slice(0, 10),
+    meioPagamento: '',
+    comprovanteDocumentoId: '',
+    observacoes: ''
+  });
+  const [receiptDocuments, setReceiptDocuments] = useState<ReceiptDocument[]>([]);
+  const [loadingReceiptDocuments, setLoadingReceiptDocuments] = useState(false);
+  const [savingReceipt, setSavingReceipt] = useState(false);
   const [search, setSearch] = useState('');
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
@@ -59,24 +85,72 @@ export function Faturas() {
     fetchDados();
   }, []);
 
-  const handleMarcarComoPago = async (id: string) => {
+  const parseCurrencyToCents = (value: string) => {
+    const normalized = value.trim().replace(/\./g, '').replace(',', '.');
+    const amount = Number(normalized);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  };
+
+  const openReceiptForm = (item: Parcela) => {
+    const outstanding = Math.max(0, item.valor - (item.valorPago || 0));
+    setReceivingFatura(item);
+    setReceiptForm({
+      valorPrincipal: (outstanding / 100).toFixed(2).replace('.', ','),
+      juros: '0',
+      multa: '0',
+      desconto: '0',
+      taxas: '0',
+      dataRecebimento: new Date().toISOString().slice(0, 10),
+      meioPagamento: '',
+      comprovanteDocumentoId: '',
+      observacoes: ''
+    });
+    setReceiptDocuments([]);
+    setLoadingReceiptDocuments(true);
+    const params = new URLSearchParams({ clienteId: item.clienteId });
+    if (item.projetoId) params.set('projetoId', item.projetoId);
+    apiClient.get<ReceiptDocument[]>(`/api/financeiro/comprovantes?${params.toString()}`)
+      .then(setReceiptDocuments)
+      .catch(() => setReceiptDocuments([]))
+      .finally(() => setLoadingReceiptDocuments(false));
+  };
+
+  const handleRegisterReceipt = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!receivingFatura) return;
+    const payload = {
+      valorPrincipal: parseCurrencyToCents(receiptForm.valorPrincipal),
+      juros: parseCurrencyToCents(receiptForm.juros),
+      multa: parseCurrencyToCents(receiptForm.multa),
+      desconto: parseCurrencyToCents(receiptForm.desconto),
+      taxas: parseCurrencyToCents(receiptForm.taxas),
+      dataRecebimento: receiptForm.dataRecebimento,
+      meioPagamento: receiptForm.meioPagamento.trim() || null,
+      comprovanteDocumentoId: receiptForm.comprovanteDocumentoId || null,
+      observacoes: receiptForm.observacoes.trim() || null
+    };
+    if (payload.valorPrincipal <= 0) {
+      alert('Informe um valor principal maior que zero.');
+      return;
+    }
+    setSavingReceipt(true);
     try {
-      const res = await apiFetch(`/api/financeiro/parcelas/${id}`, {
-        method: 'PATCH',
+      const response = await apiFetch(`/api/financeiro/parcelas/${receivingFatura.id}/recebimentos`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statusPagamento: 'Pago' })
+        body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        fetchDados();
-        if (selectedFatura?.id === id) {
-          setSelectedFatura(null);
-        }
-      } else {
-        const errorData = await res.json().catch(() => null);
-        alert(errorData?.error || 'Erro ao processar pagamento.');
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error || 'Não foi possível registrar o recebimento.');
       }
-    } catch {
-      alert('Erro de conexão ao processar pagamento.');
+      setReceivingFatura(null);
+      setSelectedFatura(null);
+      fetchDados();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível registrar o recebimento.');
+    } finally {
+      setSavingReceipt(false);
     }
   };
 
@@ -86,6 +160,7 @@ export function Faturas() {
 
   const getFaturaStatus = (item: Parcela) => {
     if (item.statusPagamento === 'Pago') return 'Pago';
+    if ((item.valorPago || 0) > 0) return 'Parcial';
     const venc = new Date(item.dataVencimento);
     const hoje = new Date();
     hoje.setHours(0,0,0,0);
@@ -94,11 +169,13 @@ export function Faturas() {
 
   // Calcular estatísticas
   const faturamentoTotal = parcelas.reduce((acc, curr) => acc + curr.valor, 0);
-  const totalRecebido = parcelas.filter(p => p.statusPagamento === 'Pago').reduce((acc, curr) => acc + curr.valor, 0);
+  const totalRecebido = parcelas.reduce((acc, curr) => acc + (curr.recebidoCaixa || curr.valorPago || 0), 0);
   const totalAtrasado = parcelas.filter(p => {
-    return p.statusPagamento === 'Pendente' && new Date(p.dataVencimento) < new Date();
-  }).reduce((acc, curr) => acc + curr.valor, 0);
-  const totalPendente = faturamentoTotal - totalRecebido - totalAtrasado;
+    return p.statusPagamento !== 'Pago' && new Date(p.dataVencimento) < new Date();
+  }).reduce((acc, curr) => acc + Math.max(0, curr.valor - (curr.valorPago || 0)), 0);
+  const totalPendente = parcelas.filter(p => {
+    return p.statusPagamento !== 'Pago' && new Date(p.dataVencimento) >= new Date();
+  }).reduce((acc, curr) => acc + Math.max(0, curr.valor - (curr.valorPago || 0)), 0);
 
   // Filtrar parcelas
   const filteredParcelas = parcelas.filter(p => {
@@ -119,13 +196,13 @@ export function Faturas() {
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
           <div>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-              Faturamento
+              Financeiro
             </span>
             <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-              Controle de Faturas
+              Contas a receber
             </h1>
             <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-              Gerencie parcelas de serviços, recibos e recebimentos de clientes.
+              Gerencie cobranças, parcelas e recebimentos dos clientes.
             </p>
           </div>
         </div>
@@ -133,7 +210,7 @@ export function Faturas() {
         {/* Stats Bento Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
           <div className={cn(geoGreenSurfaceClass, 'rounded-[2rem] p-6 ring-1 ring-emerald-300/15 shadow-sm')}>
-            <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total Faturado</span>
+            <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total previsto</span>
             <p className={cn('mt-2 text-3xl font-bold', geoGreenValueClass)}>{formatCurrency(faturamentoTotal)}</p>
           </div>
           <div className={cn(geoGreenSurfaceClass, 'rounded-[2rem] p-6 ring-1 ring-emerald-300/15 shadow-sm')}>
@@ -190,7 +267,7 @@ export function Faturas() {
             )}
           </div>
           <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-            {filteredParcelas.length} de {parcelas.length} fatura(s) exibidas
+              {filteredParcelas.length} de {parcelas.length} parcela(s) exibidas
           </p>
         </div>
 
@@ -204,7 +281,7 @@ export function Faturas() {
                 : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
             }`}
           >
-            Faturas em Aberto
+              Parcelas em aberto
           </button>
           <button 
             onClick={() => setActiveTab('recebidas')}
@@ -218,12 +295,12 @@ export function Faturas() {
           </button>
         </div>
 
-        {/* Faturas list */}
+        {/* Contas a receber */}
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm">
           {loading ? (
-            <p className="text-zinc-500 dark:text-zinc-400 text-sm">Carregando faturas...</p>
+              <p className="text-zinc-500 dark:text-zinc-400 text-sm">Carregando contas a receber…</p>
           ) : filteredParcelas.length === 0 ? (
-            <p className="text-zinc-400 text-sm">Nenhuma fatura encontrada.</p>
+              <p className="text-zinc-400 text-sm">Nenhuma conta a receber encontrada.</p>
           ) : (
             <div className="divide-y divide-zinc-50">
               {filteredParcelas.map(item => {
@@ -235,6 +312,7 @@ export function Faturas() {
                         <span className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                           status === 'Pago' ? 'bg-emerald-50 text-emerald-700' :
                           status === 'Atrasado' ? 'bg-red-50 text-red-700 animate-pulse' :
+                          status === 'Parcial' ? 'bg-blue-50 text-blue-700' :
                           'bg-amber-50 text-amber-700'
                         }`}>
                           {status}
@@ -246,21 +324,29 @@ export function Faturas() {
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{formatCurrency(item.valor)}</p>
+                      <div className="text-right">
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{formatCurrency(item.valor)}</p>
+                        {(item.valorPago || 0) > 0 && item.statusPagamento !== 'Pago' && (
+                          <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+                            Saldo {formatCurrency(Math.max(0, item.valor - (item.valorPago || 0)))}
+                          </p>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => setSelectedFatura(item)}
                           className="px-3 py-2 bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 rounded-xl text-xs font-semibold text-zinc-700 active:scale-[0.97]"
                         >
-                          Ver Recibo
+                            {status === 'Pago' ? 'Ver recibo' : 'Ver cobrança'}
                         </button>
                         {status !== 'Pago' && (
                           <button 
-                            onClick={() => handleMarcarComoPago(item.id)}
-                            className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center hover:bg-emerald-100 active:scale-[0.97]"
-                            title="Confirmar Recebimento"
+                            onClick={() => openReceiptForm(item)}
+                            className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-emerald-500/30"
+                            title="Registrar recebimento integral ou parcial"
                           >
                             <Check weight="bold" className="w-4 h-4" />
+                            Receber
                           </button>
                         )}
                       </div>
@@ -276,7 +362,7 @@ export function Faturas() {
       <Modal
         isOpen={!!selectedFatura}
         onClose={() => setSelectedFatura(null)}
-        title="GeoGestor • Fatura / Recibo"
+        title={selectedFatura?.statusPagamento === 'Pago' ? 'GeoGestor • Recibo' : 'GeoGestor • Demonstrativo de cobrança'}
         maxWidth="max-w-2xl"
       >
         {selectedFatura && (
@@ -311,9 +397,21 @@ export function Faturas() {
               
               <div className="flex justify-between items-center pt-4 border-t border-zinc-200/60 text-sm">
                 <span className="text-zinc-500 dark:text-zinc-400">Parcela de Orçamento (Ref: #{selectedFatura.orcamentoId.substring(0, 8)})</span>
-                <span className="font-bold text-zinc-900 dark:text-zinc-100">{formatCurrency(selectedFatura.valor)}</span>
+                  <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                    {formatCurrency(
+                      selectedFatura.statusPagamento === 'Pago'
+                        ? selectedFatura.recebidoCaixa || selectedFatura.valorPago || selectedFatura.valor
+                        : selectedFatura.valor
+                    )}
+                  </span>
               </div>
             </div>
+
+            <p className="mb-5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {selectedFatura.statusPagamento === 'Pago'
+                ? 'Este recibo confirma o recebimento financeiro e não substitui documento fiscal quando ele for exigido.'
+                : 'Este demonstrativo é uma cobrança interna. Ele não é nota fiscal nem comprova pagamento.'}
+            </p>
 
             {/* Botões / Rodapé */}
             <div className="flex items-center justify-between pt-6 border-t border-zinc-100 dark:border-zinc-800 print:hidden">
@@ -321,19 +419,128 @@ export function Faturas() {
                 onClick={() => window.print()}
                 className="flex items-center gap-2 bg-zinc-900 text-white rounded-full px-5 py-3 text-xs font-semibold hover:bg-zinc-800"
               >
-                <Printer className="w-4 h-4" /> Imprimir Recibo
+                <Printer className="w-4 h-4" /> {selectedFatura.statusPagamento === 'Pago' ? 'Imprimir recibo' : 'Imprimir cobrança'}
               </button>
               
               {selectedFatura.statusPagamento !== 'Pago' && (
                 <button 
-                  onClick={() => handleMarcarComoPago(selectedFatura.id)}
+                  onClick={() => openReceiptForm(selectedFatura)}
                   className="bg-emerald-600 text-white rounded-full px-5 py-3 text-xs font-semibold hover:bg-emerald-500"
                 >
-                  Marcar como Pago
+                  Registrar recebimento
                 </button>
               )}
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={!!receivingFatura}
+        onClose={() => !savingReceipt && setReceivingFatura(null)}
+        title="Registrar recebimento"
+        maxWidth="max-w-xl"
+      >
+        {receivingFatura && (
+          <form onSubmit={handleRegisterReceipt} className="space-y-5">
+            <div className="rounded-2xl bg-zinc-50 p-4 text-sm dark:bg-zinc-950">
+              <p className="font-semibold text-zinc-950 dark:text-white">{receivingFatura.clienteNome}</p>
+              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                Saldo principal: {formatCurrency(Math.max(0, receivingFatura.valor - (receivingFatura.valorPago || 0)))}
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {[
+                ['valorPrincipal', 'Principal recebido'],
+                ['juros', 'Juros'],
+                ['multa', 'Multa'],
+                ['desconto', 'Desconto'],
+                ['taxas', 'Taxas bancárias']
+              ].map(([name, label]) => (
+                <label key={name} className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                  <span>{label} (R$)</span>
+                  <input
+                    name={name}
+                    inputMode="decimal"
+                    value={receiptForm[name as keyof typeof receiptForm]}
+                    onChange={(event) => setReceiptForm((current) => ({ ...current, [name]: event.target.value }))}
+                    className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm tabular-nums text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                    required={name === 'valorPrincipal'}
+                  />
+                </label>
+              ))}
+              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                <span>Data do recebimento</span>
+                <DatePickerField
+                  name="dataRecebimento"
+                  value={receiptForm.dataRecebimento}
+                  onChange={(event) => setReceiptForm((current) => ({ ...current, dataRecebimento: event.target.value }))}
+                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                  required
+                />
+              </label>
+              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                <span>Meio de pagamento</span>
+                <input
+                  name="meioPagamento"
+                  value={receiptForm.meioPagamento}
+                  onChange={(event) => setReceiptForm((current) => ({ ...current, meioPagamento: event.target.value }))}
+                  placeholder="PIX, transferência, boleto…"
+                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                />
+              </label>
+              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                <span>Comprovante vinculado</span>
+                <select
+                  name="comprovanteDocumentoId"
+                  value={receiptForm.comprovanteDocumentoId}
+                  onChange={(event) => setReceiptForm((current) => ({ ...current, comprovanteDocumentoId: event.target.value }))}
+                  disabled={loadingReceiptDocuments}
+                  className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                >
+                  <option value="">{loadingReceiptDocuments ? 'Carregando documentos…' : 'Sem comprovante vinculado'}</option>
+                  {receiptDocuments.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.nome}{document.projetoId ? ' · documento do projeto' : ' · documento geral do cliente'}
+                    </option>
+                  ))}
+                </select>
+                {!loadingReceiptDocuments && receiptDocuments.length === 0 && (
+                  <span className="block font-normal text-zinc-500">Envie o comprovante na área de documentos do cliente ou projeto para selecioná-lo aqui.</span>
+                )}
+              </label>
+            </div>
+            <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+              <span>Observações</span>
+              <textarea
+                name="observacoes"
+                value={receiptForm.observacoes}
+                onChange={(event) => setReceiptForm((current) => ({ ...current, observacoes: event.target.value }))}
+                rows={3}
+                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+              />
+            </label>
+            <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+              O principal reduz o saldo da parcela. Juros, multa, desconto e taxas alteram apenas o valor efetivamente recebido no caixa.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setReceivingFatura(null)}
+                disabled={savingReceipt}
+                className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={savingReceipt}
+                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
+              >
+                {savingReceipt ? 'Registrando…' : 'Confirmar recebimento'}
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
     </Layout>

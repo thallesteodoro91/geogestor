@@ -1,11 +1,11 @@
-import { ArrowDown, ArrowUp, ArrowsLeftRight, CaretDown, CheckCircle, Circle, Copy, FloppyDisk, Plus, Trash, UserPlus, WarningCircle
+import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Circle, Copy, FloppyDisk, Plus, Trash, UserPlus, WarningCircle
 } from '@phosphor-icons/react';
 import { BUDGET_UNITS, SERVICE_TYPES, isValidBrazilianPhone, isValidCnpj, isValidCpf, percentageToBasisPoints } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CheckboxField, DatePickerField, FormError, FormField, FormFooter, FormSelect } from '../../components/Form';
+import { CheckboxField, DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect } from '../../components/Form';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
@@ -299,6 +299,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
   const [quickClient, setQuickClient] = useState({ tipoPessoa: 'PF' as 'PF' | 'PJ', nome: '', documento: '', email: '', telefone: '', endereco: '' });
   const [openSections, setOpenSections] = useState<Set<EditorSectionId>>(() => new Set(['header']));
   const [activeSection, setActiveSection] = useState<EditorSectionId>('header');
+  const [expandedItemDetails, setExpandedItemDetails] = useState<Set<string>>(() => new Set());
   const [isFormScrolled, setIsFormScrolled] = useState(false);
   const [highlightedSection, setHighlightedSection] = useState<EditorSectionId | null>(null);
   const sectionRefs = useRef<Partial<Record<EditorSectionId, HTMLElement | null>>>({});
@@ -329,6 +330,19 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
     }
   }, [form]);
 
+  const scrollSectionIntoEditor = (sectionId: EditorSectionId) => {
+    const section = sectionRefs.current[sectionId];
+    const scrollContainer = formRef.current?.parentElement;
+    if (!section || !scrollContainer) return;
+    const sectionRect = section.getBoundingClientRect();
+    const containerRect = scrollContainer.getBoundingClientRect();
+    const stickyNavigationOffset = window.innerWidth < 1024 ? 72 : 8;
+    scrollContainer.scrollTo({
+      top: Math.max(0, scrollContainer.scrollTop + sectionRect.top - containerRect.top - stickyNavigationOffset),
+      behavior: preferredScrollBehavior()
+    });
+  };
+
   const focusErrorSection = (sectionId: EditorSectionId, fieldId?: string) => {
     setActiveSection(sectionId);
     setOpenSections((current) => {
@@ -339,7 +353,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
     });
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const section = sectionRefs.current[sectionId];
-      section?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' });
+      scrollSectionIntoEditor(sectionId);
       const sectionContent = section?.querySelector<HTMLElement>(`#budget-section-${sectionId}-content`);
       const requestedField = fieldId ? document.getElementById(fieldId) : null;
       const firstField = requestedField || sectionContent?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])');
@@ -596,7 +610,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
       next.add(id);
       return next;
     });
-    requestAnimationFrame(() => sectionRefs.current[id]?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' }));
+    requestAnimationFrame(() => scrollSectionIntoEditor(id));
   };
 
   useEffect(() => {
@@ -800,7 +814,12 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
 
   return (
     <Modal isOpen={isOpen} onClose={requestClose} closeDisabled={saveMutation.isPending} title={initial ? 'Editar orçamento em rascunho' : 'Novo orçamento'} maxWidth="max-w-[1520px]">
-      <form ref={formRef} onSubmit={(event) => { event.preventDefault(); handleSubmit(); }} className="-m-1 rounded-xl bg-zinc-50 p-1 dark:bg-[#0b0c0f]" noValidate>
+      <form
+        ref={formRef}
+        onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}
+        className="-m-1 min-h-full rounded-xl bg-zinc-50 p-1 dark:bg-[#0b0c0f]"
+        noValidate
+      >
         {visibleFormError && (
           <div ref={errorRef} tabIndex={-1} className="mb-5">
             <FormError message={visibleFormError} />
@@ -971,73 +990,93 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
           onActivate={() => setActiveSection('characterization')}
           setRef={(node) => { sectionRefs.current.characterization = node; }}
         >
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
-            <FormField htmlFor="budget-service-type" label="Tipo de serviço" required error={fieldError('budget-service-type')} className="xl:col-span-2">
-              <FormSelect id="budget-service-type" value={form.serviceType} onChange={(event) => setForm({ ...form, serviceType: event.target.value })} className={fieldClass} {...fieldA11y('budget-service-type')}>
-                {SERVICE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-              </FormSelect>
-            </FormField>
-            <FormField htmlFor="budget-property-type" label="Classificação do imóvel">
-              <FormSelect id="budget-property-type" value={form.propertyType} onChange={(event) => setForm({ ...form, propertyType: event.target.value as 'rural' | 'urbano' })} className={fieldClass}><option value="rural">Rural</option><option value="urbano">Urbano</option></FormSelect>
-            </FormField>
-            <FormField htmlFor="budget-property-name" label="Nome do imóvel">
-              <input id="budget-property-name" value={form.propertyName} onChange={(event) => setForm({ ...form, propertyName: event.target.value })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-municipality" label="Município">
-              <input id="budget-municipality" autoComplete="address-level2" value={form.municipality} onChange={(event) => setForm({ ...form, municipality: event.target.value })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-state" label="UF">
-              <input id="budget-state" maxLength={2} autoComplete="address-level1" value={form.state} onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase() })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-area" label="Área estimada">
-              <input id="budget-area" inputMode="decimal" value={form.characterization.estimatedArea} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedArea: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-vertices" label="Vértices estimados">
-              <input id="budget-vertices" type="number" min="0" inputMode="numeric" value={form.characterization.estimatedVertices} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedVertices: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-neighbors" label="Confrontantes">
-              <input id="budget-neighbors" type="number" min="0" inputMode="numeric" value={form.characterization.neighbors} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, neighbors: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-distance" label="Distância operacional (km)">
-              <input id="budget-distance" inputMode="decimal" value={form.characterization.distanceKm} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, distanceKm: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-complexity" label="Complexidade">
-              <FormSelect id="budget-complexity" value={form.characterization.complexity} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, complexity: event.target.value } })} className={fieldClass}><option value="baixa">Baixa</option><option value="média">Média</option><option value="alta">Alta</option></FormSelect>
-            </FormField>
-            <FormField htmlFor="budget-method" label="Método de levantamento" className="md:col-span-2">
-              <input id="budget-method" value={form.characterization.surveyMethod} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, surveyMethod: event.target.value } })} placeholder="Ex.: RTK, Estático, Stop and Go, estação total" className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-ground-control" label="Pontos de apoio ou marcos físicos" hint="Materializados fisicamente no terreno.">
-              <input id="budget-ground-control" value={form.characterization.physicalGroundControl} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, physicalGroundControl: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-gnss-base" label="Estação base eletrônica GNSS" hint="Receptor eletrônico usado como estação de referência.">
-              <input id="budget-gnss-base" value={form.characterization.gnssElectronicBase} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, gnssElectronicBase: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-equipment" label="Equipamentos previstos" className="md:col-span-2">
-              <input id="budget-equipment" value={form.characterization.equipment} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, equipment: event.target.value } })} className={fieldClass} />
-            </FormField>
-            <FormField htmlFor="budget-methodology" label="Metodologia" className="md:col-span-2">
-              <textarea id="budget-methodology" rows={3} value={form.methodology} onChange={(event) => setForm({ ...form, methodology: event.target.value })} className={cn(fieldClass, 'resize-y py-3')} />
-            </FormField>
-            <FormField htmlFor="budget-deliverables" label="Produtos e entregáveis" className="md:col-span-2">
-              <textarea id="budget-deliverables" rows={3} value={form.deliverables} onChange={(event) => setForm({ ...form, deliverables: event.target.value })} className={cn(fieldClass, 'resize-y py-3')} />
-            </FormField>
-          </div>
-          <fieldset className="flex flex-wrap gap-4 rounded-xl border border-brand-border p-4">
-            <legend className="px-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Logística prevista</legend>
-            {[
-              ['travelRequired', 'Necessita deslocamento'], ['lodgingRequired', 'Necessita hospedagem'], ['additionalTeam', 'Necessita ajudante ou equipe adicional']
-            ].map(([key, label]) => (
-              <CheckboxField
-                key={key}
-                id={`budget-${key}`}
-                label={label}
-                checked={Boolean(form.characterization[key as keyof typeof form.characterization])}
-                onChange={(checked) => setForm({ ...form, characterization: { ...form.characterization, [key]: checked } })}
-                compact
-              />
-            ))}
-          </fieldset>
+          <FormSection title="Serviço e imóvel" description="Identificação do trabalho e do imóvel considerado na proposta." className="bg-brand-surface-subtle/30">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <FormField htmlFor="budget-service-type" label="Tipo de serviço" required error={fieldError('budget-service-type')} className="md:col-span-2">
+                <FormSelect id="budget-service-type" value={form.serviceType} onChange={(event) => setForm({ ...form, serviceType: event.target.value })} className={fieldClass} {...fieldA11y('budget-service-type')}>
+                  {SERVICE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                </FormSelect>
+              </FormField>
+              <FormField htmlFor="budget-property-type" label="Classificação do imóvel">
+                <FormSelect id="budget-property-type" value={form.propertyType} onChange={(event) => setForm({ ...form, propertyType: event.target.value as 'rural' | 'urbano' })} className={fieldClass}><option value="rural">Rural</option><option value="urbano">Urbano</option></FormSelect>
+              </FormField>
+              <FormField htmlFor="budget-property-name" label="Nome do imóvel">
+                <input id="budget-property-name" name="propertyName" autoComplete="off" value={form.propertyName} onChange={(event) => setForm({ ...form, propertyName: event.target.value })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-municipality" label="Município">
+                <input id="budget-municipality" name="municipality" autoComplete="address-level2" value={form.municipality} onChange={(event) => setForm({ ...form, municipality: event.target.value })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-state" label="UF">
+                <input id="budget-state" name="state" maxLength={2} autoComplete="address-level1" value={form.state} onChange={(event) => setForm({ ...form, state: event.target.value.toUpperCase() })} className={fieldClass} />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Dimensionamento e complexidade" description="Estimativas que influenciam esforço de campo, prazo e formação do preço." className="bg-brand-surface-subtle/30">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <FormField htmlFor="budget-area" label="Área estimada">
+                <input id="budget-area" name="estimatedArea" inputMode="decimal" autoComplete="off" value={form.characterization.estimatedArea} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedArea: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-vertices" label="Vértices estimados">
+                <input id="budget-vertices" name="estimatedVertices" type="number" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.estimatedVertices} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedVertices: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-neighbors" label="Confrontantes">
+                <input id="budget-neighbors" name="neighbors" type="number" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.neighbors} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, neighbors: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-distance" label="Distância operacional (km)">
+                <input id="budget-distance" name="distanceKm" inputMode="decimal" autoComplete="off" value={form.characterization.distanceKm} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, distanceKm: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-complexity" label="Complexidade">
+                <FormSelect id="budget-complexity" name="complexity" value={form.characterization.complexity} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, complexity: event.target.value } })} className={fieldClass}><option value="baixa">Baixa</option><option value="média">Média</option><option value="alta">Alta</option></FormSelect>
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Método e infraestrutura de campo" description="Recursos técnicos previstos para executar o levantamento." className="bg-brand-surface-subtle/30">
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField htmlFor="budget-method" label="Método de levantamento" className="md:col-span-2">
+                <input id="budget-method" name="surveyMethod" autoComplete="off" value={form.characterization.surveyMethod} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, surveyMethod: event.target.value } })} placeholder="Ex.: RTK, Estático, Stop and Go, estação total" className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-ground-control" label="Pontos de apoio ou marcos físicos" hint="Pontos materializados fisicamente no terreno.">
+                <input id="budget-ground-control" name="physicalGroundControl" autoComplete="off" value={form.characterization.physicalGroundControl} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, physicalGroundControl: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-gnss-base" label="Estação base eletrônica GNSS" hint="Receptor eletrônico utilizado como estação de referência.">
+                <input id="budget-gnss-base" name="gnssElectronicBase" autoComplete="off" value={form.characterization.gnssElectronicBase} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, gnssElectronicBase: event.target.value } })} className={fieldClass} />
+              </FormField>
+              <FormField htmlFor="budget-equipment" label="Equipamentos previstos" className="md:col-span-2">
+                <input id="budget-equipment" name="equipment" autoComplete="off" value={form.characterization.equipment} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, equipment: event.target.value } })} className={fieldClass} />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Escopo técnico" description="Metodologia proposta e produtos que serão entregues ao cliente." className="bg-brand-surface-subtle/30">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FormField htmlFor="budget-methodology" label="Metodologia">
+                <textarea id="budget-methodology" name="methodology" rows={4} value={form.methodology} onChange={(event) => setForm({ ...form, methodology: event.target.value })} className={cn(fieldClass, 'resize-y py-3')} />
+              </FormField>
+              <FormField htmlFor="budget-deliverables" label="Produtos e entregáveis">
+                <textarea id="budget-deliverables" name="deliverables" rows={4} value={form.deliverables} onChange={(event) => setForm({ ...form, deliverables: event.target.value })} className={cn(fieldClass, 'resize-y py-3')} />
+              </FormField>
+            </div>
+          </FormSection>
+
+          <FormSection title="Logística prevista" description="Necessidades operacionais que podem gerar custos adicionais." className="bg-brand-surface-subtle/30">
+            <fieldset className="flex flex-wrap gap-x-6 gap-y-3">
+              <legend className="sr-only">Necessidades de logística</legend>
+              {[
+                ['travelRequired', 'Necessita deslocamento'], ['lodgingRequired', 'Necessita hospedagem'], ['additionalTeam', 'Necessita ajudante ou equipe adicional']
+              ].map(([key, label]) => (
+                <CheckboxField
+                  key={key}
+                  id={`budget-${key}`}
+                  label={label}
+                  checked={Boolean(form.characterization[key as keyof typeof form.characterization])}
+                  onChange={(checked) => setForm({ ...form, characterization: { ...form.characterization, [key]: checked } })}
+                  compact
+                />
+              ))}
+            </fieldset>
+          </FormSection>
         </EditorSection>
 
         <EditorSection
@@ -1054,41 +1093,127 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
           onActivate={() => setActiveSection('items')}
           setRef={(node) => { sectionRefs.current.items = node; }}
         >
-          <div className="flex flex-wrap items-end gap-3">
-            <FormField htmlFor="budget-template" label="Modelo salvo" className="min-w-64 flex-1">
-              <FormSelect id="budget-template" value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value)} className={fieldClass}><option value="">Selecione um modelo…</option>{options.templates.map((template) => <option key={template.id} value={template.id}>{template.nome}</option>)}</FormSelect>
-            </FormField>
-            <button type="button" disabled={!selectedTemplate} onClick={applyTemplate} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-50">Usar modelo</button>
-            <button type="button" onClick={saveTemplate} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4"><FloppyDisk aria-hidden="true" size={17} /> Salvar como modelo</button>
-            <button id="budget-add-item" type="button" onClick={() => setForm({ ...form, items: [...form.items, emptyBudgetItem()] })} className="geo-button-base geo-button-primary geo-focus-ring min-h-11 px-4" {...fieldA11y('budget-add-item')}><Plus aria-hidden="true" size={17} /> Adicionar item</button>
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+            <section aria-labelledby="budget-template-tools-title" className="rounded-xl border border-brand-border bg-brand-surface-subtle/35 p-4">
+              <div className="mb-3">
+                <h4 id="budget-template-tools-title" className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-200">Modelos de itens</h4>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Aplique uma composição existente ou salve a lista atual para reutilização.</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-[minmax(14rem,1fr)_auto_auto] md:items-end">
+                <FormField htmlFor="budget-template" label="Modelo salvo">
+                  <FormSelect id="budget-template" name="template" value={selectedTemplate} onChange={(event) => setSelectedTemplate(event.target.value)} className={fieldClass}><option value="">Selecione um modelo…</option>{options.templates.map((template) => <option key={template.id} value={template.id}>{template.nome}</option>)}</FormSelect>
+                </FormField>
+                <button type="button" disabled={!selectedTemplate} onClick={applyTemplate} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-50">Usar modelo</button>
+                <button type="button" onClick={saveTemplate} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4"><FloppyDisk aria-hidden="true" size={17} /> Salvar como modelo</button>
+              </div>
+            </section>
+            <section aria-labelledby="budget-item-tools-title" className="flex flex-col justify-between rounded-xl border border-brand-border bg-brand-surface-subtle/35 p-4">
+              <div>
+                <h4 id="budget-item-tools-title" className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-200">Itens</h4>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Inclua uma nova linha na proposta.</p>
+              </div>
+              <button id="budget-add-item" type="button" onClick={() => setForm({ ...form, items: [...form.items, emptyBudgetItem()] })} className="geo-button-base geo-button-primary geo-focus-ring mt-4 min-h-11 px-4" {...fieldA11y('budget-add-item')}><Plus aria-hidden="true" size={17} /> Adicionar item</button>
+            </section>
           </div>
           {fieldError('budget-add-item') && <p id="budget-add-item-error" className="text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError('budget-add-item')}</p>}
-          <p className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400 xl:hidden"><ArrowsLeftRight aria-hidden="true" size={16} /> Deslize horizontalmente para consultar todas as colunas. Ordem e ações permanecem visíveis.</p>
-          <div className="max-w-full overflow-x-auto rounded-xl border border-brand-border overscroll-contain [scrollbar-gutter:stable]">
-            <table className="min-w-[1320px] w-full border-collapse text-left text-sm">
-              <thead className="bg-brand-surface-subtle text-xs uppercase tracking-wider text-text-muted">
-                <tr><th className="sticky left-0 z-20 w-24 bg-brand-surface-subtle p-3 shadow-[8px_0_12px_-12px_rgba(0,0,0,0.45)]">Ordem</th><th className="p-3">Código / grupo</th><th className="p-3">Descrição</th><th className="p-3">Unidade</th><th className="p-3">Qtd.</th><th className="p-3">Custo unit.</th><th className="p-3">Preço unit.</th><th className="p-3">Desconto</th><th className="p-3">Acréscimo</th><th className="p-3">Componente</th><th className="p-3">Trib.</th><th className="p-3">Total</th><th className="sticky right-0 z-20 bg-brand-surface-subtle p-3 shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.45)]">Ações</th></tr>
-              </thead>
-              <tbody className="divide-y divide-brand-border">
-                {form.items.map((item, index) => (
-                  <tr key={item.id} className="align-top">
-                    <td className="sticky left-0 z-10 bg-white p-2 shadow-[8px_0_12px_-12px_rgba(0,0,0,0.45)] dark:bg-[#13151a]"><div className="flex"><button type="button" className={iconButtonClass} onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`Mover item ${index + 1} para cima`}><ArrowUp aria-hidden="true" size={15} /></button><button type="button" className={iconButtonClass} onClick={() => moveItem(index, 1)} disabled={index === form.items.length - 1} aria-label={`Mover item ${index + 1} para baixo`}><ArrowDown aria-hidden="true" size={15} /></button></div></td>
-                    <td className="p-2 space-y-2"><input aria-label={`Código do item ${index + 1}`} value={item.code} onChange={(event) => updateItem(item.id, { code: event.target.value })} className={compactFieldClass} placeholder="Código" /><input aria-label={`Grupo do item ${index + 1}`} value={item.group} onChange={(event) => updateItem(item.id, { group: event.target.value })} className={compactFieldClass} placeholder="Grupo" /></td>
-                    <td className="p-2"><textarea id={`budget-item-description-${index}`} aria-label={`Descrição do item ${index + 1}`} rows={3} value={item.description} onChange={(event) => updateItem(item.id, { description: event.target.value })} className={cn(compactFieldClass, 'min-w-64 resize-y py-2')} {...fieldA11y(`budget-item-description-${index}`)} />{fieldError(`budget-item-description-${index}`) && <p id={`budget-item-description-${index}-error`} className="mt-1 min-w-64 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-item-description-${index}`)}</p>}</td>
-                    <td className="p-2"><FormSelect aria-label={`Unidade do item ${index + 1}`} value={item.unit} onChange={(event) => updateItem(item.id, { unit: event.target.value })} className={cn(compactFieldClass, 'w-24 min-w-20')}>{BUDGET_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</FormSelect></td>
-                    <td className="p-2"><input id={`budget-item-quantity-${index}`} aria-label={`Quantidade do item ${index + 1}`} inputMode="decimal" value={item.quantity} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} className={cn(compactFieldClass, 'w-24 min-w-20 text-right font-mono tabular-nums')} {...fieldA11y(`budget-item-quantity-${index}`)} />{fieldError(`budget-item-quantity-${index}`) && <p id={`budget-item-quantity-${index}-error`} className="mt-1 min-w-24 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-item-quantity-${index}`)}</p>}</td>
-                    <td className="p-2"><input aria-label={`Custo unitário do item ${index + 1}`} inputMode="decimal" value={item.unitCost} onChange={(event) => updateItem(item.id, { unitCost: event.target.value })} className={cn(compactFieldClass, 'w-32 min-w-28 text-right font-mono tabular-nums')} /></td>
-                    <td className="p-2"><input aria-label={`Preço unitário do item ${index + 1}`} inputMode="decimal" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: event.target.value })} className={cn(compactFieldClass, 'w-32 min-w-28 text-right font-mono tabular-nums')} /></td>
-                    <td className="p-2"><AdjustmentInput id={`budget-item-discount-${index}`} compact type={item.discountType} value={item.discountValue} typeAriaLabel={`Tipo de desconto do item ${index + 1}`} valueAriaLabel={`Valor do desconto do item ${index + 1}`} onTypeChange={(discountType) => updateItem(item.id, { discountType })} onValueChange={(discountValue) => updateItem(item.id, { discountValue })} invalid={Boolean(fieldError(`budget-item-discount-${index}`))} errorId={fieldError(`budget-item-discount-${index}`) ? `budget-item-discount-${index}-error` : undefined} />{fieldError(`budget-item-discount-${index}`) && <p id={`budget-item-discount-${index}-error`} className="mt-1 min-w-40 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-item-discount-${index}`)}</p>}</td>
-                    <td className="p-2"><AdjustmentInput id={`budget-item-addition-${index}`} compact type={item.additionType} value={item.additionValue} typeAriaLabel={`Tipo de acréscimo do item ${index + 1}`} valueAriaLabel={`Valor do acréscimo do item ${index + 1}`} onTypeChange={(additionType) => updateItem(item.id, { additionType })} onValueChange={(additionValue) => updateItem(item.id, { additionValue })} invalid={Boolean(fieldError(`budget-item-addition-${index}`))} errorId={fieldError(`budget-item-addition-${index}`) ? `budget-item-addition-${index}-error` : undefined} />{fieldError(`budget-item-addition-${index}`) && <p id={`budget-item-addition-${index}-error`} className="mt-1 min-w-40 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-item-addition-${index}`)}</p>}</td>
-                    <td className="min-w-44 p-2"><FormSelect aria-label={`Componente financeiro do item ${index + 1}`} value={item.component} onChange={(event) => updateItem(item.id, { component: event.target.value as BudgetFormItem['component'] })} className={compactFieldClass}><option value="servico">Serviço</option><option value="despesa">Despesa cobrada</option><option value="taxa_repassada">Taxa repassada</option></FormSelect><CheckboxField id={`budget-item-optional-${index}`} label="Opcional" checked={item.optional} onChange={(optional) => updateItem(item.id, { optional })} compact className="mt-1" /></td>
-                    <td className="p-2 text-center"><CheckboxField id={`budget-item-taxable-${index}`} label={`Item ${index + 1} tributável`} checked={item.taxable} onChange={(taxable) => updateItem(item.id, { taxable })} compact labelHidden className="mx-auto" /></td>
-                    <td className="bg-brand-green-50/70 p-3 font-mono font-bold tabular-nums text-brand-green-800 dark:bg-brand-green-500/10 dark:text-brand-green-100">{preview ? formatCurrency(preview.items[index]?.totalCents) : '—'}</td>
-                    <td className="sticky right-0 z-10 bg-white p-2 shadow-[-8px_0_12px_-12px_rgba(0,0,0,0.45)] dark:bg-[#13151a]"><div className="flex"><button type="button" className={iconButtonClass} onClick={() => setForm({ ...form, items: [...form.items.slice(0, index + 1), { ...item, id: crypto.randomUUID() }, ...form.items.slice(index + 1)] })} aria-label={`Duplicar item ${index + 1}`}><Copy aria-hidden="true" size={16} /></button><button type="button" className={cn(iconButtonClass, 'text-brand-red-600')} onClick={() => setForm({ ...form, items: form.items.filter((candidate) => candidate.id !== item.id) })} aria-label={`Remover item ${index + 1}`}><Trash aria-hidden="true" size={16} /></button></div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-3">
+            {form.items.map((item, index) => {
+              const detailsOpen = expandedItemDetails.has(item.id)
+                || Boolean(fieldError(`budget-item-discount-${index}`))
+                || Boolean(fieldError(`budget-item-addition-${index}`));
+              return (
+                <article key={item.id} className="overflow-hidden rounded-xl border border-brand-border bg-brand-surface shadow-sm">
+                  <header className="flex flex-wrap items-center justify-between gap-3 border-b border-brand-border bg-brand-surface-subtle/45 px-4 py-3">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-bold text-zinc-950 dark:text-white">Item {index + 1}</h4>
+                      <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{item.description.trim() || 'Descrição ainda não informada'}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <div className="mr-1 text-right">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Total</span>
+                        <span className="font-mono text-sm font-bold tabular-nums text-brand-green-800 dark:text-brand-green-100">{preview ? formatCurrency(preview.items[index]?.totalCents) : '—'}</span>
+                      </div>
+                      <button type="button" className={iconButtonClass} onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`Mover item ${index + 1} para cima`}><ArrowUp aria-hidden="true" size={15} /></button>
+                      <button type="button" className={iconButtonClass} onClick={() => moveItem(index, 1)} disabled={index === form.items.length - 1} aria-label={`Mover item ${index + 1} para baixo`}><ArrowDown aria-hidden="true" size={15} /></button>
+                      <button type="button" className={iconButtonClass} onClick={() => setForm({ ...form, items: [...form.items.slice(0, index + 1), { ...item, id: crypto.randomUUID() }, ...form.items.slice(index + 1)] })} aria-label={`Duplicar item ${index + 1}`}><Copy aria-hidden="true" size={16} /></button>
+                      <button type="button" className={cn(iconButtonClass, 'text-brand-red-600')} onClick={() => setForm({ ...form, items: form.items.filter((candidate) => candidate.id !== item.id) })} aria-label={`Remover item ${index + 1}`}><Trash aria-hidden="true" size={16} /></button>
+                    </div>
+                  </header>
+
+                  <div className="space-y-4 p-4">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.7fr)]">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <FormField htmlFor={`budget-item-code-${index}`} label="Código">
+                          <input id={`budget-item-code-${index}`} name={`items.${index}.code`} autoComplete="off" value={item.code} onChange={(event) => updateItem(item.id, { code: event.target.value })} className={compactFieldClass} placeholder="Código" />
+                        </FormField>
+                        <FormField htmlFor={`budget-item-group-${index}`} label="Grupo">
+                          <input id={`budget-item-group-${index}`} name={`items.${index}.group`} autoComplete="off" value={item.group} onChange={(event) => updateItem(item.id, { group: event.target.value })} className={compactFieldClass} placeholder="Grupo" />
+                        </FormField>
+                      </div>
+                      <FormField htmlFor={`budget-item-description-${index}`} label="Descrição" required error={fieldError(`budget-item-description-${index}`)}>
+                        <textarea id={`budget-item-description-${index}`} name={`items.${index}.description`} rows={3} value={item.description} onChange={(event) => updateItem(item.id, { description: event.target.value })} className={cn(compactFieldClass, 'min-h-24 resize-y py-2')} {...fieldA11y(`budget-item-description-${index}`)} />
+                      </FormField>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                      <FormField htmlFor={`budget-item-unit-${index}`} label="Unidade">
+                        <FormSelect id={`budget-item-unit-${index}`} name={`items.${index}.unit`} value={item.unit} onChange={(event) => updateItem(item.id, { unit: event.target.value })} className={compactFieldClass}>{BUDGET_UNITS.map((unit) => <option key={unit} value={unit}>{unit}</option>)}</FormSelect>
+                      </FormField>
+                      <FormField htmlFor={`budget-item-quantity-${index}`} label="Quantidade" required error={fieldError(`budget-item-quantity-${index}`)}>
+                        <input id={`budget-item-quantity-${index}`} name={`items.${index}.quantity`} inputMode="decimal" autoComplete="off" value={item.quantity} onChange={(event) => updateItem(item.id, { quantity: event.target.value })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y(`budget-item-quantity-${index}`)} />
+                      </FormField>
+                      <FormField htmlFor={`budget-item-price-${index}`} label="Preço unitário">
+                        <input id={`budget-item-price-${index}`} name={`items.${index}.unitPrice`} inputMode="decimal" autoComplete="off" value={item.unitPrice} onChange={(event) => updateItem(item.id, { unitPrice: event.target.value })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} />
+                      </FormField>
+                      <div className="rounded-lg border border-brand-green-200/70 bg-brand-green-50/70 px-3 py-2 dark:border-brand-green-500/20 dark:bg-brand-green-500/10">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-brand-green-700 dark:text-brand-green-200">Total do item</span>
+                        <span className="mt-1 block break-words font-mono text-base font-bold tabular-nums text-brand-green-900 dark:text-brand-green-100">{preview ? formatCurrency(preview.items[index]?.totalCents) : '—'}</span>
+                      </div>
+                    </div>
+
+                    <section className="overflow-hidden rounded-lg border border-brand-border">
+                      <h5>
+                        <button
+                          type="button"
+                          aria-expanded={detailsOpen}
+                          aria-controls={`budget-item-details-${index}`}
+                          onClick={() => setExpandedItemDetails((current) => {
+                            const next = new Set(current);
+                            if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+                            return next;
+                          })}
+                          className="geo-focus-ring flex min-h-11 w-full items-center justify-between gap-3 bg-brand-surface-subtle/40 px-3 py-2 text-left text-xs font-bold text-zinc-700 transition-colors hover:bg-brand-surface-subtle dark:text-zinc-200"
+                        >
+                          <span>Precificação e classificação</span>
+                          <CaretDown aria-hidden="true" size={16} weight="bold" className={cn('shrink-0 transition-transform duration-150 motion-reduce:transition-none', detailsOpen && 'rotate-180')} />
+                        </button>
+                      </h5>
+                      <div id={`budget-item-details-${index}`} hidden={!detailsOpen} className="space-y-4 border-t border-brand-border p-4">
+                        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                          <FormField htmlFor={`budget-item-cost-${index}`} label="Custo unitário">
+                            <input id={`budget-item-cost-${index}`} name={`items.${index}.unitCost`} inputMode="decimal" autoComplete="off" value={item.unitCost} onChange={(event) => updateItem(item.id, { unitCost: event.target.value })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} />
+                          </FormField>
+                          <FormField htmlFor={`budget-item-discount-${index}`} label="Desconto" error={fieldError(`budget-item-discount-${index}`)}>
+                            <AdjustmentInput id={`budget-item-discount-${index}`} compact type={item.discountType} value={item.discountValue} typeAriaLabel={`Tipo de desconto do item ${index + 1}`} valueAriaLabel={`Valor do desconto do item ${index + 1}`} onTypeChange={(discountType) => updateItem(item.id, { discountType })} onValueChange={(discountValue) => updateItem(item.id, { discountValue })} invalid={Boolean(fieldError(`budget-item-discount-${index}`))} errorId={fieldError(`budget-item-discount-${index}`) ? `budget-item-discount-${index}-error` : undefined} />
+                          </FormField>
+                          <FormField htmlFor={`budget-item-addition-${index}`} label="Acréscimo" error={fieldError(`budget-item-addition-${index}`)}>
+                            <AdjustmentInput id={`budget-item-addition-${index}`} compact type={item.additionType} value={item.additionValue} typeAriaLabel={`Tipo de acréscimo do item ${index + 1}`} valueAriaLabel={`Valor do acréscimo do item ${index + 1}`} onTypeChange={(additionType) => updateItem(item.id, { additionType })} onValueChange={(additionValue) => updateItem(item.id, { additionValue })} invalid={Boolean(fieldError(`budget-item-addition-${index}`))} errorId={fieldError(`budget-item-addition-${index}`) ? `budget-item-addition-${index}-error` : undefined} />
+                          </FormField>
+                          <FormField htmlFor={`budget-item-component-${index}`} label="Componente financeiro">
+                            <FormSelect id={`budget-item-component-${index}`} name={`items.${index}.component`} value={item.component} onChange={(event) => updateItem(item.id, { component: event.target.value as BudgetFormItem['component'] })} className={compactFieldClass}><option value="servico">Serviço</option><option value="despesa">Despesa cobrada</option><option value="taxa_repassada">Taxa repassada</option></FormSelect>
+                          </FormField>
+                        </div>
+                        <fieldset className="flex flex-wrap gap-x-6 gap-y-3">
+                          <legend className="sr-only">Classificação adicional do item {index + 1}</legend>
+                          <CheckboxField id={`budget-item-optional-${index}`} label="Item opcional" checked={item.optional} onChange={(optional) => updateItem(item.id, { optional })} compact />
+                          <CheckboxField id={`budget-item-taxable-${index}`} label="Item tributável" checked={item.taxable} onChange={(taxable) => updateItem(item.id, { taxable })} compact />
+                        </fieldset>
+                      </div>
+                    </section>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </EditorSection>
 

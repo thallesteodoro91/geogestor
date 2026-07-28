@@ -227,20 +227,23 @@ export async function licencasRoutes(server: FastifyInstance) {
         .limit(1);
       if (!project.length) return reply.status(400).send({ error: 'O projeto selecionado não existe.' });
 
-      const created = await db.insert(schema.licencas).values({
-        id: crypto.randomUUID(),
-        projetoId: request.body.projetoId,
-        clienteId: request.body.clienteId || project[0].clienteId,
-        numero: request.body.numero,
-        protocolo: request.body.protocolo || null,
-        orgao: request.body.orgao,
-        tipoLicenca: request.body.tipoLicenca,
-        dataEmissao: request.body.dataEmissao || null,
-        dataVencimento: request.body.dataVencimento,
-        status: request.body.status,
-        observacoes: request.body.observacoes || null
-      }).returning();
-      await AuditLogService.log('INSERT', 'Licença', null, created[0]);
+      const created = await db.transaction(async (tx) => {
+        const license = await tx.insert(schema.licencas).values({
+          id: crypto.randomUUID(),
+          projetoId: request.body.projetoId,
+          clienteId: request.body.clienteId || project[0].clienteId,
+          numero: request.body.numero,
+          protocolo: request.body.protocolo || null,
+          orgao: request.body.orgao,
+          tipoLicenca: request.body.tipoLicenca,
+          dataEmissao: request.body.dataEmissao || null,
+          dataVencimento: request.body.dataVencimento,
+          status: request.body.status,
+          observacoes: request.body.observacoes || null
+        }).returning();
+        await AuditLogService.log('INSERT', 'Licença', null, license[0], tx);
+        return license;
+      });
       return reply.status(201).send(created[0]);
     } catch (error) {
       server.log.error(error);
@@ -256,14 +259,17 @@ export async function licencasRoutes(server: FastifyInstance) {
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
-      const updated = await db.update(schema.licencas).set({
-        ...request.body,
-        protocolo: request.body.protocolo === undefined ? undefined : request.body.protocolo || null,
-        dataEmissao: request.body.dataEmissao === undefined ? undefined : request.body.dataEmissao || null,
-        observacoes: request.body.observacoes === undefined ? undefined : request.body.observacoes || null,
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.licencas.id, request.params.id)).returning();
-      await AuditLogService.log('UPDATE', 'Licença', current[0], updated[0]);
+      const updated = await db.transaction(async (tx) => {
+        const license = await tx.update(schema.licencas).set({
+          ...request.body,
+          protocolo: request.body.protocolo === undefined ? undefined : request.body.protocolo || null,
+          dataEmissao: request.body.dataEmissao === undefined ? undefined : request.body.dataEmissao || null,
+          observacoes: request.body.observacoes === undefined ? undefined : request.body.observacoes || null,
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.licencas.id, request.params.id)).returning();
+        await AuditLogService.log('UPDATE', 'Licença', current[0], license[0], tx);
+        return license;
+      });
       return updated[0];
     } catch (error) {
       server.log.error(error);
@@ -279,14 +285,17 @@ export async function licencasRoutes(server: FastifyInstance) {
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
-      const updated = await db.update(schema.licencas).set({
-        ...request.body,
-        protocolo: request.body.protocolo || null,
-        dataEmissao: request.body.dataEmissao || null,
-        observacoes: request.body.observacoes || null,
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.licencas.id, request.params.id)).returning();
-      await AuditLogService.log('UPDATE', 'Licença', current[0], updated[0]);
+      const updated = await db.transaction(async (tx) => {
+        const license = await tx.update(schema.licencas).set({
+          ...request.body,
+          protocolo: request.body.protocolo || null,
+          dataEmissao: request.body.dataEmissao || null,
+          observacoes: request.body.observacoes || null,
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.licencas.id, request.params.id)).returning();
+        await AuditLogService.log('UPDATE', 'Licença', current[0], license[0], tx);
+        return license;
+      });
       return updated[0];
     } catch (error) {
       server.log.error(error);
@@ -300,11 +309,13 @@ export async function licencasRoutes(server: FastifyInstance) {
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
-      await db.update(schema.licencas).set({
-        deletedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.licencas.id, request.params.id));
-      await AuditLogService.log('DELETE (SOFT)', 'Licença', current[0], null);
+      await db.transaction(async (tx) => {
+        await tx.update(schema.licencas).set({
+          deletedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.licencas.id, request.params.id));
+        await AuditLogService.log('DELETE (SOFT)', 'Licença', current[0], null, tx);
+      });
       return reply.status(204).send();
     } catch (error) {
       server.log.error(error);
@@ -335,19 +346,22 @@ export async function licencasRoutes(server: FastifyInstance) {
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
       if (!license.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
-      const created = await db.insert(schema.condicionantesAmbientais).values({
-        id: crypto.randomUUID(),
-        licencaId: request.params.id,
-        ...request.body,
-        descricao: request.body.descricao || null,
-        dataLimite: request.body.dataLimite || null,
-        periodicidade: request.body.periodicidade || null,
-        responsavel: request.body.responsavel || null,
-        dataCumprimento: request.body.dataCumprimento || null,
-        observacoes: request.body.observacoes || null,
-        comprovante: request.body.comprovante || null
-      }).returning();
-      await AuditLogService.log('INSERT', 'Condicionante Ambiental', null, created[0]);
+      const created = await db.transaction(async (tx) => {
+        const condition = await tx.insert(schema.condicionantesAmbientais).values({
+          id: crypto.randomUUID(),
+          licencaId: request.params.id,
+          ...request.body,
+          descricao: request.body.descricao || null,
+          dataLimite: request.body.dataLimite || null,
+          periodicidade: request.body.periodicidade || null,
+          responsavel: request.body.responsavel || null,
+          dataCumprimento: request.body.dataCumprimento || null,
+          observacoes: request.body.observacoes || null,
+          comprovante: request.body.comprovante || null
+        }).returning();
+        await AuditLogService.log('INSERT', 'Condicionante Ambiental', null, condition[0], tx);
+        return condition;
+      });
       return reply.status(201).send(serializeCondition(created[0]));
     } catch (error) {
       server.log.error(error);
@@ -366,11 +380,14 @@ export async function licencasRoutes(server: FastifyInstance) {
           isNull(schema.condicionantesAmbientais.deletedAt)
         )).limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Condicionante não encontrada.' });
-      const updated = await db.update(schema.condicionantesAmbientais).set({
-        ...request.body,
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.condicionantesAmbientais.id, request.params.conditionId)).returning();
-      await AuditLogService.log('UPDATE', 'Condicionante Ambiental', current[0], updated[0]);
+      const updated = await db.transaction(async (tx) => {
+        const condition = await tx.update(schema.condicionantesAmbientais).set({
+          ...request.body,
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.condicionantesAmbientais.id, request.params.conditionId)).returning();
+        await AuditLogService.log('UPDATE', 'Condicionante Ambiental', current[0], condition[0], tx);
+        return condition;
+      });
       return serializeCondition(updated[0]);
     } catch (error) {
       server.log.error(error);
@@ -389,11 +406,13 @@ export async function licencasRoutes(server: FastifyInstance) {
           isNull(schema.condicionantesAmbientais.deletedAt)
         )).limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Condicionante não encontrada.' });
-      await db.update(schema.condicionantesAmbientais).set({
-        deletedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }).where(eq(schema.condicionantesAmbientais.id, request.params.conditionId));
-      await AuditLogService.log('DELETE (SOFT)', 'Condicionante Ambiental', current[0], null);
+      await db.transaction(async (tx) => {
+        await tx.update(schema.condicionantesAmbientais).set({
+          deletedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }).where(eq(schema.condicionantesAmbientais.id, request.params.conditionId));
+        await AuditLogService.log('DELETE (SOFT)', 'Condicionante Ambiental', current[0], null, tx);
+      });
       return reply.status(204).send();
     } catch (error) {
       server.log.error(error);

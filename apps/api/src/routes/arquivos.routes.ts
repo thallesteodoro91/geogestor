@@ -13,6 +13,7 @@ import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemService } from '../services/fs.service';
 import { RecoverableFileService, type QuarantineManifest } from '../services/recoverable-file.service';
+import { assertLexicalPathInsideRoot, ensurePathInsideRoot } from '../services/path-containment.service';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.gpkg', '.kml', '.kmz', '.docx', '.csv', '.xlsx', '.dwg', '.shp', '.geojson', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.zip'];
 const PREVIEW_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
@@ -102,22 +103,13 @@ async function getDataRoot() {
   return FileSystemService.getRootFolder();
 }
 
-function ensurePathInsideRoot(filePath: string, dadosPasta: string) {
-  const normalizedRoot = path.resolve(dadosPasta).toLowerCase();
-  const normalizedPath = path.resolve(filePath).toLowerCase();
-
-  if (normalizedPath !== normalizedRoot && !normalizedPath.startsWith(`${normalizedRoot}${path.sep}`)) {
-    throw new Error('Acesso negado fora do diretório raiz');
-  }
-}
-
 function getClientDirectory(dadosPasta: string, clienteNome: string) {
   const directory = path.join(
     dadosPasta,
     'Clientes',
     FileSystemService.sanitizeFolderName(clienteNome, 'Cliente sem nome')
   );
-  ensurePathInsideRoot(directory, dadosPasta);
+  assertLexicalPathInsideRoot(directory, dadosPasta);
   return directory;
 }
 
@@ -126,7 +118,7 @@ function getProjectDirectory(dadosPasta: string, clienteNome: string, projetoNom
     getClientDirectory(dadosPasta, clienteNome),
     FileSystemService.sanitizeFolderName(projetoNome, 'Projeto sem nome')
   );
-  ensurePathInsideRoot(directory, dadosPasta);
+  assertLexicalPathInsideRoot(directory, dadosPasta);
   return directory;
 }
 
@@ -793,18 +785,19 @@ export async function arquivosRoutes(server: FastifyInstance) {
         currentClienteId = clienteId;
         targetDir = path.join(getClientDirectory(dadosPasta, info[0].clienteNome), folderCategory);
       }
-      ensurePathInsideRoot(targetDir, dadosPasta);
+      await ensurePathInsideRoot(targetDir, dadosPasta);
 
       let filePath = '';
       try {
         await fs.mkdir(targetDir, { recursive: true });
+        targetDir = await ensurePathInsideRoot(targetDir, dadosPasta, { mustExist: true });
         filePath = await getAvailableFilePath(targetDir, safeFileName);
         
         const limitBytes = getMaxFileSize(ext);
         const limiter = createSizeLimiter(limitBytes, ext);
 
         // Streaming file to disk com verificação de limite
-        await pipeline(data.file, limiter, createWriteStream(filePath));
+        await pipeline(data.file, limiter, createWriteStream(filePath, { flags: 'wx' }));
       } catch (streamErr) {
         if (filePath) {
           await fs.unlink(filePath).catch(() => {});
@@ -925,10 +918,11 @@ export async function arquivosRoutes(server: FastifyInstance) {
         return reply.status(400).send({ error: 'É necessário informar clienteId ou projetoId' });
       }
 
-      ensurePathInsideRoot(targetDir, dadosPasta);
+      await ensurePathInsideRoot(targetDir, dadosPasta);
 
       // Ensure directory exists
       await fs.mkdir(targetDir, { recursive: true });
+      targetDir = await ensurePathInsideRoot(targetDir, dadosPasta, { mustExist: true });
 
       // Decode Base64 content
       let base64Data = fileContent;
@@ -949,7 +943,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
       if (!hasExpectedSignature(fileBuffer.subarray(0, 32), ext)) {
         return reply.status(400).send({ error: `O conteúdo do arquivo não corresponde à extensão ${ext}` });
       }
-      await fs.writeFile(filePath, fileBuffer);
+      await fs.writeFile(filePath, fileBuffer, { flag: 'wx' });
       const stat = await fs.stat(filePath);
       const relativePath = path.relative(path.dirname(targetDir), filePath);
 
@@ -1005,16 +999,16 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
     try {
       const dadosPasta = await getDataRoot();
-      ensurePathInsideRoot(filePath, dadosPasta);
+      const safeFilePath = await ensurePathInsideRoot(filePath, dadosPasta, { mustExist: true });
 
-      const stat = await fs.stat(filePath);
+      const stat = await fs.stat(safeFilePath);
       if (!stat.isFile()) return reply.status(404).send({ error: 'Arquivo não encontrado' });
-      const fileName = path.basename(filePath);
+      const fileName = path.basename(safeFilePath);
 
       reply.header('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
       reply.header('Access-Control-Expose-Headers', 'Content-Disposition');
       reply.header('Content-Length', String(stat.size));
-      return reply.send(createReadStream(filePath));
+      return reply.send(createReadStream(safeFilePath));
     } catch (err) {
       server.log.error(err);
       return reply.status(404).send({ error: 'Arquivo não encontrado' });
@@ -1036,17 +1030,17 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
     try {
       const dadosPasta = await getDataRoot();
-      ensurePathInsideRoot(filePath, dadosPasta);
+      const safeFilePath = await ensurePathInsideRoot(filePath, dadosPasta, { mustExist: true });
 
-      const stat = await fs.stat(filePath);
+      const stat = await fs.stat(safeFilePath);
       if (!stat.isFile()) return reply.status(404).send({ error: 'Arquivo não encontrado' });
-      const fileName = path.basename(filePath);
+      const fileName = path.basename(safeFilePath);
 
       reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
       reply.header('Cache-Control', 'no-store');
       reply.header('Content-Length', String(stat.size));
-      reply.type(getMimeType(filePath));
-      return reply.send(createReadStream(filePath));
+      reply.type(getMimeType(safeFilePath));
+      return reply.send(createReadStream(safeFilePath));
     } catch (err) {
       server.log.error(err);
       return reply.status(404).send({ error: 'Arquivo não encontrado' });
@@ -1063,9 +1057,9 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
     try {
       const dadosPasta = await getDataRoot();
-      ensurePathInsideRoot(filePath, dadosPasta);
-      await fs.access(filePath);
-      openPath(filePath);
+      const safeFilePath = await ensurePathInsideRoot(filePath, dadosPasta, { mustExist: true });
+      await fs.access(safeFilePath);
+      openPath(safeFilePath);
       return { success: true };
     } catch (err) {
       server.log.error(err);
@@ -1083,10 +1077,10 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
     try {
       const dadosPasta = await getDataRoot();
-      ensurePathInsideRoot(targetPath, dadosPasta);
+      const safeTargetPath = await ensurePathInsideRoot(targetPath, dadosPasta, { mustExist: true });
 
-      const stat = await fs.stat(targetPath);
-      const folderPath = stat.isDirectory() ? targetPath : path.dirname(targetPath);
+      const stat = await fs.stat(safeTargetPath);
+      const folderPath = stat.isDirectory() ? safeTargetPath : path.dirname(safeTargetPath);
 
       openPath(folderPath);
       return { success: true };
@@ -1162,15 +1156,15 @@ export async function arquivosRoutes(server: FastifyInstance) {
     let quarantined: QuarantineManifest | null = null;
     try {
       const dadosPasta = await getDataRoot();
-      ensurePathInsideRoot(filePath, dadosPasta);
+      const safeFilePath = await ensurePathInsideRoot(filePath, dadosPasta, { mustExist: true });
 
       const documentRecord = await db.select()
         .from(schema.documentos)
-        .where(eq(schema.documentos.caminho, filePath))
+        .where(eq(schema.documentos.caminho, safeFilePath))
         .limit(1);
 
       quarantined = await RecoverableFileService.quarantine({
-        sourcePath: filePath,
+        sourcePath: safeFilePath,
         dataRoot: dadosPasta,
         recordId: documentRecord[0]?.id ?? null
       });

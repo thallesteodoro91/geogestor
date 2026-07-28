@@ -168,7 +168,7 @@ export function DashboardFinanceiro() {
     projetos,
   });
 
-  // Process data locally (DRE approach)
+  // Processa indicadores gerenciais de caixa.
 
   const totalContratado = analytics.kpis.receitaContratada / 100;
   const receitaLiquida = analytics.kpis.receitaLiquidaEstimada / 100;
@@ -176,12 +176,12 @@ export function DashboardFinanceiro() {
   const totalDespesasLancadas = analytics.kpis.despesasLancadas / 100;
   
   const netProfit = analytics.kpis.resultadoCaixa / 100; // Fluxo de Caixa Livre
-  const lucroOperacional = analytics.kpis.resultadoCompetencia / 100; // EBITDA / DRE
+  const resultadoGerencialContratado = analytics.kpis.resultadoCompetencia / 100;
   
   const profitMargin = analytics.kpis.margemCaixa;
   const margemContribuicao = analytics.kpis.margemContribuicao;
 
-  // Monthly DRE data mapping
+  // Mapeamento mensal do fluxo de caixa.
   const monthlyChartData = analytics.monthly.map((d) => {
     return {
       mes: d.label.toUpperCase(),
@@ -286,7 +286,7 @@ export function DashboardFinanceiro() {
             Dash Financeiro
           </h1>
           <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Rentabilidade por cliente, categorias de custos e DRE detalhada.
+            Resultado por cliente, categorias de custos e fluxo de caixa detalhado.
           </p>
         </div>
       </div>
@@ -297,7 +297,7 @@ export function DashboardFinanceiro() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Top KPIs Row (DRE Cascade) */}
+          {/* Indicadores gerenciais principais */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className={cn(geoGreenSurfaceClass, 'flex flex-col justify-between rounded-[2rem] p-6 ring-1 ring-emerald-300/15 shadow-sm')}>
               <div className="flex items-center justify-between mb-4">
@@ -316,16 +316,16 @@ export function DashboardFinanceiro() {
 
             <div className={cn(geoGreenSurfaceClass, 'flex flex-col justify-between rounded-[2rem] p-6 ring-1 ring-emerald-300/15 shadow-sm')}>
               <div className="flex items-center justify-between mb-4">
-                <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Lucro Oper. (EBITDA)</span>
+                <span className={cn('text-xs font-bold uppercase tracking-wider', geoGreenLabelClass)}>Resultado gerencial estimado</span>
                 <div className={cn(geoGreenIconClass, 'flex h-8 w-8 items-center justify-center rounded-xl')}>
                   <Wallet className="w-4 h-4" />
                 </div>
               </div>
               <div>
-                <span className={cn('text-2xl font-semibold tracking-tight', lucroOperacional >= 0 ? geoGreenValueClass : 'text-rose-100')}>
-                  {formatBRL(lucroOperacional)}
+                <span className={cn('text-2xl font-semibold tracking-tight', resultadoGerencialContratado >= 0 ? geoGreenValueClass : 'text-rose-100')}>
+                  {formatBRL(resultadoGerencialContratado)}
                 </span>
-                <p className="mt-1 text-xs font-bold tracking-wide text-emerald-100/70">PELA COMPETÊNCIA (DRE)</p>
+                <p className="mt-1 text-xs font-bold tracking-wide text-emerald-100/70">CONTRATOS MENOS ESTIMATIVAS E DESPESAS</p>
               </div>
             </div>
 
@@ -366,10 +366,10 @@ export function DashboardFinanceiro() {
             <div className="col-span-1 md:col-span-7 bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm min-h-[360px] flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                     <Tag className="w-5 h-5 text-indigo-500" />
                     Árvore de Custos (Treemap)
-                  </h3>
+                  </h2>
                   <p className="text-xs text-text-muted font-medium">Proporção visual de impacto financeiro por categoria.</p>
                 </div>
               </div>
@@ -453,12 +453,12 @@ export function DashboardFinanceiro() {
           {/* Charts Grid */}
           <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             
-            {/* Historico Mensal (DRE) */}
+            {/* Histórico mensal do fluxo de caixa */}
             <div className="col-span-1 md:col-span-8 bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm min-h-[400px] flex flex-col">
               <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Evolução do Fluxo de Caixa (DRE)</h3>
-                  <p className="text-xs text-text-muted font-medium">Comparação mensal de receitas líquidas e despesas registradas.</p>
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Evolução do fluxo de caixa</h2>
+                  <p className="text-xs text-text-muted font-medium">Comparação mensal de recebimentos e despesas pagas.</p>
                 </div>
                 <div className="flex items-center gap-1 rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800/80 border border-zinc-200/60 dark:border-zinc-700/60">
                   <button
@@ -501,7 +501,7 @@ export function DashboardFinanceiro() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
                     <XAxis dataKey="mes" tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `R$ ${v}`} />
-                    <Tooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Lucro Líquido" format="currency" />} />
+                    <Tooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
                     <Area type="monotone" dataKey="Recebido" stroke={chartColors.positive} strokeWidth={2} fillOpacity={1} fill="url(#colorRec)" />
                     <Area type="monotone" dataKey="Despesas" stroke={chartColors.negative} strokeWidth={2} fillOpacity={1} fill="url(#colorDes)" />
                     <Area type="monotone" dataKey="Resultado" stroke={chartColors.primary} strokeWidth={2} fillOpacity={0} />
@@ -513,7 +513,7 @@ export function DashboardFinanceiro() {
             {/* Custos por Categoria */}
             <div className="col-span-1 md:col-span-4 bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm min-h-[400px] flex flex-col">
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Despesas por Categoria</h3>
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Despesas por Categoria</h2>
                 <p className="text-xs text-text-muted font-medium">Distribuição das saídas financeiras por setor.</p>
               </div>
 
@@ -552,7 +552,7 @@ export function DashboardFinanceiro() {
           {/* Bottom Row: Profit per Client */}
           <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm min-h-[350px]">
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Rentabilidade de Clientes (Top 5)</h3>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Rentabilidade de Clientes (Top 5)</h2>
               <p className="text-xs text-text-muted font-medium">Análise de retorno líquido por cliente comparando receitas e custos operacionais diretos.</p>
             </div>
 

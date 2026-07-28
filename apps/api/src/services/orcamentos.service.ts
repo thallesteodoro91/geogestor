@@ -1046,6 +1046,15 @@ export async function getBudgetKpis(filters: BudgetFilters = {}) {
   const installments = ids.length
     ? await db.select().from(schema.parcelas).where(and(inArray(schema.parcelas.orcamentoId, ids), isNull(schema.parcelas.deletedAt)))
     : [];
+  const installmentIds = installments.map((installment) => installment.id);
+  const receipts = installmentIds.length
+    ? await db.select().from(schema.recebimentos).where(and(
+      inArray(schema.recebimentos.parcelaId, installmentIds),
+      isNull(schema.recebimentos.deletedAt),
+      isNull(schema.recebimentos.estornadoEm)
+    ))
+    : [];
+  const installmentIdsWithReceipts = new Set(receipts.map((receipt) => receipt.parcelaId));
   const counts = Object.fromEntries([
     'rascunho', 'emitido', 'enviado', 'em_negociacao', 'aprovado', 'rejeitado', 'expirado', 'cancelado', 'substituido'
   ].map((status) => [status, 0])) as Record<BudgetStatus, number>;
@@ -1056,9 +1065,10 @@ export async function getBudgetKpis(filters: BudgetFilters = {}) {
   const openReceivables = installments
     .filter((installment) => !['Pago', 'Cancelado'].includes(installment.statusPagamento))
     .reduce((sum, installment) => sum + Math.max(0, installment.valor - (installment.valorPago || 0)), 0);
-  const received = installments
-    .filter((installment) => installment.statusPagamento === 'Pago')
-    .reduce((sum, installment) => sum + (installment.valorPago || installment.valor), 0);
+  const received = receipts.reduce((sum, receipt) => sum + receipt.valorRecebido, 0)
+    + installments
+      .filter((installment) => installment.statusPagamento === 'Pago' && !installmentIdsWithReceipts.has(installment.id))
+      .reduce((sum, installment) => sum + (installment.valorPago || installment.valor), 0);
   const totalApproved = approved.reduce((sum, budget) => sum + budget.totalCents, 0);
   const byService = new Map<string, { eligible: number; approved: number }>();
   for (const budget of eligibleClosed) {

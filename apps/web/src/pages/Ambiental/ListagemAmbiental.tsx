@@ -25,7 +25,12 @@ import { CalculadoraAmbiental } from '../Calculadoras/CalculadoraAmbiental';
 import { ProjectFormModal } from '../Projetos/ProjectFormModal';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
-import { geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import { geoKickerClass } from '../../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+} from '../../utils/localNavigationStyles';
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
 const numberFormatter = new Intl.NumberFormat('pt-BR');
@@ -219,7 +224,7 @@ export function ListagemAmbiental() {
             left: event.currentTarget.scrollLeft > 2,
             right: event.currentTarget.scrollWidth - event.currentTarget.clientWidth - event.currentTarget.scrollLeft > 2
           })}
-          className={cn(geoTabListClass, 'flex min-w-0 max-w-full scroll-px-3 gap-1 overflow-x-auto rounded-xl')}
+          className={cn(localNavigationBarClass, 'flex scroll-px-3 gap-3')}
         >
         <button
           ref={(element) => { tabRefs.current[0] = element; }}
@@ -231,9 +236,9 @@ export function ListagemAmbiental() {
           tabIndex={activeTab === 'ambiental' ? 0 : -1}
           onKeyDown={(event) => handleTabKeyDown(event, 0)}
           onClick={() => handleTabChange('ambiental')}
-          className={cn(geoTabButtonClass(activeTab === 'ambiental', 'success'), 'rounded-lg px-4 py-2.5')}
+          className={localNavigationButtonClass(activeTab === 'ambiental', 'success')}
         >
-          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'ambiental', 'success')}>
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'ambiental', 'success')}>
             <Leaf weight={activeTab === 'ambiental' ? 'fill' : 'regular'} className="h-4 w-4" />
           </span>
           Demandas Ambientais
@@ -248,9 +253,9 @@ export function ListagemAmbiental() {
           tabIndex={activeTab === 'licenciamento' ? 0 : -1}
           onKeyDown={(event) => handleTabKeyDown(event, 1)}
           onClick={() => handleTabChange('licenciamento')}
-          className={cn(geoTabButtonClass(activeTab === 'licenciamento', 'warning'), 'rounded-lg px-4 py-2.5')}
+          className={localNavigationButtonClass(activeTab === 'licenciamento', 'warning')}
         >
-          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'licenciamento', 'warning')}>
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'licenciamento', 'warning')}>
             <Certificate weight={activeTab === 'licenciamento' ? 'fill' : 'regular'} className="h-4 w-4" />
           </span>
           Licenciamento
@@ -265,9 +270,9 @@ export function ListagemAmbiental() {
           tabIndex={activeTab === 'car' ? 0 : -1}
           onKeyDown={(event) => handleTabKeyDown(event, 2)}
           onClick={() => handleTabChange('car')}
-          className={cn(geoTabButtonClass(activeTab === 'car', 'field'), 'rounded-lg px-4 py-2.5')}
+          className={localNavigationButtonClass(activeTab === 'car', 'field')}
         >
-          <span aria-hidden="true" className={geoTabIconClass(activeTab === 'car', 'field')}>
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'car', 'field')}>
             <Calculator weight={activeTab === 'car' ? 'fill' : 'regular'} className="h-4 w-4" />
           </span>
           Análise CAR

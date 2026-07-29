@@ -18,6 +18,12 @@ import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CLIENT_ORIGIN_OPTIONS, CLIENT_SERVICOS_OPTIONS } from '../../utils/clientTags';
 import { geoFieldClass } from '../../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+  localNavigationItemsClass,
+} from '../../utils/localNavigationStyles';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
 
 type CRMOptions = {
@@ -216,8 +222,8 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
   const [searchParams] = useSearchParams();
 
   return (
-    <nav aria-label="Seções do CRM" className="max-w-full min-w-0 overflow-x-auto border-b border-brand-border">
-      <div className="flex min-w-max gap-5" role="list">
+    <nav aria-label="Seções do CRM" className={localNavigationBarClass}>
+      <div className={localNavigationItemsClass} role="list">
         {CRM_SECTIONS.map((section) => {
           const active = section.id === activeView;
           const nextSearchParams = new URLSearchParams(searchParams);
@@ -227,14 +233,22 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
               key={section.id}
               to={`/crm?${nextSearchParams.toString()}`}
               aria-current={active ? 'page' : undefined}
-              className={cn(
-                'geo-focus-ring inline-flex min-h-11 items-center gap-2 border-b-2 px-1 text-sm font-semibold transition-[border-color,color] duration-150',
-                active
-                  ? 'border-brand-primary-600 text-brand-primary-700 dark:border-brand-primary-300 dark:text-brand-primary-100'
-                  : 'border-transparent text-text-secondary hover:border-brand-border-strong hover:text-text-primary'
+              className={localNavigationButtonClass(
+                active,
+                'system',
+                'min-h-10 px-4 py-2 sm:px-4',
               )}
             >
-              {section.icon}
+              <span
+                aria-hidden="true"
+                className={localNavigationIconClass(
+                  active,
+                  'system',
+                  'h-7 w-7 rounded-lg',
+                )}
+              >
+                {section.icon}
+              </span>
               {section.label}
             </Link>
           );

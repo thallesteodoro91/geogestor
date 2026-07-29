@@ -40,6 +40,12 @@ import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
 import { filterControlClass } from '../../utils/filterStyles';
 import { primaryActionButtonClass } from '../../utils/actionStyles';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+  localNavigationItemsClass,
+} from '../../utils/localNavigationStyles';
 import { Faturas } from '../Faturas/Faturas';
 import { Despesas } from '../Despesas/Despesas';
 import { GestaoFinanceira } from './GestaoFinanceira';
@@ -520,33 +526,35 @@ export function Financeiro() {
         </div>
       </header>
 
-      <nav role="tablist" aria-label="Áreas do Financeiro" className="mb-7 flex gap-6 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800">
-        {([
-          ['visao', 'Visão geral', ChartBar],
-          ['faturas', 'Contas a receber', CurrencyDollar],
-          ['pagar', 'Contas a pagar', Receipt],
-          ['auxiliares', 'Viagens e notas fiscais', Briefcase]
-        ] as const).map(([id, label, Icon]) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === id}
-            onClick={() => {
-              setEmbeddedAction(null);
-              setActiveTab(id);
-            }}
-            className={cn(
-              'geo-focus-ring inline-flex min-h-12 shrink-0 items-center gap-2 border-b-2 px-1 text-sm font-semibold transition-[border-color,color] duration-150 motion-reduce:transition-none',
-              activeTab === id
-                ? 'border-emerald-500 text-zinc-950 dark:text-white'
-                : 'border-transparent text-zinc-500 hover:border-zinc-300 hover:text-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:text-zinc-100'
-            )}
-          >
-            <Icon aria-hidden="true" weight={activeTab === id ? 'fill' : 'regular'} className="h-4 w-4" />
-            {label}
-          </button>
-        ))}
+      <nav aria-label="Áreas do Financeiro" className={cn(localNavigationBarClass, 'mb-7')}>
+        <div role="tablist" className={localNavigationItemsClass}>
+          {([
+            ['visao', 'Visão geral', ChartBar, 'system'],
+            ['faturas', 'Contas a receber', CurrencyDollar, 'finance'],
+            ['pagar', 'Contas a pagar', Receipt, 'warning'],
+            ['auxiliares', 'Viagens e notas fiscais', Briefcase, 'field']
+          ] as const).map(([id, label, Icon, tone]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === id}
+              onClick={() => {
+                setEmbeddedAction(null);
+                setActiveTab(id);
+              }}
+              className={localNavigationButtonClass(activeTab === id, tone)}
+            >
+              <span
+                aria-hidden="true"
+                className={localNavigationIconClass(activeTab === id, tone)}
+              >
+                <Icon weight={activeTab === id ? 'fill' : 'regular'} className="h-4 w-4" />
+              </span>
+              {label}
+            </button>
+          ))}
+        </div>
       </nav>
 
       {activeTab === 'visao' && (

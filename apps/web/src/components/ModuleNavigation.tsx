@@ -8,11 +8,14 @@ import topographyIcon from '../assets/magnific-icons/theodolite_7504749.svg';
 import importIcon from '../assets/magnific-icons/upload_5406245.svg';
 import { cn } from '../utils/cn';
 import {
-  geoTabButtonClass,
-  geoTabIconClass,
-  geoTabListClass,
   type GeoTone,
 } from '../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+  localNavigationItemsClass,
+} from '../utils/localNavigationStyles';
 
 type ModuleNavigationKind = 'commercial' | 'agenda' | 'tools';
 
@@ -100,9 +103,9 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
   return (
     <nav
       aria-label={MODULE_LABELS[module]}
-      className={cn(geoTabListClass, 'mb-6 max-w-full min-w-0 overflow-x-auto', className)}
+      className={cn(localNavigationBarClass, 'mb-6', className)}
     >
-      <div className="flex min-w-max gap-1">
+      <div className={localNavigationItemsClass}>
         {items.map((item) => {
           const active = (item.activePaths ?? [item.path]).some(
             (path) => location.pathname === path || location.pathname.startsWith(`${path}/`),
@@ -113,11 +116,11 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
               key={item.path}
               to={item.path}
               aria-current={active ? 'page' : undefined}
-              className={geoTabButtonClass(active, item.tone, 'min-h-12 px-3 sm:px-4')}
+              className={localNavigationButtonClass(active, item.tone)}
             >
               <span
                 aria-hidden="true"
-                className={geoTabIconClass(active, item.tone, 'h-8 w-8 overflow-hidden bg-transparent p-0')}
+                className={localNavigationIconClass(active, item.tone, 'overflow-hidden bg-transparent p-0')}
               >
                 <img
                   src={item.icon}

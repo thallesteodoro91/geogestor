@@ -5,7 +5,12 @@ import { Layout } from '../../components/Layout';
 import { Printer, Coins, Briefcase } from '@phosphor-icons/react';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
-import { geoFieldClass, geoTabButtonClass, geoTabIconClass } from '../../utils/geoTheme';
+import { geoFieldClass, type GeoTone } from '../../utils/geoTheme';
+import {
+  localNavigationButtonClass,
+  localNavigationIconClass,
+  localNavigationItemsClass,
+} from '../../utils/localNavigationStyles';
 import { apiClient } from '../../services/apiClient';
 import { RelatorioExecutivo } from './RelatorioExecutivo';
 
@@ -70,8 +75,8 @@ export function Relatorios() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
   };
 
-  const reportTabClass = (tab: typeof reportType, tone: Parameters<typeof geoTabButtonClass>[1]) =>
-    cn(geoTabButtonClass(reportType === tab, tone), 'rounded-full px-6 py-3');
+  const reportTabClass = (tab: typeof reportType, tone: GeoTone) =>
+    localNavigationButtonClass(reportType === tab, tone);
 
   return (
     <Layout>
@@ -104,26 +109,28 @@ export function Relatorios() {
         </div>
 
         {/* Seleção de Relatório e Filtros */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-12 border-b border-zinc-100 dark:border-zinc-800 pb-6">
-          <div className="flex items-center gap-4">
-            <button 
+        <div className="mb-12 flex flex-col justify-between gap-4 border-b border-zinc-100 pb-6 dark:border-zinc-800 2xl:flex-row 2xl:items-center">
+          <div className={cn(localNavigationItemsClass, 'max-w-full min-w-0 overflow-x-auto')}>
+            <button
+              type="button"
               onClick={() => setReportType('financeiro')}
               className={reportTabClass('financeiro', 'finance')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(reportType === 'financeiro', 'finance')}><Coins className="h-4 w-4" /></span> Relatório Financeiro Geral
+              <span aria-hidden="true" className={localNavigationIconClass(reportType === 'financeiro', 'finance')}><Coins className="h-4 w-4" /></span> Relatório Financeiro Geral
             </button>
-            <button 
+            <button
+              type="button"
               onClick={() => setReportType('projetos')}
               className={reportTabClass('projetos', 'field')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(reportType === 'projetos', 'field')}><Briefcase className="h-4 w-4" /></span> Relatório Operacional de Projetos
+              <span aria-hidden="true" className={localNavigationIconClass(reportType === 'projetos', 'field')}><Briefcase className="h-4 w-4" /></span> Relatório Operacional de Projetos
             </button>
             <button
               type="button"
               onClick={() => setReportType('executivo')}
               className={reportTabClass('executivo', 'system')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(reportType === 'executivo', 'system')}><Coins className="h-4 w-4" /></span> Relatório Executivo
+              <span aria-hidden="true" className={localNavigationIconClass(reportType === 'executivo', 'system')}><Coins className="h-4 w-4" /></span> Relatório Executivo
             </button>
           </div>
 

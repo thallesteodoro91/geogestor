@@ -25,7 +25,12 @@ import { formatarMoeda, formatarPercentual, calcularDesvioOrcamentario, calcular
 import { geoHoverTransition, geoViewTransition } from '../utils/motion';
 import { RichTooltip } from '../components/charts/RichTooltip';
 import { cn } from '../utils/cn';
-import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeIconClass, geoOrangeSurfaceWithAccentClass, geoPurpleIconClass, geoPurpleSurfaceWithAccentClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../utils/geoTheme';
+import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceWithAccentClass, geoGreenValueClass, geoKickerClass, geoOrangeIconClass, geoOrangeSurfaceWithAccentClass, geoPurpleIconClass, geoPurpleSurfaceWithAccentClass } from '../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+} from '../utils/localNavigationStyles';
 
 // Local UI Components to keep Page self-contained and clean
 interface KPICardProps {
@@ -426,30 +431,30 @@ export function Planejamento() {
 
         {/* Navigation Tabs & Zoom Pills */}
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-          <div role="tablist" aria-label="Abas de planejamento" className={cn(geoTabListClass, 'flex gap-1 overflow-x-auto hide-scrollbar')}>
+          <div role="tablist" aria-label="Abas de planejamento" className={cn(localNavigationBarClass, 'flex gap-3 hide-scrollbar')}>
             <button 
               role="tab"
               aria-selected={activeTab === 'orcamento'}
               onClick={() => setActiveTab('orcamento')}
-              className={geoTabButtonClass(activeTab === 'orcamento', 'finance', 'px-6')}
+              className={localNavigationButtonClass(activeTab === 'orcamento', 'finance')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'orcamento', 'system')}><FileText weight={activeTab === 'orcamento' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Metas Orçamentárias
+              <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'orcamento', 'system')}><FileText weight={activeTab === 'orcamento' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Metas Orçamentárias
             </button>
             <button 
               role="tab"
               aria-selected={activeTab === 'equilibrio'}
               onClick={() => setActiveTab('equilibrio')}
-              className={geoTabButtonClass(activeTab === 'equilibrio', 'finance', 'px-6')}
+              className={localNavigationButtonClass(activeTab === 'equilibrio', 'finance')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'equilibrio', 'success')}><TrendUp weight={activeTab === 'equilibrio' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Ponto de Equilíbrio
+              <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'equilibrio', 'success')}><TrendUp weight={activeTab === 'equilibrio' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Ponto de Equilíbrio
             </button>
             <button 
               role="tab"
               aria-selected={activeTab === 'pipeline'}
               onClick={() => setActiveTab('pipeline')}
-              className={geoTabButtonClass(activeTab === 'pipeline', 'finance', 'px-6')}
+              className={localNavigationButtonClass(activeTab === 'pipeline', 'finance')}
             >
-              <span aria-hidden="true" className={geoTabIconClass(activeTab === 'pipeline', 'warning')}><Funnel weight={activeTab === 'pipeline' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Funil Comercial (Pipeline)
+              <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'pipeline', 'warning')}><Funnel weight={activeTab === 'pipeline' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Funil Comercial (Pipeline)
             </button>
           </div>
 

@@ -36,10 +36,12 @@ import {
   geoFieldClass,
   geoKickerClass,
   geoPanelClass,
-  geoTabButtonClass,
-  geoTabIconClass,
-  geoTabListClass,
 } from '../../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+} from '../../utils/localNavigationStyles';
 
 type MainTab = 'conversor' | 'distancia' | 'poligono';
 type CoordinateKind = 'latitude' | 'longitude';
@@ -583,7 +585,7 @@ export function CalculadoraTopografica() {
       <div
         role="tablist"
         aria-label="Ferramentas de topografia"
-        className={cn(geoTabListClass, 'mb-4 flex gap-1 overflow-x-auto rounded-xl')}
+        className={cn(localNavigationBarClass, 'mb-4 flex gap-3')}
       >
         {tabs.map((tab) => (
           <button
@@ -596,9 +598,9 @@ export function CalculadoraTopografica() {
             tabIndex={activeTab === tab.id ? 0 : -1}
             onClick={() => setActiveTab(tab.id)}
             onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
-            className={cn(geoTabButtonClass(activeTab === tab.id, 'field'), 'rounded-lg px-4 py-2.5')}
+            className={localNavigationButtonClass(activeTab === tab.id, 'field')}
           >
-            <span aria-hidden="true" className={geoTabIconClass(activeTab === tab.id, 'field')}>
+            <span aria-hidden="true" className={localNavigationIconClass(activeTab === tab.id, 'field')}>
               {tabIcon(tab.id)}
             </span>
             {tab.label}

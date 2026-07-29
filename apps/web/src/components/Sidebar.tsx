@@ -38,6 +38,7 @@ interface SidebarProps {
 }
 
 const SIDEBAR_SCROLL_STORAGE_KEY = 'geogestor_sidebar_scroll_top';
+const SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY = 'geogestor_sidebar_administration_open';
 let sidebarScrollTop = 0;
 
 const SECTION_ACTIVE_CLASSES: Record<SidebarSection['tone'], string> = {
@@ -90,7 +91,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const [administrationOpen, setAdministrationOpen] = useState(false);
+  const [administrationOpen, setAdministrationOpen] = useState(
+    () => sessionStorage.getItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY) === 'true',
+  );
 
   useLayoutEffect(() => {
     const node = scrollContainerRef.current;
@@ -182,6 +185,20 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const administrationActive = administrationItems.some(isItemActive);
   const showAdministration = administrationOpen || administrationActive;
+
+  const toggleAdministration = () => {
+    setAdministrationOpen((current) => {
+      const next = !current;
+      sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
+
+  const handleAdministrationNavigation = () => {
+    sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, 'true');
+    setAdministrationOpen(true);
+    onClose?.();
+  };
 
   return (
     <>
@@ -295,7 +312,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               type="button"
               aria-expanded={showAdministration}
               aria-controls="sidebar-administration"
-              onClick={() => setAdministrationOpen((current) => !current)}
+              onClick={toggleAdministration}
               className={`geo-focus-ring flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-[12px] font-bold tracking-[0.08em] ${
                 administrationActive
                   ? 'bg-zinc-50 text-zinc-950 ring-1 ring-zinc-200/70 dark:bg-zinc-800/70 dark:text-white dark:ring-zinc-700/70'
@@ -319,7 +336,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                     <Link
                       key={item.name}
                       to={item.path!}
-                      onClick={onClose}
+                      onClick={handleAdministrationNavigation}
                       onPointerEnter={() => preloadRoute(item.path!)}
                       onPointerDown={() => preloadRoute(item.path!)}
                       onFocus={() => preloadRoute(item.path!)}

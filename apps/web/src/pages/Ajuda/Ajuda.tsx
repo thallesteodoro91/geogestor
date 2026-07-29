@@ -89,13 +89,13 @@ export function Ajuda() {
     {
       id: 'despesas-fluxo',
       category: 'financeiro',
-      title: 'Controle de Despesas e Dash Financeiro',
+      title: 'Contas a pagar e visão financeira',
       excerpt: 'Lance despesas avulsas ou atreladas a projetos e analise a rentabilidade operacional.',
       icon: Coins,
       content: [
-        'Você pode lançar custos da sua operação na tela de Despesas (ex: taxas de cartório, combustível para campo, alimentação).',
+        'Você pode lançar custos da operação em Financeiro → Contas a pagar, inclusive despesas ligadas a projetos ou viagens.',
         'Ao cadastrar uma despesa, você pode vinculá-la a um projeto específico. Isso permite calcular a real rentabilidade de cada trabalho.',
-        'No "Dash Financeiro", o sistema agrupa o faturamento de orçamentos pagos e deduz todas as despesas lançadas, gerando um gráfico de fluxo de caixa mensal dos últimos 6 meses, além de listar as categorias onde você mais gasta.'
+        'Em Financeiro → Visão financeira, o sistema consolida recebimentos e despesas, apresenta o fluxo de caixa e destaca a rentabilidade por cliente.'
       ]
     },
     {

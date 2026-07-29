@@ -1,11 +1,13 @@
 import { DatePickerField } from '../../components/Form';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { Printer, Coins, Briefcase } from '@phosphor-icons/react';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass, geoTabButtonClass, geoTabIconClass } from '../../utils/geoTheme';
 import { apiClient } from '../../services/apiClient';
+import { RelatorioExecutivo } from './RelatorioExecutivo';
 
 interface ProjetoStatusStat {
   status: string;
@@ -32,9 +34,20 @@ interface RelatorioStats {
 }
 
 export function Relatorios() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [stats, setStats] = useState<RelatorioStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [reportType, setReportType] = useState<'financeiro' | 'projetos'>('financeiro');
+  const reportType: 'financeiro' | 'projetos' | 'executivo' = searchParams.get('tipo') === 'projetos'
+    ? 'projetos'
+    : searchParams.get('tipo') === 'executivo'
+      ? 'executivo'
+      : 'financeiro';
+  const setReportType = (type: 'financeiro' | 'projetos' | 'executivo') => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (type === 'financeiro') nextParams.delete('tipo');
+    else nextParams.set('tipo', type);
+    setSearchParams(nextParams, { replace: true });
+  };
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
 
@@ -105,8 +118,16 @@ export function Relatorios() {
             >
               <span aria-hidden="true" className={geoTabIconClass(reportType === 'projetos', 'field')}><Briefcase className="h-4 w-4" /></span> Relatório Operacional de Projetos
             </button>
+            <button
+              type="button"
+              onClick={() => setReportType('executivo')}
+              className={reportTabClass('executivo', 'system')}
+            >
+              <span aria-hidden="true" className={geoTabIconClass(reportType === 'executivo', 'system')}><Coins className="h-4 w-4" /></span> Relatório Executivo
+            </button>
           </div>
 
+          {reportType !== 'executivo' && (
           <div className="flex items-center gap-2 bg-zinc-50/70 dark:bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-200/60 dark:border-zinc-800/60">
             <span className="text-xs font-semibold text-zinc-500 pl-2">Período:</span>
             <DatePickerField
@@ -135,10 +156,14 @@ export function Relatorios() {
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
 
       {/* Relatório Imprimível - Box com design minimalista premium */}
+      {reportType === 'executivo' ? (
+        <RelatorioExecutivo embedded />
+      ) : (
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-12 ring-1 ring-zinc-900/5 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.03)] print:shadow-none print:ring-0 print:p-0 max-w-4xl mx-auto">
         
         {/* Cabeçalho do Relatório */}
@@ -269,6 +294,7 @@ export function Relatorios() {
           </div>
         )}
       </div>
+      )}
     </Layout>
   );
 }

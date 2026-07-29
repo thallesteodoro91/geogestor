@@ -92,10 +92,10 @@ export function Orcamentos() {
   const queryString = budgetQuery(searchParams);
   const statusQueryString = budgetStatusQuery(searchParams);
   const selectedId = searchParams.get('budgetId');
-  const creationContext = location.state as { createForClienteId?: string; opportunityId?: string } | null;
+  const creationContext = location.state as { createForClienteId?: string; opportunityId?: string; openCreateModal?: boolean } | null;
   const initialClientId = creationContext?.createForClienteId;
   const opportunityId = creationContext?.opportunityId;
-  const [editorOpen, setEditorOpen] = useState(Boolean(initialClientId));
+  const [editorOpen, setEditorOpen] = useState(Boolean(initialClientId || creationContext?.openCreateModal));
   const [editingBudget, setEditingBudget] = useState<BudgetDetail | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BudgetListItem | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);

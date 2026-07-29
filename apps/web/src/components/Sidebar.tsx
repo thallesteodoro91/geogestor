@@ -150,8 +150,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       tone: 'finance',
       items: [
         { name: 'Financeiro', path: '/financeiro', icon: financeIcon, created: true },
-        { name: 'Contas a receber', path: '/faturas', icon: budgetsIcon, created: true },
-        { name: 'Viagens e documentos fiscais', path: '/gestao-financeira', icon: reportsIcon, created: true },
         { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
         { name: 'Planejamento Estratégico', path: '/planejamento', icon: planningIcon, created: true },
       ],

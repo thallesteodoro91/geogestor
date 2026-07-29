@@ -33,12 +33,8 @@ const ListagemProjetos = lazy(() => import('./pages/Projetos/ListagemProjetos').
 const ProjetoDetalhes = lazy(() => import('./pages/Projetos/ProjetoDetalhes').then((module) => ({ default: module.ProjetoDetalhes })));
 const Orcamentos = lazy(() => import('./pages/Orcamentos/Orcamentos').then((module) => ({ default: module.Orcamentos })));
 const Financeiro = lazy(() => import('./pages/Financeiro/Financeiro').then((module) => ({ default: module.Financeiro })));
-const DashboardFinanceiro = lazy(() => import('./pages/Financeiro/DashboardFinanceiro').then((module) => ({ default: module.DashboardFinanceiro })));
-const GestaoFinanceira = lazy(() => import('./pages/Financeiro/GestaoFinanceira').then((module) => ({ default: module.GestaoFinanceira })));
-const Despesas = lazy(() => import('./pages/Despesas/Despesas').then((module) => ({ default: module.Despesas })));
 const ImportacaoDados = lazy(() => import('./pages/Importacao/ImportacaoDados').then((module) => ({ default: module.ImportacaoDados })));
 const EsquemasImportacao = lazy(() => import('./pages/Importacao/EsquemasImportacao').then((module) => ({ default: module.EsquemasImportacao })));
-const Operacional = lazy(() => import('./pages/Operacional/Operacional').then((module) => ({ default: module.Operacional })));
 const Tarefas = lazy(() => import('./pages/Tarefas/Tarefas').then((module) => ({ default: module.Tarefas })));
 const Relatorios = lazy(() => import('./pages/Relatorios/Relatorios').then((module) => ({ default: module.Relatorios })));
 const CalculadoraTopografica = lazy(() => import('./pages/Topografia/CalculadoraTopografica').then((module) => ({ default: module.CalculadoraTopografica })));
@@ -47,11 +43,9 @@ const CalendarioDetalhes = lazy(() => import('./pages/Calendario/CalendarioDetal
 const ListagemAmbiental = lazy(() => import('./pages/Ambiental/ListagemAmbiental').then((module) => ({ default: module.ListagemAmbiental })));
 const AmbientalDetalhes = lazy(() => import('./pages/Ambiental/AmbientalDetalhes').then((module) => ({ default: module.AmbientalDetalhes })));
 const LicencaDetalhes = lazy(() => import('./pages/Licenciamento/LicencaDetalhes').then((module) => ({ default: module.LicencaDetalhes })));
-const Faturas = lazy(() => import('./pages/Faturas/Faturas').then((module) => ({ default: module.Faturas })));
 const CRM = lazy(() => import('./pages/CRM/CRM').then((module) => ({ default: module.CRM })));
 const Configuracoes = lazy(() => import('./pages/Configuracoes').then((module) => ({ default: module.Configuracoes })));
 const Cadastros = lazy(() => import('./pages/Cadastros').then((module) => ({ default: module.Cadastros })));
-const RelatorioExecutivo = lazy(() => import('./pages/Relatorios/RelatorioExecutivo').then((module) => ({ default: module.RelatorioExecutivo })));
 const AuditLogs = lazy(() => import('./pages/Relatorios/AuditLogs').then((module) => ({ default: module.AuditLogs })));
 const Ajuda = lazy(() => import('./pages/Ajuda/Ajuda').then((module) => ({ default: module.Ajuda })));
 const Planejamento = lazy(() => import('./pages/Planejamento').then((module) => ({ default: module.Planejamento })));
@@ -125,12 +119,12 @@ function AppRoutes() {
         <Route path="/projetos/:id" element={<RouteTransition><ProjetoDetalhes /></RouteTransition>} />
         <Route path="/orcamentos" element={<RouteTransition><Orcamentos /></RouteTransition>} />
         <Route path="/financeiro" element={<RouteTransition><Financeiro /></RouteTransition>} />
-        <Route path="/dashboard-financeiro" element={<RouteTransition><DashboardFinanceiro /></RouteTransition>} />
-        <Route path="/gestao-financeira" element={<RouteTransition><GestaoFinanceira /></RouteTransition>} />
-        <Route path="/despesas" element={<RouteTransition><Despesas /></RouteTransition>} />
+        <Route path="/dashboard-financeiro" element={<Navigate to="/financeiro" replace />} />
+        <Route path="/gestao-financeira" element={<Navigate to="/financeiro?tab=auxiliares" replace />} />
+        <Route path="/despesas" element={<Navigate to="/financeiro?tab=pagar" replace />} />
         <Route path="/importacao" element={<RouteTransition><ImportacaoDados /></RouteTransition>} />
         <Route path="/importacao/esquemas" element={<RouteTransition><EsquemasImportacao /></RouteTransition>} />
-        <Route path="/operacional" element={<RouteTransition><Operacional /></RouteTransition>} />
+        <Route path="/operacional" element={<Navigate to="/projetos?visualizacao=estatisticas" replace />} />
         <Route path="/tarefas" element={<RouteTransition><Tarefas /></RouteTransition>} />
         <Route path="/relatorios" element={<RouteTransition><Relatorios /></RouteTransition>} />
         <Route path="/topografia" element={<RouteTransition><CalculadoraTopografica /></RouteTransition>} />
@@ -141,11 +135,11 @@ function AppRoutes() {
         <Route path="/licenciamento" element={<Navigate to="/ambiental?tab=licenciamento" replace />} />
         <Route path="/calendario" element={<RouteTransition><Calendario /></RouteTransition>} />
         <Route path="/calendario/:tipo/:id" element={<RouteTransition><CalendarioDetalhes /></RouteTransition>} />
-        <Route path="/faturas" element={<RouteTransition><Faturas /></RouteTransition>} />
+        <Route path="/faturas" element={<Navigate to="/financeiro?tab=faturas" replace />} />
         <Route path="/crm" element={<RouteTransition><CRM /></RouteTransition>} />
         <Route path="/configuracoes" element={<RouteTransition><Configuracoes /></RouteTransition>} />
         <Route path="/cadastros" element={<RouteTransition><Cadastros /></RouteTransition>} />
-        <Route path="/relatorio-executivo" element={<RouteTransition><RelatorioExecutivo /></RouteTransition>} />
+        <Route path="/relatorio-executivo" element={<Navigate to="/relatorios?tipo=executivo" replace />} />
         <Route path="/audit-logs" element={<RouteTransition><AuditLogs /></RouteTransition>} />
         <Route path="/ajuda" element={<RouteTransition><Ajuda /></RouteTransition>} />
         <Route path="/planejamento" element={<RouteTransition><Planejamento /></RouteTransition>} />

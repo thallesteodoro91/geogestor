@@ -239,11 +239,11 @@ function getEntityRoute(log: AuditLog): string | null {
     case 'Orcamento':
       return '/orcamentos';
     case 'Despesa':
-      return '/despesas';
+      return '/financeiro?tab=pagar';
     case 'Tarefa':
       return '/tarefas';
     case 'Fatura':
-      return '/faturas';
+      return '/financeiro?tab=faturas';
     default:
       return null;
   }

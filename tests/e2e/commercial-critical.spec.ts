@@ -145,28 +145,24 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByText(PROJECT_NAME, { exact: true }).first()).toBeVisible();
   });
 
-  test('receita começa sem cliente, valida em português e protege rascunho', async ({ page }) => {
+  test('contas a receber ficam centralizadas no Financeiro e a rota antiga redireciona', async ({ page }) => {
     await unlock(page);
     await navigateBySidebar(page, 'Financeiro');
     await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
-    await page.getByRole('button', { name: 'Nova Receita' }).click();
+    await page.getByRole('button', { name: 'Contas a receber' }).first().click();
 
-    await expect(page.getByRole('combobox', { name: /Cliente vinculado/ })).toHaveText('Selecione um cliente…');
-    await page.getByRole('button', { name: 'Salvar recebimento' }).click();
-    await expect(page.getByText('Selecione o cliente responsável pela receita.')).toBeVisible();
-    await expect(page.getByText('Informe a descrição da receita.')).toBeVisible();
-    await expect(page.getByText('Informe o valor da receita.')).toBeVisible();
-    await expect(page.getByText(/Expected number|received nan/i)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/financeiro\?tab=faturas$/);
+    await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByPlaceholder('Buscar por cliente ou orçamento...')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Parcelas em aberto' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Histórico Recebido' })).toBeVisible();
 
-    await page.getByRole('textbox', { name: /Descrição ou serviço/ }).fill('Receita E2E não salva');
-    await page.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.getByRole('alertdialog', { name: 'Descartar alterações?' })).toBeVisible();
-    await page.getByRole('button', { name: 'Continuar editando' }).click();
-    await expect(page.getByRole('textbox', { name: /Descrição ou serviço/ })).toHaveValue('Receita E2E não salva');
-
-    await page.getByRole('button', { name: 'Cancelar' }).click();
-    await page.getByRole('button', { name: 'Descartar alterações' }).click();
-    await expect(page.getByRole('dialog', { name: /Nova Receita/ })).toHaveCount(0);
+    await page.goto('/faturas');
+    await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
+    await page.getByLabel('Senha local').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Desbloquear' }).click();
+    await expect(page).toHaveURL(/\/financeiro\?tab=faturas$/);
+    await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
   });
 
   test('falha da API nunca vira KPIs zerados e permite reconexão', async ({ page }) => {

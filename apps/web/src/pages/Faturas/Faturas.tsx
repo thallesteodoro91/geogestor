@@ -1,8 +1,8 @@
 import { DatePickerField } from '../../components/Form';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
-import { Check, Printer, MagnifyingGlass } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { apiFetch, apiClient } from '../../services/apiClient';
@@ -42,7 +42,28 @@ interface ReceiptDocument {
   tamanhoBytes: number;
 }
 
-export function Faturas() {
+interface Receipt {
+  id: string;
+  parcelaId: string;
+  valorPrincipal: number;
+  juros: number;
+  multa: number;
+  desconto: number;
+  taxas: number;
+  valorRecebido: number;
+  dataRecebimento: string;
+  meioPagamento?: string | null;
+  observacoes?: string | null;
+  comprovanteDocumentoId?: string | null;
+  estornadoEm?: string | null;
+  motivoEstorno?: string | null;
+}
+
+function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  return embedded ? <>{children}</> : <Layout>{children}</Layout>;
+}
+
+export function Faturas({ embedded = false }: { embedded?: boolean }) {
   const [parcelas, setParcelas] = useState<Parcela[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
@@ -60,6 +81,12 @@ export function Faturas() {
     observacoes: ''
   });
   const [receiptDocuments, setReceiptDocuments] = useState<ReceiptDocument[]>([]);
+  const [receiptHistory, setReceiptHistory] = useState<Receipt[]>([]);
+  const [loadingReceiptHistory, setLoadingReceiptHistory] = useState(false);
+  const [reversingReceipt, setReversingReceipt] = useState<Receipt | null>(null);
+  const [reversalReason, setReversalReason] = useState('');
+  const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [savingReversal, setSavingReversal] = useState(false);
   const [loadingReceiptDocuments, setLoadingReceiptDocuments] = useState(false);
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [search, setSearch] = useState('');
@@ -84,6 +111,22 @@ export function Faturas() {
   useEffect(() => {
     fetchDados();
   }, []);
+
+  const fetchReceiptHistory = async (parcelaId: string) => {
+    setLoadingReceiptHistory(true);
+    try {
+      setReceiptHistory(await apiClient.get<Receipt[]>(`/api/financeiro/parcelas/${parcelaId}/recebimentos`));
+    } catch {
+      setReceiptHistory([]);
+    } finally {
+      setLoadingReceiptHistory(false);
+    }
+  };
+
+  const openDetails = (item: Parcela) => {
+    setSelectedFatura(item);
+    void fetchReceiptHistory(item.id);
+  };
 
   const parseCurrencyToCents = (value: string) => {
     const normalized = value.trim().replace(/\./g, '').replace(',', '.');
@@ -146,11 +189,33 @@ export function Faturas() {
       }
       setReceivingFatura(null);
       setSelectedFatura(null);
+      setReceiptHistory([]);
       fetchDados();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Não foi possível registrar o recebimento.');
     } finally {
       setSavingReceipt(false);
+    }
+  };
+
+  const handleReverseReceipt = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!reversingReceipt || reversalReason.trim().length < 5) return;
+    setSavingReversal(true);
+    try {
+      await apiClient.post(`/api/financeiro/recebimentos/${reversingReceipt.id}/estorno`, {
+        motivo: reversalReason.trim(),
+        dataEstorno: reversalDate
+      });
+      setReversingReceipt(null);
+      setReversalReason('');
+      setSelectedFatura(null);
+      setReceiptHistory([]);
+      fetchDados();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível estornar o recebimento.');
+    } finally {
+      setSavingReversal(false);
     }
   };
 
@@ -190,10 +255,10 @@ export function Faturas() {
   const hasInvoiceFilters = Boolean(search || dataInicioFilter || dataFimFilter);
 
   return (
-    <Layout>
+    <PageFrame embedded={embedded}>
       {/* Esconder layout principal durante a impressão */}
       <div className="print:hidden">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+        {!embedded && <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
           <div>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
               Financeiro
@@ -205,7 +270,7 @@ export function Faturas() {
               Gerencie cobranças, parcelas e recebimentos dos clientes.
             </p>
           </div>
-        </div>
+        </div>}
 
         {/* Stats Bento Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -237,19 +302,19 @@ export function Faturas() {
                 placeholder="Buscar por cliente ou orçamento..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-3 text-xs font-semibold text-zinc-700 outline-none transition-all placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+                className="h-9 w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-3 text-xs font-semibold text-zinc-700 outline-none transition-[border-color,box-shadow] placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               />
             </div>
             <DatePickerField
               value={dataInicioFilter}
               onChange={(event) => setDataInicioFilter(event.target.value)}
-              className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-all focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-[border-color,box-shadow] focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               aria-label="Vencimento inicial"
             />
             <DatePickerField
               value={dataFimFilter}
               onChange={(event) => setDataFimFilter(event.target.value)}
-              className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-all focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+              className="h-9 rounded-xl border border-zinc-200 bg-white px-2.5 text-xs font-semibold text-zinc-700 outline-none transition-[border-color,box-shadow] focus:border-indigo-300 focus:ring-2 focus:ring-indigo-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               aria-label="Vencimento final"
             />
             {hasInvoiceFilters && (
@@ -275,7 +340,7 @@ export function Faturas() {
         <div className="flex gap-2 border-b border-zinc-200 dark:border-zinc-800 mb-8 overflow-x-auto hide-scrollbar">
           <button 
             onClick={() => setActiveTab('pendentes')}
-            className={`px-6 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+            className={`px-6 py-3 text-sm font-semibold border-b-2 transition-[border-color,color] whitespace-nowrap ${
               activeTab === 'pendentes' 
                 ? 'border-zinc-950 text-zinc-950 dark:text-white' 
                 : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -285,7 +350,7 @@ export function Faturas() {
           </button>
           <button 
             onClick={() => setActiveTab('recebidas')}
-            className={`px-6 py-3 text-sm font-semibold border-b-2 transition-all whitespace-nowrap ${
+            className={`px-6 py-3 text-sm font-semibold border-b-2 transition-[border-color,color] whitespace-nowrap ${
               activeTab === 'recebidas' 
                 ? 'border-zinc-950 text-zinc-950 dark:text-white' 
                 : 'border-transparent text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100'
@@ -334,7 +399,7 @@ export function Faturas() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => setSelectedFatura(item)}
+                          onClick={() => openDetails(item)}
                           className="px-3 py-2 bg-zinc-50 dark:bg-zinc-950 hover:bg-zinc-100 rounded-xl text-xs font-semibold text-zinc-700 active:scale-[0.97]"
                         >
                             {status === 'Pago' ? 'Ver recibo' : 'Ver cobrança'}
@@ -413,6 +478,46 @@ export function Faturas() {
                 : 'Este demonstrativo é uma cobrança interna. Ele não é nota fiscal nem comprova pagamento.'}
             </p>
 
+            <section aria-labelledby="receipt-history-title" className="mb-6 rounded-2xl border border-zinc-200 p-4 dark:border-zinc-800">
+              <h3 id="receipt-history-title" className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Histórico de recebimentos</h3>
+              {loadingReceiptHistory ? (
+                <p className="mt-3 text-xs text-zinc-500">Carregando histórico…</p>
+              ) : receiptHistory.length === 0 ? (
+                <p className="mt-3 text-xs text-zinc-500">Nenhum recebimento registrado para esta parcela.</p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {receiptHistory.map((receipt) => (
+                    <article key={receipt.id} className="flex flex-col justify-between gap-3 rounded-xl bg-zinc-50 p-3 text-xs dark:bg-zinc-950 sm:flex-row sm:items-center">
+                      <div>
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-100">
+                          {formatCurrency(receipt.valorRecebido)} em {new Date(receipt.dataRecebimento).toLocaleDateString('pt-BR')}
+                        </p>
+                        <p className="mt-1 text-zinc-500">
+                          Principal {formatCurrency(receipt.valorPrincipal)}
+                          {receipt.meioPagamento ? ` · ${receipt.meioPagamento}` : ''}
+                          {receipt.estornadoEm ? ` · Estornado em ${new Date(receipt.estornadoEm).toLocaleDateString('pt-BR')}` : ''}
+                        </p>
+                        {receipt.motivoEstorno && <p className="mt-1 text-red-600">Motivo: {receipt.motivoEstorno}</p>}
+                      </div>
+                      {!receipt.estornadoEm && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReversingReceipt(receipt);
+                            setReversalReason('');
+                            setReversalDate(new Date().toISOString().slice(0, 10));
+                          }}
+                          className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 font-semibold text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/30 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200"
+                        >
+                          <ArrowCounterClockwise aria-hidden="true" /> Estornar
+                        </button>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {/* Botões / Rodapé */}
             <div className="flex items-center justify-between pt-6 border-t border-zinc-100 dark:border-zinc-800 print:hidden">
               <button 
@@ -433,6 +538,47 @@ export function Faturas() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(reversingReceipt)}
+        onClose={() => !savingReversal && setReversingReceipt(null)}
+        title="Estornar recebimento"
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={handleReverseReceipt} className="space-y-4">
+          <p className="rounded-xl bg-red-50 p-3 text-sm text-red-800 dark:bg-red-500/10 dark:text-red-100">
+            O estorno reabrirá o saldo principal da parcela e preservará o recebimento no histórico.
+          </p>
+          <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <span>Motivo do estorno</span>
+            <textarea
+              name="motivoEstorno"
+              required
+              minLength={5}
+              rows={4}
+              value={reversalReason}
+              onChange={(event) => setReversalReason(event.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-red-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <span>Data do estorno</span>
+            <DatePickerField
+              name="dataEstorno"
+              required
+              value={reversalDate}
+              onChange={(event) => setReversalDate(event.target.value)}
+              className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-red-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setReversingReceipt(null)} disabled={savingReversal} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold dark:border-zinc-800">Cancelar</button>
+            <button type="submit" disabled={savingReversal || reversalReason.trim().length < 5} className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-60">
+              {savingReversal ? 'Estornando…' : 'Confirmar estorno'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <Modal
@@ -543,6 +689,6 @@ export function Faturas() {
           </form>
         )}
       </Modal>
-    </Layout>
+    </PageFrame>
   );
 }

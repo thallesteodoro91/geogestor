@@ -1,4 +1,4 @@
-import { CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash, XCircle } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect } from '../../components/Form';
 import { apiFetch, apiClient } from '../../services/apiClient';
 import { notifications } from '../../services/notifications';
@@ -46,6 +46,10 @@ export interface DespesaItem {
   observacoes?: string | null;
   status: string;
   formaPagamento: string;
+  canceladaEm?: string | null;
+  motivoCancelamento?: string | null;
+  estornadaEm?: string | null;
+  motivoEstorno?: string | null;
 }
 
 export interface ProjetoMin {
@@ -61,13 +65,42 @@ interface ViagemMin {
   status: string;
 }
 
-export function Despesas() {
+function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  return embedded ? <>{children}</> : <Layout>{children}</Layout>;
+}
+
+function newExpenseFingerprint() {
+  const today = new Date().toISOString().split('T')[0];
+  return JSON.stringify({
+    projetoId: '',
+    viagemId: '',
+    descricao: '',
+    fornecedor: '',
+    numeroDocumento: '',
+    valor: '',
+    data: today,
+    dataCompetencia: today,
+    dataPagamento: '',
+    categoria: 'Combustível',
+    tipoCusto: 'Variável de campo',
+    centroCusto: 'Campo',
+    reembolsavel: false,
+    observacoes: '',
+    status: 'Pendente',
+    formaPagamento: 'Pix'
+  });
+}
+
+export function Despesas({ embedded = false, openCreateOnMount = false }: { embedded?: boolean; openCreateOnMount?: boolean }) {
   const queryClient = useQueryClient();
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(openCreateOnMount);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [initialFormFingerprint, setInitialFormFingerprint] = useState('');
+  const [initialFormFingerprint, setInitialFormFingerprint] = useState(() => openCreateOnMount ? newExpenseFingerprint() : '');
   const [selectedDespesa, setSelectedDespesa] = useState<DespesaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DespesaItem | null>(null);
+  const [financialAction, setFinancialAction] = useState<{ type: 'cancelamento' | 'estorno'; item: DespesaItem } | null>(null);
+  const [financialActionReason, setFinancialActionReason] = useState('');
+  const [financialActionDate, setFinancialActionDate] = useState(new Date().toISOString().slice(0, 10));
 
   // Form states
   const [projetoId, setProjetoId] = useState('');
@@ -202,6 +235,25 @@ export function Despesas() {
     onError: (error) => {
       notifications.error(error instanceof Error ? error.message : 'Erro ao excluir despesa');
     }
+  });
+
+  const financialActionMutation = useMutation({
+    mutationFn: async () => {
+      if (!financialAction) throw new Error('Selecione uma despesa.');
+      const dateField = financialAction.type === 'estorno' ? 'dataEstorno' : 'dataCancelamento';
+      return apiClient.post(`/api/financeiro/despesas/${financialAction.item.id}/${financialAction.type}`, {
+        motivo: financialActionReason.trim(),
+        [dateField]: financialActionDate
+      });
+    },
+    onSuccess: async () => {
+      const action = financialAction?.type;
+      setFinancialAction(null);
+      setFinancialActionReason('');
+      await invalidateFinancialQueries(queryClient);
+      notifications.success(action === 'estorno' ? 'Despesa estornada.' : 'Despesa cancelada.');
+    },
+    onError: (error) => notifications.error(error instanceof Error ? error.message : 'Não foi possível concluir a operação.')
   });
 
   const submitMutation = useMutation({
@@ -383,14 +435,14 @@ export function Despesas() {
   };
 
   return (
-    <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
+    <PageFrame embedded={embedded}>
+      <div className={`flex flex-col md:flex-row md:items-end justify-between gap-6 ${embedded ? 'mb-8' : 'mb-12'}`}>
         <div>
           <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
             Gestão Financeira
           </span>
-          <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Despesas
+          <h1 className={`${embedded ? 'text-3xl' : 'text-5xl'} font-semibold tracking-tighter text-zinc-950 dark:text-white`}>
+            Contas a pagar
           </h1>
           <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
             Controle de despesas, custos operacionais e reembolsos vinculados.
@@ -567,20 +619,57 @@ export function Despesas() {
                       </td>
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button 
-                            onClick={() => openEditModal(desp)}
-                            className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 transition-all shadow-sm"
-                            title="Editar Despesa"
-                          >
-                            <PencilSimple className="w-4 h-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(desp.id)}
-                            className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-800/60 flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-100 transition-all shadow-sm"
-                            title="Excluir Despesa"
-                          >
-                            <Trash className="w-4 h-4" />
-                          </button>
+                          {!desp.canceladaEm && !desp.estornadaEm && (
+                            <>
+                              <button
+                                onClick={() => openEditModal(desp)}
+                                className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 transition-[background-color,color,border-color,transform] shadow-sm"
+                                title="Editar despesa"
+                                aria-label={`Editar despesa ${desp.descricao}`}
+                              >
+                                <PencilSimple aria-hidden="true" className="w-4 h-4" />
+                              </button>
+                              {(desp.status || '').toLowerCase() === 'pago' || desp.dataPagamento ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFinancialAction({ type: 'estorno', item: desp });
+                                    setFinancialActionReason('');
+                                    setFinancialActionDate(new Date().toISOString().slice(0, 10));
+                                  }}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200/80 bg-amber-50 text-amber-700 shadow-sm transition-[background-color,color,border-color,transform] hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                                  aria-label={`Estornar despesa ${desp.descricao}`}
+                                  title="Estornar despesa paga"
+                                >
+                                  <ArrowCounterClockwise aria-hidden="true" className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setFinancialAction({ type: 'cancelamento', item: desp });
+                                      setFinancialActionReason('');
+                                      setFinancialActionDate(new Date().toISOString().slice(0, 10));
+                                    }}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200/80 bg-amber-50 text-amber-700 shadow-sm transition-[background-color,color,border-color,transform] hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
+                                    aria-label={`Cancelar despesa ${desp.descricao}`}
+                                    title="Cancelar despesa"
+                                  >
+                                    <XCircle aria-hidden="true" className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(desp.id)}
+                                    className="w-8 h-8 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200/80 dark:border-red-800/60 flex items-center justify-center text-red-600 dark:text-red-400 hover:bg-red-100 transition-[background-color,color,border-color,transform] shadow-sm"
+                                    title="Excluir despesa"
+                                    aria-label={`Excluir despesa ${desp.descricao}`}
+                                  >
+                                    <Trash aria-hidden="true" className="w-4 h-4" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -716,6 +805,46 @@ export function Despesas() {
         confirmText="Excluir despesa"
         loading={deleteMutation.isPending}
       />
-    </Layout>
+      <Modal
+        isOpen={Boolean(financialAction)}
+        onClose={() => !financialActionMutation.isPending && setFinancialAction(null)}
+        title={financialAction?.type === 'estorno' ? 'Estornar despesa paga' : 'Cancelar despesa'}
+        maxWidth="max-w-lg"
+      >
+        <form onSubmit={(event) => { event.preventDefault(); financialActionMutation.mutate(); }} className="space-y-4">
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-500/10 dark:text-amber-100">
+            O registro permanecerá no histórico financeiro e na trilha de auditoria.
+          </p>
+          <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <span>Motivo</span>
+            <textarea
+              name="motivo"
+              required
+              minLength={5}
+              rows={4}
+              value={financialActionReason}
+              onChange={(event) => setFinancialActionReason(event.target.value)}
+              className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+            <span>{financialAction?.type === 'estorno' ? 'Data do estorno' : 'Data do cancelamento'}</span>
+            <DatePickerField
+              name="dataAcaoFinanceira"
+              required
+              value={financialActionDate}
+              onChange={(event) => setFinancialActionDate(event.target.value)}
+              className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+            />
+          </label>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={() => setFinancialAction(null)} disabled={financialActionMutation.isPending} className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold dark:border-zinc-800">Voltar</button>
+            <button type="submit" disabled={financialActionMutation.isPending || financialActionReason.trim().length < 5} className="rounded-xl bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-60">
+              {financialActionMutation.isPending ? 'Salvando…' : financialAction?.type === 'estorno' ? 'Confirmar estorno' : 'Confirmar cancelamento'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </PageFrame>
   );
 }

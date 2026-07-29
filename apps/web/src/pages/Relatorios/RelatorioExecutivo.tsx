@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { Layout } from '../../components/Layout';
 import { motion } from 'framer-motion';
 import { 
@@ -42,7 +43,11 @@ interface RelatorioStats {
   despesasPorCategoria?: DespesaCategoriaStat[];
 }
 
-export function RelatorioExecutivo() {
+function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  return embedded ? <>{children}</> : <Layout>{children}</Layout>;
+}
+
+export function RelatorioExecutivo({ embedded = false }: { embedded?: boolean }) {
   const { data: stats, isLoading } = useQuery<RelatorioStats>({
     queryKey: ['relatorio-geral'],
     queryFn: () => apiClient.get<RelatorioStats>('/api/relatorios/geral')
@@ -54,7 +59,7 @@ export function RelatorioExecutivo() {
 
   if (isLoading) {
     return (
-      <Layout>
+      <PageFrame embedded={embedded}>
         <div className="py-24 flex justify-center items-center">
           <motion.div 
             animate={{ rotate: 360 }} 
@@ -62,7 +67,7 @@ export function RelatorioExecutivo() {
             className="w-8 h-8 rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900"
           />
         </div>
-      </Layout>
+      </PageFrame>
     );
   }
 
@@ -107,10 +112,10 @@ export function RelatorioExecutivo() {
   }));
 
   return (
-    <Layout>
+    <PageFrame embedded={embedded}>
       {/* Hide controls during printing */}
       <div className="print:hidden">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+        {!embedded && <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
           <div>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
               Consolidado Corporativo
@@ -134,7 +139,7 @@ export function RelatorioExecutivo() {
               </div>
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Bento Grid layout */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
@@ -363,6 +368,6 @@ export function RelatorioExecutivo() {
           </div>
         </div>
       </div>
-    </Layout>
+    </PageFrame>
   );
 }

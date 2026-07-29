@@ -22,7 +22,7 @@ export const geoTabListClass =
 
 export function geoTabButtonClass(active: boolean, tone: GeoTone = 'system', className?: string) {
   return cn(
-    'geo-focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold outline-none ring-1 ring-transparent transition-[background-color,color,box-shadow,transform,border-color] duration-150 hover:-translate-y-px active:translate-y-0',
+    'geo-focus-ring inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2.5 text-sm font-semibold outline-none ring-1 ring-transparent',
     active
       ? cn('shadow-sm', activeTabTone[tone])
       : 'text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100',
@@ -56,9 +56,9 @@ const activeTabIconTone: Record<GeoTone, string> = {
 
 export function geoTabIconClass(active: boolean, tone: GeoTone = 'system', className?: string) {
   return cn(
-    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1 transition-[background-color,color,box-shadow,transform] duration-150',
+    'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ring-1',
     active ? activeTabIconTone[tone] : tabIconTone[tone],
-    active && 'scale-[1.04] shadow-sm ring-current/20',
+    active && 'shadow-sm ring-current/20',
     className
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Plus, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -59,7 +59,11 @@ const toCents = (value: string) => Math.round((Number(value.replace(',', '.')) |
 const fieldClass = 'w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100';
 const labelClass = 'mb-1.5 block text-xs font-semibold text-zinc-600 dark:text-zinc-300';
 
-export function GestaoFinanceira() {
+function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  return embedded ? <>{children}</> : <Layout>{children}</Layout>;
+}
+
+export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'viagens' | 'fiscal' | 'diagnostico'>('viagens');
   const [travelModal, setTravelModal] = useState(false);
@@ -152,11 +156,11 @@ export function GestaoFinanceira() {
   });
 
   return (
-    <Layout>
-      <div className="mb-10 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+    <PageFrame embedded={embedded}>
+      <div className={`${embedded ? 'mb-8' : 'mb-10'} flex flex-col justify-between gap-5 md:flex-row md:items-end`}>
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Gestão operacional</p>
-          <h1 className="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-white">Controles financeiros auxiliares</h1>
+          <h1 className={`${embedded ? 'text-3xl' : 'text-4xl'} font-semibold tracking-tight text-zinc-950 dark:text-white`}>Viagens e notas fiscais</h1>
           <p className="mt-2 max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
             Viagens, documentos fiscais informados e integridade dos vínculos. Esta área não realiza apuração tributária nem substitui a contabilidade.
           </p>
@@ -317,6 +321,6 @@ export function GestaoFinanceira() {
           <div className="sm:col-span-2 flex justify-end gap-2 pt-3"><button type="button" onClick={() => setFiscalModal(false)} className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold dark:border-zinc-700">Cancelar</button><button disabled={createFiscalNote.isPending} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-60">{createFiscalNote.isPending ? 'Salvando…' : 'Salvar documento'}</button></div>
         </form>
       </Modal>
-    </Layout>
+    </PageFrame>
   );
 }

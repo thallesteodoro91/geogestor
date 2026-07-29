@@ -120,7 +120,14 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
             >
               <span
                 aria-hidden="true"
-                className={localNavigationIconClass(active, item.tone, 'overflow-hidden bg-transparent p-0')}
+                className={localNavigationIconClass(
+                  active,
+                  item.tone,
+                  cn(
+                    'overflow-hidden bg-transparent p-0',
+                    module === 'commercial' && 'dark:bg-transparent',
+                  ),
+                )}
               >
                 <img
                   src={item.icon}

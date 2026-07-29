@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { Modal } from '../../components/Modal';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -782,6 +783,7 @@ export function ListagemClientes() {
 
   return (
     <Layout>
+      <ModuleNavigation module="commercial" />
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <span className={cn(geoKickerClass, 'mb-2')}>

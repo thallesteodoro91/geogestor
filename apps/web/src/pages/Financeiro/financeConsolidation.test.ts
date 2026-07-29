@@ -9,7 +9,7 @@ test('Financeiro concentra os painéis canônicos sem editar orçamentos ou dupl
   const source = read('./Financeiro.tsx');
 
   assert.match(source, /<Faturas embedded \/>/);
-  assert.match(source, /<Despesas embedded \/>/);
+  assert.match(source, /<Despesas embedded openCreateOnMount=\{embeddedAction === 'despesa'\} \/>/);
   assert.match(source, /<GestaoFinanceira embedded \/>/);
   assert.doesNotMatch(source, /Receitas e contratos/);
   assert.doesNotMatch(source, /Relatórios Corporativos/);

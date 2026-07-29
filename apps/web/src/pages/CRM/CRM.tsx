@@ -1,11 +1,12 @@
 import { AddressBook, ArrowCounterClockwise, ArrowsLeftRight, CalendarBlank, CalendarCheck, CaretLeft, CaretRight, Check, ClockCountdown, ClockCounterClockwise, CurrencyDollar, Eye, FileText, Funnel, Handshake, MagnifyingGlass, PencilSimple, Plus, Target, Trash, TrendUp, WarningCircle, X
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { toast } from 'sonner';
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ACTIVE_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -16,7 +17,7 @@ import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CLIENT_ORIGIN_OPTIONS, CLIENT_SERVICOS_OPTIONS } from '../../utils/clientTags';
-import { geoFieldClass, geoKickerClass } from '../../utils/geoTheme';
+import { geoFieldClass } from '../../utils/geoTheme';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
 
 type CRMOptions = {
@@ -215,8 +216,8 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
   const [searchParams] = useSearchParams();
 
   return (
-    <nav aria-label="Seções do CRM" className="max-w-full min-w-0 overflow-x-auto rounded-2xl border border-brand-border bg-brand-surface p-1.5 shadow-sm">
-      <div className="flex min-w-max gap-1" role="list">
+    <nav aria-label="Seções do CRM" className="max-w-full min-w-0 overflow-x-auto border-b border-brand-border">
+      <div className="flex min-w-max gap-5" role="list">
         {CRM_SECTIONS.map((section) => {
           const active = section.id === activeView;
           const nextSearchParams = new URLSearchParams(searchParams);
@@ -227,10 +228,10 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
               to={`/crm?${nextSearchParams.toString()}`}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'geo-focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-[background-color,color,box-shadow] duration-150',
+                'geo-focus-ring inline-flex min-h-11 items-center gap-2 border-b-2 px-1 text-sm font-semibold transition-[border-color,color] duration-150',
                 active
-                  ? 'bg-brand-primary-50 text-brand-primary-700 shadow-sm ring-1 ring-inset ring-brand-primary-200/70 dark:bg-brand-primary-400/15 dark:text-brand-primary-100 dark:ring-brand-primary-300/15'
-                  : 'text-text-secondary hover:bg-brand-surface-subtle hover:text-text-primary'
+                  ? 'border-brand-primary-600 text-brand-primary-700 dark:border-brand-primary-300 dark:text-brand-primary-100'
+                  : 'border-transparent text-text-secondary hover:border-brand-border-strong hover:text-text-primary'
               )}
             >
               {section.icon}
@@ -240,6 +241,29 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
         })}
       </div>
     </nav>
+  );
+}
+
+function CRMPageHeader({
+  description,
+  action,
+}: {
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="min-w-0">
+        <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">
+          <Funnel aria-hidden="true" size={34} weight="duotone" className="text-brand-primary-600" />
+          CRM
+        </h1>
+        <p className="mt-2 max-w-3xl break-words text-sm font-medium leading-6 text-text-secondary sm:text-base">
+          {description}
+        </p>
+      </div>
+      {action}
+    </header>
   );
 }
 
@@ -277,6 +301,8 @@ export function CRM() {
   const [pendingOutcome, setPendingOutcome] = useState<{ opportunity: OpportunityListItem; stage: 'Ganho' | 'Perdido' } | null>(null);
   const [outcomeReason, setOutcomeReason] = useState('');
   const [historyTarget, setHistoryTarget] = useState<OpportunityListItem | null>(null);
+  const [showAllIndicators, setShowAllIndicators] = useState(false);
+  const [funnelFiltersOpen, setFunnelFiltersOpen] = useState(false);
 
   const opportunitiesQuery = useQuery<OpportunityListItem[]>({
     queryKey: ['opportunities'],
@@ -503,6 +529,19 @@ export function CRM() {
     return true;
   }), [attentionFilter, opportunities, responsibleFilter, searchTerm, serviceFilter, staleLimit, today]);
   const boardFiltered = Boolean(searchTerm || responsibleFilter || serviceFilter || attentionFilter !== 'all');
+  const activeFunnelFilterCount = [
+    responsibleFilter,
+    serviceFilter,
+    attentionFilter !== 'all' ? attentionFilter : '',
+  ].filter(Boolean).length;
+
+  const clearFunnelFilters = () => {
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      ['q', 'responsavel', 'servico', 'atencao'].forEach((key) => next.delete(key));
+      return next;
+    }, { replace: true });
+  };
 
   const handleDragEnd = async (result: DropResult) => {
     const { source, destination, draggableId } = result;
@@ -566,17 +605,14 @@ export function CRM() {
     return (
       <Layout contentClassName="max-w-[1800px]">
         <div className="min-w-0 space-y-6">
-          <header className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <span className={cn(geoKickerClass, 'mb-4')}>Área comercial</span>
-              <h1 className="flex items-center gap-3 text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl"><Funnel aria-hidden="true" size={42} weight="duotone" className="text-brand-primary-600" />CRM</h1>
-              <p className="mt-3 max-w-3xl break-words text-base font-medium leading-7 text-text-secondary">Centralize leads, oportunidades e resultados comerciais sem misturar seus cadastros.</p>
-            </div>
-            <button type="button" onClick={() => leadsRef.current?.openCreate()} className={cn(primaryActionButtonClass, 'shrink-0 self-start sm:self-auto')}>
+          <ModuleNavigation module="commercial" className="mb-0" />
+          <CRMPageHeader
+            description="Centralize leads, oportunidades e resultados comerciais sem misturar seus cadastros."
+            action={<button type="button" onClick={() => leadsRef.current?.openCreate()} className={cn(primaryActionButtonClass, 'shrink-0 self-start sm:self-auto')}>
               <span>Novo lead</span>
               <span className={primaryActionIconClass}><Plus aria-hidden="true" size={17} weight="bold" /></span>
-            </button>
-          </header>
+            </button>}
+          />
           <CRMSectionNavigation activeView={activeView} />
           <Contatos ref={leadsRef} embedded />
         </div>
@@ -588,33 +624,60 @@ export function CRM() {
     const indicatorsError = leadAnalyticsQuery.isError || analyticsQuery.isError;
     const indicatorsLoading = leadAnalyticsQuery.isLoading || analyticsQuery.isLoading;
     const hasOpportunityData = analytics.total > 0 || OPPORTUNITY_STAGES.some((stage) => analytics.counts[stage] > 0 || analytics.values[stage] > 0);
+    const hasCommercialData = leadAnalytics.total > 0 || hasOpportunityData;
     const funnelSearchParams = new URLSearchParams(searchParams);
     funnelSearchParams.set('view', 'funil');
     return (
       <Layout contentClassName="max-w-[1800px]">
         <div className="min-w-0 space-y-6">
-          <header>
-            <span className={cn(geoKickerClass, 'mb-4')}>Área comercial</span>
-            <h1 className="flex items-center gap-3 text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl"><Funnel aria-hidden="true" size={42} weight="duotone" className="text-brand-primary-600" />CRM</h1>
-            <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-text-secondary">Acompanhe conversão de leads, valor do pipeline e oportunidades que exigem atenção.</p>
-          </header>
+          <ModuleNavigation module="commercial" className="mb-0" />
+          <CRMPageHeader description="Acompanhe conversão de leads, valor do pipeline e oportunidades que exigem atenção." />
           <CRMSectionNavigation activeView={activeView} />
           {indicatorsError ? (
             <div className="geo-card p-6"><FormError message="Não foi possível carregar todos os indicadores comerciais." /><button type="button" onClick={() => { void leadAnalyticsQuery.refetch(); void analyticsQuery.refetch(); }} className="geo-button-base geo-button-secondary geo-focus-ring mt-4 min-h-10 px-4">Tentar novamente</button></div>
           ) : indicatorsLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="h-28 rounded-2xl" />)}</div>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-28 rounded-2xl" />)}</div>
+          ) : !hasCommercialData ? (
+            <section className="geo-card px-6 py-12 text-center sm:px-10 sm:py-16" aria-labelledby="crm-first-use-title">
+              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-primary-50 text-brand-primary-700 ring-1 ring-inset ring-brand-primary-200/70 dark:bg-brand-primary-400/10 dark:text-brand-primary-200 dark:ring-brand-primary-300/15">
+                <Funnel aria-hidden="true" size={28} weight="duotone" />
+              </span>
+              <h2 id="crm-first-use-title" className="mt-5 text-xl font-semibold text-text-primary">Comece pelo primeiro lead</h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-text-secondary">
+                Cadastre um contato comercial e acompanhe sua evolução até oportunidade, orçamento e projeto.
+              </p>
+              <Link to="/crm?view=leads" className="geo-button-base geo-button-primary geo-focus-ring mt-6 inline-flex min-h-11 px-5 text-sm">
+                <Plus aria-hidden="true" size={17} />
+                Cadastrar primeiro lead
+              </Link>
+            </section>
           ) : (
             <>
               <section aria-label="Indicadores comerciais" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <Metric label="Leads ativos" value={String(leadAnalytics.activeCount)} helper="Aguardando conversão" icon={<AddressBook aria-hidden="true" size={19} />} />
-                <Metric label="Leads convertidos" value={String(leadAnalytics.convertedCount)} helper="Histórico preservado" icon={<Check aria-hidden="true" size={19} />} />
-                <Metric label="Conversão de leads" value={formatPercentage(leadAnalytics.conversionBasisPoints)} helper={`${leadAnalytics.convertedCount} de ${leadAnalytics.total} leads`} icon={<Target aria-hidden="true" size={19} />} />
                 <Metric label="Pipeline em aberto" value={formatCurrency(analytics.openPipelineCents)} helper={`${analytics.activeCount} oportunidade(s) ativa(s)`} icon={<CurrencyDollar aria-hidden="true" size={19} />} />
-                <Metric label="Oportunidades ganhas" value={String(analytics.wonCount)} helper={formatCurrency(analytics.wonValueCents)} icon={<TrendUp aria-hidden="true" size={19} />} />
-                <Metric label="Oportunidades perdidas" value={String(analytics.lostCount)} helper="Negócios encerrados sem ganho" icon={<X aria-hidden="true" size={19} />} />
+                <Metric label="Conversão de leads" value={formatPercentage(leadAnalytics.conversionBasisPoints)} helper={`${leadAnalytics.convertedCount} de ${leadAnalytics.total} leads`} icon={<Target aria-hidden="true" size={19} />} />
                 <Metric label="Próximas ações atrasadas" value={String(analytics.overdueNextActions)} helper="Prazo programado já ultrapassado" icon={<CalendarBlank aria-hidden="true" size={19} />} tone={analytics.overdueNextActions > 0 ? 'danger' : 'default'} />
-                <Metric label="Oportunidades paradas" value={String(analytics.staleOpportunities)} helper="Mais de 14 dias na etapa" icon={<ClockCountdown aria-hidden="true" size={19} />} tone={analytics.staleOpportunities > 0 ? 'warning' : 'default'} />
               </section>
+              <div>
+                <button
+                  type="button"
+                  aria-expanded={showAllIndicators}
+                  aria-controls="crm-secondary-indicators"
+                  onClick={() => setShowAllIndicators((current) => !current)}
+                  className="geo-button-base geo-button-secondary geo-focus-ring min-h-10 px-4 text-sm"
+                >
+                  {showAllIndicators ? 'Ocultar indicadores complementares' : 'Ver todos os indicadores'}
+                </button>
+              </div>
+              {showAllIndicators && (
+                <section id="crm-secondary-indicators" aria-label="Indicadores comerciais complementares" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <Metric label="Leads convertidos" value={String(leadAnalytics.convertedCount)} helper="Histórico preservado" icon={<Check aria-hidden="true" size={19} />} />
+                  <Metric label="Oportunidades ganhas" value={String(analytics.wonCount)} helper={formatCurrency(analytics.wonValueCents)} icon={<TrendUp aria-hidden="true" size={19} />} />
+                  <Metric label="Oportunidades perdidas" value={String(analytics.lostCount)} helper="Negócios encerrados sem ganho" icon={<X aria-hidden="true" size={19} />} />
+                  <Metric label="Oportunidades paradas" value={String(analytics.staleOpportunities)} helper="Mais de 14 dias na etapa" icon={<ClockCountdown aria-hidden="true" size={19} />} tone={analytics.staleOpportunities > 0 ? 'warning' : 'default'} />
+                </section>
+              )}
               <section className="geo-card overflow-hidden" aria-labelledby="stage-indicators-title">
                 <div className="border-b border-brand-border p-5"><h2 id="stage-indicators-title" className="text-lg font-semibold text-text-primary">Oportunidades por etapa</h2><p className="mt-1 text-sm text-text-secondary">Quantidade e valor estimado em cada etapa do funil.</p></div>
                 {hasOpportunityData ? (
@@ -643,23 +706,47 @@ export function CRM() {
   return (
     <Layout contentClassName="max-w-[1800px]">
       <div className="min-w-0 space-y-8">
-        <header className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div>
-            <span className={cn(geoKickerClass, 'mb-4')}>Área comercial</span>
-            <h1 className="flex items-center gap-3 text-4xl font-semibold tracking-tight text-text-primary sm:text-5xl"><Funnel aria-hidden="true" size={42} weight="duotone" className="text-brand-primary-600" />CRM</h1>
-            <p className="mt-3 max-w-3xl text-base font-medium leading-7 text-text-secondary">Acompanhe próximas ações, propostas, probabilidade de fechamento e conversões em projetos.</p>
-          </div>
-          <button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(primaryActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}><span>Nova oportunidade</span><span className={primaryActionIconClass}><Plus aria-hidden="true" size={17} weight="bold" /></span></button>
-        </header>
+        <ModuleNavigation module="commercial" className="mb-0" />
+        <CRMPageHeader
+          description="Acompanhe próximas ações, propostas, probabilidade de fechamento e conversões em projetos."
+          action={<button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(primaryActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}><span>Nova oportunidade</span><span className={primaryActionIconClass}><Plus aria-hidden="true" size={17} weight="bold" /></span></button>}
+        />
         <CRMSectionNavigation activeView={activeView} />
 
         <section className="geo-card p-4 sm:p-5" aria-label="Filtros do funil">
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,2fr)_repeat(3,minmax(180px,1fr))]">
+          <div className="grid gap-3 sm:grid-cols-[minmax(260px,1fr)_auto_auto]">
             <label className="relative"><span className="sr-only">Buscar oportunidades</span><MagnifyingGlass aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-3.5 text-text-muted" /><input type="search" name="crm-search" autoComplete="off" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Oportunidade, cliente, serviço…" className={cn(fieldClass, 'pl-10')} /></label>
-            <FormSelect aria-label="Filtrar por responsável" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)} className={fieldClass}><option value="">Todos os responsáveis</option>{responsibleOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
-            <FormSelect aria-label="Filtrar por serviço" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{serviceOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
-            <FormSelect aria-label="Filtrar oportunidades que exigem atenção" value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as typeof attentionFilter)} className={fieldClass}><option value="all">Todas as oportunidades</option><option value="overdue">Próximas ações atrasadas</option><option value="stale">Paradas há mais de 14 dias</option></FormSelect>
+            <button
+              type="button"
+              aria-expanded={funnelFiltersOpen}
+              aria-controls="crm-funnel-filters"
+              onClick={() => setFunnelFiltersOpen((current) => !current)}
+              className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm"
+            >
+              <Funnel aria-hidden="true" size={16} />
+              Filtros
+              {activeFunnelFilterCount > 0 && <span className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-zinc-950">{activeFunnelFilterCount}</span>}
+            </button>
+            {boardFiltered && (
+              <button type="button" onClick={clearFunnelFilters} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm">
+                Limpar
+              </button>
+            )}
           </div>
+          {funnelFiltersOpen && (
+            <div id="crm-funnel-filters" className="mt-4 grid gap-3 border-t border-brand-border pt-4 md:grid-cols-3">
+              <FormSelect aria-label="Filtrar por responsável" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)} className={fieldClass}><option value="">Todos os responsáveis</option>{responsibleOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
+              <FormSelect aria-label="Filtrar por serviço" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{serviceOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
+              <FormSelect aria-label="Filtrar oportunidades que exigem atenção" value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as typeof attentionFilter)} className={fieldClass}><option value="all">Todas as oportunidades</option><option value="overdue">Próximas ações atrasadas</option><option value="stale">Paradas há mais de 14 dias</option></FormSelect>
+            </div>
+          )}
+          {activeFunnelFilterCount > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Filtros ativos do funil">
+              {responsibleFilter && <button type="button" onClick={() => setResponsibleFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Responsável: {responsibleFilter}<X aria-hidden="true" size={13} /></button>}
+              {serviceFilter && <button type="button" onClick={() => setServiceFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Serviço: {serviceFilter}<X aria-hidden="true" size={13} /></button>}
+              {attentionFilter !== 'all' && <button type="button" onClick={() => setAttentionFilter('all')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{attentionFilter === 'overdue' ? 'Ações atrasadas' : 'Oportunidades paradas'}<X aria-hidden="true" size={13} /></button>}
+            </div>
+          )}
           {boardFiltered && <p className="mt-3 flex items-center gap-2 text-xs text-text-muted"><WarningCircle aria-hidden="true" size={15} />O arraste fica protegido durante filtros. Use as ações do card ou limpe os filtros para reordenar.</p>}
         </section>
 

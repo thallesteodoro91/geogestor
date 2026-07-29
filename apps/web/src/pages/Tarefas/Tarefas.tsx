@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DatePickerField, FormError, FormFooter, FormSection, FormSelect } from '../../components/Form';
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
-import { Plus, Trash, BookmarkSimple, Calendar, MagnifyingGlass } from '@phosphor-icons/react';
+import { Plus, Trash, BookmarkSimple, Calendar, Funnel, MagnifyingGlass } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
@@ -29,6 +30,7 @@ export function Tarefas() {
   const [prioridadeFilter, setPrioridadeFilter] = useState('Todas');
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   // Form states
   const [showAddForm, setShowAddForm] = useState(false);
@@ -49,15 +51,49 @@ export function Tarefas() {
     ]).then(([tarefasData, projetosData]) => {
       setTarefas(tarefasData);
       setProjetos(projetosData);
-      if (projetosData.length > 0) {
-        setNovoProjetoId(projetosData[0].id);
-      }
     });
   };
 
   useEffect(() => {
     fetchDados();
   }, []);
+
+  const taskDraftDirty = Boolean(
+    novoTitulo.trim()
+    || novaDescricao.trim()
+    || novoProjetoId
+    || novaDataLimite
+    || novaPrioridade !== 'Média'
+  );
+
+  useEffect(() => {
+    if (!showAddForm || !taskDraftDirty) return undefined;
+    const protectDraft = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', protectDraft);
+    return () => window.removeEventListener('beforeunload', protectDraft);
+  }, [showAddForm, taskDraftDirty]);
+
+  const resetTaskForm = () => {
+    setNovoTitulo('');
+    setNovaDescricao('');
+    setNovoProjetoId('');
+    setNovaPrioridade('Média');
+    setNovaDataLimite('');
+    setFormError('');
+  };
+
+  const closeTaskForm = () => {
+    if (taskDraftDirty && !window.confirm('Descartar as alterações desta tarefa?')) return;
+    resetTaskForm();
+    setShowAddForm(false);
+  };
+
+  const openTaskForm = () => {
+    setFormError('');
+    setShowAddForm(true);
+  };
 
   useEffect(() => {
     if (!focusedTaskId || tarefas.length === 0) return;
@@ -89,10 +125,12 @@ export function Tarefas() {
     setFormError('');
     if (!novoTitulo.trim()) {
       setFormError('Informe o título da tarefa.');
+      window.requestAnimationFrame(() => document.getElementById('tarefa-titulo')?.focus());
       return;
     }
     if (!novoProjetoId) {
       setFormError('Selecione um projeto para a tarefa.');
+      window.requestAnimationFrame(() => document.getElementById('tarefa-projeto')?.focus());
       return;
     }
 
@@ -114,10 +152,7 @@ export function Tarefas() {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error || 'Não foi possível criar a tarefa.');
       }
-      setNovoTitulo('');
-      setNovaDescricao('');
-      setNovaDataLimite('');
-      setFormError('');
+      resetTaskForm();
       setShowAddForm(false);
       fetchDados();
     } catch (err) {
@@ -197,25 +232,20 @@ export function Tarefas() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+      <ModuleNavigation module="agenda" />
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-            Gestão de Serviços
-          </span>
-          <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Quadro Kanban
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
+            Tarefas
           </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
+          <p className="mt-2 text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
             Fluxo de trabalho operacional para projetos e levantamentos.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
           <button 
-            onClick={() => {
-              setFormError('');
-              setShowAddForm(true);
-            }}
+            onClick={openTaskForm}
             className={primaryActionButtonClass}
           >
             <span>Nova Tarefa</span>
@@ -227,14 +257,18 @@ export function Tarefas() {
       </div>
 
       <div className={cn('mb-6', filterBarClass)}>
-        <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-[minmax(260px,1.4fr)_repeat(4,minmax(140px,0.7fr))_auto] items-center">
+        <div className="grid grid-cols-1 items-center gap-2.5 lg:grid-cols-[minmax(260px,1.4fr)_repeat(2,minmax(160px,0.7fr))_auto_auto]">
           <div className="relative">
-            <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+            <label htmlFor="task-search" className="sr-only">Buscar tarefas</label>
+            <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <input
-              type="text"
+              id="task-search"
+              name="task-search"
+              type="search"
+              autoComplete="off"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar por tarefa, projeto, cliente ou descrição..."
+              placeholder="Buscar por tarefa, projeto, cliente ou descrição…"
               className={filterSearchInputClass}
             />
           </div>
@@ -250,20 +284,19 @@ export function Tarefas() {
             onChange={setPrioridadeFilter}
             placeholder="Todas as prioridades"
             className="min-w-0"
-            options={['Todas', 'Baixa', 'Média', 'Alta'].map((value) => ({ label: value === 'Todas' ? 'Todas as prioridades' : value, value }))}
+              options={['Todas', 'Baixa', 'Média', 'Alta'].map((value) => ({ label: value === 'Todas' ? 'Todas as prioridades' : value, value }))}
           />
-          <DatePickerField
-            value={dataInicioFilter}
-            onChange={(event) => setDataInicioFilter(event.target.value)}
-            className={filterControlClass}
-            aria-label="Prazo inicial"
-          />
-          <DatePickerField
-            value={dataFimFilter}
-            onChange={(event) => setDataFimFilter(event.target.value)}
-            className={filterControlClass}
-            aria-label="Prazo final"
-          />
+          <button
+            type="button"
+            aria-expanded={advancedFiltersOpen}
+            aria-controls="task-advanced-filters"
+            onClick={() => setAdvancedFiltersOpen((current) => !current)}
+            className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm"
+          >
+            <Funnel aria-hidden="true" className="h-4 w-4" />
+            Filtros
+            {(dataInicioFilter || dataFimFilter) && <span className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-zinc-950">{[dataInicioFilter, dataFimFilter].filter(Boolean).length}</span>}
+          </button>
           {hasTaskFilters && (
             <button
               type="button"
@@ -280,20 +313,69 @@ export function Tarefas() {
             </button>
           )}
         </div>
+        {advancedFiltersOpen && (
+          <div id="task-advanced-filters" className="mt-4 grid gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800 sm:grid-cols-2">
+            <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+              <span>Prazo inicial</span>
+              <DatePickerField
+                name="task-deadline-start"
+                value={dataInicioFilter}
+                onChange={(event) => setDataInicioFilter(event.target.value)}
+                className={cn(filterControlClass, 'w-full')}
+              />
+            </label>
+            <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+              <span>Prazo final</span>
+              <DatePickerField
+                name="task-deadline-end"
+                value={dataFimFilter}
+                onChange={(event) => setDataFimFilter(event.target.value)}
+                className={cn(filterControlClass, 'w-full')}
+              />
+            </label>
+          </div>
+        )}
         <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
           {filteredTarefas.length} de {tarefas.length} tarefa(s) exibidas
         </p>
       </div>
 
       {/* Kanban Board Columns */}
-      <DragDropContext onDragEnd={onDragEnd}>
+      {filteredTarefas.length === 0 ? (
+        <section className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700" aria-labelledby="tasks-first-use-title">
+          <BookmarkSimple aria-hidden="true" className="mx-auto h-9 w-9 text-zinc-400" />
+          <h2 id="tasks-first-use-title" className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">{tarefas.length === 0 ? 'Nenhuma tarefa cadastrada' : 'Nenhuma tarefa encontrada'}</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">{tarefas.length === 0 ? 'Crie a primeira atividade operacional e acompanhe sua evolução pelo quadro.' : 'Revise a busca ou remova os filtros para voltar a visualizar o quadro.'}</p>
+          {tarefas.length === 0 ? (
+            <button type="button" onClick={openTaskForm} className={cn(primaryActionButtonClass, 'mx-auto mt-5')}>
+              <Plus aria-hidden="true" className="h-4 w-4" />
+              Nova tarefa
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedProjeto('all');
+                setPrioridadeFilter('Todas');
+                setDataInicioFilter('');
+                setDataFimFilter('');
+              }}
+              className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4 text-sm"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </section>
+      ) : (
+        <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
           {columns.map(col => {
             const colTasks = filteredTarefas.filter(t => t.status === col.id);
             return (
               <div 
                 key={col.id} 
-                className="bg-zinc-100/70 dark:bg-zinc-800/60 rounded-[2.5rem] p-6 min-h-[500px] flex flex-col border border-zinc-200/80 dark:border-zinc-700/60 shadow-sm"
+                className="flex min-h-[500px] flex-col rounded-2xl border border-zinc-200/80 bg-zinc-100/70 p-4 dark:border-zinc-700/60 dark:bg-zinc-800/60"
               >
                 <div className="flex items-center justify-between mb-6 px-2">
                   <div className="flex items-center gap-3">
@@ -321,8 +403,8 @@ export function Tarefas() {
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                               style={provided.draggableProps.style}
-                              className={`bg-white dark:bg-zinc-800/95 p-6 rounded-2xl border border-zinc-200/60 dark:border-zinc-700/60 shadow-sm transition-shadow group relative ${
-                                snapshot.isDragging ? 'shadow-xl ring-2 ring-indigo-500/50 opacity-90' : 'hover:shadow-md'
+                              className={`group relative rounded-xl border border-zinc-200/70 bg-white p-4 transition-[border-color,box-shadow] dark:border-zinc-700/60 dark:bg-zinc-800/95 ${
+                                snapshot.isDragging ? 'opacity-90 shadow-xl ring-2 ring-indigo-500/50' : 'hover:border-zinc-300 dark:hover:border-zinc-600'
                               } ${
                                 focusedTaskId === task.id
                                   ? 'ring-2 ring-blue-500 bg-blue-50/70 dark:bg-blue-950/20'
@@ -333,15 +415,15 @@ export function Tarefas() {
                                 <h4 className="font-semibold text-zinc-950 dark:text-white leading-tight pr-16">
                                   {task.titulo}
                                 </h4>
-                                <div className="flex items-center gap-1.5 absolute top-6 right-6 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute right-4 top-4 flex items-center gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                                   <button 
                                     type="button"
                                     onClick={() => handleDelete(task.id)}
-                                    className="p-1.5 rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 transition-all shadow-sm"
+                                    className="rounded-lg bg-red-50 p-1.5 text-red-600 shadow-sm transition-[background-color,color,box-shadow] hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400"
                                     aria-label="Excluir tarefa"
                                     title="Excluir tarefa"
                                   >
-                                    <Trash className="w-4 h-4" />
+                                    <Trash aria-hidden="true" className="h-4 w-4" />
                                   </button>
                                 </div>
                               </div>
@@ -394,12 +476,13 @@ export function Tarefas() {
             );
           })}
         </div>
-      </DragDropContext>
+        </DragDropContext>
+      )}
 
       {/* Modal Nova Tarefa */}
       <Modal
         isOpen={showAddForm}
-        onClose={() => setShowAddForm(false)}
+        onClose={closeTaskForm}
         title="Nova Tarefa"
       >
         <form onSubmit={handleCreate} className="space-y-5">
@@ -409,12 +492,14 @@ export function Tarefas() {
             <label htmlFor="tarefa-titulo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Título da Tarefa</label>
             <input 
               id="tarefa-titulo"
+              name="titulo"
               type="text" 
+              autoComplete="off"
               required 
               value={novoTitulo} 
               onChange={e => setNovoTitulo(e.target.value)} 
               placeholder="Ex: Executar levantamento RTK" 
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow" 
+              className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
             />
           </div>
 
@@ -425,8 +510,9 @@ export function Tarefas() {
               required 
               value={novoProjetoId} 
               onChange={e => setNovoProjetoId(e.target.value)} 
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow appearance-none"
+              className="w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
             >
+              <option value="">Selecione um projeto</option>
               {projetos.map(p => (
                 <option key={p.id} value={p.id}>{p.nome}</option>
               ))}
@@ -438,9 +524,10 @@ export function Tarefas() {
               <label htmlFor="tarefa-prioridade" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Prioridade</label>
               <FormSelect
                 id="tarefa-prioridade"
+                name="prioridade"
                 value={novaPrioridade} 
                 onChange={e => setNovaPrioridade(e.target.value)} 
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow appearance-none"
+                className="w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               >
                 <option value="Baixa">Baixa</option>
                 <option value="Média">Média</option>
@@ -452,9 +539,10 @@ export function Tarefas() {
               <label htmlFor="tarefa-data-limite" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data Limite</label>
               <DatePickerField
                 id="tarefa-data-limite"
+                name="dataLimite"
                 value={novaDataLimite} 
                 onChange={e => setNovaDataLimite(e.target.value)} 
-                className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow" 
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
               />
             </div>
           </div>
@@ -463,11 +551,12 @@ export function Tarefas() {
             <label htmlFor="tarefa-descricao" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Descrição</label>
             <textarea 
               id="tarefa-descricao"
+              name="descricao"
               value={novaDescricao} 
               onChange={e => setNovaDescricao(e.target.value)} 
               rows={3} 
-              placeholder="Adicione detalhes..."
-              className="w-full bg-zinc-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl px-4 py-3 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-950 transition-shadow resize-none"
+              placeholder="Adicione detalhes…"
+              className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
             ></textarea>
           </div>
 
@@ -476,7 +565,7 @@ export function Tarefas() {
           <FormFooter>
             <button 
               type="button" 
-              onClick={() => setShowAddForm(false)} 
+              onClick={closeTaskForm}
               className="px-6 py-3 rounded-full text-zinc-500 dark:text-zinc-400 font-medium hover:text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancelar

@@ -18,6 +18,7 @@ import {
 } from '@phosphor-icons/react';
 import Papa from 'papaparse';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { apiClient } from '../../services/apiClient';
 
 type EntityKey = 'clientes' | 'projetos' | 'contatos';
@@ -301,6 +302,7 @@ export function ImportacaoDados() {
 
   return (
     <Layout>
+      <ModuleNavigation module="tools" />
       <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">

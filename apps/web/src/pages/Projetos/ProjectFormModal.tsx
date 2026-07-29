@@ -260,8 +260,7 @@ function ProjectFormModalContent({
 
             <FormFooter className="relative z-0 mt-0 flex-shrink-0 flex-wrap py-4 sm:flex-nowrap">
               <p className="mr-auto w-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 sm:w-auto" role="status" aria-live="polite">
-                Etapa {projectTabOrder.indexOf(activeTab) + 1} de {projectTabOrder.length}
-                {activeTab === 'projeto' ? ' · campos obrigatórios marcados com *' : ' · preenchimento opcional'}
+                {activeTab === 'projeto' ? 'Campos obrigatórios marcados com *' : 'Preenchimento opcional nesta etapa'}
               </p>
               <button type="button" onClick={close} disabled={saveMutation.isPending} className={secondarySmallActionButtonClass}>Cancelar</button>
               {activeTab !== 'projeto' && (

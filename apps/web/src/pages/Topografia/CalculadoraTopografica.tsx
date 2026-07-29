@@ -16,6 +16,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
 import { createBaseTileLayer } from '../../utils/mapTiles';
 import {
@@ -567,6 +568,7 @@ export function CalculadoraTopografica() {
 
   return (
     <Layout compactBottom>
+      <ModuleNavigation module="tools" className="mb-4" />
       <header className="mb-3 border-b border-zinc-200/80 pb-3 dark:border-zinc-800">
         <span className={cn(geoKickerClass, 'mb-2')}>Ferramentas técnicas</span>
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">

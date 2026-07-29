@@ -28,7 +28,7 @@ async function unlock(page: Page) {
   await expect(dashboardHeading).toBeVisible();
 }
 
-async function navigateBySidebar(page: Page, destination: 'Visão Geral' | 'Clientes' | 'Projetos' | 'Financeiro') {
+async function navigateBySidebar(page: Page, destination: 'Visão Geral' | 'Comercial' | 'Projetos' | 'Financeiro') {
   await page.getByRole('link', { name: destination, exact: true }).click();
   await expect(page.locator('h1')).toBeVisible();
 }
@@ -89,8 +89,10 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
   test('cliente pode ser criado, pesquisado, editado e excluído', async ({ page }) => {
     await unlock(page);
-    await navigateBySidebar(page, 'Clientes');
+    await navigateBySidebar(page, 'Comercial');
     await expect(page.getByRole('heading', { name: /Clientes/ })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Áreas do módulo Comercial' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Clientes', exact: true })).toHaveAttribute('aria-current', 'page');
 
     await page.getByRole('button', { name: 'Novo cliente' }).first().click();
     await page.getByLabel('Pessoa física').check();
@@ -121,7 +123,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
   test('projeto é criado em três etapas com cliente explícito', async ({ page }) => {
     await unlock(page);
-    await navigateBySidebar(page, 'Clientes');
+    await navigateBySidebar(page, 'Comercial');
     await page.getByRole('button', { name: 'Novo cliente' }).first().click();
     await page.getByLabel('Pessoa física').check();
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
@@ -149,7 +151,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await unlock(page);
     await navigateBySidebar(page, 'Financeiro');
     await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
-    await page.getByRole('button', { name: 'Contas a receber' }).first().click();
+    await page.getByRole('tab', { name: 'Contas a receber' }).click();
 
     await expect(page).toHaveURL(/\/financeiro\?tab=faturas$/);
     await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
@@ -196,7 +198,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await unlock(page);
     await page.setViewportSize({ width: 800, height: 520 });
 
-    for (const destination of ['Visão Geral', 'Clientes', 'Projetos', 'Financeiro'] as const) {
+    for (const destination of ['Visão Geral', 'Comercial', 'Projetos', 'Financeiro'] as const) {
       if (destination !== 'Visão Geral') await navigateBySidebar(page, destination);
       else await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
       await expect(page.locator('h1')).toBeVisible();

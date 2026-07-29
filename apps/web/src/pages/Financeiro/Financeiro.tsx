@@ -38,7 +38,6 @@ import {
 import { chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
-import { geoKickerClass } from '../../utils/geoTheme';
 import { filterControlClass } from '../../utils/filterStyles';
 import { primaryActionButtonClass } from '../../utils/actionStyles';
 import { Faturas } from '../Faturas/Faturas';
@@ -406,6 +405,8 @@ export function Financeiro() {
     }));
   const hasChartData = monthlyData.some((item) => item.Recebido !== 0 || item.Despesas !== 0);
   const launchCount = analytics.parcelas.length + analytics.despesas.length;
+  const hasSourceData = orcamentos.length > 0 || despesas.length > 0 || parcelas.length > 0;
+  const hasFilteredData = launchCount > 0;
 
   const exportOverview = () => {
     const header = ['Período', 'Recebido', 'Despesas', 'Resultado'];
@@ -450,11 +451,10 @@ export function Financeiro() {
 
   return (
     <Layout>
-      <header className="mb-7 flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+      <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div className="min-w-0">
-          <span className={cn(geoKickerClass, 'mb-4')}>Módulo Financeiro</span>
-          <h1 className="text-4xl font-semibold tracking-tighter text-zinc-950 dark:text-white sm:text-5xl">Gestão financeira 360</h1>
-          <p className="mt-3 max-w-3xl text-base font-medium text-zinc-500 dark:text-zinc-400 sm:text-lg">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">Gestão financeira 360</h1>
+          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
             Acompanhe receitas, despesas, viagens e o resultado do seu negócio.
           </p>
         </div>
@@ -551,7 +551,8 @@ export function Financeiro() {
 
       {activeTab === 'visao' && (
         <>
-          <section aria-label="Período e filtros financeiros" className="relative mb-6">
+          {(loading || failed || hasSourceData) && (
+            <section aria-label="Período e filtros financeiros" className="relative mb-6">
             <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <div className="flex min-w-[220px] flex-1 items-center gap-2 sm:max-w-[280px]">
@@ -684,7 +685,8 @@ export function Financeiro() {
                 </div>
               </>
             )}
-          </section>
+            </section>
+          )}
 
           {loading ? (
             <FinancialSkeleton />
@@ -692,6 +694,48 @@ export function Financeiro() {
             <section role="alert" className="rounded-2xl border border-red-300 bg-red-50 p-6 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-100">
               <h2 className="text-lg font-semibold">Dados financeiros indisponíveis</h2>
               <p className="mt-2 text-sm">Nenhum saldo foi substituído por zero. Restabeleça a conexão local e tente novamente.</p>
+            </section>
+          ) : !hasSourceData ? (
+            <section className="rounded-2xl border border-zinc-200 bg-white px-6 py-12 text-center dark:border-zinc-800 dark:bg-zinc-900/60 sm:px-10 sm:py-16" aria-labelledby="financial-first-use-title">
+              <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/20">
+                <ChartBar aria-hidden="true" size={28} weight="duotone" />
+              </span>
+              <h2 id="financial-first-use-title" className="mt-5 text-xl font-semibold text-zinc-950 dark:text-white">
+                Comece pelo primeiro lançamento
+              </h2>
+              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                Registre uma receita ou despesa. Depois disso, o GeoGestor apresentará fluxo de caixa, pendências, rentabilidade por cliente e despesas por categoria.
+              </p>
+              <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring mt-6 min-h-11 px-5 text-sm">
+                <Plus aria-hidden="true" size={17} />
+                Criar primeiro lançamento
+              </button>
+              <div className="mx-auto mt-8 grid max-w-2xl gap-3 border-t border-zinc-200 pt-6 text-left text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300 sm:grid-cols-3">
+                <p><strong className="block text-zinc-950 dark:text-white">1. Registre</strong> Receitas e despesas.</p>
+                <p><strong className="block text-zinc-950 dark:text-white">2. Acompanhe</strong> Contas e vencimentos.</p>
+                <p><strong className="block text-zinc-950 dark:text-white">3. Analise</strong> Caixa e rentabilidade.</p>
+              </div>
+            </section>
+          ) : !hasFilteredData ? (
+            <section className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700" aria-labelledby="financial-filter-empty-title">
+              <Receipt aria-hidden="true" size={30} className="mx-auto text-zinc-400" />
+              <h2 id="financial-filter-empty-title" className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">
+                Nenhum lançamento neste período
+              </h2>
+              <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                Existem dados financeiros, mas nenhum corresponde ao período e aos filtros selecionados.
+              </p>
+              <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+                {hasFilters && (
+                  <button type="button" onClick={clearFilters} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm">
+                    Limpar filtros
+                  </button>
+                )}
+                <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5 text-sm">
+                  <Plus aria-hidden="true" size={17} />
+                  Novo lançamento
+                </button>
+              </div>
             </section>
           ) : (
             <div className="space-y-10">

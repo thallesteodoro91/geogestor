@@ -296,12 +296,12 @@ export function Dashboard() {
 
   return (
     <Layout>
-      <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:pt-10 lg:mb-10 xl:pt-0">
+      <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:pt-10 xl:pt-0">
         <div className="min-w-0">
-          <h1 className="text-4xl font-semibold tracking-tighter text-text-primary sm:text-5xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">
             Visão Geral
           </h1>
-          <p className="mt-2 max-w-3xl text-base font-medium leading-7 text-text-secondary sm:mt-3 sm:text-lg">
+          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-text-secondary sm:text-base">
             Monitoramento operacional, financeiro e geográfico consolidado.
           </p>
         </div>
@@ -524,8 +524,8 @@ export function Dashboard() {
 
           <div className="mt-4">
             <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800" role="progressbar" aria-label="Conclusão das tarefas" aria-valuemin={0} aria-valuemax={100} aria-valuenow={taskCompletionRate}>
-              <div 
-                className="bg-emerald-600 dark:bg-emerald-500 h-full rounded-full transition-all duration-1000" 
+              <div
+                className="h-full rounded-full bg-emerald-600 transition-[width] duration-1000 dark:bg-emerald-500"
                 style={{ width: `${taskCompletionRate}%` }}
               />
             </div>

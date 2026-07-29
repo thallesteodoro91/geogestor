@@ -19,12 +19,13 @@ import {
 } from '@phosphor-icons/react';
 import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, SERVICE_TYPES, type BudgetStatus } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Skeleton } from '../../components/Skeleton';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
-import { geoFieldClass, geoKickerClass } from '../../utils/geoTheme';
+import { geoFieldClass } from '../../utils/geoTheme';
 import { BudgetEditor } from './BudgetEditor';
 import { BudgetDetails } from './BudgetDetails';
 import { currencyInputToCents, formatBasisPoints, formatCurrency, formatDate } from './budgetForm';
@@ -267,9 +268,9 @@ export function Orcamentos() {
   return (
     <Layout contentClassName="min-w-0 max-w-[1600px]">
       <div className="min-w-0 max-w-full space-y-7">
+        <ModuleNavigation module="commercial" className="mb-0" />
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <span className={cn(geoKickerClass, 'mb-3')}>Comercial e precifica&ccedil;&atilde;o</span>
             <h1 className="text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">Or&ccedil;amentos</h1>
             <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-text-secondary sm:text-base">Crie propostas t&eacute;cnicas, preserve vers&otilde;es e transforme aprova&ccedil;&otilde;es em projetos e contas a receber rastre&aacute;veis.</p>
           </div>

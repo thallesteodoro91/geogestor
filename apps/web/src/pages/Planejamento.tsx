@@ -369,7 +369,7 @@ export function Planejamento() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <span className={cn(geoKickerClass, 'mb-3')}>Financeiro e estratégia</span>
-            <h1 className="text-4xl font-semibold tracking-tight text-zinc-950 dark:text-white font-heading">
+            <h1 className="font-heading text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
               Planejamento Estratégico
             </h1>
             <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">

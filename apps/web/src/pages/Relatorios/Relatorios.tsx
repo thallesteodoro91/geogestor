@@ -82,7 +82,7 @@ export function Relatorios() {
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
               Exportação
             </span>
-            <h1 className="text-5xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
+            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
               Relatórios & Faturamento
             </h1>
             <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">

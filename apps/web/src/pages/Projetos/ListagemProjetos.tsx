@@ -623,7 +623,7 @@ export function ListagemProjetos() {
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <span className={cn(geoKickerClass, 'mb-2')}>Operações</span>
-            <h1 className="text-4xl font-semibold tracking-tighter text-zinc-950 dark:text-white sm:text-5xl">Projetos</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">Projetos</h1>
           </div>
           <button
             type="button"

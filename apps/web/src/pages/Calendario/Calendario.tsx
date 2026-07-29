@@ -2,6 +2,7 @@ import { Briefcase, Calendar, CalendarBlank, CaretLeft, CaretRight, CheckSquare,
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
+import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -10,7 +11,7 @@ import { FormError, FormField, FormFooter, FormSelect, SwitchField } from '../..
 import { CustomSelect } from '../../components/CustomSelect';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
-import { geoFieldClass, geoGreenSurfaceClass, geoKickerClass } from '../../utils/geoTheme';
+import { geoFieldClass, geoGreenSurfaceClass } from '../../utils/geoTheme';
 import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { apiFetch } from '../../services/apiClient';
 import { AppointmentTypePicker, CalendarDatePicker, MonthYearPicker, TimePicker } from './CalendarControls';
@@ -685,13 +686,13 @@ export function Calendario() {
 
   return (
     <Layout>
-      <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+      <ModuleNavigation module="agenda" />
+      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div className="min-w-0">
-          <span className={cn(geoKickerClass, 'mb-2')}>Gestão de agendas</span>
-          <h1 className="text-4xl font-semibold tracking-tighter text-zinc-950 text-balance sm:text-5xl dark:text-white">
+          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 text-balance sm:text-4xl dark:text-white">
             Calendário
           </h1>
-          <p className="mt-2 max-w-3xl text-base font-medium leading-relaxed text-zinc-500 sm:text-lg dark:text-zinc-400">
+          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-zinc-500 sm:text-base dark:text-zinc-400">
             Agende reuniões e visitas de campo e acompanhe automaticamente os prazos dos projetos.
           </p>
         </div>

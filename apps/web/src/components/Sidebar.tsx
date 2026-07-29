@@ -1,22 +1,18 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation, Link } from 'react-router-dom';
-import { LockKey, X } from '@phosphor-icons/react';
+import { CaretDown, LockKey, X } from '@phosphor-icons/react';
 import { preloadRoute } from '../utils/routePreloaders';
 import { useAppSession } from '../contexts/AppSessionContext';
 import { APP_VERSION } from '../version';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
 import projectsIcon from '../assets/magnific-icons/project_folder.svg';
-import clientsIcon from '../assets/magnific-icons/user_3237472.svg';
 import crmIcon from '../assets/magnific-icons/filter_9757817.svg';
 import calendarIcon from '../assets/magnific-icons/calendar_5684639.svg';
 import topographyIcon from '../assets/magnific-icons/theodolite_7504749.svg';
 import ambientalIcon from '../assets/magnific-icons/plant_2786614.svg';
-import budgetsIcon from '../assets/magnific-icons/profit_6919960.svg';
 import financeIcon from '../assets/magnific-icons/money_7190332.svg';
 import reportsIcon from '../assets/magnific-icons/invoice_9510031.svg';
 import planningIcon from '../assets/magnific-icons/objective_5799225.svg';
-import tasksIcon from '../assets/magnific-icons/list_5406211.svg';
-import importIcon from '../assets/magnific-icons/upload_5406245.svg';
 import recordsIcon from '../assets/magnific-icons/notes_8079875.svg';
 import settingsIcon from '../assets/magnific-icons/settings_4415587.svg';
 import auditIcon from '../assets/magnific-icons/auditor_5807551.svg';
@@ -27,6 +23,7 @@ interface SidebarItem {
   path?: string;
   icon: string;
   created: boolean;
+  activePaths?: string[];
 }
 
 interface SidebarSection {
@@ -93,6 +90,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [administrationOpen, setAdministrationOpen] = useState(false);
 
   useLayoutEffect(() => {
     const node = scrollContainerRef.current;
@@ -132,41 +130,58 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
   const sections: SidebarSection[] = [
     {
-      title: 'OPERAÇÃO',
+      title: 'NAVEGAÇÃO',
       tone: 'field',
       items: [
         { name: 'Visão Geral', path: '/', icon: dashboardIcon, created: true },
+        {
+          name: 'Comercial',
+          path: '/clientes',
+          icon: crmIcon,
+          created: true,
+          activePaths: ['/clientes', '/crm', '/orcamentos'],
+        },
         { name: 'Projetos', path: '/projetos', icon: projectsIcon, created: true },
-        { name: 'Clientes', path: '/clientes', icon: clientsIcon, created: true },
-        { name: 'CRM', path: '/crm', icon: crmIcon, created: true },
-        { name: 'Calendário', path: '/calendario', icon: calendarIcon, created: true },
-        { name: 'Topografia', path: '/topografia', icon: topographyIcon, created: true },
         { name: 'Ambiental', path: '/ambiental', icon: ambientalIcon, created: true },
-        { name: 'Orçamentos', path: '/orcamentos', icon: budgetsIcon, created: true },
-      ],
-    },
-    {
-      title: 'FINANCEIRO',
-      tone: 'finance',
-      items: [
         { name: 'Financeiro', path: '/financeiro', icon: financeIcon, created: true },
-        { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
-        { name: 'Planejamento Estratégico', path: '/planejamento', icon: planningIcon, created: true },
-      ],
-    },
-    {
-      title: 'SISTEMA',
-      tone: 'system',
-      items: [
-        { name: 'Tarefas', path: '/tarefas', icon: tasksIcon, created: true },
-        { name: 'Importação', path: '/importacao', icon: importIcon, created: true },
-        { name: 'Cadastros', path: '/cadastros', icon: recordsIcon, created: true },
-        { name: 'Configurações', path: '/configuracoes', icon: settingsIcon, created: true },
-        { name: 'Logs de Auditoria', path: '/audit-logs', icon: auditIcon, created: true },
-        { name: 'Ajuda', path: '/ajuda', icon: helpIcon, created: true },
+        {
+          name: 'Agenda',
+          path: '/calendario',
+          icon: calendarIcon,
+          created: true,
+          activePaths: ['/calendario', '/tarefas'],
+        },
+        {
+          name: 'Ferramentas',
+          path: '/topografia',
+          icon: topographyIcon,
+          created: true,
+          activePaths: ['/topografia', '/importacao'],
+        },
       ],
     },
   ];
+
+  const administrationItems: SidebarItem[] = [
+    { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
+    { name: 'Planejamento', path: '/planejamento', icon: planningIcon, created: true },
+    { name: 'Cadastros', path: '/cadastros', icon: recordsIcon, created: true },
+    { name: 'Configurações', path: '/configuracoes', icon: settingsIcon, created: true },
+    { name: 'Logs de Auditoria', path: '/audit-logs', icon: auditIcon, created: true },
+    { name: 'Ajuda', path: '/ajuda', icon: helpIcon, created: true },
+  ];
+
+  const isItemActive = (item: SidebarItem) => {
+    const paths = item.activePaths ?? (item.path ? [item.path] : []);
+    return paths.some((path) => (
+      path === '/'
+        ? location.pathname === '/'
+        : location.pathname === path || location.pathname.startsWith(`${path}/`)
+    ));
+  };
+
+  const administrationActive = administrationItems.some(isItemActive);
+  const showAdministration = administrationOpen || administrationActive;
 
   return (
     <>
@@ -225,9 +240,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </span>
               <div className="space-y-1">
                 {section.items.map((item) => {
-                  const isActive = item.path
-                    ? location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path))
-                    : false;
+                  const isActive = isItemActive(item);
 
                   if (item.created && item.path) {
                     return (
@@ -276,6 +289,69 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </div>
             </div>
           ))}
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              aria-expanded={showAdministration}
+              aria-controls="sidebar-administration"
+              onClick={() => setAdministrationOpen((current) => !current)}
+              className={`geo-focus-ring flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-[12px] font-bold tracking-[0.08em] ${
+                administrationActive
+                  ? 'bg-zinc-50 text-zinc-950 ring-1 ring-zinc-200/70 dark:bg-zinc-800/70 dark:text-white dark:ring-zinc-700/70'
+                  : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
+              }`}
+            >
+              <span>GESTÃO E SISTEMA</span>
+              <CaretDown
+                aria-hidden="true"
+                size={16}
+                weight="bold"
+                className={`transition-transform duration-200 motion-reduce:transition-none ${showAdministration ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {showAdministration && (
+              <div id="sidebar-administration" className="space-y-1 border-l border-zinc-200 pl-2 dark:border-zinc-700">
+                {administrationItems.map((item) => {
+                  const isActive = isItemActive(item);
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.path!}
+                      onClick={onClose}
+                      onPointerEnter={() => preloadRoute(item.path!)}
+                      onPointerDown={() => preloadRoute(item.path!)}
+                      onFocus={() => preloadRoute(item.path!)}
+                      aria-current={isActive ? 'page' : undefined}
+                      className={`group relative flex min-h-[50px] items-center rounded-lg px-2.5 text-[13px] font-semibold outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES.system} ${
+                        isActive
+                          ? SECTION_ACTIVE_CLASSES.system
+                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
+                      }`}
+                    >
+                      {isActive && (
+                        <span aria-hidden="true" className={`absolute bottom-2 left-0 top-2 w-1 rounded-r-full ${SECTION_MARKER_CLASSES.system}`} />
+                      )}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center">
+                          <img
+                            src={item.icon}
+                            alt=""
+                            aria-hidden="true"
+                            width={28}
+                            height={28}
+                            className="h-7 w-7 object-contain"
+                          />
+                        </span>
+                        <span className="truncate">{item.name}</span>
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </nav>
 
         <div className="border-t border-zinc-100 p-4 dark:border-zinc-800">

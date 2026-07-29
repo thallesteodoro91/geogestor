@@ -39,7 +39,21 @@ interface SidebarProps {
 
 const SIDEBAR_SCROLL_STORAGE_KEY = 'geogestor_sidebar_scroll_top';
 const SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY = 'geogestor_sidebar_administration_open';
+const ADMINISTRATION_PATHS = [
+  '/relatorios',
+  '/planejamento',
+  '/cadastros',
+  '/configuracoes',
+  '/audit-logs',
+  '/ajuda',
+];
 let sidebarScrollTop = 0;
+
+function isAdministrationPath(pathname: string) {
+  return ADMINISTRATION_PATHS.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
 
 const SECTION_ACTIVE_CLASSES: Record<SidebarSection['tone'], string> = {
   field:
@@ -91,8 +105,14 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousAdministrationActiveRef = useRef(isAdministrationPath(location.pathname));
   const [administrationOpen, setAdministrationOpen] = useState(
-    () => sessionStorage.getItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY) === 'true',
+    () => {
+      const storedPreference = sessionStorage.getItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY);
+      return storedPreference === null
+        ? isAdministrationPath(location.pathname)
+        : storedPreference === 'true';
+    },
   );
 
   useLayoutEffect(() => {
@@ -184,7 +204,17 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   };
 
   const administrationActive = administrationItems.some(isItemActive);
-  const showAdministration = administrationOpen || administrationActive;
+  const showAdministration = administrationOpen;
+
+  useEffect(() => {
+    const wasAdministrationActive = previousAdministrationActiveRef.current;
+    previousAdministrationActiveRef.current = administrationActive;
+
+    if (administrationActive && !wasAdministrationActive) {
+      sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, 'true');
+      setAdministrationOpen(true);
+    }
+  }, [administrationActive]);
 
   const toggleAdministration = () => {
     setAdministrationOpen((current) => {

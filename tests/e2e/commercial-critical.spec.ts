@@ -207,6 +207,17 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
     await expect(administrationMenu).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Relatórios & Faturamento' })).toBeVisible();
+    await administrationMenu.click();
+    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toHaveCount(0);
+
+    await navigateBySidebar(page, 'Comercial');
+    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'false');
+    await administrationMenu.click();
+    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'true');
   });
 
   test('páginas críticas atendem WCAG A/AA sem violações sérias e funcionam em 800×520', async ({ page }) => {

@@ -39,6 +39,7 @@ import {
   filterSearchInputClass
 } from '../../utils/filterStyles';
 import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import { commercialContentClass } from '../../utils/commercialLayout';
 
 export interface Cliente {
   id: string;
@@ -782,7 +783,7 @@ export function ListagemClientes() {
   };
 
   return (
-    <Layout>
+    <Layout contentClassName={commercialContentClass}>
       <ModuleNavigation module="commercial" />
       <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>

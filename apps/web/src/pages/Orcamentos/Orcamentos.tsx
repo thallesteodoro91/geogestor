@@ -26,6 +26,7 @@ import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
+import { commercialContentClass } from '../../utils/commercialLayout';
 import { BudgetEditor } from './BudgetEditor';
 import { BudgetDetails } from './BudgetDetails';
 import { currencyInputToCents, formatBasisPoints, formatCurrency, formatDate } from './budgetForm';
@@ -266,7 +267,7 @@ export function Orcamentos() {
   ];
 
   return (
-    <Layout contentClassName="min-w-0 max-w-[1600px]">
+    <Layout contentClassName={commercialContentClass}>
       <div className="min-w-0 max-w-full space-y-7">
         <ModuleNavigation module="commercial" className="mb-0" />
         <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">

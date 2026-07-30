@@ -24,6 +24,7 @@ import {
   localNavigationIconClass,
   localNavigationItemsClass,
 } from '../../utils/localNavigationStyles';
+import { commercialContentClass } from '../../utils/commercialLayout';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
 
 type CRMOptions = {
@@ -617,7 +618,7 @@ export function CRM() {
 
   if (activeView === 'leads') {
     return (
-      <Layout contentClassName="max-w-[1800px]">
+      <Layout contentClassName={commercialContentClass}>
         <div className="min-w-0 space-y-6">
           <ModuleNavigation module="commercial" className="mb-0" />
           <CRMPageHeader
@@ -642,7 +643,7 @@ export function CRM() {
     const funnelSearchParams = new URLSearchParams(searchParams);
     funnelSearchParams.set('view', 'funil');
     return (
-      <Layout contentClassName="max-w-[1800px]">
+      <Layout contentClassName={commercialContentClass}>
         <div className="min-w-0 space-y-6">
           <ModuleNavigation module="commercial" className="mb-0" />
           <CRMPageHeader description="Acompanhe conversão de leads, valor do pipeline e oportunidades que exigem atenção." />
@@ -718,7 +719,7 @@ export function CRM() {
   }
 
   return (
-    <Layout contentClassName="max-w-[1800px]">
+    <Layout contentClassName={commercialContentClass}>
       <div className="min-w-0 space-y-8">
         <ModuleNavigation module="commercial" className="mb-0" />
         <CRMPageHeader

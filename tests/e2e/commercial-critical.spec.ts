@@ -220,6 +220,47 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(administrationMenu).toHaveAttribute('aria-expanded', 'true');
   });
 
+  test('Clientes, CRM e Orçamentos mantêm a mesma largura no Comercial', async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1440 });
+    await unlock(page);
+    await navigateBySidebar(page, 'Comercial');
+
+    const measureCommercialLayout = async () => {
+      await expect(page.locator('main > div').last()).toHaveClass(/max-w-\[1600px\]/);
+      await expect.poll(async () => (
+        await page.locator('main > div').last().boundingBox()
+      )?.width).toBe(1600);
+      const content = await page.locator('main > div').last().boundingBox();
+      const navigation = await page.locator('nav[aria-label*="Comercial"]').first().boundingBox();
+      if (!content || !navigation) throw new Error('Não foi possível medir o layout Comercial.');
+      return { content, navigation };
+    };
+
+    const clientes = await measureCommercialLayout();
+    await page.getByRole('link', { name: 'CRM e Funil', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'CRM' })).toBeVisible();
+    const crm = await measureCommercialLayout();
+    await page.getByRole('link', { name: 'Orçamentos', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Orçamentos' })).toBeVisible();
+    const orcamentos = await measureCommercialLayout();
+
+    expect(await page.evaluate(() => window.innerWidth)).toBe(2560);
+    for (const [pageName, measurement] of Object.entries({ clientes, crm, orcamentos })) {
+      expect(measurement.content.width, pageName).toBe(1600);
+      expect(measurement.navigation.width, pageName).toBe(1600);
+      expect(measurement.navigation.x).toBe(measurement.content.x);
+      expect(measurement.navigation.x + measurement.navigation.width)
+        .toBe(measurement.content.x + measurement.content.width);
+    }
+
+    expect(crm.content.x).toBe(clientes.content.x);
+    expect(orcamentos.content.x).toBe(clientes.content.x);
+    const horizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(horizontalOverflow).toBe(false);
+  });
+
   test('páginas críticas atendem WCAG A/AA sem violações sérias e funcionam em 800×520', async ({ page }) => {
     await unlock(page);
     await page.setViewportSize({ width: 800, height: 520 });

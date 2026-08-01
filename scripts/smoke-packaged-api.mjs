@@ -11,6 +11,7 @@ if (!fs.existsSync(serverPath)) throw new Error(`API empacotada ausente: ${serve
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'geogestor-package-smoke-'));
 const token = crypto.randomBytes(32).toString('hex');
+const databaseKey = crypto.randomBytes(32).toString('base64');
 const port = 41_000 + crypto.randomInt(1_000);
 const output = [];
 const child = spawn(process.execPath, [serverPath], {
@@ -22,6 +23,8 @@ const child = spawn(process.execPath, [serverPath], {
     PORT: String(port),
     GEOGESTOR_API_TOKEN: token,
     GEOGESTOR_SECRET_KEY: crypto.randomBytes(32).toString('base64'),
+    GEOGESTOR_DB_ENCRYPTION_KEY: databaseKey,
+    GEOGESTOR_DATABASE_WORKER: path.join(path.dirname(serverPath), 'database-security-worker.js'),
     GEOGESTOR_DB_PATH: path.join(scratch, 'geogestor.db'),
     NODE_PATH: path.join(path.dirname(serverPath), 'native_modules')
   },
@@ -91,8 +94,16 @@ try {
       throw new Error('O registro de auditoria expôs uma senha ou token sensível.');
     }
   }
-  if (!fs.existsSync(path.join(scratch, 'geogestor.db'))) throw new Error('Banco inicial vazio não foi criado.');
-  console.log('Smoke test aprovado: API empacotada iniciou, protegeu o acesso, manteve os dados operacionais vazios e auditou a configuração sem expor segredos.');
+  const databasePath = path.join(scratch, 'geogestor.db');
+  if (!fs.existsSync(databasePath)) throw new Error('Banco inicial vazio não foi criado.');
+  const databaseBytes = fs.readFileSync(databasePath);
+  if (databaseBytes.subarray(0, 16).toString('ascii') === 'SQLite format 3\u0000') {
+    throw new Error('O banco empacotado permaneceu em texto claro.');
+  }
+  if (databaseBytes.includes(Buffer.from('GeoGestor Smoke', 'utf8'))) {
+    throw new Error('O banco empacotado expôs dados de teste em texto claro.');
+  }
+  console.log('Smoke test aprovado: API empacotada iniciou com banco criptografado, protegeu o acesso, manteve os dados operacionais vazios e auditou a configuração sem expor segredos.');
 } finally {
   child.kill();
   await new Promise((resolve) => setTimeout(resolve, 500));

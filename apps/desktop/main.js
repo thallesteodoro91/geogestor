@@ -40,6 +40,7 @@ let isQuitting = false;
 let restoreRestartInProgress = false;
 let apiRestartHistory = [];
 let apiRestartTimer = null;
+const runtimeSensitiveValues = new Set();
 
 function reportStartupMilestone(name) {
   if (reportedStartupMilestones.has(name)) return;
@@ -71,7 +72,11 @@ ipcMain.handle('open-diagnostics-folder', async () => {
 function writeApiProcessLog(level, data) {
   try {
     const logPath = path.join(app.getPath('userData'), 'api-process.log');
-    const line = `[${new Date().toISOString()}] [${level}] ${String(data).trim()}\n`;
+    const sanitized = [...runtimeSensitiveValues].reduce(
+      (value, secret) => value.split(secret).join('[REDACTED_SECRET]'),
+      String(data).trim()
+    );
+    const line = `[${new Date().toISOString()}] [${level}] ${sanitized}\n`;
     fs.appendFileSync(logPath, line, { encoding: 'utf8' });
   } catch (error) {
     console.error('[Electron] Não foi possível registrar o log da API:', error);
@@ -192,6 +197,45 @@ function getOrCreateSecretKey() {
   return key;
 }
 
+function databaseKeyId(key) {
+  return crypto.createHash('sha256').update(key, 'utf8').digest('hex').slice(0, 16);
+}
+
+function getOrCreateDatabaseEncryptionKey() {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('O Windows DPAPI não está disponível para proteger a chave do banco de dados.');
+  }
+  const keyPath = path.join(app.getPath('userData'), 'database-key.v1.json');
+  if (fs.existsSync(keyPath)) {
+    const envelope = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    if (envelope.version !== 1 || envelope.protection !== 'electron-safeStorage' || typeof envelope.ciphertext !== 'string') {
+      throw new Error('O arquivo protegido da chave do banco está em formato incompatível.');
+    }
+    const key = safeStorage.decryptString(Buffer.from(envelope.ciphertext, 'base64'));
+    const decoded = Buffer.from(key, 'base64');
+    const valid = decoded.length === 32 && decoded.toString('base64') === key;
+    decoded.fill(0);
+    if (!valid || databaseKeyId(key) !== envelope.keyId) {
+      throw new Error('A chave protegida do banco não pôde ser validada neste perfil do Windows.');
+    }
+    return key;
+  }
+  const key = crypto.randomBytes(32).toString('base64');
+  const encrypted = safeStorage.encryptString(key);
+  const envelope = {
+    version: 1,
+    protection: 'electron-safeStorage',
+    scope: 'current-windows-user',
+    keyId: databaseKeyId(key),
+    createdAt: new Date().toISOString(),
+    ciphertext: encrypted.toString('base64')
+  };
+  const temporaryPath = `${keyPath}.pending`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(envelope)}\n`, { flag: 'wx', mode: 0o600 });
+  fs.renameSync(temporaryPath, keyPath);
+  return key;
+}
+
 function installSecurityHeaders() {
   if (securityHeadersInstalled) return;
   securityHeadersInstalled = true;
@@ -263,6 +307,9 @@ async function startApiServer() {
       console.log('[Electron] Created an empty database in the user data directory');
     }
     const secretKey = getOrCreateSecretKey();
+    const databaseEncryptionKey = getOrCreateDatabaseEncryptionKey();
+    runtimeSensitiveValues.add(secretKey);
+    runtimeSensitiveValues.add(databaseEncryptionKey);
 
     console.log(`[Electron] Starting API server from: ${serverScript} on port ${port}`);
 
@@ -274,6 +321,8 @@ async function startApiServer() {
       GEOGESTOR_WEB_DIST: path.join(process.resourcesPath, 'web'),
       GEOGESTOR_API_TOKEN: apiToken,
       GEOGESTOR_SECRET_KEY: secretKey,
+      GEOGESTOR_DB_ENCRYPTION_KEY: databaseEncryptionKey,
+      GEOGESTOR_DATABASE_WORKER: path.join(process.resourcesPath, 'api', 'database-security-worker.js'),
       GEOGESTOR_DESKTOP_MANAGED: '1',
       NODE_PATH: [
         path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules'),

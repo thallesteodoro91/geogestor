@@ -1,21 +1,33 @@
 import crypto from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Writable } from 'node:stream';
 import { createClient } from '@libsql/client';
-import { db } from '../db';
-import { sql } from 'drizzle-orm';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
-import { MANAGERIAL_FINANCE_MIGRATION } from './runtime-migrations/v4-managerial-finance';
+import { OPERATIONAL_INTEGRITY_MIGRATION } from './runtime-migrations/v7-operational-integrity';
+import { cloneDatabaseEncryptedSync, databaseClientConfig, databaseKeyId, getDatabaseEncryptionKey } from '@geogestor/database';
 
-const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_VERSION = 2;
+const ENCRYPTED_FILE_MAGIC = Buffer.from('GGBAK2\0', 'ascii');
+const ENCRYPTED_FILE_HEADER_BYTES = ENCRYPTED_FILE_MAGIC.length + 12;
+const ENCRYPTED_FILE_TAG_BYTES = 16;
 const DEFAULT_RETENTION = 10;
 const RESTORE_CONFIRMATION = 'RESTORE_GEOGESTOR';
+
+export type BackupExecutionOptions = {
+  destinationDirectory?: string | null;
+  retention?: number;
+  maxStorageBytes?: number;
+};
 
 type BackupFileEntry = {
   path: string;
   sizeBytes: number;
   sha256: string;
+  kind?: 'database' | 'document';
+  logicalPathEncrypted?: string;
 };
 
 export type BackupManifest = {
@@ -27,7 +39,97 @@ export type BackupManifest = {
   type: 'database' | 'complete';
   files: BackupFileEntry[];
   totals: { files: number; bytes: number };
+  encryption?: {
+    algorithm: 'AES-256-GCM';
+    kdf: 'HKDF-SHA-256';
+    keyId: string;
+    salt: string;
+  };
 };
+
+function deriveBackupKey(databaseKey: string, salt: Buffer) {
+  const source = Buffer.from(databaseKey, 'base64');
+  try {
+    return Buffer.from(crypto.hkdfSync('sha256', source, salt, Buffer.from('GeoGestor backup v2', 'utf8'), 32));
+  } finally {
+    source.fill(0);
+  }
+}
+
+function encryptLogicalPath(key: Buffer, value: string) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(Buffer.from('GeoGestor backup path v2', 'utf8'));
+  const ciphertext = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+  return `${iv.toString('base64')}:${cipher.getAuthTag().toString('base64')}:${ciphertext.toString('base64')}`;
+}
+
+function decryptLogicalPath(key: Buffer, value: string) {
+  const parts = value.split(':');
+  if (parts.length !== 3) throw new Error('Caminho protegido do backup em formato inválido.');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(parts[0], 'base64'));
+  decipher.setAAD(Buffer.from('GeoGestor backup path v2', 'utf8'));
+  decipher.setAuthTag(Buffer.from(parts[1], 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(parts[2], 'base64')), decipher.final()]).toString('utf8');
+}
+
+async function encryptFile(source: string, target: string, key: Buffer) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await fs.writeFile(target, Buffer.concat([ENCRYPTED_FILE_MAGIC, iv]), { flag: 'wx' });
+  await pipeline(createReadStream(source), cipher, createWriteStream(target, { flags: 'a' }));
+  await fs.appendFile(target, cipher.getAuthTag());
+}
+
+async function encryptedFileParts(source: string) {
+  const stats = await fs.stat(source);
+  if (stats.size < ENCRYPTED_FILE_HEADER_BYTES + ENCRYPTED_FILE_TAG_BYTES) throw new Error('Arquivo protegido do backup está incompleto.');
+  const handle = await fs.open(source, 'r');
+  try {
+    const header = Buffer.alloc(ENCRYPTED_FILE_HEADER_BYTES);
+    const tag = Buffer.alloc(ENCRYPTED_FILE_TAG_BYTES);
+    await handle.read(header, 0, header.length, 0);
+    await handle.read(tag, 0, tag.length, stats.size - tag.length);
+    if (!header.subarray(0, ENCRYPTED_FILE_MAGIC.length).equals(ENCRYPTED_FILE_MAGIC)) {
+      throw new Error('Arquivo protegido do backup possui assinatura inválida.');
+    }
+    return { stats, iv: header.subarray(ENCRYPTED_FILE_MAGIC.length), tag };
+  } finally {
+    await handle.close();
+  }
+}
+
+async function decryptFile(source: string, target: string, key: Buffer) {
+  const { stats, iv, tag } = await encryptedFileParts(source);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await pipeline(
+    createReadStream(source, { start: ENCRYPTED_FILE_HEADER_BYTES, end: stats.size - ENCRYPTED_FILE_TAG_BYTES - 1 }),
+    decipher,
+    createWriteStream(target, { flags: 'wx' })
+  );
+}
+
+async function verifyEncryptedFile(source: string, key: Buffer) {
+  const { stats, iv, tag } = await encryptedFileParts(source);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  await pipeline(
+    createReadStream(source, { start: ENCRYPTED_FILE_HEADER_BYTES, end: stats.size - ENCRYPTED_FILE_TAG_BYTES - 1 }),
+    decipher,
+    new Writable({ write(_chunk, _encoding, callback) { callback(); } })
+  );
+}
+
+function safeLogicalPath(value: string) {
+  const normalized = value.replace(/\\/g, '/');
+  if (!normalized || normalized.includes('\0') || path.posix.isAbsolute(normalized) || normalized.split('/').includes('..')) {
+    throw new Error('O backup contém um caminho de documento inválido.');
+  }
+  return normalized;
+}
 
 function assertInside(candidate: string, root: string) {
   const relative = path.relative(path.resolve(root), path.resolve(candidate));
@@ -73,7 +175,7 @@ async function renameWithRetry(source: string, target: string) {
 }
 
 async function inspectDatabase(databasePath: string) {
-  const client = createClient({ url: `file:${databasePath}` });
+  const client = createClient(databaseClientConfig(databasePath));
   try {
     const quickCheck = await client.execute('PRAGMA quick_check;');
     const foreignKeys = await client.execute('PRAGMA foreign_key_check;');
@@ -105,27 +207,59 @@ export class BackupService {
     return path.dirname(this.getDatabasePath());
   }
 
-  static getBackupDirectory(): string {
-    return path.join(this.getDataDirectory(), 'backups');
+  static getBackupDirectory(destinationDirectory?: string | null): string {
+    return destinationDirectory?.trim()
+      ? path.resolve(destinationDirectory)
+      : path.join(this.getDataDirectory(), 'backups');
   }
 
-  static async createLocalBackup(): Promise<{
+  static async getStorageStatus(destinationDirectory?: string | null) {
+    const backupDirectory = this.getBackupDirectory(destinationDirectory);
+    await fs.mkdir(backupDirectory, { recursive: true });
+    const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
+    let totalBytes = 0;
+    let versions = 0;
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !/^geogestor-backup-(database|complete)-/.test(entry.name) || entry.name.endsWith('.pending')) continue;
+      const manifest = await fs.readFile(path.join(backupDirectory, entry.name, 'manifest.json'), 'utf8')
+        .then((raw) => JSON.parse(raw) as BackupManifest)
+        .catch(() => null);
+      if (!manifest) continue;
+      versions += 1;
+      totalBytes += Number(manifest.totals?.bytes || 0);
+    }
+    const disk = await fs.statfs(backupDirectory);
+    return {
+      backupDirectory,
+      versions,
+      totalBytes,
+      availableBytes: Number(disk.bavail) * Number(disk.bsize)
+    };
+  }
+
+  static async createLocalBackup(options: BackupExecutionOptions = {}): Promise<{
     backupPath: string;
     bundlePath: string;
     manifestPath: string;
     copiedFiles: string[];
     validation: { quickCheck: 'ok'; foreignKeyViolations: 0 };
   }> {
-    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'database' }));
+    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'database', options }));
   }
 
-  static async createCompleteBackup(filesRootDirectory: string) {
-    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'complete', filesRootDirectory }));
+  static async createCompleteBackup(filesRootDirectory: string, options: BackupExecutionOptions = {}) {
+    return MaintenanceCoordinator.runExclusive('backup', () => this.createBackupBundle({ type: 'complete', filesRootDirectory, options }));
   }
 
-  private static async createBackupBundle(input: { type: 'database' | 'complete'; filesRootDirectory?: string }) {
-    const backupDirectory = this.getBackupDirectory();
+  private static async createBackupBundle(input: { type: 'database' | 'complete'; filesRootDirectory?: string; options?: BackupExecutionOptions }) {
+    const backupDirectory = this.getBackupDirectory(input.options?.destinationDirectory);
     await fs.mkdir(backupDirectory, { recursive: true });
+
+    const available = await fs.statfs(backupDirectory).then((stats) => Number(stats.bavail) * Number(stats.bsize));
+    const databaseBytes = await fs.stat(this.getDatabasePath()).then((stats) => stats.size);
+    if (available < databaseBytes * 2) {
+      throw new Error('NÃ£o hÃ¡ espaÃ§o livre suficiente para criar e validar um novo backup.');
+    }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const bundleName = `geogestor-backup-${input.type}-${timestamp}`;
@@ -147,36 +281,56 @@ export class BackupService {
     const backupDatabasePath = path.join(pendingPath, 'database.db');
 
     try {
-      const safeBackupPath = backupDatabasePath.replace(/\\/g, '/').replace(/'/g, "''");
-      await db.run(sql.raw(`VACUUM INTO '${safeBackupPath}'`));
+      const databaseEncryptionKey = getDatabaseEncryptionKey();
+      const backupSalt = databaseEncryptionKey ? crypto.randomBytes(32) : null;
+      const backupKey = databaseEncryptionKey && backupSalt ? deriveBackupKey(databaseEncryptionKey, backupSalt) : null;
+      cloneDatabaseEncryptedSync(this.getDatabasePath(), backupDatabasePath);
       const databaseInspection = await inspectDatabase(backupDatabasePath);
+      const databaseStats = await fs.stat(backupDatabasePath);
+      const entries: BackupFileEntry[] = [{
+        path: 'database.db',
+        kind: 'database',
+        sizeBytes: databaseStats.size,
+        sha256: await sha256File(backupDatabasePath)
+      }];
 
       if (input.type === 'complete' && input.filesRootDirectory) {
         try {
           const stats = await fs.stat(input.filesRootDirectory);
           if (!stats.isDirectory()) throw new Error('A raiz de documentos não é uma pasta.');
-          await fs.cp(input.filesRootDirectory, path.join(pendingPath, 'files'), { recursive: true, force: false });
+          const sourceRoot = path.resolve(input.filesRootDirectory);
+          for (const sourceFile of await listFiles(sourceRoot)) {
+            const logicalPath = safeLogicalPath(path.relative(sourceRoot, sourceFile));
+            if (backupKey) {
+              const storagePath = `objects/${crypto.randomUUID()}.ggenc`;
+              const target = path.join(pendingPath, storagePath);
+              await encryptFile(sourceFile, target, backupKey);
+              const targetStats = await fs.stat(target);
+              entries.push({
+                path: storagePath,
+                kind: 'document',
+                logicalPathEncrypted: encryptLogicalPath(backupKey, logicalPath),
+                sizeBytes: targetStats.size,
+                sha256: await sha256File(target)
+              });
+            } else {
+              const storagePath = `files/${logicalPath}`;
+              const target = path.join(pendingPath, storagePath);
+              await fs.mkdir(path.dirname(target), { recursive: true });
+              await fs.copyFile(sourceFile, target, fs.constants.COPYFILE_EXCL);
+              const targetStats = await fs.stat(target);
+              entries.push({ path: storagePath, sizeBytes: targetStats.size, sha256: await sha256File(target) });
+            }
+          }
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          await fs.mkdir(path.join(pendingPath, 'files'), { recursive: true });
+          if (!backupKey) await fs.mkdir(path.join(pendingPath, 'files'), { recursive: true });
         }
-      }
-
-      const dataFiles = (await listFiles(pendingPath))
-        .filter((file) => !file.endsWith('manifest.json') && !file.endsWith('COMPLETE') && !file.endsWith('PENDING'));
-      const entries: BackupFileEntry[] = [];
-      for (const file of dataFiles) {
-        const stats = await fs.stat(file);
-        entries.push({
-          path: path.relative(pendingPath, file).replace(/\\/g, '/'),
-          sizeBytes: stats.size,
-          sha256: await sha256File(file)
-        });
       }
 
       const now = new Date().toISOString();
       const manifest: BackupManifest = {
-        formatVersion: BACKUP_FORMAT_VERSION,
+        formatVersion: databaseEncryptionKey ? BACKUP_FORMAT_VERSION : 1,
         application: 'GeoGestor',
         createdAt: now,
         completedAt: now,
@@ -186,19 +340,32 @@ export class BackupService {
         totals: {
           files: entries.length,
           bytes: entries.reduce((sum, file) => sum + file.sizeBytes, 0)
-        }
+        },
+        ...(databaseEncryptionKey && backupSalt ? {
+          encryption: {
+            algorithm: 'AES-256-GCM' as const,
+            kdf: 'HKDF-SHA-256' as const,
+            keyId: databaseKeyId(databaseEncryptionKey)!,
+            salt: backupSalt.toString('base64')
+          }
+        } : {})
       };
+      backupKey?.fill(0);
       await writeJsonAtomic(path.join(pendingPath, 'manifest.json'), manifest);
       await fs.rm(path.join(pendingPath, 'PENDING'), { force: true });
       await fs.writeFile(path.join(pendingPath, 'COMPLETE'), `${manifest.completedAt}\n`, { encoding: 'utf8', flag: 'wx' });
-      await this.validateBackup(bundlePath);
+      await this.validateBackup(bundlePath, backupDirectory);
       await writeJsonAtomic(path.join(backupDirectory, 'last-backup.json'), {
         bundlePath,
         completedAt: manifest.completedAt,
         type: manifest.type,
         schemaVersion: manifest.schemaVersion
       });
-      await this.enforceRetention();
+      await this.enforceRetention(
+        input.options?.retention,
+        backupDirectory,
+        input.options?.maxStorageBytes
+      );
 
       const backupPath = path.join(bundlePath, 'database.db');
       return {
@@ -214,9 +381,9 @@ export class BackupService {
     }
   }
 
-  static async validateBackup(bundlePath: string) {
+  static async validateBackup(bundlePath: string, allowedBackupDirectory = this.getBackupDirectory()) {
     const resolvedBundle = path.resolve(bundlePath);
-    const backupDirectory = path.resolve(this.getBackupDirectory());
+    const backupDirectory = path.resolve(allowedBackupDirectory);
     assertInside(resolvedBundle, backupDirectory);
     const bundleStats = await fs.stat(resolvedBundle);
     if (bundleStats.isFile()) {
@@ -231,13 +398,27 @@ export class BackupService {
     }
     await fs.access(path.join(resolvedBundle, 'COMPLETE'));
     const manifest = JSON.parse(await fs.readFile(path.join(resolvedBundle, 'manifest.json'), 'utf8')) as BackupManifest;
-    if (manifest.formatVersion !== BACKUP_FORMAT_VERSION || manifest.application !== 'GeoGestor') {
+    if (![1, BACKUP_FORMAT_VERSION].includes(manifest.formatVersion) || manifest.application !== 'GeoGestor') {
       throw new Error('Formato de backup incompatível.');
+    }
+    let backupKey: Buffer | null = null;
+    if (manifest.formatVersion === BACKUP_FORMAT_VERSION) {
+      const databaseEncryptionKey = getDatabaseEncryptionKey(true);
+      if (
+        manifest.encryption?.algorithm !== 'AES-256-GCM'
+        || manifest.encryption.kdf !== 'HKDF-SHA-256'
+        || manifest.encryption.keyId !== databaseKeyId(databaseEncryptionKey)
+      ) {
+        throw new Error('O backup foi protegido com outra chave ou possui metadados incompatíveis.');
+      }
+      const salt = Buffer.from(manifest.encryption.salt, 'base64');
+      if (salt.length !== 32) throw new Error('O salt criptográfico do backup é inválido.');
+      backupKey = deriveBackupKey(databaseEncryptionKey, salt);
     }
     if (!Number.isInteger(manifest.schemaVersion) || manifest.schemaVersion < 0) {
       throw new Error('Versão de schema inválida no manifesto do backup.');
     }
-    if (manifest.schemaVersion > MANAGERIAL_FINANCE_MIGRATION.version) {
+    if (manifest.schemaVersion > OPERATIONAL_INTEGRITY_MIGRATION.version) {
       throw new Error('Este backup foi criado por uma versão mais nova do GeoGestor. Atualize o aplicativo antes de restaurar.');
     }
     if (!Array.isArray(manifest.files) || !manifest.totals || !Number.isInteger(manifest.totals.files)) {
@@ -251,6 +432,11 @@ export class BackupService {
       const stats = await fs.stat(filePath);
       if (!stats.isFile() || stats.size !== entry.sizeBytes) throw new Error(`Tamanho divergente no backup: ${entry.path}`);
       if (await sha256File(filePath) !== entry.sha256) throw new Error(`Checksum divergente no backup: ${entry.path}`);
+      if (manifest.formatVersion === BACKUP_FORMAT_VERSION && entry.kind === 'document') {
+        if (!backupKey || !entry.logicalPathEncrypted) throw new Error('Entrada protegida de documento está incompleta.');
+        safeLogicalPath(decryptLogicalPath(backupKey, entry.logicalPathEncrypted));
+        await verifyEncryptedFile(filePath, backupKey);
+      }
       totalBytes += stats.size;
     }
     if (manifest.totals.files !== manifest.files.length || manifest.totals.bytes !== totalBytes) {
@@ -258,6 +444,7 @@ export class BackupService {
     }
     const inspection = await inspectDatabase(path.join(resolvedBundle, 'database.db'));
     if (inspection.schemaVersion !== manifest.schemaVersion) throw new Error('Versão do schema diverge do manifesto.');
+    backupKey?.fill(0);
     return { manifest, quickCheck: 'ok' as const, foreignKeyViolations: 0 as const };
   }
 
@@ -266,9 +453,10 @@ export class BackupService {
     targetDatabasePath: string;
     targetFilesRoot?: string;
     confirmation: string;
+    allowedBackupDirectory?: string;
   }) {
     if (input.confirmation !== RESTORE_CONFIRMATION) throw new Error('Confirmação de restauração inválida.');
-    const validation = await this.validateBackup(input.bundlePath);
+    const validation = await this.validateBackup(input.bundlePath, input.allowedBackupDirectory || this.getBackupDirectory());
     if (validation.manifest.type === 'complete' && !input.targetFilesRoot) {
       throw new Error('A restauração completa exige uma pasta de destino para os documentos.');
     }
@@ -306,10 +494,28 @@ export class BackupService {
       await this.restoreFailureInjector?.('database-installed');
 
       if (validation.manifest.type === 'complete' && targetFilesRoot) {
-        const sourceFiles = path.join(path.resolve(input.bundlePath), 'files');
         pendingFilesPath = `${targetFilesRoot}.restore-${operationId}.pending`;
         safetyFilesPath = `${targetFilesRoot}.before-restore-${operationId}`;
-        await fs.cp(sourceFiles, pendingFilesPath, { recursive: true, force: false });
+        if (validation.manifest.formatVersion === BACKUP_FORMAT_VERSION) {
+          const databaseEncryptionKey = getDatabaseEncryptionKey(true);
+          const salt = Buffer.from(validation.manifest.encryption!.salt, 'base64');
+          const backupKey = deriveBackupKey(databaseEncryptionKey, salt);
+          await fs.mkdir(pendingFilesPath, { recursive: true });
+          try {
+            for (const entry of validation.manifest.files.filter((item) => item.kind === 'document')) {
+              const logicalPath = safeLogicalPath(decryptLogicalPath(backupKey, entry.logicalPathEncrypted!));
+              const source = path.join(path.resolve(input.bundlePath), entry.path);
+              const target = path.join(pendingFilesPath, logicalPath);
+              assertInside(target, pendingFilesPath);
+              await decryptFile(source, target, backupKey);
+            }
+          } finally {
+            backupKey.fill(0);
+          }
+        } else {
+          const sourceFiles = path.join(path.resolve(input.bundlePath), 'files');
+          await fs.cp(sourceFiles, pendingFilesPath, { recursive: true, force: false });
+        }
         try {
           await renameWithRetry(targetFilesRoot, safetyFilesPath);
           filesMovedToSafety = true;
@@ -340,16 +546,29 @@ export class BackupService {
     }
   }
 
-  static async enforceRetention(retention = Number(process.env.GEOGESTOR_BACKUP_RETENTION || DEFAULT_RETENTION)) {
-    const backupDirectory = this.getBackupDirectory();
+  static async enforceRetention(
+    retention = Number(process.env.GEOGESTOR_BACKUP_RETENTION || DEFAULT_RETENTION),
+    backupDirectory = this.getBackupDirectory(),
+    maxStorageBytes = 0
+  ) {
     const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
     const bundles = entries
       .filter((entry) => entry.isDirectory() && /^geogestor-backup-(database|complete)-/.test(entry.name) && !entry.name.endsWith('.pending'))
       .map((entry) => entry.name)
       .sort()
       .reverse();
-    for (const obsolete of bundles.slice(Math.max(1, retention))) {
-      const target = path.join(backupDirectory, obsolete);
+    let accumulatedBytes = 0;
+    for (const [index, bundle] of bundles.entries()) {
+      const target = path.join(backupDirectory, bundle);
+      const manifest = await fs.readFile(path.join(target, 'manifest.json'), 'utf8')
+        .then((raw) => JSON.parse(raw) as BackupManifest)
+        .catch(() => null);
+      const bytes = Number(manifest?.totals?.bytes || 0);
+      accumulatedBytes += bytes;
+      const exceedsCount = index >= Math.max(1, retention);
+      const exceedsStorage = maxStorageBytes > 0 && accumulatedBytes > maxStorageBytes && index > 0;
+      if (!exceedsCount && !exceedsStorage) continue;
+      accumulatedBytes -= bytes;
       assertInside(target, backupDirectory);
       await fs.rm(target, { recursive: true, force: true });
     }

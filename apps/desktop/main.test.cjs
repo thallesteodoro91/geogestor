@@ -45,6 +45,56 @@ globalThis.__readinessHelpers = { waitForManagedApiReady, registerApiRecoveryAtt
   return context.__readinessHelpers;
 }
 
+function loadDatabaseKeyHelpers(userDataPath) {
+  const mainPath = path.join(__dirname, 'main.js');
+  const source = `${fs.readFileSync(mainPath, 'utf8')}
+globalThis.__databaseKeyHelpers = { getOrCreateDatabaseEncryptionKey, databaseKeyId };`;
+  let protectedValue = '';
+  const app = {
+    commandLine: { appendSwitch() {} },
+    isPackaged: true,
+    requestSingleInstanceLock: () => true,
+    on() {},
+    getPath: () => userDataPath,
+    whenReady: () => new Promise(() => {})
+  };
+  const electron = {
+    app,
+    BrowserWindow: {},
+    dialog: {},
+    shell: {},
+    ipcMain: { on() {}, handle() {} },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString(value) {
+        protectedValue = value;
+        return Buffer.from('DPAPI-SYNTHETIC-CIPHERTEXT');
+      },
+      decryptString() {
+        return protectedValue;
+      }
+    },
+    session: {}
+  };
+  const context = {
+    __dirname,
+    Buffer,
+    clearTimeout,
+    console,
+    globalThis: null,
+    process,
+    require(moduleName) {
+      if (moduleName === 'electron') return electron;
+      return require(moduleName);
+    },
+    setTimeout,
+    URL
+  };
+  context.globalThis = context;
+  vm.runInNewContext(source, context, { filename: mainPath });
+  return context.__databaseKeyHelpers;
+}
+
 test('readiness resolve somente após a mensagem IPC ready', async () => {
   const { waitForManagedApiReady } = loadReadinessHelpers();
   const child = new EventEmitter();
@@ -88,4 +138,25 @@ test('supervisão limita reinicializações repetidas e libera nova tentativa ap
   assert.equal(registerApiRecoveryAttempt(base + 2_000), 3);
   assert.equal(registerApiRecoveryAttempt(base + 3_000), null);
   assert.equal(registerApiRecoveryAttempt(base + 5 * 60 * 1000 + 2_001), 1);
+});
+
+test('chave do banco é aleatória, versionada e persistida somente pelo cofre do Windows', () => {
+  const userDataPath = path.join(__dirname, '.test-database-key');
+  fs.rmSync(userDataPath, { recursive: true, force: true });
+  fs.mkdirSync(userDataPath, { recursive: true });
+  try {
+    const { getOrCreateDatabaseEncryptionKey, databaseKeyId } = loadDatabaseKeyHelpers(userDataPath);
+    const first = getOrCreateDatabaseEncryptionKey();
+    const envelopePath = path.join(userDataPath, 'database-key.v1.json');
+    const envelopeText = fs.readFileSync(envelopePath, 'utf8');
+    const envelope = JSON.parse(envelopeText);
+    assert.equal(Buffer.from(first, 'base64').length, 32);
+    assert.equal(envelope.version, 1);
+    assert.equal(envelope.scope, 'current-windows-user');
+    assert.equal(envelope.keyId, databaseKeyId(first));
+    assert.equal(envelopeText.includes(first), false);
+    assert.equal(getOrCreateDatabaseEncryptionKey(), first);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
 });

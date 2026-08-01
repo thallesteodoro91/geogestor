@@ -2,21 +2,37 @@ import { createClient, type Client } from '@libsql/client';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'node:fs/promises';
+import { cloneDatabaseEncryptedSync, databaseClientConfig } from '@geogestor/database';
 import {
   ensureFilesystemOperations,
   FILESYSTEM_OUTBOX_MIGRATION
 } from './runtime-migrations/v2-filesystem-outbox';
-import { ensureClientDocumentIntegrity } from './runtime-migrations/v3-client-document-integrity';
+import {
+  CLIENT_DOCUMENT_INTEGRITY_MIGRATION,
+  ensureClientDocumentIntegrity
+} from './runtime-migrations/v3-client-document-integrity';
 import {
   ensureManagerialFinance,
   MANAGERIAL_FINANCE_MIGRATION
 } from './runtime-migrations/v4-managerial-finance';
+import {
+  ensureStrategicPlanning,
+  STRATEGIC_PLANNING_MIGRATION
+} from './runtime-migrations/v5-strategic-planning';
+import {
+  ensureStrategicGovernance,
+  STRATEGIC_GOVERNANCE_MIGRATION
+} from './runtime-migrations/v6-strategic-governance';
+import {
+  ensureOperationalIntegrity,
+  OPERATIONAL_INTEGRITY_MIGRATION
+} from './runtime-migrations/v7-operational-integrity';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
 import { OperationalLogService } from './operational-log.service';
 
 const dbPath = process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
-const RUNTIME_MIGRATION_VERSION = MANAGERIAL_FINANCE_MIGRATION.version;
-const RUNTIME_MIGRATION_NAME = MANAGERIAL_FINANCE_MIGRATION.name;
+const RUNTIME_MIGRATION_VERSION = OPERATIONAL_INTEGRITY_MIGRATION.version;
+const RUNTIME_MIGRATION_NAME = OPERATIONAL_INTEGRITY_MIGRATION.name;
 const MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 
 type ColumnInfo = {
@@ -1135,10 +1151,9 @@ async function createPreMigrationBackup(client: Client) {
   await fs.mkdir(backupDirectory, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.join(backupDirectory, `before-schema-v${RUNTIME_MIGRATION_VERSION}-${timestamp}.db`);
-  const sqlPath = backupPath.replace(/\\/g, '/').replace(/'/g, "''");
-  await client.execute(`VACUUM INTO '${sqlPath}'`);
+  cloneDatabaseEncryptedSync(dbPath, backupPath);
 
-  const backupClient = createClient({ url: `file:${backupPath}` });
+  const backupClient = createClient(databaseClientConfig(backupPath));
   try {
     const quickCheck = await backupClient.execute('PRAGMA quick_check;');
     const foreignKeys = await backupClient.execute('PRAGMA foreign_key_check;');
@@ -1284,9 +1299,7 @@ async function isCurrentMigrationApplied(client: Client) {
 
 async function executeRuntimeMigrations() {
   const startedAtMs = performance.now();
-  const client = createClient({
-    url: `file:${dbPath}`
-  });
+  const client = createClient(databaseClientConfig(dbPath));
   let transactionStarted = false;
   let migrationLedgerReady = false;
   let backupPath: string | null = null;
@@ -1337,6 +1350,9 @@ async function executeRuntimeMigrations() {
     await fixBrokenForeignKeys(client);
 
     await ensureCoreTables(client);
+    // Bancos das primeiras versões não possuíam a tabela de contatos. Ela precisa
+    // existir antes de reconstruirmos oportunidades com o vínculo opcional de lead.
+    await ensureContatos(client);
     await ensureOpportunityCRM(client);
 
     await addColumnIfTableExists(client, 'configuracoes', 'google_client_id', 'TEXT');
@@ -1507,6 +1523,9 @@ async function executeRuntimeMigrations() {
 
     await ensureBudgetModule(client);
     await ensureManagerialFinance(client);
+    await ensureStrategicPlanning(client);
+    await ensureStrategicGovernance(client);
+    await ensureOperationalIntegrity(client);
 
     // Após migrar, os campos originais poderiam ser descartados, mas o SQLite não permite DROP COLUMN facilmente.
     // Vamos apenas deixá-los null ou ignora-los nas queries futuras.
@@ -1520,6 +1539,12 @@ async function executeRuntimeMigrations() {
     await client.execute('CREATE INDEX IF NOT EXISTS idx_tarefas_cliente_projeto_status ON tarefas(cliente_id, projeto_id, status, data_limite);');
     await client.execute('CREATE INDEX IF NOT EXISTS idx_interacoes_cliente_data ON interacoes_cliente(cliente_id, data);');
     await client.execute('CREATE INDEX IF NOT EXISTS idx_documentos_cliente_projeto_cat ON documentos(cliente_id, projeto_id, categoria_id, caminho);');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_projetos_periodo ON projetos(data_inicio, created_at) WHERE deleted_at IS NULL;');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_orcamentos_periodo ON orcamentos(data_competencia, data_emissao, data_orcamento, created_at) WHERE deleted_at IS NULL;');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_orcamentos_pagamento ON orcamentos(data_pagamento) WHERE deleted_at IS NULL;');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_parcelas_periodo ON parcelas(data_competencia, data_vencimento, data_pagamento, orcamento_id) WHERE deleted_at IS NULL AND cancelada_em IS NULL;');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_recebimentos_periodo ON recebimentos(data_recebimento, parcela_id) WHERE deleted_at IS NULL AND estornado_em IS NULL;');
+    await client.execute('CREATE INDEX IF NOT EXISTS idx_reports_despesas_periodo ON despesas(data_pagamento, data_competencia, data) WHERE deleted_at IS NULL AND cancelada_em IS NULL AND estornada_em IS NULL;');
     await assertForeignKeyIntegrity(client);
     const appliedAt = new Date().toISOString();
     await client.execute({
@@ -1533,6 +1558,45 @@ async function executeRuntimeMigrations() {
           version, name, status, backup_path, error_message, started_at, applied_at, updated_at
         ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
       args: [FILESYSTEM_OUTBOX_MIGRATION.version, FILESYSTEM_OUTBOX_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [CLIENT_DOCUMENT_INTEGRITY_MIGRATION.version, CLIENT_DOCUMENT_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [MANAGERIAL_FINANCE_MIGRATION.version, MANAGERIAL_FINANCE_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [STRATEGIC_PLANNING_MIGRATION.version, STRATEGIC_PLANNING_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [STRATEGIC_GOVERNANCE_MIGRATION.version, STRATEGIC_GOVERNANCE_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `UPDATE schema_migrations
+        SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
+        WHERE version IN (1, ?, ?, ?, ?, ?, ?)`,
+      args: [
+        appliedAt,
+        appliedAt,
+        FILESYSTEM_OUTBOX_MIGRATION.version,
+        CLIENT_DOCUMENT_INTEGRITY_MIGRATION.version,
+        MANAGERIAL_FINANCE_MIGRATION.version,
+        STRATEGIC_PLANNING_MIGRATION.version,
+        STRATEGIC_GOVERNANCE_MIGRATION.version,
+        OPERATIONAL_INTEGRITY_MIGRATION.version
+      ]
     });
     await client.execute({
       sql: `UPDATE schema_migrations

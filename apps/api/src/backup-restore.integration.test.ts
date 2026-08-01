@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { createClient } from '@libsql/client';
+import { createRequire } from 'node:module';
+import { databaseClientConfig } from '@geogestor/database';
 
 const root = path.resolve(process.cwd(), 'scratch', `backup-restore-${process.pid}`);
 const dbPath = path.join(root, 'source', 'geogestor.db');
@@ -12,6 +14,11 @@ const restoredFilesRoot = path.join(root, 'restored-files');
 
 process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_BACKUP_RETENTION = '3';
+const databaseKey = Buffer.alloc(32, 73).toString('base64');
+const requireFromHere = createRequire(__filename);
+process.env.GEOGESTOR_DB_ENCRYPTION_KEY = databaseKey;
+process.env.GEOGESTOR_DATABASE_WORKER = path.resolve(process.cwd(), 'apps/api/src/database-security-worker.ts');
+process.env.GEOGESTOR_DATABASE_WORKER_RUNNER = requireFromHere.resolve('tsx/cli');
 
 async function reset() {
   await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
@@ -27,7 +34,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   ]);
   await runRuntimeMigrations();
 
-  const sourceClient = createClient({ url: `file:${dbPath}` });
+  const sourceClient = createClient(databaseClientConfig(dbPath));
   await sourceClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-backup', 'Cliente sintético'] });
   await sourceClient.execute({
     sql: 'INSERT INTO projetos (id, cliente_id, nome) VALUES (?, ?, ?)',
@@ -40,6 +47,15 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.equal(validation.quickCheck, 'ok');
   assert.equal(validation.foreignKeyViolations, 0);
   assert.equal(validation.manifest.type, 'complete');
+  assert.equal(validation.manifest.formatVersion, 2);
+  assert.equal((await fs.readFile(path.join(backup.bundlePath, 'database.db'))).includes(Buffer.from('Cliente sintético')), false);
+  const encryptedDocument = validation.manifest.files.find((entry) => entry.kind === 'document');
+  assert.ok(encryptedDocument);
+  assert.equal((await fs.readFile(path.join(backup.bundlePath, encryptedDocument.path))).includes(Buffer.from('versão preservada')), false);
+
+  process.env.GEOGESTOR_DB_ENCRYPTION_KEY = Buffer.alloc(32, 74).toString('base64');
+  await assert.rejects(BackupService.validateBackup(backup.bundlePath), /outra chave|incompatíveis/);
+  process.env.GEOGESTOR_DB_ENCRYPTION_KEY = databaseKey;
 
   const corruptBundle = `${backup.bundlePath}-corrupt`;
   await fs.cp(backup.bundlePath, corruptBundle, { recursive: true });
@@ -79,7 +95,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   });
   assert.equal(restore.restored, true);
 
-  const restoredClient = createClient({ url: `file:${restoredDbPath}` });
+  const restoredClient = createClient(databaseClientConfig(restoredDbPath));
   const clients = await restoredClient.execute('SELECT id FROM clientes ORDER BY id');
   const projects = await restoredClient.execute('SELECT id, cliente_id FROM projetos');
   const quickCheck = await restoredClient.execute('PRAGMA quick_check');
@@ -91,7 +107,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.equal(await fs.readFile(path.join(restoredFilesRoot, 'documento.txt'), 'utf8'), 'versão preservada');
 
   await restoredClient.close();
-  const beforeFailureClient = createClient({ url: `file:${restoredDbPath}` });
+  const beforeFailureClient = createClient(databaseClientConfig(restoredDbPath));
   await beforeFailureClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-anterior', 'Estado anterior'] });
   await beforeFailureClient.close();
   await new Promise((resolve) => setTimeout(resolve, 100));
@@ -107,7 +123,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   }), /Falha sintética/);
   BackupService.setRestoreFailureInjectorForTests(null);
 
-  const rolledBackClient = createClient({ url: `file:${restoredDbPath}` });
+  const rolledBackClient = createClient(databaseClientConfig(restoredDbPath));
   const rolledBackClients = await rolledBackClient.execute('SELECT id FROM clientes ORDER BY id');
   assert.deepEqual(rolledBackClients.rows.map((row) => row.id), ['cliente-anterior', 'cliente-backup']);
   assert.equal(await fs.readFile(path.join(restoredFilesRoot, 'documento.txt'), 'utf8'), 'estado anterior');

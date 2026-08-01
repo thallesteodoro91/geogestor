@@ -9,12 +9,15 @@ const outputDir = path.join(__dirname, 'dist');
 fs.rmSync(outputDir, { recursive: true, force: true });
 fs.mkdirSync(outputDir, { recursive: true });
 await esbuild.build({
-  entryPoints: [path.join(__dirname, 'src/server.ts')],
+  entryPoints: {
+    server: path.join(__dirname, 'src/server.ts'),
+    'database-security-worker': path.join(__dirname, 'src/database-security-worker.ts')
+  },
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  outfile: path.join(outputDir, 'server.js'),
+  outdir: outputDir,
   external: [
     // Native Node modules that can't be bundled
     'better-sqlite3',

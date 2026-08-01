@@ -98,6 +98,9 @@ export const projetos = sqliteTable('projetos', {
   return {
     clienteIdIdx: index('idx_projetos_cliente_id').on(table.clienteId),
     statusIdx: index('idx_projetos_status').on(table.status),
+    reportsPeriodIdx: index('idx_reports_projetos_periodo')
+      .on(table.dataInicio, table.createdAt)
+      .where(sql`${table.deletedAt} IS NULL`),
   };
 });
 
@@ -183,6 +186,12 @@ export const orcamentos = sqliteTable('orcamentos', {
     statusIdx: index('idx_orcamentos_status').on(table.status),
     emissaoIdx: index('idx_orcamentos_emissao').on(table.dataEmissao),
     validadeIdx: index('idx_orcamentos_validade').on(table.validadeAte),
+    reportsPeriodIdx: index('idx_reports_orcamentos_periodo')
+      .on(table.dataCompetencia, table.dataEmissao, table.dataOrcamento, table.createdAt)
+      .where(sql`${table.deletedAt} IS NULL`),
+    reportsPaymentIdx: index('idx_reports_orcamentos_pagamento')
+      .on(table.dataPagamento)
+      .where(sql`${table.deletedAt} IS NULL`),
     municipioIdx: index('idx_orcamentos_municipio').on(table.municipio),
     aprovacaoIdempotenteIdx: uniqueIndex('uq_orcamentos_aprovacao_idempotencia').on(table.chaveIdempotenciaAprovacao),
   };
@@ -264,6 +273,9 @@ export const parcelas = sqliteTable('parcelas', {
   return {
     origemIdx: uniqueIndex('uq_parcelas_chave_origem').on(table.chaveOrigem),
     dataVencimentoIdx: index('idx_parcelas_data_vencimento').on(table.dataVencimento),
+    reportsPeriodIdx: index('idx_reports_parcelas_periodo')
+      .on(table.dataCompetencia, table.dataVencimento, table.dataPagamento, table.orcamentoId)
+      .where(sql`${table.deletedAt} IS NULL AND ${table.canceladaEm} IS NULL`),
   };
 });
 
@@ -451,6 +463,9 @@ export const despesas = sqliteTable('despesas', {
     viagemIdIdx: index('idx_despesas_viagem_id').on(table.viagemId),
     dataIdx: index('idx_despesas_data').on(table.data),
     statusIdx: index('idx_despesas_status').on(table.status),
+    reportsPeriodIdx: index('idx_reports_despesas_periodo')
+      .on(table.dataPagamento, table.dataCompetencia, table.data)
+      .where(sql`${table.deletedAt} IS NULL AND ${table.canceladaEm} IS NULL AND ${table.estornadaEm} IS NULL`),
   };
 });
 
@@ -616,7 +631,10 @@ export const recebimentos = sqliteTable('recebimentos', {
   ...timestamps
 }, (table) => ({
   parcelaIdIdx: index('idx_recebimentos_parcela_id').on(table.parcelaId),
-  dataIdx: index('idx_recebimentos_data').on(table.dataRecebimento)
+  dataIdx: index('idx_recebimentos_data').on(table.dataRecebimento),
+  reportsPeriodIdx: index('idx_reports_recebimentos_periodo')
+    .on(table.dataRecebimento, table.parcelaId)
+    .where(sql`${table.deletedAt} IS NULL AND ${table.estornadoEm} IS NULL`)
 }));
 
 export const despesaDocumentos = sqliteTable('despesa_documentos', {
@@ -834,3 +852,192 @@ export const pericias = sqliteTable('pericias', {
     projetoIdIdx: index('idx_pericias_projeto_id').on(table.projetoId),
   };
 });
+
+export const configuracoesOperacionais = sqliteTable('configuracoes_operacionais', {
+  id: text('id').primaryKey(),
+  chave: text('chave').notNull().unique(),
+  valorJson: text('valor_json').notNull(),
+  origem: text('origem').default('aplicacao').notNull(),
+  migradoEm: text('migrado_em'),
+  ...timestamps
+}, (table) => ({
+  chaveIdx: uniqueIndex('uq_configuracoes_operacionais_chave').on(table.chave)
+}));
+
+export const calculosSalvos = sqliteTable('calculos_salvos', {
+  id: text('id').primaryKey(),
+  tipo: text('tipo').notNull(),
+  nome: text('nome').notNull(),
+  clienteId: text('cliente_id').references(() => clientes.id),
+  projetoId: text('projeto_id').references(() => projetos.id),
+  dataCalculo: text('data_calculo').notNull(),
+  entradasJson: text('entradas_json').notNull(),
+  resultadoJson: text('resultado_json').notNull(),
+  unidade: text('unidade'),
+  metodo: text('metodo'),
+  observacoes: text('observacoes'),
+  ...timestamps
+}, (table) => ({
+  tipoDataIdx: index('idx_calculos_salvos_tipo_data').on(table.tipo, table.dataCalculo),
+  clienteIdx: index('idx_calculos_salvos_cliente').on(table.clienteId),
+  projetoIdx: index('idx_calculos_salvos_projeto').on(table.projetoId)
+}));
+
+export const ciclosEstrategicos = sqliteTable('ciclos_estrategicos', {
+  id: text('id').primaryKey(),
+  nome: text('nome').notNull(),
+  dataInicio: text('data_inicio').notNull(),
+  dataFim: text('data_fim').notNull(),
+  visao: text('visao').notNull(),
+  status: text('status').default('rascunho').notNull(),
+  proximaRevisao: text('proxima_revisao'),
+  ...timestamps
+}, (table) => ({
+  statusPeriodoIdx: index('idx_ciclos_estrategicos_status_periodo').on(table.status, table.dataInicio, table.dataFim),
+}));
+
+export const pilaresEstrategicos = sqliteTable('pilares_estrategicos', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  nome: text('nome').notNull(),
+  descricao: text('descricao'),
+  ordem: integer('ordem').default(0).notNull(),
+  ...timestamps
+}, (table) => ({
+  cicloOrdemIdx: index('idx_pilares_estrategicos_ciclo_ordem').on(table.cicloId, table.ordem),
+}));
+
+export const objetivosEstrategicos = sqliteTable('objetivos_estrategicos', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  pilarId: text('pilar_id').references(() => pilaresEstrategicos.id, { onDelete: 'restrict' }).notNull(),
+  titulo: text('titulo').notNull(),
+  descricao: text('descricao'),
+  responsavel: text('responsavel').notNull(),
+  dataLimite: text('data_limite').notNull(),
+  status: text('status').default('nao_iniciado').notNull(),
+  prioridade: text('prioridade').default('media').notNull(),
+  ordem: integer('ordem').default(0).notNull(),
+  ...timestamps
+}, (table) => ({
+  cicloStatusIdx: index('idx_objetivos_estrategicos_ciclo_status').on(table.cicloId, table.status, table.dataLimite),
+  pilarIdx: index('idx_objetivos_estrategicos_pilar').on(table.pilarId),
+  pilarOrdemIdx: index('idx_objetivos_estrategicos_pilar_ordem').on(table.pilarId, table.ordem),
+}));
+
+export const resultadosChave = sqliteTable('resultados_chave', {
+  id: text('id').primaryKey(),
+  objetivoId: text('objetivo_id').references(() => objetivosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  titulo: text('titulo').notNull(),
+  descricao: text('descricao'),
+  linhaBase: real('linha_base').notNull(),
+  meta: real('meta').notNull(),
+  valorAtual: real('valor_atual'),
+  unidade: text('unidade').notNull(),
+  direcao: text('direcao').default('aumentar').notNull(),
+  fonteTipo: text('fonte_tipo').default('manual').notNull(),
+  fonteCodigo: text('fonte_codigo'),
+  fonteRegra: text('fonte_regra'),
+  fontePeriodo: text('fonte_periodo'),
+  fonteRota: text('fonte_rota'),
+  frequencia: text('frequencia').default('mensal').notNull(),
+  ultimaAtualizacao: text('ultima_atualizacao'),
+  confianca: text('confianca').default('media').notNull(),
+  ...timestamps
+}, (table) => ({
+  objetivoIdx: index('idx_resultados_chave_objetivo').on(table.objetivoId),
+  fonteIdx: index('idx_resultados_chave_fonte').on(table.fonteTipo, table.fonteCodigo),
+}));
+
+export const iniciativasEstrategicas = sqliteTable('iniciativas_estrategicas', {
+  id: text('id').primaryKey(),
+  objetivoId: text('objetivo_id').references(() => objetivosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  titulo: text('titulo').notNull(),
+  descricao: text('descricao'),
+  responsavel: text('responsavel').notNull(),
+  dataLimite: text('data_limite').notNull(),
+  progresso: real('progresso').default(0).notNull(),
+  status: text('status').default('planejada').notNull(),
+  orcamentoCentavos: integer('orcamento_centavos'),
+  dependencias: text('dependencias'),
+  proximoMarco: text('proximo_marco'),
+  projetoId: text('projeto_id').references(() => projetos.id, { onDelete: 'set null' }),
+  tarefaId: text('tarefa_id').references(() => tarefas.id, { onDelete: 'set null' }),
+  ...timestamps
+}, (table) => ({
+  objetivoStatusIdx: index('idx_iniciativas_estrategicas_objetivo_status').on(table.objetivoId, table.status, table.dataLimite),
+  projetoIdx: index('idx_iniciativas_estrategicas_projeto').on(table.projetoId),
+  tarefaIdx: index('idx_iniciativas_estrategicas_tarefa').on(table.tarefaId),
+}));
+
+export const checkinsEstrategicos = sqliteTable('checkins_estrategicos', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  objetivoId: text('objetivo_id').references(() => objetivosEstrategicos.id, { onDelete: 'set null' }),
+  data: text('data').notNull(),
+  status: text('status').notNull(),
+  narrativa: text('narrativa').notNull(),
+  confianca: text('confianca').notNull(),
+  bloqueios: text('bloqueios'),
+  decisoes: text('decisoes'),
+  decisoesPendentes: text('decisoes_pendentes'),
+  proximosPassos: text('proximos_passos'),
+  proximaRevisao: text('proxima_revisao'),
+  ...timestamps
+}, (table) => ({
+  cicloDataIdx: index('idx_checkins_estrategicos_ciclo_data').on(table.cicloId, table.data),
+  objetivoIdx: index('idx_checkins_estrategicos_objetivo').on(table.objetivoId),
+}));
+
+export const riscosEstrategicos = sqliteTable('riscos_estrategicos', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  objetivoId: text('objetivo_id').references(() => objetivosEstrategicos.id, { onDelete: 'set null' }),
+  iniciativaId: text('iniciativa_id').references(() => iniciativasEstrategicas.id, { onDelete: 'set null' }),
+  descricao: text('descricao').notNull(),
+  impacto: text('impacto').notNull(),
+  probabilidade: text('probabilidade').notNull(),
+  mitigacao: text('mitigacao'),
+  responsavel: text('responsavel').notNull(),
+  status: text('status').default('aberto').notNull(),
+  ...timestamps
+}, (table) => ({
+  cicloStatusIdx: index('idx_riscos_estrategicos_ciclo_status').on(table.cicloId, table.status),
+  objetivoIdx: index('idx_riscos_estrategicos_objetivo').on(table.objetivoId),
+  iniciativaIdx: index('idx_riscos_estrategicos_iniciativa').on(table.iniciativaId),
+}));
+
+export const decisoesEstrategicas = sqliteTable('decisoes_estrategicas', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  checkinId: text('checkin_id').references(() => checkinsEstrategicos.id, { onDelete: 'set null' }),
+  objetivoId: text('objetivo_id').references(() => objetivosEstrategicos.id, { onDelete: 'set null' }),
+  descricao: text('descricao').notNull(),
+  responsavel: text('responsavel').notNull(),
+  prazo: text('prazo').notNull(),
+  status: text('status').default('pendente').notNull(),
+  concluidaEm: text('concluida_em'),
+  observacaoEncerramento: text('observacao_encerramento'),
+  ...timestamps
+}, (table) => ({
+  cicloStatusPrazoIdx: index('idx_decisoes_estrategicas_ciclo_status_prazo').on(table.cicloId, table.status, table.prazo),
+  checkinIdx: index('idx_decisoes_estrategicas_checkin').on(table.checkinId),
+  objetivoIdx: index('idx_decisoes_estrategicas_objetivo').on(table.objetivoId),
+}));
+
+export const snapshotsEstrategicos = sqliteTable('snapshots_estrategicos', {
+  id: text('id').primaryKey(),
+  cicloId: text('ciclo_id').references(() => ciclosEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  checkinId: text('checkin_id').references(() => checkinsEstrategicos.id, { onDelete: 'cascade' }).notNull(),
+  capturadoEm: text('capturado_em').notNull(),
+  progressoGeral: real('progresso_geral'),
+  objetivosJson: text('objetivos_json').notNull(),
+  riscosJson: text('riscos_json').notNull(),
+  iniciativasJson: text('iniciativas_json').notNull(),
+  decisoesJson: text('decisoes_json').notNull(),
+  dadosDesatualizados: integer('dados_desatualizados').default(0).notNull(),
+  ...timestamps
+}, (table) => ({
+  cicloCapturaIdx: index('idx_snapshots_estrategicos_ciclo_captura').on(table.cicloId, table.capturadoEm),
+  checkinUniqueIdx: uniqueIndex('idx_snapshots_estrategicos_checkin_unique').on(table.checkinId),
+}));

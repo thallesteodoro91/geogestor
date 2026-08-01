@@ -30,6 +30,18 @@ Preencha “resultado observado”, “evidência” e “status” durante a ho
 | Encerrar o processo durante migração, restauração e rotação | Reinício recupera o estado anterior íntegro | A preencher | Windows 11 / 100% | Claro | Matriz de interrupções | Pendente |
 | Inspecionar cofre de chave e processos com ferramentas do Windows | Chave não aparece em texto claro nem chega ao processo de renderização | A preencher | Windows 11 / 100% | N/A | Relatório técnico | Pendente |
 
+## Procedimento reproduzível
+
+Use uma cópia do banco de produção anonimizada e pelo menos um documento de cada tipo aceito. Registre a versão do instalador, versão do Windows, escala, tema, data, responsável e evidência em cada execução.
+
+1. **Teclado e modais:** abra as rotas principais, percorra cada controle com Tab e Shift+Tab, acione botões com Enter e Espaço e feche modais com Esc. Confirme visualmente a entrada e o retorno do foco ao acionador.
+2. **NVDA:** com o leitor ativo, navegue pelo cabeçalho, navegação, filtros, tabelas, feedbacks assíncronos e modais. Registre nomes anunciados, landmarks e qualquer controle sem rótulo.
+3. **Escala e zoom:** repita as rotas Dashboard, Clientes, Projetos, Orçamentos, Financeiro, Relatórios e Planejamento com escalas de 125%, 150% e 200%; em seguida use viewport de 390 px com zoom de 200%. Capture qualquer corte, sobreposição ou rolagem horizontal indevida.
+4. **PDF:** gere orçamento, relatório e laudo com texto longo, acentos, valores altos e múltiplas páginas. Clique duas vezes em Gerar PDF e simule uma falha; deve haver somente uma operação ativa e uma mensagem clara de recuperação.
+5. **Backup e restauração:** crie um backup completo, altere um cliente e um documento, restaure-o e compare os dados e arquivos com o estado anterior. Em seguida tente restaurar um backup inválido para confirmar falha segura.
+6. **Migração e interrupção:** execute a atualização sobre uma cópia legada e, em cópias descartáveis, encerre o processo durante migração, restauração e rotação. Na reabertura, valide que a cópia anterior permanece íntegra ou que a recuperação foi concluída com segurança.
+7. **Proteção local:** verifique os arquivos de banco, WAL, SHM e backup com ferramentas do Windows; confirme que não exibem conteúdo operacional em texto claro e que a chave não aparece em logs nem no processo de renderização.
+
 ## Critério de encerramento
 
 A nota 10/10 depende de todos os itens acima aprovados no instalador final. Falhas devem registrar reprodução, evidência e correção antes de nova homologação.

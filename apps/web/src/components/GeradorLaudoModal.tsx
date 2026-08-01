@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { DatePickerField, FormSelect } from './Form';
 import { useState } from 'react';
 import { Modal } from './Modal';
@@ -32,7 +33,7 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
 
   const handleGenerate = async () => {
     if (!formData.clienteNome || !formData.tecnicoResponsavel) {
-      alert('Preencha os campos obrigatórios (Cliente e Técnico).');
+      toast.error('Preencha os campos obrigatórios (Cliente e Técnico).');
       return;
     }
 
@@ -42,7 +43,7 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
       await gerarLaudoTecnico(formData as LaudoOptions);
       onClose();
     } catch {
-      alert('Não foi possível gerar o PDF. Revise os dados e tente novamente.');
+      toast.error('Não foi possível gerar o PDF. Revise os dados e tente novamente.');
     } finally {
       setIsGenerating(false);
     }

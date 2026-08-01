@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { useCallback, useEffect, useRef, useState, useMemo, type ElementType } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
@@ -409,7 +410,7 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
       }, 10);
     },
     onError: (err: Error) => {
-      alert(`Erro ao enviar mapa: ${err.message}`);
+      toast.error(`Erro ao enviar mapa: ${err.message}`);
     },
     onSettled: () => {
       setIsUploading(false);
@@ -419,7 +420,7 @@ function ClienteMapaCard({ clienteId, className = '' }: { clienteId: string; cla
   const handleFile = (file: File) => {
     const ext = `.${file.name.split('.').pop()?.toLowerCase() || ''}`;
     if (!MAP_EXTENSIONS.includes(ext)) {
-      alert('Envie apenas arquivos de mapa (KML, KMZ, GeoJSON).');
+      toast.error('Envie apenas arquivos de mapa (KML, KMZ, GeoJSON).');
       return;
     }
     setIsUploading(true);
@@ -986,13 +987,13 @@ export function ClienteDetalhes() {
       setShowTaskForm(false);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', id] });
     },
-    onError: () => alert('Erro ao salvar tarefa.')
+    onError: () => toast.error('Erro ao salvar tarefa.')
   });
 
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitulo.trim()) {
-      alert('Por favor, informe o título da tarefa.');
+      toast.error('Por favor, informe o título da tarefa.');
       return;
     }
     addTaskMutation.mutate();
@@ -1007,7 +1008,7 @@ export function ClienteDetalhes() {
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', id] });
     },
-    onError: () => alert('Erro ao excluir tarefa.')
+    onError: () => toast.error('Erro ao excluir tarefa.')
   });
 
   const updateTaskMutation = useMutation({
@@ -1023,7 +1024,7 @@ export function ClienteDetalhes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', id] });
     },
-    onError: () => alert('Erro ao atualizar tarefa.')
+    onError: () => toast.error('Erro ao atualizar tarefa.')
   });
 
   // Agenda mutations
@@ -1077,13 +1078,13 @@ export function ClienteDetalhes() {
       setShowAgendaForm(false);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', id] });
     },
-    onError: () => alert('Erro ao salvar compromisso.')
+    onError: () => toast.error('Erro ao salvar compromisso.')
   });
 
   const handleAddAgenda = (e: React.FormEvent) => {
     e.preventDefault();
     if (!agendaTitulo.trim() || !agendaData) {
-      alert('Preencha os campos obrigatórios.');
+      toast.error('Preencha os campos obrigatórios.');
       return;
     }
     addAgendaMutation.mutate();
@@ -1098,7 +1099,7 @@ export function ClienteDetalhes() {
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', id] });
     },
-    onError: () => alert('Erro ao excluir compromisso.')
+    onError: () => toast.error('Erro ao excluir compromisso.')
   });
 
   const { data: clienteGeoFiles = [] } = useQuery<ClienteGeoFileItem[]>({
@@ -1248,7 +1249,7 @@ export function ClienteDetalhes() {
       setNewDocumentCategoryTone('teal');
     },
     onError: (err: Error) => {
-      alert(`Erro ao salvar categoria: ${err.message}`);
+      toast.error(`Erro ao salvar categoria: ${err.message}`);
     }
   });
 
@@ -1280,7 +1281,7 @@ export function ClienteDetalhes() {
       setEditingDocumentCategoryId(null);
     },
     onError: (err: Error) => {
-      alert(`Erro ao atualizar categoria: ${err.message}`);
+      toast.error(`Erro ao atualizar categoria: ${err.message}`);
     }
   });
 
@@ -1307,7 +1308,7 @@ export function ClienteDetalhes() {
       }
     },
     onError: (err: Error) => {
-      alert(`Erro ao apagar categoria: ${err.message}`);
+      toast.error(`Erro ao apagar categoria: ${err.message}`);
     }
   });
 
@@ -1339,7 +1340,7 @@ export function ClienteDetalhes() {
       }, 10);
     },
     onError: (err: Error) => {
-      alert(`Erro ao enviar arquivo: ${err.message}`);
+      toast.error(`Erro ao enviar arquivo: ${err.message}`);
     },
     onSettled: () => {
       setUploading(false);
@@ -1361,7 +1362,7 @@ export function ClienteDetalhes() {
       }, 10);
     },
     onError: () => {
-      alert('Erro ao excluir o arquivo.');
+      toast.error('Erro ao excluir o arquivo.');
     }
   });
 
@@ -1370,7 +1371,7 @@ export function ClienteDetalhes() {
     const extension = `.${file.name.split('.').pop()?.toLowerCase() || ''}`;
 
     if (!CLIENT_UPLOAD_EXTENSIONS.includes(extension)) {
-      alert('Envie PDF, imagem ou arquivo de mapa KML/KMZ/GeoJSON nesta área.');
+      toast.error('Envie PDF, imagem ou arquivo de mapa KML/KMZ/GeoJSON nesta área.');
       return;
     }
 
@@ -1379,7 +1380,7 @@ export function ClienteDetalhes() {
       const uploadCategory = documentUploadCategory;
 
       if (!uploadCategory) {
-        alert('Informe o nome da categoria antes de enviar o arquivo.');
+        toast.error('Informe o nome da categoria antes de enviar o arquivo.');
         setUploading(false);
         return;
       }
@@ -1387,7 +1388,7 @@ export function ClienteDetalhes() {
       uploadFileMutation.mutate({ file, category: uploadCategory });
     } catch (err) {
       console.error(err);
-      alert('Erro ao processar o arquivo.');
+      toast.error('Erro ao processar o arquivo.');
       setUploading(false);
     }
   };
@@ -1437,7 +1438,7 @@ export function ClienteDetalhes() {
   const handleDeleteDocumentCategory = (category: DocumentoCategoria) => {
     const usageCount = documentCategoryUsageCount.get(category.nome) || 0;
     if (usageCount > 0) {
-      alert('Essa categoria possui documentos vinculados. Para apagar, mova os documentos para outra categoria primeiro.');
+      toast.error('Essa categoria possui documentos vinculados. Para apagar, mova os documentos para outra categoria primeiro.');
       return;
     }
 
@@ -1475,7 +1476,7 @@ export function ClienteDetalhes() {
     });
 
     if (!res.ok) {
-      alert('Não foi possível abrir o arquivo no aplicativo padrão.');
+      toast.error('Não foi possível abrir o arquivo no aplicativo padrão.');
     }
   };
 
@@ -1487,7 +1488,7 @@ export function ClienteDetalhes() {
     });
 
     if (!res.ok) {
-      alert('Não foi possível abrir a pasta local.');
+      toast.error('Não foi possível abrir a pasta local.');
     }
   };
 
@@ -1643,7 +1644,7 @@ export function ClienteDetalhes() {
       setCopiedContactField(field);
       window.setTimeout(() => setCopiedContactField((current) => (current === field ? null : current)), 1400);
     } catch {
-      alert('Não foi possível copiar este dado automaticamente.');
+      toast.error('Não foi possível copiar este dado automaticamente.');
     }
   };
 

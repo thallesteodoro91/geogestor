@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
@@ -245,7 +246,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', id] });
     },
     onError: () => {
-      alert('Erro ao criar tarefa.');
+      toast.error('Erro ao criar tarefa.');
     }
   });
 
@@ -264,7 +265,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', id] });
     },
     onError: () => {
-      alert('Erro ao atualizar tarefa.');
+      toast.error('Erro ao atualizar tarefa.');
     }
   });
 
@@ -280,7 +281,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', id] });
     },
     onError: () => {
-      alert('Erro ao excluir tarefa.');
+      toast.error('Erro ao excluir tarefa.');
     }
   });
 
@@ -301,7 +302,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
     },
     onError: () => {
-      alert('Erro ao criar despesa.');
+      toast.error('Erro ao criar despesa.');
     }
   });
 
@@ -317,7 +318,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['despesas'] });
     },
     onError: () => {
-      alert('Erro ao excluir despesa.');
+      toast.error('Erro ao excluir despesa.');
     }
   });
 
@@ -353,7 +354,7 @@ export function ProjetoDetalhes() {
         invalidateFinancialQueries(queryClient)
       ]);
     },
-    onError: (error: Error) => alert(error.message)
+    onError: (error: Error) => toast.error(error.message)
   });
 
   const uploadFileMutation = useMutation({
@@ -376,7 +377,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['projeto-arquivos', id] });
     },
     onError: (err: Error) => {
-      alert(`Erro ao enviar arquivo: ${err.message}`);
+      toast.error(`Erro ao enviar arquivo: ${err.message}`);
     },
     onSettled: () => {
       setUploading(false);
@@ -394,7 +395,7 @@ export function ProjetoDetalhes() {
       queryClient.invalidateQueries({ queryKey: ['projeto-arquivos', id] });
     },
     onError: () => {
-      alert('Erro ao excluir o arquivo.');
+      toast.error('Erro ao excluir o arquivo.');
     }
   });
 
@@ -410,7 +411,7 @@ export function ProjetoDetalhes() {
       console.log('Pasta aberta:', data.path);
     },
     onError: () => {
-      alert('Não foi possível abrir a pasta local automaticamente. Verifique se o caminho existe.');
+      toast.error('Não foi possível abrir a pasta local automaticamente. Verifique se o caminho existe.');
     }
   });
 
@@ -421,7 +422,7 @@ export function ProjetoDetalhes() {
       uploadFileMutation.mutate(file);
     } catch (err) {
       console.error(err);
-      alert('Erro ao processar o arquivo.');
+      toast.error('Erro ao processar o arquivo.');
       setUploading(false);
     }
   };

@@ -206,7 +206,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                 <div className="font-heading text-lg font-semibold leading-none text-zinc-900 dark:text-white">
                   GeoGestor
                 </div>
-                <span className="rounded-md border border-emerald-600/30 bg-emerald-50 px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-tighter text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950 dark:text-emerald-300">
+                <span className="rounded-md border border-emerald-600/30 bg-emerald-50 px-1.5 py-0.5 font-mono text-[11px] font-extrabold tracking-tighter text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-950 dark:text-emerald-300">
                   v{APP_VERSION}
                 </span>
               </div>

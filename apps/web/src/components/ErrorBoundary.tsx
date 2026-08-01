@@ -59,7 +59,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                     {this.state.error.toString()}
                   </p>
                   {this.state.errorStack && (
-                    <pre className="border-t border-brand-border pt-1 font-mono text-[9px] text-zinc-500 whitespace-pre-wrap dark:text-zinc-400">
+                    <pre className="border-t border-brand-border pt-1 font-mono text-[11px] text-zinc-500 whitespace-pre-wrap dark:text-zinc-400">
                       {this.state.errorStack}
                     </pre>
                   )}

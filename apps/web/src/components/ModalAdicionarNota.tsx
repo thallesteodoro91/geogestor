@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { DatePickerField, FormSelect } from './Form';
 import { apiClient } from '../services/apiClient';
 import { persistOperationalSetting } from '../services/operationalSettings';
@@ -160,7 +161,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
   const handleSubmeter = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!titulo.trim()) {
-      alert('Por favor, informe o título da nota.');
+      toast.error('Por favor, informe o título da nota.');
       return;
     }
     setLoading(true);
@@ -176,7 +177,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
       onSuccess?.();
       onClose();
     } catch {
-      alert('Erro ao salvar nota na Jornada do Cliente.');
+      toast.error('Erro ao salvar nota na Jornada do Cliente.');
     } finally {
       setLoading(false);
     }

@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { DatePickerField } from '../../components/Form';
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
@@ -173,7 +174,7 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
       observacoes: receiptForm.observacoes.trim() || null
     };
     if (payload.valorPrincipal <= 0) {
-      alert('Informe um valor principal maior que zero.');
+      toast.error('Informe um valor principal maior que zero.');
       return;
     }
     setSavingReceipt(true);
@@ -192,7 +193,7 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
       setReceiptHistory([]);
       fetchDados();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Não foi possível registrar o recebimento.');
+      toast.error(error instanceof Error ? error.message : 'Não foi possível registrar o recebimento.');
     } finally {
       setSavingReceipt(false);
     }
@@ -213,7 +214,7 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
       setReceiptHistory([]);
       fetchDados();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Não foi possível estornar o recebimento.');
+      toast.error(error instanceof Error ? error.message : 'Não foi possível estornar o recebimento.');
     } finally {
       setSavingReversal(false);
     }

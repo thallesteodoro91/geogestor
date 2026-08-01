@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
@@ -82,9 +83,9 @@ export function Configuracoes() {
       queryClient.invalidateQueries();
       setShowResetModal(false);
       setResetInputText('');
-      alert('Todas as informações operacionais do GeoGestor foram apagadas com sucesso.');
+      toast.success('Todas as informações operacionais do GeoGestor foram apagadas com sucesso.');
     } catch (err) {
-      alert(`Erro ao apagar informações: ${err instanceof Error ? err.message : 'Falha de comunicação'}`);
+      toast.error(`Erro ao apagar informações: ${err instanceof Error ? err.message : 'Falha de comunicação'}`);
     } finally {
       setResetting(false);
     }
@@ -92,7 +93,7 @@ export function Configuracoes() {
 
   const handleChooseRestoreBundle = async () => {
     if (!window.electronAPI?.selectBackupBundle) {
-      alert('A seleção de backup está disponível somente no aplicativo desktop.');
+      toast.error('A seleção de backup está disponível somente no aplicativo desktop.');
       return;
     }
     const selected = await window.electronAPI.selectBackupBundle();
@@ -110,10 +111,10 @@ export function Configuracoes() {
         bundlePath: restoreBundlePath,
         confirmation: 'RESTAURAR BACKUP DO GEOGESTOR'
       }, { timeoutMs: 60_000 });
-      alert('Backup validado. O GeoGestor será reiniciado para concluir a restauração.');
+      toast.success('Backup validado. O GeoGestor será reiniciado para concluir a restauração.');
     } catch (error) {
       setRestoring(false);
-      alert(error instanceof Error ? error.message : 'Não foi possível restaurar o backup.');
+      toast.error(error instanceof Error ? error.message : 'Não foi possível restaurar o backup.');
     }
   };
 
@@ -161,7 +162,7 @@ export function Configuracoes() {
       termos: templateTermos
     };
     await persistOperationalSetting('geogestor_empresa_template', tData);
-    alert('Identidade Visual & Template de Orçamentos salvos com sucesso!');
+    toast.success('Identidade Visual & Template de Orçamentos salvos com sucesso!');
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -277,7 +278,7 @@ export function Configuracoes() {
             if (status.conectado) {
               setGoogleStatus(status);
               clearInterval(interval);
-              alert('Google Agenda conectada com sucesso!');
+              toast.success('Google Agenda conectada com sucesso!');
             }
           } catch {
             // Ignore polling errors
@@ -287,7 +288,7 @@ export function Configuracoes() {
         setTimeout(() => clearInterval(interval), 120000);
       }
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao gerar URL de conexão do Google.');
+      toast.error(e instanceof Error ? e.message : 'Erro ao gerar URL de conexão do Google.');
     }
   };
 
@@ -296,9 +297,9 @@ export function Configuracoes() {
     try {
       const res = await apiClient.post<{ sent?: number; received?: number }>('/api/google/sync');
       fetchGoogleStatus();
-      alert(`Sincronização concluída!\nEnviados para o Google: ${res.sent || 0}\nRecebidos no GeoGestor: ${res.received || 0}`);
+      toast.success(`Sincronização concluída!\nEnviados para o Google: ${res.sent || 0}\nRecebidos no GeoGestor: ${res.received || 0}`);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao sincronizar com a Google Agenda.');
+      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar com a Google Agenda.');
     } finally {
       setSyncingGoogle(false);
     }
@@ -307,7 +308,7 @@ export function Configuracoes() {
   const handleSaveGoogleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!googleClientSecret.trim() && !config?.googleClientSecretConfigured) {
-      alert('Informe a Chave Secreta do Cliente para configurar a integração.');
+      toast.error('Informe a Chave Secreta do Cliente para configurar a integração.');
       return;
     }
     try {
@@ -317,9 +318,9 @@ export function Configuracoes() {
       });
       fetchGoogleStatus();
       setGoogleClientSecret('');
-      alert('Credenciais da Google Agenda salvas com sucesso!');
+      toast.success('Credenciais da Google Agenda salvas com sucesso!');
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erro ao salvar credenciais.');
+      toast.error(e instanceof Error ? e.message : 'Erro ao salvar credenciais.');
     }
   };
 
@@ -331,10 +332,10 @@ export function Configuracoes() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['configuracoes'] });
       queryClient.invalidateQueries({ queryKey: ['projetos'] });
-      alert('Configurações salvas com sucesso!');
+      toast.success('Configurações salvas com sucesso!');
     },
     onError: () => {
-      alert('Erro ao salvar as configurações no servidor.');
+      toast.error('Erro ao salvar as configurações no servidor.');
     }
   });
 
@@ -344,10 +345,10 @@ export function Configuracoes() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['sistema-info'] });
-      alert(`Backup criado com sucesso:\n${data.backupPath}`);
+      toast.success(`Backup criado com sucesso:\n${data.backupPath}`);
     },
     onError: () => {
-      alert('Erro ao criar backup local do banco de dados.');
+      toast.error('Erro ao criar backup local do banco de dados.');
     }
   });
 
@@ -358,10 +359,10 @@ export function Configuracoes() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['sistema-info'] });
       const sizeInfo = data.totalBytes ? `\nTamanho copiado: ${formatBytes(data.totalBytes)} em ${data.totalFiles || 0} arquivo(s)` : '';
-      alert(`Backup completo criado com sucesso:\nBanco: ${data.backupPath}\nArquivos: ${data.filesBackupPath}${sizeInfo}`);
+      toast.success(`Backup completo criado com sucesso:\nBanco: ${data.backupPath}\nArquivos: ${data.filesBackupPath}${sizeInfo}`);
     },
     onError: () => {
-      alert('Erro ao criar backup completo. Verifique se a pasta de arquivos está configurada e acessível.');
+      toast.error('Erro ao criar backup completo. Verifique se a pasta de arquivos está configurada e acessível.');
     }
   });
 
@@ -370,7 +371,7 @@ export function Configuracoes() {
       return apiClient.post('/api/sistema/abrir-pasta-dados');
     },
     onError: () => {
-      alert('Erro ao abrir a pasta de dados local.');
+      toast.error('Erro ao abrir a pasta de dados local.');
     }
   });
 
@@ -410,7 +411,7 @@ export function Configuracoes() {
         createFullBackupMutation.mutate();
       }
     } catch (err) {
-      alert(`Erro ao preparar backup completo: ${err instanceof Error ? err.message : 'falha desconhecida'}`);
+      toast.error(`Erro ao preparar backup completo: ${err instanceof Error ? err.message : 'falha desconhecida'}`);
     } finally {
       setCheckingFullBackup(false);
     }
@@ -419,7 +420,7 @@ export function Configuracoes() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!empresaNome.trim() || !dadosPasta.trim()) {
-      alert('Preencha os campos obrigatórios.');
+      toast.error('Preencha os campos obrigatórios.');
       return;
     }
 
@@ -706,7 +707,7 @@ export function Configuracoes() {
                       <div className="bg-emerald-500/10 dark:bg-emerald-950/40 p-3 rounded-xl border border-emerald-500/20">
                         <p className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Versão do Aplicativo</p>
                         <p className="text-base font-heading font-extrabold text-emerald-950 dark:text-emerald-100 mt-0.5 flex items-center gap-2">
-                          v{APP_VERSION} <span className="text-[9px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">Atualizado</span>
+                          v{APP_VERSION} <span className="text-[11px] font-mono font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">Atualizado</span>
                         </p>
                       </div>
                       <div className="bg-zinc-50 dark:bg-zinc-950 p-3 rounded-xl border border-zinc-200 dark:border-zinc-800">
@@ -1079,9 +1080,9 @@ export function Configuracoes() {
                                   googleSyncActive: false
                                 });
                                 fetchGoogleStatus();
-                                alert('Conta Google desconectada!');
+                                toast.success('Conta Google desconectada!');
                               } catch {
-                                alert('Erro ao desconectar conta Google.');
+                                toast.error('Erro ao desconectar conta Google.');
                               }
                             }
                           }}

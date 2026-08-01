@@ -381,7 +381,7 @@ function LayoutShell({
           </div>
           <div>
             <p className="font-heading text-sm font-semibold leading-none text-zinc-900 dark:text-white">GeoGestor</p>
-            <span className="text-[9px] text-zinc-500 font-sans tracking-wide">GESTÃO</span>
+            <span className="text-[11px] text-zinc-500 font-sans tracking-wide">GESTÃO</span>
           </div>
         </div>
         
@@ -398,7 +398,7 @@ function LayoutShell({
               {unreadNotifications.length > 0 && (
                 <span
                   aria-hidden="true"
-                  className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-red-500 px-1 text-[9px] font-bold leading-none text-white dark:border-zinc-900"
+                  className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-white bg-red-500 px-1 text-[11px] font-bold leading-none text-white dark:border-zinc-900"
                 >
                   {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
                 </span>
@@ -478,7 +478,7 @@ function LayoutShell({
             {unreadNotifications.length > 0 && (
               <span
                 aria-hidden="true"
-                className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[9px] font-bold leading-none text-white dark:border-zinc-950"
+                className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[11px] font-bold leading-none text-white dark:border-zinc-950"
               >
                 {unreadNotifications.length > 9 ? '9+' : unreadNotifications.length}
               </span>

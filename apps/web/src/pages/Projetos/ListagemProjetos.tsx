@@ -501,7 +501,7 @@ export function ListagemProjetos() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao excluir projeto';
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -520,7 +520,7 @@ export function ListagemProjetos() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro desconhecido';
-      alert(`Erro ao enviar arquivo: ${msg}`);
+      toast.error(`Erro ao enviar arquivo: ${msg}`);
     },
     onSettled: () => {
       setUploading(false);
@@ -536,7 +536,7 @@ export function ListagemProjetos() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao excluir o arquivo.';
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -597,7 +597,7 @@ export function ListagemProjetos() {
       const { gerarRelatorioProjeto } = await import('../../utils/pdfGenerator');
       await gerarRelatorioProjeto(projeto);
     } catch {
-      alert('Erro ao gerar o PDF do projeto.');
+      toast.error('Erro ao gerar o PDF do projeto.');
     }
   };
 
@@ -606,7 +606,7 @@ export function ListagemProjetos() {
       await apiClient.post(`/api/projetos/${id}/abrir-pasta`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao tentar abrir a pasta.';
-      alert(msg);
+      toast.error(msg);
     }
   };
 
@@ -615,7 +615,7 @@ export function ListagemProjetos() {
     try {
       uploadFileMutation.mutate(file);
     } catch {
-      alert('Erro ao processar o arquivo.');
+      toast.error('Erro ao processar o arquivo.');
       setUploading(false);
     }
   };

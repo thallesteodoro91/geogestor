@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Buildings, MagnifyingGlass, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
@@ -84,7 +85,7 @@ export function Propriedades() {
       await queryClient.invalidateQueries({ queryKey: ['properties'] });
       setDeleteTarget(null);
     },
-    onError: (error: Error) => { setDeleteTarget(null); alert(error.message); },
+    onError: (error: Error) => { setDeleteTarget(null); toast.error(error.message); },
   });
 
   const openCreate = () => {

@@ -510,7 +510,7 @@ export function ListagemClientes() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar interação.';
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -530,7 +530,7 @@ export function ListagemClientes() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao enviar arquivo';
-      alert(`Erro ao enviar arquivo: ${msg}`);
+      toast.error(`Erro ao enviar arquivo: ${msg}`);
     },
     onSettled: () => {
       setUploading(false);
@@ -546,7 +546,7 @@ export function ListagemClientes() {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Erro ao excluir o arquivo.';
-      alert(msg);
+      toast.error(msg);
     }
   });
 
@@ -558,7 +558,7 @@ export function ListagemClientes() {
       uploadFileMutation.mutate(file);
     } catch (err) {
       console.error(err);
-      alert('Erro ao processar o arquivo.');
+      toast.error('Erro ao processar o arquivo.');
       setUploading(false);
     }
   };

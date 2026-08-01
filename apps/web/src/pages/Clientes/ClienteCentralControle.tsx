@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -304,7 +305,7 @@ export function ClienteCentralControle({
       setShowEventForm(false);
       queryClient.invalidateQueries({ queryKey: ['cliente-historico', clienteId] });
     },
-    onError: () => alert('Erro ao registrar evento na jornada do cliente.')
+    onError: () => toast.error('Erro ao registrar evento na jornada do cliente.')
   });
 
   const updateEventMutation = useMutation({
@@ -331,7 +332,7 @@ export function ClienteCentralControle({
       setShowEventForm(false);
       queryClient.invalidateQueries({ queryKey: ['cliente-historico', clienteId] });
     },
-    onError: () => alert('Erro ao atualizar evento da jornada do cliente.')
+    onError: () => toast.error('Erro ao atualizar evento da jornada do cliente.')
   });
 
   const addTaskMutation = useMutation({
@@ -363,7 +364,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['tarefas'] });
       if (taskProjetoId) queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', taskProjetoId] });
     },
-    onError: () => alert('Erro ao criar tarefa.')
+    onError: () => toast.error('Erro ao criar tarefa.')
   });
 
   const updateTaskMutation = useMutation({
@@ -385,7 +386,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['tarefas'] });
     },
-    onError: () => alert('Erro ao atualizar tarefa.')
+    onError: () => toast.error('Erro ao atualizar tarefa.')
   });
 
   const deleteTaskMutation = useMutation({
@@ -399,7 +400,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['cliente-central-tarefas', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['tarefas'] });
     },
-    onError: () => alert('Erro ao excluir tarefa.')
+    onError: () => toast.error('Erro ao excluir tarefa.')
   });
 
   const addAgendaMutation = useMutation({
@@ -430,7 +431,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['compromissos'] });
     },
-    onError: () => alert('Erro ao criar compromisso na agenda.')
+    onError: () => toast.error('Erro ao criar compromisso na agenda.')
   });
 
   const updateAgendaMutation = useMutation({
@@ -453,7 +454,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['compromissos'] });
     },
-    onError: () => alert('Erro ao atualizar compromisso na agenda.')
+    onError: () => toast.error('Erro ao atualizar compromisso na agenda.')
   });
 
   const deleteAgendaMutation = useMutation({
@@ -475,7 +476,7 @@ export function ClienteCentralControle({
       queryClient.invalidateQueries({ queryKey: ['cliente-central-compromissos', clienteId] });
       queryClient.invalidateQueries({ queryKey: ['compromissos'] });
     },
-    onError: () => alert('Erro ao excluir compromisso da agenda.')
+    onError: () => toast.error('Erro ao excluir compromisso da agenda.')
   });
 
   const timelineItems = useMemo(() => {

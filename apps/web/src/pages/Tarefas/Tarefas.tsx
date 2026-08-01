@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
@@ -129,7 +130,7 @@ export function Tarefas() {
         setTarefas(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
       }
     } catch {
-      alert('Erro ao atualizar status da tarefa');
+      toast.error('Erro ao atualizar status da tarefa');
     }
   };
 
@@ -189,7 +190,7 @@ export function Tarefas() {
         throw new Error('Não foi possível excluir a tarefa.');
       }
     } catch {
-      alert('Não foi possível excluir a tarefa. Tente novamente.');
+      toast.error('Não foi possível excluir a tarefa. Tente novamente.');
     } finally {
       setDeleting(false);
     }

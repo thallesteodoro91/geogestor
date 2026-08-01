@@ -10,6 +10,14 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { normalizeBudgetStatus } from '@geogestor/contracts';
 import { LegacyFinanceDomainService } from '../services/legacy-finance-domain.service';
 import {
+  centsSchema,
+  isoDateSchema,
+  legacyBudgetCostSchema,
+  legacyBudgetItemSchema,
+  nullableCentsSchema,
+  nullableDateSchema
+} from './financeiro.schemas';
+import {
   calculateInstallmentSettlement,
   calculateReceiptCash,
   normalizeExpenseCategoryCode
@@ -24,22 +32,6 @@ const todayKey = () => {
 };
 
 type IdParams = { id: string };
-
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Data inválida');
-const nullableDateSchema = isoDateSchema.nullable().optional();
-const centsSchema = z.number().int().min(0).max(9_000_000_000);
-const nullableCentsSchema = centsSchema.nullable().optional();
-const legacyBudgetItemSchema = z.object({
-  descricao: z.string().trim().min(1).max(500),
-  quantidade: z.number().finite().positive().max(1_000_000),
-  valorUnitario: centsSchema,
-  // Mantido no contrato por compatibilidade; o valor persistido é recalculado no servidor.
-  total: centsSchema
-});
-const legacyBudgetCostSchema = z.object({
-  descricao: z.string().trim().min(1).max(500),
-  valor: centsSchema
-});
 
 async function syncInstallmentSettlement(tx: any, parcelaId: string) {
   const [parcela] = await tx.select().from(schema.parcelas)

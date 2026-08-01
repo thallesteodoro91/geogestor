@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Layout } from '../../components/Layout';
+import { PageFilterBar } from '../../components/PageFilterBar';
+import { PageHeader } from '../../components/PageHeader';
 import { 
   BookOpen, MagnifyingGlass, Question, Sliders, Users, 
   FolderOpen, Coins, Shield, Keyboard, ArrowRight,
@@ -7,6 +9,7 @@ import {
 } from '@phosphor-icons/react';
 import { motion } from 'framer-motion';
 import { APP_VERSION } from '../../version';
+import { filterClearButtonClass, filterSearchInputClass } from '../../utils/filterStyles';
 
 interface HelpArticle {
   id: string;
@@ -149,41 +152,40 @@ export function Ajuda() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-            Documentação Interna
-          </span>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Central de Ajuda
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Manual operacional offline, guias rápidos e configurações do GeoGestor.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Documentação interna"
+        title="Central de Ajuda"
+        description="Manual operacional offline, guias rápidos e configurações do GeoGestor."
+      />
 
       {/* Search Input Box */}
-      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 dark:ring-white/10 shadow-sm mb-12 flex flex-col md:flex-row items-center gap-4">
-        <div className="relative flex-1 w-full">
-          <MagnifyingGlass className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 dark:text-zinc-400" />
+      <PageFilterBar
+        search={
+          <div className="relative min-w-0">
+          <label htmlFor="help-search" className="sr-only">Pesquisar manuais e guias de suporte</label>
+          <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-400" />
           <input 
-            type="text" 
-            placeholder="Pesquisar manuais e guias de suporte..." 
+            id="help-search"
+            name="helpSearch"
+            type="search"
+            autoComplete="off"
+            placeholder="Pesquisar manuais e guias de suporte…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl pl-12 pr-6 py-4 text-zinc-800 dark:text-zinc-200 placeholder-zinc-500 dark:placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-white transition-all font-medium"
+            className={`${filterSearchInputClass} pl-9`}
           />
-        </div>
-        {searchQuery && (
+          </div>
+        }
+        sorting={searchQuery ? (
           <button 
+            type="button"
             onClick={() => setSearchQuery('')}
-            className="text-sm font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-950 dark:hover:text-white px-4 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-950 rounded-lg"
+            className={`${filterClearButtonClass} inline-flex items-center justify-center px-4`}
           >
-            Limpar Busca
+            Limpar busca
           </button>
-        )}
-      </div>
+        ) : null}
+      />
 
       {/* Categories Horizontal Selector */}
       <div className="flex items-center gap-3 overflow-x-auto pb-4 mb-12 border-b border-zinc-100 dark:border-zinc-800">

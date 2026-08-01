@@ -1,12 +1,8 @@
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { BUDGET_STATUS_LABELS } from '@geogestor/contracts/src/budgets';
 import { formatCurrency, formatDate } from './budgetForm';
 import type { BudgetDetail } from './types';
-
-// @ts-expect-error pdfmake não publica uma tipagem estável para o VFS empacotado.
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+import { loadPdfMake } from '../../utils/loadPdfMake';
 
 export interface CompanyTemplate {
   logo?: string;
@@ -229,6 +225,7 @@ export function professionalBudgetPdfFileName(budget: BudgetDetail) {
   return `${fileName}.pdf`;
 }
 
-export function generateProfessionalBudgetPdf(budget: BudgetDetail) {
-  pdfMake.createPdf(createProfessionalBudgetPdfDefinition(budget)).download(professionalBudgetPdfFileName(budget));
+export async function generateProfessionalBudgetPdf(budget: BudgetDetail) {
+  const make = await loadPdfMake();
+  make.createPdf(createProfessionalBudgetPdfDefinition(budget)).download(professionalBudgetPdfFileName(budget));
 }

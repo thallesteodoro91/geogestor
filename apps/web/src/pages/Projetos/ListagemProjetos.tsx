@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
+import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { DatePickerField, FormSelect } from '../../components/Form';
 import { FileUploadModal } from '../../components/FileUploadModal';
@@ -10,7 +11,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient, getDownloadUrl } from '../../services/apiClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, ArrowUpRight, FolderOpen, Folder, PresentationChart, Files, FilePdf, FileDoc, FileText, FileDashed, Trash, MapPin, Compass, SquaresFour, MapTrifold, DownloadSimple, MagnifyingGlass, ChartBar, Clock, CheckCircle, TrendUp, Warning } from '@phosphor-icons/react';
-import { ProjetosMap } from './ProjetosMap';
+import { Skeleton } from '../../components/Skeleton';
 import { BarChart, Bar, Cell, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, PieChart, Pie } from 'recharts';
 import { chartTextColor, chartBorder, chartLegendStyle, chartCursor, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
@@ -18,8 +19,18 @@ import { DynamicTooltip } from '../../components/charts/DynamicTooltip';
 import { RichTooltip } from '../../components/charts/RichTooltip';
 import { cn } from '../../utils/cn';
 import { useDebounce } from '../../hooks/useDebounce';
-import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
-import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import {
+  headerPrimaryActionButtonClass,
+  headerPrimaryActionIconClass,
+  primarySmallActionButtonClass,
+  secondarySmallActionButtonClass,
+} from '../../utils/actionStyles';
+import { geoFieldClass } from '../../utils/geoTheme';
+import {
+  localNavigationBarClass,
+  localNavigationButtonClass,
+  localNavigationIconClass,
+} from '../../utils/localNavigationStyles';
 import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
 import { ProjectFormModal } from './ProjectFormModal';
 import { resolveProjectFormCopy, type ProjectModalContext, type ProjectModalTab } from './projectForm';
@@ -37,13 +48,11 @@ import folderIcon from '../../assets/magnific-icons/project_folder.svg';
 import windowsIcon from '../../assets/magnific-icons/laptop_5938907.svg';
 import filterIcon from '../../assets/magnific-icons/filter_9757817.svg';
 
-interface Cliente {
-  id: string;
-  nome: string;
-}
+const ProjetosMap = lazy(() => import('./ProjetosMap').then((module) => ({ default: module.ProjetosMap })));
 
 interface OrcamentoInfo {
   clienteId: string;
+  projetoId?: string | null;
   status: string;
   valorTotal: number;
 }
@@ -52,6 +61,14 @@ interface DespesaInfo {
   projetoId?: string | null;
   valor: number;
 }
+
+type ProjectViewMode = 'grid' | 'map' | 'operacional';
+
+const projectViewTabs: Array<{ mode: ProjectViewMode; label: string }> = [
+  { mode: 'grid', label: 'Projetos' },
+  { mode: 'map', label: 'Mapa' },
+  { mode: 'operacional', label: 'Estatísticas' }
+];
 
 interface Projeto {
   id: string;
@@ -91,6 +108,14 @@ interface ProjetoArquivo {
   path: string;
   sizeBytes: number;
   modifiedAt: string;
+}
+
+interface ProjectPage {
+  items: Projeto[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 const projectSelectClass = cn(geoFieldClass, 'h-12 w-full cursor-pointer px-4 font-medium');
@@ -183,6 +208,7 @@ export function ListagemProjetos() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const handledRouteActionRef = useRef(false);
+  const viewTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const [showModal, setShowModal] = useState(false);
   const [selectedProjeto, setSelectedProjeto] = useState<Projeto | null>(null);
@@ -194,7 +220,7 @@ export function ListagemProjetos() {
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
 
   const viewParam = searchParams.get('visualizacao');
-  const viewMode: 'grid' | 'map' | 'operacional' = viewParam === 'mapa'
+  const viewMode: ProjectViewMode = viewParam === 'mapa'
     ? 'map'
     : viewParam === 'estatisticas'
       ? 'operacional'
@@ -204,20 +230,35 @@ export function ListagemProjetos() {
   const tipoFilter = searchParams.get('tipo') || 'Todos';
   const dataInicioFilter = searchParams.get('inicio') || '';
   const dataFimFilter = searchParams.get('fim') || '';
+  const page = Math.max(1, Number(searchParams.get('pagina')) || 1);
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const updateProjectQuery = useCallback((key: string, value: string, defaultValue = '') => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       if (!value || value === defaultValue) next.delete(key);
       else next.set(key, value);
+      if (key !== 'pagina' && key !== 'visualizacao') next.delete('pagina');
       return next;
     }, { replace: true });
   }, [setSearchParams]);
 
-  const setViewMode = useCallback((mode: 'grid' | 'map' | 'operacional') => {
+  const setViewMode = useCallback((mode: ProjectViewMode) => {
     const urlValue = mode === 'map' ? 'mapa' : mode === 'operacional' ? 'estatisticas' : '';
     updateProjectQuery('visualizacao', urlValue);
   }, [updateProjectQuery]);
+  const handleViewTabKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % projectViewTabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + projectViewTabs.length) % projectViewTabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = projectViewTabs.length - 1;
+    if (nextIndex === null) return;
+
+    event.preventDefault();
+    setViewMode(projectViewTabs[nextIndex].mode);
+    viewTabRefs.current[nextIndex]?.focus();
+  }, [setViewMode]);
   const setSearchTerm = useCallback((value: string) => updateProjectQuery('busca', value), [updateProjectQuery]);
   const setStatusFilter = useCallback((value: string) => updateProjectQuery('status', value, 'Todos'), [updateProjectQuery]);
   const setTipoFilter = useCallback((value: string) => updateProjectQuery('tipo', value, 'Todos'), [updateProjectQuery]);
@@ -226,7 +267,7 @@ export function ListagemProjetos() {
   const clearProjectFilters = useCallback(() => {
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      ['busca', 'status', 'tipo', 'inicio', 'fim'].forEach((key) => next.delete(key));
+      ['busca', 'status', 'tipo', 'inicio', 'fim', 'pagina'].forEach((key) => next.delete(key));
       return next;
     }, { replace: true });
   }, [setSearchParams]);
@@ -250,28 +291,27 @@ export function ListagemProjetos() {
 
   // Queries
   const {
-    data: projetos = [],
+    data: projectPage,
     isLoading: projectsLoading,
     isError: projectsError,
     error: projectsErrorDetails,
     refetch: refetchProjects
-  } = useQuery<Projeto[]>({
-    queryKey: ['projetos'],
-    queryFn: () => apiClient.get<Projeto[]>('/api/projetos')
+  } = useQuery<ProjectPage>({
+    queryKey: ['projetos', 'page', page, debouncedSearchTerm, statusFilter, tipoFilter, dataInicioFilter, dataFimFilter],
+    queryFn: () => {
+      const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '48' });
+      if (debouncedSearchTerm.trim()) params.set('q', debouncedSearchTerm.trim());
+      if (statusFilter !== 'Todos') params.set('status', statusFilter);
+      if (tipoFilter !== 'Todos') params.set('tipo', tipoFilter);
+      if (dataInicioFilter) params.set('inicio', dataInicioFilter);
+      if (dataFimFilter) params.set('fim', dataFimFilter);
+      return apiClient.get<ProjectPage>(`/api/projetos?${params}`);
+    }
   });
-
-  const {
-    data: clientes = [],
-    isLoading: clientsLoading,
-    isError: clientsError,
-    refetch: refetchClients
-  } = useQuery<Cliente[]>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get<Cliente[]>('/api/clientes')
-  });
-
-  const loading = projectsLoading || clientsLoading;
-  const pageError = projectsError || clientsError;
+  const projetos = projectPage?.items || [];
+  const loading = projectsLoading;
+  const pageError = projectsError;
+  const totalProjetos = projectPage?.total || 0;
 
   const {
     data: orcamentos = [],
@@ -281,7 +321,7 @@ export function ListagemProjetos() {
   } = useQuery<OrcamentoInfo[]>({
     queryKey: ['orcamentos-financeiro'],
     queryFn: () => apiClient.get<OrcamentoInfo[]>('/api/financeiro/orcamentos'),
-    enabled: viewMode === 'operacional'
+    enabled: viewMode === 'operacional' && totalProjetos > 0
   });
 
   const {
@@ -292,13 +332,12 @@ export function ListagemProjetos() {
   } = useQuery<DespesaInfo[]>({
     queryKey: ['despesas-financeiro'],
     queryFn: () => apiClient.get<DespesaInfo[]>('/api/financeiro/despesas'),
-    enabled: viewMode === 'operacional'
+    enabled: viewMode === 'operacional' && totalProjetos > 0
   });
   const operationalLoading = budgetsLoading || expensesLoading;
   const operationalError = budgetsError || expensesError;
 
   // Calculate Operational Stats
-  const totalProjetos = projetos.length;
   const projetosConcluidos = projetos.filter((p) => p.status === 'Concluído' || p.status === 'Finalizado').length;
   const projetosEmAndamento = projetos.filter((p) => p.status === 'Em Andamento').length;
   const projetosAtrasados = projetos.filter(p => {
@@ -394,9 +433,8 @@ export function ListagemProjetos() {
     : null;
 
   const projectComparisonData = projetos.map((proj) => {
-    const relatedBudgets = orcamentos.filter((o) => o.clienteId === proj.clienteId && isApprovedBudgetStatus(o.status));
-    const clientProjects = projetos.filter((p) => p.clienteId === proj.clienteId).length;
-    const estimatedReceita = relatedBudgets.reduce((acc: number, o) => acc + o.valorTotal, 0) / (clientProjects || 1);
+    const relatedBudgets = orcamentos.filter((o) => o.projetoId === proj.id && isApprovedBudgetStatus(o.status));
+    const estimatedReceita = relatedBudgets.reduce((acc: number, o) => acc + o.valorTotal, 0);
 
     const projectExpenses = despesas.filter((d) => d.projetoId === proj.id);
     const totalExpenses = projectExpenses.reduce((acc: number, d) => acc + d.valor, 0);
@@ -427,34 +465,11 @@ export function ListagemProjetos() {
     }))
     .filter((item) => item.count > 0);
   const projectStatuses = Array.from(new Set(projetos.map((projeto) => projeto.status).filter(Boolean))) as string[];
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
-
-  const filteredProjetos = projetos.filter((projeto) => {
-    const query = debouncedSearchTerm.trim().toLowerCase();
-    const searchable = [
-      projeto.nome,
-      projeto.clienteNome,
-      projeto.descricao,
-      projeto.status,
-      projeto.tipo,
-      projeto.cidade,
-      projeto.municipio,
-      projeto.matricula,
-      projeto.car,
-      projeto.ccir,
-      projeto.itr
-    ].filter(Boolean).join(' ').toLowerCase();
-    const matchesSearch = !query || searchable.includes(query);
-    const matchesStatus = statusFilter === 'Todos' || projeto.status === statusFilter;
-    const matchesTipo = tipoFilter === 'Todos' || projeto.tipo === tipoFilter;
-    const matchesStart = !dataInicioFilter || (projeto.dataInicio && projeto.dataInicio >= dataInicioFilter);
-    const matchesEnd = !dataFimFilter || (projeto.dataInicio && projeto.dataInicio <= dataFimFilter);
-    return matchesSearch && matchesStatus && matchesTipo && matchesStart && matchesEnd;
-  });
+  const filteredProjetos = projetos;
   const hasProjectFilters = Boolean(searchTerm || statusFilter !== 'Todos' || tipoFilter !== 'Todos' || dataInicioFilter || dataFimFilter);
-  const filteredProjectsLabel = filteredProjetos.length === 0
+  const filteredProjectsLabel = totalProjetos === 0
     ? 'Nenhum projeto exibido'
-    : `${numberFormatter.format(filteredProjetos.length)} ${filteredProjetos.length === 1 ? 'projeto exibido' : 'projetos exibidos'}`;
+    : `${numberFormatter.format(totalProjetos)} ${totalProjetos === 1 ? 'projeto encontrado' : 'projetos encontrados'}`;
 
   const { data: filesData = { files: [], path: '' }, isLoading: arquivosLoading } = useQuery<{ files: ProjetoArquivo[], path: string }>({
     queryKey: ['projeto-arquivos', showArquivosModal],
@@ -527,15 +542,13 @@ export function ListagemProjetos() {
 
   // Action methods
   const openCreateModal = useCallback((initialClienteId?: string, initialTab: ProjectModalTab = 'projeto', contexto: ProjectModalContext = 'projeto') => {
-    const nextClienteId = initialClienteId && clientes.some((cliente) => cliente.id === initialClienteId)
-      ? initialClienteId
-      : '';
+    const nextClienteId = initialClienteId || '';
     setSelectedProjeto(null);
     setModalContext(contexto);
     setInitialProjectClientId(nextClienteId);
     setInitialProjectTab(initialTab);
     setShowModal(true);
-  }, [clientes]);
+  }, []);
 
   const openEditModal = async (proj: Projeto) => {
     setEditingProjectId(proj.id);
@@ -560,14 +573,14 @@ export function ListagemProjetos() {
 
   useEffect(() => {
     const routeState = location.state as { createForClienteId?: string; modalTab?: ProjectModalTab; openCreateModal?: boolean; contexto?: string } | null;
-    if (handledRouteActionRef.current || (!routeState?.createForClienteId && !routeState?.openCreateModal) || clientsLoading) return;
+    if (handledRouteActionRef.current || (!routeState?.createForClienteId && !routeState?.openCreateModal)) return;
 
     handledRouteActionRef.current = true;
     const routeContext: ProjectModalContext = routeState.contexto === 'ambiental' || routeState.contexto === 'licenciamento'
       ? routeState.contexto
       : 'projeto';
     openCreateModal(routeState.createForClienteId, routeState.modalTab || 'projeto', routeContext);
-  }, [clientsLoading, clientes, location.state, openCreateModal]);
+  }, [location.state, openCreateModal]);
 
   const handleDelete = (id: string, name: string) => {
     setConfirmData({
@@ -582,7 +595,7 @@ export function ListagemProjetos() {
   const handleGenerateProjectPdf = async (projeto: Projeto) => {
     try {
       const { gerarRelatorioProjeto } = await import('../../utils/pdfGenerator');
-      gerarRelatorioProjeto(projeto);
+      await gerarRelatorioProjeto(projeto);
     } catch {
       alert('Erro ao gerar o PDF do projeto.');
     }
@@ -619,58 +632,74 @@ export function ListagemProjetos() {
 
   return (
     <Layout>
-      <header className="mb-8 min-w-0 max-w-full">
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="min-w-0">
-            <span className={cn(geoKickerClass, 'mb-2')}>Operações</span>
-            <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">Projetos</h1>
-          </div>
+      <PageHeader
+        eyebrow="Operações"
+        title="Projetos"
+        description="Monitoramento de processos ambientais, georreferenciamento e topografia."
+        action={
           <button
             type="button"
             onClick={() => openCreateModal()}
-            className={cn(primaryActionButtonClass, 'min-h-11 shrink-0 gap-2.5 px-5 py-2.5 text-sm font-bold')}
+            className={headerPrimaryActionButtonClass}
           >
             <span>Novo Projeto</span>
-            <span aria-hidden="true" className={cn(primaryActionIconClass, 'h-5 w-5 group-hover:translate-x-0.5')}>
+            <span aria-hidden="true" className={headerPrimaryActionIconClass}>
               <Plus weight="bold" className="h-3.5 w-3.5" />
             </span>
           </button>
-        </div>
-        <div className="mt-3 flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <p className="min-w-0 max-w-2xl break-words text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
-            Monitoramento de processos ambientais, georreferenciamento e topografia.
-          </p>
-          <div aria-label="Selecionar visualização" className={cn(geoTabListClass, 'grid w-full min-w-0 max-w-full grid-cols-3 overflow-hidden rounded-lg sm:w-auto')}>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'grid'}
-              onClick={() => setViewMode('grid')}
-              className={geoTabButtonClass(viewMode === 'grid', 'system', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
-            >
-              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'grid', 'system', 'h-6 w-6 rounded-md')}><SquaresFour weight={viewMode === 'grid' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
-              <span>Projetos</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'map'}
-              onClick={() => setViewMode('map')}
-              className={geoTabButtonClass(viewMode === 'map', 'field', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
-            >
-              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'map', 'field', 'h-6 w-6 rounded-md')}><MapTrifold weight={viewMode === 'map' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
-              <span>Mapa</span>
-            </button>
-            <button
-              type="button"
-              aria-pressed={viewMode === 'operacional'}
-              onClick={() => setViewMode('operacional')}
-              className={geoTabButtonClass(viewMode === 'operacional', 'finance', 'min-h-10 w-full min-w-0 shrink justify-center rounded-md px-2 py-2 text-xs sm:px-3 sm:text-sm')}
-            >
-              <span aria-hidden="true" className={geoTabIconClass(viewMode === 'operacional', 'finance', 'h-6 w-6 rounded-md')}><ChartBar weight={viewMode === 'operacional' ? 'fill' : 'regular'} className="h-3.5 w-3.5" /></span>
-              <span>Estatísticas</span>
-            </button>
-          </div>
-        </div>
-      </header>
+        }
+        navigation={
+          <nav aria-label="Selecionar visualização" className={localNavigationBarClass}>
+            <div role="tablist" className="grid w-max min-w-[32rem] grid-cols-3 gap-3">
+              <button
+                id="project-tab-grid"
+                ref={(node) => { viewTabRefs.current[0] = node; }}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === 'grid'}
+                aria-controls="project-panel-grid"
+                tabIndex={viewMode === 'grid' ? 0 : -1}
+                onClick={() => setViewMode('grid')}
+                onKeyDown={(event) => handleViewTabKeyDown(event, 0)}
+                className={localNavigationButtonClass(viewMode === 'grid', 'system', 'w-full justify-start')}
+              >
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'grid', 'system')}><SquaresFour weight={viewMode === 'grid' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span>Projetos</span>
+              </button>
+              <button
+                id="project-tab-map"
+                ref={(node) => { viewTabRefs.current[1] = node; }}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === 'map'}
+                aria-controls="project-panel-map"
+                tabIndex={viewMode === 'map' ? 0 : -1}
+                onClick={() => setViewMode('map')}
+                onKeyDown={(event) => handleViewTabKeyDown(event, 1)}
+                className={localNavigationButtonClass(viewMode === 'map', 'field', 'w-full justify-start')}
+              >
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'map', 'field')}><MapTrifold weight={viewMode === 'map' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span>Mapa</span>
+              </button>
+              <button
+                id="project-tab-operational"
+                ref={(node) => { viewTabRefs.current[2] = node; }}
+                type="button"
+                role="tab"
+                aria-selected={viewMode === 'operacional'}
+                aria-controls="project-panel-operational"
+                tabIndex={viewMode === 'operacional' ? 0 : -1}
+                onClick={() => setViewMode('operacional')}
+                onKeyDown={(event) => handleViewTabKeyDown(event, 2)}
+                className={localNavigationButtonClass(viewMode === 'operacional', 'finance', 'w-full justify-start')}
+              >
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'operacional', 'finance')}><ChartBar weight={viewMode === 'operacional' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span>Estatísticas</span>
+              </button>
+            </div>
+          </nav>
+        }
+      />
 
       {loading ? (
         <ProjectsPageSkeleton />
@@ -686,33 +715,15 @@ export function ListagemProjetos() {
           </p>
           <button
             type="button"
-            onClick={() => void Promise.all([refetchProjects(), refetchClients()])}
+            onClick={() => void refetchProjects()}
             className={cn(secondarySmallActionButtonClass, 'mt-6 min-h-11 px-5')}
           >
             Tentar novamente
           </button>
         </section>
-      ) : totalProjetos === 0 ? (
-        <section className="geo-card flex min-h-[380px] min-w-0 max-w-full flex-col items-center justify-center px-6 py-14 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-primary-400/10 text-brand-primary-700 ring-1 ring-brand-primary-300/25 dark:text-brand-primary-200">
-            <FolderOpen aria-hidden="true" weight="duotone" className="h-8 w-8" />
-          </span>
-          <h2 className="mt-6 max-w-full break-words text-xl font-semibold text-zinc-950 dark:text-white sm:text-2xl">Você ainda não possui projetos cadastrados</h2>
-          <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
-            Crie seu primeiro projeto para acompanhar produtividade, custos, receitas e prazos.
-          </p>
-          <button
-            type="button"
-            onClick={() => openCreateModal()}
-            className={cn(primarySmallActionButtonClass, 'mt-7 min-h-11 px-5')}
-          >
-            <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
-            Criar primeiro projeto
-          </button>
-        </section>
       ) : (
         <>
-          {viewMode !== 'operacional' && (
+          {viewMode !== 'operacional' && totalProjetos > 0 && (
             <>
               <section aria-label="Resumo dos projetos" className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <ProjectMetricCard label="Total de projetos" value={numberFormatter.format(totalProjetos)} tone="brand" icon={<Folder aria-hidden="true" className="h-5 w-5" />} />
@@ -809,14 +820,32 @@ export function ListagemProjetos() {
           <AnimatePresence mode="wait">
         {viewMode === 'operacional' && (
           <motion.div
+            id="project-panel-operational"
             key="operacional"
+            role="tabpanel"
+            aria-labelledby="project-tab-operational"
+            tabIndex={0}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.25 }}
             className="space-y-6"
           >
-          {operationalLoading ? (
+          {totalProjetos === 0 ? (
+            <section className="geo-card flex min-h-[380px] flex-col items-center justify-center px-6 py-14 text-center">
+              <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-700 ring-1 ring-emerald-400/20 dark:text-emerald-200">
+                <ChartBar aria-hidden="true" weight="duotone" className="h-8 w-8" />
+              </span>
+              <h2 className="mt-6 text-xl font-semibold text-zinc-950 dark:text-white sm:text-2xl">Ainda não há dados para gerar estatísticas</h2>
+              <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
+                Cadastre o primeiro projeto para acompanhar produtividade, prazos, custos, receitas e distribuição por status.
+              </p>
+              <button type="button" onClick={() => openCreateModal()} className={cn(primarySmallActionButtonClass, 'mt-7 min-h-11 px-5')}>
+                <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
+                Criar primeiro projeto
+              </button>
+            </section>
+          ) : operationalLoading ? (
             <ProjectsPageSkeleton />
           ) : operationalError ? (
             <section role="alert" className="geo-card flex min-h-[280px] flex-col items-center justify-center p-8 text-center">
@@ -981,14 +1010,32 @@ export function ListagemProjetos() {
         
         {viewMode === 'grid' && (
           <motion.div
+            id="project-panel-grid"
             key="grid"
+            role="tabpanel"
+            aria-labelledby="project-tab-grid"
+            tabIndex={0}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.25 }}
             className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
           >
-        {filteredProjetos.length === 0 ? (
+        {totalProjetos === 0 ? (
+          <section className="geo-card col-span-full flex min-h-[380px] flex-col items-center justify-center px-6 py-14 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-primary-400/10 text-brand-primary-700 ring-1 ring-brand-primary-300/25 dark:text-brand-primary-200">
+              <FolderOpen aria-hidden="true" weight="duotone" className="h-8 w-8" />
+            </span>
+            <h2 className="mt-6 max-w-full break-words text-xl font-semibold text-zinc-950 dark:text-white sm:text-2xl">Você ainda não possui projetos cadastrados</h2>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
+              Crie seu primeiro projeto para acompanhar produtividade, custos, receitas e prazos.
+            </p>
+            <button type="button" onClick={() => openCreateModal()} className={cn(primarySmallActionButtonClass, 'mt-7 min-h-11 px-5')}>
+              <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
+              Criar primeiro projeto
+            </button>
+          </section>
+        ) : filteredProjetos.length === 0 ? (
           <div className="geo-empty-state col-span-full flex flex-col items-center justify-center p-16 text-center">
             <div className="w-20 h-20 bg-zinc-50 dark:bg-zinc-950 rounded-full flex items-center justify-center mb-6 ring-8 ring-zinc-50/50 dark:ring-zinc-950/50">
               <img src={filterIcon} alt="" aria-hidden="true" className="w-10 h-10 object-contain opacity-40 grayscale" />
@@ -1121,14 +1168,32 @@ export function ListagemProjetos() {
 
         {viewMode === 'map' && (
           <motion.div 
+            id="project-panel-map"
             key="map"
+            role="tabpanel"
+            aria-labelledby="project-tab-map"
+            tabIndex={0}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.25 }}
             className="w-full"
           >
-            {filteredProjetos.length === 0 ? (
+            {totalProjetos === 0 ? (
+              <div className="geo-empty-state flex min-h-[380px] flex-col items-center justify-center p-10 text-center">
+                <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-700 ring-1 ring-cyan-400/20 dark:text-cyan-200">
+                  <MapTrifold aria-hidden="true" weight="duotone" className="h-8 w-8" />
+                </span>
+                <h2 className="mt-6 text-xl font-semibold text-zinc-950 dark:text-white sm:text-2xl">Nenhum projeto georreferenciado para mostrar</h2>
+                <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  Cadastre um projeto e informe suas coordenadas para visualizar a localização no mapa.
+                </p>
+                <button type="button" onClick={() => openCreateModal()} className={cn(primarySmallActionButtonClass, 'mt-7 min-h-11 px-5')}>
+                  <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
+                  Criar projeto
+                </button>
+              </div>
+            ) : filteredProjetos.length === 0 ? (
               <div className="geo-empty-state flex min-h-[300px] flex-col items-center justify-center p-10 text-center">
                 <MapTrifold aria-hidden="true" weight="duotone" className="h-9 w-9 text-zinc-400" />
                 <h2 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">Nenhum projeto para mostrar no mapa</h2>
@@ -1136,7 +1201,9 @@ export function ListagemProjetos() {
                 <button type="button" onClick={clearProjectFilters} className={cn(secondarySmallActionButtonClass, 'mt-5 min-h-11 px-5')}>Limpar filtros</button>
               </div>
             ) : (
-              <ProjetosMap projetos={filteredProjetos} />
+              <Suspense fallback={<Skeleton className="h-[520px] w-full rounded-2xl" />}>
+                <ProjetosMap projetos={filteredProjetos} />
+              </Suspense>
             )}
           </motion.div>
         )}
@@ -1144,11 +1211,18 @@ export function ListagemProjetos() {
         </>
       )}
 
+      {!loading && !pageError && (projectPage?.totalPages || 1) > 1 && (
+        <nav aria-label="Paginação de projetos" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <button type="button" disabled={page <= 1} onClick={() => updateProjectQuery('pagina', String(page - 1), '1')} className={cn(secondarySmallActionButtonClass, 'min-h-11 disabled:cursor-not-allowed disabled:opacity-50')}>Anterior</button>
+          <p className="text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">Página {page} de {projectPage?.totalPages || 1}</p>
+          <button type="button" disabled={page >= (projectPage?.totalPages || 1)} onClick={() => updateProjectQuery('pagina', String(page + 1), '1')} className={cn(secondarySmallActionButtonClass, 'min-h-11 disabled:cursor-not-allowed disabled:opacity-50')}>Próxima</button>
+        </nav>
+      )}
+
       {/* Cadastro e edição de projetos */}
       <ProjectFormModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
-        clientes={clientes}
         context={modalContext}
         project={selectedProjeto}
         initialClientId={initialProjectClientId}

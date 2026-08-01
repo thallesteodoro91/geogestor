@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, isNull, desc, count, sum, not, and, sql, getTableColumns } from 'drizzle-orm';
+import { eq, isNull, desc, asc, count, sum, not, and, or, like, sql, getTableColumns } from 'drizzle-orm';
 import { z } from 'zod';
 import { ClientePatchPayloadSchema, ClientePayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -118,13 +118,54 @@ export async function clientesRoutes(server: FastifyInstance) {
     schema: {
       querystring: z.object({
         page: z.coerce.number().min(1).default(1),
-        limit: z.coerce.number().min(1).max(500).default(100)
+        limit: z.coerce.number().min(1).max(1000).default(100),
+        mode: z.enum(['legacy', 'page']).default('legacy'),
+        q: z.string().trim().max(200).optional(),
+        status: z.string().trim().max(100).optional(),
+        categoria: z.string().trim().max(100).optional(),
+        origem: z.string().trim().max(100).optional(),
+        ordenar: z.enum(['recentes', 'antigos', 'az', 'za']).default('recentes')
       })
     }
   }, async (request, reply) => {
-    const { page, limit } = request.query;
+    const { page, limit, mode, q, status, categoria, origem, ordenar } = request.query;
     try {
       const offset = (page - 1) * limit;
+      const conditions = [isNull(schema.clientes.deletedAt)];
+      if (q) {
+        const search = `%${q}%`;
+        conditions.push(or(
+          like(schema.clientes.nome, search),
+          like(schema.clientes.email, search),
+          like(schema.clientes.telefone, search),
+          like(schema.clientes.celular, search),
+          like(schema.clientes.cpf, search),
+          like(schema.clientes.cnpj, search),
+          like(schema.clientes.documento, search),
+          like(schema.clientes.endereco, search),
+          like(schema.clientes.bairro, search)
+        )!);
+      }
+      if (status) {
+        conditions.push(status === 'Ativo'
+          ? or(eq(schema.clientes.situacao, status), isNull(schema.clientes.situacao))!
+          : eq(schema.clientes.situacao, status));
+      }
+      if (categoria) conditions.push(like(schema.clientes.categoria, `%${categoria}%`));
+      if (origem) {
+        conditions.push(or(
+          eq(schema.clientes.origemPrincipal, origem),
+          like(schema.clientes.origem, `%${origem}%`)
+        )!);
+      }
+      const whereClause = and(...conditions);
+      const orderBy = ordenar === 'az'
+        ? asc(schema.clientes.nome)
+        : ordenar === 'za'
+          ? desc(schema.clientes.nome)
+          : ordenar === 'antigos'
+            ? asc(schema.clientes.createdAt)
+            : desc(schema.clientes.createdAt);
       const clientesList = await db.select({
         ...getTableColumns(schema.clientes),
         propriedadesCount: sql<number>`CAST(
@@ -139,14 +180,81 @@ export async function clientesRoutes(server: FastifyInstance) {
           AS INTEGER
         )`
       }).from(schema.clientes)
-        .where(isNull(schema.clientes.deletedAt))
+        .where(whereClause)
         .limit(limit)
         .offset(offset)
-        .orderBy(desc(schema.clientes.createdAt));
-      return clientesList;
+        .orderBy(orderBy);
+
+      if (mode === 'legacy') return clientesList;
+
+      const [{ total }] = await db.select({ total: count() })
+        .from(schema.clientes)
+        .where(whereClause);
+      return {
+        items: clientesList,
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit))
+      };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao buscar clientes' });
+    }
+  });
+
+  zServer.get('/options', {
+    schema: {
+      querystring: z.object({
+        q: z.string().trim().max(200).optional(),
+        selectedId: z.string().uuid().optional(),
+        page: z.coerce.number().min(1).default(1),
+        limit: z.coerce.number().min(1).max(100).default(50),
+        mode: z.enum(['legacy', 'page']).default('legacy')
+      })
+    }
+  }, async (request, reply) => {
+    const { q, selectedId, page, limit, mode } = request.query;
+    try {
+      const conditions = [isNull(schema.clientes.deletedAt)];
+      if (q) {
+        const search = `%${q}%`;
+        conditions.push(or(
+          like(schema.clientes.nome, search),
+          like(schema.clientes.documento, search),
+          like(schema.clientes.cpf, search),
+          like(schema.clientes.cnpj, search)
+        )!);
+      }
+      const whereClause = and(...conditions);
+      const [items, totalRows] = await Promise.all([db.select({
+        id: schema.clientes.id,
+        nome: schema.clientes.nome,
+        documento: schema.clientes.documento,
+        cpf: schema.clientes.cpf,
+        cnpj: schema.clientes.cnpj
+      }).from(schema.clientes)
+        .where(whereClause)
+        .orderBy(asc(schema.clientes.nome))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      db.select({ total: count() }).from(schema.clientes).where(whereClause)]);
+      if (selectedId && !items.some((item) => item.id === selectedId)) {
+        const [selected] = await db.select({
+          id: schema.clientes.id,
+          nome: schema.clientes.nome,
+          documento: schema.clientes.documento,
+          cpf: schema.clientes.cpf,
+          cnpj: schema.clientes.cnpj
+        }).from(schema.clientes).where(and(eq(schema.clientes.id, selectedId), isNull(schema.clientes.deletedAt))).limit(1);
+        if (selected) items.unshift(selected);
+      }
+      if (mode === 'legacy') return items.slice(0, limit);
+      const total = Number(totalRows[0]?.total || 0);
+      return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+    } catch (err) {
+      server.log.error(err);
+      return reply.status(500).send({ error: 'Erro ao buscar opções de clientes' });
     }
   });
 

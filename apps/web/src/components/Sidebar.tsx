@@ -1,7 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { CaretDown, LockKey, X } from '@phosphor-icons/react';
-import { preloadRoute } from '../utils/routePreloaders';
+import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
+import { LockKey, X } from '@phosphor-icons/react';
+import { PreloadLink } from './PreloadLink';
 import { useAppSession } from '../contexts/AppSessionContext';
 import { APP_VERSION } from '../version';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
@@ -38,22 +38,7 @@ interface SidebarProps {
 }
 
 const SIDEBAR_SCROLL_STORAGE_KEY = 'geogestor_sidebar_scroll_top';
-const SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY = 'geogestor_sidebar_administration_open';
-const ADMINISTRATION_PATHS = [
-  '/relatorios',
-  '/planejamento',
-  '/cadastros',
-  '/configuracoes',
-  '/audit-logs',
-  '/ajuda',
-];
 let sidebarScrollTop = 0;
-
-function isAdministrationPath(pathname: string) {
-  return ADMINISTRATION_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`),
-  );
-}
 
 const SECTION_ACTIVE_CLASSES: Record<SidebarSection['tone'], string> = {
   field:
@@ -105,15 +90,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const previousAdministrationActiveRef = useRef(isAdministrationPath(location.pathname));
-  const [administrationOpen, setAdministrationOpen] = useState(
-    () => {
-      const storedPreference = sessionStorage.getItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY);
-      return storedPreference === null
-        ? isAdministrationPath(location.pathname)
-        : storedPreference === 'true';
-    },
-  );
 
   useLayoutEffect(() => {
     const node = scrollContainerRef.current;
@@ -189,6 +165,8 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
     { name: 'Planejamento', path: '/planejamento', icon: planningIcon, created: true },
     { name: 'Cadastros', path: '/cadastros', icon: recordsIcon, created: true },
+    { name: 'Propriedades', path: '/propriedades', icon: recordsIcon, created: true },
+    { name: 'Qualidade dos dados', path: '/qualidade-dados', icon: auditIcon, created: true },
     { name: 'Configurações', path: '/configuracoes', icon: settingsIcon, created: true },
     { name: 'Logs de Auditoria', path: '/audit-logs', icon: auditIcon, created: true },
     { name: 'Ajuda', path: '/ajuda', icon: helpIcon, created: true },
@@ -201,33 +179,6 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         ? location.pathname === '/'
         : location.pathname === path || location.pathname.startsWith(`${path}/`)
     ));
-  };
-
-  const administrationActive = administrationItems.some(isItemActive);
-  const showAdministration = administrationOpen;
-
-  useEffect(() => {
-    const wasAdministrationActive = previousAdministrationActiveRef.current;
-    previousAdministrationActiveRef.current = administrationActive;
-
-    if (administrationActive && !wasAdministrationActive) {
-      sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, 'true');
-      setAdministrationOpen(true);
-    }
-  }, [administrationActive]);
-
-  const toggleAdministration = () => {
-    setAdministrationOpen((current) => {
-      const next = !current;
-      sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, String(next));
-      return next;
-    });
-  };
-
-  const handleAdministrationNavigation = () => {
-    sessionStorage.setItem(SIDEBAR_ADMINISTRATION_OPEN_STORAGE_KEY, 'true');
-    setAdministrationOpen(true);
-    onClose?.();
   };
 
   return (
@@ -291,13 +242,10 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
                   if (item.created && item.path) {
                     return (
-                      <Link
+                      <PreloadLink
                         key={item.name}
                         to={item.path}
                         onClick={onClose}
-                        onPointerEnter={() => preloadRoute(item.path)}
-                        onPointerDown={() => preloadRoute(item.path)}
-                        onFocus={() => preloadRoute(item.path)}
                         aria-current={isActive ? 'page' : undefined}
                         className={`group relative flex min-h-[58px] items-center justify-between rounded-lg py-2.5 pl-3 pr-3 text-[14.5px] font-semibold leading-5 outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES[section.tone]} ${
                           isActive
@@ -312,7 +260,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                           <SidebarIcon src={item.icon} isActive={isActive} />
                           <span className="truncate">{item.name}</span>
                         </div>
-                      </Link>
+                      </PreloadLink>
                     );
                   }
 
@@ -338,66 +286,45 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           ))}
 
           <div className="space-y-2">
-            <button
-              type="button"
-              aria-expanded={showAdministration}
-              aria-controls="sidebar-administration"
-              onClick={toggleAdministration}
-              className={`geo-focus-ring flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-[12px] font-bold tracking-[0.08em] ${
-                administrationActive
-                  ? 'bg-zinc-50 text-zinc-950 ring-1 ring-zinc-200/70 dark:bg-zinc-800/70 dark:text-white dark:ring-zinc-700/70'
-                  : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
-              }`}
-            >
-              <span>GESTÃO E SISTEMA</span>
-              <CaretDown
-                aria-hidden="true"
-                size={16}
-                weight="bold"
-                className={`transition-transform duration-200 motion-reduce:transition-none ${showAdministration ? 'rotate-180' : ''}`}
-              />
-            </button>
+            <span className="block px-3 font-heading text-[11px] font-bold tracking-[0.16em] text-zinc-600 dark:text-zinc-400">
+              GESTÃO E SISTEMA
+            </span>
 
-            {showAdministration && (
-              <div id="sidebar-administration" className="space-y-1 border-l border-zinc-200 pl-2 dark:border-zinc-700">
-                {administrationItems.map((item) => {
-                  const isActive = isItemActive(item);
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.path!}
-                      onClick={handleAdministrationNavigation}
-                      onPointerEnter={() => preloadRoute(item.path!)}
-                      onPointerDown={() => preloadRoute(item.path!)}
-                      onFocus={() => preloadRoute(item.path!)}
-                      aria-current={isActive ? 'page' : undefined}
-                      className={`group relative flex min-h-[50px] items-center rounded-lg px-2.5 text-[13px] font-semibold outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES.system} ${
-                        isActive
-                          ? SECTION_ACTIVE_CLASSES.system
-                          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
-                      }`}
-                    >
-                      {isActive && (
-                        <span aria-hidden="true" className={`absolute bottom-2 left-0 top-2 w-1 rounded-r-full ${SECTION_MARKER_CLASSES.system}`} />
-                      )}
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center">
-                          <img
-                            src={item.icon}
-                            alt=""
-                            aria-hidden="true"
-                            width={28}
-                            height={28}
-                            className="h-7 w-7 object-contain"
-                          />
-                        </span>
-                        <span className="truncate">{item.name}</span>
+            <div className="space-y-1">
+              {administrationItems.map((item) => {
+                const isActive = isItemActive(item);
+                return (
+                  <PreloadLink
+                    key={item.name}
+                    to={item.path!}
+                    onClick={onClose}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={`group relative flex min-h-[50px] items-center rounded-lg px-2.5 text-[13px] font-semibold outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES.system} ${
+                      isActive
+                        ? SECTION_ACTIVE_CLASSES.system
+                        : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
+                    }`}
+                  >
+                    {isActive && (
+                      <span aria-hidden="true" className={`absolute bottom-2 left-0 top-2 w-1 rounded-r-full ${SECTION_MARKER_CLASSES.system}`} />
+                    )}
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center">
+                        <img
+                          src={item.icon}
+                          alt=""
+                          aria-hidden="true"
+                          width={28}
+                          height={28}
+                          className="h-7 w-7 object-contain"
+                        />
                       </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                  </PreloadLink>
+                );
+              })}
+            </div>
           </div>
         </nav>
 

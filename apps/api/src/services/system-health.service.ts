@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createClient } from '@libsql/client';
-import { schema } from '@geogestor/database';
+import { databaseClientConfig, schema } from '@geogestor/database';
 import { db } from '../db';
 import { FileSystemOutboxService } from './filesystem-outbox.service';
 import { OperationalLogService } from './operational-log.service';
@@ -57,6 +57,23 @@ function result(code: FilesDirectoryDiagnosticCode): FilesDirectoryDiagnostic {
   };
 }
 
+const relationshipQueries: Record<string, string> = {
+  projectsWithForeignProperty: `SELECT COUNT(*) AS total FROM projetos p JOIN propriedades i ON i.id = p.propriedade_id WHERE p.deleted_at IS NULL AND i.cliente_id <> p.cliente_id`,
+  budgetsWithForeignProject: `SELECT COUNT(*) AS total FROM orcamentos o JOIN projetos p ON p.id = o.projeto_id WHERE o.deleted_at IS NULL AND p.cliente_id <> o.cliente_id`,
+  budgetsWithForeignProperty: `SELECT COUNT(*) AS total FROM orcamentos o JOIN propriedades i ON i.id = o.propriedade_id WHERE o.deleted_at IS NULL AND i.cliente_id <> o.cliente_id`,
+  approvedBudgetsWithoutProject: `SELECT COUNT(*) AS total FROM orcamentos WHERE deleted_at IS NULL AND lower(status) IN ('aprovado', 'pago') AND projeto_id IS NULL`,
+  approvedBudgetsWithoutInstallments: `SELECT COUNT(*) AS total FROM orcamentos o WHERE o.deleted_at IS NULL AND lower(o.status) IN ('aprovado', 'pago') AND NOT EXISTS (SELECT 1 FROM parcelas p WHERE p.orcamento_id = o.id AND p.deleted_at IS NULL)`,
+  tasksWithForeignProject: `SELECT COUNT(*) AS total FROM tarefas t JOIN projetos p ON p.id = t.projeto_id WHERE t.deleted_at IS NULL AND t.cliente_id <> p.cliente_id`,
+  appointmentsWithForeignProject: `SELECT COUNT(*) AS total FROM compromissos c JOIN projetos p ON p.id = c.projeto_id WHERE c.deleted_at IS NULL AND c.cliente_id <> p.cliente_id`,
+  expensesWithForeignProject: `SELECT COUNT(*) AS total FROM despesas d JOIN projetos p ON p.id = d.projeto_id WHERE d.deleted_at IS NULL AND d.cliente_id <> p.cliente_id`,
+  documentsWithForeignProject: `SELECT COUNT(*) AS total FROM documentos d JOIN projetos p ON p.id = d.projeto_id WHERE d.deleted_at IS NULL AND d.cliente_id <> p.cliente_id`,
+  licensesWithForeignProject: `SELECT COUNT(*) AS total FROM licencas l JOIN projetos p ON p.id = l.projeto_id WHERE l.deleted_at IS NULL AND l.cliente_id IS NOT NULL AND l.cliente_id <> p.cliente_id`,
+  environmentalWithForeignProject: `SELECT COUNT(*) AS total FROM ambiental a JOIN projetos p ON p.id = a.projeto_id WHERE a.deleted_at IS NULL AND a.cliente_id IS NOT NULL AND a.cliente_id <> p.cliente_id`,
+  assessmentsWithForeignProject: `SELECT COUNT(*) AS total FROM pericias a JOIN projetos p ON p.id = a.projeto_id WHERE a.deleted_at IS NULL AND a.cliente_id IS NOT NULL AND a.cliente_id <> p.cliente_id`,
+  opportunitiesWithForeignBudget: `SELECT COUNT(*) AS total FROM oportunidades op JOIN orcamentos o ON o.id = op.orcamento_id WHERE op.deleted_at IS NULL AND op.cliente_id <> o.cliente_id`,
+  opportunitiesWithForeignProject: `SELECT COUNT(*) AS total FROM oportunidades op JOIN projetos p ON p.id = op.projeto_id WHERE op.deleted_at IS NULL AND op.cliente_id <> p.cliente_id`
+};
+
 function classifyFileSystemError(error: unknown): FilesDirectoryDiagnosticCode {
   const code = (error as NodeJS.ErrnoException | undefined)?.code || '';
   if (code === 'ENOENT') return 'directory_missing';
@@ -88,13 +105,42 @@ export class SystemHealthService {
       filesDirectoryWritable: null as boolean | null,
       filesDirectory: result('not_configured'),
       filesystemOperations,
-      filesystemOperationsAvailable
+      filesystemOperationsAvailable,
+      foreignKeyViolations: 0,
+      relationshipChecksAvailable: true,
+      relationshipViolations: {} as Record<string, number>,
+      schemaVersion: 0,
+      entityCounts: {} as Record<string, number>,
+      residualMigrationTables: [] as string[]
     };
 
-    const client = createClient({ url: `file:${dbPath}` });
+    const client = createClient(databaseClientConfig(dbPath));
     try {
       const databaseCheck = await client.execute('PRAGMA quick_check;');
       checks.database = String(firstValue(databaseCheck.rows[0] as Record<string, unknown> | undefined)) === 'ok' ? 'ok' : 'failed';
+      checks.foreignKeyViolations = (await client.execute('PRAGMA foreign_key_check;')).rows.length;
+      const versionResult = await client.execute('PRAGMA user_version;');
+      checks.schemaVersion = Number(firstValue(versionResult.rows[0] as Record<string, unknown> | undefined) || 0);
+      for (const table of ['clientes', 'projetos', 'propriedades', 'orcamentos', 'parcelas', 'recebimentos', 'despesas', 'documentos', 'tarefas', 'compromissos']) {
+        try {
+          const countResult = await client.execute(`SELECT COUNT(*) AS total FROM ${table}`);
+          checks.entityCounts[table] = Number(countResult.rows[0]?.total || 0);
+        } catch (error) {
+          if (!/no such table/i.test(error instanceof Error ? error.message : String(error))) throw error;
+        }
+      }
+      const residual = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name LIKE '__new_%' OR name LIKE '%_runtime_migration')");
+      checks.residualMigrationTables = residual.rows.map((row) => String(row.name));
+      for (const [name, query] of Object.entries(relationshipQueries)) {
+        try {
+          const queryResult = await client.execute(query);
+          checks.relationshipViolations[name] = Number(queryResult.rows[0]?.total || 0);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!/no such table|no such column/i.test(message)) throw error;
+          checks.relationshipChecksAvailable = false;
+        }
+      }
     } finally {
       await client.close();
     }
@@ -115,11 +161,15 @@ export class SystemHealthService {
       : checks.filesDirectory.code === 'ok';
 
     const failedOperations = Number(checks.filesystemOperations.failed || 0);
+    const relationshipViolationCount = Object.values(checks.relationshipViolations)
+      .reduce((sum, count) => sum + count, 0);
     return {
       status: checks.database === 'ok'
         && checks.dataDirectoryWritable
         && checks.filesDirectoryWritable !== false
         && failedOperations === 0
+        && checks.foreignKeyViolations === 0
+        && relationshipViolationCount === 0
         ? 'ok'
         : 'degraded',
       checkedAt,

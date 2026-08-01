@@ -1,17 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 import { DatePickerField, FormError, FormFooter, FormSection, FormSelect } from '../../components/Form';
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
 import { Plus, Trash, BookmarkSimple, Calendar, Funnel, MagnifyingGlass } from '@phosphor-icons/react';
-import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
+import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primaryActionButtonClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import {
   filterBarClass,
@@ -19,12 +20,15 @@ import {
   filterControlClass,
   filterSearchInputClass
 } from '../../utils/filterStyles';
-import type { Tarefa, Projeto } from '@geogestor/contracts';
-import { apiFetch } from '../../services/apiClient';
+import type { Tarefa } from '@geogestor/contracts';
+import { apiClient, apiFetch } from '../../services/apiClient';
+import { useDebounce } from '../../hooks/useDebounce';
+
+type TaskPage = { items: Tarefa[]; page: number; limit: number; total: number; totalPages: number };
+type ProjectOption = { id: string; nome: string; clienteNome?: string | null };
 export function Tarefas() {
   const location = useLocation();
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [projetos, setProjetos] = useState<Projeto[]>([]);
   const [selectedProjeto, setSelectedProjeto] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [prioridadeFilter, setPrioridadeFilter] = useState('Todas');
@@ -42,21 +46,30 @@ export function Tarefas() {
   const [formError, setFormError] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Tarefa | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const focusedTaskId = new URLSearchParams(location.search).get('tarefaId');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  const fetchDados = () => {
-    Promise.all([
-      apiFetch('/api/tarefas').then(res => res.json()),
-      apiFetch('/api/projetos').then(res => res.json())
-    ]).then(([tarefasData, projetosData]) => {
-      setTarefas(tarefasData);
-      setProjetos(projetosData);
+  const fetchDados = useCallback(() => {
+    const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '100' });
+    if (focusedTaskId && !debouncedSearchTerm) params.set('id', focusedTaskId);
+    if (debouncedSearchTerm) params.set('q', debouncedSearchTerm);
+    if (selectedProjeto !== 'all') params.set('projetoId', selectedProjeto);
+    if (prioridadeFilter !== 'Todas') params.set('prioridade', prioridadeFilter);
+    if (dataInicioFilter) params.set('inicio', dataInicioFilter);
+    if (dataFimFilter) params.set('fim', dataFimFilter);
+    apiClient.get<TaskPage>(`/api/tarefas?${params}`).then((result) => {
+      setTarefas(result.items);
+      setTotalTasks(result.total);
+      setTotalPages(result.totalPages);
     });
-  };
+  }, [dataFimFilter, dataInicioFilter, debouncedSearchTerm, focusedTaskId, page, prioridadeFilter, selectedProjeto]);
 
   useEffect(() => {
     fetchDados();
-  }, []);
+  }, [fetchDados]);
 
   const taskDraftDirty = Boolean(
     novoTitulo.trim()
@@ -206,22 +219,7 @@ export function Tarefas() {
     }
   };
 
-  const filteredTarefas = tarefas.filter((task) => {
-    const searchable = [
-      task.titulo,
-      task.descricao,
-      task.status,
-      task.prioridade,
-      task.projetoNome,
-      task.clienteNome
-    ].filter(Boolean).join(' ');
-    const matchesProject = selectedProjeto === 'all' || task.projetoId === selectedProjeto;
-    const matchesSearchTerm = matchesSearch(searchable, searchTerm);
-    const matchesPrioridade = prioridadeFilter === 'Todas' || task.prioridade === prioridadeFilter;
-    const matchesStart = !dataInicioFilter || (task.dataLimite && task.dataLimite >= dataInicioFilter);
-    const matchesEnd = !dataFimFilter || (task.dataLimite && task.dataLimite <= dataFimFilter);
-    return matchesProject && matchesSearchTerm && matchesPrioridade && matchesStart && matchesEnd;
-  });
+  const filteredTarefas = tarefas;
   const hasTaskFilters = Boolean(searchTerm || selectedProjeto !== 'all' || prioridadeFilter !== 'Todas' || dataInicioFilter || dataFimFilter);
 
   const columns = [
@@ -232,29 +230,24 @@ export function Tarefas() {
 
   return (
     <Layout>
-      <ModuleNavigation module="agenda" />
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Tarefas
-          </h1>
-          <p className="mt-2 text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
-            Fluxo de trabalho operacional para projetos e levantamentos.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4">
-          <button 
+      <PageHeader
+        eyebrow="Fluxo operacional"
+        title="Tarefas"
+        description="Fluxo de trabalho operacional para projetos e levantamentos."
+        action={(
+          <button
+            type="button"
             onClick={openTaskForm}
-            className={primaryActionButtonClass}
+            className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}
           >
             <span>Nova Tarefa</span>
-            <div className={primaryActionIconClass}>
-              <Plus className="w-4 h-4" weight="bold" />
-            </div>
+            <span aria-hidden="true" className={headerPrimaryActionIconClass}>
+              <Plus className="h-3.5 w-3.5" weight="bold" />
+            </span>
           </button>
-        </div>
-      </div>
+        )}
+        navigation={<ModuleNavigation module="agenda" className="mb-0" />}
+      />
 
       <div className={cn('mb-6', filterBarClass)}>
         <div className="grid grid-cols-1 items-center gap-2.5 lg:grid-cols-[minmax(260px,1.4fr)_repeat(2,minmax(160px,0.7fr))_auto_auto]">
@@ -267,21 +260,24 @@ export function Tarefas() {
               type="search"
               autoComplete="off"
               value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
+              onChange={(event) => { setSearchTerm(event.target.value); setPage(1); }}
               placeholder="Buscar por tarefa, projeto, cliente ou descrição…"
               className={filterSearchInputClass}
             />
           </div>
-          <CustomSelect
-            value={selectedProjeto} 
-            onChange={setSelectedProjeto}
-            placeholder="Todos os projetos"
+          <RemoteCombobox<ProjectOption>
+            id="task-project-filter"
+            name="projectFilter"
+            endpoint="/api/projetos/options"
+            value={selectedProjeto === 'all' ? '' : selectedProjeto}
+            onChange={(value) => { setSelectedProjeto(value || 'all'); setPage(1); }}
+            placeholder="Pesquisar projeto…"
+            emptyLabel="Todos os projetos"
             className="min-w-0"
-            options={[{ label: 'Todos os projetos', value: 'all' }, ...projetos.map((projeto) => ({ label: projeto.nome, value: projeto.id }))]}
           />
           <CustomSelect
             value={prioridadeFilter}
-            onChange={setPrioridadeFilter}
+            onChange={(value) => { setPrioridadeFilter(value); setPage(1); }}
             placeholder="Todas as prioridades"
             className="min-w-0"
               options={['Todas', 'Baixa', 'Média', 'Alta'].map((value) => ({ label: value === 'Todas' ? 'Todas as prioridades' : value, value }))}
@@ -306,6 +302,7 @@ export function Tarefas() {
                 setPrioridadeFilter('Todas');
                 setDataInicioFilter('');
                 setDataFimFilter('');
+                setPage(1);
               }}
               className={filterClearButtonClass}
             >
@@ -320,7 +317,7 @@ export function Tarefas() {
               <DatePickerField
                 name="task-deadline-start"
                 value={dataInicioFilter}
-                onChange={(event) => setDataInicioFilter(event.target.value)}
+                onChange={(event) => { setDataInicioFilter(event.target.value); setPage(1); }}
                 className={cn(filterControlClass, 'w-full')}
               />
             </label>
@@ -329,14 +326,14 @@ export function Tarefas() {
               <DatePickerField
                 name="task-deadline-end"
                 value={dataFimFilter}
-                onChange={(event) => setDataFimFilter(event.target.value)}
+                onChange={(event) => { setDataFimFilter(event.target.value); setPage(1); }}
                 className={cn(filterControlClass, 'w-full')}
               />
             </label>
           </div>
         )}
         <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {filteredTarefas.length} de {tarefas.length} tarefa(s) exibidas
+          {filteredTarefas.length} de {totalTasks} tarefa(s) exibidas
         </p>
       </div>
 
@@ -479,6 +476,14 @@ export function Tarefas() {
         </DragDropContext>
       )}
 
+      {totalPages > 1 && (
+        <nav aria-label="Paginação de tarefas" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Anterior</button>
+          <p className="text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">Página {page} de {totalPages}</p>
+          <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Próxima</button>
+        </nav>
+      )}
+
       {/* Modal Nova Tarefa */}
       <Modal
         isOpen={showAddForm}
@@ -505,18 +510,15 @@ export function Tarefas() {
 
           <div>
             <label htmlFor="tarefa-projeto" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Projeto</label>
-            <FormSelect
+            <RemoteCombobox<ProjectOption>
               id="tarefa-projeto"
-              required 
-              value={novoProjetoId} 
-              onChange={e => setNovoProjetoId(e.target.value)} 
-              className="w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
-            >
-              <option value="">Selecione um projeto</option>
-              {projetos.map(p => (
-                <option key={p.id} value={p.id}>{p.nome}</option>
-              ))}
-            </FormSelect>
+              name="projetoId"
+              endpoint="/api/projetos/options"
+              required
+              value={novoProjetoId}
+              onChange={setNovoProjetoId}
+              placeholder="Pesquisar projeto…"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

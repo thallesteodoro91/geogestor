@@ -12,6 +12,7 @@ import { closeDb, db, dbReady } from './db';
 import { schema } from '@geogestor/database';
 import { eq, sql } from 'drizzle-orm';
 import { clientesRoutes } from './routes/clientes.routes';
+import { dashboardRoutes } from './routes/dashboard.routes';
 import { projetosRoutes } from './routes/projetos.routes';
 import { financeiroRoutes } from './routes/financeiro.routes';
 import { arquivosRoutes } from './routes/arquivos.routes';
@@ -25,16 +26,20 @@ import { contatosRoutes } from './routes/contatos.routes';
 import { licencasRoutes } from './routes/licencas.routes';
 import { ambientalRoutes } from './routes/ambiental.routes';
 import { orcamentosRoutes } from './routes/orcamentos.routes';
+import { strategicPlanningRoutes } from './routes/strategic-planning.routes';
+import { operationalDataRoutes } from './routes/operational-data.routes';
 import { runRuntimeMigrations } from './services/runtime-migrations.service';
 import { FileSystemService } from './services/fs.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
 import { SchedulerService } from './services/scheduler.service';
 import { BackupService } from './services/backup.service';
+import { BackupPolicyService } from './services/backup-policy.service';
 import { LocalSecretService } from './services/local-secret.service';
 import { AuditLogService } from './services/audit.service';
 import { OperationalLogService } from './services/operational-log.service';
 import { ResetInProgressError, SystemResetService } from './services/system-reset.service';
 import { SystemHealthService } from './services/system-health.service';
+import { DataQualityService } from './services/data-quality.service';
 import { PerformanceMetricsService, normalizeRegisteredRoute } from './services/performance-metrics.service';
 import { LocalSessionService, verifyAdminPassword } from './services/local-session.service';
 import { z } from 'zod';
@@ -75,6 +80,16 @@ const resetSchema = z.object({ confirmation: z.literal(RESET_CONFIRMATION) }).st
 const restoreSchema = z.object({
   bundlePath: trimmedRequired('Diretório do backup', 4_096),
   confirmation: z.literal(RESTORE_CONFIRMATION)
+}).strict();
+const backupPolicySchema = z.object({
+  databaseIntervalHours: z.number().int().min(1).max(24 * 30),
+  completeIntervalDays: z.number().int().min(1).max(365),
+  retention: z.number().int().min(1).max(365),
+  destinationDirectory: z.string().trim().max(4_096).nullable(),
+  maxStorageBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  overdueGraceHours: z.number().int().min(0).max(24 * 30),
+  runOnStartup: z.boolean(),
+  runOnShutdown: z.boolean()
 }).strict();
 const unlockSchema = z.object({
   password: z.string().min(1, 'Informe a senha local.').max(200)
@@ -325,7 +340,7 @@ async function writeRestoreResult(status: 'success' | 'failed', message: string)
   await fs.rename(temporary, target);
 }
 
-async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string }) {
+async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string }) {
   let exitCode = 76;
   try {
     SchedulerService.stop();
@@ -335,6 +350,7 @@ async function executeManagedRestore(input: { bundlePath: string; targetFilesRoo
       bundlePath: input.bundlePath,
       targetDatabasePath: getDatabasePath(),
       targetFilesRoot: input.targetFilesRoot,
+      allowedBackupDirectory: input.allowedBackupDirectory,
       confirmation: 'RESTORE_GEOGESTOR'
     });
     await writeRestoreResult('success', 'Backup restaurado e validado com sucesso.');
@@ -458,6 +474,7 @@ server.register(cors, {
 
 // Registrar rotas modulares
 server.register(clientesRoutes, { prefix: '/api/clientes' });
+server.register(dashboardRoutes, { prefix: '/api/dashboard' });
 server.register(projetosRoutes, { prefix: '/api/projetos' });
 server.register(financeiroRoutes, { prefix: '/api/financeiro' });
 server.register(arquivosRoutes, { prefix: '/api/arquivos' });
@@ -471,6 +488,8 @@ server.register(contatosRoutes, { prefix: '/api/contatos' });
 server.register(licencasRoutes, { prefix: '/api/licencas' });
 server.register(ambientalRoutes, { prefix: '/api/ambiental' });
 server.register(orcamentosRoutes, { prefix: '/api/orcamentos' });
+server.register(strategicPlanningRoutes, { prefix: '/api/planejamento' });
+server.register(operationalDataRoutes, { prefix: '/api/dados-operacionais' });
 
 // Health check
 server.get('/api/ready', async (_request, reply) => {
@@ -596,12 +615,13 @@ server.get('/api/sistema/info', async () => {
     filesRootDirectory = null;
   }
 
+  const policy = await BackupPolicyService.get();
   return {
     mode: process.env.NODE_ENV || 'development',
     desktop: Boolean(process.env.GEOGESTOR_DB_PATH),
     databasePath,
     dataDirectory,
-    backupDirectory: path.join(dataDirectory, 'backups'),
+    backupDirectory: BackupService.getBackupDirectory(policy.destinationDirectory),
     filesRootDirectory,
     webDistPath: process.env.GEOGESTOR_WEB_DIST || null
   };
@@ -609,7 +629,12 @@ server.get('/api/sistema/info', async () => {
 
 server.post('/api/sistema/backup', async (request, reply) => {
   try {
-    const result = await BackupService.createLocalBackup();
+    const policy = await BackupPolicyService.get();
+    const result = await BackupService.createLocalBackup({
+      destinationDirectory: policy.destinationDirectory,
+      retention: policy.retention,
+      maxStorageBytes: policy.maxStorageBytes
+    });
     return {
       message: 'Backup criado com sucesso',
       ...result
@@ -618,6 +643,53 @@ server.post('/api/sistema/backup', async (request, reply) => {
     server.log.error(err);
     return reply.status(500).send({ error: 'Erro ao criar backup local' });
   }
+});
+
+server.get('/api/sistema/backups/politica', async () => BackupPolicyService.get());
+
+server.put('/api/sistema/backups/politica', async (request, reply) => {
+  const parsed = backupPolicySchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    const saved = await BackupPolicyService.save(parsed.data);
+    const storage = await BackupService.getStorageStatus(saved.destinationDirectory);
+    return { policy: saved, storage };
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'NÃ£o foi possÃ­vel salvar a polÃ­tica de backup.') });
+  }
+});
+
+server.get('/api/sistema/backups/status', async () => {
+  const policy = await BackupPolicyService.get();
+  const state = OperationalLogService.getState();
+  const storage = await BackupService.getStorageStatus(policy.destinationDirectory);
+  const databaseCompletedAt = typeof state.backup?.details?.completedAt === 'string' ? state.backup.details.completedAt : null;
+  const completeCompletedAt = typeof state.backupComplete?.details?.completedAt === 'string' ? state.backupComplete.details.completedAt : null;
+  const nextAt = (value: string | null, intervalMs: number) => value
+    ? new Date(Date.parse(value) + intervalMs).toISOString()
+    : null;
+  const now = Date.now();
+  const classify = (value: string | null, intervalMs: number, operationStatus?: string) => {
+    if (operationStatus === 'failed') return 'failed';
+    if (!value) return 'incomplete';
+    return now > Date.parse(value) + intervalMs + policy.overdueGraceHours * 60 * 60 * 1000 ? 'overdue' : 'current';
+  };
+  const databaseIntervalMs = policy.databaseIntervalHours * 60 * 60 * 1000;
+  const completeIntervalMs = policy.completeIntervalDays * 24 * 60 * 60 * 1000;
+  return {
+    policy,
+    storage,
+    database: {
+      completedAt: databaseCompletedAt,
+      nextAt: nextAt(databaseCompletedAt, databaseIntervalMs),
+      status: classify(databaseCompletedAt, databaseIntervalMs, state.backup?.status)
+    },
+    complete: {
+      completedAt: completeCompletedAt,
+      nextAt: nextAt(completeCompletedAt, completeIntervalMs),
+      status: classify(completeCompletedAt, completeIntervalMs, state.backupComplete?.status)
+    }
+  };
 });
 
 const resetHandler = async (request: FastifyRequest, reply: FastifyReply) => {
@@ -655,11 +727,35 @@ server.post('/api/sistema/diagnostico', async (request, reply) => {
   }
 });
 
+const qualityQuerySchema = z.object({
+  module: z.string().trim().max(100).optional(),
+  severity: z.enum(['critical', 'warning', 'info']).optional(),
+  clienteId: z.string().uuid().optional()
+});
+
+server.get('/api/sistema/qualidade-dados', async (request, reply) => {
+  const parsed = qualityQuerySchema.safeParse(request.query);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  return DataQualityService.inspect(parsed.data);
+});
+
+server.get('/api/sistema/qualidade-dados.csv', async (request, reply) => {
+  const parsed = qualityQuerySchema.safeParse(request.query);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  const report = await DataQualityService.inspect(parsed.data);
+  const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  const rows = [['MÃ³dulo', 'Gravidade', 'Problema', 'Quantidade', 'RecomendaÃ§Ã£o']]
+    .concat(report.issues.map((issue) => [issue.module, issue.severity, issue.title, String(issue.count), issue.recommendation]));
+  return reply.type('text/csv; charset=utf-8')
+    .header('content-disposition', 'attachment; filename="qualidade-dados.csv"')
+    .send(`\uFEFF${rows.map((row) => row.map(quote).join(';')).join('\n')}`);
+});
+
 server.get('/api/sistema/backup-completo/preflight', async (request, reply) => {
   try {
     const databasePath = getDatabasePath();
-    const dataDirectory = getDataDirectory();
-    const backupDirectory = path.join(dataDirectory, 'backups');
+    const policy = await BackupPolicyService.get();
+    const backupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
     const filesRootDirectory = await FileSystemService.getRootFolder();
     const [databaseStats, filesStats] = await Promise.all([
       getDatabaseBundleStats(databasePath),
@@ -689,7 +785,12 @@ server.post('/api/sistema/backup-completo', async (request, reply) => {
       getDatabaseBundleStats(databasePath),
       getPathStats(filesRootDirectory)
     ]);
-    const backup = await BackupService.createCompleteBackup(filesRootDirectory);
+    const policy = await BackupPolicyService.get();
+    const backup = await BackupService.createCompleteBackup(filesRootDirectory, {
+      destinationDirectory: policy.destinationDirectory,
+      retention: policy.retention,
+      maxStorageBytes: policy.maxStorageBytes
+    });
 
     return {
       message: 'Backup completo criado com sucesso',
@@ -715,13 +816,15 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
 
   try {
-    const validation = await BackupService.validateBackup(parsed.data.bundlePath);
+    const policy = await BackupPolicyService.get();
+    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory);
     const targetFilesRoot = validation.manifest.type === 'complete'
       ? await FileSystemService.getRootFolder()
       : undefined;
     restoreScheduled = true;
     setTimeout(() => {
-      void executeManagedRestore({ bundlePath: parsed.data.bundlePath, targetFilesRoot });
+      void executeManagedRestore({ bundlePath: parsed.data.bundlePath, targetFilesRoot, allowedBackupDirectory });
     }, 150);
     return reply.status(202).send({
       message: 'Backup validado. O GeoGestor será reiniciado para concluir a restauração.',
@@ -990,7 +1093,9 @@ export const start = async () => {
     // Graceful Shutdown
     process.on('SIGTERM', () => {
       SchedulerService.stop();
-      server.close().then(() => {
+      SchedulerService.prepareForShutdown().catch((error) => {
+        server.log.error({ err: error }, 'Falha no backup configurado para o encerramento');
+      }).then(() => server.close()).then(() => {
         console.log('[GEO-API] Server closed gracefully.');
         process.exit(0);
       });

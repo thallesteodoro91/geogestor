@@ -1,8 +1,11 @@
 import { FormSelect } from '../components/Form';
+import type { ManagerialReport } from '@geogestor/contracts';
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
+import { KpiTransparency } from '../components/KpiTransparency';
 import { Layout } from '../components/Layout';
+import { PageHeader } from '../components/PageHeader';
 import { RecentActivities } from '../components/RecentActivities';
 import { Skeleton } from '../components/Skeleton';
 import { motion } from 'framer-motion';
@@ -45,25 +48,6 @@ const getStatusColor = (status: string, index: number) => {
   }
 };
 
-interface StatsGeral {
-  orcamentosStats?: Array<{ total?: number }>;
-  despesasPorCategoria?: Array<{ categoria: string; total: number }>;
-  areaTotal?: number;
-  historicoMensal?: {
-    receitasMensais: Array<{ mes: string; total: number }>;
-    despesasMensais: Array<{ mes: string; total: number }>;
-  };
-  projetosPorStatus?: Array<{ status: string; count: number }>;
-  financeiro?: {
-    receitaContratada: number;
-    receitaRecebida: number;
-    receitaPendente: number;
-    despesasPagas: number;
-    impostosPrevistos: number;
-    resultadoCaixa: number;
-  };
-}
-
 interface TaskItem {
   id: string;
   titulo: string;
@@ -74,18 +58,16 @@ interface TaskItem {
   prioridade?: string;
 }
 
-interface ProjetoResumo {
-  id: string;
-  nome: string;
-  clienteNome?: string;
-  status: string;
-  tipo?: string | null;
-}
-
-interface ClienteResumo {
-  id: string;
-  nome: string;
-  email?: string | null;
+interface DashboardOverview {
+  clientsTotal: number;
+  projectsTotal: number;
+  tasksTotal: number;
+  tasksCompleted: number;
+  tasksPending: number;
+  taskCompletionRate: number;
+  projectByType: Array<{ name: string; value: number }>;
+  projectByTypeStatus: Array<{ type: string; status: string; value: number }>;
+  upcomingTasks: TaskItem[];
 }
 
 interface LicencaItem {
@@ -97,6 +79,7 @@ interface LicencaItem {
   dataVencimento: string;
   status: string;
   observacoes?: string | null;
+  projetoNome?: string;
 }
 
 const getDaysLeftText = (targetDate: Date) => {
@@ -124,67 +107,48 @@ export function Dashboard() {
   const [projetoFilterMode, setProjetoFilterMode] = useState<'macro' | 'unitario'>('macro');
   const [selectedProjetoTipo, setSelectedProjetoTipo] = useState<string>('');
 
-  const { data: clientesData, isLoading: loadingClientes, isError: clientesError } = useQuery<ClienteResumo[]>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get<ClienteResumo[]>('/api/clientes')
+  const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery<DashboardOverview>({
+    queryKey: ['dashboard-overview'],
+    queryFn: () => apiClient.get<DashboardOverview>('/api/dashboard/overview')
   });
 
-  const { data: projetosData, isLoading: loadingProjetos, isError: projetosError } = useQuery<ProjetoResumo[]>({
-    queryKey: ['projetos'],
-    queryFn: () => apiClient.get<ProjetoResumo[]>('/api/projetos'),
-    staleTime: 60_000,
-  });
-
-  const { data: tasksData, isError: tasksError } = useQuery<TaskItem[]>({
-    queryKey: ['tarefas'],
-    queryFn: () => apiClient.get<TaskItem[]>('/api/tarefas')
-  });
-
-  const { data: stats, isLoading: loadingStats, isError: statsError } = useQuery<StatsGeral>({
+  const { data: stats, isLoading: loadingStats, isError: statsError } = useQuery<ManagerialReport>({
     queryKey: ['stats-geral'],
-    queryFn: () => apiClient.get<StatsGeral>('/api/relatorios/geral')
+    queryFn: () => apiClient.get<ManagerialReport>('/api/relatorios/geral')
   });
 
   const { data: licencasData, isError: licencasError } = useQuery<LicencaItem[]>({
     queryKey: ['licencas'],
     queryFn: () => apiClient.get<LicencaItem[]>('/api/licencas')
   });
-  const clientes = useMemo(() => clientesData ?? [], [clientesData]);
-  const projetos = useMemo(() => projetosData ?? [], [projetosData]);
-  const tasks = useMemo(() => tasksData ?? [], [tasksData]);
+  const tasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
   const licencas = useMemo(() => licencasData ?? [], [licencasData]);
 
   // Calcular balanço financeiro
   const { netProfit, areaTotal } = useMemo(() => {
     return {
-      netProfit: stats?.financeiro?.resultadoCaixa || 0,
-      areaTotal: stats?.areaTotal || 0,
+      netProfit: stats?.financial.kpis.cashResult || 0,
+      areaTotal: stats?.operational.kpis.activeAreaHa || 0,
     };
   }, [stats]);
 
   // Porcentagem de tarefas concluídas
   const { completedTasks, taskCompletionRate } = useMemo(() => {
-    const completed = tasks.filter((t) => t.status === 'Concluído').length;
-    const rate = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
+    const completed = overview?.tasksCompleted ?? tasks.filter((t) => t.status === 'Concluído').length;
+    const rate = overview?.taskCompletionRate ?? (tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0);
     return { completedTasks: completed, taskCompletionRate: rate };
-  }, [tasks]);
+  }, [overview, tasks]);
 
   // Preparar dados do gráfico financeiro
   const financeChartData = useMemo(() => {
     const chartMap = new Map<string, { mes: string; receita: number; despesa: number }>();
-    if (stats?.historicoMensal) {
-      stats.historicoMensal.receitasMensais.forEach((r) => {
-        chartMap.set(r.mes, { mes: r.mes, receita: r.total / 100, despesa: 0 });
+    stats?.financial.monthly.forEach((point) => {
+      chartMap.set(point.month, {
+        mes: point.month,
+        receita: point.receivedRevenue / 100,
+        despesa: point.paidExpenses / 100
       });
-      stats.historicoMensal.despesasMensais.forEach((d) => {
-        const existing = chartMap.get(d.mes);
-        if (existing) {
-          existing.despesa = d.total / 100;
-        } else {
-          chartMap.set(d.mes, { mes: d.mes, receita: 0, despesa: d.total / 100 });
-        }
-      });
-    }
+    });
     let data = Array.from(chartMap.values()).sort((a, b) => a.mes.localeCompare(b.mes));
     if (data.length === 0) {
       data = [{ mes: 'Jan', receita: 0, despesa: 0 }, { mes: 'Fev', receita: 0, despesa: 0 }, { mes: 'Mar', receita: 0, despesa: 0 }];
@@ -195,31 +159,20 @@ export function Dashboard() {
 
 
   // Preparar os tipos de projetos disponíveis a partir dos dados reais
-  const availableProjectTypes = useMemo(() => 
-    Array.from(new Set(projetos.map((p) => p.tipo || 'Não Informado'))) as string[],
-  [projetos]);
+  const availableProjectTypes = useMemo(() => overview?.projectByType.map((item) => item.name) || [], [overview]);
 
   const effectiveProjetoTipo = selectedProjetoTipo || availableProjectTypes[0] || '';
 
   // Preparar dados de distribuição de projetos
   const projetosStatusData = useMemo(() => {
     if (projetoFilterMode === 'macro') {
-      const countMap = new Map<string, number>();
-      projetos.forEach((p) => {
-        const key = p.tipo || 'Não Informado';
-        countMap.set(key, (countMap.get(key) || 0) + 1);
-      });
-      return Array.from(countMap.entries()).map(([name, value]) => ({ name, value }));
+      return overview?.projectByType || [];
     } else {
-      const filtered = projetos.filter((p) => (p.tipo || 'Não Informado') === effectiveProjetoTipo);
-      const countMap = new Map<string, number>();
-      filtered.forEach((p) => {
-        const key = p.status || 'Sem Status';
-        countMap.set(key, (countMap.get(key) || 0) + 1);
-      });
-      return Array.from(countMap.entries()).map(([name, value]) => ({ name, value }));
+      return (overview?.projectByTypeStatus || [])
+        .filter((item) => item.type === effectiveProjetoTipo)
+        .map((item) => ({ name: item.status, value: item.value }));
     }
-  }, [projetos, projetoFilterMode, effectiveProjetoTipo]);
+  }, [overview, projetoFilterMode, effectiveProjetoTipo]);
 
 
 
@@ -259,12 +212,11 @@ export function Dashboard() {
         if (dateParts.length >= 3) {
           const date = new Date(Number(dateParts[0]), Number(dateParts[1]) - 1, Number(dateParts[2]));
           const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
-          const projeto = projetos.find(p => p.id === l.projetoId);
           items.push({
             id: l.id,
             tipo: 'licenca',
             titulo: `${l.numero} - ${l.orgao}`,
-            contexto: projeto ? projeto.nome : 'Sem Projeto',
+            contexto: l.projetoNome || 'Sem projeto',
             data: date,
             dataString: formattedDate,
             badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
@@ -274,10 +226,8 @@ export function Dashboard() {
     });
 
     return items.sort((a, b) => a.data.getTime() - b.data.getTime()).slice(0, 5);
-  }, [tasks, licencas, projetos]);
-  const failedWithoutData = (clientesError && !clientesData)
-    || (projetosError && !projetosData)
-    || (tasksError && !tasksData)
+  }, [tasks, licencas]);
+  const failedWithoutData = (overviewError && !overview)
     || (statsError && !stats)
     || (licencasError && !licencasData);
 
@@ -296,17 +246,10 @@ export function Dashboard() {
 
   return (
     <Layout>
-      <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-end md:pt-10 xl:pt-0">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">
-            Visão Geral
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-text-secondary sm:text-base">
-            Monitoramento operacional, financeiro e geográfico consolidado.
-          </p>
-        </div>
-
-      </div>
+      <PageHeader
+        title="Visão Geral"
+        description="Monitoramento operacional, financeiro e geográfico consolidado."
+      />
       
             {/* Top Row: Finance & Quick Stats */}
       <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
@@ -330,6 +273,18 @@ export function Dashboard() {
               <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit / 100)}
               </span>
+              {stats && <KpiTransparency
+                definition="Recebimentos confirmados menos despesas pagas. Cancelamentos não removem recebimentos anteriores; somente estornos explícitos."
+                period={stats.period.label}
+                total={new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit / 100)}
+                recordCount={stats.state.filteredRecordCount}
+                updatedAt={stats.generatedAt}
+                records={stats.financial.monthly.map((item) => ({
+                  id: item.month, label: item.month,
+                  value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.cashResult / 100)
+                }))}
+                warnings={stats.financial.alerts.map((alert) => alert.code === 'negative_cash' ? 'O resultado de caixa está negativo no período.' : '').filter(Boolean)}
+              />}
             </div>
           </div>
 
@@ -373,11 +328,11 @@ export function Dashboard() {
             </div>
             <div className="text-right relative z-10">
               <span className={`text-xs font-semibold uppercase tracking-wider ${geoGreenLabelClass} block mb-1`}>Clientes</span>
-              {loadingClientes ? (
+              {overviewLoading ? (
                 <Skeleton className="h-10 w-16 ml-auto mt-1" />
               ) : (
                 <span className={`text-3xl font-semibold tracking-tighter sm:text-2xl xl:text-4xl ${geoGreenValueClass}`}>
-                  {String(clientes.length).padStart(2, '0')}
+                  {String(overview?.clientsTotal ?? 0).padStart(2, '0')}
                 </span>
               )}
             </div>
@@ -395,11 +350,11 @@ export function Dashboard() {
             </div>
             <div className="text-right relative z-10">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-orange-100/85">Projetos</span>
-              {loadingProjetos ? (
+              {overviewLoading ? (
                 <Skeleton className="h-10 w-16 ml-auto mt-1" />
               ) : (
                 <span className="text-3xl font-semibold tracking-tighter text-white sm:text-2xl xl:text-4xl">
-                  {String(projetos.length).padStart(2, '0')}
+                  {String(overview?.projectsTotal ?? 0).padStart(2, '0')}
                 </span>
               )}
             </div>
@@ -517,7 +472,7 @@ export function Dashboard() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-text-secondary">Pendentes:</span>
-                <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">{tasks.length - completedTasks}</span>
+                <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">{overview?.tasksPending ?? tasks.length - completedTasks}</span>
               </div>
             </div>
           </div>

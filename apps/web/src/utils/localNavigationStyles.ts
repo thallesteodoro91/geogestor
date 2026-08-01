@@ -20,7 +20,7 @@ export function localNavigationButtonClass(
     active,
     tone,
     cn(
-      'min-h-11 rounded-full px-5 py-2.5 ring-0 shadow-none sm:px-6',
+      'h-[52px] min-h-[52px] rounded-full px-5 py-0 ring-0 shadow-none sm:px-6',
       className,
     ),
   );

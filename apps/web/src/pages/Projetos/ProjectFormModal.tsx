@@ -39,7 +39,7 @@ export interface ProjectFormSavedRecord extends ProjectRecordForForm {
 interface ProjectFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  clientes: ProjectFormClientOption[];
+  clientes?: ProjectFormClientOption[];
   context?: ProjectModalContext;
   project?: ProjectFormSavedRecord | null;
   initialClientId?: string;
@@ -51,7 +51,7 @@ const projectTabOrder: ProjectModalTab[] = ['projeto', 'propriedade', 'geoloc'];
 
 function ProjectFormModalContent({
   onClose,
-  clientes,
+  clientes = [],
   context = 'projeto',
   project = null,
   initialClientId = '',
@@ -157,7 +157,7 @@ function ProjectFormModalContent({
     onClose();
   };
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const validation = validateProjectForm(form);
     if (activeTab !== 'geoloc') {
@@ -181,6 +181,38 @@ function ProjectFormModalContent({
       activateTab(firstTab);
       window.setTimeout(() => document.getElementById(firstField ? `project-${firstField}` : 'project-nome')?.focus(), 0);
       return;
+    }
+    if (project && validation.payload.clienteId !== project.clienteId) {
+      try {
+        const impact = await apiClient.get<{
+          allowed: boolean;
+          hasFinancialDependencies: boolean;
+          dependencies: Array<{ label: string; count: number; financial: boolean }>;
+        }>(`/api/projetos/${project.id}/reassignment-impact?clienteId=${validation.payload.clienteId}`);
+        const dependencySummary = impact.dependencies.length
+          ? impact.dependencies.map((item) => `${item.label}: ${item.count}${item.financial ? ' (financeiro)' : ''}`).join('\n')
+          : 'Nenhuma dependência vinculada.';
+        if (impact.hasFinancialDependencies) {
+          toast.error(`Reatribuição bloqueada. Dependências financeiras encontradas:\n${dependencySummary}`);
+          return;
+        }
+        const confirmed = window.confirm([
+          'Reatribuir este projeto para outro cliente?', '', dependencySummary, '',
+          impact.dependencies.length
+            ? 'As dependências editáveis e os metadados de arquivos serão atualizados em uma única transação.'
+            : 'O projeto não possui dependências vinculadas.'
+        ].join('\n'));
+        if (!confirmed) return;
+        if (impact.dependencies.length) {
+          await apiClient.post(`/api/projetos/${project.id}/reassign-client`, {
+            clienteId: validation.payload.clienteId,
+            confirmation: `REATRIBUIR ${project.id} PARA ${validation.payload.clienteId}`
+          });
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Não foi possível analisar a reatribuição.');
+        return;
+      }
     }
     saveMutation.mutate(validation.payload);
   };
@@ -253,6 +285,7 @@ function ProjectFormModalContent({
                 activeTab={activeTab}
                 context={effectiveContext}
                 clientes={clientes}
+                propriedades={[]}
                 onClearErrors={clearErrors}
                 onCreateClient={() => setShowQuickClientModal(true)}
               />

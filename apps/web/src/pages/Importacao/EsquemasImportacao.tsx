@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileCsv, Gear, ListDashes, MagnifyingGlass, Trash } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { persistOperationalSetting } from '../../services/operationalSettings';
 
 interface ImportSchema {
   id: string;
@@ -40,11 +41,11 @@ export function EsquemasImportacao() {
     );
   }, [schemas, search]);
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!schemaToDelete) return;
 
     const updated = schemas.filter(schema => schema.id !== schemaToDelete.id);
-    localStorage.setItem('import_schemas', JSON.stringify(updated));
+    await persistOperationalSetting('import_schemas', updated);
     setSchemas(updated);
     setSchemaToDelete(null);
   };

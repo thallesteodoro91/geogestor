@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { PreloadLink } from './PreloadLink';
 import clientsIcon from '../assets/magnific-icons/user_3237472.svg';
 import crmIcon from '../assets/magnific-icons/filter_9757817.svg';
 import budgetsIcon from '../assets/magnific-icons/profit_6919960.svg';
@@ -112,7 +113,7 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
           );
 
           return (
-            <Link
+            <PreloadLink
               key={item.path}
               to={item.path}
               aria-current={active ? 'page' : undefined}
@@ -123,10 +124,7 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
                 className={localNavigationIconClass(
                   active,
                   item.tone,
-                  cn(
-                    'overflow-hidden bg-transparent p-0',
-                    module === 'commercial' && 'dark:bg-transparent',
-                  ),
+                  'overflow-hidden bg-transparent p-0 dark:bg-transparent',
                 )}
               >
                 <img
@@ -138,7 +136,7 @@ export function ModuleNavigation({ module, className }: ModuleNavigationProps) {
                 />
               </span>
               {item.label}
-            </Link>
+            </PreloadLink>
           );
         })}
       </div>

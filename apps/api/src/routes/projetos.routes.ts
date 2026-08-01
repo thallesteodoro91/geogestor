@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, and, isNull, desc } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, desc, asc, count, like, lte, gte, notInArray, or } from 'drizzle-orm';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
@@ -9,6 +9,12 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { normalizeBudgetStatus, ProjetoPayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import {
+  RelationshipIntegrityError,
+  assertActiveClient,
+  assertPropertyBelongsToClient,
+  inspectProjectReassignment
+} from '../services/relationship-integrity.service';
 
 const ProjetoLotePayloadSchema = z.array(z.object({
   clienteId: z.string().uuid(),
@@ -57,14 +63,37 @@ export async function projetosRoutes(server: FastifyInstance) {
     schema: {
       querystring: z.object({
         page: z.coerce.number().min(1).default(1),
-        limit: z.coerce.number().min(1).max(500).default(100),
-        clienteId: z.string().uuid().optional()
+        limit: z.coerce.number().min(1).max(100).default(50),
+        clienteId: z.string().uuid().optional(),
+        q: z.string().trim().max(200).optional(),
+        status: z.string().trim().max(100).optional(),
+        tipo: z.string().trim().max(100).optional(),
+        inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        mode: z.enum(['legacy', 'page']).default('legacy')
       })
     }
   }, async (request, reply) => {
-    const { page, limit } = request.query;
+    const { page, limit, mode, q } = request.query;
     try {
       const offset = (page - 1) * limit;
+      const whereClause = and(
+        isNull(schema.projetos.deletedAt),
+        request.query.clienteId ? eq(schema.projetos.clienteId, request.query.clienteId) : undefined,
+        request.query.status ? eq(schema.projetos.status, request.query.status) : undefined,
+        request.query.tipo ? eq(schema.projetos.tipo, request.query.tipo) : undefined,
+        request.query.inicio ? gte(schema.projetos.dataInicio, request.query.inicio) : undefined,
+        request.query.fim ? lte(schema.projetos.dataInicio, request.query.fim) : undefined,
+        q ? or(
+          like(schema.projetos.nome, `%${q}%`),
+          like(schema.clientes.nome, `%${q}%`),
+          like(schema.projetos.descricao, `%${q}%`),
+          like(schema.projetos.cidade, `%${q}%`),
+          like(schema.projetos.municipio, `%${q}%`),
+          like(schema.projetos.matricula, `%${q}%`),
+          like(schema.projetos.car, `%${q}%`)
+        ) : undefined
+      );
       const projetosList = await db.select({
         projeto: schema.projetos,
         cliente: {
@@ -74,25 +103,99 @@ export async function projetosRoutes(server: FastifyInstance) {
       })
       .from(schema.projetos)
       .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
-      .where(
-        and(
-          isNull(schema.projetos.deletedAt),
-          request.query.clienteId ? eq(schema.projetos.clienteId, request.query.clienteId) : undefined
-        )
-      )
+      .where(whereClause)
       .limit(limit)
       .offset(offset)
-      .orderBy(desc(schema.projetos.createdAt));
+      .orderBy(q ? asc(schema.projetos.nome) : desc(schema.projetos.createdAt));
       
-      return projetosList.map(row => ({
+      const items = projetosList.map(row => ({
         ...row.projeto,
         clienteNome: row.cliente?.nome
       }));
+      if (mode === 'legacy') return items;
+      const [{ total }] = await db.select({ total: count() }).from(schema.projetos)
+        .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
+        .where(whereClause);
+      return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao buscar projetos' });
     }
   });
+
+  zServer.get('/options', {
+    schema: { querystring: z.object({
+      q: z.string().trim().max(200).optional(),
+      clienteId: z.string().uuid().optional(),
+      selectedId: z.string().uuid().optional(),
+      limit: z.coerce.number().int().min(1).max(50).default(25)
+    }) }
+  }, async (request) => {
+    const { q, clienteId, selectedId, limit } = request.query;
+    const selection = {
+      id: schema.projetos.id,
+      nome: schema.projetos.nome,
+      clienteId: schema.projetos.clienteId,
+      status: schema.projetos.status,
+      cidade: schema.projetos.cidade,
+      clienteNome: schema.clientes.nome,
+      tipo: schema.projetos.tipo
+    };
+    const items = await db.select(selection).from(schema.projetos)
+      .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id)).where(and(
+      isNull(schema.projetos.deletedAt),
+      clienteId ? eq(schema.projetos.clienteId, clienteId) : undefined,
+      q ? or(like(schema.projetos.nome, `%${q}%`), like(schema.projetos.cidade, `%${q}%`)) : undefined
+    )).orderBy(asc(schema.projetos.nome), asc(schema.projetos.id)).limit(limit);
+    if (selectedId && !items.some((item) => item.id === selectedId)) {
+      const [selected] = await db.select(selection).from(schema.projetos)
+        .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
+        .where(and(eq(schema.projetos.id, selectedId), isNull(schema.projetos.deletedAt))).limit(1);
+      if (selected) return [selected, ...items].slice(0, limit);
+    }
+    return items;
+  });
+
+  zServer.get('/deadlines', {
+    schema: { querystring: z.object({ days: z.coerce.number().int().min(0).max(365).default(7) }) }
+  }, async (request) => {
+    const maximum = new Date();
+    maximum.setHours(0, 0, 0, 0);
+    maximum.setDate(maximum.getDate() + request.query.days);
+    return db.select({
+      id: schema.projetos.id,
+      nome: schema.projetos.nome,
+      status: schema.projetos.status,
+      dataEntrega: schema.projetos.dataEntrega
+    }).from(schema.projetos).where(and(
+      isNull(schema.projetos.deletedAt),
+      isNotNull(schema.projetos.dataEntrega),
+      lte(schema.projetos.dataEntrega, maximum.toISOString().slice(0, 10)),
+      notInArray(schema.projetos.status, ['Concluído', 'Concluido', 'Finalizado', 'Arquivado', 'Cancelado'])
+    )).orderBy(asc(schema.projetos.dataEntrega), asc(schema.projetos.id)).limit(200);
+  });
+
+  zServer.get('/calendar', {
+    schema: { querystring: z.object({
+      inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }) }
+  }, async (request) => db.select({
+    id: schema.projetos.id,
+    nome: schema.projetos.nome,
+    dataInicio: schema.projetos.dataInicio,
+    dataEntrega: schema.projetos.dataEntrega,
+    clienteId: schema.projetos.clienteId,
+    clienteNome: schema.clientes.nome
+  }).from(schema.projetos)
+    .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
+    .where(and(
+      isNull(schema.projetos.deletedAt),
+      or(
+        and(gte(schema.projetos.dataInicio, request.query.inicio), lte(schema.projetos.dataInicio, request.query.fim)),
+        and(gte(schema.projetos.dataEntrega, request.query.inicio), lte(schema.projetos.dataEntrega, request.query.fim))
+      )
+    )).orderBy(asc(schema.projetos.dataInicio), asc(schema.projetos.id)).limit(500));
 
   zServer.get('/:id', {
     schema: {
@@ -356,6 +459,93 @@ export async function projetosRoutes(server: FastifyInstance) {
     }
   });
 
+  zServer.get('/:id/reassignment-impact', {
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      querystring: z.object({ clienteId: z.string().uuid() })
+    }
+  }, async (request, reply) => {
+    const [project] = await db.select().from(schema.projetos).where(and(
+      eq(schema.projetos.id, request.params.id),
+      isNull(schema.projetos.deletedAt)
+    )).limit(1);
+    if (!project) return reply.status(404).send({ error: 'Projeto não encontrado.' });
+    try {
+      await assertActiveClient(request.query.clienteId);
+      await assertPropertyBelongsToClient(project.propriedadeId, request.query.clienteId);
+      return {
+        projetoId: project.id,
+        clienteAtualId: project.clienteId,
+        clienteDestinoId: request.query.clienteId,
+        ...(await inspectProjectReassignment(project.id))
+      };
+    } catch (error) {
+      if (error instanceof RelationshipIntegrityError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
+      throw error;
+    }
+  });
+
+  zServer.post('/:id/reassign-client', {
+    schema: {
+      params: z.object({ id: z.string().uuid() }),
+      body: z.object({ clienteId: z.string().uuid(), confirmation: z.string().min(1) })
+    }
+  }, async (request, reply) => {
+    const [project] = await db.select().from(schema.projetos).where(and(
+      eq(schema.projetos.id, request.params.id), isNull(schema.projetos.deletedAt)
+    )).limit(1);
+    if (!project) return reply.status(404).send({ error: 'Projeto não encontrado.' });
+    const expected = `REATRIBUIR ${project.id} PARA ${request.body.clienteId}`;
+    if (request.body.confirmation !== expected) {
+      return reply.status(400).send({ error: 'A confirmação específica da reatribuição não confere.' });
+    }
+    try {
+      await assertActiveClient(request.body.clienteId);
+      await assertPropertyBelongsToClient(project.propriedadeId, request.body.clienteId);
+      const impact = await inspectProjectReassignment(project.id);
+      if (impact.hasFinancialDependencies) {
+        return reply.status(409).send({
+          error: 'A reatribuição foi bloqueada porque existem dependências financeiras.',
+          code: 'PROJECT_REASSIGNMENT_BLOCKED', impact
+        });
+      }
+      const [[oldClient], [targetClient]] = await Promise.all([
+        db.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, project.clienteId)).limit(1),
+        db.select({ nome: schema.clientes.nome }).from(schema.clientes).where(eq(schema.clientes.id, request.body.clienteId)).limit(1)
+      ]);
+      const now = new Date().toISOString();
+      await db.transaction(async (tx) => {
+        await tx.update(schema.tarefas).set({ clienteId: request.body.clienteId }).where(eq(schema.tarefas.projetoId, project.id));
+        await tx.update(schema.compromissos).set({ clienteId: request.body.clienteId }).where(eq(schema.compromissos.projetoId, project.id));
+        await tx.update(schema.viagens).set({ clienteId: request.body.clienteId }).where(eq(schema.viagens.projetoId, project.id));
+        await tx.update(schema.documentos).set({ clienteId: request.body.clienteId }).where(eq(schema.documentos.projetoId, project.id));
+        await tx.update(schema.licencas).set({ clienteId: request.body.clienteId }).where(eq(schema.licencas.projetoId, project.id));
+        await tx.update(schema.ambiental).set({ clienteId: request.body.clienteId }).where(eq(schema.ambiental.projetoId, project.id));
+        await tx.update(schema.pericias).set({ clienteId: request.body.clienteId }).where(eq(schema.pericias.projetoId, project.id));
+        await tx.update(schema.oportunidades).set({ clienteId: request.body.clienteId }).where(eq(schema.oportunidades.projetoId, project.id));
+        await tx.update(schema.interacoes_cliente).set({ clienteId: request.body.clienteId }).where(eq(schema.interacoes_cliente.projetoId, project.id));
+        await tx.update(schema.projetos).set({ clienteId: request.body.clienteId, updatedAt: now }).where(eq(schema.projetos.id, project.id));
+        await AuditLogService.log('UPDATE', 'ProjetoReatribuicao', project, { ...project, clienteId: request.body.clienteId, impact }, tx);
+        await FileSystemOutboxService.enqueue({
+          idempotencyKey: `project-reassignment:${project.id}:${project.clienteId}:${request.body.clienteId}`,
+          operationType: 'rename-project-folder', aggregateType: 'project', aggregateId: project.id,
+          payload: {
+            oldClientName: oldClient?.nome || project.clienteId,
+            newClientName: targetClient?.nome || request.body.clienteId,
+            oldProjectName: project.nome, newProjectName: project.nome, projectId: project.id
+          }
+        }, tx);
+      });
+      FileSystemOutboxService.kick();
+      return { reassigned: true, projetoId: project.id, clienteId: request.body.clienteId, impact };
+    } catch (error) {
+      if (error instanceof RelationshipIntegrityError) return reply.status(error.statusCode).send({ error: error.message });
+      throw error;
+    }
+  });
+
   zServer.patch('/:id', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
@@ -369,7 +559,47 @@ export async function projetosRoutes(server: FastifyInstance) {
       if (!oldProjeto.length || oldProjeto[0].deletedAt) {
         return reply.status(404).send({ error: 'Projeto não encontrado' });
       }
+      const targetClientId = data.clienteId ?? oldProjeto[0].clienteId;
+      await assertActiveClient(targetClientId);
+      await assertPropertyBelongsToClient(
+        data.propriedadeId !== undefined ? data.propriedadeId : oldProjeto[0].propriedadeId,
+        targetClientId
+      );
+      if (targetClientId !== oldProjeto[0].clienteId) {
+        const impact = await inspectProjectReassignment(id);
+        if (impact.dependencies.length > 0) {
+          return reply.status(409).send({
+            error: impact.hasFinancialDependencies
+              ? 'O cliente do projeto não pode ser alterado enquanto existirem dependências financeiras.'
+              : 'Use a operação assistida de reatribuição para atualizar todas as dependências.',
+            code: impact.hasFinancialDependencies ? 'PROJECT_REASSIGNMENT_BLOCKED' : 'PROJECT_REASSIGNMENT_REQUIRED',
+            impact
+          });
+        }
+      }
       const requestedType = data.tipo !== undefined ? data.tipo : oldProjeto[0].tipo;
+      if (requestedType !== oldProjeto[0].tipo) {
+        const [licenses, environmental, assessments] = await Promise.all([
+          db.select({ id: schema.licencas.id }).from(schema.licencas)
+            .where(and(eq(schema.licencas.projetoId, id), isNull(schema.licencas.deletedAt))).limit(1),
+          db.select({ id: schema.ambiental.id }).from(schema.ambiental)
+            .where(and(eq(schema.ambiental.projetoId, id), isNull(schema.ambiental.deletedAt))).limit(1),
+          db.select({ id: schema.pericias.id }).from(schema.pericias)
+            .where(and(eq(schema.pericias.projetoId, id), isNull(schema.pericias.deletedAt))).limit(1)
+        ]);
+        const specializedDependencies = [
+          licenses.length ? 'licenças e condicionantes' : null,
+          environmental.length ? 'dados ambientais' : null,
+          assessments.length ? 'perícias' : null
+        ].filter((value): value is string => Boolean(value));
+        if (specializedDependencies.length) {
+          return reply.status(409).send({
+            error: `A alteração de tipo foi bloqueada para preservar ${specializedDependencies.join(', ')}.`,
+            code: 'PROJECT_TYPE_CHANGE_BLOCKED',
+            dependencies: specializedDependencies
+          });
+        }
+      }
       if (requestedType === 'Licenciamento') {
         const existingLicense = await db.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1);
         if (!existingLicense.length && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataVencimentoLicenca)) {
@@ -396,16 +626,6 @@ export async function projetosRoutes(server: FastifyInstance) {
 
         const currentType = data.tipo !== undefined ? data.tipo : oldProjeto[0].tipo;
         const specializedUpdatedAt = new Date().toISOString();
-
-        if (currentType !== 'Licenciamento') {
-          await tx.delete(schema.licencas).where(eq(schema.licencas.projetoId, id));
-        }
-        if (currentType !== 'Ambiental') {
-          await tx.delete(schema.ambiental).where(eq(schema.ambiental.projetoId, id));
-        }
-        if (currentType !== 'Perícia') {
-          await tx.delete(schema.pericias).where(eq(schema.pericias.projetoId, id));
-        }
 
         if (currentType === 'Licenciamento') {
           const existing = await tx.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1);
@@ -555,6 +775,9 @@ export async function projetosRoutes(server: FastifyInstance) {
 
       return projetoAtualizado;
     } catch (err) {
+      if (err instanceof RelationshipIntegrityError) {
+        return reply.status(err.statusCode).send({ error: err.message });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao atualizar projeto' });
     }

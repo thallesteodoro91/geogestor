@@ -2,6 +2,7 @@ import { AddressBook, ArrowCounterClockwise, ArrowsLeftRight, CalendarBlank, Cal
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
@@ -15,7 +16,7 @@ import { Skeleton } from '../../components/Skeleton';
 import { apiClient } from '../../services/apiClient';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
+import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CLIENT_ORIGIN_OPTIONS, CLIENT_SERVICOS_OPTIONS } from '../../utils/clientTags';
 import { geoFieldClass } from '../../utils/geoTheme';
 import {
@@ -224,7 +225,7 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
 
   return (
     <nav aria-label="Seções do CRM" className={localNavigationBarClass}>
-      <div className={localNavigationItemsClass} role="list">
+      <div className={localNavigationItemsClass}>
         {CRM_SECTIONS.map((section) => {
           const active = section.id === activeView;
           const nextSearchParams = new URLSearchParams(searchParams);
@@ -267,18 +268,15 @@ function CRMPageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">
-          <Funnel aria-hidden="true" size={34} weight="duotone" className="text-brand-primary-600" />
-          CRM
-        </h1>
-        <p className="mt-2 max-w-3xl break-words text-sm font-medium leading-6 text-text-secondary sm:text-base">
-          {description}
-        </p>
-      </div>
-      {action}
-    </header>
+    <PageHeader
+      eyebrow="Relacionamento comercial"
+      title="CRM"
+      description={description}
+      icon={<Funnel size={24} weight="duotone" />}
+      action={action}
+      navigation={<ModuleNavigation module="commercial" className="mb-0" />}
+      className="mb-0"
+    />
   );
 }
 
@@ -620,12 +618,11 @@ export function CRM() {
     return (
       <Layout contentClassName={commercialContentClass}>
         <div className="min-w-0 space-y-6">
-          <ModuleNavigation module="commercial" className="mb-0" />
           <CRMPageHeader
             description="Centralize leads, oportunidades e resultados comerciais sem misturar seus cadastros."
-            action={<button type="button" onClick={() => leadsRef.current?.openCreate()} className={cn(primaryActionButtonClass, 'shrink-0 self-start sm:self-auto')}>
+            action={<button type="button" onClick={() => leadsRef.current?.openCreate()} className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}>
               <span>Novo lead</span>
-              <span className={primaryActionIconClass}><Plus aria-hidden="true" size={17} weight="bold" /></span>
+              <span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span>
             </button>}
           />
           <CRMSectionNavigation activeView={activeView} />
@@ -645,7 +642,6 @@ export function CRM() {
     return (
       <Layout contentClassName={commercialContentClass}>
         <div className="min-w-0 space-y-6">
-          <ModuleNavigation module="commercial" className="mb-0" />
           <CRMPageHeader description="Acompanhe conversão de leads, valor do pipeline e oportunidades que exigem atenção." />
           <CRMSectionNavigation activeView={activeView} />
           {indicatorsError ? (
@@ -721,10 +717,9 @@ export function CRM() {
   return (
     <Layout contentClassName={commercialContentClass}>
       <div className="min-w-0 space-y-8">
-        <ModuleNavigation module="commercial" className="mb-0" />
         <CRMPageHeader
           description="Acompanhe próximas ações, propostas, probabilidade de fechamento e conversões em projetos."
-          action={<button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(primaryActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}><span>Nova oportunidade</span><span className={primaryActionIconClass}><Plus aria-hidden="true" size={17} weight="bold" /></span></button>}
+          action={<button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(headerPrimaryActionButtonClass, 'w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto')}><span>Nova oportunidade</span><span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span></button>}
         />
         <CRMSectionNavigation activeView={activeView} />
 

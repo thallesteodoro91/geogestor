@@ -4,6 +4,8 @@ import { LicenseStatusSchema } from './environmental';
 export * from './budgets';
 export * from './opportunities';
 export * from './environmental';
+export * from './reports';
+export * from './strategic-planning';
 
 export const StatusProjetoSchema = z.enum([
   'Em Andamento',

@@ -3,17 +3,19 @@ import { Briefcase, Calendar, CalendarBlank, CaretLeft, CaretRight, CheckSquare,
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FormError, FormField, FormFooter, FormSelect, SwitchField } from '../../components/Form';
+import { FormError, FormField, FormFooter, SwitchField } from '../../components/Form';
 import { CustomSelect } from '../../components/CustomSelect';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { geoFieldClass, geoGreenSurfaceClass } from '../../utils/geoTheme';
-import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
-import { apiFetch } from '../../services/apiClient';
+import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
+import { apiClient, apiFetch } from '../../services/apiClient';
 import { AppointmentTypePicker, CalendarDatePicker, MonthYearPicker, TimePicker } from './CalendarControls';
 import {
   filterBarClass,
@@ -28,11 +30,6 @@ interface Projeto {
   dataEntrega?: string | null;
   clienteId?: string | null;
   clienteNome?: string | null;
-}
-
-interface Cliente {
-  id: string;
-  nome: string;
 }
 
 interface Tarefa {
@@ -294,7 +291,6 @@ export function Calendario() {
   const [currentDate, setCurrentDate] = useState(initialMonth);
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
   const [projetos, setProjetos] = useState<Projeto[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Compromisso | null>(null);
@@ -317,20 +313,21 @@ export function Calendario() {
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') ?? 'Todos');
   const dayButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
-  const fetchDados = async () => {
+  const fetchDados = useCallback(async () => {
     setLoading(true);
     setLoadError('');
+    const inicio = toDateKey(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
+    const fim = toDateKey(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0));
+    const range = new URLSearchParams({ inicio, fim });
 
     const results = await Promise.allSettled([
-      fetchCollection<Projeto>('/api/projetos', 'os projetos'),
-      fetchCollection<Cliente>('/api/clientes?limit=500', 'os clientes'),
-      fetchCollection<Tarefa>('/api/tarefas', 'as tarefas'),
-      fetchCollection<Compromisso>('/api/compromissos', 'os compromissos')
+      apiClient.get<Projeto[]>(`/api/projetos/calendar?${range}`),
+      apiClient.get<Tarefa[]>(`/api/tarefas/calendar?${range}`),
+      fetchCollection<Compromisso>(`/api/compromissos?${range}`, 'os compromissos')
     ]);
 
-    const [projetosResult, clientesResult, tarefasResult, compromissosResult] = results;
+    const [projetosResult, tarefasResult, compromissosResult] = results;
     setProjetos(projetosResult.status === 'fulfilled' ? projetosResult.value : []);
-    setClientes(clientesResult.status === 'fulfilled' ? clientesResult.value : []);
     setTarefas(tarefasResult.status === 'fulfilled' ? tarefasResult.value : []);
     setCompromissos(compromissosResult.status === 'fulfilled' ? compromissosResult.value : []);
 
@@ -339,11 +336,11 @@ export function Calendario() {
       .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason));
     if (errors.length) setLoadError(errors.join(' '));
     setLoading(false);
-  };
+  }, [currentDate]);
 
   useEffect(() => {
     void Promise.resolve().then(fetchDados);
-  }, []);
+  }, [fetchDados]);
 
   useEffect(() => {
     setSearchParams((previous) => {
@@ -484,11 +481,6 @@ export function Calendario() {
     tarefas.forEach((item) => values.add(item.status));
     return [{ label: 'Todos os status', value: 'Todos' }, ...Array.from(values).filter(Boolean).map((value) => ({ label: value, value }))];
   }, [tarefas]);
-
-  const availableProjects = useMemo(() => {
-    if (!novoClienteId) return projetos;
-    return projetos.filter((projeto) => !projeto.clienteId || projeto.clienteId === novoClienteId);
-  }, [novoClienteId, projetos]);
 
   useEffect(() => {
     if (!addFormDirty) return;
@@ -686,24 +678,20 @@ export function Calendario() {
 
   return (
     <Layout>
-      <ModuleNavigation module="agenda" />
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 text-balance sm:text-4xl dark:text-white">
-            Calendário
-          </h1>
-          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-zinc-500 sm:text-base dark:text-zinc-400">
-            Agende reuniões e visitas de campo e acompanhe automaticamente os prazos dos projetos.
-          </p>
-        </div>
-
-        <button type="button" onClick={openAddModal} className={cn(primaryActionButtonClass, 'w-full md:w-auto')}>
-          <span>Agendar compromisso</span>
-          <span className={primaryActionIconClass} aria-hidden="true">
-            <Plus weight="bold" className="h-4 w-4" />
-          </span>
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Agenda"
+        title="Calendário"
+        description="Agende reuniões e visitas de campo e acompanhe automaticamente os prazos dos projetos."
+        action={(
+          <button type="button" onClick={openAddModal} className={cn(headerPrimaryActionButtonClass, 'w-full md:w-auto')}>
+            <span>Agendar compromisso</span>
+            <span className={headerPrimaryActionIconClass} aria-hidden="true">
+              <Plus weight="bold" className="h-3.5 w-3.5" />
+            </span>
+          </button>
+        )}
+        navigation={<ModuleNavigation module="agenda" className="mb-0" />}
+      />
 
       <section aria-label="Filtros do calendário" className={cn('mb-5', filterBarClass)}>
         <div className="grid grid-cols-1 items-center gap-2.5 lg:grid-cols-[minmax(260px,1.4fr)_repeat(2,minmax(150px,0.7fr))_auto]">
@@ -1066,39 +1054,33 @@ export function Calendario() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <FormField htmlFor="calendar-client" label={<FieldLabel icon={<User weight="duotone" className="h-3.5 w-3.5" />} tone="emerald">Cliente</FieldLabel>} hint="Opcional">
-              <FormSelect
+              <RemoteCombobox<{ id: string; nome: string }>
                 id="calendar-client"
                 name="clienteId"
+                endpoint="/api/clientes/options"
                 value={novoClienteId}
-                onChange={(event) => {
-                  const clienteId = event.target.value;
+                onChange={(clienteId) => {
                   setNovoClienteId(clienteId);
-                  const selectedProject = projetos.find((projeto) => projeto.id === novoProjetoId);
-                  if (selectedProject?.clienteId && selectedProject.clienteId !== clienteId) setNovoProjetoId('');
+                  setNovoProjetoId('');
                 }}
-                className={cn(geoFieldClass, 'geo-native-select h-12 w-full appearance-none px-4 text-sm')}
-              >
-                <option value="">Sem vínculo</option>
-                {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
-              </FormSelect>
+                emptyLabel="Sem vínculo"
+                placeholder="Pesquisar cliente…"
+              />
             </FormField>
 
             <FormField htmlFor="calendar-project" label={<FieldLabel icon={<Briefcase weight="duotone" className="h-3.5 w-3.5" />} tone="violet">Projeto</FieldLabel>} hint="Opcional">
-              <FormSelect
+              <RemoteCombobox<Projeto>
                 id="calendar-project"
                 name="projetoId"
+                endpoint={`/api/projetos/options${novoClienteId ? `?clienteId=${encodeURIComponent(novoClienteId)}` : ''}`}
                 value={novoProjetoId}
-                onChange={(event) => {
-                  const projetoId = event.target.value;
+                onChange={(projetoId, project) => {
                   setNovoProjetoId(projetoId);
-                  const project = projetos.find((item) => item.id === projetoId);
                   if (project?.clienteId) setNovoClienteId(project.clienteId);
                 }}
-                className={cn(geoFieldClass, 'geo-native-select h-12 w-full appearance-none px-4 text-sm')}
-              >
-                <option value="">Sem vínculo</option>
-                {availableProjects.map((projeto) => <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>)}
-              </FormSelect>
+                emptyLabel="Sem vínculo"
+                placeholder="Pesquisar projeto…"
+              />
             </FormField>
           </div>
 

@@ -8,7 +8,6 @@ import {
   CaretDown,
   CaretRight,
   CheckCircle,
-  Database,
   FileCsv,
   FileXls,
   Gear,
@@ -19,7 +18,11 @@ import {
 import Papa from 'papaparse';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageHeader } from '../../components/PageHeader';
 import { apiClient } from '../../services/apiClient';
+import { persistOperationalSetting } from '../../services/operationalSettings';
+import { secondaryActionButtonClass } from '../../utils/actionStyles';
+import { cn } from '../../utils/cn';
 
 type EntityKey = 'clientes' | 'projetos' | 'contatos';
 
@@ -254,7 +257,7 @@ export function ImportacaoDados() {
 
       const savedSchemas = JSON.parse(localStorage.getItem('import_schemas') || '[]');
       savedSchemas.push(schemaToSave);
-      localStorage.setItem('import_schemas', JSON.stringify(savedSchemas));
+      await persistOperationalSetting('import_schemas', savedSchemas);
       return { success: true, count: payload.length };
     },
     onSuccess: () => {
@@ -302,38 +305,31 @@ export function ImportacaoDados() {
 
   return (
     <Layout>
-      <ModuleNavigation module="tools" />
-      <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <Database size={14} weight="bold" aria-hidden="true" />
-              Importador local
-            </span>
-            <span className="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-              CSV e XLSX
-            </span>
-          </div>
-          <h1 className="text-2xl font-bold leading-tight text-zinc-950 dark:text-white md:text-[28px]">
-            Importação de dados
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-            Envie uma planilha, confirme o mapeamento das colunas e grave os registros em lote.
-          </p>
-        </div>
-
-        <Link
-          to="/importacao/esquemas"
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-800 shadow-sm transition-colors hover:border-zinc-300 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/45 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-        >
-          <Gear weight="bold" size={16} aria-hidden="true" />
-          Esquemas salvos
-        </Link>
-      </div>
+      <PageHeader
+        eyebrow="Ferramentas técnicas"
+        title="Importação de dados"
+        description="Envie uma planilha, confirme o mapeamento das colunas e grave os registros em lote."
+        className="mb-4"
+        descriptionClassName="max-w-none"
+        navigationClassName="mt-4"
+        action={
+          <Link
+            to="/importacao/esquemas"
+            className={cn(
+              secondaryActionButtonClass,
+              'h-11 min-h-11 gap-2 px-4 py-0',
+            )}
+          >
+            <Gear weight="bold" size={20} aria-hidden="true" />
+            Esquemas salvos
+          </Link>
+        }
+        navigation={<ModuleNavigation module="tools" className="mb-0" />}
+      />
 
       <ol
         aria-label="Etapas da importação"
-        className="mb-6 grid gap-3 md:grid-cols-3"
+        className="mb-4 grid gap-3 md:grid-cols-3"
       >
         {stepItems.map(item => {
           const isCurrent = step === item.num;
@@ -343,9 +339,9 @@ export function ImportacaoDados() {
             <li
               key={item.num}
               aria-current={isCurrent ? 'step' : undefined}
-              className={`rounded-xl border px-4 py-3 ${
+              className={`rounded-xl border px-4 py-3 transition-colors ${
                 isCurrent
-                  ? 'border-zinc-900 bg-zinc-950 text-white dark:border-zinc-100 dark:bg-white dark:text-zinc-950'
+                  ? 'border-brand-turquoise-200 bg-gradient-to-r from-brand-turquoise-50 via-brand-blue-50 to-brand-green-50 text-brand-turquoise-900 dark:border-brand-turquoise-300/20 dark:from-brand-turquoise-400/15 dark:via-brand-blue-400/10 dark:to-brand-green-400/15 dark:text-brand-turquoise-100'
                   : isDone
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-100'
                     : 'border-zinc-200 bg-white text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400'
@@ -355,7 +351,7 @@ export function ImportacaoDados() {
                 <span
                   className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                     isCurrent
-                      ? 'bg-white text-zinc-950 dark:bg-zinc-950 dark:text-white'
+                      ? 'bg-brand-turquoise-700 text-white dark:bg-brand-turquoise-300 dark:text-zinc-950'
                       : isDone
                         ? 'bg-emerald-600 text-white'
                         : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300'
@@ -365,7 +361,7 @@ export function ImportacaoDados() {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className={`mt-0.5 block text-xs leading-5 ${isCurrent ? 'text-zinc-200 dark:text-zinc-600' : 'opacity-75'}`}>
+                  <span className={`mt-0.5 block text-xs leading-5 ${isCurrent ? 'text-brand-turquoise-800/75 dark:text-brand-turquoise-100/70' : 'opacity-75'}`}>
                     {isDone ? 'Concluído' : item.description}
                   </span>
                 </span>
@@ -375,7 +371,7 @@ export function ImportacaoDados() {
         })}
       </ol>
 
-      <section className="mx-auto max-w-5xl rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 md:p-6">
+      <section className="w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 md:p-6">
         {step === 1 && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
             <aside className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
@@ -392,7 +388,7 @@ export function ImportacaoDados() {
                   name="entidade"
                   value={entity}
                   onChange={event => setEntity(event.target.value as EntityKey)}
-                  className="h-11 w-full appearance-none rounded-lg border border-zinc-300 bg-white px-3 pr-10 text-sm font-semibold text-zinc-900 transition-colors hover:border-zinc-400 focus-visible:border-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/35 dark:[color-scheme:dark] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-600"
+                  className="h-10 w-full appearance-none rounded-lg border border-zinc-300 bg-white px-3 pr-10 text-sm font-semibold text-zinc-900 transition-colors hover:border-zinc-400 focus-visible:border-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/35 dark:[color-scheme:dark] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-600"
                 >
                   {Object.entries(entityOptions).map(([value, option]) => (
                     <option key={value} value={value}>

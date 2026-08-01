@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MotionConfig } from 'framer-motion';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { PersistentLayout } from './components/Layout';
 import { Toaster, toast } from 'sonner';
 
 // Intercept global alert to use Sonner (Lovable style)
@@ -25,6 +26,13 @@ import { clearLocalSessionToken } from './services/apiClient';
 import { ApiAvailability } from './components/ApiAvailability';
 import { DesbloqueioLocal } from './pages/DesbloqueioLocal';
 import { AppSessionProvider, type AppIdentity } from './contexts/AppSessionContext';
+import { scheduleCommonRoutePreload } from './utils/routePreloaders';
+import {
+  initializeNavigationMetrics,
+  markNavigationUrlChanged,
+  markNavigationUsable,
+  recordGlobalFallback
+} from './utils/navigationMetrics';
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((module) => ({ default: module.Dashboard })));
 const ListagemClientes = lazy(() => import('./pages/Clientes/ListagemClientes').then((module) => ({ default: module.ListagemClientes })));
@@ -46,6 +54,9 @@ const LicencaDetalhes = lazy(() => import('./pages/Licenciamento/LicencaDetalhes
 const CRM = lazy(() => import('./pages/CRM/CRM').then((module) => ({ default: module.CRM })));
 const Configuracoes = lazy(() => import('./pages/Configuracoes').then((module) => ({ default: module.Configuracoes })));
 const Cadastros = lazy(() => import('./pages/Cadastros').then((module) => ({ default: module.Cadastros })));
+const Propriedades = lazy(() => import('./pages/Propriedades').then((module) => ({ default: module.Propriedades })));
+const QualidadeDados = lazy(() => import('./pages/QualidadeDados').then((module) => ({ default: module.QualidadeDados })));
+const PosAtualizacao = lazy(() => import('./pages/PosAtualizacao').then((module) => ({ default: module.PosAtualizacao })));
 const AuditLogs = lazy(() => import('./pages/Relatorios/AuditLogs').then((module) => ({ default: module.AuditLogs })));
 const Ajuda = lazy(() => import('./pages/Ajuda/Ajuda').then((module) => ({ default: module.Ajuda })));
 const Planejamento = lazy(() => import('./pages/Planejamento').then((module) => ({ default: module.Planejamento })));
@@ -68,9 +79,11 @@ const queryClient = new QueryClient({
 });
 
 function AppLoading() {
+  useEffect(() => recordGlobalFallback(), []);
+
   return (
     <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-sm font-semibold text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
-      Carregando GeoGestor...
+      Carregando GeoGestor…
     </div>
   );
 }
@@ -92,24 +105,29 @@ function RouteTransition({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.1, ease: "easeOut" }}
-      className="h-full w-full"
-    >
-      {children}
-    </motion.div>
-  );
+  return <div className="h-full w-full">{children}</div>;
 }
 
 function AppRoutes() {
   const location = useLocation();
-  return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+  const previousPathnameRef = useRef(location.pathname);
+
+  useEffect(() => {
+    markNavigationUrlChanged(location.pathname);
+  }, [location.key, location.pathname]);
+
+  useEffect(() => {
+    if (previousPathnameRef.current === location.pathname) return;
+    previousPathnameRef.current = location.pathname;
+
+    window.requestAnimationFrame(() => {
+      document.getElementById('main-content')?.focus({ preventScroll: true });
+      window.requestAnimationFrame(() => markNavigationUsable(location.pathname));
+    });
+  }, [location.pathname]);
+
+  const routes = (
+      <Routes location={location}>
         <Route path="/configuracoes-iniciais" element={<ConfiguracaoInicial />} />
         <Route path="/" element={<RouteTransition><Dashboard /></RouteTransition>} />
         <Route path="/clientes" element={<RouteTransition><ListagemClientes /></RouteTransition>} />
@@ -139,17 +157,56 @@ function AppRoutes() {
         <Route path="/crm" element={<RouteTransition><CRM /></RouteTransition>} />
         <Route path="/configuracoes" element={<RouteTransition><Configuracoes /></RouteTransition>} />
         <Route path="/cadastros" element={<RouteTransition><Cadastros /></RouteTransition>} />
+        <Route path="/propriedades" element={<RouteTransition><Propriedades /></RouteTransition>} />
+        <Route path="/qualidade-dados" element={<RouteTransition><QualidadeDados /></RouteTransition>} />
+        <Route path="/pos-atualizacao" element={<RouteTransition><PosAtualizacao /></RouteTransition>} />
         <Route path="/relatorio-executivo" element={<Navigate to="/relatorios?tipo=executivo" replace />} />
         <Route path="/audit-logs" element={<RouteTransition><AuditLogs /></RouteTransition>} />
         <Route path="/ajuda" element={<RouteTransition><Ajuda /></RouteTransition>} />
         <Route path="/planejamento" element={<RouteTransition><Planejamento /></RouteTransition>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </AnimatePresence>
+  );
+
+  return (
+    <>
+      {location.pathname === '/configuracoes-iniciais'
+        ? routes
+        : <PersistentLayout>{routes}</PersistentLayout>}
+    </>
   );
 }
 
 function SetupGate() {
+  useEffect(() => {
+    const marker = 'geogestor_operational_storage_migrated_v1';
+    if (localStorage.getItem(marker) === 'true') return;
+    const keys = [
+      'geogestor_tipos_servico',
+      'geogestor_tipos_despesa',
+      'geogestor_jornada_categorias',
+      'geogestor_empresa_template',
+      'import_schemas',
+      'geogestor_alerta_dias'
+    ];
+    const values: Record<string, unknown> = {};
+    for (const key of keys) {
+      const stored = localStorage.getItem(key);
+      if (stored === null) continue;
+      try {
+        values[key] = JSON.parse(stored);
+      } catch {
+        values[key] = stored;
+      }
+    }
+    if (!Object.keys(values).length) {
+      localStorage.setItem(marker, 'true');
+      return;
+    }
+    void apiClient.put('/api/dados-operacionais/configuracoes-operacionais/migrar', { values })
+      .then(() => localStorage.setItem(marker, 'true'))
+      .catch(() => undefined);
+  }, []);
   const location = useLocation();
   const [forcedLocked, setForcedLocked] = useState(false);
   const [connectionError, setConnectionError] = useState<unknown>(null);
@@ -162,8 +219,9 @@ function SetupGate() {
     queryKey: ['auth-status'],
     queryFn: () => apiClient.get('/api/auth/status', { timeoutMs: 2_500 }),
     retry: false,
-    refetchInterval: 2_000,
-    refetchIntervalInBackground: true
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true
   });
 
   const retryConnection = useCallback(async () => {
@@ -275,21 +333,26 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => scheduleCommonRoutePreload(), []);
+  useEffect(() => initializeNavigationMetrics(), []);
+
   return (
     <QueryClientProvider client={queryClient}>
-      <Toaster position="top-right" richColors closeButton />
-      {DevTypeUIPanel && (
-        <Suspense fallback={null}>
-          <DevTypeUIPanel />
-        </Suspense>
-      )}
-      <BrowserRouter>
-        <Suspense fallback={<AppLoading />}>
-          <ErrorBoundary>
-            <SetupGate />
-          </ErrorBoundary>
-        </Suspense>
-      </BrowserRouter>
+      <MotionConfig reducedMotion="user">
+        <Toaster position="top-right" richColors closeButton />
+        {DevTypeUIPanel && (
+          <Suspense fallback={null}>
+            <DevTypeUIPanel />
+          </Suspense>
+        )}
+        <BrowserRouter>
+          <Suspense fallback={<AppLoading />}>
+            <ErrorBoundary>
+              <SetupGate />
+            </ErrorBoundary>
+          </Suspense>
+        </BrowserRouter>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

@@ -60,7 +60,7 @@ test('migração do CRM preserva oportunidades e habilita vínculo opcional com 
     sql: 'INSERT INTO oportunidades (id, cliente_id, titulo, valor_estimado) VALUES (?, ?, ?, ?)',
     args: ['oportunidade-legada', 'cliente-legado', 'Levantamento legado', 150_000]
   });
-  await legacyClient.execute("UPDATE schema_migrations SET status = 'failed' WHERE version = 4");
+  await legacyClient.execute("UPDATE schema_migrations SET status = 'failed' WHERE version = 7");
   await legacyClient.close();
 
   await runRuntimeMigrations();

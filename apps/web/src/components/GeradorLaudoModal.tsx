@@ -16,6 +16,7 @@ interface GeradorLaudoModalProps {
 }
 
 export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudoModalProps) {
+  const [isGenerating, setIsGenerating] = useState(false);
   const [formData, setFormData] = useState<Partial<LaudoOptions>>({
     projetoNome: projetoNome,
     clienteNome: '',
@@ -29,14 +30,22 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!formData.clienteNome || !formData.tecnicoResponsavel) {
       alert('Preencha os campos obrigatórios (Cliente e Técnico).');
       return;
     }
 
-    gerarLaudoTecnico(formData as LaudoOptions);
-    onClose();
+    if (isGenerating) return;
+    setIsGenerating(true);
+    try {
+      await gerarLaudoTecnico(formData as LaudoOptions);
+      onClose();
+    } catch {
+      alert('Não foi possível gerar o PDF. Revise os dados e tente novamente.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -120,17 +129,22 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
 
         <div className="flex justify-end gap-3 pt-4">
           <button
+            type="button"
             onClick={onClose}
+            disabled={isGenerating}
             className={secondarySmallActionButtonClass}
           >
             Cancelar
           </button>
           <button
-            onClick={handleGenerate}
-            className={primarySmallActionButtonClass}
+            type="button"
+            onClick={() => void handleGenerate()}
+            disabled={isGenerating}
+            aria-busy={isGenerating}
+            className={cn(primarySmallActionButtonClass, 'disabled:cursor-wait disabled:opacity-60')}
           >
             <FilePdf weight="bold" className="h-4 w-4" />
-            Gerar PDF
+            {isGenerating ? 'Gerando PDF…' : 'Gerar PDF'}
           </button>
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
 import { schema } from '@geogestor/database';
 import { db } from '../db';
 import { JornadaService } from './jornada.service';
+import { getActiveProject } from './relationship-integrity.service';
 
 type ReorderItem = { id: string; estagio: OpportunityStage; ordem: number };
 
@@ -110,7 +111,20 @@ async function assertLead(leadId: string, tx: any = db) {
 async function assertSubject(clientId: string | null, leadId: string | null, tx: any = db) {
   if (!clientId && !leadId) throw new Error('Selecione um cliente ou um lead.');
   if (clientId) await assertClient(clientId, tx);
-  if (!clientId && leadId) await assertLead(leadId, tx);
+  if (clientId && leadId) {
+    const [lead] = await tx.select({
+      id: schema.contatos.id,
+      clienteConvertidoId: schema.contatos.clienteConvertidoId
+    }).from(schema.contatos)
+      .where(and(eq(schema.contatos.id, leadId), isNull(schema.contatos.deletedAt)))
+      .limit(1);
+    if (!lead) throw new Error('Lead não encontrado.');
+    if (lead.clienteConvertidoId !== clientId) {
+      throw new Error('O lead informado não corresponde ao cliente convertido.');
+    }
+    return;
+  }
+  if (leadId) await assertLead(leadId, tx);
 }
 
 async function logClientEvent(clientId: string | null, payload: Record<string, unknown>, tx: any) {
@@ -238,6 +252,22 @@ export async function updateOpportunity(id: string, input: OpportunityUpdate) {
     const clientId = input.clienteId !== undefined ? input.clienteId : current.clienteId;
     const leadId = input.leadId !== undefined ? input.leadId : current.leadId;
     await assertSubject(clientId, leadId, tx);
+    const effectiveBudgetId = input.orcamentoId !== undefined ? input.orcamentoId : current.orcamentoId;
+    if (effectiveBudgetId && !clientId) {
+      throw new Error('Converta o lead em cliente antes de vincular um orçamento.');
+    }
+    const effectiveBudget = effectiveBudgetId && clientId
+      ? await assertBudget(effectiveBudgetId, clientId, tx)
+      : null;
+    const effectiveProjectId = input.orcamentoId !== undefined && effectiveBudget?.projetoId
+      ? effectiveBudget.projetoId
+      : current.projetoId;
+    if (effectiveProjectId && clientId) {
+      const project = await getActiveProject(effectiveProjectId, tx);
+      if (project.clienteId !== clientId) {
+        throw new Error('O projeto vinculado à oportunidade pertence a outro cliente.');
+      }
+    }
     if (input.orcamentoId && !clientId) throw new Error('Converta o lead em cliente antes de vincular um orçamento.');
     if (input.orcamentoId && clientId) await assertBudget(input.orcamentoId, clientId, tx);
     await tx.update(schema.oportunidades).set({
@@ -254,12 +284,15 @@ export async function updateOpportunity(id: string, input: OpportunityUpdate) {
       probabilidadePontosBase: input.probabilidadePontosBase,
       observacoes: input.observacoes,
       orcamentoId: input.orcamentoId,
+      projetoId: input.orcamentoId !== undefined && effectiveBudget?.projetoId
+        ? effectiveBudget.projetoId
+        : undefined,
       ultimoContatoEm: input.proximaAcao !== undefined ? nowIso() : undefined,
       updatedAt: nowIso()
     }).where(eq(schema.oportunidades.id, id));
     await logClientEvent(clientId, {
-      projetoId: current.projetoId,
-      orcamentoId: current.orcamentoId,
+      projetoId: effectiveProjectId,
+      orcamentoId: effectiveBudgetId,
       tipo: 'Oportunidade',
       titulo: `Oportunidade atualizada: ${input.titulo?.trim() || current.titulo}`,
       categoria: 'Comercial',

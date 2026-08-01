@@ -1,10 +1,12 @@
 import { DatePickerField, FormSelect } from '../../components/Form';
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageFilterBar } from '../../components/PageFilterBar';
+import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -18,7 +20,7 @@ import {
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass, primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { getDownloadUrl } from '../../services/apiClient';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ClienteFormFields } from './ClienteFormFields';
@@ -33,12 +35,8 @@ import {
   type ClientFormState,
   type PersonType
 } from './clientForm';
-import {
-  filterBarClass,
-  filterClearButtonClass,
-  filterSearchInputClass
-} from '../../utils/filterStyles';
-import { geoFieldClass, geoKickerClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
+import { filterSearchInputClass } from '../../utils/filterStyles';
+import { geoFieldClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import { commercialContentClass } from '../../utils/commercialLayout';
 
 export interface Cliente {
@@ -77,6 +75,16 @@ export interface Cliente {
   createdAt?: string | null;
   updatedAt?: string | null;
 }
+
+interface ClientPage {
+  items: Cliente[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+const EMPTY_CLIENTS: Cliente[] = [];
 
 type ClientModalTab = 'basico' | 'notas' | 'historico' | 'arquivos';
 
@@ -338,7 +346,12 @@ export function ListagemClientes() {
   const [categoriaFilter, setCategoriaFilter] = useState(() => readInitialListValue(location.search, 'categoria', 'Todos'));
   const [origemFilter, setOrigemFilter] = useState(() => readInitialListValue(location.search, 'origem', 'Todos'));
   const [sortOrder, setSortOrder] = useState(() => readInitialListValue(location.search, 'ordenar', 'recentes'));
-  const [visibleCount, setVisibleCount] = useState(15);
+  const [showFilters, setShowFilters] = useState(false);
+  const [page, setPage] = useState(() => {
+    const value = Number(readInitialListValue(location.search, 'pagina', '1'));
+    return Number.isSafeInteger(value) && value > 0 ? value : 1;
+  });
+  const resetPageAfterFirstCriteriaChangeRef = useRef(false);
 
   // Client files states
   const [uploading, setUploading] = useState(false);
@@ -367,11 +380,27 @@ export function ListagemClientes() {
   const [histData, setHistData] = useState(new Date().toISOString().split('T')[0]);
   const [histDescricao, setHistDescricao] = useState('');
 
-  // 1. Fetching client list
-  const { data: clientes = [], isLoading: loading, isError: hasLoadError, isFetching, refetch } = useQuery<Cliente[]>({
-    queryKey: ['clientes', 'directory', 500],
-    queryFn: () => apiClient.get<Cliente[]>('/api/clientes?limit=500')
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const { data: clientPage, isLoading: loading, isError: hasLoadError, isFetching, refetch } = useQuery<ClientPage>({
+    queryKey: ['clientes', 'directory', page, deferredSearchTerm, situacaoFilter, categoriaFilter, origemFilter, sortOrder],
+    queryFn: () => {
+      const params = new URLSearchParams({
+        mode: 'page',
+        page: String(page),
+        limit: '30',
+        ordenar: sortOrder
+      });
+      if (deferredSearchTerm.trim()) params.set('q', deferredSearchTerm.trim());
+      if (situacaoFilter !== 'Todos') params.set('status', situacaoFilter);
+      if (categoriaFilter !== 'Todos') params.set('categoria', categoriaFilter);
+      if (origemFilter !== 'Todos') params.set('origem', origemFilter);
+      return apiClient.get<ClientPage>(`/api/clientes?${params}`);
+    },
+    placeholderData: (previous) => previous
   });
+  const clientes = clientPage?.items || EMPTY_CLIENTS;
+  const totalClients = clientPage?.total || 0;
+  const totalPages = clientPage?.totalPages || 1;
 
   // 2. Fetching history list
   const { data: historico = [], isLoading: loadingHistorico } = useQuery<Array<{
@@ -412,41 +441,15 @@ export function ListagemClientes() {
 
   const clientFiles = filesData.files;
   const clientFilesPasta = filesData.path;
-  const deferredSearchTerm = useDeferredValue(searchTerm);
-  const filteredClientes = useMemo(() => {
-    const query = deferredSearchTerm.trim().toLowerCase();
-
-    return clientes.filter((cliente) => {
-      const searchable = [
-        cliente.nome,
-        cliente.email,
-        cliente.telefone,
-        cliente.celular,
-        cliente.cpf,
-        cliente.cnpj,
-        cliente.documento,
-        cliente.endereco,
-        cliente.numero,
-        cliente.bairro,
-        (cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural')),
-        cliente.origemPrincipal || cliente.origem
-      ].filter(Boolean).join(' ').toLowerCase();
-      const matchesSearch = !query || searchable.includes(query);
-      const matchesSituacao = situacaoFilter === 'Todos' || (cliente.situacao || 'Ativo') === situacaoFilter;
-      const matchesCategoria = categoriaFilter === 'Todos' || splitClientTags((cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural'))).includes(categoriaFilter);
-      const matchesOrigem = origemFilter === 'Todos' || (cliente.origemPrincipal || splitClientTags(cliente.origem)[0]) === origemFilter;
-      return matchesSearch && matchesSituacao && matchesCategoria && matchesOrigem;
-    }).sort((a, b) => {
-      if (sortOrder === 'az') return a.nome.localeCompare(b.nome);
-      if (sortOrder === 'za') return b.nome.localeCompare(a.nome);
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      if (sortOrder === 'antigos') return dateA - dateB;
-      return dateB - dateA;
-    });
-  }, [categoriaFilter, clientes, deferredSearchTerm, origemFilter, situacaoFilter, sortOrder]);
-  const paginatedClientes = useMemo(() => filteredClientes.slice(0, visibleCount), [filteredClientes, visibleCount]);
-  const hasClientFilters = Boolean(searchTerm || situacaoFilter !== 'Todos' || categoriaFilter !== 'Todos' || origemFilter !== 'Todos');
+  const filteredClientes = clientes;
+  const paginatedClientes = clientes;
+  const activeClientCriteriaCount = [
+    searchTerm,
+    situacaoFilter !== 'Todos',
+    categoriaFilter !== 'Todos',
+    origemFilter !== 'Todos',
+    sortOrder !== 'recentes'
+  ].filter(Boolean).length;
   const activeFilterChips = [
     situacaoFilter !== 'Todos' ? { key: 'status', label: `Status: ${situacaoFilter}`, clear: () => setSituacaoFilter('Todos') } : null,
     categoriaFilter !== 'Todos' ? { key: 'categoria', label: `Categoria: ${categoriaFilter}`, clear: () => setCategoriaFilter('Todos') } : null,
@@ -660,12 +663,18 @@ export function ListagemClientes() {
   }, [clientFormDirty]);
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
-      setVisibleCount(15);
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
+    if (!resetPageAfterFirstCriteriaChangeRef.current) {
+      resetPageAfterFirstCriteriaChangeRef.current = true;
+      return;
+    }
+    setPage(1);
   }, [categoriaFilter, deferredSearchTerm, origemFilter, situacaoFilter, sortOrder]);
+
+  useEffect(() => {
+    if (!clientPage || page <= clientPage.totalPages) return;
+    const timeoutId = window.setTimeout(() => setPage(clientPage.totalPages), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [clientPage, page]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -679,6 +688,7 @@ export function ListagemClientes() {
     setOrDelete('categoria', categoriaFilter, 'Todos');
     setOrDelete('origem', origemFilter, 'Todos');
     setOrDelete('ordenar', sortOrder, 'recentes');
+    setOrDelete('pagina', String(page), '1');
 
     const nextSearch = params.toString();
     const currentSearch = location.search.replace(/^\?/, '');
@@ -691,9 +701,10 @@ export function ListagemClientes() {
       status: situacaoFilter,
       categoria: categoriaFilter,
       origem: origemFilter,
-      ordenar: sortOrder
+      ordenar: sortOrder,
+      pagina: String(page)
     }));
-  }, [categoriaFilter, location.pathname, location.search, navigate, origemFilter, searchTerm, situacaoFilter, sortOrder]);
+  }, [categoriaFilter, location.pathname, location.search, navigate, origemFilter, page, searchTerm, situacaoFilter, sortOrder]);
 
   const handleDelete = (id: string, name: string) => {
     setConfirmData({
@@ -784,58 +795,66 @@ export function ListagemClientes() {
 
   return (
     <Layout contentClassName={commercialContentClass}>
-      <ModuleNavigation module="commercial" />
-      <div className="mb-6 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <span className={cn(geoKickerClass, 'mb-2')}>
-            Diretório
-          </span>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Clientes <span className="text-zinc-600 dark:text-zinc-300">· {clientes.length}</span>
-          </h1>
-          <p className="mt-1.5 text-sm font-medium text-zinc-600 dark:text-zinc-300 sm:text-base">
-            Gerencie clientes, contatos, propriedades e histórico de interações.
-          </p>
-        </div>
-        
-        <button 
-          type="button"
-          onClick={() => openCreateModal()}
-          className={cn(primaryActionButtonClass, 'shadow-sm hover:shadow-md')}
-        >
-          <span>Novo cliente</span>
-          <div className={primaryActionIconClass}>
-            <Plus aria-hidden="true" weight="bold" className="h-4 w-4" />
-          </div>
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Diretório"
+        title="Clientes"
+        count={totalClients}
+        description="Gerencie clientes, contatos, propriedades e histórico de interações."
+        action={(
+          <button
+            type="button"
+            onClick={() => openCreateModal()}
+            className={cn(headerPrimaryActionButtonClass, 'w-full shadow-sm hover:shadow-md sm:w-auto')}
+          >
+            <span>Novo cliente</span>
+            <span aria-hidden="true" className={headerPrimaryActionIconClass}>
+              <Plus weight="bold" className="h-3.5 w-3.5" />
+            </span>
+          </button>
+        )}
+        navigation={<ModuleNavigation module="commercial" className="mb-0" />}
+      />
 
-      <div className={cn('mb-4', filterBarClass)}>
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-end">
-          <div className="min-w-[260px] flex-1">
+      <PageFilterBar
+        search={(
+          <>
             <label htmlFor="client-search" className="sr-only">Buscar clientes</label>
             <div className="relative">
               <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-            <input
-              id="client-search"
-              name="client-search"
-              type="text"
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Buscar clientes por nome, documento ou contato…"
-              autoComplete="off"
-              className={filterSearchInputClass}
-            />
+              <input
+                id="client-search"
+                name="client-search"
+                type="search"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Buscar clientes por nome, documento ou contato…"
+                autoComplete="off"
+                className={filterSearchInputClass}
+              />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:flex">
+          </>
+        )}
+        filtersOpen={showFilters}
+        onFiltersToggle={() => setShowFilters((current) => !current)}
+        filterPanelId="client-filter-panel"
+        activeFilterCount={activeClientCriteriaCount}
+        onClear={() => {
+          setSearchTerm('');
+          setSituacaoFilter('Todos');
+          setCategoriaFilter('Todos');
+          setOrigemFilter('Todos');
+          setSortOrder('recentes');
+        }}
+      >
+        <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span>Status</span>
             <CustomSelect
               id="client-status-filter"
               ariaLabel="Filtrar por status"
               value={situacaoFilter}
               onChange={setSituacaoFilter}
               placeholder="Status"
-              className="min-w-0 xl:min-w-[140px]"
+              className="min-w-0"
               options={[
                 { label: 'Todos os status', value: 'Todos' },
                 { label: 'Ativo', value: 'Ativo' },
@@ -843,31 +862,40 @@ export function ListagemClientes() {
                 { label: 'Prospectado', value: 'Prospectado' }
               ]}
             />
+        </label>
+        <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span>Categoria</span>
             <CustomSelect
               id="client-category-filter"
               ariaLabel="Filtrar por categoria"
               value={categoriaFilter}
               onChange={setCategoriaFilter}
               placeholder="Categoria"
-              className="min-w-0 xl:min-w-[150px]"
+              className="min-w-0"
               options={[
                 { label: 'Todas as categorias', value: 'Todos' },
                 ...CLIENT_CATEGORY_OPTIONS.map(opt => ({ label: opt, value: opt }))
               ]}
             />
+        </label>
+        <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span>Origem</span>
             <CustomSelect
               id="client-origin-filter"
               ariaLabel="Filtrar por origem"
               value={origemFilter}
               onChange={setOrigemFilter}
               placeholder="Origem"
-              className="min-w-0 xl:min-w-[140px]"
+              className="min-w-0"
               options={[
                 { label: 'Todas as origens', value: 'Todos' },
                 ...CLIENT_ORIGIN_OPTIONS.map(opt => ({ label: opt, value: opt }))
               ]}
             />
-            <div className="relative min-w-0 xl:min-w-[210px]">
+        </label>
+        <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span>Ordenação</span>
+            <div className="relative min-w-0">
               <ArrowsDownUp aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <CustomSelect
                 id="client-sort-order"
@@ -885,24 +913,12 @@ export function ListagemClientes() {
                 ]}
               />
             </div>
-          </div>
-          {hasClientFilters && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm('');
-                setSituacaoFilter('Todos');
-                setCategoriaFilter('Todos');
-                setOrigemFilter('Todos');
-              }}
-              className={filterClearButtonClass}
-            >
-              Limpar filtros
-            </button>
-          )}
-        </div>
+        </label>
+      </PageFilterBar>
+
+      <div className="mb-4">
         {activeFilterChips.length > 0 && (
-          <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Filtros ativos">
+          <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2" aria-label="Filtros ativos">
             <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">Filtros ativos:</span>
             {activeFilterChips.map((chip) => (
               <button
@@ -921,7 +937,7 @@ export function ListagemClientes() {
       </div>
 
       <div className="mb-3 flex min-h-6 items-center justify-between gap-3 text-xs font-medium text-zinc-600 dark:text-zinc-300" role="status" aria-live="polite" aria-atomic="true">
-        <span>{filteredClientes.length} {filteredClientes.length === 1 ? 'resultado encontrado' : 'resultados encontrados'}</span>
+        <span>{totalClients} {totalClients === 1 ? 'resultado encontrado' : 'resultados encontrados'}</span>
         {isFetching && !loading && <span>Atualizando…</span>}
       </div>
 
@@ -1042,7 +1058,7 @@ export function ListagemClientes() {
                           <div className="min-w-0 space-y-1 text-[13px]">
                             {cliente.email ? (
                               isValidEmail(cliente.email) ? (
-                                <a href={`mailto:${cliente.email}`} className="geo-focus-ring flex min-w-0 items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
+                                <a href={`mailto:${cliente.email}`} className="geo-focus-ring flex min-h-6 min-w-0 items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
                                   <EnvelopeSimple aria-hidden="true" className="h-4 w-4 shrink-0" />
                                   <span className="truncate">{cliente.email}</span>
                                 </a>
@@ -1055,7 +1071,7 @@ export function ListagemClientes() {
                             ) : <span className="text-zinc-500 dark:text-zinc-400">Sem e-mail</span>}
                             {phone ? (
                               phone.valid ? (
-                                <a href={phone.href} className="geo-focus-ring flex items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
+                                <a href={phone.href} className="geo-focus-ring flex min-h-6 items-center gap-1.5 rounded text-zinc-700 hover:text-brand-primary-700 hover:underline dark:text-zinc-200 dark:hover:text-brand-primary-100">
                                   <Phone aria-hidden="true" className="h-4 w-4 shrink-0" />
                                   {phone.display}
                                 </a>
@@ -1138,12 +1154,12 @@ export function ListagemClientes() {
                         <dd className="mt-1 min-w-0 space-y-1 text-zinc-700 dark:text-zinc-200">
                           {cliente.email ? (
                             isValidEmail(cliente.email)
-                              ? <a href={`mailto:${cliente.email}`} className="geo-focus-ring block truncate rounded hover:text-brand-primary-700 hover:underline">{cliente.email}</a>
+                              ? <a href={`mailto:${cliente.email}`} className="geo-focus-ring flex min-h-6 items-center truncate rounded hover:text-brand-primary-700 hover:underline">{cliente.email}</a>
                               : <span className="block truncate text-amber-800 dark:text-amber-200">{cliente.email} · Revisar</span>
                           ) : <span>Sem e-mail</span>}
                           {phone ? (
                             phone.valid
-                              ? <a href={phone.href} className="geo-focus-ring block rounded hover:text-brand-primary-700 hover:underline">{phone.display}</a>
+                              ? <a href={phone.href} className="geo-focus-ring flex min-h-6 items-center rounded hover:text-brand-primary-700 hover:underline">{phone.display}</a>
                               : <span className="block truncate text-amber-800 dark:text-amber-200">{phone.display} · Revisar telefone</span>
                           ) : <span>Sem telefone</span>}
                         </dd>
@@ -1165,13 +1181,16 @@ export function ListagemClientes() {
               })}
             </div>
 
-            {visibleCount < filteredClientes.length && (
-              <div className="flex flex-col items-center gap-2 pt-5">
-                <span className="text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300">Mostrando {paginatedClientes.length} de {filteredClientes.length}</span>
-                <button type="button" onClick={() => setVisibleCount((value) => value + 15)} className={secondarySmallActionButtonClass}>
-                  Carregar mais clientes
+            {totalPages > 1 && (
+              <nav className="flex flex-wrap items-center justify-center gap-3 pt-5" aria-label="Paginação de clientes">
+                <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1 || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
+                  Página anterior
                 </button>
-              </div>
+                <span className="min-w-28 text-center text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300">Página {page} de {totalPages}</span>
+                <button type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
+                  Próxima página
+                </button>
+              </nav>
             )}
           </>
         )}

@@ -12,6 +12,7 @@ import {
   WarningCircle
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
+import { CalculationHistory, type SavedCalculation } from '../../components/CalculationHistory';
 import { cn } from '../../utils/cn';
 
 type ReservaLegalRegion = 'amazonia_floresta' | 'amazonia_cerrado' | 'amazonia_campos' | 'demais_regioes';
@@ -118,6 +119,33 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
     totalArea
   ]);
 
+  const reopenCalculation = (calculation: SavedCalculation) => {
+    const saved = calculation.entradas as Partial<{
+      region: ReservaLegalRegion;
+      totalArea: string;
+      appArea: string;
+      nativeOutsideApp: string;
+      fiscalModules: string;
+      nativeOn2008: string;
+      propertyExistedOn2008: boolean;
+      carRequested: boolean;
+      appProtected: boolean;
+      noNewConversion: boolean;
+      historicalCompliance: boolean;
+    }>;
+    if (saved.region && regionOptions.some((option) => option.value === saved.region)) setRegion(saved.region);
+    if (typeof saved.totalArea === 'string') setTotalArea(saved.totalArea);
+    if (typeof saved.appArea === 'string') setAppArea(saved.appArea);
+    if (typeof saved.nativeOutsideApp === 'string') setNativeOutsideApp(saved.nativeOutsideApp);
+    if (typeof saved.fiscalModules === 'string') setFiscalModules(saved.fiscalModules);
+    if (typeof saved.nativeOn2008 === 'string') setNativeOn2008(saved.nativeOn2008);
+    if (typeof saved.propertyExistedOn2008 === 'boolean') setPropertyExistedOn2008(saved.propertyExistedOn2008);
+    if (typeof saved.carRequested === 'boolean') setCarRequested(saved.carRequested);
+    if (typeof saved.appProtected === 'boolean') setAppProtected(saved.appProtected);
+    if (typeof saved.noNewConversion === 'boolean') setNoNewConversion(saved.noNewConversion);
+    if (typeof saved.historicalCompliance === 'boolean') setHistoricalCompliance(saved.historicalCompliance);
+  };
+
   const fieldClass = 'geo-focus-ring min-h-11 w-full rounded-xl border border-zinc-300 bg-white px-3 text-sm text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white';
   const errorClass = 'mt-1.5 text-xs font-medium text-red-700 dark:text-red-300';
 
@@ -222,7 +250,19 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
         </section>
 
         <section aria-labelledby="car-result-title" aria-live="polite" className="flex min-h-[22rem] flex-col rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:min-h-[32rem] sm:p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 id="car-result-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Resultado da triagem</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="car-result-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Resultado da triagem</h2>
+            <CalculationHistory
+              type="ambiental"
+              suggestedName="Triagem de Reserva Legal"
+              inputs={{ region, totalArea, appArea, nativeOutsideApp, fiscalModules, nativeOn2008, propertyExistedOn2008, carRequested, appProtected, noNewConversion, historicalCompliance }}
+              result={analysis}
+              unit="ha"
+              method="Lei 12.651/2012 — arts. 12, 15, 67 e 68"
+              disabled={!analysis.ready || !('valid' in analysis) || !analysis.valid}
+              onReopen={reopenCalculation}
+            />
+          </div>
 
           {!analysis.ready ? (
             <div className="flex flex-1 flex-col items-center justify-center py-12 text-center">

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import { createClient } from '@libsql/client';
+import { eq } from 'drizzle-orm';
 
 const testRoot = path.resolve(process.cwd(), 'scratch', `clientes-list-${process.pid}`);
 const dbPath = path.join(testRoot, 'geogestor.db');
@@ -12,7 +13,7 @@ process.env.NODE_ENV = 'test';
 process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_API_TOKEN = token;
 
-test('listagem preserva contrato, paginação, soft delete e contagem híbrida entre 0 e 500 clientes', async () => {
+test('listagem preserva contrato e pagina, busca e filtra mais de 500 clientes', async () => {
   await fs.rm(testRoot, { recursive: true, force: true });
   await fs.mkdir(testRoot, { recursive: true });
   const [{ server }, { db, dbReady }, { runRuntimeMigrations }, { schema }] = await Promise.all([
@@ -97,14 +98,62 @@ test('listagem preserva contrato, paginação, soft delete e contagem híbrida e
     assert.equal(fiveHundred.json<unknown[]>().length, 500);
     assert.equal(fiveHundred.json<Array<{ id: string }>>().some((cliente) => cliente.id === 'cliente-soft-deleted'), false);
 
+    await addClients(500, 550);
+    await db.update(schema.clientes).set({
+      situacao: 'Inativo',
+      categoria: 'Empresa',
+      origemPrincipal: 'Indicação'
+    }).where(eq(schema.clientes.id, 'cliente-0549'));
+
     for (let page = 1; page <= 5; page += 1) {
       const response = await request(`/api/clientes?page=${page}&limit=100`);
       assert.equal(response.statusCode, 200, response.body);
       assert.equal(response.json<unknown[]>().length, 100);
     }
-    const afterLastPage = await request('/api/clientes?page=6&limit=100');
+    const sixthPage = await request('/api/clientes?page=6&limit=100');
+    assert.equal(sixthPage.statusCode, 200, sixthPage.body);
+    assert.equal(sixthPage.json<unknown[]>().length, 50);
+    const afterLastPage = await request('/api/clientes?page=7&limit=100');
     assert.equal(afterLastPage.statusCode, 200, afterLastPage.body);
     assert.deepEqual(afterLastPage.json(), []);
+
+    const paged = await request('/api/clientes?mode=page&page=2&limit=30&ordenar=az');
+    assert.equal(paged.statusCode, 200, paged.body);
+    const pagedBody = paged.json<{ items: Array<{ nome: string }>; page: number; total: number; totalPages: number }>();
+    assert.equal(pagedBody.page, 2);
+    assert.equal(pagedBody.total, 550);
+    assert.equal(pagedBody.totalPages, 19);
+    assert.equal(pagedBody.items.length, 30);
+    assert.ok(pagedBody.items[0].nome.localeCompare(pagedBody.items[1].nome) <= 0);
+
+    const filtered = await request('/api/clientes?mode=page&q=0549&status=Inativo&categoria=Empresa&origem=Indica%C3%A7%C3%A3o');
+    assert.equal(filtered.statusCode, 200, filtered.body);
+    const filteredBody = filtered.json<{ items: Array<{ id: string }>; total: number }>();
+    assert.equal(filteredBody.total, 1);
+    assert.equal(filteredBody.items[0].id, 'cliente-0549');
+
+    const options = await request('/api/clientes/options?q=0549');
+    assert.equal(options.statusCode, 200, options.body);
+    const optionRows = options.json<Array<Record<string, unknown>>>();
+    assert.equal(optionRows.length, 1);
+    assert.deepEqual(Object.keys(optionRows[0]).sort(), ['cnpj', 'cpf', 'documento', 'id', 'nome']);
+
+    await addClients(550, 10_000);
+    const optionStartedAt = performance.now();
+    const tenThousandOptions = await request('/api/clientes/options?q=9999&limit=25');
+    const optionDurationMs = performance.now() - optionStartedAt;
+    assert.equal(tenThousandOptions.statusCode, 200, tenThousandOptions.body);
+    assert.equal(tenThousandOptions.json<Array<{ id: string }>>().length, 1);
+    assert.equal(tenThousandOptions.json<Array<{ id: string }>>()[0].id, 'cliente-9999');
+    assert.ok(Buffer.byteLength(tenThousandOptions.body, 'utf8') < 5_000);
+    assert.ok(optionDurationMs < 500, `autocomplete demorou ${optionDurationMs.toFixed(2)} ms`);
+
+    const deepPage = await request('/api/clientes?mode=page&page=100&limit=100&ordenar=az');
+    assert.equal(deepPage.statusCode, 200, deepPage.body);
+    const deepPageBody = deepPage.json<{ items: unknown[]; total: number; totalPages: number }>();
+    assert.equal(deepPageBody.total, 10_000);
+    assert.equal(deepPageBody.totalPages, 100);
+    assert.equal(deepPageBody.items.length, 100);
 
     const client = createClient({ url: `file:${dbPath}` });
     try {

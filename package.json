@@ -15,6 +15,7 @@
     "release:verify-signature": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-authenticode.ps1",
     "release:build-candidate": "node scripts/release-candidate.mjs",
     "release:smoke-package": "node scripts/smoke-packaged-api.mjs",
+    "migration:validate-copy": "node scripts/validate-legacy-migration.mjs",
     "lint": "pnpm --filter web lint",
     "typecheck": "pnpm --filter web typecheck && pnpm --filter api typecheck",
     "test:web": "pnpm --filter web test",

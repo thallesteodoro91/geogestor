@@ -1,9 +1,10 @@
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, Plus, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 import { apiClient } from '../../services/apiClient';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 
@@ -90,24 +91,6 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
     queryFn: () => apiClient.get('/api/financeiro/diagnostico-vinculos'),
     enabled: activeTab === 'diagnostico'
   });
-  const { data: clients = [] } = useQuery<ClientOption[]>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get('/api/clientes')
-  });
-  const { data: projects = [] } = useQuery<ProjectOption[]>({
-    queryKey: ['projetos'],
-    queryFn: () => apiClient.get('/api/projetos')
-  });
-
-  const travelProjects = useMemo(
-    () => projects.filter((project) => !travelForm.clienteId || project.clienteId === travelForm.clienteId),
-    [projects, travelForm.clienteId]
-  );
-  const fiscalProjects = useMemo(
-    () => projects.filter((project) => !fiscalForm.clienteId || project.clienteId === fiscalForm.clienteId),
-    [projects, fiscalForm.clienteId]
-  );
-
   const createTravel = useMutation({
     mutationFn: () => apiClient.post('/api/financeiro/viagens', {
       ...travelForm,
@@ -294,8 +277,8 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
 
       <Modal isOpen={travelModal} onClose={() => setTravelModal(false)} title="Nova viagem" maxWidth="max-w-2xl">
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); createTravel.mutate(); }}>
-          <label><span className={labelClass}>Cliente</span><select className={fieldClass} value={travelForm.clienteId} onChange={(event) => setTravelForm({ ...travelForm, clienteId: event.target.value, projetoId: '' })}><option value="">Administrativo/geral</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.nome}</option>)}</select></label>
-          <label><span className={labelClass}>Projeto</span><select className={fieldClass} value={travelForm.projetoId} onChange={(event) => setTravelForm({ ...travelForm, projetoId: event.target.value })}><option value="">Sem projeto</option>{travelProjects.map((project) => <option key={project.id} value={project.id}>{project.nome}</option>)}</select></label>
+          <label><span className={labelClass}>Cliente</span><RemoteCombobox<ClientOption> id="travel-client" name="clienteId" endpoint="/api/clientes/options" value={travelForm.clienteId} emptyLabel="Administrativo/geral" onChange={(clienteId) => setTravelForm((current) => ({ ...current, clienteId, projetoId: '' }))} /></label>
+          <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="travel-project" name="projetoId" endpoint={`/api/projetos/options${travelForm.clienteId ? `?clienteId=${encodeURIComponent(travelForm.clienteId)}` : ''}`} value={travelForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setTravelForm((current) => ({ ...current, projetoId }))} /></label>
           <label className="sm:col-span-2"><span className={labelClass}>Finalidade</span><input required className={fieldClass} value={travelForm.finalidade} onChange={(event) => setTravelForm({ ...travelForm, finalidade: event.target.value })} /></label>
           <label className="sm:col-span-2"><span className={labelClass}>Destino</span><input required className={fieldClass} value={travelForm.destino} onChange={(event) => setTravelForm({ ...travelForm, destino: event.target.value })} /></label>
           <label><span className={labelClass}>Início</span><input required type="date" className={fieldClass} value={travelForm.dataInicio} onChange={(event) => setTravelForm({ ...travelForm, dataInicio: event.target.value })} /></label>
@@ -310,8 +293,8 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
 
       <Modal isOpen={fiscalModal} onClose={() => setFiscalModal(false)} title="Informar documento fiscal" maxWidth="max-w-2xl">
         <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); createFiscalNote.mutate(); }}>
-          <label><span className={labelClass}>Cliente</span><select required className={fieldClass} value={fiscalForm.clienteId} onChange={(event) => setFiscalForm({ ...fiscalForm, clienteId: event.target.value, projetoId: '' })}><option value="">Selecione</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.nome}</option>)}</select></label>
-          <label><span className={labelClass}>Projeto</span><select className={fieldClass} value={fiscalForm.projetoId} onChange={(event) => setFiscalForm({ ...fiscalForm, projetoId: event.target.value })}><option value="">Sem projeto</option>{fiscalProjects.map((project) => <option key={project.id} value={project.id}>{project.nome}</option>)}</select></label>
+          <label><span className={labelClass}>Cliente</span><RemoteCombobox<ClientOption> id="fiscal-client" name="clienteId" endpoint="/api/clientes/options" value={fiscalForm.clienteId} required onChange={(clienteId) => setFiscalForm((current) => ({ ...current, clienteId, projetoId: '' }))} /></label>
+          <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="fiscal-project" name="projetoId" endpoint={`/api/projetos/options${fiscalForm.clienteId ? `?clienteId=${encodeURIComponent(fiscalForm.clienteId)}` : ''}`} value={fiscalForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setFiscalForm((current) => ({ ...current, projetoId }))} /></label>
           <label><span className={labelClass}>Número</span><input required className={fieldClass} value={fiscalForm.numero} onChange={(event) => setFiscalForm({ ...fiscalForm, numero: event.target.value })} /></label>
           <label><span className={labelClass}>Código de verificação</span><input className={fieldClass} value={fiscalForm.codigoVerificacao} onChange={(event) => setFiscalForm({ ...fiscalForm, codigoVerificacao: event.target.value })} /></label>
           <label><span className={labelClass}>Data de emissão</span><input required type="date" className={fieldClass} value={fiscalForm.dataEmissao} onChange={(event) => setFiscalForm({ ...fiscalForm, dataEmissao: event.target.value })} /></label>

@@ -1,5 +1,6 @@
 import { DatePickerField, FormSelect } from './Form';
 import { apiClient } from '../services/apiClient';
+import { persistOperationalSetting } from '../services/operationalSettings';
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -140,7 +141,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
     }
   }, [isOpen]);
 
-  const handleSalvarCategoria = () => {
+  const handleSalvarCategoria = async () => {
     if (!newCatNome.trim()) return;
     const nova: NotaCategoriaItem = {
       id: `cat-${Date.now()}`,
@@ -149,8 +150,8 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
       cor: newCatCor
     };
     const listaAtualizada = [...categorias, nova];
+    await persistOperationalSetting('geogestor_jornada_categorias', listaAtualizada);
     setCategorias(listaAtualizada);
-    localStorage.setItem('geogestor_jornada_categorias', JSON.stringify(listaAtualizada));
     setCategoriaSelecionada(nova.nome);
     setNewCatNome('');
     setShowCatCreator(false);

@@ -1,14 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, or } from 'drizzle-orm';
+import { eq, or, and, gte, lte, asc } from 'drizzle-orm';
 import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
 import { AuditLogService } from '../services/audit.service';
+import { RelationshipIntegrityError, resolveClientProjectLink } from '../services/relationship-integrity.service';
 
 export async function compromissosRoutes(server: FastifyInstance) {
   server.get('/', async (request, reply) => {
-    const { clienteId, projetoId } = request.query as { clienteId?: string; projetoId?: string };
+    const { clienteId, projetoId, inicio, fim } = request.query as { clienteId?: string; projetoId?: string; inicio?: string; fim?: string };
 
     const query = db
       .select({
@@ -42,7 +43,14 @@ export async function compromissosRoutes(server: FastifyInstance) {
       ));
     }
 
-    return query;
+    if (inicio || fim) {
+      return query.where(and(
+        inicio ? gte(schema.compromissos.data, inicio) : undefined,
+        fim ? lte(schema.compromissos.data, fim) : undefined
+      )).orderBy(asc(schema.compromissos.data)).limit(500);
+    }
+
+    return query.limit(500);
   });
 
   server.get('/:id', async (request, reply) => {
@@ -157,20 +165,20 @@ export async function compromissosRoutes(server: FastifyInstance) {
     if (body.hora !== undefined) updateFields.hora = body.hora;
     if (body.tipo !== undefined) updateFields.tipo = body.tipo;
 
-    if (body.projetoId !== undefined) {
-      const projetoId = body.projetoId || null;
-      updateFields.projetoId = projetoId;
-      if (projetoId) {
-        const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, projetoId)).limit(1);
-        if (!projeto.length) {
-          return reply.status(400).send({ error: 'Projeto vinculado nao encontrado' });
+    if (body.projetoId !== undefined || body.clienteId !== undefined) {
+      try {
+        const link = await resolveClientProjectLink({
+          projetoId: body.projetoId !== undefined ? body.projetoId || null : compromissoAnterior[0].projetoId,
+          clienteId: body.clienteId !== undefined ? body.clienteId || null : compromissoAnterior[0].clienteId
+        });
+        updateFields.projetoId = link.projetoId;
+        updateFields.clienteId = link.clienteId;
+      } catch (error) {
+        if (error instanceof RelationshipIntegrityError) {
+          return reply.status(error.statusCode).send({ error: error.message });
         }
-        updateFields.clienteId = projeto[0].clienteId;
+        throw error;
       }
-    }
-
-    if (body.clienteId !== undefined && updateFields.clienteId === undefined) {
-      updateFields.clienteId = body.clienteId || null;
     }
 
     updateFields.updatedAt = new Date().toISOString();

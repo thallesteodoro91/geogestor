@@ -49,6 +49,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
   const [projectId, setProjectId] = useState(detail?.projetoId || '');
   const [projectName, setProjectName] = useState(detail ? `${detail.descricao || detail.servicoTipo || 'Projeto'} — ${detail.clientName}` : '');
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const clientProjects = useMemo(() => options.projects.filter((project) => project.clientId === detail?.clienteId), [detail?.clienteId, options.projects]);
 
@@ -63,6 +64,18 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
       queryClient.invalidateQueries({ queryKey: ['projetos'] })
     ]);
     await invalidateFinancialQueries(queryClient);
+  };
+
+  const generatePdf = async () => {
+    if (!detail || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      await generateProfessionalBudgetPdf(detail);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível gerar o PDF. Tente novamente.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const transitionMutation = useMutation({
@@ -182,7 +195,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
             {detail.status === 'aprovado' && <button type="button" onClick={() => setReasonAction('revision')} className={actionClass}><ArrowClockwise aria-hidden="true" size={17} /> Criar revisão</button>}
             {!detail.visualizadoEm && detail.status !== 'rascunho' && <button type="button" onClick={markViewed} className={actionClass}><Eye aria-hidden="true" size={17} /> Registrar visualização</button>}
             <button type="button" onClick={() => cloneMutation.mutate('duplicate')} className={actionClass}><Copy aria-hidden="true" size={17} /> Duplicar</button>
-            <button type="button" onClick={() => generateProfessionalBudgetPdf(detail)} className={actionClass}><FilePdf aria-hidden="true" size={17} /> Gerar PDF</button>
+            <button type="button" onClick={() => void generatePdf()} disabled={isGeneratingPdf} aria-busy={isGeneratingPdf} className={cn(actionClass, 'disabled:cursor-wait disabled:opacity-60')}><FilePdf aria-hidden="true" size={17} /> {isGeneratingPdf ? 'Gerando PDF…' : 'Gerar PDF'}</button>
           </div>
 
           <section aria-labelledby="budget-financial-statement-title" className="border-y border-brand-border">

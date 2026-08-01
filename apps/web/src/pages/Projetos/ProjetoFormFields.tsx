@@ -5,10 +5,25 @@ import { cn } from '../../utils/cn';
 import { secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { resolveProjectFormCopy, type ProjectFormErrors, type ProjectFormState, type ProjectModalContext, type ProjectModalTab } from './projectForm';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 
 interface ProjectClientOption {
   id: string;
   nome: string;
+}
+
+interface ProjectPropertyOption {
+  id: string;
+  nome: string;
+  areaHa?: number | null;
+  matricula?: string | null;
+  car?: string | null;
+  ccir?: string | null;
+  itr?: string | null;
+  municipio?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  situacaoImovel?: string | null;
 }
 
 interface ProjetoFormFieldsProps {
@@ -18,6 +33,7 @@ interface ProjetoFormFieldsProps {
   activeTab: ProjectModalTab;
   context?: ProjectModalContext;
   clientes: ProjectClientOption[];
+  propriedades: ProjectPropertyOption[];
   onClearErrors: (...fields: Array<keyof ProjectFormState>) => void;
   onCreateClient: () => void;
 }
@@ -37,6 +53,7 @@ export function ProjetoFormFields({
   activeTab,
   context = 'projeto',
   clientes,
+  propriedades,
   onClearErrors,
   onCreateClient
 }: ProjetoFormFieldsProps) {
@@ -92,19 +109,22 @@ export function ProjetoFormFields({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <FormField htmlFor="project-clienteId" label="Cliente" required error={errors.clienteId}>
               <div className="flex min-w-0 flex-col gap-2 sm:flex-row md:col-span-1 md:flex-col xl:flex-row">
-                <FormSelect
+                <RemoteCombobox<ProjectClientOption>
                   id="project-clienteId"
                   name="clienteId"
-                  autoComplete="off"
+                  endpoint="/api/clientes/options"
                   value={form.clienteId}
-                  onChange={(event) => update('clienteId', event.target.value)}
+                  selectedLabel={clientes.find((cliente) => cliente.id === form.clienteId)?.nome}
+                  placeholder="Pesquisar cliente…"
+                  required
+                  onChange={(nextValue) => {
+                    setForm((current) => ({ ...current, clienteId: nextValue, propriedadeId: '' }));
+                    onClearErrors('clienteId', 'propriedadeId');
+                  }}
                   aria-invalid={Boolean(errors.clienteId)}
                   aria-describedby={describedBy('clienteId', errors)}
-                  className={cn(fieldClass, 'min-w-0 flex-1 geo-native-select cursor-pointer')}
-                >
-                  <option value="">Selecione um cliente…</option>
-                  {clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}
-                </FormSelect>
+                  className="min-w-0 flex-1"
+                />
                 <button
                   id="project-create-client"
                   type="button"
@@ -277,6 +297,34 @@ export function ProjetoFormFields({
           tone="amber"
           optional
         >
+          <FormField htmlFor="project-propriedadeId" label="Propriedade cadastrada" hint="O vínculo garante que projeto e imóvel pertençam ao mesmo cliente.">
+            <RemoteCombobox<ProjectPropertyOption>
+              id="project-propriedadeId"
+              name="propriedadeId"
+              endpoint={`/api/dados-operacionais/propriedades/options${form.clienteId ? `?clienteId=${encodeURIComponent(form.clienteId)}` : ''}`}
+              value={form.propriedadeId}
+              selectedLabel={propriedades.find((item) => item.id === form.propriedadeId)?.nome}
+              placeholder="Pesquisar propriedade…"
+              emptyLabel="Sem propriedade vinculada"
+              onChange={(nextValue, property) => {
+                setForm((current) => ({
+                  ...current,
+                  propriedadeId: nextValue,
+                  area: property?.areaHa !== null && property?.areaHa !== undefined ? String(property.areaHa).replace('.', ',') : current.area,
+                  matricula: property?.matricula || current.matricula,
+                  car: property?.car || current.car,
+                  ccir: property?.ccir || current.ccir,
+                  itr: property?.itr || current.itr,
+                  municipio: property?.municipio || current.municipio,
+                  latitude: property?.latitude !== null && property?.latitude !== undefined ? String(property.latitude) : current.latitude,
+                  longitude: property?.longitude !== null && property?.longitude !== undefined ? String(property.longitude) : current.longitude,
+                  situacaoImovel: property?.situacaoImovel || current.situacaoImovel,
+                }));
+                onClearErrors('propriedadeId');
+              }}
+            />
+          </FormField>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField htmlFor="project-area" label="Área estimada" error={errors.area} hint="O valor será armazenado em hectares.">
               <div className="flex min-w-0">

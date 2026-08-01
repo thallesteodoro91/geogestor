@@ -17,6 +17,8 @@ import 'leaflet/dist/leaflet.css';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageHeader } from '../../components/PageHeader';
+import { CalculationHistory, type SavedCalculation } from '../../components/CalculationHistory';
 import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
 import { createBaseTileLayer } from '../../utils/mapTiles';
 import {
@@ -34,7 +36,6 @@ import {
 import { cn } from '../../utils/cn';
 import {
   geoFieldClass,
-  geoKickerClass,
   geoPanelClass,
 } from '../../utils/geoTheme';
 import {
@@ -562,6 +563,36 @@ export function CalculadoraTopografica() {
     setDeleteTarget(null);
   }
 
+  function reopenCalculation(calculation: SavedCalculation) {
+    const saved = calculation.entradas as Record<string, unknown>;
+    if (saved.coordinateKind === 'latitude' || saved.coordinateKind === 'longitude') {
+      setActiveTab('conversor');
+      setCoordinateKind(saved.coordinateKind);
+      if (saved.hemisphere === 'N' || saved.hemisphere === 'S' || saved.hemisphere === 'E' || saved.hemisphere === 'W') setHemisphere(saved.hemisphere);
+      if (typeof saved.degreesInput === 'string') setDegreesInput(saved.degreesInput);
+      if (typeof saved.minutesInput === 'string') setMinutesInput(saved.minutesInput);
+      if (typeof saved.secondsInput === 'string') setSecondsInput(saved.secondsInput);
+      if (typeof saved.decimalInput === 'string') setDecimalInput(saved.decimalInput);
+      return;
+    }
+    if (saved.point1 && saved.point2) {
+      const first = saved.point1 as { lat?: unknown; lng?: unknown };
+      const second = saved.point2 as { lat?: unknown; lng?: unknown };
+      if (typeof first.lat === 'string' && typeof first.lng === 'string' && typeof second.lat === 'string' && typeof second.lng === 'string') {
+        setActiveTab('distancia');
+        setPoint1({ lat: first.lat, lng: first.lng });
+        setPoint2({ lat: second.lat, lng: second.lng });
+      }
+      return;
+    }
+    if ((saved.polygonMode === 'geografica' || saved.polygonMode === 'projetada') && Array.isArray(saved.vertices)) {
+      setActiveTab('poligono');
+      setPolygonMode(saved.polygonMode);
+      if (saved.polygonMode === 'geografica') setGeographicVertices(saved.vertices as GeographicVertex[]);
+      else setProjectedVertices(saved.vertices as ProjectedVertex[]);
+    }
+  }
+
   const tabIcon = (tab: MainTab) => {
     if (tab === 'conversor') return <ArrowsLeftRight className="h-4 w-4" aria-hidden="true" />;
     if (tab === 'distancia') return <Compass className="h-4 w-4" aria-hidden="true" />;
@@ -570,43 +601,71 @@ export function CalculadoraTopografica() {
 
   return (
     <Layout compactBottom>
-      <ModuleNavigation module="tools" className="mb-4" />
-      <header className="mb-3 border-b border-zinc-200/80 pb-3 dark:border-zinc-800">
-        <span className={cn(geoKickerClass, 'mb-2')}>Ferramentas técnicas</span>
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
-          Topografia
-        </h1>
-        <p className="mt-1 max-w-none text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-          Conversão de coordenadas e cálculos de apoio para conferência. Verifique o SRC, o datum e o
-          método exigido antes de usar resultados em peças técnicas.
-        </p>
-      </header>
-
-      <div
-        role="tablist"
-        aria-label="Ferramentas de topografia"
-        className={cn(localNavigationBarClass, 'mb-4 flex gap-3')}
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            id={`topography-tab-${tab.id}`}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === tab.id}
-            aria-controls={`topography-panel-${tab.id}`}
-            tabIndex={activeTab === tab.id ? 0 : -1}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
-            className={localNavigationButtonClass(activeTab === tab.id, 'field')}
-          >
-            <span aria-hidden="true" className={localNavigationIconClass(activeTab === tab.id, 'field')}>
-              {tabIcon(tab.id)}
-            </span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <PageHeader
+        eyebrow="Ferramentas técnicas"
+        title="Topografia"
+        description="Conversão de coordenadas e cálculos de apoio para conferência. Verifique o SRC, o datum e o método exigido antes de usar resultados em peças técnicas."
+        className="mb-4"
+        descriptionClassName="max-w-none"
+        navigationClassName="mt-4"
+        navigation={
+          <div className="space-y-4">
+            <ModuleNavigation module="tools" className="mb-0" />
+            <div
+              role="tablist"
+              aria-label="Ferramentas de topografia"
+              className={cn(localNavigationBarClass, 'flex gap-3')}
+            >
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  id={`topography-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  aria-controls={`topography-panel-${tab.id}`}
+                  tabIndex={activeTab === tab.id ? 0 : -1}
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+                  className={localNavigationButtonClass(activeTab === tab.id, 'field')}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={localNavigationIconClass(
+                      activeTab === tab.id,
+                      'field',
+                      'bg-transparent p-0 dark:bg-transparent',
+                    )}
+                  >
+                    {tabIcon(tab.id)}
+                  </span>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <CalculationHistory
+                type="topografico"
+                suggestedName={activeTab === 'conversor' ? 'Conversão de coordenadas' : activeTab === 'distancia' ? 'Distância e azimute' : 'Área e perímetro'}
+                inputs={activeTab === 'conversor'
+                  ? { coordinateKind, hemisphere, degreesInput, minutesInput, secondsInput, decimalInput }
+                  : activeTab === 'distancia'
+                    ? { point1, point2 }
+                    : { polygonMode, vertices: polygonMode === 'geografica' ? geographicVertices : projectedVertices }}
+                result={activeTab === 'conversor'
+                  ? { decimal: gmsDecimalResult, gms: decimalGmsResult, hemisphere: decimalHemisphere }
+                  : activeTab === 'distancia'
+                    ? { distanceMeters: geographicDistance, initialBearingDegrees: initialBearing }
+                    : polygonMetrics}
+                unit={activeTab === 'distancia' ? 'm e graus' : activeTab === 'poligono' ? 'm² e m' : 'graus'}
+                method={activeTab === 'conversor' ? 'Conversão GMS/decimal' : activeTab === 'distancia' ? 'Geodésico' : polygonMode === 'geografica' ? 'Geográfico estimado' : 'Coordenadas projetadas'}
+                disabled={activeTab === 'conversor' ? !gmsDecimalResult && !decimalGmsResult : activeTab === 'distancia' ? !distanceResultIsValid : !polygonMetrics}
+                onReopen={reopenCalculation}
+              />
+            </div>
+          </div>
+        }
+      />
 
       {activeTab === 'conversor' && (
         <section

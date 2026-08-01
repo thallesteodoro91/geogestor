@@ -89,6 +89,7 @@ export const resolveProjectFormCopy = (
 export interface ProjectRecordForForm {
   nome?: string | null;
   clienteId?: string | null;
+  propriedadeId?: string | null;
   descricao?: string | null;
   status?: string | null;
   dataInicio?: string | null;
@@ -124,6 +125,7 @@ export interface ProjectRecordForForm {
 export interface ProjectFormState {
   nome: string;
   clienteId: string;
+  propriedadeId: string;
   descricao: string;
   status: string;
   dataInicio: string;
@@ -190,6 +192,7 @@ export const createEmptyProjectForm = (
 ): ProjectFormState => ({
   nome: '',
   clienteId: initialClienteId,
+  propriedadeId: '',
   descricao: '',
   status: 'Planejamento',
   dataInicio: '',
@@ -232,6 +235,7 @@ export const projectRecordToForm = (project: ProjectRecordForForm): ProjectFormS
     ...createEmptyProjectForm(),
     nome: project.nome || '',
     clienteId: project.clienteId || '',
+    propriedadeId: project.propriedadeId || '',
     descricao: project.descricao || '',
     status: project.status || 'Planejamento',
     dataInicio: project.dataInicio || '',
@@ -276,6 +280,7 @@ export const projectFormToPayload = (form: ProjectFormState): ProjetoPayload => 
   return {
     nome: form.nome.trim(),
     clienteId: form.clienteId,
+    propriedadeId: form.propriedadeId || null,
     descricao: nullable(form.descricao),
     status: form.status || 'Planejamento',
     dataInicio: nullable(form.dataInicio),
@@ -368,6 +373,7 @@ export const projectFormFingerprint = (form: ProjectFormState) => JSON.stringify
 export const projectFieldTab: Partial<Record<keyof ProjectFormState, ProjectModalTab>> = {
   nome: 'projeto',
   clienteId: 'projeto',
+  propriedadeId: 'propriedade',
   descricao: 'projeto',
   status: 'projeto',
   dataInicio: 'projeto',

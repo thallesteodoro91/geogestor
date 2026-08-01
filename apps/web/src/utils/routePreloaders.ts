@@ -13,6 +13,9 @@ const routePreloaders: Record<string, () => Promise<unknown>> = {
   '/tarefas': () => import('../pages/Tarefas/Tarefas'),
   '/importacao': () => import('../pages/Importacao/ImportacaoDados'),
   '/cadastros': () => import('../pages/Cadastros'),
+  '/propriedades': () => import('../pages/Propriedades'),
+  '/qualidade-dados': () => import('../pages/QualidadeDados'),
+  '/pos-atualizacao': () => import('../pages/PosAtualizacao'),
   '/configuracoes': () => import('../pages/Configuracoes'),
   '/audit-logs': () => import('../pages/Relatorios/AuditLogs'),
   '/ajuda': () => import('../pages/Ajuda/Ajuda')
@@ -29,4 +32,43 @@ export function preloadRoute(path?: string) {
   void preload().catch(() => {
     preloadedRoutes.delete(path);
   });
+}
+
+const COMMON_ROUTES = [
+  '/clientes',
+  '/projetos',
+  '/financeiro',
+  '/calendario',
+  '/crm',
+  '/orcamentos',
+  '/relatorios'
+] as const;
+
+type IdleCapableWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
+export function scheduleCommonRoutePreload() {
+  const browserWindow = window as IdleCapableWindow;
+  const timers: number[] = [];
+
+  const preloadCommonRoutes = () => {
+    COMMON_ROUTES.forEach((route, index) => {
+      timers.push(window.setTimeout(() => void preloadRoute(route), index * 150));
+    });
+  };
+
+  const idleHandle = browserWindow.requestIdleCallback
+    ? browserWindow.requestIdleCallback(preloadCommonRoutes, { timeout: 2_500 })
+    : window.setTimeout(preloadCommonRoutes, 1_000);
+
+  return () => {
+    timers.forEach((timer) => window.clearTimeout(timer));
+    if (browserWindow.cancelIdleCallback) {
+      browserWindow.cancelIdleCallback(idleHandle);
+    } else {
+      window.clearTimeout(idleHandle);
+    }
+  };
 }

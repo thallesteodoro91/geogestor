@@ -1021,3 +1021,31 @@ select:not([multiple]):not([size]):not(.geo-form-select) {
     transition-delay: 0s !important;
   }
 }
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html,
+  body,
+  #root {
+    background: #fff !important;
+    color: #18181b !important;
+    color-scheme: light;
+  }
+
+  [data-report-document] {
+    background: #fff !important;
+    color: #18181b !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    print-color-adjust: exact;
+  }
+
+  [data-report-document] table,
+  [data-report-document] section {
+    break-inside: avoid;
+  }
+}

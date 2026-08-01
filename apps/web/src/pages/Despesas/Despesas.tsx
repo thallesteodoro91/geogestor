@@ -3,6 +3,7 @@ import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
 import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 import { MetricCard } from '../../components/MetricCard';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -134,16 +135,12 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
     queryFn: () => apiClient.get<DespesaItem[]>('/api/financeiro/despesas')
   });
 
-  const { data: projetos = [], isLoading: projetosLoading } = useQuery<ProjetoMin[]>({
-    queryKey: ['projetos'],
-    queryFn: () => apiClient.get<ProjetoMin[]>('/api/projetos')
-  });
   const { data: viagens = [], isLoading: viagensLoading } = useQuery<ViagemMin[]>({
     queryKey: ['viagens'],
     queryFn: () => apiClient.get<ViagemMin[]>('/api/financeiro/viagens')
   });
 
-  const loading = despesasLoading || projetosLoading || viagensLoading;
+  const loading = despesasLoading || viagensLoading;
   const formFingerprint = JSON.stringify({
     projetoId,
     viagemId,
@@ -175,7 +172,6 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
   }, [hasUnsavedExpense]);
 
   const filteredDespesas = despesas.filter((desp) => {
-    const linkedProj = projetos.find((p) => p.id === desp.projetoId);
     const searchable = [
       desp.descricao,
       desp.fornecedor,
@@ -187,7 +183,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
       desp.formaPagamento,
       desp.observacoes,
       desp.projetoNome,
-      linkedProj?.nome
+      desp.projetoNome
     ].filter(Boolean).join(' ');
     const matchesSearchTerm = matchesSearch(searchable, searchTerm);
     const matchesCategoria = categoriaFilter === 'Todos' || desp.categoria === categoriaFilter;
@@ -585,7 +581,6 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {filteredDespesas.map((desp) => {
-                  const linkedProj = projetos.find((p) => p.id === desp.projetoId);
                   return (
                     <tr key={desp.id} className="hover:bg-zinc-50/40 transition-colors">
                       <td className="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400">
@@ -602,10 +597,10 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                        {linkedProj ? (
+                        {desp.projetoNome ? (
                           <span className="flex items-center gap-1.5 text-zinc-700">
                             <FolderSimple weight="bold" className="w-4 h-4 text-zinc-400" />
-                            {linkedProj.nome}
+                            {desp.projetoNome}
                           </span>
                         ) : '-'}
                       </td>
@@ -736,7 +731,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
               </div>
               <div>
                 <label htmlFor="despesa-projeto" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Projeto vinculado</label>
-                <FormSelect id="despesa-projeto" name="projetoId" value={projetoId} onChange={e => setProjetoId(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="">Nenhum</option>{projetos.map((proj) => <option key={proj.id} value={proj.id}>{proj.nome}</option>)}</FormSelect>
+                <RemoteCombobox<ProjetoMin> id="despesa-projeto" name="projetoId" endpoint="/api/projetos/options" value={projetoId} onChange={setProjetoId} emptyLabel="Nenhum" placeholder="Pesquisar projeto…" />
               </div>
               <div>
                 <label htmlFor="despesa-viagem" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Viagem / prestação de contas</label>

@@ -1,14 +1,13 @@
 import { LICENSE_STATUSES, LicensePayloadSchema, normalizeLicenseStatus, type LicenseListItem, type LicensePayload
 } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Buildings, CalendarBlank, IdentificationCard, NotePencil } from '@phosphor-icons/react';
 import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect } from '../../components/Form';
-import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { RemoteCombobox } from '../../components/RemoteCombobox';
 
 interface ProjectOption {
   id: string;
@@ -70,16 +69,7 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
   const [form, setForm] = useState<FormState>(() => formFromLicense(license));
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState('');
-  const projectsQuery = useQuery<ProjectOption[]>({
-    queryKey: ['license-project-options'],
-    queryFn: () => apiClient.get<ProjectOption[]>('/api/projetos?limit=500'),
-    enabled: isOpen
-  });
-
-  const selectedProject = useMemo(
-    () => projectsQuery.data?.find((project) => project.id === form.projetoId),
-    [form.projetoId, projectsQuery.data]
-  );
+  const [selectedProject, setSelectedProject] = useState<ProjectOption | null>(null);
 
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -123,14 +113,11 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
   return (
     <Modal isOpen={isOpen} onClose={onClose} closeDisabled={loading} title={license ? 'Editar licença ambiental' : 'Nova licença ambiental'} maxWidth="max-w-4xl" initialFocusId="license-projetoId">
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-        <FormError message={formError || (projectsQuery.isError ? 'Não foi possível carregar os projetos. Feche a janela e tente novamente.' : '')} />
+        <FormError message={formError} />
         <FormSection sectionId="license-enterprise" title="Empreendimento e vínculo" description="Associe a licença ao projeto e ao cliente responsáveis pelo processo." icon={<Buildings className="h-5 w-5" weight="duotone" />} tone="cyan">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField htmlFor="license-projetoId" label="Projeto ou empreendimento" required error={errors.projetoId}>
-              <FormSelect id="license-projetoId" name="projetoId" autoComplete="off" disabled={projectsQuery.isLoading || Boolean(license)} value={form.projetoId} onChange={(event) => update('projetoId', event.target.value)} aria-invalid={Boolean(errors.projetoId)} aria-describedby={errors.projetoId ? 'license-projetoId-error' : undefined} className={cn(fieldClass, 'geo-native-select')}>
-                <option value="">{projectsQuery.isLoading ? 'Carregando projetos…' : 'Selecione…'}</option>
-                {projectsQuery.data?.map((project) => <option key={project.id} value={project.id}>{project.nome} — {project.clienteNome || 'cliente não informado'}</option>)}
-              </FormSelect>
+              <RemoteCombobox<ProjectOption> id="license-projetoId" name="projetoId" endpoint="/api/projetos/options" disabled={Boolean(license)} value={form.projetoId} selectedLabel={license?.projetoNome || ''} onChange={(nextValue, option) => { setSelectedProject(option); update('projetoId', nextValue); }} getOptionDescription={(option) => option.clienteNome || 'Cliente não informado'} placeholder="Pesquisar projeto…" required aria-invalid={Boolean(errors.projetoId)} aria-describedby={errors.projetoId ? 'license-projetoId-error' : undefined} />
             </FormField>
             <FormField htmlFor="license-cliente" label="Cliente">
               <input id="license-cliente" name="cliente" type="text" value={selectedProject?.clienteNome || license?.clienteNome || ''} readOnly aria-readonly="true" placeholder="Definido pelo projeto" className={cn(fieldClass, 'bg-zinc-50 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300')} />
@@ -180,7 +167,7 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
         </FormSection>
         <FormFooter>
           <button type="button" onClick={onClose} disabled={loading} className={secondarySmallActionButtonClass}>Cancelar</button>
-          <button type="submit" disabled={loading || projectsQuery.isLoading} aria-busy={loading} className={primarySubmitButtonClass}>{loading ? 'Salvando…' : license ? 'Salvar alterações' : 'Criar licença'}</button>
+          <button type="submit" disabled={loading} aria-busy={loading} className={primarySubmitButtonClass}>{loading ? 'Salvando…' : license ? 'Salvar alterações' : 'Criar licença'}</button>
         </FormFooter>
       </form>
     </Modal>

@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { createClient, type Client } from '@libsql/client';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
 import { OperationalLogService } from './operational-log.service';
+import { databaseClientConfig } from '@geogestor/database';
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_WAL_CHECKPOINT_BYTES = 16 * 1024 * 1024;
@@ -60,7 +61,7 @@ export class SqliteMaintenanceService {
       if (!force && Date.now() - this.lastRunAt < interval) return null;
       const startedAt = performance.now();
       const dbPath = path.resolve(databasePath());
-      const client = createClient({ url: `file:${dbPath}` });
+      const client = createClient(databaseClientConfig(dbPath));
       try {
         await client.execute('PRAGMA foreign_keys = ON;');
         await client.execute('PRAGMA busy_timeout = 5000;');

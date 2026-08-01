@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Layout } from '../components/Layout';
+import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError, FormFooter, FormSection, FormSelect } from '../components/Form';
@@ -14,7 +15,13 @@ import {
   MagnifyingGlass
 } from '@phosphor-icons/react';
 import { cn } from '../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../utils/actionStyles';
+import { filterSearchInputClass } from '../utils/filterStyles';
+import {
+  headerPrimaryActionButtonClass,
+  headerPrimaryActionIconClass,
+  primarySubmitButtonClass,
+} from '../utils/actionStyles';
+import { persistOperationalSetting } from '../services/operationalSettings';
 
 interface TipoServico {
   id: string;
@@ -61,7 +68,6 @@ export function Cadastros() {
         { id: '3', nome: 'Demarcação de Divisas', categoria: 'Topografia', valorSugerido: 180000 },
         { id: '4', nome: 'Retificação de Área', categoria: 'Regularização', valorSugerido: 300000 },
       ];
-      localStorage.setItem('geogestor_tipos_servico', JSON.stringify(defaults));
       return defaults;
     }
   });
@@ -77,20 +83,27 @@ export function Cadastros() {
         { id: '3', categoria: 'Alimentação', descricao: 'Refeições da equipe de campo' },
         { id: '4', categoria: 'Equipamento', descricao: 'Manutenção de RTK, Estação Total ou Drones' },
       ];
-      localStorage.setItem('geogestor_tipos_despesa', JSON.stringify(defaults));
       return defaults;
     }
   });
 
   const saveServicos = (list: TipoServico[]) => {
     setServicos(list);
-    localStorage.setItem('geogestor_tipos_servico', JSON.stringify(list));
   };
 
   const saveDespesas = (list: TipoDespesa[]) => {
     setDespesas(list);
-    localStorage.setItem('geogestor_tipos_despesa', JSON.stringify(list));
   };
+
+  useEffect(() => {
+    void persistOperationalSetting('geogestor_tipos_servico', servicos)
+      .catch(() => setFormError('Não foi possível persistir os tipos de serviço no banco local.'));
+  }, [servicos]);
+
+  useEffect(() => {
+    void persistOperationalSetting('geogestor_tipos_despesa', despesas)
+      .catch(() => setFormError('Não foi possível persistir as categorias de despesa no banco local.'));
+  }, [despesas]);
 
   const openCreateModal = () => {
     setSelectedId(null);
@@ -229,30 +242,23 @@ export function Cadastros() {
 
   return (
     <Layout>
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-            Parâmetros do Sistema
-          </span>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Cadastros Auxiliares
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Configure tabelas auxiliares de tipos de serviço e categorias de despesa.
-          </p>
-        </div>
-        
-        <button 
-          onClick={openCreateModal}
-          className={cn(primaryActionButtonClass, 'font-medium')}
-        >
-          <span>Novo Item</span>
-          <div className={primaryActionIconClass}>
-            <Plus weight="bold" className="w-4 h-4" />
-          </div>
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Parâmetros do sistema"
+        title="Cadastros Auxiliares"
+        description="Configure tabelas auxiliares de tipos de serviço e categorias de despesa."
+        action={
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className={headerPrimaryActionButtonClass}
+          >
+            <span>Novo item</span>
+            <span className={headerPrimaryActionIconClass} aria-hidden="true">
+              <Plus weight="bold" className="w-4 h-4" />
+            </span>
+          </button>
+        }
+      />
 
       {/* Tabs */}
       <div className="flex overflow-x-auto hide-scrollbar rounded-2xl border border-zinc-200/70 bg-white/80 p-2 shadow-sm ring-1 ring-zinc-950/[0.03] backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:ring-white/[0.03] gap-2 mb-8">
@@ -304,11 +310,14 @@ export function Cadastros() {
         <div className="relative">
           <MagnifyingGlass className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
-            type="text"
+            aria-label="Buscar cadastro auxiliar"
+            name="auxiliaryRegistrationSearch"
+            type="search"
+            autoComplete="off"
             value={activeTab === 'servicos' ? searchServicos : searchDespesas}
             onChange={(event) => activeTab === 'servicos' ? setSearchServicos(event.target.value) : setSearchDespesas(event.target.value)}
-            placeholder={activeTab === 'servicos' ? 'Buscar tipo de serviço por nome ou categoria...' : 'Buscar categoria ou descrição de despesa...'}
-            className="h-11 w-full rounded-2xl border border-zinc-200 bg-white pl-10 pr-24 text-sm font-medium text-zinc-900 outline-none transition-all placeholder:text-zinc-400 focus:border-indigo-300 focus:ring-4 focus:ring-indigo-500/10 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            placeholder={activeTab === 'servicos' ? 'Buscar tipo de serviço por nome ou categoria…' : 'Buscar categoria ou descrição de despesa…'}
+            className={cn(filterSearchInputClass, 'pr-24')}
           />
           {currentSearch && (
             <button

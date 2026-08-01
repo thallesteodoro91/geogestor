@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
+import { persistOperationalSetting } from '../services/operationalSettings';
 import { APP_VERSION } from '../version';
 import { Layout } from '../components/Layout';
+import { PageHeader } from '../components/PageHeader';
 import { motion } from 'framer-motion';
+import { Link as RouterLink } from 'react-router-dom';
 import { 
   FolderOpen,
   Check, 
@@ -21,8 +24,9 @@ import {
 } from '@phosphor-icons/react';
 import { Modal } from '../components/Modal';
 import { cn } from '../utils/cn';
-import { geoFieldClass, geoKickerClass, geoPanelClass, geoTabButtonClass, geoTabIconClass } from '../utils/geoTheme';
+import { geoFieldClass, geoPanelClass, geoTabButtonClass, geoTabIconClass } from '../utils/geoTheme';
 import { primarySmallActionButtonClass, primarySubmitButtonClass, revenueActionButtonClass } from '../utils/actionStyles';
+import { BackupPolicyPanel } from '../components/BackupPolicyPanel';
 
 export function Configuracoes() {
   const queryClient = useQueryClient();
@@ -144,7 +148,7 @@ export function Configuracoes() {
     }
   }, []);
 
-  const handleSaveTemplate = (e: React.FormEvent) => {
+  const handleSaveTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     const tData = {
       logo: logoBase64,
@@ -156,7 +160,7 @@ export function Configuracoes() {
       cor: templateCor,
       termos: templateTermos
     };
-    localStorage.setItem('geogestor_empresa_template', JSON.stringify(tData));
+    await persistOperationalSetting('geogestor_empresa_template', tData);
     alert('Identidade Visual & Template de Orçamentos salvos com sucesso!');
   };
 
@@ -326,7 +330,7 @@ export function Configuracoes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['configuracoes'] });
-      queryClient.invalidateQueries({ queryKey: ['projetos-notificacoes'] });
+      queryClient.invalidateQueries({ queryKey: ['projetos'] });
       alert('Configurações salvas com sucesso!');
     },
     onError: () => {
@@ -412,14 +416,14 @@ export function Configuracoes() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!empresaNome.trim() || !dadosPasta.trim()) {
       alert('Preencha os campos obrigatórios.');
       return;
     }
 
-    localStorage.setItem('geogestor_alerta_dias', alertaDias);
+    await persistOperationalSetting('geogestor_alerta_dias', alertaDias, alertaDias);
 
     updateConfigMutation.mutate({
       empresaNome,
@@ -441,20 +445,11 @@ export function Configuracoes() {
 
   return (
     <Layout>
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-        <div>
-          <span className={cn(geoKickerClass, 'mb-2')}>
-            Painel do Sistema
-          </span>
-          <h1 className="text-3xl font-semibold tracking-tighter text-zinc-950 dark:text-white">
-            Configurações
-          </h1>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400 font-medium font-sans">
-            Gerencie os dados da sua empresa, caminhos de diretórios locais e preferências.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Painel do sistema"
+        title="Configurações"
+        description="Gerencie os dados da sua empresa, caminhos de diretórios locais e preferências."
+      />
 
       {/* Tabs Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -515,9 +510,9 @@ export function Configuracoes() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Single Compact Card */}
                 <div className={cn(systemPanelClass, 'space-y-4')}>
-                  <h3 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                  <h2 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                     <Gear className="w-5 h-5 text-indigo-500" /> Configurações Gerais do Sistema
-                  </h3>
+                  </h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -579,9 +574,9 @@ export function Configuracoes() {
 
                 {/* Card de Configuração de Alertas de Vencimento */}
                 <div className={cn(systemPanelClass, 'space-y-4')}>
-                  <h3 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+                  <h2 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                     <WarningCircle className="w-5 h-5 text-indigo-500" /> Configurações de Alertas e Prazos
-                  </h3>
+                  </h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -628,7 +623,7 @@ export function Configuracoes() {
                     <h3 className="flex items-center gap-2 text-xs font-bold text-red-700 dark:text-red-400">
                       <WarningCircle weight="bold" className="h-3.5 w-3.5 shrink-0" /> Zona de Perigo — Limpeza Operacional
                     </h3>
-                    <p className="text-[11px] leading-relaxed text-red-600/80 dark:text-red-300/70">
+                    <p className="text-[11px] leading-relaxed text-red-700 dark:text-red-300">
                       Esta ação apaga definitivamente todos os Clientes, Projetos, Orçamentos, Parcelas, Documentos e registros da Jornada do Cliente. Não afeta as configurações da sua empresa ou template.
                     </p>
                   </div>
@@ -646,9 +641,9 @@ export function Configuracoes() {
 
           {activeTab === 'aparencia' && (
             <div className={cn(systemPanelClass, 'space-y-4')}>
-              <h3 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
+              <h2 className="text-base font-semibold text-zinc-950 dark:text-white flex items-center gap-2 pb-3 border-b border-zinc-100 dark:border-zinc-800">
                 <Palette className="w-5 h-5 text-zinc-400" /> Preferências Visuais
-              </h3>
+              </h2>
 
               <div className="space-y-4">
                 <div>
@@ -689,9 +684,9 @@ export function Configuracoes() {
               <div className={systemPanelClass}>
                 <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                   <div>
-                    <h3 className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
                       <Database className="h-5 w-5 text-zinc-400" /> Banco local do GeoGestor
-                    </h3>
+                    </h2>
                     <p className="mt-0.5 text-xs font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
                       O app desktop salva os dados localmente no Windows. Use o backup antes de atualizações grandes ou manutenções.
                     </p>
@@ -742,6 +737,12 @@ export function Configuracoes() {
                   </div>
                 )}
               </div>
+
+              <BackupPolicyPanel />
+
+              <RouterLink to="/pos-atualizacao" className="geo-focus-ring inline-flex min-h-11 items-center rounded-xl border border-zinc-300 px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                Executar verificação pós-atualização
+              </RouterLink>
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
                 <button
@@ -828,9 +829,9 @@ export function Configuracoes() {
               <div className={cn(systemPanelLargeClass, 'md:p-8')}>
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
                       <FileText className="w-5 h-5 text-emerald-500" /> Identidade Visual para Exportação de Orçamentos
-                    </h3>
+                    </h2>
                     <p className="text-xs text-zinc-500 mt-1">Configure o cabeçalho corporativo, cores e termos padrão dos relatórios em PDF.</p>
                   </div>
                   <span className="text-xs font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
@@ -974,9 +975,9 @@ export function Configuracoes() {
               <form onSubmit={handleSaveGoogleCredentials} className={cn(systemPanelLargeClass, 'space-y-6')}>
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
                       <Gear className="w-5 h-5 text-indigo-600" /> Credenciais Google API
-                    </h3>
+                    </h2>
                     <p className="text-xs text-zinc-500 mt-1">
                       Insira as chaves criadas no Google Cloud Console para sincronizar com sua Google Agenda.
                     </p>
@@ -1021,9 +1022,9 @@ export function Configuracoes() {
               <div className={cn(systemPanelLargeClass, 'space-y-6')}>
                 <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
                   <div>
-                    <h3 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
                       <Calendar className="w-5 h-5 text-emerald-500" /> Sincronização da Agenda
-                    </h3>
+                    </h2>
                     <p className="text-xs text-zinc-500 mt-1">
                       Conecte sua conta do Google e gerencie a sincronização de seus compromissos locais e do Google Calendar.
                     </p>

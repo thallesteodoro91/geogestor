@@ -4,6 +4,12 @@ export const primaryActionButtonClass =
 export const primaryActionIconClass =
   'flex h-8 w-8 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/15 transition-transform duration-150 group-hover:translate-x-1';
 
+export const headerPrimaryActionButtonClass =
+  'geo-button-base geo-button-primary geo-focus-ring group relative flex h-11 min-h-11 shrink-0 gap-2.5 px-5 py-0 text-sm disabled:cursor-not-allowed disabled:opacity-60';
+
+export const headerPrimaryActionIconClass =
+  'flex h-5 w-5 items-center justify-center rounded-full bg-white/15 ring-1 ring-white/15 transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none';
+
 export const revenueActionButtonClass =
   'geo-button-base geo-button-revenue geo-focus-ring group relative flex min-h-11 shrink-0 gap-3 px-6 py-3.5 text-sm disabled:cursor-not-allowed disabled:opacity-60';
 

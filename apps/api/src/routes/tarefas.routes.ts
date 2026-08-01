@@ -1,12 +1,13 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, or, and, isNull, desc } from 'drizzle-orm';
+import { eq, or, and, isNull, desc, asc, count, like, gte, lte } from 'drizzle-orm';
 import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
 import { AuditLogService } from '../services/audit.service';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { RelationshipIntegrityError, resolveClientProjectLink } from '../services/relationship-integrity.service';
 
 const TarefaPayloadSchema = z.object({
   titulo: z.string().min(1),
@@ -28,11 +29,17 @@ export async function tarefasRoutes(server: FastifyInstance) {
         projetoId: z.string().uuid().optional(),
         clienteId: z.string().uuid().optional(),
         page: z.coerce.number().min(1).default(1),
-        limit: z.coerce.number().min(1).max(500).default(100)
+        limit: z.coerce.number().min(1).max(100).default(50),
+        q: z.string().trim().max(200).optional(),
+        id: z.string().uuid().optional(),
+        prioridade: z.string().trim().max(100).optional(),
+        inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        mode: z.enum(['legacy', 'page']).default('legacy')
       })
     }
   }, async (request, reply) => {
-    const { projetoId, clienteId, page, limit } = request.query;
+    const { projetoId, clienteId, page, limit, q, mode } = request.query;
     const offset = (page - 1) * limit;
 
     let condition = isNull(schema.tarefas.deletedAt);
@@ -45,6 +52,11 @@ export async function tarefasRoutes(server: FastifyInstance) {
         eq(schema.projetos.clienteId, clienteId)
       ))!;
     }
+    if (q) condition = and(condition, like(schema.tarefas.titulo, `%${q}%`))!;
+    if (request.query.id) condition = and(condition, eq(schema.tarefas.id, request.query.id))!;
+    if (request.query.prioridade) condition = and(condition, eq(schema.tarefas.prioridade, request.query.prioridade))!;
+    if (request.query.inicio) condition = and(condition, gte(schema.tarefas.dataLimite, request.query.inicio))!;
+    if (request.query.fim) condition = and(condition, lte(schema.tarefas.dataLimite, request.query.fim))!;
 
     const query = db.select({
       id: schema.tarefas.id,
@@ -68,8 +80,66 @@ export async function tarefasRoutes(server: FastifyInstance) {
       .offset(offset)
       .orderBy(desc(schema.tarefas.createdAt));
 
-    return query;
+    const items = await query;
+    if (mode === 'legacy') return items;
+    const [{ total }] = await db.select({ total: count() })
+      .from(schema.tarefas)
+      .leftJoin(schema.projetos, eq(schema.tarefas.projetoId, schema.projetos.id))
+      .where(condition);
+    return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
   });
+
+  zServer.get('/options', {
+    schema: { querystring: z.object({
+      q: z.string().trim().max(200).optional(),
+      projetoId: z.string().uuid().optional(),
+      selectedId: z.string().uuid().optional(),
+      limit: z.coerce.number().int().min(1).max(50).default(25)
+    }) }
+  }, async (request) => {
+    const { q, projetoId, selectedId, limit } = request.query;
+    const selection = {
+      id: schema.tarefas.id,
+      titulo: schema.tarefas.titulo,
+      projetoId: schema.tarefas.projetoId,
+      clienteId: schema.tarefas.clienteId,
+      status: schema.tarefas.status
+    };
+    const items = await db.select(selection).from(schema.tarefas).where(and(
+      isNull(schema.tarefas.deletedAt),
+      projetoId ? eq(schema.tarefas.projetoId, projetoId) : undefined,
+      q ? like(schema.tarefas.titulo, `%${q}%`) : undefined
+    )).orderBy(asc(schema.tarefas.titulo), asc(schema.tarefas.id)).limit(limit);
+    if (selectedId && !items.some((item) => item.id === selectedId)) {
+      const [selected] = await db.select(selection).from(schema.tarefas)
+        .where(and(eq(schema.tarefas.id, selectedId), isNull(schema.tarefas.deletedAt))).limit(1);
+      if (selected) return [selected, ...items].slice(0, limit);
+    }
+    return items;
+  });
+
+  zServer.get('/calendar', {
+    schema: { querystring: z.object({
+      inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+    }) }
+  }, async (request) => db.select({
+    id: schema.tarefas.id,
+    titulo: schema.tarefas.titulo,
+    status: schema.tarefas.status,
+    dataLimite: schema.tarefas.dataLimite,
+    clienteId: schema.tarefas.clienteId,
+    clienteNome: schema.clientes.nome,
+    projetoId: schema.tarefas.projetoId,
+    projetoNome: schema.projetos.nome
+  }).from(schema.tarefas)
+    .leftJoin(schema.projetos, eq(schema.tarefas.projetoId, schema.projetos.id))
+    .leftJoin(schema.clientes, eq(schema.tarefas.clienteId, schema.clientes.id))
+    .where(and(
+      isNull(schema.tarefas.deletedAt),
+      gte(schema.tarefas.dataLimite, request.query.inicio),
+      lte(schema.tarefas.dataLimite, request.query.fim)
+    )).orderBy(asc(schema.tarefas.dataLimite), asc(schema.tarefas.id)).limit(500));
 
   zServer.post('/', {
     schema: {
@@ -157,22 +227,21 @@ export async function tarefasRoutes(server: FastifyInstance) {
     if (body.categoria !== undefined) updateFields.categoria = body.categoria;
     if (body.dataLimite !== undefined) updateFields.dataLimite = body.dataLimite;
 
-    if (body.projetoId !== undefined) {
-      const projetoId = body.projetoId || null;
-      updateFields.projetoId = projetoId;
-      updateFields.contextoTipo = projetoId ? 'projeto' : 'cliente';
-
-      if (projetoId) {
-        const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, projetoId)).limit(1);
-        if (!projeto.length) {
-          return reply.status(400).send({ error: 'Projeto vinculado nao encontrado' });
+    if (body.projetoId !== undefined || body.clienteId !== undefined) {
+      try {
+        const link = await resolveClientProjectLink({
+          projetoId: body.projetoId !== undefined ? body.projetoId || null : tarefaAnterior[0].projetoId,
+          clienteId: body.clienteId !== undefined ? body.clienteId || null : tarefaAnterior[0].clienteId
+        });
+        updateFields.projetoId = link.projetoId;
+        updateFields.clienteId = link.clienteId;
+        updateFields.contextoTipo = link.projetoId ? 'projeto' : 'cliente';
+      } catch (error) {
+        if (error instanceof RelationshipIntegrityError) {
+          return reply.status(error.statusCode).send({ error: error.message });
         }
-        updateFields.clienteId = projeto[0].clienteId;
+        throw error;
       }
-    }
-
-    if (body.clienteId !== undefined && updateFields.clienteId === undefined) {
-      updateFields.clienteId = body.clienteId || null;
     }
 
     updateFields.updatedAt = new Date().toISOString();

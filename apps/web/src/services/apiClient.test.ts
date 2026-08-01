@@ -97,3 +97,29 @@ test('apiClient sinaliza indisponibilidade sem devolver dados vazios ou zeros', 
   );
   assert.equal(unavailableEvents, 1);
 });
+
+test('getAllPages percorre todas as páginas e remove ids duplicados', async () => {
+  const requestedPages: number[] = [];
+  Object.assign(globalThis, {
+    window: {
+      electronAPI: { getApiPort: () => 4321, getApiToken: () => 'synthetic-token' },
+      location: { protocol: 'http:', port: '4321', origin: 'http://127.0.0.1:4321' },
+      dispatchEvent: () => true
+    },
+    fetch: async (input: RequestInfo | URL) => {
+      const url = new URL(String(input));
+      const page = Number(url.searchParams.get('page'));
+      requestedPages.push(page);
+      const items = page === 1
+        ? [{ id: '1', nome: 'Primeiro' }, { id: '2', nome: 'Segundo' }]
+        : [{ id: '2', nome: 'Segundo repetido' }, { id: '3', nome: 'Terceiro' }];
+      return new Response(JSON.stringify({ items, page, limit: 100, total: 3, totalPages: 2 }), {
+        status: 200, headers: { 'content-type': 'application/json' }
+      });
+    }
+  });
+  const { apiClient } = await import('./apiClient');
+  const rows = await apiClient.getAllPages<{ id: string; nome: string }>('/api/projetos');
+  assert.deepEqual(requestedPages, [1, 2]);
+  assert.deepEqual(rows.map((row) => row.id), ['1', '2', '3']);
+});

@@ -359,7 +359,7 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
 
         {/* Diff summary for edits */}
         {changeSummary && (
-          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-500 truncate leading-snug" title={changeSummary}>
+          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400 truncate leading-snug" title={changeSummary}>
             {changeSummary}
           </p>
         )}
@@ -450,7 +450,7 @@ export function RecentActivities() {
       <div className="flex-1 overflow-y-auto pr-1 space-y-4 scrollbar-thin scrollbar-thumb-zinc-200 dark:scrollbar-thumb-zinc-800">
         {isLoading ? (
           <div className="h-full flex items-center justify-center">
-            <span className="text-sm text-zinc-400 dark:text-zinc-500">Carregando atividades…</span>
+            <span className="text-sm text-zinc-400 dark:text-zinc-400">Carregando atividades…</span>
           </div>
         ) : filteredLogs.length === 0 ? (
           <div className="h-full flex items-center justify-center">

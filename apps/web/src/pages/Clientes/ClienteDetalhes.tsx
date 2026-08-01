@@ -63,7 +63,7 @@ import {
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
 import { formatCnpj, formatCpf, formatPhoneBR } from '../../utils/formatters';
-import { apiFetch, getDownloadUrl, getPreviewUrl } from '../../services/apiClient';
+import { apiClient, apiFetch, getDownloadUrl, getPreviewUrl } from '../../services/apiClient';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoTabButtonClass, geoTabIconClass, geoTabListClass, type GeoTone } from '../../utils/geoTheme';
@@ -736,7 +736,7 @@ export function ClienteDetalhes() {
     if (id) {
       queryClient.prefetchQuery({
         queryKey: ['projetos', id],
-        queryFn: () => apiFetch(`/api/projetos?clienteId=${id}`).then(res => res.json())
+        queryFn: () => apiClient.getAllPages(`/api/projetos?clienteId=${id}`)
       });
       // Optionally prefetch other tabs based on priority
     }
@@ -804,7 +804,7 @@ export function ClienteDetalhes() {
     observacoes?: string | null;
   }>>({
     queryKey: ['projetos', id],
-    queryFn: () => apiFetch(`/api/projetos?clienteId=${id}`).then(res => res.json()),
+    queryFn: () => apiClient.getAllPages(`/api/projetos?clienteId=${id}`),
     enabled: !!id && (activeTab === 'servicos' || activeTab === 'ambiental' || activeTab === 'visao-geral')
   });
 

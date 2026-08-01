@@ -9,23 +9,27 @@ import {
   CaretLeft,
   CaretRight,
   Certificate,
-  Funnel,
   Leaf,
   MagnifyingGlass,
   Plus,
   Scales,
-  WarningCircle,
-  X
+  WarningCircle
 } from '@phosphor-icons/react';
 import type { EnvironmentalDemandListResponse } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
+import { PageFilterBar } from '../../components/PageFilterBar';
+import { PageHeader } from '../../components/PageHeader';
 import { apiClient } from '../../services/apiClient';
 import { Licenciamento } from '../Licenciamento/Licenciamento';
 import { CalculadoraAmbiental } from '../Calculadoras/CalculadoraAmbiental';
 import { ProjectFormModal } from '../Projetos/ProjectFormModal';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
-import { geoKickerClass } from '../../utils/geoTheme';
+import {
+  headerPrimaryActionButtonClass,
+  headerPrimaryActionIconClass,
+  secondarySmallActionButtonClass,
+} from '../../utils/actionStyles';
+import { filterSearchInputClass } from '../../utils/filterStyles';
 import {
   localNavigationBarClass,
   localNavigationButtonClass,
@@ -36,9 +40,6 @@ const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
 const numberFormatter = new Intl.NumberFormat('pt-BR');
 const environmentalTabs = ['ambiental', 'licenciamento', 'car'] as const;
 type EnvironmentalTab = typeof environmentalTabs[number];
-const headerActionButtonClass = 'h-11 min-h-11 w-full shrink-0 justify-between gap-2.5 px-5 py-0 text-sm font-semibold sm:w-auto sm:self-end sm:justify-center';
-const headerActionIconClass = 'h-5 w-5 group-hover:translate-x-0.5';
-
 const formatDate = (date?: string | null) => date ? dateFormatter.format(new Date(`${date.slice(0, 10)}T12:00:00Z`)) : 'Não definido';
 
 function deadlineTone(date?: string | null) {
@@ -135,13 +136,8 @@ export function ListagemAmbiental() {
     queryFn: () => apiClient.get<EnvironmentalDemandListResponse>(`/api/ambiental?${queryString}`),
     enabled: activeTab === 'ambiental'
   });
-  const clientsQuery = useQuery<Array<{ id: string; nome: string }>>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get<Array<{ id: string; nome: string }>>('/api/clientes'),
-    enabled: demandFormOpen
-  });
-
   const hasFilters = Boolean(searchParams.get('q') || status || tipo || inicio || fim);
+  const activeFilterCount = [searchTerm, status, tipo, inicio, fim].filter(Boolean).length;
   const totalPages = Math.max(1, Math.ceil((demandsQuery.data?.total || 0) / 24));
 
   const clearFilters = () => {
@@ -174,46 +170,39 @@ export function ListagemAmbiental() {
 
   return (
     <Layout>
-      <header className="mb-3 border-b border-zinc-200/80 pb-3 dark:border-zinc-800">
-        <span className={cn(geoKickerClass, 'mb-4')}>Gestão ambiental</span>
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <h1 className="flex min-w-0 items-center gap-3 text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white">
-              <span aria-hidden="true" className={cn('inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1', activeHeader.iconClass)}>
-                {activeHeader.icon}
-              </span>
-              <span className="min-w-0 text-pretty">{activeHeader.title}</span>
-            </h1>
-            <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{activeHeader.description}</p>
-          </div>
-
-          {activeTab === 'ambiental' && (
+      <PageHeader
+        eyebrow="Gestão ambiental"
+        title={activeHeader.title}
+        description={activeHeader.description}
+        icon={activeHeader.icon}
+        iconClassName={activeHeader.iconClass}
+        action={
+          activeTab === 'ambiental' ? (
             <button
               type="button"
               onClick={() => updateParam('action', 'new')}
-              className={cn(primaryActionButtonClass, headerActionButtonClass)}
+              className={headerPrimaryActionButtonClass}
             >
               <span>Nova demanda</span>
-              <span aria-hidden="true" className={cn(primaryActionIconClass, headerActionIconClass)}>
+              <span aria-hidden="true" className={headerPrimaryActionIconClass}>
                 <Plus weight="bold" className="h-3.5 w-3.5" />
               </span>
             </button>
-          )}
-
-          {activeTab === 'licenciamento' && (
+          ) : activeTab === 'licenciamento' ? (
             <button
               type="button"
               onClick={() => setLicenseFormOpen(true)}
-              className={cn(primaryActionButtonClass, headerActionButtonClass)}
+              className={headerPrimaryActionButtonClass}
             >
               <span>Nova licença</span>
-              <span aria-hidden="true" className={cn(primaryActionIconClass, headerActionIconClass)}>
+              <span aria-hidden="true" className={headerPrimaryActionIconClass}>
                 <Plus weight="bold" className="h-3.5 w-3.5" />
               </span>
             </button>
-          )}
-        </div>
-      </header>
+          ) : null
+        }
+        className="mb-4"
+      />
 
       <div className="relative mb-4 min-w-0 max-w-full">
         <div
@@ -296,45 +285,37 @@ export function ListagemAmbiental() {
         aria-labelledby="ambiental-tab-demandas"
         hidden={activeTab !== 'ambiental'}
       >
-        <div className="mb-4 space-y-3">
-          <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
-            <div className="relative min-w-0 flex-1 sm:max-w-xl">
+        <PageFilterBar
+          filtersOpen={showFilters}
+          onFiltersToggle={() => setShowFilters((current) => !current)}
+          onClear={clearFilters}
+          activeFilterCount={activeFilterCount}
+          filterPanelId={filterPanelId}
+          search={
+            <div className="relative min-w-0">
               <label htmlFor={searchId} className="sr-only">Buscar demandas ambientais</label>
               <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <input id={searchId} name="buscaAmbiental" type="search" autoComplete="off" value={searchTerm} onChange={(event) => updateParam('q', event.target.value, true)} placeholder="Buscar por demanda, cliente, órgão ou processo…" className="relative z-0 w-full rounded-xl border border-zinc-200 bg-white py-2 pl-9 pr-3 text-xs text-zinc-950 transition-[border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white" />
+              <input id={searchId} name="buscaAmbiental" type="search" autoComplete="off" value={searchTerm} onChange={(event) => updateParam('q', event.target.value, true)} placeholder="Buscar por demanda, cliente, órgão ou processo…" className={cn(filterSearchInputClass, 'pl-9')} />
             </div>
-            <button type="button" aria-expanded={showFilters} aria-controls={filterPanelId} onClick={() => setShowFilters((current) => !current)} className={cn(secondarySmallActionButtonClass, 'min-h-10 gap-1.5 px-3')}>
-              <Funnel aria-hidden="true" className="h-3.5 w-3.5" />
-              Filtros
-            </button>
-            {hasFilters && (
-              <button type="button" onClick={clearFilters} className={cn(secondarySmallActionButtonClass, 'min-h-10 gap-1.5 px-3')}>
-                <X aria-hidden="true" className="h-3.5 w-3.5" />
-                Limpar
-              </button>
-            )}
-          </div>
-          {showFilters && (
-            <div id={filterPanelId} className="grid grid-cols-1 gap-3 rounded-2xl border border-zinc-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4 dark:border-zinc-800 dark:bg-zinc-900">
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo
-                <FormSelect name="tipoAmbiental" autoComplete="off" value={tipo} onChange={(event) => updateParam('tipo', event.target.value)} className="geo-native-select mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                  <option value="">Todos</option><option value="Ambiental">Ambiental</option><option value="Perícia">Perícia</option>
-                </FormSelect>
-              </label>
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Status
-                <FormSelect name="statusAmbiental" autoComplete="off" value={status} onChange={(event) => updateParam('status', event.target.value)} className="geo-native-select mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-                  <option value="">Todos</option><option value="Planejamento">Planejamento</option><option value="Em Análise">Em análise</option><option value="Em Andamento">Em andamento</option><option value="Aguardando Órgão">Aguardando órgão</option><option value="Finalizado">Finalizado</option>
-                </FormSelect>
-              </label>
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo a partir de
-                <DatePickerField name="inicioAmbiental" autoComplete="off" value={inicio} onChange={(event) => updateParam('inicio', event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
-              </label>
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo até
-                <DatePickerField name="fimAmbiental" autoComplete="off" min={inicio || undefined} value={fim} onChange={(event) => updateParam('fim', event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
-              </label>
-            </div>
-          )}
-        </div>
+          }
+        >
+          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo
+            <FormSelect name="tipoAmbiental" autoComplete="off" value={tipo} onChange={(event) => updateParam('tipo', event.target.value)} className="geo-native-select mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+              <option value="">Todos</option><option value="Ambiental">Ambiental</option><option value="Perícia">Perícia</option>
+            </FormSelect>
+          </label>
+          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Status
+            <FormSelect name="statusAmbiental" autoComplete="off" value={status} onChange={(event) => updateParam('status', event.target.value)} className="geo-native-select mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
+              <option value="">Todos</option><option value="Planejamento">Planejamento</option><option value="Em Análise">Em análise</option><option value="Em Andamento">Em andamento</option><option value="Aguardando Órgão">Aguardando órgão</option><option value="Finalizado">Finalizado</option>
+            </FormSelect>
+          </label>
+          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo a partir de
+            <DatePickerField name="inicioAmbiental" autoComplete="off" value={inicio} onChange={(event) => updateParam('inicio', event.target.value)} className="mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
+          </label>
+          <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo até
+            <DatePickerField name="fimAmbiental" autoComplete="off" min={inicio || undefined} value={fim} onChange={(event) => updateParam('fim', event.target.value)} className="mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950" />
+          </label>
+        </PageFilterBar>
 
         <div aria-live="polite" className="sr-only">{demandsQuery.isLoading ? 'Carregando demandas…' : `${demandsQuery.data?.total || 0} demandas encontradas.`}</div>
         {demandsQuery.isLoading ? (
@@ -353,7 +334,7 @@ export function ListagemAmbiental() {
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{hasFilters ? 'Ajuste ou limpe os filtros para ampliar a busca.' : 'Use “Nova demanda” para cadastrar uma demanda ambiental ou perícia.'}</p>
             {hasFilters && (
               <button type="button" onClick={clearFilters} className={cn(secondarySmallActionButtonClass, 'mt-4 px-4')}>
-                Limpar filtros
+                Limpar pesquisa
               </button>
             )}
           </div>
@@ -410,7 +391,6 @@ export function ListagemAmbiental() {
       <ProjectFormModal
         isOpen={demandFormOpen}
         onClose={() => updateParam('action', '', true)}
-        clientes={clientsQuery.data || []}
         context="ambiental"
         onSaved={(project) => navigate(`/ambiental/${project.id}`)}
       />

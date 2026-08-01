@@ -21,8 +21,11 @@ import {
   X
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
+import { PageHeader } from '../../components/PageHeader';
 import { DatePickerField } from '../../components/Form';
 import { CustomSelect } from '../../components/CustomSelect';
+import { ClientProfitabilityChart } from '../../components/charts/ClientProfitabilityChart';
+import { ExpenseCategoryChart } from '../../components/charts/ExpenseCategoryChart';
 import { RichTooltip } from '../../components/charts/RichTooltip';
 import { apiClient } from '../../services/apiClient';
 import {
@@ -39,7 +42,7 @@ import { chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveC
 import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
 import { filterControlClass } from '../../utils/filterStyles';
-import { primaryActionButtonClass } from '../../utils/actionStyles';
+import { headerPrimaryActionButtonClass } from '../../utils/actionStyles';
 import {
   localNavigationBarClass,
   localNavigationButtonClass,
@@ -69,6 +72,10 @@ const periodOptions: Array<{ label: string; value: PeriodKey }> = [
   { label: 'Este ano', value: 'year' },
   { label: 'Período personalizado', value: 'custom' }
 ];
+const percentageFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1
+});
 
 const metricToneClasses = {
   positive: {
@@ -256,22 +263,28 @@ export function Financeiro() {
     queryFn: () => apiClient.get('/api/financeiro/parcelas'),
     enabled: overviewEnabled
   });
-  const clientesQuery = useQuery<ClienteFinanceiro[]>({
-    queryKey: ['clientes'],
-    queryFn: () => apiClient.get('/api/clientes'),
-    enabled: overviewEnabled
-  });
-  const projetosQuery = useQuery<ProjetoFinanceiro[]>({
-    queryKey: ['projetos'],
-    queryFn: () => apiClient.get('/api/projetos'),
-    enabled: overviewEnabled
-  });
-
   const orcamentos = useMemo(() => orcamentosQuery.data ?? [], [orcamentosQuery.data]);
   const despesas = useMemo(() => despesasQuery.data ?? [], [despesasQuery.data]);
   const parcelas = useMemo(() => parcelasQuery.data ?? [], [parcelasQuery.data]);
-  const clientes = useMemo(() => clientesQuery.data ?? [], [clientesQuery.data]);
-  const projetos = useMemo(() => projetosQuery.data ?? [], [projetosQuery.data]);
+  const clientes = useMemo<ClienteFinanceiro[]>(() => {
+    const byId = new Map<string, ClienteFinanceiro>();
+    const add = (id?: string | null, nome?: string | null) => {
+      if (id && nome) byId.set(id, { id, nome });
+    };
+    orcamentos.forEach((item) => add(item.clienteId, item.clienteNome));
+    parcelas.forEach((item) => add(item.clienteId, item.clienteNome));
+    despesas.forEach((item) => add(item.clienteId, item.clienteNome));
+    return Array.from(byId.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [despesas, orcamentos, parcelas]);
+  const projetos = useMemo<ProjetoFinanceiro[]>(() => {
+    const byId = new Map<string, ProjetoFinanceiro>();
+    const add = (id?: string | null, nome?: string | null, clienteId?: string | null) => {
+      if (id && nome) byId.set(id, { id, nome, clienteId });
+    };
+    orcamentos.forEach((item) => add(item.projetoId, item.projetoNome, item.clienteId));
+    despesas.forEach((item) => add(item.projetoId, item.projetoNome, item.clienteId));
+    return Array.from(byId.values());
+  }, [despesas, orcamentos]);
 
   const filters = useMemo<FinancialFilters>(() => ({
     dataInicio: effectiveDataInicio || undefined,
@@ -294,16 +307,12 @@ export function Financeiro() {
   const loading = overviewEnabled && [
     orcamentosQuery,
     despesasQuery,
-    parcelasQuery,
-    clientesQuery,
-    projetosQuery
+    parcelasQuery
   ].some((query) => query.isLoading);
   const failed = overviewEnabled && [
     orcamentosQuery,
     despesasQuery,
-    parcelasQuery,
-    clientesQuery,
-    projetosQuery
+    parcelasQuery
   ].some((query) => query.isError);
 
   const categories = Array.from(new Set(despesas.map((item) => item.categoria).filter((value): value is string => Boolean(value)))).sort();
@@ -457,14 +466,12 @@ export function Financeiro() {
 
   return (
     <Layout>
-      <header className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div className="min-w-0">
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">Gestão financeira 360</h1>
-          <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-zinc-500 dark:text-zinc-400 sm:text-base">
-            Acompanhe receitas, despesas, viagens e o resultado do seu negócio.
-          </p>
-        </div>
-        <div ref={actionMenuRef} className="relative shrink-0 self-start lg:self-auto">
+      <PageHeader
+        eyebrow="Gestão financeira"
+        title="Gestão financeira 360"
+        description="Acompanhe receitas, despesas, viagens e o resultado do seu negócio."
+        action={
+          <div ref={actionMenuRef} className="relative shrink-0">
           <button
             id="finance-primary-action"
             type="button"
@@ -472,7 +479,7 @@ export function Financeiro() {
             aria-expanded={actionMenuOpen}
             aria-controls="finance-new-entry-menu"
             onClick={() => setActionMenuOpen((current) => !current)}
-            className={cn(primaryActionButtonClass, 'w-full justify-center sm:w-auto')}
+            className={cn(headerPrimaryActionButtonClass, 'w-full justify-center sm:w-auto')}
           >
             <Plus aria-hidden="true" size={18} weight="bold" />
             <span>Novo lançamento</span>
@@ -523,8 +530,9 @@ export function Financeiro() {
               </button>
             </div>
           )}
-        </div>
-      </header>
+          </div>
+        }
+      />
 
       <nav aria-label="Áreas do Financeiro" className={cn(localNavigationBarClass, 'mb-7')}>
         <div role="tablist" className={localNavigationItemsClass}>
@@ -860,45 +868,45 @@ export function Financeiro() {
                   {analytics.clientes.length === 0 ? (
                     <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Sem dados suficientes.</p>
                   ) : (
-                    <div className="mt-4 overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
-                          <tr><th className="py-3">Cliente</th><th className="py-3 text-right">Resultado</th><th className="py-3 text-right">Margem</th></tr>
-                        </thead>
-                        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                          {analytics.clientes.slice(0, 5).map((item) => (
-                            <tr key={item.clienteId}>
-                              <td className="py-3 pr-3 font-semibold">{item.cliente}</td>
-                              <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
-                              <td className="py-3 text-right font-mono tabular-nums">{item.margem.toFixed(1)}%</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <>
+                      <ClientProfitabilityChart
+                        items={analytics.clientes.map((item) => ({
+                          name: item.cliente,
+                          result: item.resultado / 100,
+                          margin: item.margem
+                        }))}
+                      />
+                      <div className="mt-4 overflow-x-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                        <table className="w-full min-w-[420px] text-left text-sm">
+                          <caption className="sr-only">Detalhamento da rentabilidade por cliente</caption>
+                          <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
+                            <tr><th className="py-3">Cliente</th><th className="py-3 text-right">Resultado</th><th className="py-3 text-right">Margem</th></tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                            {analytics.clientes.slice(0, 5).map((item) => (
+                              <tr key={item.clienteId}>
+                                <th scope="row" className="py-3 pr-3 text-left font-semibold">{item.cliente}</th>
+                                <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
+                                <td className="py-3 text-right font-mono tabular-nums">{percentageFormatter.format(item.margem)}%</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </section>
 
                 <section aria-labelledby="expense-category-title" className="min-w-0 xl:border-l xl:border-zinc-200 xl:pl-8 dark:xl:border-zinc-800">
                   <h2 id="expense-category-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Despesas por categoria</h2>
                   <p className="mt-1 text-sm text-zinc-500">Categorias com maior valor no recorte.</p>
-                  {analytics.categorias.length === 0 ? (
-                    <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Nenhuma despesa encontrada.</p>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      {analytics.categorias.slice(0, 6).map((item) => (
-                        <div key={item.categoria}>
-                          <div className="flex justify-between gap-4 text-sm">
-                            <span className="truncate font-semibold">{item.categoria}</span>
-                            <span className="font-mono tabular-nums">{formatCurrencyFromCents(item.total)}</span>
-                          </div>
-                          <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                            <div className="h-full rounded-full bg-rose-500" style={{ width: `${Math.max(2, item.percentual)}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <ExpenseCategoryChart
+                    items={analytics.categorias.map((item) => ({
+                      name: item.categoria,
+                      value: item.total,
+                      count: item.count
+                    }))}
+                  />
                 </section>
               </div>
 

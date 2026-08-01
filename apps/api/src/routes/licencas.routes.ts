@@ -16,6 +16,7 @@ import {
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { AuditLogService } from '../services/audit.service';
+import { RelationshipIntegrityError, resolveClientProjectLink } from '../services/relationship-integrity.service';
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const ConditionParamsSchema = z.object({
@@ -225,13 +226,19 @@ export async function licencasRoutes(server: FastifyInstance) {
       const project = await db.select().from(schema.projetos)
         .where(and(eq(schema.projetos.id, request.body.projetoId), isNull(schema.projetos.deletedAt)))
         .limit(1);
+      const link = project.length
+        ? await resolveClientProjectLink({
+            projetoId: request.body.projetoId,
+            clienteId: request.body.clienteId
+          })
+        : null;
       if (!project.length) return reply.status(400).send({ error: 'O projeto selecionado não existe.' });
 
       const created = await db.transaction(async (tx) => {
         const license = await tx.insert(schema.licencas).values({
           id: crypto.randomUUID(),
           projetoId: request.body.projetoId,
-          clienteId: request.body.clienteId || project[0].clienteId,
+          clienteId: link!.clienteId,
           numero: request.body.numero,
           protocolo: request.body.protocolo || null,
           orgao: request.body.orgao,
@@ -246,6 +253,9 @@ export async function licencasRoutes(server: FastifyInstance) {
       });
       return reply.status(201).send(created[0]);
     } catch (error) {
+      if (error instanceof RelationshipIntegrityError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
       server.log.error(error);
       return reply.status(500).send({ error: 'Não foi possível criar a licença.' });
     }
@@ -258,10 +268,18 @@ export async function licencasRoutes(server: FastifyInstance) {
       const current = await db.select().from(schema.licencas)
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
+      const link = current.length
+        ? await resolveClientProjectLink({
+            projetoId: request.body.projetoId !== undefined ? request.body.projetoId : current[0].projetoId,
+            clienteId: request.body.clienteId !== undefined ? request.body.clienteId : current[0].clienteId
+          })
+        : null;
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
       const updated = await db.transaction(async (tx) => {
         const license = await tx.update(schema.licencas).set({
           ...request.body,
+          projetoId: link!.projetoId!,
+          clienteId: link!.clienteId,
           protocolo: request.body.protocolo === undefined ? undefined : request.body.protocolo || null,
           dataEmissao: request.body.dataEmissao === undefined ? undefined : request.body.dataEmissao || null,
           observacoes: request.body.observacoes === undefined ? undefined : request.body.observacoes || null,
@@ -272,6 +290,9 @@ export async function licencasRoutes(server: FastifyInstance) {
       });
       return updated[0];
     } catch (error) {
+      if (error instanceof RelationshipIntegrityError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
       server.log.error(error);
       return reply.status(500).send({ error: 'Não foi possível atualizar a licença.' });
     }
@@ -284,10 +305,18 @@ export async function licencasRoutes(server: FastifyInstance) {
       const current = await db.select().from(schema.licencas)
         .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
         .limit(1);
+      const link = current.length
+        ? await resolveClientProjectLink({
+            projetoId: request.body.projetoId,
+            clienteId: request.body.clienteId
+          })
+        : null;
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
       const updated = await db.transaction(async (tx) => {
         const license = await tx.update(schema.licencas).set({
           ...request.body,
+          projetoId: link!.projetoId!,
+          clienteId: link!.clienteId,
           protocolo: request.body.protocolo || null,
           dataEmissao: request.body.dataEmissao || null,
           observacoes: request.body.observacoes || null,
@@ -298,6 +327,9 @@ export async function licencasRoutes(server: FastifyInstance) {
       });
       return updated[0];
     } catch (error) {
+      if (error instanceof RelationshipIntegrityError) {
+        return reply.status(error.statusCode).send({ error: error.message });
+      }
       server.log.error(error);
       return reply.status(500).send({ error: 'Não foi possível atualizar a licença.' });
     }

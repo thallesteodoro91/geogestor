@@ -38,6 +38,27 @@ test('política de backup usa estado persistido e janela de 24 horas', async () 
   }, now), true);
 });
 
+test('backup completo usa estado separado e vence após sete dias', async () => {
+  const { isAutomaticCompleteBackupDue, SCHEDULER_DELAYS } = await import('./services/scheduler.service');
+  const now = Date.parse('2026-08-01T12:00:00.000Z');
+
+  assert.equal(isAutomaticCompleteBackupDue({}, now), true);
+  assert.equal(isAutomaticCompleteBackupDue({
+    backupComplete: {
+      status: 'ok',
+      updatedAt: '2026-07-31T12:00:00.000Z',
+      details: { completedAt: new Date(now - SCHEDULER_DELAYS.completeBackupDueMs + 1).toISOString() }
+    }
+  }, now), false);
+  assert.equal(isAutomaticCompleteBackupDue({
+    backupComplete: {
+      status: 'ok',
+      updatedAt: '2026-07-25T12:00:00.000Z',
+      details: { completedAt: new Date(now - SCHEDULER_DELAYS.completeBackupDueMs).toISOString() }
+    }
+  }, now), true);
+});
+
 test('start agenda outbox cedo e posterga backup e manutenção pesada', async () => {
   const scheduledTimeouts: number[] = [];
   const scheduledIntervals: number[] = [];

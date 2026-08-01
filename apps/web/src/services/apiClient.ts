@@ -31,6 +31,14 @@ interface RequestOptions extends RequestInit {
   timeoutMs?: number;
 }
 
+export interface PaginatedResponse<T> {
+  items: T[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export function getBaseUrl(): string {
   if (typeof window !== 'undefined' && window.electronAPI?.getApiPort) {
     const port = window.electronAPI.getApiPort();
@@ -151,6 +159,10 @@ export const apiClient = {
     const { timeoutMs = 15000, ...fetchOptions } = options;
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeoutMs);
+    const upstreamSignal = fetchOptions.signal;
+    const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
+    if (upstreamSignal?.aborted) abortFromUpstream();
+    else upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
 
     const baseUrl = getBaseUrl();
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
@@ -160,9 +172,11 @@ export const apiClient = {
     try {
       const response = await apiFetch(url, fetchOptions);
       clearTimeout(id);
+      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
       return await handleResponse<T>(response);
     } catch (error: unknown) {
       clearTimeout(id);
+      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
       if (error instanceof ApiError) {
         if (error.status === 423) {
           clearLocalSessionToken();
@@ -195,6 +209,34 @@ export const apiClient = {
 
   async get<T>(endpoint: string, options?: RequestOptions): Promise<T> {
     return apiClient.request<T>(endpoint, { ...options, method: 'GET' });
+  },
+
+  /**
+   * Carrega explicitamente todas as pÃ¡ginas de um endpoint paginado. O total
+   * informado pelo backend encerra a coleta e ids repetidos nunca sÃ£o
+   * adicionados duas vezes.
+   */
+  async getAllPages<T extends { id?: string }>(endpoint: string, options?: RequestOptions): Promise<T[]> {
+    const pageSize = 100;
+    const collected: T[] = [];
+    const seen = new Set<string>();
+    let page = 1;
+    while (true) {
+      const separator = endpoint.includes('?') ? '&' : '?';
+      const response = await apiClient.get<PaginatedResponse<T>>(
+        `${endpoint}${separator}mode=page&page=${page}&limit=${pageSize}`,
+        options,
+      );
+      for (const item of response.items) {
+        const key = item.id || `page-${page}-index-${collected.length}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        collected.push(item);
+      }
+      if (page >= response.totalPages) break;
+      page += 1;
+    }
+    return collected;
   },
 
   async post<T>(endpoint: string, body?: unknown, options?: RequestOptions): Promise<T> {

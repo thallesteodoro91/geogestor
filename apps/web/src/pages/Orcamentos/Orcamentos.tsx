@@ -10,7 +10,6 @@ import {
   Eye,
   FilePdf,
   FileText,
-  Funnel,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -20,11 +19,13 @@ import {
 import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, SERVICE_TYPES, type BudgetStatus } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
+import { PageFilterBar } from '../../components/PageFilterBar';
+import { PageHeader } from '../../components/PageHeader';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Skeleton } from '../../components/Skeleton';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
-import { primaryActionButtonClass, primaryActionIconClass } from '../../utils/actionStyles';
+import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { commercialContentClass } from '../../utils/commercialLayout';
 import { BudgetEditor } from './BudgetEditor';
@@ -33,7 +34,7 @@ import { currencyInputToCents, formatBasisPoints, formatCurrency, formatDate } f
 import { generateProfessionalBudgetPdf } from './budgetPdfGenerator';
 import type { BudgetDetail, BudgetKpis, BudgetListItem, BudgetOptions } from './types';
 
-const fieldClass = cn(geoFieldClass, 'min-h-11 w-full px-3 text-sm');
+const fieldClass = cn(geoFieldClass, 'h-10 min-h-10 w-full px-3 text-xs font-semibold');
 const iconButtonClass = 'geo-focus-ring inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-brand-border bg-brand-surface text-zinc-600 transition-[background-color,color,transform] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 active:scale-[0.97] dark:text-zinc-300 dark:hover:text-white';
 
 const emptyKpis: BudgetKpis = {
@@ -102,6 +103,7 @@ export function Orcamentos() {
   const [deleteTarget, setDeleteTarget] = useState<BudgetListItem | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
   const { data: budgets = [], isLoading: budgetsLoading } = useQuery<BudgetListItem[]>({
     queryKey: ['budgets', queryString],
@@ -195,11 +197,17 @@ export function Orcamentos() {
   });
 
   const generatePdf = async (id: string) => {
+    if (generatingPdfId) return;
+    setGeneratingPdfId(id);
+    const loadingToast = toast.loading('Gerando PDF…');
     try {
       const detail = await apiClient.get<BudgetDetail>(`/api/orcamentos/${id}`);
-      generateProfessionalBudgetPdf(detail);
+      await generateProfessionalBudgetPdf(detail);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'N\u00e3o foi poss\u00edvel gerar o documento.');
+    } finally {
+      toast.dismiss(loadingToast);
+      setGeneratingPdfId(null);
     }
   };
 
@@ -269,14 +277,70 @@ export function Orcamentos() {
   return (
     <Layout contentClassName={commercialContentClass}>
       <div className="min-w-0 max-w-full space-y-7">
-        <ModuleNavigation module="commercial" className="mb-0" />
-        <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-text-primary sm:text-4xl">Or&ccedil;amentos</h1>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-text-secondary sm:text-base">Crie propostas t&eacute;cnicas, preserve vers&otilde;es e transforme aprova&ccedil;&otilde;es em projetos e contas a receber rastre&aacute;veis.</p>
-          </div>
-          <button type="button" onClick={() => { setEditingBudget(null); setEditorOpen(true); }} className={primaryActionButtonClass}><span className={primaryActionIconClass}><Plus aria-hidden="true" size={18} weight="bold" /></span>Novo or&ccedil;amento</button>
-        </header>
+        <PageHeader
+          eyebrow="Propostas comerciais"
+          title="Orçamentos"
+          description="Crie propostas técnicas, preserve versões e transforme aprovações em projetos e contas a receber rastreáveis."
+          action={(
+            <button
+              type="button"
+              onClick={() => { setEditingBudget(null); setEditorOpen(true); }}
+              className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}
+            >
+              <span aria-hidden="true" className={headerPrimaryActionIconClass}>
+                <Plus size={15} weight="bold" />
+              </span>
+              Novo orçamento
+            </button>
+          )}
+          navigation={<ModuleNavigation module="commercial" className="mb-0" />}
+        />
+
+        <PageFilterBar
+          search={(
+            <label className="relative block">
+              <span className="sr-only">Buscar por número, cliente, imóvel ou descrição</span>
+              <MagnifyingGlass aria-hidden="true" size={18} className="pointer-events-none absolute left-3 top-2.5 text-text-muted" />
+              <input
+                name="query"
+                type="search"
+                autoComplete="off"
+                value={searchParams.get('query') || ''}
+                onChange={(event) => updateFilter('query', event.target.value)}
+                placeholder="Número, cliente, imóvel…"
+                className={cn(fieldClass, 'pl-10')}
+              />
+            </label>
+          )}
+          filtersOpen={showAdvancedFilters}
+          onFiltersToggle={() => setShowAdvancedFilters((value) => !value)}
+          filterPanelId="budget-filter-panel"
+          activeFilterCount={activeFilters.length + (selectedStatus ? 1 : 0)}
+          onClear={clearFilters}
+          panelClassName="lg:grid-cols-4"
+        >
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary">
+            <span>Cliente</span>
+            <FormSelect aria-label="Filtrar por cliente" value={searchParams.get('clientId') || ''} onChange={(event) => updateFilter('clientId', event.target.value)} className={fieldClass}><option value="">Todos os clientes</option>{options.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</FormSelect>
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary">
+            <span>Tipo de serviço</span>
+            <FormSelect aria-label="Filtrar por tipo de serviço" value={searchParams.get('serviceType') || ''} onChange={(event) => updateFilter('serviceType', event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{SERVICE_TYPES.map((type) => <option key={type}>{type}</option>)}</FormSelect>
+          </label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Município</span><input aria-label="Filtrar por município" value={searchParams.get('municipality') || ''} onChange={(event) => updateFilter('municipality', event.target.value)} placeholder="Município" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Imóvel</span><input aria-label="Filtrar por imóvel" value={searchParams.get('property') || ''} onChange={(event) => updateFilter('property', event.target.value)} placeholder="Imóvel" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Responsável técnico</span><input aria-label="Filtrar por responsável técnico" value={searchParams.get('technicalLead') || ''} onChange={(event) => updateFilter('technicalLead', event.target.value)} placeholder="Responsável técnico" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Tipo de imóvel</span><FormSelect aria-label="Filtrar rural ou urbano" value={searchParams.get('propertyType') || ''} onChange={(event) => updateFilter('propertyType', event.target.value)} className={fieldClass}><option value="">Rural e urbano</option><option value="rural">Rural</option><option value="urbano">Urbano</option></FormSelect></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Vínculo com projeto</span><FormSelect aria-label="Filtrar vínculo com projeto" value={searchParams.get('linkedProject') || ''} onChange={(event) => updateFilter('linkedProject', event.target.value)} className={fieldClass}><option value="">Com ou sem projeto</option><option value="sim">Vinculado a projeto</option><option value="nao">Sem projeto</option></FormSelect></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Emissão inicial</span><DatePickerField aria-label="Emissão inicial" value={searchParams.get('issueFrom') || ''} onChange={(event) => updateFilter('issueFrom', event.target.value)} className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Emissão final</span><DatePickerField aria-label="Emissão final" value={searchParams.get('issueTo') || ''} onChange={(event) => updateFilter('issueTo', event.target.value)} className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Validade inicial</span><DatePickerField aria-label="Validade inicial" value={searchParams.get('validFrom') || ''} onChange={(event) => updateFilter('validFrom', event.target.value)} className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Validade final</span><DatePickerField aria-label="Validade final" value={searchParams.get('validTo') || ''} onChange={(event) => updateFilter('validTo', event.target.value)} className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor mínimo</span><input aria-label="Valor mínimo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('minValueCents'))} onChange={(event) => updateFilter('minValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor mínimo (R$)" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor máximo</span><input aria-label="Valor máximo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('maxValueCents'))} onChange={(event) => updateFilter('maxValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor máximo (R$)" className={fieldClass} /></label>
+        </PageFilterBar>
+
+        {activeFilters.length > 0 && <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2" aria-label="Filtros ativos"><span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">Filtros ativos</span>{activeFilters.map((filter) => <button key={filter.key} type="button" onClick={() => updateFilter(filter.key, '')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-border bg-brand-surface-subtle px-3 text-xs font-medium text-text-secondary transition-[background-color,color,border-color] hover:border-brand-primary-300 hover:text-text-primary" aria-label={`Remover filtro ${filter.label}: ${filter.value}`}><span>{filter.label}: {filter.value}</span><X aria-hidden="true" size={13} /></button>)}</div>}
 
         <div>
           <section aria-labelledby="budget-pulse-title" className="border-y border-brand-border bg-brand-surface-subtle/25">
@@ -347,30 +411,6 @@ export function Orcamentos() {
             </span>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(280px,2fr)_minmax(190px,1fr)_minmax(210px,1fr)_auto_auto]">
-            <label className="relative md:col-span-2 xl:col-span-1"><span className="sr-only">Buscar por n&uacute;mero, cliente, im&oacute;vel ou descri&ccedil;&atilde;o</span><MagnifyingGlass aria-hidden="true" size={18} className="pointer-events-none absolute left-3 top-3.5 text-text-muted" /><input name="query" type="search" autoComplete="off" value={searchParams.get('query') || ''} onChange={(event) => updateFilter('query', event.target.value)} placeholder="N&uacute;mero, cliente, im&oacute;vel&hellip;" className={cn(fieldClass, 'pl-10')} /></label>
-            <label><span className="sr-only">Filtrar por cliente</span><FormSelect aria-label="Filtrar por cliente" value={searchParams.get('clientId') || ''} onChange={(event) => updateFilter('clientId', event.target.value)} className={fieldClass}><option value="">Todos os clientes</option>{options.clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</FormSelect></label>
-            <label><span className="sr-only">Filtrar por tipo de servi&ccedil;o</span><FormSelect aria-label="Filtrar por tipo de servi&ccedil;o" value={searchParams.get('serviceType') || ''} onChange={(event) => updateFilter('serviceType', event.target.value)} className={fieldClass}><option value="">Todos os servi&ccedil;os</option>{SERVICE_TYPES.map((type) => <option key={type}>{type}</option>)}</FormSelect></label>
-            <button type="button" aria-expanded={showAdvancedFilters} aria-controls="budget-advanced-filters" onClick={() => setShowAdvancedFilters((value) => !value)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-xs"><Funnel aria-hidden="true" size={17} />{showAdvancedFilters ? 'Ocultar filtros' : 'Mais filtros'}</button>
-            {hasFilters && <button type="button" onClick={clearFilters} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-xs">Limpar filtros</button>}
-          </div>
-
-          {showAdvancedFilters && <fieldset id="budget-advanced-filters" className="mt-4 grid gap-4 border-y border-brand-border bg-brand-surface-subtle/35 px-4 py-4 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6"><legend className="sr-only">Filtros avan&ccedil;ados</legend>
-            <input aria-label="Filtrar por munic&iacute;pio" value={searchParams.get('municipality') || ''} onChange={(event) => updateFilter('municipality', event.target.value)} placeholder="Munic&iacute;pio" className={fieldClass} />
-            <input aria-label="Filtrar por im&oacute;vel" value={searchParams.get('property') || ''} onChange={(event) => updateFilter('property', event.target.value)} placeholder="Im&oacute;vel" className={fieldClass} />
-            <input aria-label="Filtrar por respons&aacute;vel t&eacute;cnico" value={searchParams.get('technicalLead') || ''} onChange={(event) => updateFilter('technicalLead', event.target.value)} placeholder="Respons&aacute;vel t&eacute;cnico" className={fieldClass} />
-            <FormSelect aria-label="Filtrar rural ou urbano" value={searchParams.get('propertyType') || ''} onChange={(event) => updateFilter('propertyType', event.target.value)} className={fieldClass}><option value="">Rural e urbano</option><option value="rural">Rural</option><option value="urbano">Urbano</option></FormSelect>
-            <FormSelect aria-label="Filtrar v&iacute;nculo com projeto" value={searchParams.get('linkedProject') || ''} onChange={(event) => updateFilter('linkedProject', event.target.value)} className={fieldClass}><option value="">Com ou sem projeto</option><option value="sim">Vinculado a projeto</option><option value="nao">Sem projeto</option></FormSelect>
-            <label className="text-xs text-text-muted">Emiss&atilde;o inicial<DatePickerField aria-label="Emiss&atilde;o inicial" value={searchParams.get('issueFrom') || ''} onChange={(event) => updateFilter('issueFrom', event.target.value)} className={cn(fieldClass, 'mt-1')} /></label>
-            <label className="text-xs text-text-muted">Emiss&atilde;o final<DatePickerField aria-label="Emiss&atilde;o final" value={searchParams.get('issueTo') || ''} onChange={(event) => updateFilter('issueTo', event.target.value)} className={cn(fieldClass, 'mt-1')} /></label>
-            <label className="text-xs text-text-muted">Validade inicial<DatePickerField aria-label="Validade inicial" value={searchParams.get('validFrom') || ''} onChange={(event) => updateFilter('validFrom', event.target.value)} className={cn(fieldClass, 'mt-1')} /></label>
-            <label className="text-xs text-text-muted">Validade final<DatePickerField aria-label="Validade final" value={searchParams.get('validTo') || ''} onChange={(event) => updateFilter('validTo', event.target.value)} className={cn(fieldClass, 'mt-1')} /></label>
-            <input aria-label="Valor m&iacute;nimo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('minValueCents'))} onChange={(event) => updateFilter('minValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor m&iacute;nimo (R$)" className={fieldClass} />
-            <input aria-label="Valor m&aacute;ximo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('maxValueCents'))} onChange={(event) => updateFilter('maxValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor m&aacute;ximo (R$)" className={fieldClass} />
-          </fieldset>}
-
-          {activeFilters.length > 0 && <div className="mt-3 flex flex-wrap items-center gap-2" aria-label="Filtros ativos"><span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">Filtros ativos</span>{activeFilters.map((filter) => <button key={filter.key} type="button" onClick={() => updateFilter(filter.key, '')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-border bg-brand-surface-subtle px-3 text-xs font-medium text-text-secondary transition-[background-color,color,border-color] hover:border-brand-primary-300 hover:text-text-primary" aria-label={`Remover filtro ${filter.label}: ${filter.value}`}><span>{filter.label}: {filter.value}</span><X aria-hidden="true" size={13} /></button>)}</div>}
-
           <nav aria-label="Filtrar propostas por status" className="mt-4 overflow-x-auto overscroll-x-contain border-y border-brand-border">
             <div className="flex min-w-max" role="group" aria-label="Status do or&ccedil;amento">
               <button type="button" aria-pressed={!selectedStatus} onClick={() => updateFilter('status', '')} className={cn('geo-focus-ring relative flex min-h-11 items-center gap-2 px-4 text-xs font-semibold transition-[background-color,color] hover:bg-brand-surface-subtle', !selectedStatus ? 'text-brand-primary-700 dark:text-brand-primary-200' : 'text-text-muted')}><span>Todos</span><span className="font-mono tabular-nums">{statusKpis.total}</span>{!selectedStatus && <span aria-hidden="true" className="absolute inset-x-3 bottom-0 h-0.5 bg-brand-primary-500" />}</button>
@@ -422,7 +462,7 @@ export function Orcamentos() {
                               <button type="button" onClick={() => openDetail(budget)} className={cn(iconButtonClass, 'border-sky-200/80 bg-sky-50 text-sky-700 dark:border-sky-400/20 dark:bg-sky-950/30 dark:text-sky-200')} aria-label={`Visualizar ${budget.number || 'or\u00e7amento'} de ${budget.clientName}`}><Eye aria-hidden="true" size={17} /></button>
                               {budget.status === 'rascunho' && <button type="button" onClick={async () => { const detail = await apiClient.get<BudgetDetail>(`/api/orcamentos/${budget.id}`); setEditingBudget(detail); setEditorOpen(true); }} className={cn(iconButtonClass, 'border-indigo-200/80 bg-indigo-50 text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-200')} aria-label={`Editar rascunho de ${budget.clientName}`}><PencilSimple aria-hidden="true" size={17} /></button>}
                               <button type="button" onClick={() => duplicateMutation.mutate(budget.id)} className={iconButtonClass} aria-label={`Duplicar or\u00e7amento de ${budget.clientName}`}><Copy aria-hidden="true" size={17} /></button>
-                              <button type="button" onClick={() => generatePdf(budget.id)} className={cn(iconButtonClass, 'border-sky-200/80 bg-sky-50 text-sky-700 dark:border-sky-400/20 dark:bg-sky-950/30 dark:text-sky-200')} aria-label={`Gerar PDF do or\u00e7amento de ${budget.clientName}`}><FilePdf aria-hidden="true" size={17} /></button>
+                              <button type="button" onClick={() => void generatePdf(budget.id)} disabled={generatingPdfId !== null} aria-busy={generatingPdfId === budget.id} className={cn(iconButtonClass, 'border-sky-200/80 bg-sky-50 text-sky-700 disabled:cursor-wait disabled:opacity-60 dark:border-sky-400/20 dark:bg-sky-950/30 dark:text-sky-200')} aria-label={generatingPdfId === budget.id ? 'Gerando PDF…' : `Gerar PDF do or\u00e7amento de ${budget.clientName}`}><FilePdf aria-hidden="true" size={17} /></button>
                               {budget.status === 'rascunho' && <button type="button" onClick={() => setDeleteTarget(budget)} className={cn(iconButtonClass, 'border-red-200/80 bg-red-50 text-brand-red-700 dark:border-red-400/20 dark:bg-red-950/30 dark:text-brand-red-100')} aria-label={`Excluir rascunho de ${budget.clientName}`}><Trash aria-hidden="true" size={17} /></button>}
                             </div>
                           </td>

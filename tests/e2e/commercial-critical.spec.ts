@@ -104,6 +104,11 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
     await page.getByPlaceholder('Buscar clientes por nome, documento ou contato…').fill(CLIENT_NAME);
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
+    await expect(page).toHaveURL(/\/clientes\?q=Cliente(?:\+|%20)E2E/);
+    await page.getByRole('link', { name: 'CRM e Funil', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'CRM' })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByPlaceholder('Buscar clientes por nome, documento ou contato…')).toHaveValue(CLIENT_NAME);
 
     await page.getByRole('button', { name: `Ações de ${CLIENT_NAME}` }).click();
     await page.getByRole('menuitem', { name: 'Editar' }).click();
@@ -167,6 +172,50 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
   });
 
+  test('despesas por categoria alternam entre treemap e barras e preservam a tabela', async ({ page }) => {
+    await unlock(page);
+    const expense = (id: string, categoria: string, valor: number) => ({
+      id,
+      categoria,
+      valor,
+      status: 'Pago',
+      data: '2026-07-15',
+      dataPagamento: '2026-07-15'
+    });
+    const fourCategories = [
+      expense('expense-1', 'Combustível', 45_000),
+      expense('expense-2', 'Taxas e cartório', 30_000),
+      expense('expense-3', 'Hospedagem', 20_000),
+      expense('expense-4', 'Alimentação', 5_000)
+    ];
+    await page.route('**/api/financeiro/despesas', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(fourCategories)
+    }));
+    await navigateBySidebar(page, 'Financeiro');
+
+    await expect(page.locator('[data-chart-mode="treemap"]')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Valores exatos das despesas por categoria' })).toBeVisible();
+    await expect(page.getByRole('row', { name: /Combustível.*1.*45/ })).toBeVisible();
+
+    await page.unroute('**/api/financeiro/despesas');
+    await page.route('**/api/financeiro/despesas', (route) => route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(fourCategories.slice(0, 3))
+    }));
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
+    await page.getByLabel('Senha local').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Desbloquear' }).click();
+    await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
+
+    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
+    await expect(page.getByRole('table', { name: 'Valores exatos das despesas por categoria' })).toBeVisible();
+    await page.unroute('**/api/financeiro/despesas');
+  });
+
   test('falha da API nunca vira KPIs zerados e permite reconexão', async ({ page }) => {
     await unlock(page);
     await page.route('**/api/auth/status', (route) => route.abort('failed'));
@@ -187,53 +236,188 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await unlock(page);
     await navigateBySidebar(page, 'Projetos');
     const tileRequest = page.waitForRequest(tileUrl);
-    await page.getByRole('button', { name: 'Mapa' }).click();
+    await page.getByRole('tab', { name: 'Mapa' }).click();
     await tileRequest;
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
     await expect(page.getByText('Mapa-base indisponível')).toBeVisible();
     await expect(page.getByText(/marcadores, geometrias e dados próprios continuam visíveis/i)).toBeVisible();
   });
 
-  test('Gestão e Sistema permanece aberto ao navegar entre páginas', async ({ page }) => {
+  test('visualizações de projetos têm estados vazios próprios, URL e navegação por teclado', async ({ page }) => {
+    await page.route('**/api/projetos*', (route) => route.fulfill({
+      status: route.request().method() === 'OPTIONS' ? 204 : 200,
+      contentType: 'application/json',
+      body: route.request().method() === 'OPTIONS' ? '' : '[]'
+    }));
     await unlock(page);
-    const administrationMenu = page.getByRole('button', { name: 'GESTÃO E SISTEMA' });
-    if (await administrationMenu.getAttribute('aria-expanded') !== 'true') {
-      await administrationMenu.click();
-    }
+    await navigateBySidebar(page, 'Projetos');
 
-    await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Relatórios & Faturamento' })).toBeVisible();
-    await navigateBySidebar(page, 'Comercial');
+    const projectsTab = page.getByRole('tab', { name: 'Projetos' });
+    const mapTab = page.getByRole('tab', { name: 'Mapa' });
+    const statisticsTab = page.getByRole('tab', { name: 'Estatísticas' });
+    await expect(projectsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: 'Você ainda não possui projetos cadastrados' })).toBeVisible();
 
-    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'true');
-    await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toBeVisible();
+    await mapTab.click();
+    await expect(page).toHaveURL(/\/projetos\?visualizacao=mapa$/);
+    await expect(mapTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: 'Nenhum projeto georreferenciado para mostrar' })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Relatórios & Faturamento' })).toBeVisible();
-    await administrationMenu.click();
-    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'false');
-    await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toHaveCount(0);
+    await mapTab.press('ArrowRight');
+    await expect(statisticsTab).toBeFocused();
+    await expect(statisticsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page).toHaveURL(/\/projetos\?visualizacao=estatisticas$/);
+    await expect(page.getByRole('heading', { name: 'Ainda não há dados para gerar estatísticas' })).toBeVisible();
 
-    await navigateBySidebar(page, 'Comercial');
-    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'false');
-    await administrationMenu.click();
-    await expect(administrationMenu).toHaveAttribute('aria-expanded', 'true');
+    await statisticsTab.press('Home');
+    await expect(projectsTab).toBeFocused();
+    await expect(page).toHaveURL(/\/projetos$/);
+    await page.unroute('**/api/projetos*');
   });
 
-  test('Clientes, CRM e Orçamentos mantêm a mesma largura no Comercial', async ({ page }) => {
+  test('Gestão e Sistema permanece estático e visível ao navegar entre páginas', async ({ page }) => {
+    await unlock(page);
+    await page.evaluate(() => {
+      (window as typeof window & { __geogestorSidebar?: Element | null }).__geogestorSidebar = document.querySelector('aside');
+    });
+    const administrationLabel = page.getByText('GESTÃO E SISTEMA', { exact: true });
+    await expect(administrationLabel).toBeVisible();
+    await expect(page.getByRole('button', { name: 'GESTÃO E SISTEMA' })).toHaveCount(0);
+
+    const navigationStartedAt = await page.evaluate(() => performance.now());
+    await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible();
+    expect(await page.evaluate((startedAt) => performance.now() - startedAt, navigationStartedAt)).toBeLessThan(250);
+    expect(await page.evaluate(() => (
+      (window as typeof window & { __geogestorSidebar?: Element | null }).__geogestorSidebar === document.querySelector('aside')
+    ))).toBe(true);
+    await expect(page.getByText('Carregando GeoGestor…')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toHaveAttribute('aria-current', 'page');
+    await navigateBySidebar(page, 'Comercial');
+
+    await expect(administrationLabel).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Relatórios', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ajuda', exact: true })).toBeVisible();
+  });
+
+  test('notificações permitem ler tudo, apagar tudo e abrir o projeto informado', async ({ page }) => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+
+    await page.addInitScript(() => {
+      localStorage.removeItem('geogestor_cleared_notifications');
+      localStorage.removeItem('geogestor_read_notifications');
+      localStorage.setItem('geogestor_alerta_dias', '7');
+    });
+    await page.route('**/api/projetos/deadlines*', async (route) => {
+      if (route.request().method() === 'OPTIONS') {
+        await route.fulfill({
+          status: 204,
+          headers: {
+            'access-control-allow-origin': '*',
+            'access-control-allow-headers': '*',
+            'access-control-allow-methods': 'GET,OPTIONS',
+          },
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify([
+          {
+            id: 'notificacao-a',
+            nome: 'Projeto Notificação A',
+            status: 'Em andamento',
+            dataEntrega: dateKey(yesterday),
+          },
+          {
+            id: 'notificacao-b',
+            nome: 'Projeto Notificação B',
+            status: 'Em andamento',
+            dataEntrega: dateKey(today),
+          },
+          {
+            id: 'notificacao-finalizada',
+            nome: 'Projeto Finalizado',
+            status: 'Finalizado',
+            dataEntrega: dateKey(yesterday),
+          },
+        ]),
+      });
+    });
+
+    await unlock(page);
+    const notificationTrigger = page.locator('main button[aria-label^="Notificações:"]');
+    await expect(notificationTrigger).toHaveAttribute('aria-label', /2 não lida/);
+    await notificationTrigger.click();
+
+    const panel = page.getByRole('dialog', { name: 'Central de notificações' });
+    await expect(panel).toContainText('2 notificações não lidas');
+    await expect(panel).toContainText('Projeto Notificação A');
+    await expect(panel).toContainText('Projeto Notificação B');
+    await expect(panel).not.toContainText('Projeto Finalizado');
+
+    await panel
+      .locator('article')
+      .filter({ hasText: 'Projeto Notificação A' })
+      .getByRole('button')
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/projetos\/notificacao-a$/);
+
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
+    await expect(notificationTrigger).toHaveAttribute('aria-label', /1 não lida/);
+    await notificationTrigger.click();
+    await panel.getByRole('button', { name: 'Marcar todas as notificações como lidas' }).click();
+    await expect(panel).toContainText('Nenhuma notificação não lida');
+    await expect(notificationTrigger).toHaveAttribute('aria-label', /0 não lida/);
+    await expect(panel.locator('article[data-unread="false"]')).toHaveCount(2);
+
+    await panel.getByRole('button', { name: 'Apagar todas as notificações' }).click();
+    await expect(panel).toContainText('Nenhuma notificação');
+    await expect(panel.locator('article')).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Desfazer' }).click();
+    await expect(panel.locator('article')).toHaveCount(2);
+    await panel.getByRole('button', { name: 'Apagar todas as notificações' }).click();
+    await expect(panel.locator('article')).toHaveCount(0);
+
+    const persistedState = await page.evaluate(() => ({
+      read: JSON.parse(localStorage.getItem('geogestor_read_notifications') ?? '[]') as string[],
+      cleared: JSON.parse(localStorage.getItem('geogestor_cleared_notifications') ?? '[]') as string[],
+    }));
+    expect(persistedState.read).toHaveLength(2);
+    expect(persistedState.cleared).toHaveLength(2);
+  });
+
+  test('Clientes, CRM e Orçamentos mantêm corpo amplo e cabeçalho alinhado em 1400 px', async ({ page }) => {
+    const pdfMakeRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('pdfmake-')) pdfMakeRequests.push(request.url());
+    });
     await page.setViewportSize({ width: 2560, height: 1440 });
     await unlock(page);
     await navigateBySidebar(page, 'Comercial');
 
     const measureCommercialLayout = async () => {
-      await expect(page.locator('main > div').last()).toHaveClass(/max-w-\[1600px\]/);
+      await expect(page.locator('[data-page-content]')).toHaveClass(/max-w-\[1600px\]/);
       await expect.poll(async () => (
-        await page.locator('main > div').last().boundingBox()
+        await page.locator('[data-page-content]').boundingBox()
       )?.width).toBe(1600);
-      const content = await page.locator('main > div').last().boundingBox();
+      const content = await page.locator('[data-page-content]').boundingBox();
+      const header = await page.locator('main header > div').first().boundingBox();
+      const heading = await page.locator('main header h1').first().boundingBox();
       const navigation = await page.locator('nav[aria-label*="Comercial"]').first().boundingBox();
-      if (!content || !navigation) throw new Error('Não foi possível medir o layout Comercial.');
-      return { content, navigation };
+      const action = await page.locator('main header button').first().boundingBox();
+      if (!content || !header || !heading || !navigation || !action) {
+        throw new Error('Não foi possível medir o layout Comercial.');
+      }
+      return { content, header, heading, navigation, action };
     };
 
     const clientes = await measureCommercialLayout();
@@ -243,14 +427,18 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('link', { name: 'Orçamentos', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Orçamentos' })).toBeVisible();
     const orcamentos = await measureCommercialLayout();
+    expect(pdfMakeRequests).toHaveLength(0);
 
     expect(await page.evaluate(() => window.innerWidth)).toBe(2560);
     for (const [pageName, measurement] of Object.entries({ clientes, crm, orcamentos })) {
       expect(measurement.content.width, pageName).toBe(1600);
-      expect(measurement.navigation.width, pageName).toBe(1600);
-      expect(measurement.navigation.x).toBe(measurement.content.x);
-      expect(measurement.navigation.x + measurement.navigation.width)
-        .toBe(measurement.content.x + measurement.content.width);
+      expect(measurement.header.width, pageName).toBe(1400);
+      expect(measurement.navigation.width, pageName).toBe(1400);
+      expect(measurement.navigation.x, pageName).toBe(measurement.header.x);
+      expect(measurement.heading.y, pageName).toBeLessThan(measurement.navigation.y);
+      expect(measurement.action.height, pageName).toBe(44);
+      expect(measurement.content.x + measurement.content.width / 2, pageName)
+        .toBe(measurement.header.x + measurement.header.width / 2);
     }
 
     expect(crm.content.x).toBe(clientes.content.x);

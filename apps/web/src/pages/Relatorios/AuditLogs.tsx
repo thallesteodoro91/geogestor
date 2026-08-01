@@ -1,8 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
-import { Funnel, ArrowClockwise, Plus, Pencil, Trash, FileText } from '@phosphor-icons/react';
+import { PageFilterBar } from '../../components/PageFilterBar';
+import { PageHeader } from '../../components/PageHeader';
+import { ArrowClockwise, Plus, Pencil, Trash, FileText } from '@phosphor-icons/react';
 import { Modal } from '../../components/Modal';
-import { primaryActionButtonClass, primaryActionIconClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import {
+  headerPrimaryActionButtonClass,
+  headerPrimaryActionIconClass,
+  secondarySmallActionButtonClass,
+} from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import { MetricCard } from '../../components/MetricCard';
 import { cn } from '../../utils/cn';
@@ -23,6 +29,7 @@ export function AuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [actionFilter, setActionFilter] = useState<string>('ALL');
   const [entityFilter, setEntityFilter] = useState<string>('ALL');
 
@@ -100,6 +107,7 @@ export function AuditLogs() {
   const totalInsert = logs.filter(l => l.action === 'INSERT').length;
   const totalUpdate = logs.filter(l => l.action === 'UPDATE').length;
   const totalDelete = logs.filter(l => l.action === 'DELETE').length;
+  const activeFilterCount = [actionFilter !== 'ALL', entityFilter !== 'ALL'].filter(Boolean).length;
 
   const renderDataDiff = (log: AuditLog) => {
     const oldObj = log.oldData ? (JSON.parse(log.oldData) as Record<string, unknown>) : null;
@@ -195,31 +203,23 @@ export function AuditLogs() {
 
   return (
     <Layout>
-      <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-            Segurança & Conformidade
-          </span>
-          <h1 className="text-3xl font-semibold tracking-tight text-zinc-950 dark:text-white sm:text-4xl">
-            Auditoria de Logs
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Histórico completo de alterações realizadas localmente no sistema.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
+      <PageHeader
+        eyebrow="Segurança & Conformidade"
+        title="Auditoria de Logs"
+        description="Histórico completo de alterações realizadas localmente no sistema."
+        action={
           <button 
+            type="button"
             onClick={fetchLogs}
-            className={primaryActionButtonClass}
+            className={headerPrimaryActionButtonClass}
           >
             <span>Atualizar</span>
-            <div className={primaryActionIconClass}>
+            <span className={headerPrimaryActionIconClass}>
               <ArrowClockwise weight="bold" className="w-4 h-4" />
-            </div>
+            </span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Bento Grid Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
@@ -233,16 +233,19 @@ export function AuditLogs() {
       </div>
 
       {/* Main Filter & Feed Section */}
-      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-100 dark:border-zinc-800 mb-6">
-          <div className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 font-semibold">
-            <Funnel className="w-5 h-5" />
-            <span>Filtros</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4">
+      <PageFilterBar
+        filtersOpen={showFilters}
+        onFiltersToggle={() => setShowFilters((current) => !current)}
+        onClear={() => {
+          setActionFilter('ALL');
+          setEntityFilter('ALL');
+        }}
+        activeFilterCount={activeFilterCount}
+        filterPanelId="audit-log-filter-panel"
+        panelClassName="sm:grid-cols-2 lg:grid-cols-2"
+      >
             <div>
-              <label htmlFor="action-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider block mb-1">Ação</label>
+              <label htmlFor="action-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Ação</label>
               <CustomSelect
                 id="action-filter"
                 value={actionFilter} 
@@ -255,11 +258,12 @@ export function AuditLogs() {
                   { label: 'Edição (UPDATE)', value: 'UPDATE' },
                   { label: 'Exclusão (DELETE)', value: 'DELETE' }
                 ]}
+                buttonClassName="mt-1.5 h-10 min-h-10"
               />
             </div>
 
             <div>
-              <label htmlFor="entity-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider block mb-1">Entidade</label>
+              <label htmlFor="entity-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Entidade</label>
               <CustomSelect
                 id="entity-filter"
                 value={entityFilter} 
@@ -273,11 +277,12 @@ export function AuditLogs() {
                   { label: 'Orçamento', value: 'Orcamento' },
                   { label: 'Despesa', value: 'Despesa' }
                 ]}
+                buttonClassName="mt-1.5 h-10 min-h-10"
               />
             </div>
-          </div>
-        </div>
+      </PageFilterBar>
 
+      <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
         {loading ? (
           <div className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria...</div>
         ) : filteredLogs.length === 0 ? (

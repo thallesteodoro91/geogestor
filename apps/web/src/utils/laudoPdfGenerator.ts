@@ -1,9 +1,5 @@
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
-
-// @ts-expect-error - pdfFonts does not have official type definitions
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+import { loadPdfMake } from './loadPdfMake';
 
 export interface LaudoOptions {
   projetoNome: string;
@@ -14,7 +10,8 @@ export interface LaudoOptions {
   observacoes: string;
 }
 
-export const gerarLaudoTecnico = (options: LaudoOptions) => {
+export const gerarLaudoTecnico = async (options: LaudoOptions) => {
+  const pdfMake = await loadPdfMake();
   const dataAtual = new Date().toLocaleDateString('pt-BR');
 
   const tituloLaudo = options.tipoLaudo === 'vistoria' ? 'LAUDO DE VISTORIA TÉCNICA' :

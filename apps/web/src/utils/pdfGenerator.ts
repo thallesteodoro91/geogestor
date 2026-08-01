@@ -1,9 +1,5 @@
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
 import type { TDocumentDefinitions, TableCell } from 'pdfmake/interfaces';
-
-// @ts-expect-error - pdfFonts does not have official type definitions
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+import { loadPdfMake } from './loadPdfMake';
 
 interface ProjetoPdfItem {
   nome?: string | null;
@@ -25,7 +21,8 @@ interface ProjetoPdfItem {
   observacoes?: string | null;
 }
 
-export const gerarRelatorioProjeto = (projeto: ProjetoPdfItem) => {
+export const gerarRelatorioProjeto = async (projeto: ProjetoPdfItem) => {
+  const pdfMake = await loadPdfMake();
   const dataAtual = new Date().toLocaleDateString('pt-BR');
 
   const docDefinition: TDocumentDefinitions = {
@@ -207,7 +204,8 @@ interface OrcamentoPdfItem {
   itens?: OrcamentoServicoItemPdf[] | null;
 }
 
-export const gerarOrcamentoPDF = (orcamento: OrcamentoPdfItem) => {
+export const gerarOrcamentoPDF = async (orcamento: OrcamentoPdfItem) => {
+  const pdfMake = await loadPdfMake();
   const dataAtual = new Date().toLocaleDateString('pt-BR');
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(orcamento.valorTotal / 100);
 
@@ -458,4 +456,3 @@ export const gerarOrcamentoPDF = (orcamento: OrcamentoPdfItem) => {
   const pdfFilename = `Orcamento_${cleanName}_Ref_${orcamento.codigoOrcamento || '001'}.pdf`;
   pdfMake.createPdf(docDefinition).download(pdfFilename);
 };
-

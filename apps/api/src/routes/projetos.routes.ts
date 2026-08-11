@@ -15,17 +15,31 @@ import {
   assertPropertyBelongsToClient,
   inspectProjectReassignment
 } from '../services/relationship-integrity.service';
+import { finishSimpleImport, type SimpleImportRowResult } from '../services/simple-import-result.service';
+import { OperationalLogService } from '../services/operational-log.service';
+import {
+  maskedDocument,
+  projectImportPreviewRow,
+  resolveProjectImportClient,
+  summarizeProjectImportPreview,
+  type ProjectImportPreviewRow
+} from '../services/project-import-client-resolution.service';
 
-const ProjetoLotePayloadSchema = z.array(z.object({
-  clienteId: z.string().uuid(),
-  nome: z.string().min(1),
+const ProjetoLoteItemSchema = z.object({
+  clienteId: z.string().uuid().optional(),
+  clienteReferencia: z.string().trim().min(1).max(300).optional(),
+  clienteDocumento: z.string().trim().max(30).optional(),
+  associacaoManual: z.boolean().optional(),
+  associacaoPendente: z.boolean().optional(),
+  nome: z.string().trim().min(1),
   status: z.string().optional(),
   cidade: z.string().nullable().optional(),
   areaHa: z.preprocess(
     (value) => value === '' || value === null || value === undefined ? null : Number(value),
     z.number().nullable().optional()
   )
-}));
+});
+const ProjetoLotePayloadSchema = z.array(z.unknown()).min(1).max(500);
 
 const labelValue = (value: any) => {
   if (value === null || value === undefined || value === '') return 'não informado';
@@ -365,45 +379,146 @@ export async function projetosRoutes(server: FastifyInstance) {
     }
   });
 
+  zServer.get('/lote/clientes', {
+    schema: {
+      querystring: z.object({
+        q: z.string().trim().max(200).optional(),
+        selectedId: z.string().uuid().optional(),
+        limit: z.coerce.number().int().min(1).max(50).default(25)
+      })
+    }
+  }, async (request, reply) => {
+    const { q, selectedId, limit } = request.query;
+    try {
+      const activeCondition = or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!;
+      const conditions = [isNull(schema.clientes.deletedAt), activeCondition];
+      if (q) {
+        const search = `%${q}%`;
+        conditions.push(or(
+          like(schema.clientes.nome, search),
+          like(schema.clientes.documento, search),
+          like(schema.clientes.cpf, search),
+          like(schema.clientes.cnpj, search),
+          like(schema.clientes.municipio, search)
+        )!);
+      }
+      const selectFields = {
+        id: schema.clientes.id,
+        nome: schema.clientes.nome,
+        documentoNormalizado: schema.clientes.documentoNormalizado,
+        municipio: schema.clientes.municipio
+      };
+      const items = await db.select(selectFields).from(schema.clientes)
+        .where(and(...conditions)).orderBy(asc(schema.clientes.nome)).limit(limit);
+      if (selectedId && !items.some(item => item.id === selectedId)) {
+        const [selected] = await db.select(selectFields).from(schema.clientes).where(and(
+          eq(schema.clientes.id, selectedId),
+          isNull(schema.clientes.deletedAt),
+          activeCondition
+        )).limit(1);
+        if (selected) items.unshift(selected);
+      }
+      return items.slice(0, limit).map(item => ({
+        id: item.id,
+        nome: item.nome,
+        documentoMascarado: maskedDocument(item.documentoNormalizado),
+        municipio: item.municipio
+      }));
+    } catch (error) {
+      server.log.error(error);
+      return reply.status(500).send({ error: 'Não foi possível pesquisar clientes para a associação.' });
+    }
+  });
+
+  zServer.post('/lote/preview', {
+    schema: { body: ProjetoLotePayloadSchema }
+  }, async (request, reply) => {
+    try {
+      const activeClients = await db.select({
+        id: schema.clientes.id,
+        nome: schema.clientes.nome,
+        documentoNormalizado: schema.clientes.documentoNormalizado,
+        municipio: schema.clientes.municipio
+      }).from(schema.clientes).where(and(
+        isNull(schema.clientes.deletedAt),
+        or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!
+      ));
+      const rows: ProjectImportPreviewRow[] = request.body.map((raw, index) => {
+        const parsed = ProjetoLoteItemSchema.safeParse(raw);
+        if (!parsed.success) {
+          return {
+            index,
+            row: index + 2,
+            projectName: raw && typeof raw === 'object' && 'nome' in raw ? String(raw.nome || 'Projeto sem nome') : 'Projeto sem nome',
+            reference: raw && typeof raw === 'object' && 'clienteReferencia' in raw ? String(raw.clienteReferencia || '') : '',
+            status: 'pending',
+            reason: 'invalid_row',
+            message: [...new Set(parsed.error.issues.map(issue => issue.message))].join(' ')
+          };
+        }
+        return projectImportPreviewRow(parsed.data, index, activeClients);
+      });
+      const counts = summarizeProjectImportPreview(rows);
+      await OperationalLogService.info('simple-project-import-preview', { rows: rows.length, ...counts, status: counts.pending > 0 ? 'blocked' : 'ready' });
+      return { status: counts.pending > 0 ? 'blocked' as const : 'ready' as const, counts, rows };
+    } catch (error) {
+      server.log.error(error);
+      return reply.status(500).send({ error: 'Não foi possível validar os vínculos dos projetos.' });
+    }
+  });
+
   zServer.post('/lote', {
     schema: {
       body: ProjetoLotePayloadSchema
     }
   }, async (request, reply) => {
-      const data = request.body;
+    const data = request.body;
+    const startedAt = new Date().toISOString();
 
     if (data.length === 0) {
       return reply.status(400).send({ error: 'Payload deve conter pelo menos um projeto' });
     }
 
     try {
-      const clientesById = new Map<string, string>();
+      const results: SimpleImportRowResult[] = [];
+      const resolved: Array<{ index: number; item: z.infer<typeof ProjetoLoteItemSchema>; clienteId: string; clienteNome: string }> = [];
+      const activeClients = await db.select({
+        id: schema.clientes.id,
+        nome: schema.clientes.nome,
+        documentoNormalizado: schema.clientes.documentoNormalizado,
+        municipio: schema.clientes.municipio
+      }).from(schema.clientes).where(and(
+        isNull(schema.clientes.deletedAt),
+        or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!
+      ));
 
-      for (const item of data) {
-        if (clientesById.has(item.clienteId)) continue;
-
-        const cliente = await db.select({
-          id: schema.clientes.id,
-          nome: schema.clientes.nome
-        })
-          .from(schema.clientes)
-          .where(eq(schema.clientes.id, item.clienteId))
-          .limit(1);
-
-        if (!cliente.length) {
-            return reply.status(400).send({ error: `Cliente vinculado não encontrado: ${item.clienteId}` });
+      for (const [index, raw] of data.entries()) {
+        const parsed = ProjetoLoteItemSchema.safeParse(raw);
+        if (!parsed.success) {
+          results.push({ index, status: 'failed', errors: [...new Set(parsed.error.issues.map(issue => issue.message))] });
+          continue;
         }
-
-        clientesById.set(cliente[0].id, cliente[0].nome);
+        const item = parsed.data;
+        const clientResolution = resolveProjectImportClient(item, activeClients);
+        if (clientResolution.status !== 'resolved') {
+          results.push({ index, status: 'failed', errors: [clientResolution.message] });
+          continue;
+        }
+        resolved.push({
+          index,
+          item,
+          clienteId: clientResolution.client.id,
+          clienteNome: clientResolution.client.nome
+        });
       }
 
-      const projetosCriados = await db.transaction(async (tx) => {
+      await db.transaction(async (tx) => {
         const created = [];
 
-        for (const item of data) {
+        for (const { index, item, clienteId, clienteNome } of resolved) {
           const result = await tx.insert(schema.projetos).values({
             id: crypto.randomUUID(),
-            clienteId: item.clienteId,
+            clienteId,
             nome: item.nome,
             status: item.status || 'Em Andamento',
             cidade: item.cidade || null,
@@ -411,7 +526,7 @@ export async function projetosRoutes(server: FastifyInstance) {
           }).returning();
 
           await JornadaService.logClienteEvento({
-            clienteId: item.clienteId,
+            clienteId,
             projetoId: result[0].id,
             tipo: 'Projeto',
             titulo: `Projeto criado: ${result[0].nome}`,
@@ -419,7 +534,6 @@ export async function projetosRoutes(server: FastifyInstance) {
             descricao: `Status: ${result[0].status}`
           }, tx);
 
-          const clienteNome = clientesById.get(item.clienteId);
           if (clienteNome) {
             await FileSystemOutboxService.enqueue({
               idempotencyKey: `project-folder:create:${result[0].id}:${clienteNome}:${result[0].nome}`,
@@ -427,7 +541,7 @@ export async function projetosRoutes(server: FastifyInstance) {
               aggregateType: 'project',
               aggregateId: result[0].id,
               payload: {
-                clientId: item.clienteId,
+                clientId: clienteId,
                 projectId: result[0].id,
                 clientName: clienteNome,
                 projectName: result[0].nome
@@ -436,6 +550,17 @@ export async function projetosRoutes(server: FastifyInstance) {
           }
 
           created.push(result[0]);
+          const resolution = resolveProjectImportClient(item, activeClients);
+          results.push({
+            index,
+            status: 'success',
+            id: result[0].id,
+            association: resolution.status === 'resolved' ? {
+              clientId: clienteId,
+              clientName: clienteNome,
+              method: resolution.method
+            } : undefined
+          });
         }
 
         await AuditLogService.log('INSERT', 'Projeto', null, {
@@ -449,11 +574,11 @@ export async function projetosRoutes(server: FastifyInstance) {
 
       await FileSystemOutboxService.processPending();
 
-      return reply.status(201).send({
-        message: `${projetosCriados.length} projetos importados com sucesso`,
-        importedCount: projetosCriados.length
-      });
+      const summary = finishSimpleImport(startedAt, data.length, results);
+      await OperationalLogService.info('simple-spreadsheet-import', { importId: summary.importId, entity: 'projetos', status: summary.status, rows: summary.rowsRead, imported: summary.imported, failed: summary.failed, durationMs: summary.durationMs });
+      return reply.status(201).send(summary);
     } catch (err) {
+      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'projetos', status: 'failed', rows: data.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar projetos em lote' });
     }

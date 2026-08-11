@@ -1,5 +1,5 @@
 import { FormSelect } from '../../components/Form';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -17,14 +17,38 @@ import {
 } from '@phosphor-icons/react';
 import Papa from 'papaparse';
 import { Layout } from '../../components/Layout';
-import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { apiClient } from '../../services/apiClient';
 import { persistOperationalSetting } from '../../services/operationalSettings';
 import { secondaryActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
+import { FullMigrationReview, FullMigrationResultView } from './FullMigrationReview';
+import { ImportGuidance } from './ImportGuidance';
+import { SimpleImportResultView } from './SimpleImportResultView';
+import { ProjectClientAssociationReview } from './ProjectClientAssociationReview';
+import { validateSimpleClientPayload, type SimpleImportResult } from './simpleImport';
+import {
+  applyProjectAssociationOverride,
+  canConfirmProjectImport,
+  replaceProjectPreviewRow,
+  type ProjectAssociationOverride,
+  type ProjectImportPreview
+} from './projectImport';
+import {
+  detectHeaderRowIndex,
+  selectBestWorkbookSheet,
+  sha256File,
+  uniqueSpreadsheetHeaders,
+  validateSpreadsheetDimensions,
+  validateSpreadsheetFile,
+  type FullMigrationPayload,
+  type FullMigrationPreview,
+  type FullMigrationResult
+} from './fullMigration';
 
 type EntityKey = 'clientes' | 'projetos' | 'contatos';
+type ImportMode = 'complete' | 'simple';
+type ImportPhase = 'idle' | 'reading' | 'identifying' | 'analyzing' | 'validating' | 'preview_ready' | 'blocked' | 'saving' | 'completed' | 'partial' | 'failed';
 
 type EntityField = {
   key: string;
@@ -53,14 +77,16 @@ const entityOptions: Record<EntityKey, { label: string; description: string; rou
 const entityFields: Record<EntityKey, EntityField[]> = {
   clientes: [
     { key: 'nome', label: 'Nome / Razão Social', required: true },
-    { key: 'documento', label: 'CPF / CNPJ', required: false },
+    { key: 'tipoPessoa', label: 'Tipo de pessoa (PF ou PJ)', required: false },
+    { key: 'cpf', label: 'CPF', required: false },
+    { key: 'cnpj', label: 'CNPJ', required: false },
     { key: 'email', label: 'E-mail comercial', required: false },
-    { key: 'telefone', label: 'Telefone / WhatsApp', required: false },
+    { key: 'telefone', label: 'Telefone / WhatsApp', required: true },
     { key: 'endereco', label: 'Endereço completo', required: false }
   ],
   projetos: [
     { key: 'nome', label: 'Nome do projeto topográfico', required: true },
-    { key: 'clienteId', label: 'Cliente vinculado', required: true },
+    { key: 'clienteReferencia', label: 'Cliente (nome exato ou CPF/CNPJ)', required: true },
     { key: 'status', label: 'Status operacional', required: false },
     { key: 'cidade', label: 'Cidade / UF', required: false },
     { key: 'areaHa', label: 'Área total (ha)', required: false }
@@ -82,7 +108,18 @@ const stepItems = [
   { num: 3, label: 'Concluído', description: 'Confira o resultado final' }
 ];
 
-const acceptedExtensions = ['csv', 'xlsx'];
+const phaseLabels: Record<ImportPhase, string> = {
+  idle: 'Aguardando arquivo', reading: 'Lendo arquivo…', identifying: 'Identificando cabeçalho…',
+  analyzing: 'Analisando colunas…', validating: 'Validando registros…', preview_ready: 'Prévia pronta para conferência',
+  blocked: 'Importação bloqueada', saving: 'Gravando registros…', completed: 'Importação concluída',
+  partial: 'Importação concluída parcialmente', failed: 'Importação não realizada'
+};
+
+const simpleFieldAliases: Partial<Record<EntityKey, Record<string, string[]>>> = {
+  clientes: { nome: ['cliente', 'nome do cliente', 'razao social'], tipoPessoa: ['tipo de pessoa', 'pf pj'], cpf: ['cpf'], cnpj: ['cnpj'], telefone: ['telefone', 'celular', 'whatsapp'] },
+  projetos: { nome: ['projeto', 'nome do projeto'], clienteReferencia: ['cliente', 'cliente vinculado', 'cpf', 'cnpj'] },
+  contatos: { nome: ['contato', 'nome', 'nome completo'] }
+};
 
 const normalizeText = (value: string) =>
   value
@@ -100,18 +137,98 @@ export function ImportacaoDados() {
   const [data, setData] = useState<Array<Record<string, unknown>>>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [entity, setEntity] = useState<EntityKey>('clientes');
+  const [importMode, setImportMode] = useState<ImportMode>('complete');
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [step, setStep] = useState(1);
   const [isParsingFile, setIsParsingFile] = useState(false);
+  const [isRefreshingFullPreview, setIsRefreshingFullPreview] = useState(false);
   const [parseError, setParseError] = useState('');
   const [formError, setFormError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
+  const [fullPayload, setFullPayload] = useState<FullMigrationPayload | null>(null);
+  const [fullPreview, setFullPreview] = useState<FullMigrationPreview | null>(null);
+  const [fullResult, setFullResult] = useState<FullMigrationResult | null>(null);
+  const [simpleResult, setSimpleResult] = useState<SimpleImportResult | null>(null);
+  const [reviewAcknowledged, setReviewAcknowledged] = useState(false);
+  const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
+  const [projectPreview, setProjectPreview] = useState<ProjectImportPreview | null>(null);
+  const [projectOverrides, setProjectOverrides] = useState<Record<number, ProjectAssociationOverride>>({});
+  const [isPreviewingProjects, setIsPreviewingProjects] = useState(false);
+  const [refreshingProjectRow, setRefreshingProjectRow] = useState<number | null>(null);
 
   const selectedEntity = entityOptions[entity];
   const currentFields = entityFields[entity];
   const requiredFields = currentFields.filter(field => field.required);
+  const simplePayload = useMemo(() => data.map(row => {
+    const item: Record<string, string> = {};
+    Object.keys(mapping).forEach(key => {
+      const sourceHeader = mapping[key];
+      if (sourceHeader) item[key] = formatCell(row[sourceHeader]);
+    });
+    if (entity === 'clientes') {
+      const declaredType = normalizeText(item.tipoPessoa || '');
+      item.tipoPessoa = declaredType === 'pj' || declaredType.includes('juridica') || Boolean(item.cnpj) ? 'PJ' : 'PF';
+    }
+    return item;
+  }), [data, entity, mapping]);
+  const simplePreflightIssues = useMemo(
+    () => importMode === 'simple' && entity === 'clientes' ? validateSimpleClientPayload(simplePayload) : [],
+    [entity, importMode, simplePayload]
+  );
+  const effectiveSimplePayload = useMemo(
+    () => entity === 'projetos'
+      ? simplePayload.map((row, index) => applyProjectAssociationOverride(row, projectOverrides[index]))
+      : simplePayload,
+    [entity, projectOverrides, simplePayload]
+  );
+  const isSimpleProjectImport = importMode === 'simple' && entity === 'projetos';
+  const projectConfirmationReady = !isSimpleProjectImport || canConfirmProjectImport(projectPreview, isPreviewingProjects || refreshingProjectRow !== null);
+
+  useEffect(() => {
+    if (step !== 2 || importPhase !== 'blocked') return;
+    const animationFrame = requestAnimationFrame(() => {
+      const firstProjectPending = projectPreview?.rows.find(row => row.status === 'pending');
+      const targetId = importMode === 'simple' && entity === 'projetos' && firstProjectPending
+        ? `project-association-pending-${firstProjectPending.index}`
+        : 'migration-first-blocking-issue';
+      document.getElementById(targetId)?.focus();
+    });
+    return () => cancelAnimationFrame(animationFrame);
+  }, [entity, importMode, importPhase, projectPreview, step, fullPreview?.importId]);
+
+  useEffect(() => {
+    const hasRequiredMapping = entityFields.projetos.filter(field => field.required).every(field => Boolean(mapping[field.key]));
+    if (step !== 2 || importMode !== 'simple' || entity !== 'projetos' || !hasRequiredMapping || simplePayload.length === 0) {
+      return;
+    }
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      setIsPreviewingProjects(true);
+      setImportPhase('validating');
+      setReviewAcknowledged(false);
+      try {
+        const preview = await apiClient.post<ProjectImportPreview>('/api/projetos/lote/preview', simplePayload, { timeoutMs: 60_000 });
+        if (!active) return;
+        setProjectPreview(preview);
+        setProjectOverrides({});
+        setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
+      } catch (error) {
+        if (!active) return;
+        setProjectPreview(null);
+        setImportPhase('failed');
+        setFormError(error instanceof Error ? `Não foi possível validar os clientes dos projetos: ${error.message}` : 'Não foi possível validar os clientes dos projetos.');
+      } finally {
+        if (active) setIsPreviewingProjects(false);
+      }
+    }, 150);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [entity, importMode, mapping, simplePayload, step]);
 
   const applyParsedRows = (rows: Array<Record<string, unknown>>) => {
+    setImportPhase('analyzing');
     const normalizedRows = rows.map(row =>
       Object.fromEntries(
         Object.entries(row)
@@ -133,14 +250,20 @@ export function ImportacaoDados() {
     if (detectedHeaders.length === 0) {
       throw new Error('Não foi possível identificar colunas no arquivo.');
     }
+    const dimensionError = validateSpreadsheetDimensions(nonEmptyRows.length, detectedHeaders.length);
+    if (dimensionError) throw new Error(dimensionError);
+    if (importMode === 'simple' && nonEmptyRows.length > 500) {
+      throw new Error(`A importação simples aceita até 500 linhas por lote. Este arquivo possui ${nonEmptyRows.length.toLocaleString('pt-BR')} linhas. Divida-o em lotes menores.`);
+    }
 
     const autoMap: Record<string, string> = {};
     currentFields.forEach(field => {
       const normalizedKey = normalizeText(field.key);
       const normalizedLabel = normalizeText(field.label);
+      const aliases = (simpleFieldAliases[entity]?.[field.key] ?? []).map(normalizeText);
       const match = detectedHeaders.find(header => {
         const normalizedHeader = normalizeText(header);
-        return normalizedHeader.includes(normalizedKey) || normalizedLabel.includes(normalizedHeader);
+        return normalizedHeader.includes(normalizedKey) || normalizedLabel.includes(normalizedHeader) || aliases.some(alias => normalizedHeader === alias || normalizedHeader.includes(alias));
       });
 
       if (match) {
@@ -153,13 +276,45 @@ export function ImportacaoDados() {
     setMapping(autoMap);
     setParseError('');
     setFormError('');
+    setReviewAcknowledged(false);
     setStep(2);
+    return { rows: nonEmptyRows, headers: detectedHeaders };
+  };
+
+  const prepareCompleteMigration = async (
+    selectedFile: File,
+    parsed: { rows: Array<Record<string, unknown>>; headers: string[] },
+    source?: { sheetName?: string; firstDataRow?: number; readingMs?: number }
+  ) => {
+    setImportPhase('validating');
+    const hashingStartedAt = performance.now();
+    const fileHash = await sha256File(selectedFile);
+    const payload: FullMigrationPayload = {
+      fileName: selectedFile.name,
+      fileHash,
+      headers: parsed.headers,
+      rows: parsed.rows,
+      sheetName: source?.sheetName,
+      firstDataRow: source?.firstDataRow,
+      clientTimings: {
+        readingMs: Math.round(source?.readingMs ?? 0),
+        hashingMs: Math.round(performance.now() - hashingStartedAt)
+      }
+    };
+    const preview = await apiClient.post<FullMigrationPreview>(
+      '/api/importacoes/migracao-completa/preview',
+      payload,
+      { timeoutMs: 60_000 }
+    );
+    setFullPayload(payload);
+    setFullPreview(preview);
+    setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
   };
 
   const parseCsv = (selectedFile: File) =>
-    new Promise<Array<Record<string, unknown>>>((resolve, reject) => {
-      Papa.parse<Record<string, unknown>>(selectedFile, {
-        header: true,
+    new Promise<unknown[][]>((resolve, reject) => {
+      Papa.parse<unknown[]>(selectedFile, {
+        header: false,
         skipEmptyLines: true,
         complete: results => {
           if (results.errors.length > 0) {
@@ -174,41 +329,69 @@ export function ImportacaoDados() {
 
   const processFile = async (selectedFile: File) => {
     const extension = selectedFile.name.split('.').pop()?.toLowerCase() ?? '';
+    const readingStartedAt = performance.now();
 
     setFile(selectedFile);
     setParseError('');
     setFormError('');
     setIsParsingFile(true);
+    setImportPhase('reading');
+    setReviewAcknowledged(false);
+    setSimpleResult(null);
 
     try {
-      if (!acceptedExtensions.includes(extension)) {
-        throw new Error('Formato não suportado. Envie um arquivo CSV ou XLSX.');
-      }
+      const fileError = validateSpreadsheetFile(selectedFile.name, selectedFile.size);
+      if (fileError) throw new Error(fileError);
 
       if (extension === 'csv') {
-        applyParsedRows(await parseCsv(selectedFile));
+        const csvRows = await parseCsv(selectedFile);
+        setImportPhase('identifying');
+        const headerIndex = detectHeaderRowIndex(csvRows);
+        const headerRow = csvRows[headerIndex];
+        if (!headerRow?.length) throw new Error('Não foi possível identificar o cabeçalho do arquivo CSV.');
+        const csvHeaders = uniqueSpreadsheetHeaders(headerRow);
+        const rows = csvRows.slice(headerIndex + 1).map(row =>
+          Object.fromEntries(csvHeaders.map((header, index) => [header, row[index] ?? '']))
+        );
+        const parsed = applyParsedRows(rows);
+        if (importMode === 'complete') await prepareCompleteMigration(selectedFile, parsed, { firstDataRow: headerIndex + 2, readingMs: performance.now() - readingStartedAt });
+        else setImportPhase('preview_ready');
         return;
       }
 
-      const { readSheet } = await import('read-excel-file/browser');
-      const sheetRows = await readSheet(selectedFile);
-      const [headerRow, ...bodyRows] = sheetRows;
+      const { default: readXlsxFile } = await import('read-excel-file/browser');
+      const workbook = await readXlsxFile(selectedFile);
+      setImportPhase('identifying');
+      const selectedSheet = selectBestWorkbookSheet(workbook);
+      const sheetRows = selectedSheet?.data ?? [];
+      const headerIndex = detectHeaderRowIndex(sheetRows);
+      const headerRow = sheetRows[headerIndex];
+      const bodyRows = sheetRows.slice(headerIndex + 1);
 
       if (!headerRow || headerRow.length === 0) {
         throw new Error('A planilha não possui abas legíveis.');
       }
 
-      const sheetHeaders = headerRow.map((cell: unknown) => String(cell ?? '').trim());
+      const sheetHeaders = uniqueSpreadsheetHeaders(headerRow);
       const rows = bodyRows.map((row: unknown[]) =>
         Object.fromEntries(sheetHeaders.map((header: string, index: number) => [header, row[index] ?? '']))
       ) as Array<Record<string, unknown>>;
 
-      applyParsedRows(rows);
+      const parsed = applyParsedRows(rows);
+      if (importMode === 'complete') await prepareCompleteMigration(selectedFile, parsed, {
+        sheetName: selectedSheet?.sheet,
+        firstDataRow: headerIndex + 2,
+        readingMs: performance.now() - readingStartedAt
+      });
+      else setImportPhase('preview_ready');
     } catch (error) {
       setStep(1);
       setHeaders([]);
       setData([]);
       setMapping({});
+      setFullPayload(null);
+      setFullPreview(null);
+      setImportPhase('failed');
       setParseError(error instanceof Error ? error.message : 'Não foi possível ler o arquivo. Revise o formato e tente novamente.');
     } finally {
       setIsParsingFile(false);
@@ -237,15 +420,82 @@ export function ImportacaoDados() {
 
   const handleMappingChange = (fieldKey: string, headerName: string) => {
     setFormError('');
+    setReviewAcknowledged(false);
+    setProjectOverrides({});
+    setProjectPreview(null);
     setMapping(prev => ({
       ...prev,
       [fieldKey]: headerName
     }));
   };
 
+  const revalidateProjectRow = async (index: number, override?: ProjectAssociationOverride) => {
+    const sourceRow = simplePayload[index];
+    if (!sourceRow || !projectPreview) return;
+    const nextOverrides = { ...projectOverrides };
+    if (override) nextOverrides[index] = override;
+    else delete nextOverrides[index];
+    setProjectOverrides(nextOverrides);
+    setRefreshingProjectRow(index);
+    setReviewAcknowledged(false);
+    setFormError('');
+    try {
+      const rowPayload = applyProjectAssociationOverride(sourceRow, override);
+      const refreshed = await apiClient.post<ProjectImportPreview>('/api/projetos/lote/preview', [rowPayload], { timeoutMs: 60_000 });
+      const replacement = refreshed.rows[0];
+      if (!replacement) throw new Error('O servidor não retornou a validação da linha.');
+      const next = replaceProjectPreviewRow(projectPreview, index, replacement);
+      setProjectPreview(next);
+      setImportPhase(next.status === 'ready' ? 'preview_ready' : 'blocked');
+    } catch (error) {
+      setImportPhase('failed');
+      setFormError(error instanceof Error ? `Não foi possível revalidar a linha ${index + 2}: ${error.message}` : `Não foi possível revalidar a linha ${index + 2}.`);
+    } finally {
+      setRefreshingProjectRow(null);
+    }
+  };
+
+  const handleProjectAssociation = (index: number, clientId: string | null, keepPending: boolean) => {
+    void revalidateProjectRow(index, keepPending ? { keepPending: true } : clientId ? { clientId } : undefined);
+  };
+
+  const handleProjectAssociationReset = (index: number) => {
+    void revalidateProjectRow(index);
+  };
+
+  const handleFullMappingChange = async (source: string, field: string | null) => {
+    if (!fullPayload || isRefreshingFullPreview) return;
+    const nextPayload: FullMigrationPayload = {
+      ...fullPayload,
+      mappingOverrides: {
+        ...(fullPayload.mappingOverrides ?? {}),
+        [source]: field
+      }
+    };
+    setFullPayload(nextPayload);
+    setIsRefreshingFullPreview(true);
+    setImportPhase('validating');
+    setReviewAcknowledged(false);
+    setFormError('');
+    try {
+      const preview = await apiClient.post<FullMigrationPreview>(
+        '/api/importacoes/migracao-completa/preview',
+        nextPayload,
+        { timeoutMs: 60_000 }
+      );
+      setFullPreview(preview);
+      setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
+    } catch (error) {
+      setImportPhase('failed');
+      setFormError(error instanceof Error ? `Não foi possível recalcular a prévia: ${error.message}` : 'Não foi possível recalcular a prévia.');
+    } finally {
+      setIsRefreshingFullPreview(false);
+    }
+  };
+
   const importMutation = useMutation({
-    mutationFn: async (payload: Array<Record<string, string>>) => {
-      await apiClient.post(`/api/${entity}/lote`, payload);
+    mutationFn: async (payload: Array<Record<string, unknown>>) => {
+      const result = await apiClient.post<SimpleImportResult>(`/api/${entity}/lote`, payload);
 
       const schemaToSave = {
         id: crypto.randomUUID(),
@@ -257,40 +507,96 @@ export function ImportacaoDados() {
 
       const savedSchemas = JSON.parse(localStorage.getItem('import_schemas') || '[]');
       savedSchemas.push(schemaToSave);
-      await persistOperationalSetting('import_schemas', savedSchemas);
-      return { success: true, count: payload.length };
+      void persistOperationalSetting('import_schemas', savedSchemas).catch(() => undefined);
+      return result;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [entity] });
+    onMutate: () => setImportPhase('saving'),
+    onSuccess: result => {
+      if (result.imported > 0) queryClient.invalidateQueries({ queryKey: [entity] });
+      setSimpleResult(result);
+      setImportPhase(result.status === 'completed' ? 'completed' : result.status === 'partial' ? 'partial' : 'failed');
       setFormError('');
       setStep(3);
     },
     onError: (err: Error) => {
+      setImportPhase('failed');
       setFormError(`Erro na importação: ${err.message}. Revise os dados e tente novamente.`);
     }
   });
 
+  const fullImportMutation = useMutation({
+    mutationFn: async (payload: FullMigrationPayload) => apiClient.post<FullMigrationResult>(
+      '/api/importacoes/migracao-completa/confirmar',
+      payload,
+      { timeoutMs: 120_000 }
+    ),
+    onMutate: () => setImportPhase('saving'),
+    onSuccess: result => {
+      if (fullPreview && file) {
+        const reusableMapping = Object.fromEntries(
+          Object.entries(fullPreview.columns.selectedMapping).filter((entry): entry is [string, string] => Boolean(entry[1]))
+        );
+        const savedSchemas = JSON.parse(localStorage.getItem('import_schemas') || '[]');
+        savedSchemas.push({
+          id: crypto.randomUUID(),
+          name: `Mapeamento completo - ${fullPayload?.sheetName ?? file.name}`,
+          entity: 'migração completa',
+          mapping: reusableMapping,
+          date: new Date().toISOString()
+        });
+        void persistOperationalSetting('import_schemas', savedSchemas).catch(() => undefined);
+      }
+      setFullResult(result);
+      setImportPhase('completed');
+      setFormError('');
+      setStep(3);
+      queryClient.invalidateQueries();
+    },
+    onError: (err: Error) => {
+      setImportPhase('failed');
+      setFormError(`A migração não foi concluída: ${err.message}`);
+    }
+  });
+  const operationInProgress = isParsingFile || isRefreshingFullPreview || isPreviewingProjects || refreshingProjectRow !== null || importMutation.isPending || fullImportMutation.isPending;
+
   const handleImport = () => {
     if (!file) return;
+
+    if (!reviewAcknowledged) {
+      setFormError('Confirme que revisou o mapeamento, as pendências e os totais antes de prosseguir.');
+      return;
+    }
+
+    if (importMode === 'complete') {
+      if (!fullPayload || !fullPreview) {
+        setFormError('Gere novamente a prévia antes de confirmar a migração.');
+        return;
+      }
+      if (fullPreview.status !== 'ready' || fullPreview.counts.blocking > 0) {
+        setFormError('Corrija os erros impeditivos indicados na prévia antes de confirmar.');
+        return;
+      }
+      fullImportMutation.mutate(fullPayload);
+      return;
+    }
 
     const missingRequired = requiredFields.filter(field => !mapping[field.key]);
     if (missingRequired.length > 0) {
       setFormError(`Mapeie os campos obrigatórios antes de concluir: ${missingRequired.map(field => field.label).join(', ')}.`);
       return;
     }
+    if (entity === 'clientes' && !mapping.cpf && !mapping.cnpj) {
+      setFormError('Mapeie ao menos uma coluna de CPF ou CNPJ para importar clientes pelo modo simples.');
+      return;
+    }
+    if (entity === 'projetos' && !canConfirmProjectImport(projectPreview, isPreviewingProjects || refreshingProjectRow !== null)) {
+      setFormError('Resolva todas as associações de clientes pendentes antes de confirmar a importação dos projetos.');
+      const firstPending = projectPreview?.rows.find(row => row.status === 'pending');
+      if (firstPending) document.getElementById(`project-association-pending-${firstPending.index}`)?.focus();
+      return;
+    }
 
-    const payload = data.map(row => {
-      const obj: Record<string, string> = {};
-      Object.keys(mapping).forEach(key => {
-        const sourceHeader = mapping[key];
-        if (sourceHeader) {
-          obj[key] = formatCell(row[sourceHeader]);
-        }
-      });
-      return obj;
-    });
-
-    importMutation.mutate(payload);
+    importMutation.mutate(effectiveSimplePayload);
   };
 
   const resetFlow = () => {
@@ -301,12 +607,22 @@ export function ImportacaoDados() {
     setData([]);
     setParseError('');
     setFormError('');
+    setFullPayload(null);
+    setFullPreview(null);
+    setFullResult(null);
+    setSimpleResult(null);
+    setProjectPreview(null);
+    setProjectOverrides({});
+    setIsPreviewingProjects(false);
+    setRefreshingProjectRow(null);
+    setReviewAcknowledged(false);
+    setImportPhase('idle');
   };
 
   return (
     <Layout>
       <PageHeader
-        eyebrow="Ferramentas técnicas"
+        eyebrow="Configurações"
         title="Importação de dados"
         description="Envie uma planilha, confirme o mapeamento das colunas e grave os registros em lote."
         className="mb-4"
@@ -324,7 +640,6 @@ export function ImportacaoDados() {
             Esquemas salvos
           </Link>
         }
-        navigation={<ModuleNavigation module="tools" className="mb-0" />}
       />
 
       <ol
@@ -371,10 +686,36 @@ export function ImportacaoDados() {
         })}
       </ol>
 
+      {step === 1 && <div className="mb-4"><ImportGuidance /></div>}
+
       <section className="w-full rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 md:p-6">
         {step === 1 && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)]">
             <aside className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+              <label htmlFor="import-mode" className="block text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Tipo de importação
+              </label>
+              <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                Use a migração completa para planilhas amplas vindas do Excel.
+              </p>
+              <div className="relative mt-3">
+                <FormSelect
+                  id="import-mode"
+                  name="tipo-importacao"
+                  value={importMode}
+                  onChange={event => {
+                    resetFlow();
+                    setImportMode(event.target.value as ImportMode);
+                  }}
+                  className="h-10 w-full appearance-none rounded-lg border border-zinc-300 bg-white px-3 pr-10 text-sm font-semibold text-zinc-900 transition-colors hover:border-zinc-400 focus-visible:border-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500/35 dark:[color-scheme:dark] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="complete">Migração completa de planilha</option>
+                  <option value="simple">Importação simples por cadastro</option>
+                </FormSelect>
+                <CaretDown size={16} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+              </div>
+
+              <div className={importMode === 'simple' ? 'mt-5' : 'hidden'}>
               <label htmlFor="import-entity" className="block text-sm font-semibold text-zinc-900 dark:text-zinc-100">
                 Entidade de destino
               </label>
@@ -402,10 +743,18 @@ export function ImportacaoDados() {
                   className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500"
                 />
               </div>
+              </div>
 
               <div className="mt-4 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
                 <p className="text-xs font-semibold uppercase text-zinc-500 dark:text-zinc-400">Campos esperados</p>
-                <ul className="mt-2 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
+                {importMode === 'complete' && (
+                  <div className="mt-2 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <p><strong>64 campos possíveis</strong> no catálogo do GeoGestor.</p>
+                    <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">A planilha não precisa seguir um modelo: o sistema interpreta as colunas disponíveis e você confirma as associações.</p>
+                    <span className="inline-flex rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">Prévia obrigatória</span>
+                  </div>
+                )}
+                {importMode === 'simple' && <ul className="mt-2 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
                   {currentFields.slice(0, 5).map(field => (
                     <li key={field.key} className="flex items-center justify-between gap-3">
                       <span className="min-w-0 truncate">{field.label}</span>
@@ -416,7 +765,7 @@ export function ImportacaoDados() {
                       )}
                     </li>
                   ))}
-                </ul>
+                </ul>}
               </div>
             </aside>
 
@@ -486,7 +835,7 @@ export function ImportacaoDados() {
               </label>
 
               <p id="import-status" aria-live="polite" className="sr-only">
-                {isParsingFile ? 'Lendo planilha.' : file ? `Arquivo selecionado: ${file.name}.` : 'Nenhum arquivo selecionado.'}
+                {isParsingFile ? phaseLabels[importPhase] : file ? `Arquivo selecionado: ${file.name}.` : 'Nenhum arquivo selecionado.'}
               </p>
 
               {parseError && (
@@ -504,6 +853,10 @@ export function ImportacaoDados() {
 
         {step === 2 && (
           <div className="space-y-6">
+            <div aria-live="polite" className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm font-semibold ${importPhase === 'blocked' || importPhase === 'failed' ? 'border-red-200 bg-red-50 text-red-900 dark:border-red-900/70 dark:bg-red-950/30 dark:text-red-200' : importPhase === 'preview_ready' ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/70 dark:bg-emerald-950/30 dark:text-emerald-200' : 'border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-200'}`}>
+              <span className="flex items-center gap-2">{operationInProgress && <ArrowsClockwise size={17} className="motion-safe:animate-spin motion-reduce:animate-none" aria-hidden="true" />}{phaseLabels[importPhase]}</span>
+              {importPhase === 'blocked' && (fullPreview || projectPreview) && <button type="button" onClick={() => { const firstProjectPending = projectPreview?.rows.find(row => row.status === 'pending'); const targetId = isSimpleProjectImport && firstProjectPending ? `project-association-pending-${firstProjectPending.index}` : 'migration-first-blocking-issue'; const target = document.getElementById(targetId); target?.scrollIntoView({ behavior: 'smooth', block: 'center' }); target?.focus(); }} className="rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-900 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:border-red-800 dark:bg-red-950">Ir ao primeiro erro ({isSimpleProjectImport ? projectPreview?.counts.pending ?? 0 : fullPreview?.counts.blocking ?? 0})</button>}
+            </div>
             <div className="flex flex-col gap-4 border-b border-zinc-200 pb-5 dark:border-zinc-800 md:flex-row md:items-start md:justify-between">
               <div className="flex min-w-0 items-start gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
@@ -516,7 +869,8 @@ export function ImportacaoDados() {
                 <div className="min-w-0">
                   <h2 className="truncate text-lg font-bold text-zinc-950 dark:text-zinc-100">{file?.name}</h2>
                   <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    {data.length} registros encontrados para {selectedEntity.label.toLowerCase()}.
+                    {data.length} registros encontrados {importMode === 'complete' ? 'para migração completa' : `para ${selectedEntity.label.toLowerCase()}`}.
+                    {importMode === 'complete' && fullPayload?.sheetName ? ` Aba analisada: ${fullPayload.sheetName}.` : ''}
                   </p>
                 </div>
               </div>
@@ -525,7 +879,7 @@ export function ImportacaoDados() {
                   {headers.length} colunas
                 </span>
                 <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  {Object.values(mapping).filter(Boolean).length} mapeadas
+                  {importMode === 'complete' ? `${fullPreview?.columns.recognized.length ?? 0} reconhecidas` : `${Object.values(mapping).filter(Boolean).length} mapeadas`}
                 </span>
               </div>
             </div>
@@ -540,6 +894,15 @@ export function ImportacaoDados() {
               </p>
             )}
 
+            {importMode === 'complete' && fullPreview && (
+              <FullMigrationReview
+                preview={fullPreview}
+                onMappingChange={handleFullMappingChange}
+                isRefreshing={isRefreshingFullPreview}
+              />
+            )}
+
+            {importMode === 'simple' && <>
             <div>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
@@ -611,6 +974,25 @@ export function ImportacaoDados() {
               </div>
             </div>
 
+            {entity === 'projetos' && projectPreview && (
+              <ProjectClientAssociationReview
+                preview={projectPreview}
+                refreshingRow={refreshingProjectRow}
+                onAssociate={handleProjectAssociation}
+                onReset={handleProjectAssociationReset}
+              />
+            )}
+
+            {simplePreflightIssues.length > 0 && (
+              <section aria-labelledby="simple-preflight-title" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100">
+                <h3 id="simple-preflight-title" className="text-sm font-bold">Linhas com erros antes do envio</h3>
+                <p className="mt-1 text-xs leading-5">{simplePreflightIssues.length} linha(s) deverão ser rejeitadas se não forem corrigidas. Se prosseguir, apenas as linhas válidas poderão ser importadas.</p>
+                <ul className="mt-3 max-h-48 space-y-2 overflow-auto text-sm">
+                  {simplePreflightIssues.map(issue => <li key={issue.row} className="rounded-md border border-amber-200 bg-white/70 px-3 py-2 dark:border-amber-900 dark:bg-zinc-950/30"><strong>Linha {issue.row}:</strong> {issue.errors.join(' ')}</li>)}
+                </ul>
+              </section>
+            )}
+
             {data.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
@@ -653,6 +1035,18 @@ export function ImportacaoDados() {
               </div>
             )}
 
+            </>}
+
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
+              <label className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-zinc-800 dark:text-zinc-200">
+                <input type="checkbox" name="confirmacao-conferencia-importacao" checked={reviewAcknowledged} disabled={!projectConfirmationReady} onChange={event => { setReviewAcknowledged(event.target.checked); setFormError(''); }} className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-300 text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60" />
+                <span>Revisei o mapeamento, as pendências e os totais apresentados. Estou ciente de que a importação automatizada pode exigir correções posteriores.</span>
+              </label>
+              {importMode === 'simple' && <p className="mt-2 pl-7 text-xs text-zinc-500 dark:text-zinc-400">Linhas inválidas poderão ser rejeitadas. O resultado final mostrará exatamente o que foi ou não gravado.</p>}
+              {isSimpleProjectImport && !projectConfirmationReady && <p className="mt-2 pl-7 text-xs font-semibold text-amber-800 dark:text-amber-200">A conferência final será liberada depois que todas as linhas tiverem um cliente associado.</p>}
+              {importMode === 'complete' && fullPreview?.status === 'blocked' && <p className="mt-2 pl-7 text-xs font-semibold text-red-700 dark:text-red-300">A importação não está processando. Ela foi bloqueada por {fullPreview.counts.blocking} erro(s) que precisam ser corrigidos.</p>}
+            </div>
+
             <div className="flex flex-col-reverse gap-3 border-t border-zinc-200 pt-5 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
               <button
                 type="button"
@@ -668,18 +1062,18 @@ export function ImportacaoDados() {
               <button
                 type="button"
                 onClick={handleImport}
-                disabled={importMutation.isPending}
-                aria-busy={importMutation.isPending}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 focus-visible:ring-2 focus-visible:ring-emerald-500/45 disabled:cursor-wait disabled:bg-emerald-900/60 disabled:text-emerald-50"
+                disabled={!reviewAcknowledged || !projectConfirmationReady || (importMode === 'complete' ? fullImportMutation.isPending || isRefreshingFullPreview || fullPreview?.status !== 'ready' : importMutation.isPending || isPreviewingProjects || refreshingProjectRow !== null)}
+                aria-busy={importMode === 'complete' ? fullImportMutation.isPending : importMutation.isPending || isPreviewingProjects || refreshingProjectRow !== null}
+                className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-700 px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-800 focus-visible:ring-2 focus-visible:ring-emerald-500/45 disabled:bg-emerald-900/60 disabled:text-emerald-50 ${(importMode === 'complete' ? fullImportMutation.isPending || isRefreshingFullPreview : importMutation.isPending || isPreviewingProjects || refreshingProjectRow !== null) ? 'disabled:cursor-wait' : 'disabled:cursor-not-allowed'}`}
               >
-                {importMutation.isPending ? (
+                {(importMode === 'complete' ? fullImportMutation.isPending : importMutation.isPending) ? (
                   <>
                     <ArrowsClockwise size={16} aria-hidden="true" className="motion-safe:animate-spin motion-reduce:animate-none" />
                     Gravando registros…
                   </>
                 ) : (
                   <>
-                    Concluir importação
+                    {importMode === 'complete' ? 'Confirmar migração completa' : 'Concluir importação'}
                     <CaretRight weight="bold" size={16} aria-hidden="true" />
                   </>
                 )}
@@ -689,31 +1083,22 @@ export function ImportacaoDados() {
         )}
 
         {step === 3 && (
-          <div className="mx-auto max-w-xl py-10 text-center">
-            <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-8 ring-emerald-500/10 dark:bg-emerald-950/40 dark:text-emerald-300">
-              <CheckCircle weight="fill" size={42} aria-hidden="true" />
-            </div>
-            <h2 className="text-2xl font-bold text-zinc-950 dark:text-zinc-100">Lote cadastrado com sucesso</h2>
-            <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Os registros foram incorporados ao banco local e já aparecem nas listagens de {selectedEntity.label.toLowerCase()}.
-            </p>
-
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center">
-              <button
-                type="button"
-                onClick={resetFlow}
-                className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/45 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                Nova importação
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(selectedEntity.route)}
-                className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-950 px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-zinc-500/45 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-              >
-                Acessar {selectedEntity.label}
-              </button>
-            </div>
+          <div className={`mx-auto py-10 ${importMode === 'complete' ? 'max-w-6xl' : 'max-w-4xl'}`}>
+            {importMode === 'complete' && fullResult ? (
+              <>
+                <FullMigrationResultView result={fullResult} />
+                <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={resetFlow} className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/45 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Nova importação</button>
+                  <button type="button" onClick={() => navigate('/financeiro')} className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-950 px-5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-zinc-500/45 dark:bg-white dark:text-zinc-950">Conferir financeiro</button>
+                </div>
+              </>
+            ) : simpleResult ? <>
+              <SimpleImportResultView result={simpleResult} />
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button type="button" onClick={resetFlow} className="inline-flex h-10 items-center justify-center rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/45 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">Nova importação</button>
+                {simpleResult.imported > 0 && <button type="button" onClick={() => navigate(selectedEntity.route)} className="inline-flex h-10 items-center justify-center rounded-lg bg-zinc-950 px-5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-zinc-500/45 dark:bg-white dark:text-zinc-950">Conferir {selectedEntity.label}</button>}
+              </div>
+            </> : null}
           </div>
         )}
       </section>

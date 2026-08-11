@@ -25,6 +25,7 @@ export type ProjectImportPreviewRow = {
   projectName: string;
   reference: string;
   status: 'resolved' | 'pending';
+  action: 'create' | 'reject';
   reason: 'document' | 'exact_name' | 'manual' | 'internal_id' | 'missing' | 'ambiguous' | 'invalid_document' | 'manual_pending' | 'invalid_row';
   message: string;
   association?: {
@@ -36,7 +37,7 @@ export type ProjectImportPreviewRow = {
   };
 };
 
-const normalizedName = (value: string) => value.trim().toLocaleLowerCase('pt-BR');
+const normalizedName = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
 export function maskedDocument(value?: string | null) {
   if (!value) return null;
@@ -106,6 +107,7 @@ export function projectImportPreviewRow(
       projectName: item.nome?.trim() || 'Projeto sem nome',
       reference: safeReference,
       status: 'pending',
+      action: 'reject',
       reason: resolution.status,
       message: resolution.message
     };
@@ -116,6 +118,7 @@ export function projectImportPreviewRow(
     projectName: item.nome?.trim() || 'Projeto sem nome',
     reference: safeReference,
     status: 'resolved',
+    action: 'create',
     reason: resolution.method,
     message: resolution.method === 'manual' ? 'Cliente confirmado manualmente.' : 'Cliente identificado automaticamente.',
     association: {

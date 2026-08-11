@@ -12,12 +12,20 @@ export type SimpleImportRowResult = {
   };
 };
 
-export function finishSimpleImport(startedAt: string, rowsRead: number, results: SimpleImportRowResult[]) {
+type SimpleImportOptions = {
+  importId?: string;
+  idempotent?: boolean;
+  requestReused?: boolean;
+  warnings?: string[];
+  filesystemPending?: boolean;
+};
+
+export function finishSimpleImport(startedAt: string, rowsRead: number, results: SimpleImportRowResult[], options: SimpleImportOptions = {}) {
   const completedAt = new Date().toISOString();
   const imported = results.filter((item) => item.status === 'success').length;
   const failed = results.filter((item) => item.status === 'failed').length;
   return {
-    importId: crypto.randomUUID(),
+    importId: options.importId ?? crypto.randomUUID(),
     status: imported === 0 ? 'failed' as const : failed > 0 ? 'partial' as const : 'completed' as const,
     rowsRead,
     imported,
@@ -29,6 +37,10 @@ export function finishSimpleImport(startedAt: string, rowsRead: number, results:
     ignored: 0,
     failed,
     pendingReview: failed,
+    idempotent: options.idempotent ?? false,
+    requestReused: options.requestReused ?? false,
+    filesystemPending: options.filesystemPending ?? false,
+    warnings: options.warnings ?? [],
     startedAt,
     completedAt,
     durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),

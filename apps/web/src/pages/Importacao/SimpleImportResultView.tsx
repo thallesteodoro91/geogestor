@@ -6,6 +6,8 @@ const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyl
 export function SimpleImportResultView({ result }: { result: SimpleImportResult }) {
   const presentation = result.status === 'completed'
     ? { title: 'Importação concluída', description: 'Todos os registros válidos foram gravados.', icon: CheckCircle, tone: 'emerald' }
+    : result.status === 'completed_with_warnings'
+      ? { title: 'Dados gravados com uma pendência', description: 'Os registros foram salvos. A operação de pastas será tentada novamente.', icon: WarningCircle, tone: 'amber' }
     : result.status === 'partial'
       ? { title: 'Importação concluída parcialmente', description: 'Parte das linhas foi gravada e parte precisa de correção.', icon: WarningCircle, tone: 'amber' }
       : { title: 'Nenhum registro foi importado', description: 'Corrija os problemas indicados e gere uma nova prévia.', icon: XCircle, tone: 'red' };
@@ -30,6 +32,13 @@ export function SimpleImportResultView({ result }: { result: SimpleImportResult 
         <Icon size={26} weight="fill" aria-hidden="true" className="shrink-0" />
         <div><h2 className="text-lg font-bold">{presentation.title}</h2><p className="mt-1 text-sm">{presentation.description}</p></div>
       </div>
+      {(result.requestReused || result.filesystemPending || (result.warnings?.length ?? 0) > 0) && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100" role="status" aria-live="polite">
+          {result.requestReused && <p className="font-semibold">Esta solicitação já havia sido processada; nenhum registro foi duplicado.</p>}
+          {result.filesystemPending && <p className="font-semibold">Os dados foram gravados, mas a criação das pastas ficou pendente e será tentada novamente.</p>}
+          {result.warnings?.map((warning, index) => <p key={`${index}-${warning}`} className="mt-1">{warning}</p>)}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {metrics.map(([label, value]) => <div key={label} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><p className="text-xs font-semibold text-zinc-500">{label}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}
       </div>

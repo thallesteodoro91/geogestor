@@ -1,5 +1,5 @@
 import { FormSelect } from '../../components/Form';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -43,6 +43,8 @@ import {
   validateSpreadsheetFile,
   type FullMigrationPayload,
   type FullMigrationPreview,
+  type FullMigrationQueued,
+  type FullMigrationRun,
   type FullMigrationResult
 } from './fullMigration';
 
@@ -155,6 +157,8 @@ export function ImportacaoDados() {
   const [projectOverrides, setProjectOverrides] = useState<Record<number, ProjectAssociationOverride>>({});
   const [isPreviewingProjects, setIsPreviewingProjects] = useState(false);
   const [refreshingProjectRow, setRefreshingProjectRow] = useState<number | null>(null);
+  const [fullImportProgress, setFullImportProgress] = useState('');
+  const simpleIdempotencyKey = useRef(crypto.randomUUID());
 
   const selectedEntity = entityOptions[entity];
   const currentFields = entityFields[entity];
@@ -495,7 +499,9 @@ export function ImportacaoDados() {
 
   const importMutation = useMutation({
     mutationFn: async (payload: Array<Record<string, unknown>>) => {
-      const result = await apiClient.post<SimpleImportResult>(`/api/${entity}/lote`, payload);
+      const result = await apiClient.post<SimpleImportResult>(`/api/${entity}/lote`, payload, {
+        headers: { 'Idempotency-Key': simpleIdempotencyKey.current }
+      });
 
       const schemaToSave = {
         id: crypto.randomUUID(),
@@ -514,7 +520,7 @@ export function ImportacaoDados() {
     onSuccess: result => {
       if (result.imported > 0) queryClient.invalidateQueries({ queryKey: [entity] });
       setSimpleResult(result);
-      setImportPhase(result.status === 'completed' ? 'completed' : result.status === 'partial' ? 'partial' : 'failed');
+      setImportPhase(result.status === 'completed' || result.status === 'completed_with_warnings' ? 'completed' : result.status === 'partial' ? 'partial' : 'failed');
       setFormError('');
       setStep(3);
     },
@@ -525,12 +531,31 @@ export function ImportacaoDados() {
   });
 
   const fullImportMutation = useMutation({
-    mutationFn: async (payload: FullMigrationPayload) => apiClient.post<FullMigrationResult>(
-      '/api/importacoes/migracao-completa/confirmar',
-      payload,
-      { timeoutMs: 120_000 }
-    ),
-    onMutate: () => setImportPhase('saving'),
+    mutationFn: async (payload: FullMigrationPayload) => {
+      if (!fullPreview?.previewId) throw new Error('A prévia não possui um identificador válido. Gere uma nova prévia.');
+      const queued = await apiClient.post<FullMigrationQueued>(
+        '/api/importacoes/migracao-completa/confirmar',
+        { ...payload, previewId: fullPreview.previewId },
+        { timeoutMs: 60_000 }
+      );
+
+      for (let attempt = 0; attempt < 1_200; attempt += 1) {
+        const run = await apiClient.get<FullMigrationRun>(queued.pollUrl, { timeoutMs: 30_000 });
+        setFullImportProgress(`${run.stage} · ${run.progress}%`);
+        if (run.status === 'failed' || run.status === 'cancelled') {
+          throw new Error(run.error?.message || 'O processamento foi interrompido. Consulte o histórico da importação.');
+        }
+        if (['completed', 'partial', 'completed_with_warnings'].includes(run.status) && run.result) {
+          return run.result;
+        }
+        await new Promise<void>(resolve => window.setTimeout(resolve, 750));
+      }
+      throw new Error('A importação continua em processamento. Consulte o histórico para acompanhar a conclusão.');
+    },
+    onMutate: () => {
+      setImportPhase('saving');
+      setFullImportProgress('Recebido · 0%');
+    },
     onSuccess: result => {
       if (fullPreview && file) {
         const reusableMapping = Object.fromEntries(
@@ -550,10 +575,12 @@ export function ImportacaoDados() {
       setImportPhase('completed');
       setFormError('');
       setStep(3);
+      setFullImportProgress('');
       queryClient.invalidateQueries();
     },
     onError: (err: Error) => {
       setImportPhase('failed');
+      setFullImportProgress('');
       setFormError(`A migração não foi concluída: ${err.message}`);
     }
   });
@@ -617,6 +644,8 @@ export function ImportacaoDados() {
     setRefreshingProjectRow(null);
     setReviewAcknowledged(false);
     setImportPhase('idle');
+    setFullImportProgress('');
+    simpleIdempotencyKey.current = crypto.randomUUID();
   };
 
   return (
@@ -1069,7 +1098,7 @@ export function ImportacaoDados() {
                 {(importMode === 'complete' ? fullImportMutation.isPending : importMutation.isPending) ? (
                   <>
                     <ArrowsClockwise size={16} aria-hidden="true" className="motion-safe:animate-spin motion-reduce:animate-none" />
-                    Gravando registros…
+                    {importMode === 'complete' && fullImportProgress ? fullImportProgress : 'Gravando registros…'}
                   </>
                 ) : (
                   <>

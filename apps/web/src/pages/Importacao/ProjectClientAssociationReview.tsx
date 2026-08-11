@@ -68,6 +68,9 @@ function AssociationRow({ row, refreshing, onAssociate, onReset }: {
         ) : null}
       </td>
       <td className="px-3 py-3">
+        <span className={`mb-2 inline-flex rounded-md px-2 py-1 text-xs font-bold ${(row.action ?? (row.status === 'resolved' ? 'create' : 'reject')) === 'create' ? 'bg-blue-50 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200' : 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200'}`}>
+          {(row.action ?? (row.status === 'resolved' ? 'create' : 'reject')) === 'create' ? 'Será criado' : 'Será rejeitado'}
+        </span>
         <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold ${row.status === 'resolved' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'}`}>
           {row.status === 'resolved' ? <CheckCircle size={14} weight="fill" aria-hidden="true" /> : <WarningCircle size={14} weight="fill" aria-hidden="true" />}
           {row.status === 'resolved' && association ? methodLabel[association.method] : 'Pendente'}

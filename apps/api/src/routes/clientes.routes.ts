@@ -8,12 +8,59 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
+import { finishSimpleImport } from '../services/simple-import-result.service';
+import { OperationalLogService } from '../services/operational-log.service';
+import { finalizeImportFilesystem } from '../services/import-filesystem-finalization.service';
+import {
+  completeImportRun,
+  ensureImportInfrastructure,
+  failImportRun,
+  findImportReplay,
+  importContentDigest,
+  ImportRunError,
+  readIdempotencyKey,
+  reserveSimpleImport
+} from '../services/import-run.service';
 
 type IdParams = { id: string };
 type HistoricoParams = { id: string; historicoId: string };
 type Payload = Record<string, any>;
 
 const normalizeDocument = (value?: string | null) => value?.replace(/\D/g, '') || null;
+
+const CLIENT_IMPORT_FIELDS = new Set([
+  'nome', 'tipoPessoa', 'documento', 'email', 'telefone', 'endereco', 'numero', 'semNumero',
+  'complemento', 'bairro', 'municipio', 'uf', 'cep', 'celular', 'celularWhatsapp', 'cpf', 'rg',
+  'cnpj', 'inscricaoEstadual', 'origem', 'origemPrincipal', 'origemDetalhe', 'indicadoPor',
+  'categoria', 'perfis', 'anotacoes', 'situacao', 'previsaoEntrega', 'servicos'
+]);
+
+function normalizeClientImportRow(raw: unknown) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { data: null, errors: ['linha: envie um objeto com os campos do cliente.'] };
+  }
+  const errors: string[] = [];
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (!CLIENT_IMPORT_FIELDS.has(key)) {
+      errors.push(`${key}: campo não permitido.`);
+      continue;
+    }
+    if (value !== null && typeof value === 'object') {
+      errors.push(`${key}: estruturas aninhadas não são permitidas.`);
+      continue;
+    }
+    if (typeof value === 'string') {
+      const maximum = key === 'anotacoes' ? 5_000 : 500;
+      const clean = value.normalize('NFKC').trim().replace(/\s+/g, ' ');
+      if (clean.length > maximum) errors.push(`${key}: limite de ${maximum} caracteres excedido.`);
+      normalized[key] = clean;
+    } else {
+      normalized[key] = value;
+    }
+  }
+  return { data: normalized, errors };
+}
 
 function getClientDocument(input: {
   tipoPessoa?: string | null;
@@ -787,7 +834,20 @@ export async function clientesRoutes(server: FastifyInstance) {
   zServer.post('/lote', {
     schema: { body: z.array(z.unknown()).min(1).max(500) }
   }, async (request, reply) => {
+    const startedAt = new Date().toISOString();
+    const digest = importContentDigest(request.body);
+    let runId: string | null = null;
     try {
+      await ensureImportInfrastructure();
+      const idempotencyKey = readIdempotencyKey(request.headers);
+      const replay = await findImportReplay('clientes', 'simple', idempotencyKey, digest);
+      if (replay) return reply.status(200).send(replay);
+      const reservation = await reserveSimpleImport(db, {
+        entity: 'clientes', key: idempotencyKey, digest, totalRows: request.body.length
+      });
+      runId = reservation.runId;
+      if (reservation.replay) return reply.status(200).send(reservation.replay);
+
       const existing = await db.select({ documentoNormalizado: schema.clientes.documentoNormalizado })
         .from(schema.clientes).where(isNull(schema.clientes.deletedAt));
       const knownDocuments = new Set(existing.map((item) => item.documentoNormalizado).filter(Boolean));
@@ -795,7 +855,12 @@ export async function clientesRoutes(server: FastifyInstance) {
       const results: Array<{ index: number; status: 'success' | 'failed'; id?: string; errors?: string[] }> = [];
 
       request.body.forEach((raw, index) => {
-        const parsed = ClientePayloadSchema.safeParse(raw);
+        const normalized = normalizeClientImportRow(raw);
+        if (!normalized.data || normalized.errors.length) {
+          results.push({ index, status: 'failed', errors: normalized.errors });
+          return;
+        }
+        const parsed = ClientePayloadSchema.safeParse(normalized.data);
         if (!parsed.success) {
           results.push({ index, status: 'failed', errors: parsed.error.issues.map((issue) => issue.message) });
           return;
@@ -813,8 +878,8 @@ export async function clientesRoutes(server: FastifyInstance) {
         accepted.push({ index, data: parsed.data, id: crypto.randomUUID() });
       });
 
-      if (accepted.length) {
-        await db.transaction(async (tx) => {
+      const summary = accepted.length
+        ? await db.transaction(async (tx) => {
           for (const item of accepted) {
             const data = item.data;
             await tx.insert(schema.clientes).values({
@@ -864,22 +929,24 @@ export async function clientesRoutes(server: FastifyInstance) {
             quantidade: accepted.length,
             ids: accepted.map((item) => item.id)
           }, tx);
-        });
-
-        await FileSystemOutboxService.processPending();
+          const transactionResult = finishSimpleImport(startedAt, request.body.length, results, { importId: runId! });
+          await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
+          return transactionResult;
+        })
+        : finishSimpleImport(startedAt, request.body.length, results, { importId: runId });
+      if (!accepted.length) {
+        await completeImportRun(db, runId, summary as unknown as Record<string, unknown>, results);
       }
-
-      results.sort((a, b) => a.index - b.index);
-      return reply.status(201).send({
-        message: `${accepted.length} registros importados com sucesso`,
-        imported: accepted.length,
-        failed: results.length - accepted.length,
-        results
-      });
+      const finalized = accepted.length ? await finalizeImportFilesystem(runId, summary) : summary;
+      await OperationalLogService.info('simple-spreadsheet-import', { importId: finalized.importId, entity: 'clientes', status: finalized.status, rows: finalized.rowsRead, imported: finalized.imported, failed: finalized.failed, durationMs: finalized.durationMs });
+      return reply.status(201).send(finalized);
     } catch (err) {
+      if (runId) await failImportRun(runId, err).catch(() => undefined);
+      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'clientes', status: 'failed', rows: request.body.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
       if (isClientDocumentConflict(err)) {
         return reply.status(409).send({ error: 'CPF/CNPJ já cadastrado ou repetido durante a importação.' });
       }
+      if (err instanceof ImportRunError) return reply.status(err.statusCode).send({ error: err.message, code: err.code });
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar em lote' });
     }

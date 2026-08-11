@@ -15,7 +15,7 @@ export type SimpleImportRowResult = {
 
 export type SimpleImportResult = {
   importId: string;
-  status: 'completed' | 'partial' | 'failed';
+  status: 'completed' | 'completed_with_warnings' | 'partial' | 'failed';
   rowsRead: number;
   imported: number;
   updated: number;
@@ -23,6 +23,10 @@ export type SimpleImportResult = {
   ignored: number;
   failed: number;
   pendingReview: number;
+  idempotent?: boolean;
+  requestReused?: boolean;
+  filesystemPending?: boolean;
+  warnings?: string[];
   startedAt: string;
   completedAt: string;
   durationMs: number;

@@ -28,6 +28,7 @@ import { ambientalRoutes } from './routes/ambiental.routes';
 import { orcamentosRoutes } from './routes/orcamentos.routes';
 import { strategicPlanningRoutes } from './routes/strategic-planning.routes';
 import { operationalDataRoutes } from './routes/operational-data.routes';
+import { importacoesRoutes } from './routes/importacoes.routes';
 import { runRuntimeMigrations } from './services/runtime-migrations.service';
 import { FileSystemService } from './services/fs.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
@@ -490,6 +491,7 @@ server.register(ambientalRoutes, { prefix: '/api/ambiental' });
 server.register(orcamentosRoutes, { prefix: '/api/orcamentos' });
 server.register(strategicPlanningRoutes, { prefix: '/api/planejamento' });
 server.register(operationalDataRoutes, { prefix: '/api/dados-operacionais' });
+server.register(importacoesRoutes, { prefix: '/api/importacoes' });
 
 // Health check
 server.get('/api/ready', async (_request, reply) => {

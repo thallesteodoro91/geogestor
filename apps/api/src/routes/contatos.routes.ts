@@ -3,6 +3,20 @@ import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { and, desc, eq, isNull, like, or, sql } from 'drizzle-orm';
 import crypto from 'crypto';
+import { finishSimpleImport, type SimpleImportRowResult } from '../services/simple-import-result.service';
+import { OperationalLogService } from '../services/operational-log.service';
+import { z } from 'zod';
+import { AuditLogService } from '../services/audit.service';
+import {
+  completeImportRun,
+  ensureImportInfrastructure,
+  failImportRun,
+  findImportReplay,
+  importContentDigest,
+  ImportRunError,
+  readIdempotencyKey,
+  reserveSimpleImport
+} from '../services/import-run.service';
 
 type ContatoInput = {
   nome: string;
@@ -13,6 +27,29 @@ type ContatoInput = {
   observacoes?: string;
   origem?: string;
 };
+
+const optionalText = (max: number) => z.preprocess(
+  value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+  z.string().trim().max(max).optional()
+);
+
+const ContatoLoteItemSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome do contato.').max(200),
+  email: z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().email('Informe um e-mail válido.').max(320).transform(value => normalizeEmail(value)).optional()
+  ),
+  telefone: z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().max(30).transform(value => normalizePhone(value)).refine(value => value.length === 10 || value.length === 11, 'Informe um telefone com DDD e 10 ou 11 dígitos.').optional()
+  ),
+  empresa: optionalText(200),
+  cidade: optionalText(200),
+  observacoes: optionalText(5_000),
+  origem: optionalText(100)
+}).strict();
+
+const ContatoLotePayloadSchema = z.array(z.unknown()).min(1).max(500);
 
 type ContatosQuery = {
   q?: string;
@@ -423,33 +460,87 @@ export async function contatosRoutes(server: FastifyInstance) {
 
   // POST /api/contatos/lote
   server.post('/lote', async (request: FastifyRequest, reply: FastifyReply) => {
-    const items = request.body as ContatoInput[];
-    if (!Array.isArray(items)) {
-      return reply.status(400).send({ error: 'Payload deve ser uma lista de contatos' });
+    const payload = ContatoLotePayloadSchema.safeParse(request.body);
+    if (!payload.success) {
+      return reply.status(400).send({
+        error: 'Revise os contatos enviados.',
+        issues: payload.error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message }))
+      });
     }
-
+    const startedAt = new Date().toISOString();
+    const digest = importContentDigest(payload.data);
+    let runId: string | null = null;
     try {
-      await db.transaction(async (tx) => {
-        for (const item of items) {
-          if (!item.nome) continue;
-          const now = new Date().toISOString();
+      await ensureImportInfrastructure();
+      const idempotencyKey = readIdempotencyKey(request.headers);
+      const replay = await findImportReplay('contatos', 'simple', idempotencyKey, digest);
+      if (replay) return reply.status(200).send(replay);
+      const reservation = await reserveSimpleImport(db, {
+        entity: 'contatos', key: idempotencyKey, digest, totalRows: payload.data.length
+      });
+      runId = reservation.runId;
+      if (reservation.replay) return reply.status(200).send(reservation.replay);
+
+      const existing = await db.select({ email: schema.contatos.email, telefone: schema.contatos.telefone })
+        .from(schema.contatos).where(isNull(schema.contatos.deletedAt));
+      const knownEmails = new Set(existing.map(item => normalizeEmail(item.email)).filter(Boolean));
+      const knownPhones = new Set(existing.map(item => normalizePhone(item.telefone)).filter(Boolean));
+      const accepted: Array<{ index: number; data: z.infer<typeof ContatoLoteItemSchema>; id: string }> = [];
+      const results: SimpleImportRowResult[] = [];
+
+      payload.data.forEach((raw, index) => {
+        const parsed = ContatoLoteItemSchema.safeParse(raw);
+        if (!parsed.success) {
+          results.push({ index, status: 'failed', errors: parsed.error.issues.map(issue => `${issue.path.join('.') || 'linha'}: ${issue.message}`) });
+          return;
+        }
+        if (parsed.data.email && knownEmails.has(parsed.data.email)) {
+          results.push({ index, status: 'failed', errors: ['Já existe um contato com este e-mail.'] });
+          return;
+        }
+        if (parsed.data.telefone && knownPhones.has(parsed.data.telefone)) {
+          results.push({ index, status: 'failed', errors: ['Já existe um contato com este telefone.'] });
+          return;
+        }
+        if (parsed.data.email) knownEmails.add(parsed.data.email);
+        if (parsed.data.telefone) knownPhones.add(parsed.data.telefone);
+        accepted.push({ index, data: parsed.data, id: crypto.randomUUID() });
+      });
+
+      const summary = await db.transaction(async tx => {
+        const now = new Date().toISOString();
+        for (const item of accepted) {
           await tx.insert(schema.contatos).values({
-            id: crypto.randomUUID(),
-            nome: item.nome,
-            email: item.email || null,
-            telefone: item.telefone || null,
-            empresa: item.empresa || null,
-            cidade: item.cidade || null,
-            observacoes: item.observacoes || null,
-            origem: item.origem || null,
+            id: item.id,
+            nome: item.data.nome,
+            email: item.data.email || null,
+            telefone: item.data.telefone || null,
+            empresa: item.data.empresa || null,
+            cidade: item.data.cidade || null,
+            observacoes: item.data.observacoes || null,
+            origem: item.data.origem || null,
             status: 'ativo',
             createdAt: now,
             updatedAt: now
           }).run();
+          results.push({ index: item.index, status: 'success', id: item.id });
         }
+        await AuditLogService.log('INSERT', 'Contato', null, {
+          importacaoLote: true,
+          quantidade: accepted.length,
+          ids: accepted.map(item => item.id)
+        }, tx);
+        const transactionResult = finishSimpleImport(startedAt, payload.data.length, results, { importId: runId! });
+        await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
+        return transactionResult;
       });
-      return { success: true, importedCount: items.length };
+
+      await OperationalLogService.info('simple-spreadsheet-import', { importId: summary.importId, entity: 'contatos', status: summary.status, rows: summary.rowsRead, imported: summary.imported, failed: summary.failed, durationMs: summary.durationMs });
+      return reply.status(201).send(summary);
     } catch (err) {
+      if (runId) await failImportRun(runId, err).catch(() => undefined);
+      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'contatos', status: 'failed', rows: payload.data.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
+      if (err instanceof ImportRunError) return reply.status(err.statusCode).send({ error: err.message, code: err.code });
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar contatos em lote' });
     }

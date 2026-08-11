@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, and, isNull, isNotNull, desc, asc, count, like, lte, gte, notInArray, or } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, desc, asc, count, like, lte, gte, inArray, notInArray, or, sql } from 'drizzle-orm';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
@@ -17,6 +17,17 @@ import {
 } from '../services/relationship-integrity.service';
 import { finishSimpleImport, type SimpleImportRowResult } from '../services/simple-import-result.service';
 import { OperationalLogService } from '../services/operational-log.service';
+import { finalizeImportFilesystem } from '../services/import-filesystem-finalization.service';
+import {
+  completeImportRun,
+  ensureImportInfrastructure,
+  failImportRun,
+  findImportReplay,
+  importContentDigest,
+  ImportRunError,
+  readIdempotencyKey,
+  reserveSimpleImport
+} from '../services/import-run.service';
 import {
   maskedDocument,
   projectImportPreviewRow,
@@ -31,15 +42,71 @@ const ProjetoLoteItemSchema = z.object({
   clienteDocumento: z.string().trim().max(30).optional(),
   associacaoManual: z.boolean().optional(),
   associacaoPendente: z.boolean().optional(),
-  nome: z.string().trim().min(1),
-  status: z.string().optional(),
-  cidade: z.string().nullable().optional(),
+  nome: z.string().trim().min(1).max(300),
+  status: z.string().trim().max(100).optional(),
+  cidade: z.string().trim().max(200).nullable().optional(),
   areaHa: z.preprocess(
     (value) => value === '' || value === null || value === undefined ? null : Number(value),
     z.number().nullable().optional()
   )
-});
+}).strict();
 const ProjetoLotePayloadSchema = z.array(z.unknown()).min(1).max(500);
+
+const normalizeImportName = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
+
+async function loadRelevantProjectClients(items: Array<z.infer<typeof ProjetoLoteItemSchema>>) {
+  const ids = [...new Set(items.flatMap(item => item.clienteId ? [item.clienteId] : []))];
+  const documents = [...new Set(items.flatMap(item => {
+    const value = item.clienteDocumento || item.clienteReferencia || '';
+    const digits = value.replace(/\D/g, '');
+    return digits.length === 11 || digits.length === 14 ? [digits] : [];
+  }))];
+  const names = [...new Set(items.flatMap(item => {
+    const value = item.clienteReferencia?.trim();
+    return value && !/^\d+$/.test(value.replace(/\D/g, '')) ? [normalizeImportName(value)] : [];
+  }))];
+  const matches = [];
+  if (ids.length) matches.push(inArray(schema.clientes.id, ids));
+  if (documents.length) matches.push(inArray(schema.clientes.documentoNormalizado, documents));
+  if (names.length) matches.push(sql`lower(trim(${schema.clientes.nome})) in (${sql.join(names.map(name => sql`${name}`), sql`, `)})`);
+  if (!matches.length) return [];
+  return db.select({
+    id: schema.clientes.id,
+    nome: schema.clientes.nome,
+    documentoNormalizado: schema.clientes.documentoNormalizado,
+    municipio: schema.clientes.municipio
+  }).from(schema.clientes).where(and(
+    isNull(schema.clientes.deletedAt),
+    eq(schema.clientes.situacao, 'Ativo'),
+    or(...matches)!
+  ));
+}
+
+async function applyProjectDuplicatePreviewRules(rows: ProjectImportPreviewRow[]) {
+  const clientIds = [...new Set(rows.flatMap(row => row.association?.clientId ? [row.association.clientId] : []))];
+  const existing = clientIds.length === 0 ? [] : await db.select({
+    clienteId: schema.projetos.clienteId,
+    nome: schema.projetos.nome
+  }).from(schema.projetos).where(and(
+    inArray(schema.projetos.clienteId, clientIds),
+    isNull(schema.projetos.deletedAt)
+  ));
+  const existingKeys = new Set(existing.map(project => `${project.clienteId}:${normalizeImportName(project.nome)}`));
+  const seen = new Set<string>();
+
+  return rows.map(row => {
+    if (row.status !== 'resolved' || !row.association) return row;
+    const key = `${row.association.clientId}:${normalizeImportName(row.projectName)}`;
+    if (existingKeys.has(key)) {
+      return { ...row, status: 'pending' as const, action: 'reject' as const, reason: 'invalid_row' as const, message: 'Já existe um projeto com este nome para o cliente informado.' };
+    }
+    if (seen.has(key)) {
+      return { ...row, status: 'pending' as const, action: 'reject' as const, reason: 'invalid_row' as const, message: 'Projeto repetido para o mesmo cliente neste lote.' };
+    }
+    seen.add(key);
+    return row;
+  });
+}
 
 const labelValue = (value: any) => {
   if (value === null || value === undefined || value === '') return 'não informado';
@@ -390,7 +457,7 @@ export async function projetosRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const { q, selectedId, limit } = request.query;
     try {
-      const activeCondition = or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!;
+      const activeCondition = eq(schema.clientes.situacao, 'Ativo');
       const conditions = [isNull(schema.clientes.deletedAt), activeCondition];
       if (q) {
         const search = `%${q}%`;
@@ -434,17 +501,10 @@ export async function projetosRoutes(server: FastifyInstance) {
     schema: { body: ProjetoLotePayloadSchema }
   }, async (request, reply) => {
     try {
-      const activeClients = await db.select({
-        id: schema.clientes.id,
-        nome: schema.clientes.nome,
-        documentoNormalizado: schema.clientes.documentoNormalizado,
-        municipio: schema.clientes.municipio
-      }).from(schema.clientes).where(and(
-        isNull(schema.clientes.deletedAt),
-        or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!
-      ));
-      const rows: ProjectImportPreviewRow[] = request.body.map((raw, index) => {
-        const parsed = ProjetoLoteItemSchema.safeParse(raw);
+      const parsedItems = request.body.map(raw => ProjetoLoteItemSchema.safeParse(raw));
+      const activeClients = await loadRelevantProjectClients(parsedItems.flatMap(parsed => parsed.success ? [parsed.data] : []));
+      const resolvedRows: ProjectImportPreviewRow[] = request.body.map((raw, index) => {
+        const parsed = parsedItems[index];
         if (!parsed.success) {
           return {
             index,
@@ -452,12 +512,14 @@ export async function projetosRoutes(server: FastifyInstance) {
             projectName: raw && typeof raw === 'object' && 'nome' in raw ? String(raw.nome || 'Projeto sem nome') : 'Projeto sem nome',
             reference: raw && typeof raw === 'object' && 'clienteReferencia' in raw ? String(raw.clienteReferencia || '') : '',
             status: 'pending',
+            action: 'reject',
             reason: 'invalid_row',
             message: [...new Set(parsed.error.issues.map(issue => issue.message))].join(' ')
           };
         }
         return projectImportPreviewRow(parsed.data, index, activeClients);
       });
+      const rows = await applyProjectDuplicatePreviewRules(resolvedRows);
       const counts = summarizeProjectImportPreview(rows);
       await OperationalLogService.info('simple-project-import-preview', { rows: rows.length, ...counts, status: counts.pending > 0 ? 'blocked' : 'ready' });
       return { status: counts.pending > 0 ? 'blocked' as const : 'ready' as const, counts, rows };
@@ -474,26 +536,31 @@ export async function projetosRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const data = request.body;
     const startedAt = new Date().toISOString();
+    const digest = importContentDigest(data);
+    let runId: string | null = null;
 
     if (data.length === 0) {
       return reply.status(400).send({ error: 'Payload deve conter pelo menos um projeto' });
     }
 
     try {
+      await ensureImportInfrastructure();
+      const idempotencyKey = readIdempotencyKey(request.headers);
+      const replay = await findImportReplay('projetos', 'simple', idempotencyKey, digest);
+      if (replay) return reply.status(200).send(replay);
+      const reservation = await reserveSimpleImport(db, {
+        entity: 'projetos', key: idempotencyKey, digest, totalRows: data.length
+      });
+      runId = reservation.runId;
+      if (reservation.replay) return reply.status(200).send(reservation.replay);
+
       const results: SimpleImportRowResult[] = [];
       const resolved: Array<{ index: number; item: z.infer<typeof ProjetoLoteItemSchema>; clienteId: string; clienteNome: string }> = [];
-      const activeClients = await db.select({
-        id: schema.clientes.id,
-        nome: schema.clientes.nome,
-        documentoNormalizado: schema.clientes.documentoNormalizado,
-        municipio: schema.clientes.municipio
-      }).from(schema.clientes).where(and(
-        isNull(schema.clientes.deletedAt),
-        or(eq(schema.clientes.situacao, 'Ativo'), isNull(schema.clientes.situacao))!
-      ));
+      const parsedItems = data.map(raw => ProjetoLoteItemSchema.safeParse(raw));
+      const activeClients = await loadRelevantProjectClients(parsedItems.flatMap(parsed => parsed.success ? [parsed.data] : []));
 
       for (const [index, raw] of data.entries()) {
-        const parsed = ProjetoLoteItemSchema.safeParse(raw);
+        const parsed = parsedItems[index];
         if (!parsed.success) {
           results.push({ index, status: 'failed', errors: [...new Set(parsed.error.issues.map(issue => issue.message))] });
           continue;
@@ -512,10 +579,34 @@ export async function projetosRoutes(server: FastifyInstance) {
         });
       }
 
-      await db.transaction(async (tx) => {
+      const summary = await db.transaction(async (tx) => {
         const created = [];
+        const seenProjects = new Set<string>();
 
         for (const { index, item, clienteId, clienteNome } of resolved) {
+          const [activeClient] = await tx.select({ id: schema.clientes.id }).from(schema.clientes).where(and(
+            eq(schema.clientes.id, clienteId),
+            eq(schema.clientes.situacao, 'Ativo'),
+            isNull(schema.clientes.deletedAt)
+          )).limit(1);
+          if (!activeClient) {
+            results.push({ index, status: 'failed', errors: ['O cliente foi desativado ou excluído depois da prévia. Gere uma nova prévia.'] });
+            continue;
+          }
+          const businessKey = `${clienteId}:${normalizeImportName(item.nome)}`;
+          if (seenProjects.has(businessKey)) {
+            results.push({ index, status: 'failed', errors: ['Projeto repetido para o mesmo cliente neste lote.'] });
+            continue;
+          }
+          seenProjects.add(businessKey);
+          const existingProjects = await tx.select({ id: schema.projetos.id, nome: schema.projetos.nome }).from(schema.projetos).where(and(
+            eq(schema.projetos.clienteId, clienteId),
+            isNull(schema.projetos.deletedAt)
+          ));
+          if (existingProjects.some(project => normalizeImportName(project.nome) === normalizeImportName(item.nome))) {
+            results.push({ index, status: 'failed', errors: ['Já existe um projeto com este nome para o cliente informado.'] });
+            continue;
+          }
           const result = await tx.insert(schema.projetos).values({
             id: crypto.randomUUID(),
             clienteId,
@@ -568,18 +659,19 @@ export async function projetosRoutes(server: FastifyInstance) {
           quantidade: created.length,
           projetos: created.map(projeto => projeto.nome)
         }, tx);
-
-        return created;
+        const transactionResult = finishSimpleImport(startedAt, data.length, results, { importId: runId! });
+        await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
+        return transactionResult;
       });
 
-      await FileSystemOutboxService.processPending();
-
-      const summary = finishSimpleImport(startedAt, data.length, results);
-      await OperationalLogService.info('simple-spreadsheet-import', { importId: summary.importId, entity: 'projetos', status: summary.status, rows: summary.rowsRead, imported: summary.imported, failed: summary.failed, durationMs: summary.durationMs });
-      return reply.status(201).send(summary);
+      const finalized = summary.imported > 0 ? await finalizeImportFilesystem(runId, summary) : summary;
+      await OperationalLogService.info('simple-spreadsheet-import', { importId: finalized.importId, entity: 'projetos', status: finalized.status, rows: finalized.rowsRead, imported: finalized.imported, failed: finalized.failed, filesystemPending: finalized.filesystemPending, durationMs: finalized.durationMs });
+      return reply.status(201).send(finalized);
     } catch (err) {
+      if (runId) await failImportRun(runId, err).catch(() => undefined);
       await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'projetos', status: 'failed', rows: data.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
       server.log.error(err);
+      if (err instanceof ImportRunError) return reply.status(err.statusCode).send({ error: err.message, code: err.code });
       return reply.status(500).send({ error: 'Erro ao importar projetos em lote' });
     }
   });

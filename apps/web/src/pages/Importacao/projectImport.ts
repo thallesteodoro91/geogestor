@@ -6,6 +6,7 @@ export type ProjectImportPreviewRow = {
   projectName: string;
   reference: string;
   status: 'resolved' | 'pending';
+  action?: 'create' | 'reject';
   reason: ProjectAssociationMethod | 'missing' | 'ambiguous' | 'invalid_document' | 'manual_pending' | 'invalid_row';
   message: string;
   association?: {

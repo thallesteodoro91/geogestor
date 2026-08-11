@@ -28,6 +28,9 @@ export type ReconciliationItem = {
 
 export type FullMigrationPreview = {
   importId: string;
+  previewId: string;
+  previewExpiresAt: string;
+  contentDigest: string;
   fileName: string;
   fileHash: string;
   status: 'ready' | 'blocked' | 'already_imported';
@@ -94,6 +97,21 @@ export type FullMigrationResult = {
   };
   reconciliation: ReconciliationItem[];
   warnings: FullMigrationIssue[];
+};
+
+export type FullMigrationQueued = {
+  importId: string;
+  status: 'queued';
+  pollUrl: string;
+};
+
+export type FullMigrationRun = {
+  importId: string;
+  status: 'queued' | 'validating' | 'ready' | 'processing' | 'completed' | 'partial' | 'failed' | 'cancelled' | 'completed_with_warnings';
+  stage: string;
+  progress: number;
+  result: FullMigrationResult | null;
+  error: { message?: string } | null;
 };
 
 export const SPREADSHEET_LIMITS = {

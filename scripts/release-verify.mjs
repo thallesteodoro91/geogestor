@@ -51,7 +51,9 @@ if (mode === 'source') {
     const relative = path.relative(packageRoot, file);
     const ext = path.extname(file).toLowerCase();
     if (forbiddenExtensions.has(ext)) errors.push(`Artefato proibido: ${relative}`);
-    if (forbiddenNames.test(path.basename(file))) errors.push(`Nome de artefato proibido: ${relative}`);
+    if (forbiddenNames.test(path.basename(file)) && path.basename(file) !== 'backup-restore-worker.js') {
+      errors.push(`Nome de artefato proibido: ${relative}`);
+    }
     if (textExtensions.has(ext) && fs.statSync(file).size <= 50 * 1024 * 1024) {
       const content = fs.readFileSync(file, 'utf8');
       for (const pattern of contentPatterns) {

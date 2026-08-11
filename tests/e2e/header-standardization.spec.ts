@@ -160,7 +160,7 @@ test.describe.serial('padronização dos cabeçalhos principais', () => {
     await expect.poll(() => new URL(page.url()).searchParams.has('q')).toBe(false);
   });
 
-  test('Topografia e Importação compartilham alinhamento, densidade e ícones sem preenchimento', async ({ page }) => {
+  test('Topografia e Importação preservam alinhamento após a reorganização da navegação', async ({ page }) => {
     await unlock(page);
     await page.setViewportSize({ width: 1600, height: 900 });
     await setTheme(page, 'dark');
@@ -170,36 +170,47 @@ test.describe.serial('padronização dos cabeçalhos principais', () => {
     const topographyMetrics = await page.locator('main').evaluate((main) => {
       const header = main.querySelector<HTMLElement>('header');
       const description = header?.querySelector<HTMLElement>('p');
-      const moduleNavigation = header?.querySelector<HTMLElement>('nav');
       const toolNavigation = header?.querySelector<HTMLElement>('[role="tablist"]');
-      const moduleIcon = moduleNavigation?.querySelector<HTMLElement>('a span');
       const toolIcon = toolNavigation?.querySelector<HTMLElement>('button span');
-      if (!header || !description || !moduleNavigation || !toolNavigation || !moduleIcon || !toolIcon) {
-        throw new Error('Estrutura de ferramentas incompleta.');
+      if (!header || !description || !toolNavigation || !toolIcon) {
+        throw new Error('Estrutura de topografia incompleta.');
       }
 
       return {
         descriptionHeight: description.getBoundingClientRect().height,
         descriptionBottom: description.getBoundingClientRect().bottom,
-        moduleTop: moduleNavigation.getBoundingClientRect().top,
-        moduleBottom: moduleNavigation.getBoundingClientRect().bottom,
         toolTop: toolNavigation.getBoundingClientRect().top,
-        moduleIconBackground: getComputedStyle(moduleIcon).backgroundColor,
         toolIconBackground: getComputedStyle(toolIcon).backgroundColor,
       };
     });
 
     expect(topographyMetrics.descriptionHeight).toBe(24);
-    expect(topographyMetrics.moduleTop - topographyMetrics.descriptionBottom).toBeGreaterThanOrEqual(14);
-    expect(topographyMetrics.moduleTop - topographyMetrics.descriptionBottom).toBeLessThanOrEqual(18);
-    expect(topographyMetrics.toolTop - topographyMetrics.moduleBottom).toBeGreaterThanOrEqual(14);
-    expect(topographyMetrics.toolTop - topographyMetrics.moduleBottom).toBeLessThanOrEqual(18);
-    expect(topographyMetrics.moduleIconBackground).toBe('rgba(0, 0, 0, 0)');
+    expect(topographyMetrics.toolTop - topographyMetrics.descriptionBottom).toBeGreaterThanOrEqual(14);
+    expect(topographyMetrics.toolTop - topographyMetrics.descriptionBottom).toBeLessThanOrEqual(18);
     expect(topographyMetrics.toolIconBackground).toBe('rgba(0, 0, 0, 0)');
+
+    const areaTabBox = await page.getByRole('tab', { name: 'Área e perímetro' }).boundingBox();
+    const saveCalculationBox = await page.getByRole('button', { name: 'Salvar cálculo' }).boundingBox();
+    const topographyHeaderBox = await page.locator('main header').boundingBox();
+    const converterPanelBox = await page.locator('#topography-panel-conversor').boundingBox();
+    expect(areaTabBox).not.toBeNull();
+    expect(saveCalculationBox).not.toBeNull();
+    expect(topographyHeaderBox).not.toBeNull();
+    expect(converterPanelBox).not.toBeNull();
+    expect(Math.abs(
+      areaTabBox!.y + areaTabBox!.height / 2 - (saveCalculationBox!.y + saveCalculationBox!.height / 2),
+    )).toBeLessThanOrEqual(1);
+    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeGreaterThanOrEqual(14);
+    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeLessThanOrEqual(18);
+
+    await navigate(page, '/configuracoes');
+    await expect(page.getByRole('link', { name: 'Importação de dados' })).toBeVisible();
 
     await navigate(page, '/importacao');
     await expect(page.locator('main header h1')).toContainText('Importação de dados');
-    await expect(page.locator('main header')).toContainText('Ferramentas técnicas');
+    await expect(page.locator('main header')).toContainText('Configurações');
+    await expect(page.getByRole('link', { name: 'Configurações', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('link', { name: 'Topografia', exact: true })).not.toHaveAttribute('aria-current', 'page');
     const importAlignment = await page.locator('main').evaluate((main) => {
       const frame = main.querySelector<HTMLElement>('header > div');
       const steps = main.querySelector<HTMLElement>('ol[aria-label="Etapas da importação"]');

@@ -1,7 +1,7 @@
-import { DatePickerField, FormSelect } from '../../components/Form';
-import { useMemo, useState } from 'react';
+import { DatePickerField, FormSelect, NumericInput } from '../../components/Form';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ArrowsLeftRight,
@@ -16,7 +16,7 @@ import {
   Trash,
   X
 } from '@phosphor-icons/react';
-import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, SERVICE_TYPES, type BudgetStatus } from '@geogestor/contracts';
+import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, type BudgetStatus } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageFilterBar } from '../../components/PageFilterBar';
@@ -28,11 +28,13 @@ import { cn } from '../../utils/cn';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { commercialContentClass } from '../../utils/commercialLayout';
-import { BudgetEditor } from './BudgetEditor';
 import { BudgetDetails } from './BudgetDetails';
+import { buildBudgetEditorPath, getBudgetListPath, isSafeEntityId, loadBudgetListPosition, saveBudgetListPosition } from './budgetNavigation';
 import { currencyInputToCents, formatBasisPoints, formatCurrency, formatDate } from './budgetForm';
 import { generateProfessionalBudgetPdf } from './budgetPdfGenerator';
 import type { BudgetDetail, BudgetKpis, BudgetListItem, BudgetOptions } from './types';
+import { useAuxiliaryCatalogs } from '../../hooks/useAuxiliaryCatalogs';
+import { mergeCatalogAndHistoricalValues } from '../../services/catalogOptions';
 
 const fieldClass = cn(geoFieldClass, 'h-10 min-h-10 w-full px-3 text-xs font-semibold');
 const iconButtonClass = 'geo-focus-ring inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg border border-brand-border bg-brand-surface text-zinc-600 transition-[background-color,color,transform] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 active:scale-[0.97] dark:text-zinc-300 dark:hover:text-white';
@@ -71,12 +73,14 @@ const statusTone: Record<BudgetStatus, string> = {
 function budgetQuery(searchParams: URLSearchParams) {
   const params = new URLSearchParams(searchParams);
   params.delete('budgetId');
+  params.delete('highlightId');
   return params.toString();
 }
 
 function budgetStatusQuery(searchParams: URLSearchParams) {
   const params = new URLSearchParams(searchParams);
   params.delete('budgetId');
+  params.delete('highlightId');
   params.delete('status');
   return params.toString();
 }
@@ -88,27 +92,61 @@ function centsParamToReais(value: string | null) {
   return `${cents / 100n}${fraction ? `.${fraction}` : ''}`;
 }
 
+function detailToListItem(detail: BudgetDetail): BudgetListItem {
+  return {
+    id: detail.id,
+    groupId: detail.grupoId,
+    version: detail.versao,
+    number: detail.codigoOrcamento,
+    status: detail.status,
+    description: detail.descricao,
+    serviceType: detail.servicoTipo,
+    propertyType: detail.imovelTipo,
+    propertyName: detail.imovelNome,
+    municipality: detail.municipio,
+    state: detail.uf,
+    technicalLead: detail.responsavelTecnico,
+    issueDate: detail.dataEmissao,
+    validUntil: detail.validadeAte,
+    totalCents: detail.valorTotal,
+    estimatedTaxesCents: detail.impostosPrevistos,
+    netFeesCents: detail.honorariosLiquidos,
+    estimatedProfitCents: detail.lucroEstimado,
+    marginBasisPoints: detail.margemPontosBase,
+    clientId: detail.clienteId,
+    clientName: detail.clientName,
+    projectId: detail.projetoId,
+    projectName: detail.projectName,
+    viewedAt: detail.visualizadoEm
+  };
+}
+
 export function Orcamentos() {
   const queryClient = useQueryClient();
-  const location = useLocation();
+  const catalogsQuery = useAuxiliaryCatalogs();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryString = budgetQuery(searchParams);
   const statusQueryString = budgetStatusQuery(searchParams);
   const selectedId = searchParams.get('budgetId');
-  const creationContext = location.state as { createForClienteId?: string; opportunityId?: string; openCreateModal?: boolean } | null;
-  const initialClientId = creationContext?.createForClienteId;
-  const opportunityId = creationContext?.opportunityId;
-  const [editorOpen, setEditorOpen] = useState(Boolean(initialClientId || creationContext?.openCreateModal));
-  const [editingBudget, setEditingBudget] = useState<BudgetDetail | null>(null);
+  const highlightIdParam = searchParams.get('highlightId');
+  const highlightId = isSafeEntityId(highlightIdParam) ? highlightIdParam : null;
   const [deleteTarget, setDeleteTarget] = useState<BudgetListItem | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+  const tableRegionRef = useRef<HTMLDivElement | null>(null);
+  const budgetRowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const returnTo = useMemo(() => getBudgetListPath(searchParams), [searchParams]);
 
   const { data: budgets = [], isLoading: budgetsLoading } = useQuery<BudgetListItem[]>({
     queryKey: ['budgets', queryString],
     queryFn: () => apiClient.get(`/api/orcamentos${queryString ? `?${queryString}` : ''}`)
   });
+  const serviceTypeOptions = useMemo(() => mergeCatalogAndHistoricalValues(
+    catalogsQuery.data?.services.filter((item) => item.ativo).map((item) => item.nome) ?? [],
+    [...budgets.map((budget) => budget.serviceType), searchParams.get('serviceType')]
+  ), [budgets, catalogsQuery.data?.services, searchParams]);
   const { data: kpis = emptyKpis, isLoading: kpisLoading } = useQuery<BudgetKpis>({
     queryKey: ['budget-kpis', queryString],
     queryFn: () => apiClient.get(`/api/orcamentos/kpis${queryString ? `?${queryString}` : ''}`)
@@ -126,6 +164,17 @@ export function Orcamentos() {
     queryFn: () => selectedId ? apiClient.get(`/api/orcamentos/${selectedId}`) : Promise.resolve(null),
     enabled: Boolean(selectedId)
   });
+  const highlightInFilteredList = Boolean(highlightId && budgets.some((budget) => budget.id === highlightId));
+  const { data: highlightedDetail = null } = useQuery<BudgetDetail | null>({
+    queryKey: ['budget-detail', highlightId],
+    queryFn: () => highlightId ? apiClient.get(`/api/orcamentos/${highlightId}`) : Promise.resolve(null),
+    enabled: Boolean(highlightId) && !budgetsLoading && !highlightInFilteredList
+  });
+  const displayedBudgets = useMemo(() => (
+    highlightedDetail && !highlightInFilteredList
+      ? [detailToListItem(highlightedDetail), ...budgets]
+      : budgets
+  ), [budgets, highlightInFilteredList, highlightedDetail]);
 
   const updateFilter = (key: string, value: string) => {
     setSearchParams((current) => {
@@ -149,24 +198,45 @@ export function Orcamentos() {
     return next;
   }, { replace: true });
 
-  const handleBudgetSaved = async (saved: BudgetDetail) => {
-    setEditorOpen(false);
-    setEditingBudget(null);
-    queryClient.setQueryData(['budget-detail', saved.id], saved);
-    if (opportunityId) {
-      try {
-        await apiClient.post(`/api/oportunidades/${opportunityId}/link-budget`, { orcamentoId: saved.id });
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['opportunities'] }),
-          queryClient.invalidateQueries({ queryKey: ['opportunity-analytics'] })
-        ]);
-        toast.success('Or\u00e7amento vinculado \u00e0 oportunidade e etapa atualizada para Proposta.');
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'O or\u00e7amento foi salvo, mas n\u00e3o foi poss\u00edvel vincul\u00e1-lo \u00e0 oportunidade.');
-      }
-    }
-    openDetail(saved);
+  const openBudgetEditor = (budgetId?: string) => {
+    saveBudgetListPosition({
+      returnTo,
+      windowY: window.scrollY,
+      tableTop: tableRegionRef.current?.scrollTop || 0,
+      tableLeft: tableRegionRef.current?.scrollLeft || 0
+    });
+    navigate(buildBudgetEditorPath({ budgetId, returnTo }));
   };
+
+  useEffect(() => {
+    if (budgetsLoading || highlightId) return;
+    const savedPosition = loadBudgetListPosition(returnTo);
+    if (!savedPosition) return;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: savedPosition.windowY, behavior: 'auto' });
+      if (tableRegionRef.current) {
+        tableRegionRef.current.scrollTop = savedPosition.tableTop;
+        tableRegionRef.current.scrollLeft = savedPosition.tableLeft;
+      }
+    });
+  }, [budgetsLoading, highlightId, returnTo]);
+
+  useEffect(() => {
+    if (budgetsLoading || !highlightId) return;
+    loadBudgetListPosition(returnTo);
+    const row = budgetRowRefs.current.get(highlightId);
+    if (!row) return;
+    window.requestAnimationFrame(() => row.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' }));
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const timeout = window.setTimeout(() => {
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete('highlightId');
+        return next;
+      }, { replace: true });
+    }, reduceMotion ? 1200 : 3200);
+    return () => window.clearTimeout(timeout);
+  }, [budgetsLoading, highlightId, highlightedDetail, returnTo, setSearchParams]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/api/orcamentos/${id}`),
@@ -211,7 +281,7 @@ export function Orcamentos() {
     }
   };
 
-  const hasFilters = useMemo(() => Array.from(searchParams.keys()).some((key) => key !== 'budgetId'), [searchParams]);
+  const hasFilters = useMemo(() => Array.from(searchParams.keys()).some((key) => key !== 'budgetId' && key !== 'highlightId'), [searchParams]);
   const activeFilters = useMemo(() => {
     const labels: Record<string, string> = {
       query: 'Busca',
@@ -231,7 +301,7 @@ export function Orcamentos() {
     };
 
     return Array.from(searchParams.entries())
-      .filter(([key]) => key !== 'budgetId' && key !== 'status')
+      .filter(([key]) => key !== 'budgetId' && key !== 'highlightId' && key !== 'status')
       .map(([key, rawValue]) => {
         let value = rawValue;
         if (key === 'clientId') value = options.clients.find((client) => client.id === rawValue)?.name || rawValue;
@@ -284,7 +354,7 @@ export function Orcamentos() {
           action={(
             <button
               type="button"
-              onClick={() => { setEditingBudget(null); setEditorOpen(true); }}
+              onClick={() => openBudgetEditor()}
               className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}
             >
               <span aria-hidden="true" className={headerPrimaryActionIconClass}>
@@ -325,7 +395,7 @@ export function Orcamentos() {
           </label>
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary">
             <span>Tipo de serviço</span>
-            <FormSelect aria-label="Filtrar por tipo de serviço" value={searchParams.get('serviceType') || ''} onChange={(event) => updateFilter('serviceType', event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{SERVICE_TYPES.map((type) => <option key={type}>{type}</option>)}</FormSelect>
+            <FormSelect aria-label="Filtrar por tipo de serviço" value={searchParams.get('serviceType') || ''} onChange={(event) => updateFilter('serviceType', event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{serviceTypeOptions.map((type) => <option key={type}>{type}</option>)}</FormSelect>
           </label>
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Município</span><input aria-label="Filtrar por município" value={searchParams.get('municipality') || ''} onChange={(event) => updateFilter('municipality', event.target.value)} placeholder="Município" className={fieldClass} /></label>
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Imóvel</span><input aria-label="Filtrar por imóvel" value={searchParams.get('property') || ''} onChange={(event) => updateFilter('property', event.target.value)} placeholder="Imóvel" className={fieldClass} /></label>
@@ -336,8 +406,8 @@ export function Orcamentos() {
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Emissão final</span><DatePickerField aria-label="Emissão final" value={searchParams.get('issueTo') || ''} onChange={(event) => updateFilter('issueTo', event.target.value)} className={fieldClass} /></label>
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Validade inicial</span><DatePickerField aria-label="Validade inicial" value={searchParams.get('validFrom') || ''} onChange={(event) => updateFilter('validFrom', event.target.value)} className={fieldClass} /></label>
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Validade final</span><DatePickerField aria-label="Validade final" value={searchParams.get('validTo') || ''} onChange={(event) => updateFilter('validTo', event.target.value)} className={fieldClass} /></label>
-          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor mínimo</span><input aria-label="Valor mínimo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('minValueCents'))} onChange={(event) => updateFilter('minValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor mínimo (R$)" className={fieldClass} /></label>
-          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor máximo</span><input aria-label="Valor máximo em reais" type="number" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('maxValueCents'))} onChange={(event) => updateFilter('maxValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor máximo (R$)" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor mínimo</span><NumericInput aria-label="Valor mínimo em reais" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('minValueCents'))} onChange={(event) => updateFilter('minValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor mínimo (R$)" className={fieldClass} /></label>
+          <label className="space-y-1.5 text-xs font-semibold text-text-secondary"><span>Valor máximo</span><NumericInput aria-label="Valor máximo em reais" min="0" step="0.01" inputMode="decimal" value={centsParamToReais(searchParams.get('maxValueCents'))} onChange={(event) => updateFilter('maxValueCents', event.target.value ? String(currencyInputToCents(event.target.value)) : '')} placeholder="Valor máximo (R$)" className={fieldClass} /></label>
         </PageFilterBar>
 
         {activeFilters.length > 0 && <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2" aria-label="Filtros ativos"><span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">Filtros ativos</span>{activeFilters.map((filter) => <button key={filter.key} type="button" onClick={() => updateFilter(filter.key, '')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-border bg-brand-surface-subtle px-3 text-xs font-medium text-text-secondary transition-[background-color,color,border-color] hover:border-brand-primary-300 hover:text-text-primary" aria-label={`Remover filtro ${filter.label}: ${filter.value}`}><span>{filter.label}: {filter.value}</span><X aria-hidden="true" size={13} /></button>)}</div>}
@@ -407,7 +477,7 @@ export function Orcamentos() {
               <p className="mt-1 text-sm text-text-muted">Localize, compare e conduza cada proposta.</p>
             </div>
             <span className="inline-flex min-h-8 items-center rounded-full border border-brand-border bg-brand-surface-subtle px-3 font-mono text-xs font-semibold tabular-nums text-text-secondary" aria-live="polite">
-              {budgets.length} {budgets.length === 1 ? 'or\u00e7amento exibido' : 'or\u00e7amentos exibidos'}
+              {displayedBudgets.length} {displayedBudgets.length === 1 ? 'or\u00e7amento exibido' : 'or\u00e7amentos exibidos'}
             </span>
           </div>
 
@@ -422,15 +492,15 @@ export function Orcamentos() {
           </nav>
 
           <div className="mt-4">
-            {budgetsLoading ? <div className="space-y-2">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div> : budgets.length === 0 ? (
-              <div className="geo-card flex flex-col items-center px-6 py-16 text-center"><FileText aria-hidden="true" size={44} className="text-text-muted" weight="duotone" /><h3 className="mt-4 text-lg font-semibold text-text-primary">Nenhum or&ccedil;amento encontrado</h3><p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">{hasFilters ? 'Ajuste ou limpe os filtros para ampliar a busca.' : 'Crie o primeiro or\u00e7amento para iniciar seu fluxo comercial.'}</p>{!hasFilters && <button type="button" onClick={() => setEditorOpen(true)} className="mt-5 geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5"><Plus aria-hidden="true" size={17} /> Novo or&ccedil;amento</button>}</div>
+            {budgetsLoading ? <div className="space-y-2">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div> : displayedBudgets.length === 0 ? (
+              <div className="geo-card flex flex-col items-center px-6 py-16 text-center"><FileText aria-hidden="true" size={44} className="text-text-muted" weight="duotone" /><h3 className="mt-4 text-lg font-semibold text-text-primary">Nenhum or&ccedil;amento encontrado</h3><p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">{hasFilters ? 'Ajuste ou limpe os filtros para ampliar a busca.' : 'Crie o primeiro or\u00e7amento para iniciar seu fluxo comercial.'}</p>{!hasFilters && <button type="button" onClick={() => openBudgetEditor()} className="mt-5 geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5"><Plus aria-hidden="true" size={17} /> Novo or&ccedil;amento</button>}</div>
             ) : (
               <div className="geo-card max-w-full overflow-hidden">
                 <div className="flex items-center justify-end gap-2 border-b border-brand-border bg-brand-surface-subtle/50 px-4 py-2 text-[11px] font-medium text-text-muted lg:hidden">
                   <ArrowsLeftRight aria-hidden="true" size={15} />
                   Arraste para ver todas as colunas
                 </div>
-                <div className="geo-focus-ring max-h-[70vh] overflow-auto overscroll-contain" role="region" aria-label="Tabela de propostas comerciais" tabIndex={0}>
+                <div ref={tableRegionRef} className="geo-focus-ring max-h-[70vh] overflow-auto overscroll-contain" role="region" aria-label="Tabela de propostas comerciais" tabIndex={0}>
                   <table className="w-full min-w-[1160px] border-collapse text-left">
                     <thead>
                       <tr className="border-b border-brand-border text-xs uppercase tracking-wider text-text-muted">
@@ -445,11 +515,19 @@ export function Orcamentos() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-brand-border">
-                      {budgets.map((budget) => (
-                        <tr key={budget.id} className="group transition-colors duration-150 hover:bg-brand-surface-subtle/60">
-                          <td className="sticky left-0 z-10 bg-brand-surface px-4 py-3 shadow-[12px_0_20px_-20px_rgba(0,0,0,0.55)] transition-colors duration-150 group-hover:bg-brand-surface-subtle">
+                      {displayedBudgets.map((budget) => (
+                        <tr
+                          key={budget.id}
+                          ref={(node) => { if (node) budgetRowRefs.current.set(budget.id, node); else budgetRowRefs.current.delete(budget.id); }}
+                          className={cn(
+                            'group transition-[background-color,box-shadow] duration-300 motion-reduce:transition-none hover:bg-brand-surface-subtle/60',
+                            highlightId === budget.id && 'bg-emerald-50/80 shadow-[inset_4px_0_0_0_rgb(16_185_129)] dark:bg-emerald-500/10'
+                          )}
+                        >
+                          <td className={cn('sticky left-0 z-10 px-4 py-3 shadow-[12px_0_20px_-20px_rgba(0,0,0,0.55)] transition-colors duration-150 motion-reduce:transition-none group-hover:bg-brand-surface-subtle', highlightId === budget.id ? 'bg-emerald-50 dark:bg-[#14251f]' : 'bg-brand-surface')}>
                             <button type="button" onClick={() => openDetail(budget)} className="geo-focus-ring rounded-md text-left font-mono font-bold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.number || 'Rascunho'} <span className="text-xs text-text-muted">v{budget.version}</span></button>
                             <p className="mt-1 max-w-52 truncate text-xs text-text-muted">{budget.description || 'Sem descri\u00e7\u00e3o'}</p>
+                            {highlightId === budget.id && !highlightInFilteredList && <span className="mt-1.5 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-100">Fora dos filtros atuais</span>}
                           </td>
                           <td className="px-4 py-3"><p className="max-w-52 truncate text-sm font-semibold text-text-primary">{budget.clientName}</p><p className="mt-1 max-w-52 truncate text-xs text-text-muted">{budget.propertyName || 'Im\u00f3vel n\u00e3o informado'} &bull; {budget.municipality || 'Munic\u00edpio n\u00e3o informado'}</p></td>
                           <td className="px-4 py-3"><p className="max-w-64 truncate text-sm text-text-secondary">{budget.serviceType || 'N\u00e3o informado'}</p>{budget.projectId && <Link to={`/projetos/${budget.projectId}`} className="mt-1 block max-w-64 truncate text-xs font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.projectName || 'Abrir projeto'}</Link>}</td>
@@ -457,10 +535,10 @@ export function Orcamentos() {
                           <td className="px-4 py-3"><span className={cn('inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold', statusTone[budget.status])}>{BUDGET_STATUS_LABELS[budget.status]}</span>{budget.viewedAt && <p className="mt-1 text-xs text-text-muted">Visualizado</p>}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-bold tabular-nums text-text-primary">{formatCurrency(budget.totalCents)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right font-mono tabular-nums text-text-primary">{formatBasisPoints(budget.marginBasisPoints)}</td>
-                          <td className="sticky right-0 z-10 bg-brand-surface p-3 shadow-[-12px_0_20px_-20px_rgba(0,0,0,0.55)] transition-colors duration-150 group-hover:bg-brand-surface-subtle">
-                            <div className="flex justify-end gap-1 rounded-xl border border-transparent bg-brand-surface-subtle/50 p-1 transition-[border-color,background-color] duration-150 group-hover:border-brand-border group-hover:bg-brand-surface">
+                          <td className={cn('sticky right-0 z-10 p-3 shadow-[-12px_0_20px_-20px_rgba(0,0,0,0.55)] transition-colors duration-150 motion-reduce:transition-none group-hover:bg-brand-surface-subtle', highlightId === budget.id ? 'bg-emerald-50 dark:bg-[#14251f]' : 'bg-brand-surface')}>
+                            <div className="flex justify-end gap-1 rounded-xl border border-transparent bg-brand-surface-subtle/50 p-1 transition-[border-color,background-color] duration-150 motion-reduce:transition-none group-hover:border-brand-border group-hover:bg-brand-surface">
                               <button type="button" onClick={() => openDetail(budget)} className={cn(iconButtonClass, 'border-sky-200/80 bg-sky-50 text-sky-700 dark:border-sky-400/20 dark:bg-sky-950/30 dark:text-sky-200')} aria-label={`Visualizar ${budget.number || 'or\u00e7amento'} de ${budget.clientName}`}><Eye aria-hidden="true" size={17} /></button>
-                              {budget.status === 'rascunho' && <button type="button" onClick={async () => { const detail = await apiClient.get<BudgetDetail>(`/api/orcamentos/${budget.id}`); setEditingBudget(detail); setEditorOpen(true); }} className={cn(iconButtonClass, 'border-indigo-200/80 bg-indigo-50 text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-200')} aria-label={`Editar rascunho de ${budget.clientName}`}><PencilSimple aria-hidden="true" size={17} /></button>}
+                              {budget.status === 'rascunho' && <button type="button" onClick={() => openBudgetEditor(budget.id)} className={cn(iconButtonClass, 'border-indigo-200/80 bg-indigo-50 text-indigo-700 dark:border-indigo-400/20 dark:bg-indigo-950/30 dark:text-indigo-200')} aria-label={`Editar rascunho de ${budget.clientName}`}><PencilSimple aria-hidden="true" size={17} /></button>}
                               <button type="button" onClick={() => duplicateMutation.mutate(budget.id)} className={iconButtonClass} aria-label={`Duplicar or\u00e7amento de ${budget.clientName}`}><Copy aria-hidden="true" size={17} /></button>
                               <button type="button" onClick={() => void generatePdf(budget.id)} disabled={generatingPdfId !== null} aria-busy={generatingPdfId === budget.id} className={cn(iconButtonClass, 'border-sky-200/80 bg-sky-50 text-sky-700 disabled:cursor-wait disabled:opacity-60 dark:border-sky-400/20 dark:bg-sky-950/30 dark:text-sky-200')} aria-label={generatingPdfId === budget.id ? 'Gerando PDF…' : `Gerar PDF do or\u00e7amento de ${budget.clientName}`}><FilePdf aria-hidden="true" size={17} /></button>
                               {budget.status === 'rascunho' && <button type="button" onClick={() => setDeleteTarget(budget)} className={cn(iconButtonClass, 'border-red-200/80 bg-red-50 text-brand-red-700 dark:border-red-400/20 dark:bg-red-950/30 dark:text-brand-red-100')} aria-label={`Excluir rascunho de ${budget.clientName}`}><Trash aria-hidden="true" size={17} /></button>}
@@ -477,8 +555,8 @@ export function Orcamentos() {
         </section>
       </div>
 
-      {editorOpen && <BudgetEditor key={`budget-editor-${editingBudget?.id || `new-${initialClientId || 'empty'}`}`} isOpen onClose={() => { setEditorOpen(false); setEditingBudget(null); }} options={options} initial={editingBudget} initialClientId={initialClientId} onSaved={handleBudgetSaved} />}
-      {selectedDetail && <BudgetDetails key={`budget-details-${selectedDetail.id}`} detail={selectedDetail} options={options} onClose={closeDetail} onEdit={(detail) => { closeDetail(); setEditingBudget(detail); setEditorOpen(true); }} onOpenBudget={(detail) => openDetail(detail)} />}
+      {highlightId && <p className="sr-only" role="status" aria-live="polite">Orçamento salvo e destacado na listagem.</p>}
+      {selectedDetail && <BudgetDetails key={`budget-details-${selectedDetail.id}`} detail={selectedDetail} options={options} onClose={closeDetail} onEdit={(detail) => openBudgetEditor(detail.id)} onOpenBudget={(detail) => openDetail(detail)} />}
       <ConfirmDialog isOpen={Boolean(deleteTarget)} onClose={() => setDeleteTarget(null)} onConfirm={() => { if (deleteTarget) deleteMutation.mutate(deleteTarget.id); }} title="Excluir rascunho" description={`O rascunho de ${deleteTarget?.clientName || 'cliente n\u00e3o informado'} ser\u00e1 removido. Or\u00e7amentos emitidos ou aprovados n\u00e3o podem ser exclu\u00eddos.`} confirmText={deleteMutation.isPending ? 'Excluindo\u2026' : 'Excluir rascunho'} loading={deleteMutation.isPending} />
     </Layout>
   );

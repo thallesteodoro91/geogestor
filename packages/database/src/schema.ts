@@ -32,6 +32,7 @@ export const clientes = sqliteTable('clientes', {
   email: text('email'),
   telefone: text('telefone'),
   endereco: text('endereco'),
+  enderecoLegado: text('endereco_legado'),
   numero: text('numero'),
   semNumero: integer('sem_numero', { mode: 'boolean' }).default(false),
   complemento: text('complemento'),
@@ -51,7 +52,11 @@ export const clientes = sqliteTable('clientes', {
   origemDetalhe: text('origem_detalhe'),
   indicadoPor: text('indicado_por'),
   categoria: text('categoria'),
+  categoriaLegada: text('categoria_legada'),
   perfis: text('perfis'),
+  enderecoValidacao: text('endereco_validacao').default('nao_validado'),
+  revisaoCadastral: integer('revisao_cadastral', { mode: 'boolean' }).default(false).notNull(),
+  revisaoMotivos: text('revisao_motivos'),
   anotacoes: text('anotacoes'),
   situacao: text('situacao'),
   previsaoEntrega: text('previsao_entrega'),
@@ -809,6 +814,7 @@ export const propriedades = sqliteTable('propriedades', {
   itr: text('itr'),
   cidade: text('cidade'),
   municipio: text('municipio'),
+  uf: text('uf'),
   situacaoImovel: text('situacao_imovel'),
   latitude: real('latitude'),
   longitude: real('longitude'),
@@ -862,6 +868,43 @@ export const configuracoesOperacionais = sqliteTable('configuracoes_operacionais
   ...timestamps
 }, (table) => ({
   chaveIdx: uniqueIndex('uq_configuracoes_operacionais_chave').on(table.chave)
+}));
+
+export const alertaConfiguracao = sqliteTable('alerta_configuracao', {
+  id: text('id').primaryKey(),
+  habilitado: integer('habilitado', { mode: 'boolean' }).default(true).notNull(),
+  notificacaoNativa: integer('notificacao_nativa', { mode: 'boolean' }).default(true).notNull(),
+  ...timestamps
+});
+
+export const alertaCategoriaConfiguracao = sqliteTable('alerta_categoria_configuracao', {
+  categoria: text('categoria').primaryKey(),
+  habilitado: integer('habilitado', { mode: 'boolean' }).default(true).notNull(),
+  diasAntecedencia: integer('dias_antecedencia').default(7).notNull(),
+  recorrencia: text('recorrencia').default('daily').notNull(),
+  intervaloDias: integer('intervalo_dias').default(1).notNull(),
+  alertarNoVencimento: integer('alertar_no_vencimento', { mode: 'boolean' }).default(true).notNull(),
+  manterVencidos: integer('manter_vencidos', { mode: 'boolean' }).default(true).notNull(),
+  ...timestamps
+}, (table) => ({
+  enabledIdx: index('idx_alerta_categoria_habilitado').on(table.habilitado, table.categoria)
+}));
+
+export const alertaOcorrencias = sqliteTable('alerta_ocorrencias', {
+  id: text('id').primaryKey(),
+  chaveOcorrencia: text('chave_ocorrencia').notNull(),
+  categoria: text('categoria').notNull(),
+  origemId: text('origem_id').notNull(),
+  dataVencimento: text('data_vencimento').notNull(),
+  ciclo: text('ciclo').notNull(),
+  lidaEm: text('lida_em'),
+  ocultadaEm: text('ocultada_em'),
+  notificadaNativamenteEm: text('notificada_nativamente_em'),
+  ...timestamps
+}, (table) => ({
+  occurrenceKeyIdx: uniqueIndex('uq_alerta_ocorrencias_chave').on(table.chaveOcorrencia),
+  sourceIdx: index('idx_alerta_ocorrencias_origem').on(table.categoria, table.origemId, table.dataVencimento),
+  stateIdx: index('idx_alerta_ocorrencias_estado').on(table.ocultadaEm, table.lidaEm, table.createdAt)
 }));
 
 export const calculosSalvos = sqliteTable('calculos_salvos', {

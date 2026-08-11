@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { DatePickerField } from '../../components/Form';
+import { DatePickerField, FormSelect } from '../../components/Form';
 import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
@@ -636,10 +636,12 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
                   className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                 />
               </label>
-              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 sm:col-span-2">
-                <span>Comprovante vinculado</span>
-                <select
+              <div className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                <label htmlFor="receipt-document">Comprovante vinculado</label>
+                <FormSelect
+                  id="receipt-document"
                   name="comprovanteDocumentoId"
+                  aria-label="Comprovante vinculado"
                   value={receiptForm.comprovanteDocumentoId}
                   onChange={(event) => setReceiptForm((current) => ({ ...current, comprovanteDocumentoId: event.target.value }))}
                   disabled={loadingReceiptDocuments}
@@ -651,11 +653,11 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
                       {document.nome}{document.projetoId ? ' · documento do projeto' : ' · documento geral do cliente'}
                     </option>
                   ))}
-                </select>
+                </FormSelect>
                 {!loadingReceiptDocuments && receiptDocuments.length === 0 && (
                   <span className="block font-normal text-zinc-500">Envie o comprovante na área de documentos do cliente ou projeto para selecioná-lo aqui.</span>
                 )}
-              </label>
+              </div>
             </div>
             <label className="block space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
               <span>Observações</span>

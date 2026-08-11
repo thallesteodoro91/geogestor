@@ -15,7 +15,6 @@ import reportsIcon from '../assets/magnific-icons/invoice_9510031.svg';
 import planningIcon from '../assets/magnific-icons/objective_5799225.svg';
 import recordsIcon from '../assets/magnific-icons/notes_8079875.svg';
 import settingsIcon from '../assets/magnific-icons/settings_4415587.svg';
-import auditIcon from '../assets/magnific-icons/auditor_5807551.svg';
 import helpIcon from '../assets/magnific-icons/question_8288345.svg';
 
 interface SidebarItem {
@@ -151,11 +150,11 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           activePaths: ['/calendario', '/tarefas'],
         },
         {
-          name: 'Ferramentas',
+          name: 'Topografia',
           path: '/topografia',
           icon: topographyIcon,
           created: true,
-          activePaths: ['/topografia', '/importacao'],
+          activePaths: ['/topografia'],
         },
       ],
     },
@@ -164,11 +163,20 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const administrationItems: SidebarItem[] = [
     { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
     { name: 'Planejamento', path: '/planejamento', icon: planningIcon, created: true },
-    { name: 'Cadastros', path: '/cadastros', icon: recordsIcon, created: true },
-    { name: 'Propriedades', path: '/propriedades', icon: recordsIcon, created: true },
-    { name: 'Qualidade dos dados', path: '/qualidade-dados', icon: auditIcon, created: true },
-    { name: 'Configurações', path: '/configuracoes', icon: settingsIcon, created: true },
-    { name: 'Logs de Auditoria', path: '/audit-logs', icon: auditIcon, created: true },
+    {
+      name: 'Cadastros',
+      path: '/cadastros',
+      icon: recordsIcon,
+      created: true,
+      activePaths: ['/cadastros', '/propriedades'],
+    },
+    {
+      name: 'Configurações',
+      path: '/configuracoes',
+      icon: settingsIcon,
+      created: true,
+      activePaths: ['/configuracoes', '/importacao', '/qualidade-dados', '/audit-logs'],
+    },
     { name: 'Ajuda', path: '/ajuda', icon: helpIcon, created: true },
   ];
 
@@ -328,7 +336,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
         </nav>
 
-        <div className="border-t border-zinc-100 p-4 dark:border-zinc-800">
+        <div className="border-t border-zinc-100 px-4 pb-[4.5rem] pt-4 dark:border-zinc-800">
           <div className="flex items-center gap-3 rounded-lg border border-zinc-200/70 bg-zinc-50 p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 font-heading text-sm font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
               {(identity?.name || 'GG').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}

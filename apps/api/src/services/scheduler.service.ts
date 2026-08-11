@@ -6,6 +6,9 @@ import { OperationalLogService } from './operational-log.service';
 import { RecoverableFileService } from './recoverable-file.service';
 import { SqliteMaintenanceService } from './sqlite-maintenance.service';
 import { BackupPolicyService, type BackupPolicy } from './backup-policy.service';
+import { BackupActivityService } from './backup-activity.service';
+import { MaintenanceHistoryService } from './maintenance-history.service';
+import path from 'node:path';
 
 const getErrorMessage = (err: unknown) => (
   err instanceof Error ? err.message : String(err)
@@ -17,7 +20,7 @@ export const SCHEDULER_DELAYS = {
   maintenanceBootMs: 60_000,
   syncIntervalMs: 15 * 60 * 1000,
   maintenanceIntervalMs: 15 * 60 * 1000,
-  backupIntervalMs: 60 * 60 * 1000,
+  backupIntervalMs: 60 * 1000,
   backupDueMs: 24 * 60 * 60 * 1000,
   completeBackupDueMs: 7 * 24 * 60 * 60 * 1000
 } as const;
@@ -68,51 +71,87 @@ export class SchedulerService {
     }
   }
 
-  private static async runBackup(policy?: BackupPolicy) {
+  private static async runBackup(
+    policy?: BackupPolicy,
+    forceComplete = false,
+    onProgress?: (progress: { stage: string; processedFiles: number; processedBytes: number; totalFiles: number; totalBytes: number }) => void
+  ) {
     if (this.backupRunning) return;
     this.backupRunning = true;
     const startedAtMs = performance.now();
+    const attemptedAt = new Date().toISOString();
     try {
       const activePolicy = policy || await BackupPolicyService.get();
+      const activityAtStart = BackupActivityService.snapshot();
+      const protectedSequence = activityAtStart.changeSequence;
       const executionOptions = {
         destinationDirectory: activePolicy.destinationDirectory,
         retention: activePolicy.retention,
-        maxStorageBytes: activePolicy.maxStorageBytes
+        maxStorageBytes: activePolicy.maxStorageBytes,
+        retentionRecentHours: activePolicy.retentionRecentHours,
+        retentionDailyDays: activePolicy.retentionDailyDays,
+        retentionMonthlyMonths: activePolicy.retentionMonthlyMonths
+        ,onProgress
       };
-      await BackupService.createLocalBackup(executionOptions);
-      if (isAutomaticCompleteBackupDue(
+      await OperationalLogService.setState('backup', 'running', { attemptedAt });
+      const databaseBackup = forceComplete ? null : await BackupService.createLocalBackup(executionOptions);
+      let completeBackupResult: Awaited<ReturnType<typeof BackupService.createCompleteBackup>> | null = null;
+      if (forceComplete || isAutomaticCompleteBackupDue(
         OperationalLogService.getState(),
         Date.now(),
         activePolicy.completeIntervalDays * 24 * 60 * 60 * 1000
       )) {
         const completeStartedAtMs = performance.now();
+        const completeAttemptedAt = new Date().toISOString();
         try {
+          await OperationalLogService.setState('backupComplete', 'running', { attemptedAt: completeAttemptedAt });
+          await FileSystemOutboxService.processPending();
           const filesRootDirectory = await FileSystemService.getRootFolder();
-          await BackupService.createCompleteBackup(filesRootDirectory, executionOptions);
+          const completeBackup = await BackupService.createCompleteBackup(filesRootDirectory, executionOptions);
+          completeBackupResult = completeBackup;
           const completeDetails = {
+            attemptedAt: completeAttemptedAt,
             completedAt: new Date().toISOString(),
-            durationMs: Number((performance.now() - completeStartedAtMs).toFixed(2))
+            durationMs: Number((performance.now() - completeStartedAtMs).toFixed(2)),
+            totalBytes: completeBackup.totalBytes,
+            totalFiles: completeBackup.totalFiles
           };
           await OperationalLogService.setState('backupComplete', 'ok', completeDetails);
+          await BackupActivityService.markProtected(protectedSequence, {
+            completedAt: completeDetails.completedAt,
+            bundleName: path.basename(completeBackup.bundlePath)
+          });
           await OperationalLogService.info('automatic-complete-backup-completed', completeDetails);
         } catch (error) {
           const completeDetails = {
+            attemptedAt: completeAttemptedAt,
             durationMs: Number((performance.now() - completeStartedAtMs).toFixed(2)),
             error
           };
           await OperationalLogService.setState('backupComplete', 'failed', completeDetails);
           await OperationalLogService.error('automatic-complete-backup-failed', completeDetails);
+          if (forceComplete) throw error;
         }
       }
+      if (databaseBackup && !completeBackupResult && !activityAtStart.completeRequired) {
+        await BackupActivityService.markProtected(protectedSequence, {
+          completedAt: new Date().toISOString(),
+          bundleName: path.basename(databaseBackup.bundlePath)
+        });
+      }
       const details = {
+        attemptedAt,
         completedAt: new Date().toISOString(),
-        durationMs: Number((performance.now() - startedAtMs).toFixed(2))
+        durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+        totalBytes: (databaseBackup || completeBackupResult)?.totalBytes || 0,
+        totalFiles: (databaseBackup || completeBackupResult)?.totalFiles || 0
       };
       await OperationalLogService.setState('backup', 'ok', details);
       await OperationalLogService.info('automatic-backup-completed', details);
       console.log('[SchedulerService] Backup concluído com sucesso.');
     } catch (error) {
       const details = {
+        attemptedAt,
         durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
         error
       };
@@ -126,6 +165,11 @@ export class SchedulerService {
 
   private static async runBackupIfDue() {
     const policy = await BackupPolicyService.get();
+    if (!policy.automaticEnabled) return;
+    if (BackupActivityService.isDue(policy.changeDebounceMinutes)) {
+      await this.runBackup(policy, BackupActivityService.snapshot().completeRequired);
+      return;
+    }
     if (!isAutomaticBackupDue(
       OperationalLogService.getState(),
       Date.now(),
@@ -151,6 +195,16 @@ export class SchedulerService {
     try {
       const reconciliation = await FileSystemOutboxService.processPending();
       const sqlite = await SqliteMaintenanceService.runIfDue();
+      const policy = await BackupPolicyService.get();
+      let restoreTest: Awaited<ReturnType<typeof BackupService.testLatestCompleteBackup>> | null = null;
+      if (policy.runRestoreTests) {
+        const [latestTest] = await MaintenanceHistoryService.list({ type: 'restore_test', limit: 1 });
+        const lastTestAt = latestTest?.completedAt ? Date.parse(latestTest.completedAt) : 0;
+        const due = !Number.isFinite(lastTestAt)
+          || lastTestAt === 0
+          || Date.now() - lastTestAt >= policy.restoreTestIntervalDays * 24 * 60 * 60 * 1000;
+        if (due) restoreTest = await BackupService.testLatestCompleteBackup(policy.destinationDirectory);
+      }
       let purged = 0;
       try {
         const dataRoot = await FileSystemService.getRootFolder();
@@ -163,6 +217,7 @@ export class SchedulerService {
         ...reconciliation,
         purged,
         sqlite,
+        restoreTest: restoreTest ? { testedAt: restoreTest.testedAt, type: restoreTest.type } : null,
         durationMs: Number((performance.now() - startedAtMs).toFixed(2))
       };
       await OperationalLogService.setState('maintenance', 'ok', details);
@@ -196,8 +251,7 @@ export class SchedulerService {
       }
     }, SCHEDULER_DELAYS.syncIntervalMs);
 
-    // 2. Backup Automático Diário (checado a cada 1 hora se passou de 24h)
-    // Para simplificar no contexto de desktop, faremos o backup rodar a cada 24 horas a partir do momento em que o app abre.
+    // 2. Consolida alterações recentes e também mantém o ciclo periódico de segurança.
     this.backupIntervalId = setInterval(async () => {
       try {
         console.log('[SchedulerService] Disparando Backup Automático...');
@@ -258,7 +312,15 @@ export class SchedulerService {
 
   public static async prepareForShutdown() {
     const policy = await BackupPolicyService.get();
-    if (!policy.runOnShutdown || this.backupRunning) return;
-    await this.runBackup(policy);
+    const hasPendingChanges = BackupActivityService.snapshot().pendingChanges > 0;
+    if (!policy.runOnShutdown && !(policy.automaticEnabled && hasPendingChanges)) return;
+    const existingBackupWasRunning = this.backupRunning;
+    while (this.backupRunning) {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (existingBackupWasRunning) return;
+    await this.runBackup(policy, hasPendingChanges && BackupActivityService.snapshot().completeRequired, (progress) => {
+      process.send?.({ type: 'shutdown-backup-progress', progress });
+    });
   }
 }

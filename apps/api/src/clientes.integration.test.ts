@@ -123,7 +123,7 @@ test('cria PF estruturada e edita cadastro legado sem perder categoria ou origem
       celular: '(48) 99999-8888'
     });
     await db.update(schema.clientes).set({ tipoPessoa: null, origemPrincipal: null, origemDetalhe: null }).where(eq(schema.clientes.id, legacyId));
-    await db.run(sql.raw("UPDATE schema_migrations SET status = 'failed' WHERE version = 7"));
+    await db.run(sql.raw("UPDATE schema_migrations SET status = 'failed' WHERE version = 10"));
     await runRuntimeMigrations();
 
     const migrated = await request({ method: 'GET', url: `/api/clientes/${legacyId}` });

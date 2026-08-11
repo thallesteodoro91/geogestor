@@ -9,11 +9,11 @@ import { DatePickerField, FormSelect } from '../../components/Form';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient, getDownloadUrl } from '../../services/apiClient';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, ArrowUpRight, FolderOpen, Folder, PresentationChart, Files, FilePdf, FileDoc, FileText, FileDashed, Trash, MapPin, Compass, SquaresFour, MapTrifold, DownloadSimple, MagnifyingGlass, ChartBar, Clock, CheckCircle, TrendUp, Warning } from '@phosphor-icons/react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { Plus, ArrowUpRight, FolderOpen, Folder, PresentationChart, Files, FilePdf, FileDoc, FileText, FileDashed, Trash, MapPin, Compass, MapTrifold, DownloadSimple, MagnifyingGlass, ChartBar, Clock, CheckCircle, TrendUp, Warning } from '@phosphor-icons/react';
 import { Skeleton } from '../../components/Skeleton';
 import { BarChart, Bar, Cell, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, PieChart, Pie } from 'recharts';
-import { chartTextColor, chartBorder, chartLegendStyle, chartCursor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartAnimationDuration, chartTextColor, chartBorder, chartLegendStyle, chartCursor, chartSegmentStyle, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
 import { DynamicTooltip } from '../../components/charts/DynamicTooltip';
 import { RichTooltip } from '../../components/charts/RichTooltip';
@@ -47,10 +47,14 @@ import pdfIcon from '../../assets/magnific-icons/notes_8079875.svg';
 import folderIcon from '../../assets/magnific-icons/project_folder.svg';
 import windowsIcon from '../../assets/magnific-icons/laptop_5938907.svg';
 import filterIcon from '../../assets/magnific-icons/filter_9757817.svg';
+import projectTabIcon from '../../assets/magnific-icons/check-list_9757809.png';
+import mapTabIcon from '../../assets/magnific-icons/map_3909526.svg';
+import statisticsTabIcon from '../../assets/magnific-icons/bar-chart_4815689.png';
 
 const ProjetosMap = lazy(() => import('./ProjetosMap').then((module) => ({ default: module.ProjetosMap })));
 
 interface OrcamentoInfo {
+  id: string;
   clienteId: string;
   projetoId?: string | null;
   status: string;
@@ -60,6 +64,8 @@ interface OrcamentoInfo {
 interface DespesaInfo {
   projetoId?: string | null;
   valor: number;
+  canceladaEm?: string | null;
+  estornadaEm?: string | null;
 }
 
 type ProjectViewMode = 'grid' | 'map' | 'operacional';
@@ -204,6 +210,7 @@ function ProjectsPageSkeleton() {
 }
 
 export function ListagemProjetos() {
+  const reduceMotion = useReducedMotion();
   const queryClient = useQueryClient();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -218,6 +225,7 @@ export function ListagemProjetos() {
   const [categoriaFilter, setCategoriaFilter] = useState('todos');
   const [projectSuccessMessage, setProjectSuccessMessage] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [activeStatusIndex, setActiveStatusIndex] = useState<number | null>(null);
 
   const viewParam = searchParams.get('visualizacao');
   const viewMode: ProjectViewMode = viewParam === 'mapa'
@@ -314,13 +322,24 @@ export function ListagemProjetos() {
   const totalProjetos = projectPage?.total || 0;
 
   const {
+    data: analyticsProjects = [],
+    isLoading: analyticsProjectsLoading,
+    isError: analyticsProjectsError,
+    refetch: refetchAnalyticsProjects
+  } = useQuery<Projeto[]>({
+    queryKey: ['projetos-operacionais-todos'],
+    queryFn: () => apiClient.getAllPages<Projeto>('/api/projetos'),
+    enabled: viewMode === 'operacional' && totalProjetos > 0
+  });
+
+  const {
     data: orcamentos = [],
     isLoading: budgetsLoading,
     isError: budgetsError,
     refetch: refetchBudgets
   } = useQuery<OrcamentoInfo[]>({
     queryKey: ['orcamentos-financeiro'],
-    queryFn: () => apiClient.get<OrcamentoInfo[]>('/api/financeiro/orcamentos'),
+    queryFn: () => apiClient.getAllPages<OrcamentoInfo>('/api/financeiro/orcamentos'),
     enabled: viewMode === 'operacional' && totalProjetos > 0
   });
 
@@ -334,13 +353,13 @@ export function ListagemProjetos() {
     queryFn: () => apiClient.get<DespesaInfo[]>('/api/financeiro/despesas'),
     enabled: viewMode === 'operacional' && totalProjetos > 0
   });
-  const operationalLoading = budgetsLoading || expensesLoading;
-  const operationalError = budgetsError || expensesError;
+  const operationalLoading = budgetsLoading || expensesLoading || analyticsProjectsLoading;
+  const operationalError = budgetsError || expensesError || analyticsProjectsError;
 
   // Calculate Operational Stats
-  const projetosConcluidos = projetos.filter((p) => p.status === 'Concluído' || p.status === 'Finalizado').length;
-  const projetosEmAndamento = projetos.filter((p) => p.status === 'Em Andamento').length;
-  const projetosAtrasados = projetos.filter(p => {
+  const projetosConcluidos = analyticsProjects.filter((p) => p.status === 'Concluído' || p.status === 'Finalizado').length;
+  const projetosEmAndamento = analyticsProjects.filter((p) => p.status === 'Em Andamento').length;
+  const projetosAtrasados = analyticsProjects.filter(p => {
     if (p.status === 'Finalizado' || p.status === 'Concluído' || p.status === 'Cancelado') return false;
     if (p.status === 'Atrasado') return true;
     if (p.dataEntrega) {
@@ -414,7 +433,7 @@ export function ListagemProjetos() {
 
   let totalDays = 0;
   let countConcluidos = 0;
-  projetos.forEach((p) => {
+  analyticsProjects.forEach((p) => {
     if ((p.status === 'Concluído' || p.status === 'Finalizado') && p.dataInicio && p.dataEntrega) {
       const start = new Date(p.dataInicio);
       const end = new Date(p.dataEntrega);
@@ -432,11 +451,11 @@ export function ListagemProjetos() {
     ? Math.round(approvedBudgets.reduce((acc: number, curr) => acc + curr.valorTotal, 0) / approvedBudgets.length) 
     : null;
 
-  const projectComparisonData = projetos.map((proj) => {
+  const projectComparisonData = analyticsProjects.map((proj) => {
     const relatedBudgets = orcamentos.filter((o) => o.projetoId === proj.id && isApprovedBudgetStatus(o.status));
     const estimatedReceita = relatedBudgets.reduce((acc: number, o) => acc + o.valorTotal, 0);
 
-    const projectExpenses = despesas.filter((d) => d.projetoId === proj.id);
+    const projectExpenses = despesas.filter((d) => d.projetoId === proj.id && !d.canceladaEm && !d.estornadaEm);
     const totalExpenses = projectExpenses.reduce((acc: number, d) => acc + d.valor, 0);
 
     return {
@@ -457,14 +476,14 @@ export function ListagemProjetos() {
     .sort((a, b) => b.Receita - a.Receita)
     .slice(0, 5);
 
-  const projectTypes = Array.from(new Set(projetos.map((projeto) => projeto.tipo || 'Rural'))).sort();
+  const projectTypes = Array.from(new Set(analyticsProjects.map((projeto) => projeto.tipo || 'Rural'))).sort();
   const projectTypeStats = projectTypes
     .map((type) => ({
       type,
-      count: projetos.filter((projeto) => (projeto.tipo || 'Rural') === type).length
+      count: analyticsProjects.filter((projeto) => (projeto.tipo || 'Rural') === type).length
     }))
     .filter((item) => item.count > 0);
-  const projectStatuses = Array.from(new Set(projetos.map((projeto) => projeto.status).filter(Boolean))) as string[];
+  const projectStatuses = Array.from(new Set(analyticsProjects.map((projeto) => projeto.status).filter(Boolean))) as string[];
   const filteredProjetos = projetos;
   const hasProjectFilters = Boolean(searchTerm || statusFilter !== 'Todos' || tipoFilter !== 'Todos' || dataInicioFilter || dataFimFilter);
   const filteredProjectsLabel = totalProjetos === 0
@@ -663,7 +682,9 @@ export function ListagemProjetos() {
                 onKeyDown={(event) => handleViewTabKeyDown(event, 0)}
                 className={localNavigationButtonClass(viewMode === 'grid', 'system', 'w-full justify-start')}
               >
-                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'grid', 'system')}><SquaresFour weight={viewMode === 'grid' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'grid', 'system', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+                  <img src={projectTabIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
+                </span>
                 <span>Projetos</span>
               </button>
               <button
@@ -678,7 +699,9 @@ export function ListagemProjetos() {
                 onKeyDown={(event) => handleViewTabKeyDown(event, 1)}
                 className={localNavigationButtonClass(viewMode === 'map', 'field', 'w-full justify-start')}
               >
-                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'map', 'field')}><MapTrifold weight={viewMode === 'map' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'map', 'field', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+                  <img src={mapTabIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
+                </span>
                 <span>Mapa</span>
               </button>
               <button
@@ -693,7 +716,9 @@ export function ListagemProjetos() {
                 onKeyDown={(event) => handleViewTabKeyDown(event, 2)}
                 className={localNavigationButtonClass(viewMode === 'operacional', 'finance', 'w-full justify-start')}
               >
-                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'operacional', 'finance')}><ChartBar weight={viewMode === 'operacional' ? 'fill' : 'regular'} className="h-4 w-4" /></span>
+                <span aria-hidden="true" className={localNavigationIconClass(viewMode === 'operacional', 'finance', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+                  <img src={statisticsTabIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
+                </span>
                 <span>Estatísticas</span>
               </button>
             </div>
@@ -852,7 +877,7 @@ export function ListagemProjetos() {
               <Warning aria-hidden="true" weight="duotone" className="h-8 w-8 text-red-500" />
               <h2 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">Não foi possível carregar os indicadores financeiros</h2>
               <p className="mt-2 max-w-lg text-sm text-zinc-500 dark:text-zinc-400">Os projetos continuam disponíveis. Tente carregar novamente os dados de custos e receitas.</p>
-              <button type="button" onClick={() => void Promise.all([refetchBudgets(), refetchExpenses()])} className={cn(secondarySmallActionButtonClass, 'mt-5 min-h-11 px-5')}>Tentar novamente</button>
+              <button type="button" onClick={() => void Promise.all([refetchAnalyticsProjects(), refetchBudgets(), refetchExpenses()])} className={cn(secondarySmallActionButtonClass, 'mt-5 min-h-11 px-5')}>Tentar novamente</button>
             </section>
           ) : (
             <>
@@ -950,13 +975,13 @@ export function ListagemProjetos() {
                   <ResponsiveContainer {...responsiveChartProps}>
                     <BarChart data={topProjectsData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                      <XAxis dataKey="name" tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <XAxis dataKey="name" tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} minTickGap={18} />
                       <YAxis tick={{ fill: chartTextColor, fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(value) => currencyFormatter.format(Number(value))} />
                       <RechartsTooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
                       <Legend wrapperStyle={chartLegendStyle} />
-                      <Bar dataKey="Receita" fill={chartColors.positive} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Custo" fill={chartColors.negative} radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="Lucro" fill={chartColors.primary} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="Receita" fill={chartColors.positive} radius={[4, 4, 0, 0]} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                      <Bar dataKey="Custo" fill={chartColors.negative} radius={[4, 4, 0, 0]} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                      <Bar dataKey="Lucro" fill={chartColors.primary} radius={[4, 4, 0, 0]} activeBar={chartActiveBar(chartColors.primary)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -981,9 +1006,18 @@ export function ListagemProjetos() {
                         outerRadius={80}
                         paddingAngle={4}
                         dataKey="value"
+                        stroke="none"
+                        isAnimationActive={!reduceMotion}
+                        animationDuration={chartAnimationDuration}
+                        onMouseEnter={(_, index) => setActiveStatusIndex(index)}
+                        onMouseLeave={() => setActiveStatusIndex(null)}
                       >
                         {statusPieData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={entry.color}
+                            style={chartSegmentStyle(Boolean(reduceMotion), activeStatusIndex !== null && activeStatusIndex !== index)}
+                          />
                         ))}
                       </Pie>
                       <RechartsTooltip content={<DynamicTooltip formatter={(value) => formatProjectCount(Number(value))} />} />

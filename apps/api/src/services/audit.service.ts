@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { OperationalLogService } from './operational-log.service';
 
 const REDACTED = '[REDACTED]';
-const SENSITIVE_KEY = /(senha|password|secret|token|cpf|cnpj|documento|email|telefone|celular|endereco|cep|rg|inscricao)/i;
+const SENSITIVE_KEY = /(senha|password|secret|token|cpf|cnpj|documento|email|telefone|celular|endereco|cep|rg|inscricao|path|pasta|directory|folder|arquivo|filename)/i;
 
 function sanitizeAuditValue(value: unknown, depth = 0): unknown {
   if (depth > 8) return '[MAX_DEPTH]';

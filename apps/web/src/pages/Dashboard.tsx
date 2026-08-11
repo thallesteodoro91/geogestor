@@ -7,19 +7,21 @@ import { KpiTransparency } from '../components/KpiTransparency';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
 import { RecentActivities } from '../components/RecentActivities';
+import { MetricCard } from '../components/MetricCard';
 import { Skeleton } from '../components/Skeleton';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { 
-  chartTextColor, chartBorder, chartLegendStyle, chartCursor, responsiveChartProps 
+import {
+  chartActiveDot, chartAnimationDuration, chartTextColor, chartBorder, chartLegendStyle,
+  chartCursor, chartSegmentStyle, responsiveChartProps
 } from '../utils/chartHelpers';
 import { chartColors, colorblindSafeColors } from '../data/chart-colors';
 import { DynamicTooltip } from '../components/charts/DynamicTooltip';
 import { RichTooltip } from '../components/charts/RichTooltip';
-import { geoGreenLabelClass, geoGreenSurfaceClass, geoGreenValueClass, geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass } from '../utils/geoTheme';
+import { commercialContentClass } from '../utils/commercialLayout';
 
 import valueChainIcon from '../assets/magnific-icons/value-chain_10220236.svg';
 import coexistenceIcon from '../assets/magnific-icons/coexistence_10415362.svg';
@@ -104,8 +106,10 @@ const getDaysLeftText = (targetDate: Date) => {
 };
 
 export function Dashboard() {
+  const reduceMotion = useReducedMotion();
   const [projetoFilterMode, setProjetoFilterMode] = useState<'macro' | 'unitario'>('macro');
   const [selectedProjetoTipo, setSelectedProjetoTipo] = useState<string>('');
+  const [activeProjectStatusIndex, setActiveProjectStatusIndex] = useState<number | null>(null);
 
   const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery<DashboardOverview>({
     queryKey: ['dashboard-overview'],
@@ -233,7 +237,7 @@ export function Dashboard() {
 
   if (failedWithoutData) {
     return (
-      <Layout>
+      <Layout contentClassName={commercialContentClass}>
         <section role="alert" className="rounded-xl border border-red-300 bg-red-50 p-6 text-red-950 dark:border-red-800 dark:bg-red-950 dark:text-red-100">
           <h1 className="text-2xl font-bold">Não foi possível carregar o painel</h1>
           <p className="mt-2 text-sm leading-6">
@@ -245,7 +249,7 @@ export function Dashboard() {
   }
 
   return (
-    <Layout>
+    <Layout contentClassName={commercialContentClass}>
       <PageHeader
         title="Visão Geral"
         description="Monitoramento operacional, financeiro e geográfico consolidado."
@@ -292,97 +296,68 @@ export function Dashboard() {
             <ResponsiveContainer {...responsiveChartProps}>
               <AreaChart data={financeChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="colorReceita" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0}/>
+                  <linearGradient id="dashboardReceitaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColors.positive} stopOpacity={0.32}/>
+                    <stop offset="95%" stopColor={chartColors.positive} stopOpacity={0}/>
                   </linearGradient>
-                  <linearGradient id="colorDespesa" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chartColors.negative} stopOpacity={0.3}/>
+                  <linearGradient id="dashboardDespesaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={chartColors.negative} stopOpacity={0.28}/>
                     <stop offset="95%" stopColor={chartColors.negative} stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} opacity={0.4} />
-                <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} />
+                <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} minTickGap={18} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} tickFormatter={(value) => `R$ ${value}`} />
                 <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
-                <Area type="monotone" name="Receita" dataKey="receita" stroke={chartColors.primary} strokeWidth={3} fillOpacity={1} fill="url(#colorReceita)" />
-                <Area type="monotone" name="Despesa" dataKey="despesa" stroke={chartColors.negative} strokeWidth={3} fillOpacity={1} fill="url(#colorDespesa)" />
+                <Area type="monotone" name="Receita" dataKey="receita" stroke={chartColors.positive} strokeWidth={3} fillOpacity={1} fill="url(#dashboardReceitaGradient)" dot={false} activeDot={chartActiveDot(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                <Area type="monotone" name="Despesa" dataKey="despesa" stroke={chartColors.negative} strokeWidth={3} fillOpacity={1} fill="url(#dashboardDespesaGradient)" dot={false} activeDot={chartActiveDot(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </motion.div>
 
-        {/* Quick Stats Column (stacked vertically on right) */}
-        <div className="col-span-1 flex flex-col gap-4 sm:gap-5 lg:gap-6 xl:col-span-4">
-          <div className="grid grid-cols-1 gap-4 sm:gap-5 min-[900px]:grid-cols-3 lg:gap-6 xl:flex xl:flex-col">
-          
-          {/* Clientes */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
-            className={`${geoGreenSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-emerald-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
-          >
-            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
-              <img src={coexistenceIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-            </div>
-            <div className="text-right relative z-10">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${geoGreenLabelClass} block mb-1`}>Clientes</span>
-              {overviewLoading ? (
-                <Skeleton className="h-10 w-16 ml-auto mt-1" />
-              ) : (
-                <span className={`text-3xl font-semibold tracking-tighter sm:text-2xl xl:text-4xl ${geoGreenValueClass}`}>
-                  {String(overview?.clientsTotal ?? 0).padStart(2, '0')}
-                </span>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Projetos */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, type: "spring", stiffness: 100 }}
-            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
-          >
-            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
-              <img src={projectFolderIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-            </div>
-            <div className="text-right relative z-10">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-orange-100/85">Projetos</span>
-              {overviewLoading ? (
-                <Skeleton className="h-10 w-16 ml-auto mt-1" />
-              ) : (
-                <span className="text-3xl font-semibold tracking-tighter text-white sm:text-2xl xl:text-4xl">
-                  {String(overview?.projectsTotal ?? 0).padStart(2, '0')}
-                </span>
-              )}
-            </div>
-          </motion.div>
-
-          {/* Área sob Gestão */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, type: "spring", stiffness: 100 }}
-            className={`${geoOrangeSurfaceClass} relative flex flex-1 items-center justify-between overflow-hidden rounded-2xl p-5 shadow-sm ring-1 ring-orange-300/15 transition-transform duration-300 hover:-translate-y-0.5 sm:p-6`}
-          >
-            <div className="w-12 h-12 flex items-center justify-center shrink-0 relative z-10">
-              <img src={mapIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-            </div>
-            <div className="text-right relative z-10">
-              <span className={`text-xs font-semibold uppercase tracking-wider ${geoOrangeLabelClass} block mb-1`}>Área sob Gestão (ha)</span>
-              {loadingStats ? (
-                <Skeleton className="h-10 w-24 ml-auto mt-1" />
-              ) : (
-                <span className={`text-3xl font-semibold tracking-tighter sm:text-2xl xl:text-4xl ${geoOrangeValueClass}`}>
-                  {areaTotal.toFixed(1)}
-                </span>
-              )}
-            </div>
-          </motion.div>
-        </div>
-        </div>
+        {/* Indicadores rápidos */}
+        <section
+          aria-label="Indicadores gerais"
+          aria-busy={overviewLoading || loadingStats}
+          className="col-span-1 xl:col-span-4"
+        >
+          <div className="grid h-full auto-rows-fr grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:gap-6">
+            <MetricCard
+              label="Clientes"
+              value={overviewLoading ? <Skeleton className="h-9 w-20" /> : String(overview?.clientsTotal ?? 0).padStart(2, '0')}
+              icon={<img src={coexistenceIcon} alt="" className="h-6 w-6 object-contain" />}
+              tone="overview"
+              layout="total"
+              delay={0.2}
+            />
+            <MetricCard
+              label="Projetos"
+              value={overviewLoading ? <Skeleton className="h-9 w-20" /> : String(overview?.projectsTotal ?? 0).padStart(2, '0')}
+              icon={<img src={projectFolderIcon} alt="" className="h-6 w-6 object-contain" />}
+              tone="overview"
+              layout="total"
+              delay={0.3}
+            />
+            <MetricCard
+              label="Área sob Gestão (ha)"
+              value={loadingStats ? <Skeleton className="h-9 w-24" /> : areaTotal.toFixed(1)}
+              icon={<img src={mapIcon} alt="" className="h-6 w-6 object-contain" />}
+              tone="overview"
+              layout="total"
+              delay={0.4}
+            />
+            <MetricCard
+              label="Eficiência Operacional"
+              value={overviewLoading ? <Skeleton className="h-9 w-20" /> : `${taskCompletionRate}%`}
+              helper="das tarefas concluídas"
+              icon={<img src={stopwatchIcon} alt="" className="h-6 w-6 object-contain" />}
+              tone="overview"
+              layout="total"
+              delay={0.5}
+            />
+          </div>
+        </section>
 
       </div>
 
@@ -574,9 +549,17 @@ export function Dashboard() {
                   paddingAngle={5}
                   dataKey="value"
                   stroke="none"
+                  isAnimationActive={!reduceMotion}
+                  animationDuration={chartAnimationDuration}
+                  onMouseEnter={(_, index) => setActiveProjectStatusIndex(index)}
+                  onMouseLeave={() => setActiveProjectStatusIndex(null)}
                 >
                   {projetosStatusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={getStatusColor(entry.name, index)} />
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={getStatusColor(entry.name, index)}
+                      style={chartSegmentStyle(Boolean(reduceMotion), activeProjectStatusIndex !== null && activeProjectStatusIndex !== index)}
+                    />
                   ))}
                 </Pie>
                 <RechartsTooltip content={<DynamicTooltip formatter={(v) => `${v} projetos`} />} />

@@ -5,6 +5,18 @@
 
 import { cn } from "../../utils/cn";
 
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+const percentFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+const numberFormatter = new Intl.NumberFormat('pt-BR');
+
 interface TooltipPayloadItem {
   value: number;
   name?: string;
@@ -36,19 +48,19 @@ interface RichTooltipProps {
 const formatValue = (value: number, format: 'currency' | 'percent' | 'number'): string => {
   switch (format) {
     case 'currency':
-      return `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      return currencyFormatter.format(value);
     case 'percent':
-      return `${value.toFixed(1)}%`;
+      return `${percentFormatter.format(value)}%`;
     case 'number':
     default:
-      return value.toLocaleString('pt-BR');
+      return numberFormatter.format(value);
   }
 };
 
 const getSeriesColor = (item: TooltipPayloadItem): string => {
   const payloadFill = item.payload?.fill as string | undefined;
   const payloadColor = item.payload?.color as string | undefined;
-  return payloadFill || item.color || item.stroke || item.fill || payloadColor || 'hsl(var(--primary))';
+  return payloadFill || item.color || item.stroke || item.fill || payloadColor || 'hsl(var(--chart-primary))';
 };
 
 export const RichTooltip = ({
@@ -73,7 +85,7 @@ export const RichTooltip = ({
   return (
     <div
       className={cn(
-        "geo-surface-raised relative min-w-[220px] p-4 text-zinc-950 backdrop-blur-md dark:text-zinc-50",
+        "geo-surface-raised pointer-events-none relative min-w-[220px] max-w-[calc(100vw-2rem)] overflow-hidden p-4 text-zinc-950 backdrop-blur-md dark:text-zinc-50",
         className
       )}
       role="tooltip"
@@ -89,7 +101,7 @@ export const RichTooltip = ({
       <div className="pl-2">
         {/* Period Label */}
         {label && (
-          <p className="mb-3 border-b border-brand-border pb-2 text-xs font-bold text-zinc-950 dark:text-white">
+          <p className="mb-3 break-words border-b border-brand-border pb-2 text-xs font-bold text-zinc-950 dark:text-white">
             {label}
           </p>
         )}
@@ -102,14 +114,14 @@ export const RichTooltip = ({
             
             return (
               <div key={index} className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   {/* Color indicator */}
                   <span 
                     className="w-3 h-3 rounded-full shrink-0 shadow-sm"
                     style={{ backgroundColor: seriesColor }}
                     aria-hidden="true"
                   />
-                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  <span className="truncate text-xs font-medium text-zinc-600 dark:text-zinc-300">
                     {seriesName}
                   </span>
                 </div>
@@ -149,7 +161,7 @@ export const RichTooltip = ({
 
         {/* Context */}
         {context && (
-          <p className="mt-3 border-t border-brand-border pt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          <p className="mt-3 break-words border-t border-brand-border pt-2 text-xs text-zinc-500 dark:text-zinc-400">
             {context}
           </p>
         )}

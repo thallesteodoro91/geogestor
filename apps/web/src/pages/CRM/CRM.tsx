@@ -11,7 +11,7 @@ import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react
 import { ACTIVE_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect } from '../../components/Form';
+import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
 import { Skeleton } from '../../components/Skeleton';
 import { apiClient } from '../../services/apiClient';
 import { matchesSearch } from '../../utils/searchHelpers';
@@ -27,6 +27,7 @@ import {
 } from '../../utils/localNavigationStyles';
 import { commercialContentClass } from '../../utils/commercialLayout';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
+import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
 
 type CRMOptions = {
   clients: Array<{ id: string; name: string }>;
@@ -806,7 +807,7 @@ export function CRM() {
                                         </div>}
                                         {(opportunity.orcamentoId || opportunity.projetoId) && <div className="mt-3 flex flex-wrap gap-2">{opportunity.orcamentoId && <Link to={`/orcamentos?budgetId=${opportunity.orcamentoId}`} className="geo-focus-ring inline-flex items-center gap-1 rounded-md text-[10px] font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200"><FileText aria-hidden="true" size={13} />{opportunity.orcamentoCodigo || 'Orçamento'}</Link>}{opportunity.projetoId && <Link to={`/projetos/${opportunity.projetoId}`} className="geo-focus-ring inline-flex items-center gap-1 rounded-md text-[10px] font-semibold text-emerald-700 hover:underline dark:text-emerald-200"><Eye aria-hidden="true" size={13} />Projeto</Link>}</div>}
                                         {opportunity.estagio === 'Ganho' && !opportunity.projetoId && <button type="button" title="Criar projeto a partir desta oportunidade" onClick={() => convertProjectMutation.mutate(opportunity)} className="geo-focus-ring mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-lg bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/20 dark:hover:bg-emerald-500/15">Criar projeto</button>}
-                                        {isActiveOpportunityStage(opportunity.estagio) && !opportunity.orcamentoId && opportunity.clienteId && <button type="button" title="Criar orçamento para esta oportunidade" onClick={() => navigate('/orcamentos', { state: { createForClienteId: opportunity.clienteId, opportunityId: opportunity.id } })} className="geo-focus-ring mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-lg bg-brand-surface-subtle px-3 text-[11px] font-bold text-brand-primary-700 ring-1 ring-brand-border hover:bg-brand-primary-50 dark:text-brand-primary-200 dark:hover:bg-brand-primary-500/10">Criar orçamento</button>}
+                                        {isActiveOpportunityStage(opportunity.estagio) && !opportunity.orcamentoId && opportunity.clienteId && <button type="button" title="Criar orçamento para esta oportunidade" onClick={() => navigate(buildBudgetEditorPath({ clientId: opportunity.clienteId, opportunityId: opportunity.id }))} className="geo-focus-ring mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-lg bg-brand-surface-subtle px-3 text-[11px] font-bold text-brand-primary-700 ring-1 ring-brand-border hover:bg-brand-primary-50 dark:text-brand-primary-200 dark:hover:bg-brand-primary-500/10">Criar orçamento</button>}
                                         {isActiveOpportunityStage(opportunity.estagio) && !opportunity.clienteId && <Link to="/crm?view=leads&status=ativo" className="geo-focus-ring mt-3 inline-flex min-h-9 w-full items-center justify-center rounded-lg bg-amber-50 px-3 text-center text-[11px] font-bold text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-100 dark:ring-amber-400/20">Converter lead para avançar</Link>}
                                         <div className="mt-3 flex flex-wrap items-center justify-between gap-1 border-t border-brand-border pt-3 min-[1440px]:mt-2 min-[1440px]:pt-2">
                                           <div className="flex items-center gap-0.5" aria-label="Movimentação da oportunidade">
@@ -897,7 +898,7 @@ export function CRM() {
               </FormField>
               <FormField htmlFor="crm-probability" label="Probabilidade de ganho" error={formErrors.probabilidade}>
                 <div className="relative">
-                  <input id="crm-probability" name="probabilidade" type="number" min="0" max="100" step="1" inputMode="numeric" value={form.probabilidade} onChange={(event) => updateFormField('probabilidade', event.target.value)} aria-invalid={Boolean(formErrors.probabilidade)} aria-describedby={formErrors.probabilidade ? 'crm-probability-error' : undefined} className={cn(fieldClass, 'pr-10 font-mono tabular-nums')} />
+                  <NumericInput id="crm-probability" name="probabilidade" min="0" max="100" step="1" inputMode="numeric" value={form.probabilidade} onChange={(event) => updateFormField('probabilidade', event.target.value)} aria-invalid={Boolean(formErrors.probabilidade)} aria-describedby={formErrors.probabilidade ? 'crm-probability-error' : undefined} className={cn(fieldClass, 'font-mono tabular-nums')} />
                   <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-text-muted">%</span>
                 </div>
               </FormField>

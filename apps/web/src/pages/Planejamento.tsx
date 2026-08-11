@@ -35,6 +35,7 @@ import { apiClient } from '../services/apiClient';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { FormSelect } from '../components/Form';
 import {
   headerPrimaryActionButtonClass,
   headerPrimaryActionIconClass,
@@ -493,7 +494,7 @@ export function Planejamento() {
                 Ciclo estratégico
               </label>
               <div className="mt-2 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center">
-                <select
+                <FormSelect
                   id="strategic-cycle-select"
                   value={cycleId || ''}
                   onChange={(event) => {
@@ -505,7 +506,7 @@ export function Planejamento() {
                   className={cn(filterNativeSelectClass, 'w-full sm:max-w-sm')}
                 >
                   {cycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.nome}</option>)}
-                </select>
+                </FormSelect>
                 {selectedCycle ? <StatusBadge value={selectedCycle.status} /> : null}
               </div>
               {selectedCycle ? (

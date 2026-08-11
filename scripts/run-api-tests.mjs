@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
@@ -23,4 +23,13 @@ const result = spawnSync(process.execPath, [tsxCli, '--test', ...collect(source)
   stdio: 'inherit',
   env: { ...process.env, NODE_ENV: 'test' }
 });
+
+const scratch = path.join(root, 'scratch');
+if (existsSync(scratch)) {
+  for (const entry of readdirSync(scratch, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !['system-reset-', 'data-directory-'].some((prefix) => entry.name.startsWith(prefix))) continue;
+    rmSync(path.join(scratch, entry.name), { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+  }
+}
+
 process.exit(result.status ?? 1);

@@ -13,6 +13,7 @@ export interface ConfirmDialogProps {
   variant?: 'danger' | 'warning' | 'info';
   loading?: boolean;
   loadingText?: string;
+  error?: string;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -25,9 +26,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelText = 'Cancelar',
   variant = 'danger',
   loading = false,
-  loadingText
+  loadingText,
+  error
 }) => {
   const cancelButtonId = useId();
+  const descriptionId = useId();
+  const errorId = useId();
   const pendingLabel = loadingText ?? (variant === 'danger' ? 'Excluindo…' : 'Processando…');
 
   const getIcon = () => {
@@ -44,7 +48,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   const getButtonBg = () => {
     if (variant === 'danger') return 'bg-brand-red-600 hover:bg-brand-red-700 active:bg-brand-red-800 text-white shadow-brand-red-600/20';
-    if (variant === 'warning') return 'bg-brand-rajah-700 hover:bg-brand-rajah-800 active:bg-brand-rajah-900 text-white shadow-brand-rajah-700/20';
+    if (variant === 'warning') return 'bg-brand-rajah-700 hover:bg-brand-rajah-800 active:bg-brand-rajah-900 text-black shadow-brand-rajah-700/20';
     return 'bg-brand-turquoise-700 hover:bg-brand-turquoise-800 active:bg-brand-turquoise-900 text-white shadow-brand-turquoise-700/20';
   };
 
@@ -57,6 +61,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       initialFocusId={cancelButtonId}
       closeDisabled={loading}
       dialogRole="alertdialog"
+      ariaDescribedBy={[descriptionId, error ? errorId : ''].filter(Boolean).join(' ')}
     >
       <div className="space-y-6 pt-2">
         <div className="flex items-start gap-4">
@@ -64,11 +69,17 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             {getIcon()}
           </div>
           <div>
-            <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300 leading-relaxed">
+            <p id={descriptionId} className="text-sm font-medium text-zinc-600 dark:text-zinc-300 leading-relaxed">
               {description}
             </p>
           </div>
         </div>
+
+        {error && (
+          <p id={errorId} role="alert" aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-500/35 dark:bg-red-950/40 dark:text-red-200">
+            {error}
+          </p>
+        )}
 
         <div className="flex items-center justify-end gap-3 pt-4 border-t border-brand-border">
           <button

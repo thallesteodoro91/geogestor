@@ -8,7 +8,7 @@ const vm = require('node:vm');
 function loadReadinessHelpers() {
   const mainPath = path.join(__dirname, 'main.js');
   const source = `${fs.readFileSync(mainPath, 'utf8')}
-globalThis.__readinessHelpers = { waitForManagedApiReady, registerApiRecoveryAttempt };`;
+globalThis.__readinessHelpers = { waitForManagedApiReady, registerApiRecoveryAttempt, stopApiServerGracefully, openDiagnosticsFolder, setApiProcessForTest(child) { apiProcess = child; } };`;
   const ipcMain = { on() {}, handle() {} };
   const app = {
     commandLine: { appendSwitch() {} },
@@ -95,6 +95,56 @@ globalThis.__databaseKeyHelpers = { getOrCreateDatabaseEncryptionKey, databaseKe
   return context.__databaseKeyHelpers;
 }
 
+function loadSecretKeyHelpers(userDataPath) {
+  const mainPath = path.join(__dirname, 'main.js');
+  const source = `${fs.readFileSync(mainPath, 'utf8')}
+globalThis.__secretKeyHelpers = { getOrCreateSecretKey, databaseKeyId };`;
+  let protectedValue = '';
+  const app = {
+    commandLine: { appendSwitch() {} },
+    isPackaged: true,
+    requestSingleInstanceLock: () => true,
+    on() {},
+    getPath: () => userDataPath,
+    whenReady: () => new Promise(() => {})
+  };
+  const electron = {
+    app,
+    BrowserWindow: {},
+    dialog: {},
+    shell: {},
+    ipcMain: { on() {}, handle() {} },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString(value) {
+        protectedValue = value;
+        return Buffer.from('DPAPI-SECRET-SYNTHETIC-CIPHERTEXT');
+      },
+      decryptString() {
+        return protectedValue;
+      }
+    },
+    session: {}
+  };
+  const context = {
+    __dirname,
+    Buffer,
+    clearTimeout,
+    console,
+    globalThis: null,
+    process,
+    require(moduleName) {
+      if (moduleName === 'electron') return electron;
+      return require(moduleName);
+    },
+    setTimeout,
+    URL
+  };
+  context.globalThis = context;
+  vm.runInNewContext(source, context, { filename: mainPath });
+  return context.__secretKeyHelpers;
+}
+
 test('readiness resolve somente após a mensagem IPC ready', async () => {
   const { waitForManagedApiReady } = loadReadinessHelpers();
   const child = new EventEmitter();
@@ -140,6 +190,48 @@ test('supervisão limita reinicializações repetidas e libera nova tentativa ap
   assert.equal(registerApiRecoveryAttempt(base + 5 * 60 * 1000 + 2_001), 1);
 });
 
+test('encerramento envia SIGTERM e só conclui depois da confirmação de saída da API', async () => {
+  const { stopApiServerGracefully, setApiProcessForTest } = loadReadinessHelpers();
+  const child = new EventEmitter();
+  child.kill = (signal) => {
+    assert.equal(signal, 'SIGTERM');
+    setImmediate(() => child.emit('exit', 0));
+    return true;
+  };
+  setApiProcessForTest(child);
+  const result = await stopApiServerGracefully(100);
+  assert.equal(result.graceful, true);
+  assert.equal(result.reason, 'exit-0');
+});
+
+test('diagnóstico cria e abre diretamente a pasta diagnostics', async () => {
+  const { openDiagnosticsFolder } = loadReadinessHelpers();
+  const calls = [];
+  const result = await openDiagnosticsFolder({
+    userDataPath: 'C:\\GeoGestor',
+    mkdir: async (target, options) => calls.push(['mkdir', target, options]),
+    openPath: async (target) => { calls.push(['openPath', target]); return ''; }
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.path, path.join('C:\\GeoGestor', 'diagnostics'));
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
+    ['mkdir', path.join('C:\\GeoGestor', 'diagnostics'), { recursive: true }],
+    ['openPath', path.join('C:\\GeoGestor', 'diagnostics')]
+  ]);
+});
+
+test('diagnóstico trata texto de erro devolvido por shell.openPath sem expor caminho', async () => {
+  const { openDiagnosticsFolder } = loadReadinessHelpers();
+  const result = await openDiagnosticsFolder({
+    userDataPath: 'C:\\Users\\Pessoa\\GeoGestor',
+    mkdir: async () => undefined,
+    openPath: async () => 'Access denied: C:\\Users\\Pessoa\\GeoGestor\\diagnostics'
+  });
+  assert.equal(result.success, false);
+  assert.equal(result.error, 'O Windows não conseguiu abrir a pasta de diagnósticos.');
+  assert.equal(JSON.stringify(result).includes('Pessoa'), false);
+});
+
 test('chave do banco é aleatória, versionada e persistida somente pelo cofre do Windows', () => {
   const userDataPath = path.join(__dirname, '.test-database-key');
   fs.rmSync(userDataPath, { recursive: true, force: true });
@@ -156,6 +248,30 @@ test('chave do banco é aleatória, versionada e persistida somente pelo cofre d
     assert.equal(envelope.keyId, databaseKeyId(first));
     assert.equal(envelopeText.includes(first), false);
     assert.equal(getOrCreateDatabaseEncryptionKey(), first);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
+});
+
+test('segredo local legado migra para envelope DPAPI sem manter texto puro', () => {
+  const userDataPath = path.join(__dirname, '.test-secret-key');
+  fs.rmSync(userDataPath, { recursive: true, force: true });
+  fs.mkdirSync(userDataPath, { recursive: true });
+  const legacyKey = Buffer.alloc(32, 91).toString('base64');
+  fs.writeFileSync(path.join(userDataPath, 'local-secrets.key'), legacyKey, 'utf8');
+  try {
+    const { getOrCreateSecretKey, databaseKeyId } = loadSecretKeyHelpers(userDataPath);
+    const migrated = getOrCreateSecretKey();
+    const envelopePath = path.join(userDataPath, 'local-secrets-key.v2.json');
+    const envelopeText = fs.readFileSync(envelopePath, 'utf8');
+    const envelope = JSON.parse(envelopeText);
+    assert.equal(migrated, legacyKey);
+    assert.equal(envelope.version, 2);
+    assert.equal(envelope.protection, 'electron-safeStorage');
+    assert.equal(envelope.keyId, databaseKeyId(legacyKey));
+    assert.equal(envelopeText.includes(legacyKey), false);
+    assert.equal(fs.existsSync(path.join(userDataPath, 'local-secrets.key')), false);
+    assert.equal(getOrCreateSecretKey(), legacyKey);
   } finally {
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }

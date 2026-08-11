@@ -1,8 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useId, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { apiClient } from '../services/apiClient';
-import { Plus, PencilSimple, Trash, ArrowSquareOut } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, ArrowSquareOut, Info, ArrowsClockwise, type Icon } from '@phosphor-icons/react';
 import { getClientCategoryIcon } from '../utils/clientIcons';
 
 import clockIcon from '../assets/magnific-icons/clock_2924574.svg';
@@ -26,6 +26,17 @@ interface AuditLog {
 }
 
 type EntityFilter = 'Tudo' | 'Clientes' | 'Projetos' | 'Finanças' | 'Tarefas';
+type AuditAction = 'INSERT' | 'UPDATE' | 'DELETE' | 'DELETE (SOFT)';
+type ActionConfigKey = AuditAction | 'UNKNOWN';
+
+interface ActionVisualConfig {
+  badgeLabel: string;
+  actionVerb: string;
+  ariaLabel: string;
+  icon: Icon;
+  borderClass: string;
+  badgeClass: string;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -75,9 +86,47 @@ const ENTITY_LABEL_MAP: Record<string, string> = {
   Fatura: 'a fatura',
 };
 
-const ACTION_LABEL_MAP: Record<string, string> = {
-  INSERT: 'cadastrou',
-  UPDATE: 'editou',
+const ACTION_VISUAL_CONFIG: Record<ActionConfigKey, ActionVisualConfig> = {
+  INSERT: {
+    badgeLabel: 'Novo',
+    actionVerb: 'cadastrou',
+    ariaLabel: 'Criação',
+    icon: Plus,
+    borderClass: 'border-l-emerald-500 dark:border-l-emerald-600',
+    badgeClass: 'bg-emerald-50 text-emerald-700 ring-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/40',
+  },
+  UPDATE: {
+    badgeLabel: 'Editado',
+    actionVerb: 'editou',
+    ariaLabel: 'Edição',
+    icon: PencilSimple,
+    borderClass: 'border-l-amber-500 dark:border-l-amber-600',
+    badgeClass: 'bg-amber-50 text-amber-700 ring-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/40',
+  },
+  DELETE: {
+    badgeLabel: 'Removido',
+    actionVerb: 'removeu',
+    ariaLabel: 'Remoção',
+    icon: Trash,
+    borderClass: 'border-l-rose-500 dark:border-l-rose-600',
+    badgeClass: 'bg-rose-50 text-rose-700 ring-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800/40',
+  },
+  'DELETE (SOFT)': {
+    badgeLabel: 'Removido',
+    actionVerb: 'removeu',
+    ariaLabel: 'Remoção',
+    icon: Trash,
+    borderClass: 'border-l-rose-500 dark:border-l-rose-600',
+    badgeClass: 'bg-rose-50 text-rose-700 ring-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800/40',
+  },
+  UNKNOWN: {
+    badgeLabel: 'Alteração',
+    actionVerb: 'alterou',
+    ariaLabel: 'Alteração',
+    icon: ArrowsClockwise,
+    borderClass: 'border-l-zinc-400 dark:border-l-zinc-500',
+    badgeClass: 'bg-zinc-100 text-zinc-700 ring-zinc-200/80 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700/70',
+  },
 };
 
 const VISIBLE_ITEMS = 12;
@@ -128,9 +177,11 @@ function safeJsonParse(str: string | null): Record<string, unknown> | null {
   }
 }
 
-function getActionLabel(action: string): string {
-  if (action.includes('DELETE')) return 'removeu';
-  return ACTION_LABEL_MAP[action] ?? 'alterou';
+function getActionConfig(action: string): ActionVisualConfig {
+  if (action === 'INSERT' || action === 'UPDATE' || action === 'DELETE' || action === 'DELETE (SOFT)') {
+    return ACTION_VISUAL_CONFIG[action];
+  }
+  return ACTION_VISUAL_CONFIG.UNKNOWN;
 }
 
 function getEntityLabel(entity: string): string {
@@ -287,33 +338,20 @@ function groupLogsByDate(logs: AuditLog[], today: Date): GroupedLogs[] {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-function ActionBadge({ action }: { action: string }) {
-  if (action === 'INSERT') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/40" aria-label="Criação">
-        <Plus weight="bold" className="h-3 w-3" aria-hidden="true" />
-        Novo
-      </span>
-    );
-  }
-  if (action === 'UPDATE') {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800/40" aria-label="Edição">
-        <PencilSimple weight="bold" className="h-3 w-3" aria-hidden="true" />
-        Editado
-      </span>
-    );
-  }
+function ActionBadge({ config }: { config: ActionVisualConfig }) {
+  const ActionIcon = config.icon;
   return (
-    <span className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-800/40" aria-label="Exclusão">
-      <Trash weight="bold" className="h-3 w-3" aria-hidden="true" />
-      Removido
+    <span
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold ring-1 ${config.badgeClass}`}
+      aria-label={config.ariaLabel}
+    >
+      <ActionIcon weight="bold" className="h-3 w-3" aria-hidden="true" />
+      {config.badgeLabel}
     </span>
   );
 }
 
 function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
-  const navigate = useNavigate();
   const iconElement = getEntityIconElement(log);
   const route = getEntityRoute(log);
   const changeSummary = computeChangeSummary(log);
@@ -321,23 +359,10 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
   const date = parseDate(log.createdAt);
   const initials = getUserInitials(log.userId);
   const userName = getUserDisplayName(log.userId);
+  const actionConfig = getActionConfig(log.action);
 
-  let borderClass = 'border-l-emerald-500 dark:border-l-emerald-600';
-  if (log.action === 'UPDATE') borderClass = 'border-l-amber-500 dark:border-l-amber-600';
-  else if (log.action.includes('DELETE')) borderClass = 'border-l-rose-500 dark:border-l-rose-600';
-
-  const handleClick = () => {
-    if (route) navigate(route);
-  };
-
-  return (
-    <div
-      role={route ? 'link' : undefined}
-      tabIndex={route ? 0 : undefined}
-      onClick={route ? handleClick : undefined}
-      onKeyDown={route ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleClick(); } } : undefined}
-      className={`group flex items-start gap-4 p-4 rounded-2xl bg-zinc-50/55 dark:bg-zinc-800/30 transition-colors border border-zinc-200/60 dark:border-zinc-800/80 border-l-[4px] ${borderClass} ${route ? 'cursor-pointer hover:bg-zinc-100/60 dark:hover:bg-zinc-800/60 focus-visible:ring-2 focus-visible:ring-indigo-500/30 focus-visible:outline-none' : ''}`}
-    >
+  const content = (
+    <>
       {/* Entity icon */}
       <div className="w-11 h-11 flex items-center justify-center shrink-0">
         {iconElement}
@@ -348,10 +373,10 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-base text-zinc-600 dark:text-zinc-400 leading-snug">
             <strong className="font-semibold text-zinc-800 dark:text-zinc-200">{userName}</strong>
-            {' '}{getActionLabel(log.action)} {getEntityLabel(log.entity)}{' '}
+            {' '}{actionConfig.actionVerb} {getEntityLabel(log.entity)}{' '}
             {recordName && <strong className="font-semibold text-zinc-900 dark:text-white">{recordName}</strong>}
           </span>
-          <ActionBadge action={log.action} />
+          <ActionBadge config={actionConfig} />
           {route && (
             <ArrowSquareOut weight="bold" className="h-4 w-4 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true" />
           )}
@@ -374,8 +399,23 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
           <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 leading-none">{initials}</span>
         </div>
       </div>
-    </div>
+    </>
   );
+
+  const cardClassName = `group flex items-start gap-4 rounded-2xl border border-l-[4px] border-zinc-200/60 bg-zinc-50/55 p-4 transition-colors dark:border-zinc-800/80 dark:bg-zinc-800/30 ${actionConfig.borderClass}`;
+
+  if (route) {
+    return (
+      <Link
+        to={route}
+        className={`${cardClassName} cursor-pointer hover:bg-zinc-100/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:hover:bg-zinc-800/60`}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return <div className={cardClassName}>{content}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +424,7 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
 
 export function RecentActivities() {
   const now = useMemo(() => new Date(), []);
+  const colorHelpId = useId();
   const [activeFilter, setActiveFilter] = useState<EntityFilter>('Tudo');
 
   const { data: auditLogs = [], isLoading } = useQuery<AuditLog[]>({
@@ -427,23 +468,46 @@ export function RecentActivities() {
         </div>
       </div>
 
-      {/* Filter pills */}
-      <div className="flex items-center gap-1.5 mb-4 flex-wrap" role="tablist" aria-label="Filtrar atividades por tipo">
-        {ENTITY_FILTERS.map((filter) => (
+      {/* Filter pills and color help */}
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filtrar atividades por tipo">
+          {ENTITY_FILTERS.map((filter) => (
+            <button
+              key={filter}
+              role="tab"
+              aria-selected={activeFilter === filter}
+              onClick={() => setActiveFilter(filter)}
+              className={`geo-focus-ring rounded-lg px-3 py-1 text-[11px] font-semibold transition-[color,background-color,box-shadow] ${
+                activeFilter === filter
+                  ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
+                  : 'bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 hover:text-zinc-800 dark:hover:text-white'
+              }`}
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+
+        <div className="group/activity-help relative shrink-0">
           <button
-            key={filter}
-            role="tab"
-            aria-selected={activeFilter === filter}
-            onClick={() => setActiveFilter(filter)}
-            className={`geo-focus-ring rounded-lg px-3 py-1 text-[11px] font-semibold transition-[color,background-color,box-shadow] ${
-              activeFilter === filter
-                ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-500/20'
-                : 'bg-zinc-100 dark:bg-zinc-800/60 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700/60 hover:text-zinc-800 dark:hover:text-white'
-            }`}
+            type="button"
+            aria-label="Entenda as cores das atividades"
+            aria-describedby={colorHelpId}
+            className="geo-focus-ring flex h-7 w-7 items-center justify-center rounded-lg text-zinc-400 transition-[color,background-color] hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           >
-            {filter}
+            <Info className="h-4 w-4" weight="bold" aria-hidden="true" />
           </button>
-        ))}
+          <div
+            id={colorHelpId}
+            role="tooltip"
+            className="pointer-events-none invisible absolute right-0 top-full z-50 mt-2 w-64 -translate-y-1 rounded-xl border border-zinc-200 bg-white p-3 text-left opacity-0 shadow-xl transition-[opacity,transform,visibility] duration-150 group-hover/activity-help:visible group-hover/activity-help:translate-y-0 group-hover/activity-help:opacity-100 group-focus-within/activity-help:visible group-focus-within/activity-help:translate-y-0 group-focus-within/activity-help:opacity-100 dark:border-zinc-700 dark:bg-zinc-900"
+          >
+            <strong className="block text-xs font-semibold text-zinc-800 dark:text-zinc-100">Cores das atividades</strong>
+            <span className="mt-1 block text-[11px] leading-4 text-zinc-600 dark:text-zinc-300">
+              A faixa lateral indica a ação: verde para criação, laranja para edição e vermelho para remoção.
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Feed */}

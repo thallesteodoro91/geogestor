@@ -27,12 +27,24 @@ import {
   ensureOperationalIntegrity,
   OPERATIONAL_INTEGRITY_MIGRATION
 } from './runtime-migrations/v7-operational-integrity';
+import {
+  ensureUnifiedAlerts,
+  UNIFIED_ALERTS_MIGRATION
+} from './runtime-migrations/v8-unified-alerts';
+import {
+  CLIENT_WORKSPACE_INTEGRITY_MIGRATION,
+  ensureClientWorkspaceIntegrity
+} from './runtime-migrations/v9-client-workspace-integrity';
+import {
+  ensurePropertyGeography,
+  PROPERTY_GEOGRAPHY_MIGRATION
+} from './runtime-migrations/v10-property-geography';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
 import { OperationalLogService } from './operational-log.service';
 
 const dbPath = process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
-const RUNTIME_MIGRATION_VERSION = OPERATIONAL_INTEGRITY_MIGRATION.version;
-const RUNTIME_MIGRATION_NAME = OPERATIONAL_INTEGRITY_MIGRATION.name;
+const RUNTIME_MIGRATION_VERSION = PROPERTY_GEOGRAPHY_MIGRATION.version;
+const RUNTIME_MIGRATION_NAME = PROPERTY_GEOGRAPHY_MIGRATION.name;
 const MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 
 type ColumnInfo = {
@@ -1526,6 +1538,9 @@ async function executeRuntimeMigrations() {
     await ensureStrategicPlanning(client);
     await ensureStrategicGovernance(client);
     await ensureOperationalIntegrity(client);
+    await ensureUnifiedAlerts(client);
+    await ensureClientWorkspaceIntegrity(client);
+    await ensurePropertyGeography(client);
 
     // Após migrar, os campos originais poderiam ser descartados, mas o SQLite não permite DROP COLUMN facilmente.
     // Vamos apenas deixá-los null ou ignora-los nas queries futuras.
@@ -1584,9 +1599,27 @@ async function executeRuntimeMigrations() {
       args: [STRATEGIC_GOVERNANCE_MIGRATION.version, STRATEGIC_GOVERNANCE_MIGRATION.name, appliedAt, appliedAt, appliedAt]
     });
     await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [OPERATIONAL_INTEGRITY_MIGRATION.version, OPERATIONAL_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [UNIFIED_ALERTS_MIGRATION.version, UNIFIED_ALERTS_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [CLIENT_WORKSPACE_INTEGRITY_MIGRATION.version, CLIENT_WORKSPACE_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
       sql: `UPDATE schema_migrations
         SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
-        WHERE version IN (1, ?, ?, ?, ?, ?, ?)`,
+        WHERE version IN (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         appliedAt,
         appliedAt,
@@ -1595,7 +1628,9 @@ async function executeRuntimeMigrations() {
         MANAGERIAL_FINANCE_MIGRATION.version,
         STRATEGIC_PLANNING_MIGRATION.version,
         STRATEGIC_GOVERNANCE_MIGRATION.version,
-        OPERATIONAL_INTEGRITY_MIGRATION.version
+        OPERATIONAL_INTEGRITY_MIGRATION.version,
+        UNIFIED_ALERTS_MIGRATION.version,
+        CLIENT_WORKSPACE_INTEGRITY_MIGRATION.version
       ]
     });
     await client.execute({

@@ -1,5 +1,6 @@
 import type { StrategicPlanningSnapshot } from '@geogestor/contracts';
 import { FunnelSimple, X } from '@phosphor-icons/react';
+import { FormSelect } from '../../components/Form';
 import { cn } from '../../utils/cn';
 import { filterNativeSelectClass } from '../../utils/filterStyles';
 import { secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -50,61 +51,61 @@ export function PlanningFilterBar({ filters, snapshot, resultCount, totalCount, 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           Responsável
-          <select aria-label="Filtrar por responsável" value={filters.responsavel} onChange={(event) => onChange('responsavel', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+          <FormSelect aria-label="Filtrar por responsável" value={filters.responsavel} onChange={(event) => onChange('responsavel', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
             <option value="">Todos</option>
             {owners.map((owner) => <option key={owner} value={owner}>{owner}</option>)}
-          </select>
+          </FormSelect>
         </label>
         <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           Situação
-          <select aria-label="Filtrar por situação" value={filters.status} onChange={(event) => onChange('status', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+          <FormSelect aria-label="Filtrar por situação" value={filters.status} onChange={(event) => onChange('status', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
             <option value="">Todas</option>
             {statuses.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-          </select>
+          </FormSelect>
         </label>
         {mode === 'objectives' ? (
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
             Prioridade
-            <select aria-label="Filtrar por prioridade" value={filters.prioridade} onChange={(event) => onChange('prioridade', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+            <FormSelect aria-label="Filtrar por prioridade" value={filters.prioridade} onChange={(event) => onChange('prioridade', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
               <option value="">Todas</option><option value="critica">Crítica</option><option value="alta">Alta</option><option value="media">Média</option><option value="baixa">Baixa</option>
-            </select>
+            </FormSelect>
           </label>
         ) : (
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
             Objetivo
-            <select aria-label="Filtrar por objetivo" value={filters.objetivo} onChange={(event) => onChange('objetivo', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+            <FormSelect aria-label="Filtrar por objetivo" value={filters.objetivo} onChange={(event) => onChange('objetivo', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
               <option value="">Todos</option>
               {snapshot.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-            </select>
+            </FormSelect>
           </label>
         )}
         <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           Prazo
-          <select aria-label="Filtrar por prazo" value={filters.prazo} onChange={(event) => onChange('prazo', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+          <FormSelect aria-label="Filtrar por prazo" value={filters.prazo} onChange={(event) => onChange('prazo', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
             <option value="">Todos</option><option value="vencido">Vencidos</option><option value="proximos_30">Próximos 30 dias</option><option value="futuro">Depois de 30 dias</option>
-          </select>
+          </FormSelect>
         </label>
         {mode === 'objectives' ? (
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
             Qualidade dos dados
-            <select aria-label="Filtrar por qualidade dos dados" value={filters.dados} onChange={(event) => onChange('dados', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+            <FormSelect aria-label="Filtrar por qualidade dos dados" value={filters.dados} onChange={(event) => onChange('dados', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
               <option value="">Todos</option><option value="desatualizado">Desatualizados</option><option value="indisponivel">Indisponíveis</option>
-            </select>
+            </FormSelect>
           </label>
         ) : null}
         {mode === 'reviews' ? (
           <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
             Impacto do risco
-            <select aria-label="Filtrar por impacto do risco" value={filters.risco} onChange={(event) => onChange('risco', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+            <FormSelect aria-label="Filtrar por impacto do risco" value={filters.risco} onChange={(event) => onChange('risco', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
               <option value="">Todos</option><option value="critico">Crítico</option><option value="alto">Alto</option><option value="medio">Médio</option><option value="baixo">Baixo</option>
-            </select>
+            </FormSelect>
           </label>
         ) : null}
         <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
           Ordenar por
-          <select aria-label="Ordenar registros" value={filters.ordem} onChange={(event) => onChange('ordem', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
+          <FormSelect aria-label="Ordenar registros" value={filters.ordem} onChange={(event) => onChange('ordem', event.target.value)} className={cn(filterNativeSelectClass, 'mt-1.5 w-full')}>
             {orderOptions.map(([value, text]) => <option key={value || 'default'} value={value}>{text}</option>)}
-          </select>
+          </FormSelect>
         </label>
       </div>
     </section>

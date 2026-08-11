@@ -1,7 +1,7 @@
 import { useReducedMotion } from 'framer-motion';
 import { ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import { colorblindSafeColors } from '../../data/chart-colors';
-import { responsiveChartProps } from '../../utils/chartHelpers';
+import { chartAnimationDuration, responsiveChartProps } from '../../utils/chartHelpers';
 import { cn } from '../../utils/cn';
 import {
   getExpenseCategoryChartMode,
@@ -55,6 +55,7 @@ function CategoryTreemapCell({
   return (
     <g>
       <rect
+        className="transition-[filter,opacity] duration-200 hover:brightness-110 motion-reduce:transition-none"
         x={x}
         y={y}
         width={Math.max(0, width - 3)}
@@ -123,15 +124,17 @@ function ExpenseCategoryTooltip({
 export function ExpenseCategoryChart({
   items,
   emptyMessage = 'Nenhuma despesa encontrada.',
-  className
+  className,
+  compact = false
 }: {
   items: ExpenseCategoryInput[];
   emptyMessage?: string;
   className?: string;
+  compact?: boolean;
 }) {
   const reduceMotion = useReducedMotion();
-  const data = prepareExpenseCategoryData(items);
-  const mode = getExpenseCategoryChartMode(data.length);
+  const data = prepareExpenseCategoryData(items).slice(0, compact ? 5 : undefined);
+  const mode = compact ? (data.length > 0 ? 'bars' : 'empty') : getExpenseCategoryChartMode(data.length);
 
   if (mode === 'empty') {
     return (
@@ -149,7 +152,7 @@ export function ExpenseCategoryChart({
       <div
         role="img"
         aria-label={mode === 'treemap' ? 'Gráfico em árvore das despesas por categoria' : 'Gráfico de barras das despesas por categoria'}
-        className={cn(mode === 'treemap' ? 'h-72 w-full' : 'space-y-4')}
+        className={cn(mode === 'treemap' ? (compact ? 'h-64 w-full' : 'h-72 w-full') : 'space-y-4')}
       >
         {mode === 'treemap' ? (
           <ResponsiveContainer {...responsiveChartProps}>
@@ -160,7 +163,7 @@ export function ExpenseCategoryChart({
               stroke="hsl(var(--brand-surface))"
               content={<CategoryTreemapCell />}
               isAnimationActive={!reduceMotion}
-              animationDuration={250}
+              animationDuration={chartAnimationDuration}
             >
               <Tooltip content={<ExpenseCategoryTooltip />} />
             </Treemap>
@@ -183,7 +186,8 @@ export function ExpenseCategoryChart({
                   className="h-full rounded-full"
                   style={{
                     width: `${Math.max(2, item.percentage)}%`,
-                    backgroundColor: colorblindSafeColors[index % colorblindSafeColors.length]
+                    backgroundColor: colorblindSafeColors[index % colorblindSafeColors.length],
+                    transition: reduceMotion ? 'none' : `width ${chartAnimationDuration}ms var(--motion-ease-standard)`
                   }}
                 />
               </div>
@@ -192,6 +196,13 @@ export function ExpenseCategoryChart({
         )}
       </div>
 
+      {compact ? (
+        <ul className="sr-only">
+          {data.map((item) => (
+            <li key={item.name}>{item.name}: {formatCurrencyFromCents(item.value)}, {countLabel(item.count || 0)}, {percentageFormatter.format(item.percentage)}%</li>
+          ))}
+        </ul>
+      ) : (
       <div className="mt-5 overflow-x-auto border-t border-zinc-200 pt-4 dark:border-zinc-800">
         <table className="w-full min-w-[430px] text-sm">
           <caption className="sr-only">Valores exatos das despesas por categoria</caption>
@@ -215,6 +226,7 @@ export function ExpenseCategoryChart({
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

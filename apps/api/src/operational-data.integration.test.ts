@@ -27,7 +27,7 @@ async function cleanup() {
 process.env.GEOGESTOR_DB_PATH = databasePath;
 process.env.GEOGESTOR_API_TOKEN = 'test-token';
 
-test('v7 persiste propriedades, configurações migradas e histórico de cálculos', async () => {
+test('v8 persiste propriedades, configurações migradas e histórico de cálculos', async () => {
   await fs.mkdir(root, { recursive: true });
   await cleanup();
   const [{ server }, { db, dbReady, closeDb }, { runRuntimeMigrations }, { schema }] = await Promise.all([
@@ -47,7 +47,7 @@ test('v7 persiste propriedades, configurações migradas e histórico de cálcul
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 7);
+    assert.equal(migration.schemaVersion, 10);
     const clientA = crypto.randomUUID();
     const clientB = crypto.randomUUID();
     const projectA = crypto.randomUUID();
@@ -71,11 +71,28 @@ test('v7 persiste propriedades, configurações migradas e histórico de cálcul
     });
     assert.equal(propertyResponse.statusCode, 201, propertyResponse.body);
     const propertyId = propertyResponse.json<{ id: string }>().id;
+    const duplicateProperty = await request('POST', '/api/dados-operacionais/propriedades', {
+      clienteId: clientA,
+      nome: '  fazenda modelo ',
+      matricula: '99.999',
+      municipio: 'Florianópolis'
+    });
+    assert.equal(duplicateProperty.statusCode, 409, duplicateProperty.body);
+    const duplicateIdentifier = await request('POST', '/api/dados-operacionais/propriedades', {
+      clienteId: clientB,
+      nome: 'Outra Fazenda',
+      matricula: '12 345',
+      municipio: 'Palhoça'
+    });
+    assert.equal(duplicateIdentifier.statusCode, 409, duplicateIdentifier.body);
     const propertyList = await request('GET', `/api/dados-operacionais/propriedades?clienteId=${clientA}`);
     assert.equal(propertyList.json<{ total: number }>().total, 1);
     const propertyOptions = await request('GET', `/api/dados-operacionais/propriedades/options?q=inexistente&selectedId=${propertyId}`);
     assert.equal(propertyOptions.statusCode, 200, propertyOptions.body);
     assert.equal(propertyOptions.json<Array<{ id: string }>>()[0]?.id, propertyId);
+    const budgetOptions = await request('GET', '/api/orcamentos/options');
+    assert.equal(budgetOptions.statusCode, 200, budgetOptions.body);
+    assert.equal(budgetOptions.json<{ properties: Array<{ id: string }> }>().properties.some((property) => property.id === propertyId), true);
 
     const projectOptions = await request('GET', `/api/projetos/options?q=Projeto%20A&selectedId=${projectB}`);
     assert.equal(projectOptions.statusCode, 200, projectOptions.body);
@@ -126,11 +143,21 @@ test('v7 persiste propriedades, configurações migradas e histórico de cálcul
       }
     });
     assert.equal(migrationResponse.statusCode, 200, migrationResponse.body);
+    const catalogUpdate = await request('PUT', '/api/dados-operacionais/configuracoes-operacionais', {
+      values: { geogestor_tipos_servico: [
+        { id: 'service-topografia', nome: 'Topografia', categoria: 'Serviços', valorSugerido: 250000 },
+        { id: 'service-ambiental', nome: 'Ambiental', categoria: 'Serviços', valorSugerido: 180000 }
+      ] }
+    });
+    assert.equal(catalogUpdate.statusCode, 200, catalogUpdate.body);
     await request('PUT', '/api/dados-operacionais/configuracoes-operacionais/migrar', {
-      values: { geogestor_tipos_servico: ['Topografia', 'Ambiental'] }
+      values: { geogestor_tipos_servico: ['Valor local obsoleto'] }
     });
     const settings = await request('GET', '/api/dados-operacionais/configuracoes-operacionais');
-    assert.deepEqual(settings.json<Record<string, unknown>>().geogestor_tipos_servico, ['Topografia', 'Ambiental']);
+    assert.deepEqual(settings.json<Record<string, unknown>>().geogestor_tipos_servico, [
+      { id: 'service-topografia', nome: 'Topografia', categoria: 'Serviços', valorSugerido: 250000 },
+      { id: 'service-ambiental', nome: 'Ambiental', categoria: 'Serviços', valorSugerido: 180000 }
+    ]);
     const rows = await db.select().from(schema.configuracoesOperacionais);
     assert.equal(rows.filter((row) => row.chave === 'geogestor_tipos_servico').length, 1);
   } finally {

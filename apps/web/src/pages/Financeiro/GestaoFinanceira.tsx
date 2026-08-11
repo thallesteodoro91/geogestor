@@ -1,10 +1,11 @@
 import { type ReactNode, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, FileText, Plus, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
+import { CheckCircle, FileText, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { RemoteCombobox } from '../../components/RemoteCombobox';
+import { DatePickerField } from '../../components/Form';
 import { apiClient } from '../../services/apiClient';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 
@@ -64,11 +65,21 @@ function PageFrame({ embedded, children }: { embedded: boolean; children: ReactN
   return embedded ? <>{children}</> : <Layout>{children}</Layout>;
 }
 
-export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
+type AuxiliaryTab = 'viagens' | 'fiscal' | 'diagnostico';
+
+export function GestaoFinanceira({
+  embedded = false,
+  initialTab = 'viagens',
+  openCreateOnMount = false
+}: {
+  embedded?: boolean;
+  initialTab?: AuxiliaryTab;
+  openCreateOnMount?: boolean;
+}) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'viagens' | 'fiscal' | 'diagnostico'>('viagens');
-  const [travelModal, setTravelModal] = useState(false);
-  const [fiscalModal, setFiscalModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<AuxiliaryTab>(initialTab);
+  const [travelModal, setTravelModal] = useState(openCreateOnMount && initialTab === 'viagens');
+  const [fiscalModal, setFiscalModal] = useState(openCreateOnMount && initialTab === 'fiscal');
   const [travelForm, setTravelForm] = useState({
     clienteId: '', projetoId: '', finalidade: '', destino: '', dataInicio: '',
     dataFim: '', responsavel: '', adiantamento: '', quilometragem: '', valorReembolsavel: ''
@@ -140,23 +151,12 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <PageFrame embedded={embedded}>
-      <div className={`${embedded ? 'mb-8' : 'mb-10'} flex flex-col justify-between gap-5 md:flex-row md:items-end`}>
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Gestão operacional</p>
-          <h1 className={`${embedded ? 'text-3xl' : 'text-4xl'} font-semibold tracking-tight text-zinc-950 dark:text-white`}>Viagens e notas fiscais</h1>
-          <p className="mt-2 max-w-3xl text-sm text-zinc-500 dark:text-zinc-400">
-            Viagens, documentos fiscais informados e integridade dos vínculos. Esta área não realiza apuração tributária nem substitui a contabilidade.
-          </p>
-        </div>
-        {activeTab !== 'diagnostico' && (
-          <button
-            type="button"
-            onClick={() => activeTab === 'viagens' ? setTravelModal(true) : setFiscalModal(true)}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white hover:bg-emerald-500 focus-visible:ring-2 focus-visible:ring-emerald-500/40"
-          >
-            <Plus aria-hidden="true" /> {activeTab === 'viagens' ? 'Nova viagem' : 'Informar documento fiscal'}
-          </button>
-        )}
+      <div className={embedded ? 'mb-8' : 'mb-10'}>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">Gestão operacional</p>
+        <h1 className={`${embedded ? 'text-3xl' : 'text-4xl'} font-semibold tracking-tight text-zinc-950 dark:text-white`}>Viagens e notas fiscais</h1>
+        <p className="mt-2 max-w-none text-sm text-zinc-500 xl:whitespace-nowrap dark:text-zinc-400">
+          Viagens, documentos fiscais informados e integridade dos vínculos. Esta área não realiza apuração tributária nem substitui a contabilidade.
+        </p>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2" role="tablist" aria-label="Controles financeiros auxiliares">
@@ -281,8 +281,8 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
           <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="travel-project" name="projetoId" endpoint={`/api/projetos/options${travelForm.clienteId ? `?clienteId=${encodeURIComponent(travelForm.clienteId)}` : ''}`} value={travelForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setTravelForm((current) => ({ ...current, projetoId }))} /></label>
           <label className="sm:col-span-2"><span className={labelClass}>Finalidade</span><input required className={fieldClass} value={travelForm.finalidade} onChange={(event) => setTravelForm({ ...travelForm, finalidade: event.target.value })} /></label>
           <label className="sm:col-span-2"><span className={labelClass}>Destino</span><input required className={fieldClass} value={travelForm.destino} onChange={(event) => setTravelForm({ ...travelForm, destino: event.target.value })} /></label>
-          <label><span className={labelClass}>Início</span><input required type="date" className={fieldClass} value={travelForm.dataInicio} onChange={(event) => setTravelForm({ ...travelForm, dataInicio: event.target.value })} /></label>
-          <label><span className={labelClass}>Término</span><input type="date" className={fieldClass} value={travelForm.dataFim} onChange={(event) => setTravelForm({ ...travelForm, dataFim: event.target.value })} /></label>
+          <div><label htmlFor="travel-start-date" className={labelClass}>Início</label><DatePickerField id="travel-start-date" name="dataInicio" required autoComplete="off" value={travelForm.dataInicio} onChange={(event) => setTravelForm({ ...travelForm, dataInicio: event.target.value })} className={fieldClass} /></div>
+          <div><label htmlFor="travel-end-date" className={labelClass}>Término</label><DatePickerField id="travel-end-date" name="dataFim" autoComplete="off" value={travelForm.dataFim} onChange={(event) => setTravelForm({ ...travelForm, dataFim: event.target.value })} className={fieldClass} /></div>
           <label><span className={labelClass}>Responsável</span><input className={fieldClass} value={travelForm.responsavel} onChange={(event) => setTravelForm({ ...travelForm, responsavel: event.target.value })} /></label>
           <label><span className={labelClass}>Adiantamento (R$)</span><input inputMode="decimal" className={fieldClass} value={travelForm.adiantamento} onChange={(event) => setTravelForm({ ...travelForm, adiantamento: event.target.value })} /></label>
           <label><span className={labelClass}>Quilometragem</span><input inputMode="decimal" className={fieldClass} value={travelForm.quilometragem} onChange={(event) => setTravelForm({ ...travelForm, quilometragem: event.target.value })} /></label>
@@ -297,7 +297,7 @@ export function GestaoFinanceira({ embedded = false }: { embedded?: boolean }) {
           <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="fiscal-project" name="projetoId" endpoint={`/api/projetos/options${fiscalForm.clienteId ? `?clienteId=${encodeURIComponent(fiscalForm.clienteId)}` : ''}`} value={fiscalForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setFiscalForm((current) => ({ ...current, projetoId }))} /></label>
           <label><span className={labelClass}>Número</span><input required className={fieldClass} value={fiscalForm.numero} onChange={(event) => setFiscalForm({ ...fiscalForm, numero: event.target.value })} /></label>
           <label><span className={labelClass}>Código de verificação</span><input className={fieldClass} value={fiscalForm.codigoVerificacao} onChange={(event) => setFiscalForm({ ...fiscalForm, codigoVerificacao: event.target.value })} /></label>
-          <label><span className={labelClass}>Data de emissão</span><input required type="date" className={fieldClass} value={fiscalForm.dataEmissao} onChange={(event) => setFiscalForm({ ...fiscalForm, dataEmissao: event.target.value })} /></label>
+          <div><label htmlFor="fiscal-issue-date" className={labelClass}>Data de emissão</label><DatePickerField id="fiscal-issue-date" name="dataEmissao" required autoComplete="off" value={fiscalForm.dataEmissao} onChange={(event) => setFiscalForm({ ...fiscalForm, dataEmissao: event.target.value })} className={fieldClass} /></div>
           <label><span className={labelClass}>Valor (R$)</span><input required inputMode="decimal" className={fieldClass} value={fiscalForm.valor} onChange={(event) => setFiscalForm({ ...fiscalForm, valor: event.target.value })} /></label>
           <label><span className={labelClass}>Município</span><input className={fieldClass} value={fiscalForm.municipio} onChange={(event) => setFiscalForm({ ...fiscalForm, municipio: event.target.value })} /></label>
           <label><span className={labelClass}>Link de consulta</span><input type="url" className={fieldClass} value={fiscalForm.link} onChange={(event) => setFiscalForm({ ...fiscalForm, link: event.target.value })} /></label>

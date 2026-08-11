@@ -122,7 +122,7 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
     } else if (event.key === 'Enter' && open && options[activeIndex]) {
       event.preventDefault();
       choose(options[activeIndex]);
-    } else if (event.key === 'Escape') {
+    } else if (event.key === 'Escape' && open) {
       event.preventDefault();
       setOpen(false);
       setQuery('');
@@ -157,6 +157,12 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
           onFocus={() => setOpen(true)}
           onClick={() => setOpen(true)}
           onChange={(event) => { setQuery(event.target.value); setOpen(true); }}
+          onBlur={(event) => {
+            if (!rootRef.current?.contains(event.relatedTarget as Node | null)) {
+              setOpen(false);
+              setQuery('');
+            }
+          }}
           onKeyDown={onKeyDown}
           className={cn(geoFieldClass, 'h-12 w-full pl-10 pr-10', className)}
         />
@@ -191,7 +197,7 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
                 className={cn('flex min-h-11 w-full flex-col justify-center rounded-lg px-3 py-2 text-left hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:hover:bg-zinc-800', index === activeIndex && 'bg-zinc-100 dark:bg-zinc-800')}
               >
                 <span className="truncate text-sm font-medium text-zinc-950 dark:text-white">{getOptionLabel(option)}</span>
-                {description && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{description}</span>}
+                {description && <span className="truncate text-xs text-zinc-600 dark:text-zinc-300">{description}</span>}
               </button>
             );
           })}

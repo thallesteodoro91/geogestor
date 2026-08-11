@@ -32,6 +32,10 @@ export type ParcelaFinanceira = {
   dataPagamento?: string | null;
   statusPagamento: string;
   orcamentoDescricao?: string | null;
+  recebimentos?: Array<{
+    valorRecebido: number;
+    dataRecebimento: string;
+  }>;
 };
 
 export type DespesaFinanceira = {
@@ -343,7 +347,8 @@ export function buildFinancialAnalytics(params: {
 
   const parcelas = params.parcelas.filter((parcela) => {
     const dateValue = parcela.dataPagamento || parcela.dataVencimento;
-    if (!dateInRange(dateValue, filters)) return false;
+    const hasReceiptInRange = (parcela.recebimentos ?? []).some(receipt => dateInRange(receipt.dataRecebimento, filters));
+    if (!dateInRange(dateValue, filters) && !hasReceiptInRange) return false;
     if (filters.clienteId && parcela.clienteId !== filters.clienteId) return false;
     if (filters.status && filters.status !== 'Todos' && getParcelaStatusFiscal(parcela, todayKey) !== filters.status) return false;
     return true;
@@ -375,8 +380,14 @@ export function buildFinancialAnalytics(params: {
 
   const receitaContratada = orcamentosAprovados.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
   const receitaPipeline = orcamentosPipeline.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
-  const receitaRecebidaParcelas = parcelas
-    .reduce((sum, item) => sum + (Number(item.recebidoCaixa) || Number(item.valorPago) || 0), 0);
+  const receitaRecebidaParcelas = parcelas.reduce((sum, item) => {
+    if (item.recebimentos?.length) {
+      return sum + item.recebimentos
+        .filter(receipt => dateInRange(receipt.dataRecebimento, filters))
+        .reduce((receiptSum, receipt) => receiptSum + (Number(receipt.valorRecebido) || 0), 0);
+    }
+    return sum + (Number(item.recebidoCaixa) || Number(item.valorPago) || 0);
+  }, 0);
   const receitaRecebidaOrcamentos = orcamentosPagosSemParcelas.reduce((sum, item) => sum + (Number(item.valorTotal) || 0), 0);
   const receitaRecebida = receitaRecebidaParcelas + receitaRecebidaOrcamentos;
   const receitaPendenteParcelas = parcelas
@@ -452,16 +463,22 @@ export function buildFinancialAnalytics(params: {
     addToMonth(monthlyMap, getMonthKey(getOrcamentoCaixaDate(orcamento)), 'receitaRecebida', orcamento.valorTotal || 0);
   });
 
-  parcelas
-    .filter((parcela) => (Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0) > 0)
-    .forEach((parcela) => {
+  parcelas.forEach((parcela) => {
+    if (parcela.recebimentos?.length) {
+      parcela.recebimentos.forEach(receipt => {
+        addToMonth(monthlyMap, getMonthKey(receipt.dataRecebimento), 'receitaRecebida', Number(receipt.valorRecebido) || 0);
+      });
+      return;
+    }
+    if ((Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0) > 0) {
       addToMonth(
         monthlyMap,
         getMonthKey(parcela.dataPagamento || parcela.dataVencimento),
         'receitaRecebida',
         Number(parcela.recebidoCaixa) || Number(parcela.valorPago) || 0
       );
-    });
+    }
+  });
 
   despesas.forEach((despesa) => {
     addToMonth(monthlyMap, getMonthKey(getDespesaCompetenciaDate(despesa)), 'despesasLancadas', despesa.valor || 0);

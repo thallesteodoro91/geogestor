@@ -18,24 +18,24 @@ import { useQuery } from '@tanstack/react-query';
 import { useReducedMotion } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bar, ComposedChart, CartesianGrid, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, ComposedChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { ExpenseCategoryChart } from '../../components/charts/ExpenseCategoryChart';
 import { ProjectBreakdownChart } from '../../components/charts/ProjectBreakdownChart';
 import { RichTooltip } from '../../components/charts/RichTooltip';
-import { DatePickerField } from '../../components/Form';
 import { Layout } from '../../components/Layout';
 import { PageHeader } from '../../components/PageHeader';
 import { KpiTransparency, type KpiCompositionItem } from '../../components/KpiTransparency';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { chartColors } from '../../data/chart-colors';
-import { chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartActiveDot, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
-import { geoFieldClass } from '../../utils/geoTheme';
 import { RelatorioExecutivo } from './RelatorioExecutivo';
 import { ReportAlerts } from './ReportAlerts';
 import { ReportTabs } from './ReportTabs';
+import { ReportPeriodMenu } from './ReportPeriodMenu';
+import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
 import { buildReportDocumentModel } from './reportDocumentModel';
 import {
   REPORT_PERIOD_PRESETS,
@@ -223,12 +223,18 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
           <h2 id="cash-evolution-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Evolução do caixa</h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Entradas recebidas e despesas pagas por mês.</p>
           {monthly.length ? (
-            <div className="mt-5 overflow-x-auto">
-              <div role="img" aria-label="Gráfico da evolução mensal do caixa" className="h-72 min-w-[520px]">
+            <div className="mt-5 min-w-0">
+              <div role="img" aria-label="Gráfico da evolução mensal do caixa" className="h-72 min-w-0">
                 <ResponsiveContainer {...responsiveChartProps}>
                   <ComposedChart data={cashChartData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                    <defs>
+                      <linearGradient id="reportsResultGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.24} />
+                        <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 11 }} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 11 }} minTickGap={18} />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
@@ -237,9 +243,9 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
                     />
                     <Tooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
                     <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
-                    <Bar dataKey="Recebido" fill={chartColors.positive} radius={[5, 5, 0, 0]} maxBarSize={30} isAnimationActive={!reduceMotion} />
-                    <Bar dataKey="Despesas" fill={chartColors.negative} radius={[5, 5, 0, 0]} maxBarSize={30} isAnimationActive={!reduceMotion} />
-                    <Line type="monotone" dataKey="Resultado" stroke={chartColors.primary} strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 5 }} isAnimationActive={!reduceMotion} />
+                    <Bar dataKey="Recebido" fill={chartColors.positive} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                    <Bar dataKey="Despesas" fill={chartColors.negative} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                    <Area type="monotone" dataKey="Resultado" stroke={chartColors.primary} strokeWidth={3} fill="url(#reportsResultGradient)" fillOpacity={1} dot={false} activeDot={chartActiveDot(chartColors.primary)} legendType="line" isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -554,87 +560,25 @@ export function Relatorios() {
           {isGeneratingPdf ? 'Preparando o arquivo PDF. Aguarde…' : ''}
         </p>
 
-        <div className="mb-4 space-y-4">
-          <section aria-labelledby="period-filter-title" className="rounded-2xl border border-zinc-200 bg-white p-4 sm:px-6 sm:py-4 dark:border-zinc-800 dark:bg-zinc-900">
-            <div className="min-w-0">
-              <h2 id="period-filter-title" className="text-sm font-semibold text-zinc-950 dark:text-white">Período de análise</h2>
-              <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-400">O recorte altera indicadores, comparações, tabelas e o PDF.</p>
-            </div>
-
-            <div
-              role="group"
-              aria-label="Atalhos de período"
-              className="mt-3 flex min-w-0 gap-2 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            >
-              {REPORT_PERIOD_OPTIONS.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-pressed={activePeriodOption === option.id}
-                  aria-expanded={option.id === 'custom' ? customPeriodSelected : undefined}
-                  aria-controls={option.id === 'custom' ? 'custom-period-fields' : undefined}
-                  onClick={() => option.id === 'custom' ? selectCustomPeriod() : applyPeriodPreset(option.id)}
-                  className={cn(
-                    'geo-focus-ring min-h-10 shrink-0 rounded-lg border px-3.5 text-xs font-semibold transition-[background-color,border-color,color] motion-reduce:transition-none',
-                    activePeriodOption === option.id
-                      ? 'border-indigo-600 bg-indigo-600 text-white'
-                      : 'border-zinc-200 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-
-            {customPeriodSelected ? (
-              <div id="custom-period-fields" className="mt-3 flex flex-col gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800 sm:flex-row sm:items-end">
-                <div className="grid w-full max-w-lg gap-3 sm:grid-cols-2">
-                  <label className="min-w-0 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Data inicial
-                    <DatePickerField
-                      name="report-start-date"
-                      autoComplete="off"
-                      value={startDate}
-                      max={endDate || undefined}
-                      onChange={(event) => updateCustomDate('inicio', event.target.value)}
-                      className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')}
-                      aria-invalid={invalidRange}
-                      aria-describedby={invalidRange ? 'report-period-error' : undefined}
-                    />
-                  </label>
-                  <label className="min-w-0 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                    Data final
-                    <DatePickerField
-                      name="report-end-date"
-                      autoComplete="off"
-                      value={endDate}
-                      min={startDate || undefined}
-                      onChange={(event) => updateCustomDate('fim', event.target.value)}
-                      className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')}
-                      aria-invalid={invalidRange}
-                      aria-describedby={invalidRange ? 'report-period-error' : undefined}
-                    />
-                  </label>
-                </div>
-                {startDate || endDate ? (
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="geo-focus-ring inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
-                  >
-                    Limpar período
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            {customPeriodSelected && invalidRange ? <p id="report-period-error" role="alert" className="mt-2 text-sm font-medium text-rose-700 dark:text-rose-300">A data inicial deve ser anterior ou igual à data final.</p> : null}
-            {customPeriodSelected && !invalidRange && periodGuidance ? (
-              <p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{periodGuidance}</p>
-            ) : null}
-          </section>
-
-          <ReportTabs value={reportType} onChange={setReportType} />
-        </div>
+        <section aria-label="Navegação e filtros dos relatórios" className="mb-6 border-b border-zinc-800 pb-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <ReportTabs value={reportType} onChange={setReportType} />
+            <ReportPeriodMenu
+              options={REPORT_PERIOD_OPTIONS}
+              activeOption={activePeriodOption}
+              customSelected={customPeriodSelected}
+              startDate={startDate}
+              endDate={endDate}
+              invalidRange={invalidRange}
+              guidance={periodGuidance}
+              onSelectPreset={applyPeriodPreset}
+              onSelectCustom={selectCustomPeriod}
+              onUpdateCustomDate={updateCustomDate}
+              onClearCustomPeriod={clearFilters}
+            />
+          </div>
+          <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Exibindo dados de {REPORT_PERIOD_OPTIONS.find((option) => option.id === activePeriodOption)?.label.toLocaleLowerCase('pt-BR') ?? 'todo o histórico'}.</p>
+        </section>
       </div>
 
       <section
@@ -668,8 +612,7 @@ export function Relatorios() {
             {reportType === 'financeiro' ? (
               <div className="mx-auto mt-5 flex max-w-2xl flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
                 <Link
-                  to="/orcamentos"
-                  state={{ openCreateModal: true }}
+                  to={buildBudgetEditorPath()}
                   className="geo-focus-ring inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800"
                 >
                   Cadastrar orçamento

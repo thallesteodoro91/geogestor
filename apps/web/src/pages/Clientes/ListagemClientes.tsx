@@ -12,7 +12,7 @@ import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient } from '../../services/apiClient';
 import { motion } from 'framer-motion';
-import { Plus, EnvelopeSimple, Phone, Trash, Note, Info, Users, ClockCounterClockwise, WhatsappLogo, Envelope, UsersThree, ChatText, FolderSimple, DownloadSimple, FilePdf, FileDoc, FileText, FileDashed, Files, MagnifyingGlass, DotsThree, PencilSimple, ArrowSquareOut, X, ArrowsDownUp, WarningCircle } from '@phosphor-icons/react';
+import { Plus, EnvelopeSimple, Phone, Trash, Note, Info, Users, ClockCounterClockwise, WhatsappLogo, Envelope, UsersThree, ChatText, FolderSimple, DownloadSimple, FilePdf, FileDoc, FileText, FileDashed, Files, MagnifyingGlass, DotsThree, PencilSimple, ArrowSquareOut, X, ArrowsDownUp, WarningCircle, Funnel } from '@phosphor-icons/react';
 import {
   CLIENT_CATEGORY_OPTIONS,
   CLIENT_ORIGIN_OPTIONS,
@@ -455,6 +455,13 @@ export function ListagemClientes() {
     categoriaFilter !== 'Todos' ? { key: 'categoria', label: `Categoria: ${categoriaFilter}`, clear: () => setCategoriaFilter('Todos') } : null,
     origemFilter !== 'Todos' ? { key: 'origem', label: `Origem: ${origemFilter}`, clear: () => setOrigemFilter('Todos') } : null
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => Boolean(chip));
+  const clearClientFilters = () => {
+    setSearchTerm('');
+    setSituacaoFilter('Todos');
+    setCategoriaFilter('Todos');
+    setOrigemFilter('Todos');
+    setSortOrder('recentes');
+  };
 
   // 4. Mutations
   const deleteClientMutation = useMutation({
@@ -812,39 +819,60 @@ export function ListagemClientes() {
             </span>
           </button>
         )}
-        navigation={<ModuleNavigation module="commercial" className="mb-0" />}
+        navigation={(
+          <ModuleNavigation
+            module="commercial"
+            className="mb-0"
+            trailing={(
+              <div className="flex items-center gap-2">
+                <label htmlFor="client-search" className="sr-only">Buscar clientes</label>
+                <div className="relative">
+                  <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    id="client-search"
+                    name="client-search"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Buscar clientes por nome, documento ou contatoâ€¦"
+                    autoComplete="off"
+                    className={cn(filterSearchInputClass, 'h-[52px] min-h-[52px] w-72 rounded-full sm:w-96 lg:w-[520px]')}
+                  />
+                </div>
+                <button
+                  type="button"
+                  aria-expanded={showFilters}
+                  aria-controls="client-filter-panel"
+                  onClick={() => setShowFilters((current) => !current)}
+                  className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] shrink-0 rounded-full px-5 text-sm sm:px-6"
+                >
+                  <Funnel aria-hidden="true" className="h-4 w-4" />
+                  Filtros
+                  {activeClientCriteriaCount > 0 ? (
+                    <span className="rounded-full bg-brand-primary-600 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                      {activeClientCriteriaCount}
+                    </span>
+                  ) : null}
+                </button>
+                {activeClientCriteriaCount > 0 ? (
+                  <button type="button" onClick={clearClientFilters} className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] shrink-0 rounded-full px-5 text-sm">
+                    Limpar
+                  </button>
+                ) : null}
+              </div>
+            )}
+          />
+        )}
       />
 
       <PageFilterBar
-        search={(
-          <>
-            <label htmlFor="client-search" className="sr-only">Buscar clientes</label>
-            <div className="relative">
-              <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              <input
-                id="client-search"
-                name="client-search"
-                type="search"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Buscar clientes por nome, documento ou contato…"
-                autoComplete="off"
-                className={filterSearchInputClass}
-              />
-            </div>
-          </>
-        )}
         filtersOpen={showFilters}
         onFiltersToggle={() => setShowFilters((current) => !current)}
         filterPanelId="client-filter-panel"
         activeFilterCount={activeClientCriteriaCount}
-        onClear={() => {
-          setSearchTerm('');
-          setSituacaoFilter('Todos');
-          setCategoriaFilter('Todos');
-          setOrigemFilter('Todos');
-          setSortOrder('recentes');
-        }}
+        showFilterToggle={false}
+        showControls={false}
+        className="-mt-2 mb-4"
       >
         <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
           <span>Status</span>

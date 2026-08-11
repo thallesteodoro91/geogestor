@@ -10,7 +10,7 @@ const desktopPackage = JSON.parse(fs.readFileSync(path.join(rootDir, 'apps', 'de
 fs.mkdirSync(distDir, { recursive: true });
 
 const packageManager = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
-const listCommand = `${packageManager} list --recursive --prod --depth Infinity --json`;
+const listCommand = `${packageManager} --config.verify-deps-before-run=false list --recursive --prod --depth Infinity --json`;
 const listed = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', listCommand], {
   cwd: rootDir,
   encoding: 'utf8',

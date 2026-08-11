@@ -55,7 +55,7 @@ function quoteCmdArg(arg) {
 
 for (const [label, args] of steps) {
   console.log(`\n[build] ${label}`);
-  const command = [pnpmCmd, ...args].map(quoteCmdArg).join(' ');
+  const command = [pnpmCmd, '--config.verify-deps-before-run=false', ...args].map(quoteCmdArg).join(' ');
   const result = spawnSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', command], {
     cwd: rootDir,
     env,

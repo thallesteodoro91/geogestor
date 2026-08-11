@@ -9,6 +9,7 @@ import { db } from '../db';
 import { FileSystemOutboxService } from './filesystem-outbox.service';
 import { OperationalLogService } from './operational-log.service';
 import { PerformanceMetricsService } from './performance-metrics.service';
+import { MaintenanceHistoryService } from './maintenance-history.service';
 
 type HealthFileSystem = Pick<typeof fs, 'stat' | 'access' | 'writeFile' | 'rm'>;
 
@@ -83,6 +84,55 @@ function classifyFileSystemError(error: unknown): FilesDirectoryDiagnosticCode {
   if (['ENODEV', 'ENXIO', 'ERROR_NOT_READY'].includes(code)) return 'drive_unavailable';
   if (['EAGAIN', 'EBUSY', 'ETIMEDOUT', 'EMFILE', 'ENFILE', 'EIO'].includes(code)) return 'temporarily_unavailable';
   return 'unexpected_error';
+}
+
+const DIAGNOSTIC_SENSITIVE_KEY = /(senha|password|secret|token|credential|authorization|cookie|client.?id|user.?id|email|e-mail|telefone|celular|cpf|cnpj|documento|endereco|address|cep|nome|name|owner|arquivo|filename|path|pasta|directory|folder|^cliente$|^usu[aá]rio$|^user$)/i;
+const DIAGNOSTIC_MAX_DEPTH = 6;
+const DIAGNOSTIC_MAX_ARRAY_ITEMS = 100;
+const DIAGNOSTIC_MAX_OBJECT_KEYS = 200;
+const DIAGNOSTIC_MAX_TEXT_LENGTH = 2_000;
+
+export function sanitizeDiagnosticValue(value: unknown, key = '', depth = 0): unknown {
+  if (depth > DIAGNOSTIC_MAX_DEPTH) return '[MAX_DEPTH]';
+  if (value === null || value === undefined || typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (DIAGNOSTIC_SENSITIVE_KEY.test(key)) return '[REDACTED]';
+    return value
+      .replace(/(bearer\s+|token[=:]\s*|secret[=:]\s*|password[=:]\s*)[^\s&,]+/gi, '$1[REDACTED]')
+      .replace(/(?:[A-Za-z]:\\|\\\\)[^\r\n,;]*/g, '[REDACTED_PATH]')
+      .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '[REDACTED_EMAIL]')
+      .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '[REDACTED_CPF]')
+      .replace(/\b\d{2}\.?\d{3}\.?\d{3}[/]?\d{4}-?\d{2}\b/g, '[REDACTED_CNPJ]')
+      .replace(/(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4}[-\s]?\d{4}\b/g, '[REDACTED_PHONE]')
+      .replace(/\b\d{5}-?\d{3}\b/g, '[REDACTED_CEP]')
+      .replace(/\b(?:rua|avenida|av\.?|rodovia|estrada|travessa)\s+[^,;\r\n]+/gi, '[REDACTED_ADDRESS]')
+      .replace(/\b(?:nome|cliente|usu[aá]rio|user)\s*[=:]\s*[^,;\r\n]+/gi, '[REDACTED_NAME]')
+      .replace(/\b[^\s\\/]+\.(?:db|sqlite3?|pdf|docx?|xlsx?|zip|log|json)\b/gi, '[REDACTED_FILE]')
+      .slice(0, DIAGNOSTIC_MAX_TEXT_LENGTH);
+  }
+  if (Array.isArray(value)) return value.slice(0, DIAGNOSTIC_MAX_ARRAY_ITEMS).map((item) => sanitizeDiagnosticValue(item, key, depth + 1));
+  if (typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, DIAGNOSTIC_MAX_OBJECT_KEYS).map(([childKey, childValue]) => [
+      childKey,
+      sanitizeDiagnosticValue(childValue, childKey, depth + 1)
+    ]));
+  }
+  return String(value).slice(0, DIAGNOSTIC_MAX_TEXT_LENGTH);
+}
+
+export function buildSafeDiagnosticHealth(health: Awaited<ReturnType<typeof SystemHealthService.inspect>>) {
+  const operationSummary = Object.fromEntries(Object.entries(health.operations).map(([component, state]) => [
+    component,
+    { status: state.status, updatedAt: state.updatedAt }
+  ]));
+  return sanitizeDiagnosticValue({
+    status: health.status,
+    checkedAt: health.checkedAt,
+    checks: health.checks,
+    operations: operationSummary,
+    performance: health.performance,
+    logging: health.logging
+  });
 }
 
 export class SystemHealthService {
@@ -181,6 +231,8 @@ export class SystemHealthService {
   }
 
   static async createDiagnosticSnapshot() {
+    const startedAt = new Date().toISOString();
+    const startedAtMs = Date.now();
     const health = await this.inspect();
     const directory = path.join(path.dirname(path.resolve(databasePath())), 'diagnostics');
     await fs.mkdir(directory, { recursive: true });
@@ -196,12 +248,45 @@ export class SystemHealthService {
       platform: process.platform,
       architecture: process.arch,
       mode: process.env.NODE_ENV || 'development',
-      health
+      health: buildSafeDiagnosticHealth(health)
     };
     await fs.writeFile(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
     await fs.rename(temporary, target);
     await OperationalLogService.info('diagnostic-snapshot-created', { createdAt: snapshot.createdAt });
-    return { path: target, createdAt: snapshot.createdAt, health };
+    await MaintenanceHistoryService.record({
+      type: 'diagnostic_export',
+      status: 'success',
+      startedAt,
+      durationMs: Date.now() - startedAtMs,
+      sourceLabel: 'diagnóstico local',
+      destinationLabel: '[diagnóstico local protegido]',
+      files: 1,
+      bytes: Buffer.byteLength(JSON.stringify(snapshot), 'utf8'),
+      user: 'admin',
+      auditId: null,
+      details: { redacted: true, formatVersion: snapshot.formatVersion }
+    });
+    return { path: target, createdAt: snapshot.createdAt, health, summary: this.diagnosticExportSummary() };
+  }
+
+  static diagnosticExportSummary() {
+    return {
+      included: [
+        'versão do GeoGestor e ambiente de execução',
+        'resultado das verificações de integridade do banco',
+        'contagens agregadas de entidades e operações',
+        'estado agregado de desempenho e logs'
+      ],
+      excluded: [
+        'credenciais, tokens e segredos',
+        'conteúdo de documentos',
+        'nomes, e-mails e demais dados pessoais',
+        'caminhos completos de arquivos e pastas'
+      ],
+      format: 'JSON protegido por redação',
+      containsPersonalData: false,
+      containsCredentials: false
+    };
   }
 
   static configureFileSystemForTests(fileSystem: HealthFileSystem | null) {

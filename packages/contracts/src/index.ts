@@ -6,6 +6,9 @@ export * from './opportunities';
 export * from './environmental';
 export * from './reports';
 export * from './strategic-planning';
+export * from './alerts';
+export * from './auxiliary-catalogs';
+export * from './properties';
 
 export const StatusProjetoSchema = z.enum([
   'Em Andamento',
@@ -219,6 +222,7 @@ export interface Cliente {
   celular?: string | null;
   celularWhatsapp?: boolean | null;
   endereco?: string | null;
+  enderecoLegado?: string | null;
   numero?: string | null;
   semNumero?: boolean | null;
   complemento?: string | null;
@@ -237,7 +241,11 @@ export interface Cliente {
   origemDetalhe?: string | null;
   indicadoPor?: string | null;
   categoria?: string | null;
+  categoriaLegada?: string | null;
   perfis?: string | null;
+  enderecoValidacao?: 'validado' | 'nao_validado' | 'requer_revisao' | null;
+  revisaoCadastral?: boolean | null;
+  revisaoMotivos?: string | null;
   observacoes?: string | null;
   anotacoes?: string | null;
   situacao?: string | null;

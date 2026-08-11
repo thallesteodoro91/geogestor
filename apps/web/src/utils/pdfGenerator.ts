@@ -1,5 +1,6 @@
 import type { TDocumentDefinitions, TableCell } from 'pdfmake/interfaces';
 import { loadPdfMake } from './loadPdfMake';
+import { getCachedCompanyTemplate } from '../services/companyTemplate';
 
 interface ProjetoPdfItem {
   nome?: string | null;
@@ -209,22 +210,7 @@ export const gerarOrcamentoPDF = async (orcamento: OrcamentoPdfItem) => {
   const dataAtual = new Date().toLocaleDateString('pt-BR');
   const valorFormatado = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(orcamento.valorTotal / 100);
 
-  // Read company template from localStorage
-  let empresaConfig: {
-    logo?: string;
-    razao?: string;
-    cnpj?: string;
-    telefone?: string;
-    email?: string;
-    endereco?: string;
-    cor?: string;
-    termos?: string;
-  } = {};
-  try {
-    empresaConfig = JSON.parse(localStorage.getItem('geogestor_empresa_template') || '{}');
-  } catch {
-    // ignore parse error
-  }
+  const empresaConfig = getCachedCompanyTemplate();
 
   const corDestaque = empresaConfig.cor || '#059669'; // Emerald default
 

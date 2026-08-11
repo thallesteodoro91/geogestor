@@ -16,7 +16,6 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Layout } from '../../components/Layout';
-import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { CalculationHistory, type SavedCalculation } from '../../components/CalculationHistory';
 import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
@@ -609,12 +608,11 @@ export function CalculadoraTopografica() {
         descriptionClassName="max-w-none"
         navigationClassName="mt-4"
         navigation={
-          <div className="space-y-4">
-            <ModuleNavigation module="tools" className="mb-0" />
+          <div className={cn(localNavigationBarClass, 'flex min-w-0 items-center gap-3')}>
             <div
               role="tablist"
               aria-label="Ferramentas de topografia"
-              className={cn(localNavigationBarClass, 'flex gap-3')}
+              className="flex min-w-max items-center gap-3"
             >
               {tabs.map((tab) => (
                 <button
@@ -643,7 +641,7 @@ export function CalculadoraTopografica() {
                 </button>
               ))}
             </div>
-            <div className="flex justify-end">
+            <div className="ml-auto shrink-0">
               <CalculationHistory
                 type="topografico"
                 suggestedName={activeTab === 'conversor' ? 'Conversão de coordenadas' : activeTab === 'distancia' ? 'Distância e azimute' : 'Área e perímetro'}

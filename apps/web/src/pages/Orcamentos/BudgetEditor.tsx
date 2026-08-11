@@ -1,11 +1,12 @@
 import { ArrowDown, ArrowUp, CaretDown, CheckCircle, Circle, Copy, FloppyDisk, Plus, Trash, UserPlus, WarningCircle
 } from '@phosphor-icons/react';
-import { BUDGET_UNITS, SERVICE_TYPES, isValidBrazilianPhone, isValidCnpj, isValidCpf, percentageToBasisPoints } from '@geogestor/contracts';
+import { BUDGET_UNITS, isValidBrazilianPhone, isValidCnpj, isValidCpf, percentageToBasisPoints } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useBlocker } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CheckboxField, DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect } from '../../components/Form';
+import { CheckboxField, DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
@@ -34,14 +35,41 @@ import type {
   BudgetFormTax,
   BudgetOptions
 } from './types';
+import { useAuxiliaryCatalogs } from '../../hooks/useAuxiliaryCatalogs';
 
 interface BudgetEditorProps {
-  isOpen: boolean;
+  isOpen?: boolean;
   onClose: () => void;
   options: BudgetOptions;
   initial?: BudgetDetail | null;
   initialClientId?: string;
   onSaved: (budget: BudgetDetail) => void;
+  presentation?: 'modal' | 'page';
+}
+
+interface BudgetEditorShellProps {
+  children: ReactNode;
+  closeDisabled: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  presentation: 'modal' | 'page';
+  title: string;
+}
+
+function BudgetEditorShell({ children, closeDisabled, isOpen, onClose, presentation, title }: BudgetEditorShellProps) {
+  if (presentation === 'page') {
+    return (
+      <section aria-label={title} className="min-w-0 max-w-full">
+        {children}
+      </section>
+    );
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} closeDisabled={closeDisabled} title={title} maxWidth="max-w-[1520px]">
+      {children}
+    </Modal>
+  );
 }
 
 const fieldClass = cn(geoFieldClass, 'min-h-11 w-full px-3 text-sm dark:border-[#272a31] dark:bg-[#0f1115] dark:text-[#f3f4f6] dark:placeholder:text-zinc-600 dark:hover:border-zinc-600 dark:focus:border-blue-500 dark:focus:ring-blue-500/20');
@@ -282,8 +310,9 @@ function getBudgetErrorSection(message: string, fallback: EditorSectionId): Edit
   return fallback;
 }
 
-export function BudgetEditor({ isOpen, onClose, options, initial, initialClientId, onSaved }: BudgetEditorProps) {
+export function BudgetEditor({ isOpen = true, onClose, options, initial, initialClientId, onSaved, presentation = 'modal' }: BudgetEditorProps) {
   const queryClient = useQueryClient();
+  const catalogsQuery = useAuxiliaryCatalogs();
   const formRef = useRef<HTMLFormElement | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
   const [form, setForm] = useState<BudgetFormState>(() => initial ? detailToForm(initial) : createDefaultBudgetForm(initialClientId || ''));
@@ -305,7 +334,20 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
   const sectionRefs = useRef<Partial<Record<EditorSectionId, HTMLElement | null>>>({});
   const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const discardContinueRef = useRef<HTMLButtonElement | null>(null);
+  const allowNavigationRef = useRef(false);
+  const hasFocusedInitialFieldRef = useRef(false);
   const isDirty = useMemo(() => JSON.stringify(form) !== initialFormSnapshot, [form, initialFormSnapshot]);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => (
+    presentation === 'page'
+    && isDirty
+    && !allowNavigationRef.current
+    && `${currentLocation.pathname}${currentLocation.search}` !== `${nextLocation.pathname}${nextLocation.search}`
+  ));
+  const discardPromptVisible = showDiscardConfirm || blocker.state === 'blocked';
+  const serviceTypeOptions = useMemo(() => Array.from(new Set([
+    ...(catalogsQuery.data?.services.filter((item) => item.ativo).map((item) => item.nome) ?? []),
+    form.serviceType
+  ].filter(Boolean))).sort((left, right) => left.localeCompare(right, 'pt-BR', { sensitivity: 'base' })), [catalogsQuery.data?.services, form.serviceType]);
   const validationIssues = useMemo<BudgetValidationIssue[]>(() => validationActive ? validateBudgetForm(form) : [], [form, validationActive]);
   const validationByField = useMemo(() => new Map(validationIssues.map((issue) => [issue.fieldId, issue.message])), [validationIssues]);
   const validationMessage = validationIssues.length === 1
@@ -332,6 +374,15 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
 
   const scrollSectionIntoEditor = (sectionId: EditorSectionId) => {
     const section = sectionRefs.current[sectionId];
+    if (presentation === 'page') {
+      if (!section) return;
+      const stickyNavigationOffset = window.innerWidth < 768 ? 132 : 24;
+      window.scrollTo({
+        top: Math.max(0, window.scrollY + section.getBoundingClientRect().top - stickyNavigationOffset),
+        behavior: preferredScrollBehavior()
+      });
+      return;
+    }
     const scrollContainer = formRef.current?.parentElement;
     if (!section || !scrollContainer) return;
     const sectionRect = section.getBoundingClientRect();
@@ -374,6 +425,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
         queryClient.invalidateQueries({ queryKey: ['budgets'] }),
         queryClient.invalidateQueries({ queryKey: ['budget-kpis'] })
       ]);
+      allowNavigationRef.current = true;
       onSaved(budget);
     },
     onError: (mutationError) => {
@@ -404,6 +456,22 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
 
   const updateItem = (id: string, patch: Partial<BudgetFormItem>) => {
     setForm((current) => ({ ...current, items: current.items.map((item) => item.id === id ? { ...item, ...patch } : item) }));
+  };
+
+  const applyServiceType = (serviceType: string) => {
+    const catalogItem = catalogsQuery.data?.services.find((item) => item.ativo && item.nome === serviceType);
+    setForm((current) => {
+      const firstItem = current.items[0];
+      const canSuggestValue = !initial && catalogItem && catalogItem.valorSugerido > 0 && current.items.length === 1
+        && !firstItem.description.trim() && currencyInputToCents(firstItem.unitPrice || '0') === 0;
+      return {
+        ...current,
+        serviceType,
+        items: canSuggestValue
+          ? [{ ...firstItem, description: catalogItem.nome, unitPrice: centsToCurrencyInput(catalogItem.valorSugerido) }]
+          : current.items
+      };
+    });
   };
 
   const moveItem = (index: number, direction: -1 | 1) => {
@@ -621,6 +689,23 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
 
   useEffect(() => {
     if (!isOpen) return;
+    if (presentation === 'page') {
+      const updateActiveSection = () => {
+        setIsFormScrolled(window.scrollY > 8);
+        const trackingLine = window.innerWidth < 768 ? 140 : 80;
+        let currentSection = editorSections[0].id;
+        for (const section of editorSections) {
+          const element = sectionRefs.current[section.id];
+          if (!element) continue;
+          if (element.getBoundingClientRect().top <= trackingLine) currentSection = section.id;
+          else break;
+        }
+        setActiveSection((current) => current === currentSection ? current : currentSection);
+      };
+      updateActiveSection();
+      window.addEventListener('scroll', updateActiveSection, { passive: true });
+      return () => window.removeEventListener('scroll', updateActiveSection);
+    }
     const scrollContainer = formRef.current?.parentElement;
     if (!scrollContainer) return;
     const updateActiveSection = () => {
@@ -638,7 +723,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
     updateActiveSection();
     scrollContainer.addEventListener('scroll', updateActiveSection, { passive: true });
     return () => scrollContainer.removeEventListener('scroll', updateActiveSection);
-  }, [isOpen]);
+  }, [isOpen, presentation]);
 
   useEffect(() => {
     const behavior = preferredScrollBehavior();
@@ -668,7 +753,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
   }, [activeSection]);
 
   useEffect(() => {
-    if (!isOpen || !isDirty) return;
+    if (!isOpen || !isDirty || allowNavigationRef.current) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
@@ -678,8 +763,16 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
   }, [isDirty, isOpen]);
 
   useEffect(() => {
-    if (showDiscardConfirm) discardContinueRef.current?.focus();
-  }, [showDiscardConfirm]);
+    if (discardPromptVisible) discardContinueRef.current?.focus();
+  }, [discardPromptVisible]);
+
+  useEffect(() => {
+    if (presentation !== 'page' || !isOpen || hasFocusedInitialFieldRef.current) return;
+    hasFocusedInitialFieldRef.current = true;
+    window.requestAnimationFrame(() => {
+      document.getElementById('budget-description')?.focus({ preventScroll: true });
+    });
+  }, [isOpen, presentation]);
 
   const requestClose = () => {
     if (saveMutation.isPending) return;
@@ -688,6 +781,18 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
       return;
     }
     setShowDiscardConfirm(true);
+  };
+
+  const continueEditing = () => {
+    if (blocker.state === 'blocked') blocker.reset();
+    setShowDiscardConfirm(false);
+  };
+
+  const discardChanges = () => {
+    allowNavigationRef.current = true;
+    setShowDiscardConfirm(false);
+    if (blocker.state === 'blocked') blocker.proceed();
+    else onClose();
   };
 
   const handleSubmit = () => {
@@ -813,13 +918,16 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
   );
 
   return (
-    <Modal isOpen={isOpen} onClose={requestClose} closeDisabled={saveMutation.isPending} title={initial ? 'Editar orçamento em rascunho' : 'Novo orçamento'} maxWidth="max-w-[1520px]">
+    <BudgetEditorShell isOpen={isOpen} onClose={requestClose} closeDisabled={saveMutation.isPending} title={initial ? 'Editar orçamento em rascunho' : 'Novo orçamento'} presentation={presentation}>
       <form
         ref={formRef}
         onSubmit={(event) => { event.preventDefault(); handleSubmit(); }}
-        className="-m-1 min-h-full rounded-xl bg-zinc-50 p-1 dark:bg-[#0b0c0f]"
+        className={cn('min-h-full rounded-xl bg-zinc-50 p-1 dark:bg-[#0b0c0f]', presentation === 'modal' && '-m-1')}
         noValidate
       >
+        <p className="sr-only" role="status" aria-live="polite">
+          {saveMutation.isPending ? (initial ? 'Atualizando orçamento…' : 'Criando orçamento…') : ''}
+        </p>
         {visibleFormError && (
           <div ref={errorRef} tabIndex={-1} className="mb-5">
             <FormError message={visibleFormError} />
@@ -828,7 +936,8 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
 
         <div className="mb-5 lg:hidden">{renderBudgetSummary()}</div>
         <div className={cn(
-          'sticky top-0 z-20 -mx-1 mb-5 border-y border-zinc-200 bg-zinc-50/95 backdrop-blur transition-shadow duration-200 motion-reduce:transition-none dark:border-[#272a31] dark:bg-[#0b0c0f]/95 lg:hidden',
+          'sticky z-20 -mx-1 mb-5 border-y border-zinc-200 bg-zinc-50/95 backdrop-blur transition-shadow duration-200 motion-reduce:transition-none dark:border-[#272a31] dark:bg-[#0b0c0f]/95 lg:hidden',
+          presentation === 'page' ? 'top-[57px] md:top-0' : 'top-0',
           isFormScrolled && 'shadow-[0_10px_24px_-16px_rgba(0,0,0,0.65)]'
         )}>
           <div
@@ -906,7 +1015,7 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
               <input id="budget-source" name="source" autoComplete="off" value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })} className={fieldClass} />
             </FormField>
             <FormField htmlFor="budget-execution-days" label="Prazo previsto (dias)" error={fieldError('budget-execution-days')}>
-              <input id="budget-execution-days" name="executionDays" type="number" min="0" inputMode="numeric" value={form.executionDays} onChange={(event) => setForm({ ...form, executionDays: event.target.value })} className={fieldClass} {...fieldA11y('budget-execution-days')} />
+              <NumericInput id="budget-execution-days" name="executionDays" min="0" inputMode="numeric" value={form.executionDays} onChange={(event) => setForm({ ...form, executionDays: event.target.value })} className={fieldClass} {...fieldA11y('budget-execution-days')} />
             </FormField>
           </div>
         </EditorSection>
@@ -993,8 +1102,8 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
           <FormSection title="Serviço e imóvel" description="Identificação do trabalho e do imóvel considerado na proposta." className="bg-brand-surface-subtle/30">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <FormField htmlFor="budget-service-type" label="Tipo de serviço" required error={fieldError('budget-service-type')} className="md:col-span-2">
-                <FormSelect id="budget-service-type" value={form.serviceType} onChange={(event) => setForm({ ...form, serviceType: event.target.value })} className={fieldClass} {...fieldA11y('budget-service-type')}>
-                  {SERVICE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                <FormSelect id="budget-service-type" value={form.serviceType} onChange={(event) => applyServiceType(event.target.value)} className={fieldClass} {...fieldA11y('budget-service-type')}>
+                  {serviceTypeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
                 </FormSelect>
               </FormField>
               <FormField htmlFor="budget-property-type" label="Classificação do imóvel">
@@ -1018,10 +1127,10 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
                 <input id="budget-area" name="estimatedArea" inputMode="decimal" autoComplete="off" value={form.characterization.estimatedArea} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedArea: event.target.value } })} className={fieldClass} />
               </FormField>
               <FormField htmlFor="budget-vertices" label="Vértices estimados">
-                <input id="budget-vertices" name="estimatedVertices" type="number" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.estimatedVertices} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedVertices: event.target.value } })} className={fieldClass} />
+                <NumericInput id="budget-vertices" name="estimatedVertices" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.estimatedVertices} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, estimatedVertices: event.target.value } })} className={fieldClass} />
               </FormField>
               <FormField htmlFor="budget-neighbors" label="Confrontantes">
-                <input id="budget-neighbors" name="neighbors" type="number" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.neighbors} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, neighbors: event.target.value } })} className={fieldClass} />
+                <NumericInput id="budget-neighbors" name="neighbors" min="0" inputMode="numeric" autoComplete="off" value={form.characterization.neighbors} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, neighbors: event.target.value } })} className={fieldClass} />
               </FormField>
               <FormField htmlFor="budget-distance" label="Distância operacional (km)">
                 <input id="budget-distance" name="distanceKm" inputMode="decimal" autoComplete="off" value={form.characterization.distanceKm} onChange={(event) => setForm({ ...form, characterization: { ...form.characterization, distanceKm: event.target.value } })} className={fieldClass} />
@@ -1335,13 +1444,13 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
               <FormField htmlFor="financial-account" label="Conta financeira de destino"><input id="financial-account" value={form.financialAccount} onChange={(event) => setForm({ ...form, financialAccount: event.target.value })} className={fieldClass} /></FormField>
               <FormField htmlFor="payment-description" label="Descrição da condição"><input id="payment-description" value={form.paymentDescription} onChange={(event) => setForm({ ...form, paymentDescription: event.target.value })} className={fieldClass} /></FormField>
             </div>
-            <div className="flex flex-wrap items-end gap-2"><FormField htmlFor="installment-count" label="Quantidade de parcelas" error={fieldError('installment-count')}><input id="installment-count" type="number" min="1" max="60" inputMode="numeric" value={installmentCount} onChange={(event) => setInstallmentCount(event.target.value)} className={cn(fieldClass, 'w-36')} {...fieldA11y('installment-count')} /></FormField><button type="button" onClick={() => setForm({ ...form, installments: createEqualInstallments(Number(installmentCount) || 1) })} className="geo-button-base geo-button-secondary geo-focus-ring mb-0 min-h-11 px-4">Distribuir igualmente</button></div>
+            <div className="flex flex-wrap items-end gap-2"><FormField htmlFor="installment-count" label="Quantidade de parcelas" error={fieldError('installment-count')}><NumericInput id="installment-count" min="1" max="60" inputMode="numeric" value={installmentCount} onChange={(event) => setInstallmentCount(event.target.value)} className={cn(fieldClass, 'w-36')} {...fieldA11y('installment-count')} /></FormField><button type="button" onClick={() => setForm({ ...form, installments: createEqualInstallments(Number(installmentCount) || 1) })} className="geo-button-base geo-button-secondary geo-focus-ring mb-0 min-h-11 px-4">Distribuir igualmente</button></div>
             <div className="space-y-2">
               {form.installments.map((installment, index) => (
                 <div key={`${index}-${installment.label}`} className="grid gap-2 rounded-xl border border-brand-border p-3 md:grid-cols-[minmax(12rem,1fr)_8rem_8rem_auto]">
                   <input aria-label={`Descrição da parcela ${index + 1}`} value={installment.label || ''} onChange={(event) => setForm({ ...form, installments: form.installments.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) })} className={compactFieldClass} />
                   <div><input id={`budget-installment-percentage-${index}`} aria-label={`Percentual da parcela ${index + 1}`} inputMode="decimal" value={installment.percentage || ''} onChange={(event) => setForm({ ...form, installments: form.installments.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: event.target.value, valueCents: null } : item) })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y(`budget-installment-percentage-${index}`)} />{fieldError(`budget-installment-percentage-${index}`) && <p id={`budget-installment-percentage-${index}-error`} className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-installment-percentage-${index}`)}</p>}</div>
-                  <div><input id={`budget-installment-days-${index}`} aria-label={`Dias após aprovação da parcela ${index + 1}`} type="number" min="0" inputMode="numeric" value={installment.daysAfterApproval || 0} onChange={(event) => setForm({ ...form, installments: form.installments.map((item, itemIndex) => itemIndex === index ? { ...item, daysAfterApproval: Number(event.target.value), dueDate: null } : item) })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y(`budget-installment-days-${index}`)} />{fieldError(`budget-installment-days-${index}`) && <p id={`budget-installment-days-${index}-error`} className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-installment-days-${index}`)}</p>}</div>
+                  <div><NumericInput id={`budget-installment-days-${index}`} aria-label={`Dias após aprovação da parcela ${index + 1}`} min="0" inputMode="numeric" value={installment.daysAfterApproval || 0} onChange={(event) => setForm({ ...form, installments: form.installments.map((item, itemIndex) => itemIndex === index ? { ...item, daysAfterApproval: Number(event.target.value), dueDate: null } : item) })} className={cn(compactFieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y(`budget-installment-days-${index}`)} />{fieldError(`budget-installment-days-${index}`) && <p id={`budget-installment-days-${index}-error`} className="mt-1 text-xs font-semibold text-rose-600 dark:text-rose-300" role="alert">{fieldError(`budget-installment-days-${index}`)}</p>}</div>
                   <button type="button" className={cn(iconButtonClass, 'text-brand-red-600')} onClick={() => setForm({ ...form, installments: form.installments.filter((_, itemIndex) => itemIndex !== index) })} aria-label={`Remover parcela ${index + 1}`}><Trash aria-hidden="true" size={16} /></button>
                 </div>
               ))}
@@ -1416,15 +1525,15 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
           '-mx-1 flex-wrap rounded-b-xl border-zinc-200 bg-white/95 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 transition-shadow duration-200 motion-reduce:transition-none dark:border-[#272a31] dark:bg-[#13151a]/95 sm:flex-nowrap sm:px-4',
           isFormScrolled && 'shadow-[0_-10px_24px_-16px_rgba(0,0,0,0.65)]'
         )}>
-          {showDiscardConfirm ? (
+          {discardPromptVisible ? (
             <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center">
               <p className="min-w-0 flex-1 text-sm font-semibold text-brand-rajah-900 dark:text-brand-rajah-100" role="alert">
                 Existem altera&ccedil;&otilde;es n&atilde;o salvas. Deseja descart&aacute;-las?
               </p>
-              <button ref={discardContinueRef} type="button" onClick={() => setShowDiscardConfirm(false)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4">
+              <button ref={discardContinueRef} type="button" onClick={continueEditing} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4">
                 Continuar editando
               </button>
-              <button type="button" onClick={onClose} className="geo-button-base geo-focus-ring min-h-11 border border-red-200 bg-red-50 px-4 text-red-700 hover:bg-red-100 dark:border-red-400/25 dark:bg-red-950/35 dark:text-red-100 dark:hover:bg-red-950/55">
+              <button type="button" onClick={discardChanges} className="geo-button-base geo-focus-ring min-h-11 border border-red-200 bg-red-50 px-4 text-red-700 hover:bg-red-100 dark:border-red-400/25 dark:bg-red-950/35 dark:text-red-100 dark:hover:bg-red-950/55">
                 Descartar altera&ccedil;&otilde;es
               </button>
             </div>
@@ -1441,6 +1550,6 @@ export function BudgetEditor({ isOpen, onClose, options, initial, initialClientI
           )}
         </FormFooter>
       </form>
-    </Modal>
+    </BudgetEditorShell>
   );
 }

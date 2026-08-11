@@ -11,7 +11,8 @@ fs.mkdirSync(outputDir, { recursive: true });
 await esbuild.build({
   entryPoints: {
     server: path.join(__dirname, 'src/server.ts'),
-    'database-security-worker': path.join(__dirname, 'src/database-security-worker.ts')
+    'database-security-worker': path.join(__dirname, 'src/database-security-worker.ts'),
+    'backup-restore-worker': path.join(__dirname, 'src/backup-restore-worker.ts')
   },
   bundle: true,
   platform: 'node',

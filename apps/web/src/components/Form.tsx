@@ -6,6 +6,7 @@ export { ComboboxField, FormSelect, SelectField } from './form-controls/SelectFi
 export { DatePickerField } from './form-controls/DatePickerField';
 export { PopoverSurface } from './form-controls/PopoverSurface';
 export { TimePickerField } from './form-controls/TimePickerField';
+export { NumericInput } from './form-controls/NumericInput';
 
 export type FormSectionTone = 'indigo' | 'cyan' | 'amber' | 'emerald' | 'slate';
 

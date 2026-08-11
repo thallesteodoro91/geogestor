@@ -8,6 +8,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
+import { activeClientDocumentWhere } from '../services/document-integrity.service';
 import { finishSimpleImport } from '../services/simple-import-result.service';
 import { OperationalLogService } from '../services/operational-log.service';
 import { finalizeImportFilesystem } from '../services/import-filesystem-finalization.service';
@@ -437,10 +438,7 @@ export async function clientesRoutes(server: FastifyInstance) {
             isNull(schema.despesas.estornadaEm),
             eq(schema.despesas.reembolsavel, true)
           )),
-        db.select({ value: count() }).from(schema.documentos).where(and(
-          eq(schema.documentos.clienteId, id),
-          isNull(schema.documentos.deletedAt)
-        )),
+        db.select({ value: count() }).from(schema.documentos).where(activeClientDocumentWhere(id)),
         db.select({ valor: sum(schema.notasFiscais.valor), count: count() }).from(schema.notasFiscais).where(and(
           eq(schema.notasFiscais.clienteId, id),
           isNull(schema.notasFiscais.deletedAt),
@@ -487,8 +485,13 @@ export async function clientesRoutes(server: FastifyInstance) {
           latestExecutionByProject.set(decision.projetoId, decision.valor);
         }
       }
+      const [totalPropriedades, documentosEmRevisao] = await Promise.all([
+        db.select({ value: count() }).from(schema.propriedades).where(and(eq(schema.propriedades.clienteId, id), isNull(schema.propriedades.deletedAt))),
+        db.select({ value: count() }).from(schema.documentos).where(and(eq(schema.documentos.clienteId, id), eq(schema.documentos.status, 'revisao'), isNull(schema.documentos.deletedAt)))
+      ]);
       const kpis = {
         projetos: totalProjetos[0]?.value || 0,
+        propriedades: totalPropriedades[0]?.value || 0,
         tarefasPendentes: totalTarefasPendentes[0]?.value || 0,
         orcamentosQtd: totalOrcamentosEmitidos[0]?.count || 0,
         orcamentosValor: totalOrcamentosContratados[0]?.valor || 0,
@@ -514,7 +517,11 @@ export async function clientesRoutes(server: FastifyInstance) {
 
       return {
         cliente: clienteRes[0],
-        kpis
+        kpis,
+        quality: {
+          requiresReview: Boolean(clienteRes[0].revisaoCadastral) || Number(documentosEmRevisao[0]?.value || 0) > 0 || Number(totalPropriedades[0]?.value || 0) === 0,
+          documentReviewCount: documentosEmRevisao[0]?.value || 0
+        }
       };
     } catch (err) {
       server.log.error(err);

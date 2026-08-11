@@ -1,7 +1,7 @@
 import { useReducedMotion } from 'framer-motion';
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { chartColors } from '../../data/chart-colors';
-import { chartBorder, chartCursor, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartAnimationDuration, chartBorder, chartCursor, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 
 type ClientProfitabilityDatum = {
   name: string;
@@ -71,7 +71,15 @@ export function ClientProfitabilityChart({ items }: { items: ClientProfitability
             tickFormatter={(value) => String(value).length > 18 ? `${String(value).slice(0, 17)}…` : String(value)}
           />
           <Tooltip cursor={chartCursor} content={<ProfitabilityTooltip />} />
-          <Bar dataKey="result" name="Resultado" radius={[0, 6, 6, 0]} maxBarSize={28} isAnimationActive={!reduceMotion} animationDuration={250}>
+          <Bar
+            dataKey="result"
+            name="Resultado"
+            radius={[0, 6, 6, 0]}
+            maxBarSize={28}
+            activeBar={chartActiveBar('hsl(var(--text-primary))')}
+            isAnimationActive={!reduceMotion}
+            animationDuration={chartAnimationDuration}
+          >
             {data.map((item) => (
               <Cell key={item.name} fill={item.result >= 0 ? chartColors.positive : chartColors.negative} />
             ))}

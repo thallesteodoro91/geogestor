@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useReducedMotion } from 'framer-motion';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   ArrowRight,
-  Briefcase,
   CalendarBlank,
   CaretDown,
   ChartBar,
   CheckCircle,
   CurrencyDollar,
   DownloadSimple,
+  FileText,
   Funnel,
   Plus,
   Receipt,
+  SuitcaseRolling,
   TrendDown,
   TrendUp,
   Wallet,
@@ -31,6 +33,8 @@ import { apiClient } from '../../services/apiClient';
 import {
   buildFinancialAnalytics,
   formatCurrencyFromCents,
+  getDespesaStatusFiscal,
+  getParcelaStatusFiscal,
   type ClienteFinanceiro,
   type DespesaFinanceira,
   type FinancialFilters,
@@ -38,11 +42,12 @@ import {
   type ParcelaFinanceira,
   type ProjetoFinanceiro
 } from '../../utils/financialAnalytics';
-import { chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
 import { filterControlClass } from '../../utils/filterStyles';
 import { headerPrimaryActionButtonClass } from '../../utils/actionStyles';
+import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
 import {
   localNavigationBarClass,
   localNavigationButtonClass,
@@ -52,9 +57,27 @@ import {
 import { Faturas } from '../Faturas/Faturas';
 import { Despesas } from '../Despesas/Despesas';
 import { GestaoFinanceira } from './GestaoFinanceira';
+import overviewTabIcon from '../../assets/magnific-icons/analysis_5706212.png';
+import receivablesTabIcon from '../../assets/magnific-icons/crisis_6283991.png';
+import payablesTabIcon from '../../assets/magnific-icons/dollar_9510014.png';
+import travelAndInvoicesTabIcon from '../../assets/magnific-icons/travel_5595118.png';
 
 type FinanceTab = 'visao' | 'faturas' | 'pagar' | 'auxiliares';
 type PeriodKey = 'month' | '3m' | '6m' | '12m' | 'year' | 'custom';
+type EmbeddedFinanceAction = {
+  type: 'despesa' | 'viagem' | 'fiscal';
+  requestId: number;
+};
+type RecentFinancialEntry = {
+  id: string;
+  type: 'receita' | 'despesa';
+  title: string;
+  context: string;
+  date: string;
+  status: string;
+  amount: number;
+  tab: Extract<FinanceTab, 'faturas' | 'pagar'>;
+};
 type DraftFilters = {
   dataInicio: string;
   dataFim: string;
@@ -95,6 +118,7 @@ const metricToneClasses = {
     icon: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
   }
 } as const;
+const dashboardCardClass = 'min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/60 sm:p-6';
 
 function resolveTab(value: string | null): FinanceTab {
   return value === 'faturas' || value === 'pagar' || value === 'auxiliares' ? value : 'visao';
@@ -134,6 +158,13 @@ function countLabel(value: number, singular: string, plural: string) {
   return `${value} ${value === 1 ? singular : plural}`;
 }
 
+function financialStatusClass(status: string) {
+  if (status === 'Pago') return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200';
+  if (status === 'Atrasado') return 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200';
+  if (status === 'Parcialmente pago') return 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200';
+  return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300';
+}
+
 function FinancialMetric({
   label,
   value,
@@ -163,7 +194,7 @@ function FinancialMetric({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">{label}</p>
-          <p className="mt-4 truncate text-2xl font-semibold tracking-tight text-zinc-950 tabular-nums dark:text-white sm:text-3xl">{value}</p>
+          <p className="mt-4 truncate text-2xl font-semibold tracking-tight text-zinc-950 tabular-nums dark:text-white xl:text-[1.35rem] 2xl:text-2xl">{value}</p>
         </div>
         <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', styles.icon)}>
           {icon}
@@ -188,6 +219,7 @@ function FinancialSkeleton() {
 }
 
 export function Financeiro() {
+  const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveTab(searchParams.get('tab'));
@@ -195,7 +227,8 @@ export function Financeiro() {
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [embeddedAction, setEmbeddedAction] = useState<'despesa' | null>(null);
+  const [embeddedAction, setEmbeddedAction] = useState<EmbeddedFinanceAction | null>(null);
+  const [showAllAttention, setShowAllAttention] = useState(false);
 
   const dataInicio = searchParams.get('inicio') || '';
   const dataFim = searchParams.get('fim') || '';
@@ -221,6 +254,11 @@ export function Financeiro() {
     if (tab === 'visao') next.delete('tab');
     else next.set('tab', tab);
     setSearchParams(next);
+  };
+
+  const openEmbeddedAction = (type: EmbeddedFinanceAction['type']) => {
+    setEmbeddedAction({ type, requestId: Date.now() });
+    setActiveTab(type === 'despesa' ? 'pagar' : 'auxiliares');
   };
 
   useEffect(() => {
@@ -250,7 +288,7 @@ export function Financeiro() {
 
   const orcamentosQuery = useQuery<OrcamentoFinanceiro[]>({
     queryKey: ['orcamentos-financeiro'],
-    queryFn: () => apiClient.get('/api/financeiro/orcamentos'),
+    queryFn: () => apiClient.getAllPages<OrcamentoFinanceiro>('/api/financeiro/orcamentos'),
     enabled: overviewEnabled
   });
   const despesasQuery = useQuery<DespesaFinanceira[]>({
@@ -422,6 +460,42 @@ export function Financeiro() {
   const launchCount = analytics.parcelas.length + analytics.despesas.length;
   const hasSourceData = orcamentos.length > 0 || despesas.length > 0 || parcelas.length > 0;
   const hasFilteredData = launchCount > 0;
+  const recentEntries = useMemo<RecentFinancialEntry[]>(() => {
+    const revenueEntries = analytics.parcelas.map((parcela): RecentFinancialEntry => ({
+      id: `receita-${parcela.id}`,
+      type: 'receita',
+      title: parcela.orcamentoDescricao || 'Parcela a receber',
+      context: [parcela.clienteNome].filter(Boolean).join(' · ') || 'Cliente não informado',
+      date: (parcela.dataPagamento || parcela.dataVencimento || '').slice(0, 10),
+      status: getParcelaStatusFiscal(parcela),
+      amount: Number(parcela.valor) || 0,
+      tab: 'faturas'
+    }));
+    const expenseEntries = analytics.despesas.map((despesa): RecentFinancialEntry => ({
+      id: `despesa-${despesa.id}`,
+      type: 'despesa',
+      title: despesa.descricao || despesa.categoria || 'Despesa',
+      context: [despesa.clienteNome, despesa.projetoNome || despesa.fornecedor].filter(Boolean).join(' · ') || 'Administrativo / geral',
+      date: (despesa.dataPagamento || despesa.dataCompetencia || despesa.data || '').slice(0, 10),
+      status: getDespesaStatusFiscal(despesa),
+      amount: Number(despesa.valor) || 0,
+      tab: 'pagar'
+    }));
+
+    return [...revenueEntries, ...expenseEntries]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+      .slice(0, 6);
+  }, [analytics.despesas, analytics.parcelas]);
+  const nextDueDate = useMemo(() => {
+    const todayKey = toDateKey(new Date());
+    return parcelas
+      .filter((parcela) => (!filters.clienteId || parcela.clienteId === filters.clienteId)
+        && getParcelaStatusFiscal(parcela) !== 'Pago'
+        && parcela.dataVencimento?.slice(0, 10) >= todayKey)
+      .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))[0]?.dataVencimento?.slice(0, 10) || '';
+  }, [filters.clienteId, parcelas]);
+  const openAccountCount = parcelas.filter((parcela) => getParcelaStatusFiscal(parcela) !== 'Pago').length
+    + despesas.filter((despesa) => !despesa.canceladaEm && !despesa.estornadaEm && getDespesaStatusFiscal(despesa) !== 'Pago').length;
 
   const exportOverview = () => {
     const header = ['Período', 'Recebido', 'Despesas', 'Resultado'];
@@ -452,11 +526,21 @@ export function Financeiro() {
         }]
       : [])
   ];
+  const attentionPriority = { critico: 0, atencao: 1, info: 2 } as const;
+  const orderedAttentionItems = [...attentionItems].sort((a, b) => attentionPriority[a.tipo] - attentionPriority[b.tipo]);
+  const collapsedAttentionItems = orderedAttentionItems.filter((item) => item.tipo === 'critico');
+  orderedAttentionItems
+    .filter((item) => item.tipo !== 'critico')
+    .slice(0, Math.max(0, 4 - collapsedAttentionItems.length))
+    .forEach((item) => collapsedAttentionItems.push(item));
+  const visibleAttentionItems = showAllAttention ? orderedAttentionItems : collapsedAttentionItems;
+  const hiddenAttentionCount = Math.max(0, orderedAttentionItems.length - collapsedAttentionItems.length);
 
   const attentionAction = (title: string) => {
-    if (title.includes('Recebimentos')) return { label: 'Ver contas a receber', action: () => setActiveTab('faturas') };
-    if (title.includes('Orçamentos')) return { label: 'Revisar orçamentos', action: () => navigate('/orcamentos') };
-    return { label: title.includes('sem cliente') ? 'Revisar lançamentos' : 'Ver contas a pagar', action: () => setActiveTab('pagar') };
+    const normalizedTitle = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    if (normalizedTitle.includes('recebimento')) return { label: 'Ver contas a receber', action: () => setActiveTab('faturas') };
+    if (normalizedTitle.includes('orcamento')) return { label: 'Revisar orçamentos', action: () => navigate('/orcamentos') };
+    return { label: normalizedTitle.includes('sem cliente') ? 'Revisar lançamentos' : 'Ver contas a pagar', action: () => setActiveTab('pagar') };
   };
 
   const openFirstLaunch = () => {
@@ -468,8 +552,8 @@ export function Financeiro() {
     <Layout>
       <PageHeader
         eyebrow="Gestão financeira"
-        title="Gestão financeira 360"
-        description="Acompanhe receitas, despesas, viagens e o resultado do seu negócio."
+        title="Financeiro"
+        description="Acompanhe receitas, despesas, vencimentos e o resultado financeiro dos seus projetos."
         action={
           <div ref={actionMenuRef} className="relative shrink-0">
           <button
@@ -496,7 +580,7 @@ export function Financeiro() {
                 role="menuitem"
                 onClick={() => {
                   setActionMenuOpen(false);
-                  navigate('/orcamentos', { state: { openCreateModal: true } });
+                  navigate(buildBudgetEditorPath());
                 }}
                 className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
               >
@@ -508,8 +592,7 @@ export function Financeiro() {
                 role="menuitem"
                 onClick={() => {
                   setActionMenuOpen(false);
-                  setActiveTab('pagar');
-                  setEmbeddedAction('despesa');
+                  openEmbeddedAction('despesa');
                 }}
                 className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
               >
@@ -521,12 +604,24 @@ export function Financeiro() {
                 role="menuitem"
                 onClick={() => {
                   setActionMenuOpen(false);
-                  setActiveTab('auxiliares');
+                  openEmbeddedAction('viagem');
                 }}
                 className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200"><Briefcase aria-hidden="true" size={19} /></span>
-                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Nova viagem ou nota fiscal</span><span className="block truncate text-xs text-zinc-500">Acessar os controles financeiros auxiliares</span></span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200"><SuitcaseRolling aria-hidden="true" size={19} /></span>
+                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Nova viagem</span><span className="block truncate text-xs text-zinc-500">Registrar deslocamento e prestação de contas</span></span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setActionMenuOpen(false);
+                  openEmbeddedAction('fiscal');
+                }}
+                className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-500/10 dark:text-sky-200"><FileText aria-hidden="true" size={19} /></span>
+                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Informar documento fiscal</span><span className="block truncate text-xs text-zinc-500">Vincular nota fiscal ao cliente ou projeto</span></span>
               </button>
             </div>
           )}
@@ -537,11 +632,11 @@ export function Financeiro() {
       <nav aria-label="Áreas do Financeiro" className={cn(localNavigationBarClass, 'mb-7')}>
         <div role="tablist" className={localNavigationItemsClass}>
           {([
-            ['visao', 'Visão geral', ChartBar, 'system'],
-            ['faturas', 'Contas a receber', CurrencyDollar, 'finance'],
-            ['pagar', 'Contas a pagar', Receipt, 'warning'],
-            ['auxiliares', 'Viagens e notas fiscais', Briefcase, 'field']
-          ] as const).map(([id, label, Icon, tone]) => (
+            ['visao', 'Visão geral', overviewTabIcon, 'system'],
+            ['faturas', 'Contas a receber', receivablesTabIcon, 'finance'],
+            ['pagar', 'Contas a pagar', payablesTabIcon, 'warning'],
+            ['auxiliares', 'Viagens e notas fiscais', travelAndInvoicesTabIcon, 'field']
+          ] as const).map(([id, label, icon, tone]) => (
             <button
               key={id}
               type="button"
@@ -555,9 +650,9 @@ export function Financeiro() {
             >
               <span
                 aria-hidden="true"
-                className={localNavigationIconClass(activeTab === id, tone)}
+                className={localNavigationIconClass(activeTab === id, tone, 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}
               >
-                <Icon weight={activeTab === id ? 'fill' : 'regular'} className="h-4 w-4" />
+                <img src={icon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
               </span>
               {label}
             </button>
@@ -787,82 +882,137 @@ export function Financeiro() {
                 />
               </section>
 
-              <section aria-labelledby="cash-flow-title" className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/60 sm:p-7">
-                <div className="mb-6 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                  <div>
-                    <h2 id="cash-flow-title" className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white">Evolução do fluxo de caixa</h2>
-                    <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Compare receitas recebidas e despesas pagas em {periodLabel.toLocaleLowerCase('pt-BR')}.</p>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
+                <section aria-labelledby="cash-flow-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
+                  <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+                    <div>
+                      <h2 id="cash-flow-title" className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white">Evolução do fluxo de caixa</h2>
+                      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Receitas recebidas e despesas pagas no período.</p>
+                    </div>
+                    <span className="w-fit rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{periodLabel}</span>
                   </div>
-                  <span className="w-fit rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{periodLabel}</span>
-                </div>
-                {hasChartData ? (
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer {...responsiveChartProps}>
-                      <BarChart data={monthlyData}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
-                        <Tooltip cursor={chartCursor} content={<RichTooltip showDifference differenceLabel="Resultado" format="currency" />} />
-                        <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
-                        <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={36} />
-                        <Bar dataKey="Despesas" fill={chartColors.negative} radius={[6, 6, 0, 0]} maxBarSize={36} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : (
-                  <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 px-6 text-center dark:border-zinc-700">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300"><Receipt aria-hidden="true" size={24} /></span>
-                    <h3 className="mt-4 font-semibold text-zinc-950 dark:text-white">Ainda não existem lançamentos neste período</h3>
-                    <p className="mt-1 max-w-md text-sm leading-6 text-zinc-500">Registre uma receita ou despesa para começar a acompanhar a evolução do caixa.</p>
-                    <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring mt-5 min-h-11 px-5 text-sm">
-                      <Plus aria-hidden="true" size={17} /> Criar primeiro lançamento
-                    </button>
-                  </div>
-                )}
-              </section>
+                  {hasChartData ? (
+                    <div className="h-72 w-full">
+                      <ResponsiveContainer {...responsiveChartProps}>
+                        <BarChart data={monthlyData}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} minTickGap={18} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
+                          <Tooltip cursor={chartCursor} content={<RichTooltip showDifference differenceLabel="Resultado" format="currency" />} />
+                          <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
+                          <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                          <Bar dataKey="Despesas" fill={chartColors.negative} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 px-6 text-center dark:border-zinc-700">
+                      <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300"><Receipt aria-hidden="true" size={24} /></span>
+                      <h3 className="mt-4 font-semibold text-zinc-950 dark:text-white">Ainda não existem lançamentos neste período</h3>
+                      <p className="mt-1 max-w-md text-sm leading-6 text-zinc-500">Registre uma receita ou despesa para acompanhar a evolução do caixa.</p>
+                      <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring mt-5 min-h-11 px-5 text-sm">
+                        <Plus aria-hidden="true" size={17} /> Criar primeiro lançamento
+                      </button>
+                    </div>
+                  )}
+                </section>
 
-              <section aria-labelledby="financial-alerts-title" className="border-t border-zinc-200 pt-8 dark:border-zinc-800">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h2 id="financial-alerts-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Requer sua atenção</h2>
-                    <p className="mt-1 text-sm text-zinc-500">Pendências que podem afetar a leitura do resultado financeiro.</p>
+                <section aria-labelledby="financial-alerts-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h2 id="financial-alerts-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Requer sua atenção</h2>
+                      <p className="mt-1 text-sm text-zinc-500">Pendências que afetam a leitura financeira.</p>
+                    </div>
+                    <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold tabular-nums', orderedAttentionItems.length > 0 ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200')}>
+                      {orderedAttentionItems.length}
+                    </span>
                   </div>
-                  <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', attentionItems.length > 0 ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200')}>
-                    {attentionItems.length}
-                  </span>
-                </div>
-                {attentionItems.length > 0 ? (
-                  <div className="mt-5 divide-y divide-zinc-200 overflow-hidden rounded-2xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                    {attentionItems.map((alerta) => {
-                      const action = attentionAction(alerta.titulo);
-                      return (
-                        <article key={`${alerta.tipo}-${alerta.titulo}`} className="flex flex-col gap-4 bg-white p-4 dark:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="flex min-w-0 gap-3">
-                            <span className={cn('mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', alerta.tipo === 'critico' ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200')}>
-                              <WarningCircle aria-hidden="true" size={19} weight="fill" />
-                            </span>
-                            <div className="min-w-0">
-                              <p className="font-semibold text-zinc-900 dark:text-zinc-100">{alerta.titulo}</p>
-                              <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">{alerta.descricao}</p>
+                  {orderedAttentionItems.length > 0 ? (
+                    <div className="mt-4 space-y-3">
+                      {visibleAttentionItems.map((alerta) => {
+                        const action = attentionAction(alerta.titulo);
+                        return (
+                          <article key={`${alerta.tipo}-${alerta.titulo}`} className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+                            <div className="flex min-w-0 gap-3">
+                              <span className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', alerta.tipo === 'critico' ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200')}>
+                                <WarningCircle aria-hidden="true" size={17} weight="fill" />
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{alerta.titulo}</p>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{alerta.descricao}</p>
+                                <button type="button" onClick={action.action} className="geo-focus-ring mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg text-xs font-semibold text-zinc-700 hover:text-zinc-950 dark:text-zinc-200 dark:hover:text-white">
+                                  {action.label} <ArrowRight aria-hidden="true" size={13} />
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <button type="button" onClick={action.action} className="geo-focus-ring inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                            {action.label} <ArrowRight aria-hidden="true" size={15} />
-                          </button>
-                        </article>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="mt-5 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100">
-                    <CheckCircle aria-hidden="true" size={22} weight="fill" className="shrink-0" />
-                    <p className="text-sm font-medium">Tudo em dia. Nenhuma pendência financeira requer sua atenção.</p>
-                  </div>
-                )}
-              </section>
+                          </article>
+                        );
+                      })}
+                      {hiddenAttentionCount > 0 || showAllAttention ? (
+                        <button type="button" onClick={() => setShowAllAttention((current) => !current)} className="geo-focus-ring min-h-10 w-full rounded-xl text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">
+                          {showAllAttention ? 'Mostrar menos' : `Ver todas (${orderedAttentionItems.length})`}
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100">
+                      <CheckCircle aria-hidden="true" size={22} weight="fill" className="shrink-0" />
+                      <p className="text-sm font-medium leading-6">Tudo em dia. Nenhuma pendência financeira requer sua atenção.</p>
+                    </div>
+                  )}
+                </section>
 
-              <div className="grid gap-8 border-t border-zinc-200 pt-8 dark:border-zinc-800 xl:grid-cols-2">
-                <section aria-labelledby="client-profit-title" className="min-w-0 xl:pr-4">
+                <section aria-labelledby="recent-financial-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 id="recent-financial-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Últimos lançamentos</h2>
+                      <p className="mt-1 text-sm text-zinc-500">Receitas e despesas mais recentes no recorte atual.</p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{recentEntries.length}</span>
+                  </div>
+                  {recentEntries.length > 0 ? (
+                    <div className="mt-4 divide-y divide-zinc-100 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+                      {recentEntries.map((entry) => (
+                        <button key={entry.id} type="button" onClick={() => setActiveTab(entry.tab)} className="geo-focus-ring flex min-h-[72px] w-full items-center gap-3 px-1 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                          <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', entry.type === 'receita' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200')}>
+                            {entry.type === 'receita' ? <TrendUp aria-hidden="true" size={19} /> : <TrendDown aria-hidden="true" size={19} />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                              <span className="truncate text-sm font-semibold text-zinc-950 dark:text-white">{entry.title}</span>
+                              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', financialStatusClass(entry.status))}>{entry.status}</span>
+                            </span>
+                            <span className="mt-1 block truncate text-xs text-zinc-500">{entry.date ? formatDate(entry.date) : 'Sem data'} · {entry.context}</span>
+                          </span>
+                          <span className={cn('shrink-0 text-right text-sm font-semibold tabular-nums', entry.type === 'receita' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300')}>
+                            {entry.type === 'receita' ? '+' : '−'} {formatCurrencyFromCents(entry.amount)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Nenhum lançamento recente neste recorte.</p>
+                  )}
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    <button type="button" onClick={() => setActiveTab('faturas')} className="geo-focus-ring min-h-10 rounded-xl px-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">Ver recebimentos</button>
+                    <button type="button" onClick={() => setActiveTab('pagar')} className="geo-focus-ring min-h-10 rounded-xl px-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">Ver despesas</button>
+                  </div>
+                </section>
+
+                <section aria-labelledby="expense-category-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
+                  <h2 id="expense-category-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Despesas por categoria</h2>
+                  <p className="mt-1 text-sm text-zinc-500">Categorias com maior valor no recorte.</p>
+                  <ExpenseCategoryChart
+                    compact
+                    items={analytics.categorias.map((item) => ({
+                      name: item.categoria,
+                      value: item.total,
+                      count: item.count
+                    }))}
+                  />
+                </section>
+
+                <section aria-labelledby="client-profit-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
                   <h2 id="client-profit-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Rentabilidade por cliente</h2>
                   <p className="mt-1 text-sm text-zinc-500">Cinco maiores resultados realizados.</p>
                   {analytics.clientes.length === 0 ? (
@@ -885,7 +1035,7 @@ export function Financeiro() {
                           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                             {analytics.clientes.slice(0, 5).map((item) => (
                               <tr key={item.clienteId}>
-                                <th scope="row" className="py-3 pr-3 text-left font-semibold">{item.cliente}</th>
+                                <th scope="row" className="max-w-72 break-words py-3 pr-3 text-left font-semibold">{item.cliente}</th>
                                 <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
                                 <td className="py-3 text-right font-mono tabular-nums">{percentageFormatter.format(item.margem)}%</td>
                               </tr>
@@ -897,23 +1047,36 @@ export function Financeiro() {
                   )}
                 </section>
 
-                <section aria-labelledby="expense-category-title" className="min-w-0 xl:border-l xl:border-zinc-200 xl:pl-8 dark:xl:border-zinc-800">
-                  <h2 id="expense-category-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Despesas por categoria</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Categorias com maior valor no recorte.</p>
-                  <ExpenseCategoryChart
-                    items={analytics.categorias.map((item) => ({
-                      name: item.categoria,
-                      value: item.total,
-                      count: item.count
-                    }))}
-                  />
+                <section aria-labelledby="financial-summary-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
+                  <h2 id="financial-summary-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Resumo financeiro</h2>
+                  <p className="mt-1 text-sm text-zinc-500">Pendências e próximos passos do período.</p>
+                  <dl className="mt-5 divide-y divide-zinc-100 dark:divide-zinc-800">
+                    <div className="flex items-start justify-between gap-4 py-3 first:pt-0">
+                      <dt className="text-sm text-zinc-500">Total vencido</dt>
+                      <dd className={cn('text-right text-sm font-semibold tabular-nums', analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-zinc-950 dark:text-white')}>{formatCurrencyFromCents(analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas)}</dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4 py-3">
+                      <dt className="text-sm text-zinc-500">Contas abertas</dt>
+                      <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{openAccountCount}</dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4 py-3">
+                      <dt className="text-sm text-zinc-500">Próximo vencimento</dt>
+                      <dd className="max-w-40 text-right text-sm font-semibold text-zinc-950 dark:text-white">{nextDueDate ? formatDate(nextDueDate) : 'Sem vencimentos futuros'}</dd>
+                    </div>
+                    <div className="flex items-start justify-between gap-4 py-3">
+                      <dt className="text-sm text-zinc-500">Aprovados sem parcelas</dt>
+                      <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{analytics.kpis.orcamentosSemParcelas}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-5 grid gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                    <Link to="/relatorios?tipo=financeiro" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                      Relatório financeiro <ArrowRight aria-hidden="true" size={15} />
+                    </Link>
+                    <Link to="/orcamentos" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                      Gerenciar orçamentos <ArrowRight aria-hidden="true" size={15} />
+                    </Link>
+                  </div>
                 </section>
-              </div>
-
-              <div className="flex justify-end">
-                <Link to="/orcamentos" className="geo-button-base geo-focus-ring inline-flex min-h-11 items-center rounded-xl border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900">
-                  Gerenciar orçamentos
-                </Link>
               </div>
             </div>
           )}
@@ -921,8 +1084,21 @@ export function Financeiro() {
       )}
 
       {activeTab === 'faturas' && <Faturas embedded />}
-      {activeTab === 'pagar' && <Despesas embedded openCreateOnMount={embeddedAction === 'despesa'} />}
-      {activeTab === 'auxiliares' && <GestaoFinanceira embedded />}
+      {activeTab === 'pagar' && (
+        <Despesas
+          key={embeddedAction?.type === 'despesa' ? embeddedAction.requestId : 'financial-expenses'}
+          embedded
+          openCreateOnMount={embeddedAction?.type === 'despesa'}
+        />
+      )}
+      {activeTab === 'auxiliares' && (
+        <GestaoFinanceira
+          key={embeddedAction && embeddedAction.type !== 'despesa' ? embeddedAction.requestId : 'financial-auxiliary'}
+          embedded
+          initialTab={embeddedAction?.type === 'fiscal' ? 'fiscal' : 'viagens'}
+          openCreateOnMount={embeddedAction?.type === 'viagem' || embeddedAction?.type === 'fiscal'}
+        />
+      )}
     </Layout>
   );
 }

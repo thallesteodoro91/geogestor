@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell, ipcMain, safeStorage, session } = require('electron');
+const { app, BrowserWindow, Notification, dialog, shell, ipcMain, safeStorage, session } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const { fork } = require('child_process');
@@ -40,7 +40,11 @@ let isQuitting = false;
 let restoreRestartInProgress = false;
 let apiRestartHistory = [];
 let apiRestartTimer = null;
+let shutdownPromise = null;
+let shutdownCompleted = false;
+let shutdownBackupFailure = null;
 const runtimeSensitiveValues = new Set();
+const shownDeadlineAlertIds = new Set();
 
 function reportStartupMilestone(name) {
   if (reportedStartupMilestones.has(name)) return;
@@ -55,6 +59,27 @@ ipcMain.on('startup-milestone', (_event, name) => {
   }
 });
 
+ipcMain.handle('show-deadline-notification', async (_event, payload) => {
+  if (!payload || typeof payload !== 'object' || !Notification?.isSupported?.()) return false;
+  const id = typeof payload.id === 'string' ? payload.id.slice(0, 100) : '';
+  const title = typeof payload.title === 'string' ? payload.title.slice(0, 120) : 'Prazo no GeoGestor';
+  const body = typeof payload.body === 'string' ? payload.body.slice(0, 300) : '';
+  const link = typeof payload.link === 'string' && payload.link.startsWith('/') ? payload.link.slice(0, 500) : '/';
+  if (!id || shownDeadlineAlertIds.has(id)) return false;
+  shownDeadlineAlertIds.add(id);
+  if (shownDeadlineAlertIds.size > 500) shownDeadlineAlertIds.delete(shownDeadlineAlertIds.values().next().value);
+  const notification = new Notification({ title, body, silent: false });
+  notification.on('click', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('open-deadline-alert', link);
+  });
+  notification.show();
+  return true;
+});
+
 ipcMain.handle('select-backup-bundle', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Selecione um backup completo do GeoGestor',
@@ -64,10 +89,78 @@ ipcMain.handle('select-backup-bundle', async () => {
   return result.canceled ? null : result.filePaths[0] || null;
 });
 
-ipcMain.handle('open-diagnostics-folder', async () => {
-  const diagnosticsPath = app.getPath('userData');
-  await shell.openPath(diagnosticsPath);
+ipcMain.handle('select-data-directory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecione a pasta de documentos do GeoGestor',
+    defaultPath: app.getPath('documents'),
+    buttonLabel: 'Selecionar pasta',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  return result.canceled ? null : result.filePaths[0] || null;
 });
+
+ipcMain.handle('select-backup-directory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecione a pasta de backups do GeoGestor',
+    defaultPath: path.join(app.getPath('userData'), 'backups'),
+    buttonLabel: 'Usar como destino',
+    properties: ['openDirectory', 'createDirectory']
+  });
+  return result.canceled ? null : result.filePaths[0] || null;
+});
+
+ipcMain.handle('open-backup-directory', async (_event, targetDirectory) => {
+  if (typeof targetDirectory !== 'string' || targetDirectory.length > 4096 || !path.isAbsolute(targetDirectory)) {
+    throw new Error('A pasta de backup informada é inválida.');
+  }
+  const resolved = path.resolve(targetDirectory);
+  const stats = await fs.promises.stat(resolved);
+  if (!stats.isDirectory()) throw new Error('A pasta de backup não está disponível.');
+  const errorMessage = await shell.openPath(resolved);
+  if (errorMessage) throw new Error(errorMessage);
+});
+
+ipcMain.handle('get-backup-recovery-status', async () => {
+  const recovery = getOrCreateBackupRecoveryKey();
+  return { configured: true, confirmed: recovery.confirmed, keyId: recovery.keyId };
+});
+
+ipcMain.handle('confirm-backup-recovery', async () => {
+  const recovery = getOrCreateBackupRecoveryKey();
+  setBackupRecoveryConfirmed(true);
+  return { configured: true, confirmed: true, keyId: recovery.keyId };
+});
+
+ipcMain.handle('save-backup-recovery-kit', async (_event, kit) => {
+  if (!kit || typeof kit !== 'object' || kit.format !== 'GeoGestor-Recovery-Kit' || kit.version !== 1) {
+    throw new Error('O kit de recuperação informado é inválido.');
+  }
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Salvar kit de recuperação do GeoGestor',
+    defaultPath: path.join(app.getPath('documents'), `GeoGestor-Recovery-Kit-${new Date().toISOString().slice(0, 10)}.json`),
+    filters: [{ name: 'Kit de recuperação do GeoGestor', extensions: ['json'] }]
+  });
+  if (result.canceled || !result.filePath) return null;
+  await fs.promises.writeFile(result.filePath, `${JSON.stringify(kit, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+  return result.filePath;
+});
+
+async function openDiagnosticsFolder(dependencies = {}) {
+  const userDataPath = dependencies.userDataPath || app.getPath('userData');
+  const diagnosticsPath = path.join(userDataPath, 'diagnostics');
+  const mkdir = dependencies.mkdir || fs.promises.mkdir;
+  const openPath = dependencies.openPath || ((target) => shell.openPath(target));
+  try {
+    await mkdir(diagnosticsPath, { recursive: true });
+    const errorMessage = await openPath(diagnosticsPath);
+    if (errorMessage) return { success: false, error: 'O Windows não conseguiu abrir a pasta de diagnósticos.' };
+    return { success: true, path: diagnosticsPath };
+  } catch {
+    return { success: false, error: 'Não foi possível preparar ou abrir a pasta de diagnósticos.' };
+  }
+}
+
+ipcMain.handle('open-diagnostics-folder', () => openDiagnosticsFolder());
 
 function writeApiProcessLog(level, data) {
   try {
@@ -185,15 +278,62 @@ function getOrCreateSecretKey() {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('A proteção de credenciais do Windows não está disponível neste perfil.');
   }
-  const keyPath = path.join(app.getPath('userData'), 'local-secrets.key');
+  const userDataPath = app.getPath('userData');
+  const keyPath = path.join(userDataPath, 'local-secrets-key.v2.json');
+  const legacyPath = path.join(userDataPath, 'local-secrets.key');
   if (fs.existsSync(keyPath)) {
-    return safeStorage.decryptString(fs.readFileSync(keyPath));
+    const envelope = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    if (envelope.version !== 2 || envelope.protection !== 'electron-safeStorage' || typeof envelope.ciphertext !== 'string') {
+      throw new Error('O cofre local de credenciais está em um formato incompatível.');
+    }
+    const key = safeStorage.decryptString(Buffer.from(envelope.ciphertext, 'base64'));
+    const decoded = Buffer.from(key, 'base64');
+    const valid = decoded.length === 32 && decoded.toString('base64') === key;
+    decoded.fill(0);
+    if (!valid || databaseKeyId(key) !== envelope.keyId) throw new Error('O cofre local de credenciais não pôde ser validado neste perfil do Windows.');
+    return key;
   }
-  const key = crypto.randomBytes(32).toString('base64');
+
+  let key = null;
+  if (fs.existsSync(legacyPath)) {
+    const legacy = fs.readFileSync(legacyPath);
+    try {
+      const candidate = safeStorage.decryptString(legacy);
+      const decoded = Buffer.from(candidate, 'base64');
+      if (decoded.length === 32 && decoded.toString('base64') === candidate) key = candidate;
+      decoded.fill(0);
+    } catch {
+      const candidate = legacy.toString('utf8').trim();
+      const decoded = Buffer.from(candidate, 'base64');
+      if (decoded.length === 32 && decoded.toString('base64') === candidate) key = candidate;
+      decoded.fill(0);
+    }
+    if (!key) {
+      const candidate = legacy.toString('utf8').trim();
+      const decoded = Buffer.from(candidate, 'base64');
+      if (decoded.length === 32 && decoded.toString('base64') === candidate) key = candidate;
+      decoded.fill(0);
+    }
+  }
+  key ||= crypto.randomBytes(32).toString('base64');
   const encrypted = safeStorage.encryptString(key);
+  const envelope = {
+    version: 2,
+    protection: 'electron-safeStorage',
+    provider: process.platform === 'win32' ? 'Windows DPAPI' : 'operating-system-keychain',
+    scope: 'current-os-user',
+    keyId: databaseKeyId(key),
+    createdAt: new Date().toISOString(),
+    ciphertext: encrypted.toString('base64')
+  };
   const temporaryPath = `${keyPath}.pending`;
-  fs.writeFileSync(temporaryPath, encrypted, { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(envelope)}\n`, { flag: 'wx', mode: 0o600 });
   fs.renameSync(temporaryPath, keyPath);
+  const verified = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+  if (safeStorage.decryptString(Buffer.from(verified.ciphertext, 'base64')) !== key) {
+    throw new Error('A migração do cofre local não pôde ser confirmada; o valor anterior foi preservado.');
+  }
+  if (fs.existsSync(legacyPath)) fs.rmSync(legacyPath, { force: true });
   return key;
 }
 
@@ -234,6 +374,53 @@ function getOrCreateDatabaseEncryptionKey() {
   fs.writeFileSync(temporaryPath, `${JSON.stringify(envelope)}\n`, { flag: 'wx', mode: 0o600 });
   fs.renameSync(temporaryPath, keyPath);
   return key;
+}
+
+function getOrCreateBackupRecoveryKey() {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('O armazenamento seguro do sistema não está disponível para proteger a recuperação de emergência.');
+  }
+  const keyPath = path.join(app.getPath('userData'), 'backup-recovery-key.v1.json');
+  if (fs.existsSync(keyPath)) {
+    const envelope = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    if (envelope.version !== 1 || envelope.protection !== 'electron-safeStorage' || typeof envelope.ciphertext !== 'string') {
+      throw new Error('A configuração da recuperação de emergência está em formato incompatível.');
+    }
+    const key = safeStorage.decryptString(Buffer.from(envelope.ciphertext, 'base64'));
+    const decoded = Buffer.from(key, 'base64');
+    const valid = decoded.length === 32 && decoded.toString('base64') === key;
+    decoded.fill(0);
+    if (!valid || databaseKeyId(key) !== envelope.keyId) {
+      throw new Error('A chave de recuperação não pôde ser validada neste perfil do sistema.');
+    }
+    return { key, keyId: envelope.keyId, confirmed: envelope.confirmed === true };
+  }
+  const key = crypto.randomBytes(32).toString('base64');
+  const envelope = {
+    version: 1,
+    protection: 'electron-safeStorage',
+    scope: 'current-os-user',
+    keyId: databaseKeyId(key),
+    createdAt: new Date().toISOString(),
+    confirmed: false,
+    ciphertext: safeStorage.encryptString(key).toString('base64')
+  };
+  const temporaryPath = `${keyPath}.pending`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(envelope)}\n`, { flag: 'wx', mode: 0o600 });
+  fs.renameSync(temporaryPath, keyPath);
+  return { key, keyId: envelope.keyId, confirmed: false };
+}
+
+function setBackupRecoveryConfirmed(confirmed) {
+  const keyPath = path.join(app.getPath('userData'), 'backup-recovery-key.v1.json');
+  const recovery = getOrCreateBackupRecoveryKey();
+  const envelope = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+  const updated = { ...envelope, confirmed: Boolean(confirmed), confirmedAt: confirmed ? new Date().toISOString() : null };
+  const temporaryPath = `${keyPath}.pending-${crypto.randomUUID()}`;
+  fs.writeFileSync(temporaryPath, `${JSON.stringify(updated)}\n`, { flag: 'wx', mode: 0o600 });
+  fs.copyFileSync(temporaryPath, keyPath);
+  fs.rmSync(temporaryPath, { force: true });
+  return { keyId: recovery.keyId, confirmed: Boolean(confirmed) };
 }
 
 function installSecurityHeaders() {
@@ -308,8 +495,10 @@ async function startApiServer() {
     }
     const secretKey = getOrCreateSecretKey();
     const databaseEncryptionKey = getOrCreateDatabaseEncryptionKey();
+    const backupRecovery = getOrCreateBackupRecoveryKey();
     runtimeSensitiveValues.add(secretKey);
     runtimeSensitiveValues.add(databaseEncryptionKey);
+    runtimeSensitiveValues.add(backupRecovery.key);
 
     console.log(`[Electron] Starting API server from: ${serverScript} on port ${port}`);
 
@@ -322,7 +511,10 @@ async function startApiServer() {
       GEOGESTOR_API_TOKEN: apiToken,
       GEOGESTOR_SECRET_KEY: secretKey,
       GEOGESTOR_DB_ENCRYPTION_KEY: databaseEncryptionKey,
+      GEOGESTOR_BACKUP_RECOVERY_KEY: backupRecovery.key,
+      GEOGESTOR_BACKUP_RECOVERY_CONFIRMED: backupRecovery.confirmed ? '1' : '0',
       GEOGESTOR_DATABASE_WORKER: path.join(process.resourcesPath, 'api', 'database-security-worker.js'),
+      GEOGESTOR_BACKUP_RESTORE_WORKER: path.join(process.resourcesPath, 'api', 'backup-restore-worker.js'),
       GEOGESTOR_DESKTOP_MANAGED: '1',
       NODE_PATH: [
         path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules'),
@@ -349,6 +541,25 @@ async function startApiServer() {
 
     apiProcess.on('error', (err) => {
       console.error('[Electron] API process error:', err);
+    });
+
+    apiProcess.on('message', (message) => {
+      if (isQuitting && message && message.type === 'shutdown-backup-failed') {
+        shutdownBackupFailure = typeof message.message === 'string' ? message.message : 'O backup de encerramento falhou.';
+        return;
+      }
+      if (!isQuitting || !message || message.type !== 'shutdown-backup-progress') return;
+      const progress = message.progress || {};
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('shutdown-backup-status', {
+          running: true,
+          message: typeof progress.stage === 'string' ? progress.stage : 'Salvando antes de fechar…',
+          processedFiles: Number(progress.processedFiles || 0),
+          processedBytes: Number(progress.processedBytes || 0),
+          totalFiles: Number(progress.totalFiles || 0),
+          totalBytes: Number(progress.totalBytes || 0)
+        });
+      }
     });
 
     apiProcess.on('exit', (code) => {
@@ -441,13 +652,35 @@ async function restartAfterRestore(exitCode) {
   }
 }
 
-function stopApiServer() {
-  if (!apiProcess) return;
-  console.log('[Electron] Stopping API server...');
-  try {
-    apiProcess.kill('SIGTERM');
-  } catch {}
-  apiProcess = null;
+function stopApiServerGracefully(timeoutMs = 5 * 60 * 1000) {
+  if (!apiProcess) return Promise.resolve({ graceful: true, reason: 'not-managed' });
+  const child = apiProcess;
+  console.log('[Electron] Stopping API server and waiting for shutdown backup...');
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(result);
+    };
+    const timeout = setTimeout(() => {
+      writeApiProcessLog('ERROR', `A API não encerrou em ${timeoutMs} ms; finalização forçada.`);
+      try {
+        child.kill();
+      } catch {}
+      finish({ graceful: false, reason: 'timeout' });
+    }, timeoutMs);
+
+    child.once('exit', (code) => finish({ graceful: true, reason: `exit-${code}` }));
+    child.once('error', (error) => finish({ graceful: false, reason: error.message }));
+    try {
+      child.kill('SIGTERM');
+    } catch (error) {
+      finish({ graceful: false, reason: error instanceof Error ? error.message : String(error) });
+    }
+  });
 }
 
 function createWindow(port) {
@@ -538,6 +771,13 @@ function createWindow(port) {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.on('close', (event) => {
+    if (process.platform !== 'darwin' && !shutdownCompleted) {
+      event.preventDefault();
+      app.quit();
+    }
+  });
 }
 
 app.whenReady().then(async () => {
@@ -563,14 +803,52 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', () => {
-  stopApiServer();
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (shutdownCompleted) return;
+  event.preventDefault();
+  if (shutdownPromise) return;
   isQuitting = true;
   if (apiRestartTimer) clearTimeout(apiRestartTimer);
-  stopApiServer();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('shutdown-backup-status', {
+      running: true,
+      message: 'Salvando o backup de encerramento antes de fechar…'
+    });
+  }
+  shutdownPromise = (async () => {
+    while (true) {
+      shutdownBackupFailure = null;
+      const result = await stopApiServerGracefully();
+      if (!result.graceful) shutdownBackupFailure ||= `Encerramento sem confirmação da API: ${result.reason}`;
+      if (!shutdownBackupFailure) return true;
+      const decision = await dialog.showMessageBox(mainWindow, {
+        type: 'warning',
+        title: 'O backup não foi concluído',
+        message: shutdownBackupFailure,
+        detail: 'Os dados originais foram preservados. Escolha como deseja continuar.',
+        buttons: ['Tentar novamente', 'Voltar ao GeoGestor', 'Fechar sem backup'],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true
+      });
+      if (decision.response === 2) return true;
+      const port = await startApiServer();
+      if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(isDev ? 'http://localhost:5173' : `http://127.0.0.1:${port}`);
+      if (decision.response === 1) {
+        isQuitting = false;
+        mainWindow?.webContents.send('shutdown-backup-status', { running: false, message: '' });
+        return false;
+      }
+    }
+  })().then((shouldClose) => {
+    shutdownPromise = null;
+    if (!shouldClose) return;
+    shutdownCompleted = true;
+    app.quit();
+  });
 });

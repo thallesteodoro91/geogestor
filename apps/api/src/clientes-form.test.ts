@@ -67,3 +67,17 @@ test('expõe perfis e serviços antigos para edição sem tratá-los como tipo d
   assert.deepEqual(form.perfis, ['Cooperativa']);
   assert.deepEqual(form.servicos, ['Georreferenciamento', 'Serviço histórico']);
 });
+
+test('salva tipo de pessoa separado da categoria de relacionamento', async () => {
+  const { clientFormToPayload, createEmptyClientForm } = await loadClientFormModule();
+  const payload = clientFormToPayload({
+    ...createEmptyClientForm(),
+    nome: 'Cliente sintético',
+    cpf: '529.982.247-25',
+    celular: '(48) 99999-9999',
+    perfis: ['Parceiro']
+  });
+  assert.equal(payload.tipoPessoa, 'PF');
+  assert.equal(payload.categoria, 'Parceiro');
+  assert.equal(payload.perfis, 'Parceiro');
+});

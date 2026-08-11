@@ -32,7 +32,7 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 7);
+    assert.equal(migration.schemaVersion, 10);
 
     const cycleResponse = await request('POST', '/api/planejamento/ciclos', {
       nome: 'Plano 2026',

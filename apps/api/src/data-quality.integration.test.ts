@@ -38,7 +38,7 @@ test('painel de qualidade é somente leitura, filtrável e exportável; polític
     };
     const report = await server.inject({ method: 'GET', url: '/api/sistema/qualidade-dados', headers });
     assert.equal(report.statusCode, 200, report.body);
-    const payload = report.json<{ summary: { critical: number; warnings: number }; issues: Array<{ code: string }> }>();
+    const payload = report.json<{ summary: { critical: number; warnings: number }; issues: Array<{ code: string; module: string; severity: string; title: string }> }>();
     assert.ok(payload.summary.critical >= 1);
     assert.ok(payload.summary.warnings >= 1);
     assert.ok(payload.issues.some((issue) => issue.code === 'approvedBudgetsWithoutProject'));
@@ -55,6 +55,12 @@ test('painel de qualidade é somente leitura, filtrável e exportável; polític
     assert.equal(csv.statusCode, 200, csv.body);
     assert.match(csv.headers['content-type'] || '', /text\/csv/);
     assert.match(csv.body, /Problema/);
+    const csvIssue = payload.issues[0];
+    assert.ok(csvIssue);
+    const filteredCsv = await server.inject({ method: 'GET', url: `/api/sistema/qualidade-dados.csv?module=${encodeURIComponent(csvIssue.module)}&severity=${encodeURIComponent(csvIssue.severity)}`, headers });
+    assert.equal(filteredCsv.statusCode, 200, filteredCsv.body);
+    assert.match(filteredCsv.body, new RegExp(csvIssue.module));
+    assert.match(filteredCsv.body, new RegExp(csvIssue.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
     const policy = {
       databaseIntervalHours: 12, completeIntervalDays: 3, retention: 6,

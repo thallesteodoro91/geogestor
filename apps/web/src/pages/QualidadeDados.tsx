@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowClockwise, FileCsv, FilePdf, ShieldCheck, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, FileCsv, FilePdf, ShieldCheck, SpinnerGap, WarningCircle } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
+import { FormSelect } from '../components/Form';
 import { apiClient, apiFetch } from '../services/apiClient';
 import { loadPdfMake } from '../utils/loadPdfMake';
 import type { Content } from 'pdfmake/interfaces';
+import { buildQualityExportUrl } from './qualityExport';
 
 type Severity = 'critical' | 'warning' | 'info';
 type QualityIssue = {
@@ -28,6 +31,8 @@ const severityClass = {
 export function QualidadeDados() {
   const [moduleFilter, setModuleFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const reportQuery = useQuery({
     queryKey: ['data-quality', moduleFilter, severityFilter],
     queryFn: () => {
@@ -40,20 +45,31 @@ export function QualidadeDados() {
   const modules = useMemo(() => Array.from(new Set((reportQuery.data?.issues || []).map((issue) => issue.module))).sort(), [reportQuery.data]);
 
   const exportCsv = async () => {
-    const response = await apiFetch('/api/sistema/qualidade-dados.csv');
-    if (!response.ok) throw new Error('Não foi possível exportar o diagnóstico.');
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'qualidade-dados.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    if (exportingCsv) return;
+    setExportingCsv(true);
+    try {
+      const response = await apiFetch(buildQualityExportUrl(moduleFilter, severityFilter));
+      if (!response.ok) throw new Error('Não foi possível gerar o CSV.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `qualidade-dados-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success('Relatório CSV exportado com os filtros atuais.');
+    } catch (error) {
+      toast.error(`${error instanceof Error ? error.message : 'Não foi possível exportar o CSV.'} Tente novamente.`);
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   const exportPdf = async () => {
-    if (!reportQuery.data) return;
-    const pdfMake = await loadPdfMake();
-    pdfMake.createPdf({
+    if (!reportQuery.data || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const pdfMake = await loadPdfMake();
+      pdfMake.createPdf({
       pageSize: 'A4', pageMargins: [36, 42, 36, 42],
       content: [
         { text: 'GeoGestor — Qualidade dos dados', fontSize: 18, bold: true, margin: [0, 0, 0, 8] },
@@ -65,7 +81,13 @@ export function QualidadeDados() {
         ]))
       ],
       defaultStyle: { font: 'Roboto' }
-    }).download('qualidade-dados-geogestor.pdf');
+      }).download(`qualidade-dados-${new Date().toISOString().slice(0, 10)}.pdf`);
+      toast.success('Relatório PDF exportado com os filtros atuais.');
+    } catch (error) {
+      toast.error(`${error instanceof Error ? error.message : 'Não foi possível exportar o PDF.'} Tente novamente.`);
+    } finally {
+      setExportingPdf(false);
+    }
   };
 
   return (
@@ -73,11 +95,11 @@ export function QualidadeDados() {
       <div className="space-y-6">
         <PageHeader title="Qualidade dos dados" description="Diagnóstico somente leitura de vínculos, finanças, arquivos e informações legadas." />
         <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <label className="text-sm font-medium">Módulo<select value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Todos</option>{modules.map((module) => <option key={module}>{module}</option>)}</select></label>
-          <label className="text-sm font-medium">Gravidade<select value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Todas</option><option value="critical">Crítica</option><option value="warning">Atenção</option><option value="info">Informativa</option></select></label>
+          <div><label htmlFor="quality-module-filter" className="text-sm font-medium">Módulo</label><FormSelect id="quality-module-filter" aria-label="Módulo" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Todos</option>{modules.map((module) => <option key={module}>{module}</option>)}</FormSelect></div>
+          <div><label htmlFor="quality-severity-filter" className="text-sm font-medium">Gravidade</label><FormSelect id="quality-severity-filter" aria-label="Gravidade" value={severityFilter} onChange={(event) => setSeverityFilter(event.target.value)} className="mt-1 block min-h-11 rounded-xl border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Todas</option><option value="critical">Crítica</option><option value="warning">Atenção</option><option value="info">Informativa</option></FormSelect></div>
           <button type="button" onClick={() => reportQuery.refetch()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 px-3 text-sm font-semibold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-700 dark:hover:bg-zinc-800"><ArrowClockwise aria-hidden="true" /> Verificar novamente</button>
-          <button type="button" onClick={() => void exportCsv()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 px-3 text-sm font-semibold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-700 dark:hover:bg-zinc-800"><FileCsv aria-hidden="true" /> Exportar CSV</button>
-          <button type="button" onClick={() => void exportPdf()} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 px-3 text-sm font-semibold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-700 dark:hover:bg-zinc-800"><FilePdf aria-hidden="true" /> Exportar PDF</button>
+          <button type="button" onClick={() => void exportCsv()} disabled={exportingCsv} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 text-sm font-semibold text-sky-700 hover:bg-sky-100 focus-visible:ring-2 focus-visible:ring-sky-500/40 disabled:cursor-wait disabled:opacity-60 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-300">{exportingCsv ? <SpinnerGap aria-hidden="true" className="animate-spin" /> : <FileCsv aria-hidden="true" />} {exportingCsv ? 'Exportando CSV…' : 'Exportar CSV'}</button>
+          <button type="button" onClick={() => void exportPdf()} disabled={exportingPdf || !reportQuery.data} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 focus-visible:ring-2 focus-visible:ring-indigo-500/40 disabled:cursor-wait disabled:opacity-60 dark:border-indigo-900 dark:bg-indigo-950/30 dark:text-indigo-300">{exportingPdf ? <SpinnerGap aria-hidden="true" className="animate-spin" /> : <FilePdf aria-hidden="true" />} {exportingPdf ? 'Exportando PDF…' : 'Exportar PDF'}</button>
         </div>
 
         {reportQuery.isLoading ? <p aria-live="polite" className="text-sm text-zinc-500">Verificando os dados…</p>

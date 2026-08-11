@@ -16,6 +16,7 @@ interface ModalProps {
   initialFocusId?: string;
   closeDisabled?: boolean;
   dialogRole?: 'dialog' | 'alertdialog';
+  ariaDescribedBy?: string;
 }
 
 export function Modal({
@@ -28,7 +29,8 @@ export function Modal({
   contentScrollable = true,
   initialFocusId,
   closeDisabled = false,
-  dialogRole = 'dialog'
+  dialogRole = 'dialog',
+  ariaDescribedBy
 }: ModalProps) {
   const titleId = useId();
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -149,6 +151,7 @@ export function Modal({
             role={dialogRole}
             aria-modal="true"
             aria-labelledby={titleId}
+            aria-describedby={ariaDescribedBy}
             onKeyDown={handleKeyDown}
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}

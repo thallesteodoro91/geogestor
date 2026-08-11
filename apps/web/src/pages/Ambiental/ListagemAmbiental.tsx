@@ -5,11 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ArrowRight,
   CalendarBlank,
-  Calculator,
   CaretLeft,
   CaretRight,
-  Certificate,
-  Leaf,
   MagnifyingGlass,
   Plus,
   Scales,
@@ -35,6 +32,9 @@ import {
   localNavigationButtonClass,
   localNavigationIconClass,
 } from '../../utils/localNavigationStyles';
+import environmentalDemandsIcon from '../../assets/magnific-icons/eco-energy_3274986.png';
+import licensingIcon from '../../assets/magnific-icons/certification_5192312.png';
+import carAnalysisIcon from '../../assets/magnific-icons/calculator_9264106.svg';
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
 const numberFormatter = new Intl.NumberFormat('pt-BR');
@@ -150,22 +150,16 @@ export function ListagemAmbiental() {
   const activeHeader = activeTab === 'ambiental'
     ? {
         title: 'Gestão Ambiental e Perícias',
-        description: 'Acompanhe processos, laudos, fases e próximas ações ambientais.',
-        icon: <Leaf weight="duotone" className="h-6 w-6" />,
-        iconClass: 'bg-emerald-100 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-400/20'
+        description: 'Acompanhe processos, laudos, fases e próximas ações ambientais.'
       }
     : activeTab === 'licenciamento'
       ? {
           title: 'Licenciamento Ambiental',
-          description: 'Controle licenças, renovações, condicionantes e vencimentos reais.',
-          icon: <Certificate weight="duotone" className="h-6 w-6" />,
-          iconClass: 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-500/20 dark:text-amber-200 dark:ring-amber-400/20'
+          description: 'Controle licenças, renovações, condicionantes e vencimentos reais.'
         }
       : {
           title: 'Análise preliminar de Reserva Legal',
-          description: 'Faça uma triagem quantitativa com base nos arts. 12, 15, 67 e 68 da Lei nº 12.651/2012. O resultado não substitui a análise do CAR pelo órgão competente.',
-          icon: <Calculator weight="duotone" className="h-6 w-6" />,
-          iconClass: 'bg-cyan-100 text-cyan-800 ring-cyan-200 dark:bg-cyan-500/20 dark:text-cyan-200 dark:ring-cyan-400/20'
+          description: 'Faça uma triagem quantitativa com base nos arts. 12, 15, 67 e 68 da Lei nº 12.651/2012. O resultado não substitui a análise do CAR pelo órgão competente.'
         };
 
   return (
@@ -174,8 +168,7 @@ export function ListagemAmbiental() {
         eyebrow="Gestão ambiental"
         title={activeHeader.title}
         description={activeHeader.description}
-        icon={activeHeader.icon}
-        iconClassName={activeHeader.iconClass}
+        descriptionClassName={activeTab === 'car' ? 'max-w-none sm:text-sm 2xl:whitespace-nowrap' : undefined}
         action={
           activeTab === 'ambiental' ? (
             <button
@@ -201,10 +194,10 @@ export function ListagemAmbiental() {
             </button>
           ) : null
         }
-        className="mb-4"
+        className={activeTab === 'car' ? 'mb-3' : 'mb-4'}
       />
 
-      <div className="relative mb-4 min-w-0 max-w-full">
+      <div className={cn('relative min-w-0 max-w-full', activeTab === 'car' ? 'mb-3' : 'mb-4')}>
         <div
           ref={tabListRef}
           role="tablist"
@@ -227,8 +220,8 @@ export function ListagemAmbiental() {
           onClick={() => handleTabChange('ambiental')}
           className={localNavigationButtonClass(activeTab === 'ambiental', 'success')}
         >
-          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'ambiental', 'success')}>
-            <Leaf weight={activeTab === 'ambiental' ? 'fill' : 'regular'} className="h-4 w-4" />
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'ambiental', 'success', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+            <img src={environmentalDemandsIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
           </span>
           Demandas Ambientais
         </button>
@@ -244,8 +237,8 @@ export function ListagemAmbiental() {
           onClick={() => handleTabChange('licenciamento')}
           className={localNavigationButtonClass(activeTab === 'licenciamento', 'warning')}
         >
-          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'licenciamento', 'warning')}>
-            <Certificate weight={activeTab === 'licenciamento' ? 'fill' : 'regular'} className="h-4 w-4" />
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'licenciamento', 'warning', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+            <img src={licensingIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
           </span>
           Licenciamento
         </button>
@@ -261,8 +254,8 @@ export function ListagemAmbiental() {
           onClick={() => handleTabChange('car')}
           className={localNavigationButtonClass(activeTab === 'car', 'field')}
         >
-          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'car', 'field')}>
-            <Calculator weight={activeTab === 'car' ? 'fill' : 'regular'} className="h-4 w-4" />
+          <span aria-hidden="true" className={localNavigationIconClass(activeTab === 'car', 'field', 'overflow-hidden bg-transparent p-0 dark:bg-transparent')}>
+            <img src={carAnalysisIcon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
           </span>
           Análise CAR
         </button>

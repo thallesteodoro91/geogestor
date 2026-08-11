@@ -192,6 +192,8 @@ export function ClienteCentralControle({
   const [eventDescription, setEventDescription] = useState('');
   const [eventProjetoId, setEventProjetoId] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [timelineFilter, setTimelineFilter] = useState('Todos');
+  const [showFullHistory, setShowFullHistory] = useState(false);
 
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [taskProjetoId, setTaskProjetoId] = useState('');
@@ -256,7 +258,8 @@ export function ClienteCentralControle({
         projetos: projetosMap,
         total: clienteCount + projetosCount
       };
-    }
+    },
+    enabled: !onlyTimeline
   });
 
   const clienteTarefas = useMemo(
@@ -571,6 +574,21 @@ export function ClienteCentralControle({
     return [...eventos, ...budgets, ...agenda, ...tarefasConcluidasTimeline].sort((a, b) => b.sortDate - a.sortDate);
   }, [clienteCompromissos, clienteTarefas, historico, orcamentos, projetos]);
 
+  const filteredTimelineItems = useMemo(() => {
+    if (timelineFilter === 'Todos') return timelineItems;
+    return timelineItems.filter((item) => {
+      const text = normalizeTimelineText([item.tipo, item.tag, item.source, item.title].join(' '));
+      if (timelineFilter === 'Atendimento') return ['whatsapp', 'email', 'ligacao', 'reuniao', 'atendimento', 'nota'].some((value) => text.includes(value));
+      if (timelineFilter === 'Cadastro') return ['cliente', 'cadastro', 'servico', 'propriedade'].some((value) => text.includes(value));
+      if (timelineFilter === 'Documentos') return text.includes('document');
+      if (timelineFilter === 'Orçamentos') return text.includes('orcamento');
+      if (timelineFilter === 'Agenda') return text.includes('agenda') || text.includes('compromisso');
+      if (timelineFilter === 'Tarefas') return text.includes('tarefa');
+      return true;
+    });
+  }, [timelineFilter, timelineItems]);
+  const visibleTimelineItems = showFullHistory ? filteredTimelineItems : filteredTimelineItems.slice(0, 2);
+
   const nextCompromissos = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -825,18 +843,26 @@ export function ClienteCentralControle({
             </form>
           </Modal>
 
+          <div className="mb-5 flex gap-2 overflow-x-auto pb-1" aria-label="Filtrar jornada do cliente">
+            {['Todos', 'Atendimento', 'Cadastro', 'Documentos', 'Orçamentos', 'Agenda', 'Tarefas'].map((filter) => (
+              <button key={filter} type="button" aria-pressed={timelineFilter === filter} onClick={() => { setTimelineFilter(filter); setShowFullHistory(false); }} className={cn('geo-focus-ring min-h-11 shrink-0 rounded-full border px-3 text-xs font-semibold', timelineFilter === filter ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200')}>
+                {filter}
+              </button>
+            ))}
+          </div>
+
           <div className={cn('relative ml-4 min-h-[260px] space-y-5 border-l border-brand-border pl-7', onlyTimeline && 'flex-1')}>
             {loadingHistorico || loadingCompromissos ? (
               <div className="py-12 flex justify-center">
                 <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="h-7 w-7 animate-spin rounded-full border-2 border-brand-border border-t-brand-primary-600" />
               </div>
-            ) : timelineItems.length === 0 ? (
+            ) : visibleTimelineItems.length === 0 ? (
               <div className="geo-empty-state flex-1 py-14 text-center">
                 <Note className="mx-auto mb-3 h-10 w-10 text-zinc-300" />
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Nenhum evento registrado para este cliente.</p>
               </div>
             ) : (
-              timelineItems.map(item => {
+              visibleTimelineItems.map(item => {
                 const articleStyle = item.tone === 'indigo' ? 'geo-card-interactive border-brand-primary-300/70 p-4 ring-4 ring-brand-primary-400/10' :
                   item.tone === 'violet' ? 'geo-card-interactive border-brand-indigo-300/70 p-4 ring-4 ring-brand-indigo-400/10' :
                   item.tone === 'emerald' ? 'geo-card-interactive border-brand-green-300/70 p-4 ring-4 ring-brand-green-400/10' :
@@ -864,6 +890,7 @@ export function ClienteCentralControle({
                           <span className={cn('px-2 py-0.5 text-xs font-bold', statusTone(item.tag))}>
                             {item.tag}
                           </span>
+                          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{item.editable ? 'Manual' : 'Automático'}</span>
                         </div>
                       </div>
                       {item.editable && (
@@ -908,6 +935,11 @@ export function ClienteCentralControle({
               )})
             )}
           </div>
+          {filteredTimelineItems.length > 12 && (
+            <button type="button" onClick={() => setShowFullHistory((value) => !value)} className={cn(secondarySmallActionButtonClass, 'mt-5 self-start')}>
+              {showFullHistory ? 'Mostrar somente recentes' : 'Ver histórico completo'}
+            </button>
+          )}
         </section>
 
         {!onlyTimeline && (

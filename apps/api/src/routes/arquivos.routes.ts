@@ -251,6 +251,7 @@ async function syncDocumentRecord(
     tags: JSON.stringify(tags),
     origem: scope.origem || 'sync',
     status: 'ativo',
+    deletedAt: null,
     criadoEmArquivo: file.createdAt ? new Date(file.createdAt).toISOString() : null,
     modificadoEmArquivo: file.modifiedAt ? new Date(file.modifiedAt).toISOString() : null,
     ultimoSyncEm: now,
@@ -1113,6 +1114,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
       await db.transaction(async (tx) => {
         await tx.update(schema.documentos).set({
           status: 'ativo',
+          deletedAt: null,
           updatedAt: restoredAt.toISOString(),
           ultimoSyncEm: restoredAt.toISOString()
         }).where(eq(schema.documentos.id, documentId));
@@ -1175,6 +1177,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
         await db.transaction(async (tx) => {
           await tx.update(schema.documentos).set({
             status: 'excluido',
+            deletedAt: deletedAt.toISOString(),
             updatedAt: deletedAt.toISOString(),
             ultimoSyncEm: deletedAt.toISOString()
           }).where(eq(schema.documentos.id, documentRecord[0].id));

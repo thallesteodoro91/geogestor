@@ -1,32 +1,43 @@
 import { ArrowCounterClockwise, CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash, XCircle } from '@phosphor-icons/react';
 import { matchesSearch } from '../../utils/searchHelpers';
 import { cn } from '../../utils/cn';
-import { expenseActionButtonClass, primaryActionIconClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
 import { RemoteCombobox } from '../../components/RemoteCombobox';
-import { MetricCard } from '../../components/MetricCard';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
+import { PageHeader } from '../../components/PageHeader';
 import { motion } from 'framer-motion';
-import { type ReactNode, useEffect, useState } from 'react';
-import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect } from '../../components/Form';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
 import { apiFetch, apiClient } from '../../services/apiClient';
 import { notifications } from '../../services/notifications';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
+import { useAuxiliaryCatalogs } from '../../hooks/useAuxiliaryCatalogs';
+import { mergeCatalogAndHistoricalValues } from '../../services/catalogOptions';
 import {
   filterBarClass,
   filterClearButtonClass,
   filterControlClass,
   filterSearchInputClass
 } from '../../utils/filterStyles';
+import {
+  geoGreenLabelClass,
+  geoGreenSurfaceClass,
+  geoGreenValueClass,
+  geoOrangeLabelClass,
+  geoOrangeSurfaceClass,
+  geoOrangeValueClass,
+  geoPurpleLabelClass,
+  geoPurpleSurfaceClass,
+  geoPurpleValueClass
+} from '../../utils/geoTheme';
 
 const TIPOS_CUSTO = ['Fixo', 'Variável de campo', 'Cartório e taxas', 'Tributário', 'Operacional', 'Reembolsável'];
 const CENTROS_CUSTO = ['Administrativo', 'Campo', 'Cartório', 'Tributos', 'Software', 'Equipamentos', 'Serviços'];
-
-const CATEGORIAS = ['Combustível', 'Pedágio', 'Hospedagem', 'Alimentação', 'Viagem e transporte', 'Cartório e taxas', 'Documentos', 'Equipamentos', 'Software e licenças', 'Tributos', 'Outros'];
 
 export interface DespesaItem {
   id: string;
@@ -94,6 +105,7 @@ function newExpenseFingerprint() {
 
 export function Despesas({ embedded = false, openCreateOnMount = false }: { embedded?: boolean; openCreateOnMount?: boolean }) {
   const queryClient = useQueryClient();
+  const catalogsQuery = useAuxiliaryCatalogs();
   const [showModal, setShowModal] = useState(openCreateOnMount);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [initialFormFingerprint, setInitialFormFingerprint] = useState(() => openCreateOnMount ? newExpenseFingerprint() : '');
@@ -139,6 +151,19 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
     queryKey: ['viagens'],
     queryFn: () => apiClient.get<ViagemMin[]>('/api/financeiro/viagens')
   });
+
+  const configuredExpenseCategories = useMemo(
+    () => catalogsQuery.data?.expenses.filter((item) => item.ativo).map((item) => item.categoria) ?? [],
+    [catalogsQuery.data?.expenses]
+  );
+  const formExpenseCategories = useMemo(
+    () => mergeCatalogAndHistoricalValues(configuredExpenseCategories, [categoria]),
+    [categoria, configuredExpenseCategories]
+  );
+  const filterExpenseCategories = useMemo(
+    () => mergeCatalogAndHistoricalValues(configuredExpenseCategories, despesas.map((item) => item.categoria)),
+    [configuredExpenseCategories, despesas]
+  );
 
   const loading = despesasLoading || viagensLoading;
   const formFingerprint = JSON.stringify({
@@ -211,9 +236,26 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
   );
 
   // Stats calculation
-  const totalDespesas = filteredDespesas.reduce((acc: number, curr) => acc + curr.valor, 0);
-  const despesasPagas = filteredDespesas.filter((d) => d.status === 'Pago').reduce((acc: number, curr) => acc + curr.valor, 0);
-  const despesasPendentes = filteredDespesas.filter((d) => d.status !== 'Pago').reduce((acc: number, curr) => acc + curr.valor, 0);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const despesasValidas = filteredDespesas.filter((despesa) => !despesa.canceladaEm && !despesa.estornadaEm);
+  const totalPrevisto = despesasValidas.reduce((acc, despesa) => acc + despesa.valor, 0);
+  const totalPago = despesasValidas
+    .filter((despesa) => despesa.status === 'Pago')
+    .reduce((acc, despesa) => acc + despesa.valor, 0);
+  const despesasEmAberto = despesasValidas.filter((despesa) => despesa.status !== 'Pago');
+  const totalPendente = despesasEmAberto
+    .filter((despesa) => {
+      const dataDespesa = new Date(`${despesa.data.slice(0, 10)}T00:00:00`);
+      return Number.isNaN(dataDespesa.getTime()) || dataDespesa >= hoje;
+    })
+    .reduce((acc, despesa) => acc + despesa.valor, 0);
+  const totalAtrasado = despesasEmAberto
+    .filter((despesa) => {
+      const dataDespesa = new Date(`${despesa.data.slice(0, 10)}T00:00:00`);
+      return !Number.isNaN(dataDespesa.getTime()) && dataDespesa < hoje;
+    })
+    .reduce((acc, despesa) => acc + despesa.valor, 0);
 
   // Mutations
   const deleteMutation = useMutation({
@@ -432,35 +474,36 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
 
   return (
     <PageFrame embedded={embedded}>
-      <div className={`flex flex-col md:flex-row md:items-end justify-between gap-6 ${embedded ? 'mb-8' : 'mb-12'}`}>
-        <div>
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
-            Gestão Financeira
-          </span>
-          <h1 className={`${embedded ? 'text-3xl' : 'text-5xl'} font-semibold tracking-tighter text-zinc-950 dark:text-white`}>
-            Contas a pagar
-          </h1>
-          <p className="mt-3 text-lg text-zinc-500 dark:text-zinc-400 font-medium">
-            Controle de despesas, custos operacionais e reembolsos vinculados.
-          </p>
-        </div>
-        
-        <button 
-          onClick={openCreateModal}
-          className={cn(expenseActionButtonClass, 'font-medium')}
-        >
-          <span>Nova Despesa</span>
-          <div className={primaryActionIconClass}>
-            <Plus weight="bold" className="w-4 h-4" />
-          </div>
-        </button>
-      </div>
+      <PageHeader
+        title="Contas a pagar"
+        description="Controle de despesas, custos operacionais e reembolsos vinculados."
+        className={embedded ? 'mb-8' : 'mb-12'}
+        action={(
+          <button type="button" onClick={openCreateModal} className={cn(primarySubmitButtonClass, 'w-full sm:w-auto')}>
+            <Plus aria-hidden="true" className="h-4 w-4" weight="bold" />
+            Nova despesa
+          </button>
+        )}
+      />
 
       {/* Bento Grid Cards stats */}
-      <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <MetricCard label="Total Despesas" value={formatCurrency(totalDespesas)} tone="danger" icon={<CurrencyDollar weight="duotone" className="h-5 w-5" />} />
-        <MetricCard label="Total Pago" value={formatCurrency(despesasPagas)} tone="danger" delay={0.05} icon={<CurrencyDollar weight="duotone" className="h-5 w-5" />} />
-        <MetricCard label="Pendente" value={formatCurrency(despesasPendentes)} tone="danger" delay={0.1} icon={<CurrencyDollar weight="duotone" className="h-5 w-5" />} />
+      <div className="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className={cn(geoGreenSurfaceClass, 'rounded-[2rem] p-6 shadow-sm ring-1 ring-emerald-300/15')}>
+          <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total previsto</span>
+          <p className={cn('mt-2 text-3xl font-bold tabular-nums', geoGreenValueClass)}>{formatCurrency(totalPrevisto)}</p>
+        </div>
+        <div className={cn(geoGreenSurfaceClass, 'rounded-[2rem] p-6 shadow-sm ring-1 ring-emerald-300/15')}>
+          <span className={cn('text-xs font-semibold uppercase tracking-wider', geoGreenLabelClass)}>Total pago</span>
+          <p className={cn('mt-2 text-3xl font-bold tabular-nums', geoGreenValueClass)}>{formatCurrency(totalPago)}</p>
+        </div>
+        <div className={cn(geoOrangeSurfaceClass, 'rounded-[2rem] p-6 shadow-sm ring-1 ring-orange-300/15')}>
+          <span className={cn('text-xs font-semibold uppercase tracking-wider', geoOrangeLabelClass)}>Pendente (a vencer)</span>
+          <p className={cn('mt-2 text-3xl font-bold tabular-nums', geoOrangeValueClass)}>{formatCurrency(totalPendente)}</p>
+        </div>
+        <div className={cn(geoPurpleSurfaceClass, 'rounded-[2rem] p-6 shadow-sm ring-1 ring-violet-300/15')}>
+          <span className={cn('text-xs font-semibold uppercase tracking-wider', geoPurpleLabelClass)}>Total atrasado</span>
+          <p className={cn('mt-2 text-3xl font-bold tabular-nums', geoPurpleValueClass)}>{formatCurrency(totalAtrasado)}</p>
+        </div>
       </div>
 
       <div className={cn('mb-6', filterBarClass)}>
@@ -480,7 +523,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
             onChange={setCategoriaFilter}
             placeholder="Todas as categorias"
             className="min-w-0"
-            options={[{ label: 'Todas as categorias', value: 'Todos' }, ...CATEGORIAS.map((value) => ({ label: value, value }))]}
+            options={[{ label: 'Todas as categorias', value: 'Todos' }, ...filterExpenseCategories.map((value) => ({ label: value, value }))]}
           />
           <CustomSelect
             value={statusFilter}
@@ -706,7 +749,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label htmlFor="despesa-valor" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Valor (R$) *</label>
-                <input id="despesa-valor" name="valor" type="number" inputMode="decimal" step="0.01" required autoComplete="off" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium tabular-nums text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+                <NumericInput id="despesa-valor" name="valor" inputMode="decimal" step="0.01" required autoComplete="off" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium tabular-nums text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
               </div>
               <div>
                 <label htmlFor="despesa-data" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Data *</label>
@@ -727,7 +770,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label htmlFor="despesa-categoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Categoria</label>
-                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{CATEGORIAS.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{formExpenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
               </div>
               <div>
                 <label htmlFor="despesa-projeto" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Projeto vinculado</label>

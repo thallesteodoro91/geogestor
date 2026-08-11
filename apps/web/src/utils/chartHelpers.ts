@@ -34,6 +34,30 @@ export const chartCursor = {
   opacity: 0.08,
 };
 
+export const chartAnimationDuration = 420;
+
+export const chartActiveDot = (color: string) => ({
+  r: 5,
+  fill: "hsl(var(--brand-surface))",
+  stroke: color,
+  strokeWidth: 3,
+});
+
+export const chartActiveBar = (color: string) => ({
+  fillOpacity: 0.86,
+  stroke: color,
+  strokeOpacity: 0.58,
+  strokeWidth: 1,
+});
+
+export const chartSegmentStyle = (
+  reduceMotion: boolean,
+  dimmed = false,
+) => ({
+  opacity: dimmed ? 0.52 : 1,
+  transition: reduceMotion ? "none" : "opacity 180ms var(--motion-ease-standard)",
+});
+
 export const responsiveChartProps = {
   width: "100%",
   height: "100%",

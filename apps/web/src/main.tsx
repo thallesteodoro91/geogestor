@@ -12,7 +12,16 @@ declare global {
       getApiPort?: () => number;
       setLocalSessionToken?: (token: string) => void;
       selectBackupBundle?: () => Promise<string | null>;
-      openDiagnosticsFolder?: () => Promise<void>;
+      selectDataDirectory?: () => Promise<string | null>;
+      selectBackupDirectory?: () => Promise<string | null>;
+      openBackupDirectory?: (directory: string) => Promise<void>;
+      getBackupRecoveryStatus?: () => Promise<{ configured: boolean; confirmed: boolean; keyId: string }>;
+      confirmBackupRecovery?: () => Promise<{ configured: boolean; confirmed: boolean; keyId: string }>;
+      saveBackupRecoveryKit?: (kit: unknown) => Promise<string | null>;
+      onShutdownBackupStatus?: (callback: (payload: { running: boolean; message: string; processedFiles?: number; processedBytes?: number; totalFiles?: number; totalBytes?: number }) => void) => () => void;
+      openDiagnosticsFolder?: () => Promise<{ success: true; path: string } | { success: false; error: string }>;
+      showDeadlineNotification?: (payload: { id: string; title: string; body: string; link: string }) => Promise<boolean>;
+      onOpenDeadlineAlert?: (callback: (link: string) => void) => () => void;
       reportStartupMilestone?: (milestone: 'first-route-usable') => void;
     };
   }

@@ -11,24 +11,8 @@ import {
   type ReportType
 } from './reportPresentation';
 import { buildReportDocumentModel } from './reportDocumentModel';
+import { getCachedCompanyTemplate, type CompanyTemplate } from '../../services/companyTemplate';
 
-interface CompanyTemplate {
-  logo?: string;
-  razao?: string;
-  cnpj?: string;
-  telefone?: string;
-  email?: string;
-  endereco?: string;
-  cor?: string;
-}
-
-function companyTemplate(): CompanyTemplate {
-  try {
-    return JSON.parse(localStorage.getItem('geogestor_empresa_template') || '{}') as CompanyTemplate;
-  } catch {
-    return {};
-  }
-}
 
 function metricRows(rows: Array<[string, string]>): TableCell[][] {
   return rows.map(([label, value]) => [
@@ -113,7 +97,7 @@ function operationalContent(report: ManagerialReport): Content[] {
 export function createManagerialReportPdfDefinition(
   report: ManagerialReport,
   type: ReportType,
-  template: CompanyTemplate = companyTemplate()
+  template: CompanyTemplate = getCachedCompanyTemplate()
 ): TDocumentDefinitions {
   const primary = /^#[0-9a-f]{6}$/i.test(template.cor || '') ? template.cor! : '#4338ca';
   const identity = [
@@ -170,7 +154,7 @@ export function createManagerialReportPdfDefinition(
 export async function createManagerialReportPdf(
   report: ManagerialReport,
   type: ReportType,
-  template: CompanyTemplate = companyTemplate()
+  template: CompanyTemplate = getCachedCompanyTemplate()
 ) {
   const definition = createManagerialReportPdfDefinition(report, type, template);
   const make = await loadPdfMake();

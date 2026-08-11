@@ -9,11 +9,22 @@ test('Financeiro concentra os painéis canônicos sem editar orçamentos ou dupl
   const source = read('./Financeiro.tsx');
 
   assert.match(source, /<Faturas embedded \/>/);
-  assert.match(source, /<Despesas embedded openCreateOnMount=\{embeddedAction === 'despesa'\} \/>/);
-  assert.match(source, /<GestaoFinanceira embedded \/>/);
+  assert.match(source, /<Despesas[\s\S]*openCreateOnMount=\{embeddedAction\?\.type === 'despesa'\}/);
+  assert.match(source, /<GestaoFinanceira[\s\S]*openCreateOnMount=\{embeddedAction\?\.type === 'viagem' \|\| embeddedAction\?\.type === 'fiscal'\}/);
   assert.doesNotMatch(source, /Receitas e contratos/);
   assert.doesNotMatch(source, /Relatórios Corporativos/);
   assert.doesNotMatch(source, /openCreateOrcamento|submitOrcamentoMutation/);
+});
+
+test('seletor por ícones e ações de lançamento permanecem explícitos', () => {
+  const source = read('./Financeiro.tsx');
+
+  assert.match(source, /\['visao', 'Visão geral', ChartBar/);
+  assert.match(source, /\['faturas', 'Contas a receber', CurrencyDollar/);
+  assert.match(source, /\['pagar', 'Contas a pagar', Receipt/);
+  assert.match(source, /\['auxiliares', 'Viagens e notas fiscais', Briefcase/);
+  assert.match(source, /openEmbeddedAction\('viagem'\)/);
+  assert.match(source, /openEmbeddedAction\('fiscal'\)/);
 });
 
 test('contas a receber preservam recebimento parcial, comprovante, histórico e estorno', () => {

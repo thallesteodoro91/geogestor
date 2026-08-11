@@ -3,24 +3,9 @@ import { BUDGET_STATUS_LABELS } from '@geogestor/contracts/src/budgets';
 import { formatCurrency, formatDate } from './budgetForm';
 import type { BudgetDetail } from './types';
 import { loadPdfMake } from '../../utils/loadPdfMake';
+import { getCachedCompanyTemplate, type CompanyTemplate } from '../../services/companyTemplate';
 
-export interface CompanyTemplate {
-  logo?: string;
-  razao?: string;
-  cnpj?: string;
-  telefone?: string;
-  email?: string;
-  endereco?: string;
-  cor?: string;
-}
-
-function companyTemplate(): CompanyTemplate {
-  try {
-    return JSON.parse(localStorage.getItem('geogestor_empresa_template') || '{}') as CompanyTemplate;
-  } catch {
-    return {};
-  }
-}
+export type { CompanyTemplate } from '../../services/companyTemplate';
 
 function section(title: string): Content {
   return { text: title, style: 'sectionHeader', margin: [0, 16, 0, 7] };
@@ -30,7 +15,7 @@ function safe(value?: string | number | null) {
   return value === null || value === undefined || value === '' ? 'Não informado' : String(value);
 }
 
-export function createProfessionalBudgetPdfDefinition(budget: BudgetDetail, company: CompanyTemplate = companyTemplate()): TDocumentDefinitions {
+export function createProfessionalBudgetPdfDefinition(budget: BudgetDetail, company: Partial<CompanyTemplate> = getCachedCompanyTemplate()): TDocumentDefinitions {
   const accent = company.cor || '#4f46e5';
   const itemRows: TableCell[][] = [[
     { text: 'Descrição', bold: true, color: '#ffffff', fillColor: accent },

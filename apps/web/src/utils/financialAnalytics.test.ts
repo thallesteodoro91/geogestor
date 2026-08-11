@@ -100,3 +100,31 @@ test('pagamento parcial vencido vira atrasado e registros sem data não entram e
   assert.equal(analytics.kpis.receitaContratada, 0);
   assert.equal(analytics.kpis.despesasLancadas, 0);
 });
+
+test('recebimentos parciais entram no mês real de cada baixa', () => {
+  const analytics = buildFinancialAnalytics({
+    now: new Date(2026, 7, 15),
+    orcamentos: [{ id: 'orcamento-parcial', clienteId: 'cliente', status: 'Aprovado', valorTotal: 100_000, dataOrcamento: '2026-05-01' }],
+    parcelas: [{
+      id: 'parcela-parcial',
+      orcamentoId: 'orcamento-parcial',
+      clienteId: 'cliente',
+      valor: 100_000,
+      valorPago: 100_000,
+      recebidoCaixa: 100_000,
+      dataVencimento: '2026-08-10',
+      dataPagamento: '2026-08-05',
+      statusPagamento: 'Pago',
+      recebimentos: [
+        { valorRecebido: 40_000, dataRecebimento: '2026-06-20' },
+        { valorRecebido: 60_000, dataRecebimento: '2026-07-18' }
+      ]
+    }],
+    despesas: []
+  });
+
+  assert.equal(analytics.kpis.receitaRecebida, 100_000);
+  assert.equal(analytics.monthly.find(item => item.mes === '2026-06')?.receitaRecebida, 40_000);
+  assert.equal(analytics.monthly.find(item => item.mes === '2026-07')?.receitaRecebida, 60_000);
+  assert.equal(analytics.monthly.find(item => item.mes === '2026-08')?.receitaRecebida, 0);
+});

@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, sql, isNull, and, desc } from 'drizzle-orm';
+import { eq, sql, isNull, and, desc, count } from 'drizzle-orm';
 import crypto from 'crypto';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
@@ -9,6 +9,7 @@ import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { normalizeBudgetStatus } from '@geogestor/contracts';
 import { LegacyFinanceDomainService } from '../services/legacy-finance-domain.service';
+import { activeDocumentWhere } from '../services/document-integrity.service';
 import {
   centsSchema,
   isoDateSchema,
@@ -71,11 +72,12 @@ export async function financeiroRoutes(server: FastifyInstance) {
       querystring: z.object({
         page: z.coerce.number().min(1).default(1),
         limit: z.coerce.number().min(1).max(500).default(100),
-        clienteId: z.string().uuid().optional()
+        clienteId: z.string().uuid().optional(),
+        mode: z.enum(['legacy', 'page']).default('legacy')
       })
     }
   }, async (request, reply) => {
-    const { page, limit } = request.query;
+    const { page, limit, mode } = request.query;
     const offset = (page - 1) * limit;
 
     const data = await db
@@ -123,20 +125,26 @@ export async function financeiroRoutes(server: FastifyInstance) {
       
     // Buscar itens e despesas de todos os orçamentos
     const orcIds = data.map(o => o.id);
+    let items = data as Array<(typeof data)[number] & { itens?: unknown[]; despesas?: unknown[] }>;
     if (orcIds.length > 0) {
       // Itens
       const allItens = await db.select().from(schema.orcamento_itens).where(sql`orcamento_id IN ${orcIds}`);
       // Despesas
       const allDespesas = await db.select().from(schema.orcamento_despesas).where(sql`orcamento_id IN ${orcIds}`);
 
-      return data.map(orc => ({
+      items = data.map(orc => ({
         ...orc,
         itens: allItens.filter(i => i.orcamentoId === orc.id),
         despesas: allDespesas.filter(d => d.orcamentoId === orc.id)
       }));
     }
-    
-    return data;
+    if (mode === 'legacy') return items;
+    const where = and(
+      isNull(schema.orcamentos.deletedAt),
+      request.query.clienteId ? eq(schema.orcamentos.clienteId, request.query.clienteId) : undefined
+    );
+    const [{ total }] = await db.select({ total: count() }).from(schema.orcamentos).where(where);
+    return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
   });
 
   zServer.post('/orcamentos', {
@@ -461,7 +469,20 @@ export async function financeiroRoutes(server: FastifyInstance) {
         isNull(schema.orcamentos.deletedAt),
         sql`(${schema.parcelas.statusPagamento} = 'Pago' OR lower(${schema.orcamentos.status}) IN ('aprovado', 'pago'))`
       ));
-    return data;
+    const installmentIds = data.map(item => item.id);
+    const receipts = installmentIds.length ? await db.select({
+      parcelaId: schema.recebimentos.parcelaId,
+      valorRecebido: schema.recebimentos.valorRecebido,
+      dataRecebimento: schema.recebimentos.dataRecebimento
+    }).from(schema.recebimentos).where(and(
+      sql`${schema.recebimentos.parcelaId} IN ${installmentIds}`,
+      isNull(schema.recebimentos.deletedAt),
+      isNull(schema.recebimentos.estornadoEm)
+    )) : [];
+    return data.map(item => ({
+      ...item,
+      recebimentos: receipts.filter(receipt => receipt.parcelaId === item.id)
+    }));
   });
 
   server.get('/parcelas/:orcamentoId', async (request, reply) => {
@@ -672,7 +693,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
       updatedAt: schema.documentos.updatedAt
     }).from(schema.documentos).where(and(
       eq(schema.documentos.clienteId, clienteId),
-      isNull(schema.documentos.deletedAt),
+      activeDocumentWhere(),
       projetoId
         ? sql`${schema.documentos.projetoId} is null OR ${schema.documentos.projetoId} = ${projetoId}`
         : isNull(schema.documentos.projetoId)
@@ -727,7 +748,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     if (input.comprovanteDocumentoId) {
       const [document] = await db.select().from(schema.documentos).where(and(
         eq(schema.documentos.id, input.comprovanteDocumentoId),
-        isNull(schema.documentos.deletedAt)
+        activeDocumentWhere()
       )).limit(1);
       if (!document) return reply.status(400).send({ error: 'Comprovante não encontrado' });
       if (document.clienteId !== source.clienteId) {
@@ -933,7 +954,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     for (const documentId of documentIds) {
       const [document] = await db.select().from(schema.documentos).where(and(
         eq(schema.documentos.id, documentId),
-        isNull(schema.documentos.deletedAt)
+        activeDocumentWhere()
       )).limit(1);
       if (!document) return reply.status(400).send({ error: 'Um dos comprovantes não foi encontrado.' });
       if (clienteId && document.clienteId !== clienteId) {
@@ -1078,7 +1099,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
       if (data.comprovanteDocumentoId) {
         const [document] = await db.select().from(schema.documentos).where(and(
           eq(schema.documentos.id, data.comprovanteDocumentoId),
-          isNull(schema.documentos.deletedAt)
+          activeDocumentWhere()
         )).limit(1);
         if (!document) return reply.status(400).send({ error: 'Comprovante não encontrado.' });
         if (nextClienteId && document.clienteId !== nextClienteId) {
@@ -1198,7 +1219,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
     if (!expense) return reply.status(404).send({ error: 'Despesa não encontrada' });
     const [document] = await db.select().from(schema.documentos).where(and(
       eq(schema.documentos.id, parsed.data.documentoId),
-      isNull(schema.documentos.deletedAt)
+      activeDocumentWhere()
     )).limit(1);
     if (!document) return reply.status(404).send({ error: 'Documento não encontrado' });
     if (expense.clienteId && document.clienteId !== expense.clienteId) {
@@ -1789,7 +1810,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
       }
     }
     if (input.documentoId) {
-      const [document] = await db.select().from(schema.documentos).where(eq(schema.documentos.id, input.documentoId)).limit(1);
+      const [document] = await db.select().from(schema.documentos).where(and(eq(schema.documentos.id, input.documentoId), activeDocumentWhere())).limit(1);
       if (!document || document.clienteId !== input.clienteId) {
         return reply.status(400).send({ error: 'O documento não pertence ao cliente informado.' });
       }

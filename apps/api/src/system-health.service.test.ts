@@ -88,3 +88,24 @@ test('diagnóstico da pasta distingue estados sem criar ou expor o caminho confi
   assert.equal(health.checks.filesDirectory.code, 'not_configured');
   SystemHealthService.configureFileSystemForTests(null);
 });
+
+test('diagnóstico seguro remove dados pessoais, credenciais, caminhos e limita estruturas', async () => {
+  const { sanitizeDiagnosticValue } = await import('./services/system-health.service');
+  const input = {
+    nome: 'Thalles Wesley',
+    cliente: 'Pessoa identificável',
+    nested: {
+      cpf: '123.456.789-09',
+      observacao: 'CPF 123.456.789-09; CNPJ 12.345.678/0001-90; telefone (48) 99999-1234; CEP 88000-000; Rua das Flores, 10; nome: João da Silva; arquivo cliente.pdf; token=abc123',
+      email: 'pessoa@example.com',
+      caminho: 'C:\\Users\\Pessoa\\documentos\\cliente.pdf'
+    },
+    items: Array.from({ length: 130 }, (_, index) => index)
+  };
+  const sanitized = sanitizeDiagnosticValue(input) as Record<string, unknown>;
+  const serialized = JSON.stringify(sanitized);
+  for (const sensitive of ['Thalles Wesley', 'Pessoa identificável', '123.456.789-09', '12.345.678/0001-90', '99999-1234', '88000-000', 'Rua das Flores', 'João da Silva', 'cliente.pdf', 'abc123', 'pessoa@example.com', 'C:\\Users\\Pessoa']) {
+    assert.equal(serialized.includes(sensitive), false, sensitive);
+  }
+  assert.equal((sanitized.items as unknown[]).length, 100);
+});

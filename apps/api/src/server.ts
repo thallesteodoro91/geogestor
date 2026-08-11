@@ -28,6 +28,7 @@ import { ambientalRoutes } from './routes/ambiental.routes';
 import { orcamentosRoutes } from './routes/orcamentos.routes';
 import { strategicPlanningRoutes } from './routes/strategic-planning.routes';
 import { operationalDataRoutes } from './routes/operational-data.routes';
+import { alertasRoutes } from './routes/alertas.routes';
 import { importacoesRoutes } from './routes/importacoes.routes';
 import { runRuntimeMigrations } from './services/runtime-migrations.service';
 import { FileSystemService } from './services/fs.service';
@@ -43,6 +44,13 @@ import { SystemHealthService } from './services/system-health.service';
 import { DataQualityService } from './services/data-quality.service';
 import { PerformanceMetricsService, normalizeRegisteredRoute } from './services/performance-metrics.service';
 import { LocalSessionService, verifyAdminPassword } from './services/local-session.service';
+import { DataDirectoryService } from './services/data-directory.service';
+import { MaintenanceHistoryService } from './services/maintenance-history.service';
+import { MaintenanceOperationService } from './services/maintenance-operation.service';
+import { BackupActivityService } from './services/backup-activity.service';
+import { BackupDeviceService } from './services/backup-device.service';
+import { BackupProviderService } from './services/backup-provider.service';
+import { BackupRecoveryService } from './services/backup-recovery.service';
 import { z } from 'zod';
 import { isValidCnpj } from '@geogestor/contracts';
 
@@ -80,17 +88,73 @@ const configuracaoPatchSchema = z.object({
 const resetSchema = z.object({ confirmation: z.literal(RESET_CONFIRMATION) }).strict();
 const restoreSchema = z.object({
   bundlePath: trimmedRequired('Diretório do backup', 4_096),
-  confirmation: z.literal(RESTORE_CONFIRMATION)
+  confirmation: z.literal(RESTORE_CONFIRMATION),
+  recoveryCode: z.string().trim().max(256).nullable().optional()
+}).strict();
+const restorePreflightSchema = z.object({
+  bundlePath: trimmedRequired('Diretório do backup', 4_096),
+  recoveryCode: z.string().trim().max(256).nullable().optional()
+}).strict();
+const recoveryRevealSchema = z.object({ password: z.string().min(1).max(200) }).strict();
+const recoveryKitSchema = z.object({
+  password: z.string().min(1).max(200),
+  kitPassword: z.string().min(12).max(300)
 }).strict();
 const backupPolicySchema = z.object({
+  automaticEnabled: z.boolean().optional().default(true),
+  changeDebounceMinutes: z.number().int().min(1).max(24 * 60).optional().default(5),
   databaseIntervalHours: z.number().int().min(1).max(24 * 30),
   completeIntervalDays: z.number().int().min(1).max(365),
   retention: z.number().int().min(1).max(365),
+  retentionRecentHours: z.number().int().min(1).max(24 * 30).optional().default(24),
+  retentionDailyDays: z.number().int().min(1).max(3650).optional().default(30),
+  retentionMonthlyMonths: z.number().int().min(1).max(120).optional().default(12),
   destinationDirectory: z.string().trim().max(4_096).nullable(),
   maxStorageBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   overdueGraceHours: z.number().int().min(0).max(24 * 30),
   runOnStartup: z.boolean(),
-  runOnShutdown: z.boolean()
+  runOnShutdown: z.boolean(),
+  runRestoreTests: z.boolean().optional().default(true),
+  restoreTestIntervalDays: z.number().int().min(1).max(365).optional().default(30)
+}).strict();
+const backupDestinationSchema = z.object({
+  destinationDirectory: trimmedRequired('Pasta de destino', 4_096)
+}).strict();
+
+export function backupMutationScope(method: string, rawUrl: string, statusCode: number, contentType = ''): 'database' | 'complete' | null {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) || statusCode >= 400) return null;
+  const pathname = rawUrl.split('?')[0];
+  const excludedPrefixes = [
+    '/api/auth/',
+    '/api/sistema/backup',
+    '/api/sistema/backups/',
+    '/api/sistema/restaurar-backup',
+    '/api/sistema/manutencao',
+    '/api/sistema/reset',
+    '/api/sistema/diagnostico',
+    '/api/google/'
+  ];
+  if (!pathname.startsWith('/api/') || excludedPrefixes.some((prefix) => pathname.startsWith(prefix))) return null;
+  return pathname.startsWith('/api/arquivos') || contentType.toLowerCase().includes('multipart/form-data')
+    ? 'complete'
+    : 'database';
+}
+
+export function shouldTrackBackupMutation(method: string, rawUrl: string, statusCode: number) {
+  return backupMutationScope(method, rawUrl, statusCode) !== null;
+}
+const dataDirectoryPreflightSchema = z.object({
+  targetDirectory: trimmedRequired('Pasta de destino', 4_096)
+}).strict();
+const dataDirectoryMigrationSchema = z.object({
+  targetDirectory: trimmedRequired('Pasta de destino', 4_096),
+  strategy: z.enum(['use', 'copy', 'move']),
+  confirmation: z.literal('ALTERAR PASTA DE DADOS DO GEOGESTOR')
+}).strict();
+const maintenanceHistoryQuerySchema = z.object({
+  type: z.enum(['backup_database', 'backup_complete', 'restore_test', 'restore', 'data_migration', 'operational_reset', 'integrity_check', 'diagnostic_export']).optional(),
+  status: z.enum(['running', 'success', 'failed', 'cancelled']).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional()
 }).strict();
 const unlockSchema = z.object({
   password: z.string().min(1, 'Informe a senha local.').max(200)
@@ -285,6 +349,11 @@ server.addHook('onRequest', async (request, reply) => {
   }
 });
 
+server.addHook('onResponse', async (request, reply) => {
+  const scope = backupMutationScope(request.method, request.url, reply.statusCode, String(request.headers['content-type'] || ''));
+  if (scope) await BackupActivityService.markChanged(scope);
+});
+
 const httpErrorsLogged = new WeakSet<object>();
 
 server.addHook('onResponse', async (request, reply) => {
@@ -341,7 +410,7 @@ async function writeRestoreResult(status: 'success' | 'failed', message: string)
   await fs.rename(temporary, target);
 }
 
-async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string }) {
+async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string; recoveryCode?: string | null }) {
   let exitCode = 76;
   try {
     SchedulerService.stop();
@@ -352,6 +421,7 @@ async function executeManagedRestore(input: { bundlePath: string; targetFilesRoo
       targetDatabasePath: getDatabasePath(),
       targetFilesRoot: input.targetFilesRoot,
       allowedBackupDirectory: input.allowedBackupDirectory,
+      recoveryCode: input.recoveryCode,
       confirmation: 'RESTORE_GEOGESTOR'
     });
     await writeRestoreResult('success', 'Backup restaurado e validado com sucesso.');
@@ -491,6 +561,7 @@ server.register(ambientalRoutes, { prefix: '/api/ambiental' });
 server.register(orcamentosRoutes, { prefix: '/api/orcamentos' });
 server.register(strategicPlanningRoutes, { prefix: '/api/planejamento' });
 server.register(operationalDataRoutes, { prefix: '/api/dados-operacionais' });
+server.register(alertasRoutes, { prefix: '/api/alertas' });
 server.register(importacoesRoutes, { prefix: '/api/importacoes' });
 
 // Health check
@@ -630,20 +701,50 @@ server.get('/api/sistema/info', async () => {
 });
 
 server.post('/api/sistema/backup', async (request, reply) => {
+  const startedAt = new Date().toISOString();
+  const startedAtMs = performance.now();
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
+  await OperationalLogService.setState('backup', 'running', { attemptedAt: startedAt });
   try {
     const policy = await BackupPolicyService.get();
+    const databaseStats = await getDatabaseBundleStats(getDatabasePath());
+    operation = MaintenanceOperationService.begin('backup_database', {
+      totalFiles: databaseStats.files,
+      totalBytes: databaseStats.bytes
+    }, 'Preparando backup do banco');
     const result = await BackupService.createLocalBackup({
       destinationDirectory: policy.destinationDirectory,
       retention: policy.retention,
-      maxStorageBytes: policy.maxStorageBytes
+      maxStorageBytes: policy.maxStorageBytes,
+      retentionRecentHours: policy.retentionRecentHours,
+      retentionDailyDays: policy.retentionDailyDays,
+      retentionMonthlyMonths: policy.retentionMonthlyMonths,
+      shouldCancel: operation.shouldCancel,
+      onProgress: operation.update
+    });
+    operation.setCancellable(false);
+    operation.finish();
+    const completedAt = new Date().toISOString();
+    await OperationalLogService.setState('backup', 'ok', {
+      attemptedAt: startedAt,
+      completedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      totalBytes: result.totalBytes,
+      totalFiles: result.totalFiles
     });
     return {
       message: 'Backup criado com sucesso',
       ...result
     };
   } catch (err) {
+    operation?.fail(err);
+    await OperationalLogService.setState('backup', 'failed', {
+      attemptedAt: startedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      error: err
+    });
     server.log.error(err);
-    return reply.status(500).send({ error: 'Erro ao criar backup local' });
+    return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao criar backup local') });
   }
 });
 
@@ -661,35 +762,171 @@ server.put('/api/sistema/backups/politica', async (request, reply) => {
   }
 });
 
+server.post('/api/sistema/backups/testar-destino', async (request, reply) => {
+  const parsed = backupDestinationSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    return await BackupPolicyService.validateDestination(parsed.data.destinationDirectory);
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível usar a pasta de backups.') });
+  }
+});
+
+server.post('/api/sistema/backups/testar-restauracao', async (_request, reply) => {
+  try {
+    const policy = await BackupPolicyService.get();
+    const result = await BackupService.testLatestCompleteBackup(policy.destinationDirectory);
+    if (!result) return reply.status(404).send({ error: 'Crie um backup completo antes de testar a restauração.' });
+    return result;
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível testar o último backup completo.') });
+  }
+});
+
+async function authorizeRecoverySecret(password: string) {
+  const [configuration] = await db.select({ adminSenhaHash: schema.configuracoes.adminSenhaHash }).from(schema.configuracoes).limit(1);
+  if (!configuration || !verifyAdminPassword(password, configuration.adminSenhaHash)) {
+    throw new Error('Senha administrativa incorreta.');
+  }
+  return BackupRecoveryService.getConfiguredRecoverySecret(true);
+}
+
+server.get('/api/sistema/backups/recuperacao', async () => {
+  const secret = BackupRecoveryService.getConfiguredRecoverySecret(false);
+  return {
+    configured: Boolean(secret),
+    confirmed: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1',
+    keyId: secret ? BackupRecoveryService.keyId(secret) : null,
+    state: !secret
+      ? 'device_only'
+      : process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1'
+        ? 'configured'
+        : 'not_confirmed'
+  };
+});
+
+server.post('/api/sistema/backups/recuperacao/codigo', async (request, reply) => {
+  const parsed = recoveryRevealSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    const secret = await authorizeRecoverySecret(parsed.data.password);
+    if (!secret) throw new Error('A recuperação de emergência ainda não foi configurada.');
+    return { recoveryCode: BackupRecoveryService.formatRecoveryCode(secret), keyId: BackupRecoveryService.keyId(secret) };
+  } catch (error) {
+    return reply.status(401).send({ error: getErrorMessage(error, 'Não foi possível revelar o código de recuperação.') });
+  }
+});
+
+server.post('/api/sistema/backups/recuperacao/kit', async (request, reply) => {
+  const parsed = recoveryKitSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    const secret = await authorizeRecoverySecret(parsed.data.password);
+    if (!secret) throw new Error('A recuperação de emergência ainda não foi configurada.');
+    return BackupRecoveryService.exportKit(secret, parsed.data.kitPassword);
+  } catch (error) {
+    return reply.status(401).send({ error: getErrorMessage(error, 'Não foi possível exportar o kit de recuperação.') });
+  }
+});
+
 server.get('/api/sistema/backups/status', async () => {
   const policy = await BackupPolicyService.get();
   const state = OperationalLogService.getState();
   const storage = await BackupService.getStorageStatus(policy.destinationDirectory);
-  const databaseCompletedAt = typeof state.backup?.details?.completedAt === 'string' ? state.backup.details.completedAt : null;
-  const completeCompletedAt = typeof state.backupComplete?.details?.completedAt === 'string' ? state.backupComplete.details.completedAt : null;
+  const restoreTests = await MaintenanceHistoryService.list({ type: 'restore_test', limit: 1 });
+  const [device, cloud] = await Promise.all([
+    BackupDeviceService.getIdentity(),
+    BackupProviderService.inspect(policy.destinationDirectory)
+  ]);
+  const activity = BackupActivityService.snapshot();
+  const recoverySecret = BackupRecoveryService.getConfiguredRecoverySecret(false);
+  const componentDetails = (component: typeof state[string] | undefined) => {
+    const details = component?.details || {};
+    const error = details.error && typeof details.error === 'object' && 'message' in details.error
+      ? String(details.error.message)
+      : typeof details.error === 'string' ? details.error : null;
+    return {
+      attemptedAt: typeof details.attemptedAt === 'string' ? details.attemptedAt : component?.updatedAt || null,
+      completedAt: typeof details.completedAt === 'string' ? details.completedAt : null,
+      durationMs: typeof details.durationMs === 'number' ? details.durationMs : null,
+      totalBytes: typeof details.totalBytes === 'number' ? details.totalBytes : null,
+      totalFiles: typeof details.totalFiles === 'number' ? details.totalFiles : null,
+      error
+    };
+  };
+  const databaseDetails = componentDetails(state.backup);
+  const completeDetails = componentDetails(state.backupComplete);
+  const databaseCompletedAt = databaseDetails.completedAt;
+  const completeCompletedAt = completeDetails.completedAt;
+  const lastBackupAt = [databaseCompletedAt, completeCompletedAt].filter((value): value is string => Boolean(value)).sort().reverse()[0] || null;
   const nextAt = (value: string | null, intervalMs: number) => value
     ? new Date(Date.parse(value) + intervalMs).toISOString()
     : null;
   const now = Date.now();
   const classify = (value: string | null, intervalMs: number, operationStatus?: string) => {
+    if (operationStatus === 'running') return 'running';
     if (operationStatus === 'failed') return 'failed';
     if (!value) return 'incomplete';
     return now > Date.parse(value) + intervalMs + policy.overdueGraceHours * 60 * 60 * 1000 ? 'overdue' : 'current';
   };
   const databaseIntervalMs = policy.databaseIntervalHours * 60 * 60 * 1000;
   const completeIntervalMs = policy.completeIntervalDays * 24 * 60 * 60 * 1000;
+  const running = state.backup?.status === 'running' || state.backupComplete?.status === 'running';
+  const failed = state.backupComplete?.status === 'failed' || state.backup?.status === 'failed';
+  const restoreTestFailed = restoreTests[0]?.status === 'failed';
+  const summaryState = !policy.destinationDirectory
+    ? 'not_configured'
+    : running
+      ? 'running'
+      : restoreTestFailed || (failed && activity.pendingChanges > 0)
+        ? 'failed'
+        : activity.pendingChanges > 0
+          ? 'pending'
+          : lastBackupAt
+            ? cloud.confirmation === 'confirmed' ? 'protected' : 'created'
+            : 'incomplete';
   return {
     policy,
     storage,
     database: {
+      ...databaseDetails,
       completedAt: databaseCompletedAt,
       nextAt: nextAt(databaseCompletedAt, databaseIntervalMs),
       status: classify(databaseCompletedAt, databaseIntervalMs, state.backup?.status)
     },
     complete: {
+      ...completeDetails,
       completedAt: completeCompletedAt,
       nextAt: nextAt(completeCompletedAt, completeIntervalMs),
       status: classify(completeCompletedAt, completeIntervalMs, state.backupComplete?.status)
+    },
+    restoreTest: restoreTests[0] || null,
+    activeOperation: MaintenanceOperationService.snapshot(),
+    activity,
+    device,
+    cloud,
+    recovery: {
+      configured: Boolean(recoverySecret),
+      confirmed: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1',
+      keyId: recoverySecret ? BackupRecoveryService.keyId(recoverySecret) : null,
+      state: !recoverySecret ? 'device_only' : process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1' ? 'configured' : 'not_confirmed'
+    },
+    summary: {
+      state: summaryState,
+      configured: Boolean(policy.destinationDirectory),
+      pendingChanges: activity.pendingChanges,
+      lastBackupAt,
+      integrity: storage.history[0]?.integrity || null,
+      label: summaryState === 'not_configured' ? 'Backup não configurado'
+        : summaryState === 'running' ? 'Criando backup…'
+          : summaryState === 'failed' ? 'Atenção necessária'
+            : summaryState === 'pending' ? `${activity.pendingChanges} ${activity.pendingChanges === 1 ? 'alteração pendente' : 'alterações pendentes'}`
+              : summaryState === 'protected' ? 'Backup protegido'
+                : summaryState === 'created' ? 'Backup criado'
+                  : 'Primeiro backup pendente',
+      description: restoreTestFailed
+        ? 'O último teste de restauração falhou. Verifique o destino e execute “Testar restauração agora”.'
+        : cloud.message
     }
   };
 });
@@ -719,6 +956,8 @@ server.get('/api/sistema/diagnostico', async (request, reply) => {
     return reply.status(500).send({ error: 'Erro ao gerar diagnóstico do sistema' });
   }
 });
+
+server.get('/api/sistema/diagnostico/resumo', async () => SystemHealthService.diagnosticExportSummary());
 
 server.post('/api/sistema/diagnostico', async (request, reply) => {
   try {
@@ -763,6 +1002,10 @@ server.get('/api/sistema/backup-completo/preflight', async (request, reply) => {
       getDatabaseBundleStats(databasePath),
       getPathStats(filesRootDirectory)
     ]);
+    await fs.mkdir(backupDirectory, { recursive: true });
+    const disk = await fs.statfs(backupDirectory);
+    const availableBytes = Number(disk.bavail) * Number(disk.bsize);
+    const totalBytes = databaseStats.bytes + filesStats.bytes;
 
     return {
       databasePath,
@@ -770,8 +1013,11 @@ server.get('/api/sistema/backup-completo/preflight', async (request, reply) => {
       backupDirectory,
       databaseStats,
       filesStats,
-      totalBytes: databaseStats.bytes + filesStats.bytes,
-      totalFiles: databaseStats.files + filesStats.files
+      totalBytes,
+      totalFiles: databaseStats.files + filesStats.files,
+      availableBytes,
+      estimatedRequiredBytes: Math.ceil(totalBytes * 1.1),
+      canProceed: availableBytes >= Math.ceil(totalBytes * 1.1)
     };
   } catch (err) {
     server.log.error(err);
@@ -780,6 +1026,11 @@ server.get('/api/sistema/backup-completo/preflight', async (request, reply) => {
 });
 
 server.post('/api/sistema/backup-completo', async (request, reply) => {
+  const startedAt = new Date().toISOString();
+  const startedAtMs = performance.now();
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
+  await OperationalLogService.setState('backupComplete', 'running', { attemptedAt: startedAt });
+  const protectedSequence = BackupActivityService.captureSequence();
   try {
     const databasePath = getDatabasePath();
     const filesRootDirectory = await FileSystemService.getRootFolder();
@@ -787,13 +1038,36 @@ server.post('/api/sistema/backup-completo', async (request, reply) => {
       getDatabaseBundleStats(databasePath),
       getPathStats(filesRootDirectory)
     ]);
+    operation = MaintenanceOperationService.begin('backup_complete', {
+      totalFiles: databaseStats.files + filesStats.files,
+      totalBytes: databaseStats.bytes + filesStats.bytes
+    }, 'Preparando backup completo');
     const policy = await BackupPolicyService.get();
     const backup = await BackupService.createCompleteBackup(filesRootDirectory, {
       destinationDirectory: policy.destinationDirectory,
       retention: policy.retention,
-      maxStorageBytes: policy.maxStorageBytes
+      maxStorageBytes: policy.maxStorageBytes,
+      retentionRecentHours: policy.retentionRecentHours,
+      retentionDailyDays: policy.retentionDailyDays,
+      retentionMonthlyMonths: policy.retentionMonthlyMonths,
+      shouldCancel: operation.shouldCancel,
+      onProgress: operation.update
     });
+    operation.setCancellable(false);
+    operation.finish();
 
+    const completedAt = new Date().toISOString();
+    await OperationalLogService.setState('backupComplete', 'ok', {
+      attemptedAt: startedAt,
+      completedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      totalBytes: backup.totalBytes,
+      totalFiles: backup.totalFiles
+    });
+    await BackupActivityService.markProtected(protectedSequence, {
+      completedAt,
+      bundleName: path.basename(backup.bundlePath)
+    });
     return {
       message: 'Backup completo criado com sucesso',
       ...backup,
@@ -804,8 +1078,81 @@ server.post('/api/sistema/backup-completo', async (request, reply) => {
       totalFiles: databaseStats.files + filesStats.files
     };
   } catch (err) {
+    operation?.fail(err);
+    await OperationalLogService.setState('backupComplete', 'failed', {
+      attemptedAt: startedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      error: err
+    });
     server.log.error(err);
-    return reply.status(500).send({ error: 'Erro ao criar backup completo' });
+    return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao criar backup completo') });
+  }
+});
+
+server.post('/api/sistema/restaurar-backup/preflight', async (request, reply) => {
+  const parsed = restorePreflightSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    const policy = await BackupPolicyService.get();
+    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const dataDisk = await fs.statfs(getDataDirectory());
+    let availableBytes = Number(dataDisk.bavail) * Number(dataDisk.bsize);
+    if (validation.manifest.type === 'complete') {
+      const filesRoot = await FileSystemService.getRootFolder();
+      await fs.mkdir(filesRoot, { recursive: true });
+      const filesDisk = await fs.statfs(filesRoot);
+      availableBytes = Math.min(availableBytes, Number(filesDisk.bavail) * Number(filesDisk.bsize));
+    }
+    const estimatedRequiredBytes = Math.ceil(validation.manifest.totals.bytes * 1.1);
+    return {
+      valid: true,
+      application: validation.manifest.application,
+      type: validation.manifest.type,
+      createdAt: validation.manifest.createdAt,
+      completedAt: validation.manifest.completedAt,
+      schemaVersion: validation.manifest.schemaVersion,
+      formatVersion: validation.manifest.formatVersion,
+      totals: validation.manifest.totals,
+      encrypted: Boolean(validation.manifest.encryption),
+      integrity: validation.integrity,
+      checksumFilesVerified: validation.checksumFilesVerified,
+      credentialsExcluded: Boolean(validation.manifest.credentialsExcluded),
+      availableBytes,
+      estimatedRequiredBytes,
+      canProceed: availableBytes >= estimatedRequiredBytes
+    };
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'O backup selecionado não pôde ser validado.') });
+  }
+});
+
+server.post('/api/sistema/restaurar-backup/testar', async (request, reply) => {
+  const parsed = restorePreflightSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
+  try {
+    const policy = await BackupPolicyService.get();
+    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    operation = MaintenanceOperationService.begin('restore_test', {
+      totalFiles: validation.manifest.totals.files,
+      totalBytes: validation.manifest.totals.bytes
+    }, 'Criando área temporária isolada');
+    operation.setCancellable(false);
+    const result = await BackupService.testRestore(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    operation.update({
+      stage: 'Restauração isolada validada',
+      processedFiles: result.totals.files,
+      processedBytes: result.totals.bytes,
+      totalFiles: result.totals.files,
+      totalBytes: result.totals.bytes
+    });
+    operation.finish();
+    return result;
+  } catch (error) {
+    operation?.fail(error);
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível concluir o teste isolado de restauração.') });
   }
 });
 
@@ -820,13 +1167,24 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
   try {
     const policy = await BackupPolicyService.get();
     const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
-    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory);
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const restoreDisk = await fs.statfs(getDataDirectory());
+    let restoreAvailableBytes = Number(restoreDisk.bavail) * Number(restoreDisk.bsize);
+    if (validation.manifest.type === 'complete') {
+      const filesRoot = await FileSystemService.getRootFolder();
+      await fs.mkdir(filesRoot, { recursive: true });
+      const filesDisk = await fs.statfs(filesRoot);
+      restoreAvailableBytes = Math.min(restoreAvailableBytes, Number(filesDisk.bavail) * Number(filesDisk.bsize));
+    }
+    if (restoreAvailableBytes < Math.ceil(validation.manifest.totals.bytes * 1.1)) {
+      throw new Error('Não há espaço livre suficiente para restaurar e preservar a cópia de segurança dos dados atuais.');
+    }
     const targetFilesRoot = validation.manifest.type === 'complete'
       ? await FileSystemService.getRootFolder()
       : undefined;
     restoreScheduled = true;
     setTimeout(() => {
-      void executeManagedRestore({ bundlePath: parsed.data.bundlePath, targetFilesRoot, allowedBackupDirectory });
+      void executeManagedRestore({ bundlePath: parsed.data.bundlePath, targetFilesRoot, allowedBackupDirectory, recoveryCode: parsed.data.recoveryCode });
     }, 150);
     return reply.status(202).send({
       message: 'Backup validado. O GeoGestor será reiniciado para concluir a restauração.',
@@ -847,6 +1205,77 @@ server.post('/api/sistema/abrir-pasta-dados', async (request, reply) => {
   } catch (err) {
     server.log.error(err);
     return reply.status(500).send({ error: 'Erro ao abrir pasta de dados' });
+  }
+});
+
+server.post('/api/sistema/diretorio-arquivos/preflight', async (request, reply) => {
+  const parsed = dataDirectoryPreflightSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    return await DataDirectoryService.preflight(parsed.data.targetDirectory);
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível validar a pasta escolhida.') });
+  }
+});
+
+server.post('/api/sistema/diretorio-arquivos/migrar', async (request, reply) => {
+  const parsed = dataDirectoryMigrationSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
+  try {
+    const preflight = await DataDirectoryService.preflight(parsed.data.targetDirectory);
+    operation = MaintenanceOperationService.begin('data_migration', {
+      totalFiles: preflight.current.files,
+      totalBytes: preflight.current.bytes
+    }, 'Preparando migração dos documentos');
+    const result = await DataDirectoryService.migrate({
+      ...parsed.data,
+      shouldCancel: operation.shouldCancel,
+      onProgress: operation.update
+    });
+    operation.setCancellable(false);
+    operation.finish();
+    return result;
+  } catch (error) {
+    operation?.fail(error);
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível alterar a pasta de documentos.') });
+  }
+});
+
+server.get('/api/sistema/operacoes/status', async () => ({ operation: MaintenanceOperationService.snapshot() }));
+
+server.post('/api/sistema/operacoes/:id/cancelar', async (request, reply) => {
+  const id = z.string().uuid().safeParse((request.params as { id?: unknown }).id);
+  if (!id.success) return reply.status(400).send({ error: 'Identificador de operação inválido.' });
+  if (!MaintenanceOperationService.requestCancel(id.data)) {
+    return reply.status(409).send({ error: 'A operação não está ativa ou já entrou em uma etapa que não pode ser cancelada.' });
+  }
+  return { requested: true, operation: MaintenanceOperationService.snapshot() };
+});
+
+server.get('/api/sistema/historico-operacional', async (request, reply) => {
+  const parsed = maintenanceHistoryQuerySchema.safeParse(request.query);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  return { items: await MaintenanceHistoryService.list(parsed.data) };
+});
+
+server.get('/api/sistema/historico-operacional/exportar', async (request, reply) => {
+  const parsed = maintenanceHistoryQuerySchema.omit({ limit: true }).safeParse(request.query);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  const csv = await MaintenanceHistoryService.exportCsv(parsed.data);
+  return reply.type('text/csv; charset=utf-8')
+    .header('content-disposition', 'attachment; filename="historico-operacional-geogestor.csv"')
+    .send(csv);
+});
+
+server.post('/api/sistema/abrir-pasta-arquivos', async (request, reply) => {
+  try {
+    const root = await FileSystemService.getRootFolder();
+    await FileSystemService.ensureFolder(root);
+    FileSystemService.openFolderInExplorer(root);
+    return { path: root };
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível abrir a pasta de documentos.') });
   }
 });
 
@@ -1093,10 +1522,11 @@ export const start = async () => {
     });
 
     // Graceful Shutdown
-    process.on('SIGTERM', () => {
+    process.once('SIGTERM', () => {
       SchedulerService.stop();
       SchedulerService.prepareForShutdown().catch((error) => {
         server.log.error({ err: error }, 'Falha no backup configurado para o encerramento');
+        process.send?.({ type: 'shutdown-backup-failed', message: getErrorMessage(error, 'O backup de encerramento falhou.') });
       }).then(() => server.close()).then(() => {
         console.log('[GEO-API] Server closed gracefully.');
         process.exit(0);

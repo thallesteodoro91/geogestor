@@ -1,4 +1,4 @@
-import { FormSelect } from '../../components/Form';
+import { FormSelect, NumericInput } from '../../components/Form';
 import { useMemo, useState } from 'react';
 import {
   Calculator,
@@ -181,12 +181,12 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="car-total-area" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Área total do imóvel (ha)</label>
-                <input id="car-total-area" name="areaTotal" type="number" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={totalArea} onChange={(event) => setTotalArea(event.target.value)} aria-invalid={Boolean(analysis.errors.totalArea)} aria-describedby={analysis.errors.totalArea ? 'car-total-area-error' : undefined} placeholder="Ex.: 100,50" className={fieldClass} />
+                <NumericInput id="car-total-area" name="areaTotal" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={totalArea} onChange={(event) => setTotalArea(event.target.value)} aria-invalid={Boolean(analysis.errors.totalArea)} aria-describedby={analysis.errors.totalArea ? 'car-total-area-error' : undefined} placeholder="Ex.: 100,50" className={fieldClass} />
                 {analysis.errors.totalArea && <p id="car-total-area-error" className={errorClass}>{analysis.errors.totalArea}</p>}
               </div>
               <div>
                 <label htmlFor="car-fiscal-modules" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Área em módulos fiscais</label>
-                <input id="car-fiscal-modules" name="modulosFiscais" type="number" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={fiscalModules} onChange={(event) => setFiscalModules(event.target.value)} aria-invalid={Boolean(analysis.errors.fiscalModules)} aria-describedby="car-fiscal-modules-help" placeholder="Opcional" className={fieldClass} />
+                <NumericInput id="car-fiscal-modules" name="modulosFiscais" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={fiscalModules} onChange={(event) => setFiscalModules(event.target.value)} aria-invalid={Boolean(analysis.errors.fiscalModules)} aria-describedby="car-fiscal-modules-help" placeholder="Opcional" className={fieldClass} />
                 <p id="car-fiscal-modules-help" className="mt-1.5 text-xs text-zinc-500">Necessário para avaliar o possível enquadramento no art. 67.</p>
                 {analysis.errors.fiscalModules && <p className={errorClass}>{analysis.errors.fiscalModules}</p>}
               </div>
@@ -195,12 +195,12 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="car-app-area" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">APP conservada ou em recuperação (ha)</label>
-                <input id="car-app-area" name="areaApp" type="number" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={appArea} onChange={(event) => setAppArea(event.target.value)} aria-invalid={Boolean(analysis.errors.appArea)} placeholder="Ex.: 8,25" className={fieldClass} />
+                <NumericInput id="car-app-area" name="areaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={appArea} onChange={(event) => setAppArea(event.target.value)} aria-invalid={Boolean(analysis.errors.appArea)} placeholder="Ex.: 8,25" className={fieldClass} />
                 {analysis.errors.appArea && <p className={errorClass}>{analysis.errors.appArea}</p>}
               </div>
               <div>
                 <label htmlFor="car-native-outside-app" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Vegetação nativa fora de APP (ha)</label>
-                <input id="car-native-outside-app" name="vegetacaoForaApp" type="number" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOutsideApp} onChange={(event) => setNativeOutsideApp(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOutsideApp)} placeholder="Ex.: 18,00" className={fieldClass} />
+                <NumericInput id="car-native-outside-app" name="vegetacaoForaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOutsideApp} onChange={(event) => setNativeOutsideApp(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOutsideApp)} placeholder="Ex.: 18,00" className={fieldClass} />
                 {analysis.errors.nativeOutsideApp && <p className={errorClass}>{analysis.errors.nativeOutsideApp}</p>}
               </div>
             </div>
@@ -241,7 +241,7 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
             {parseArea(fiscalModules) !== null && Number(fiscalModules) <= 4 && propertyExistedOn2008 && (
               <div className="mt-2 border-t border-amber-200/70 py-4 dark:border-amber-800/40">
                 <label htmlFor="car-native-2008" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Remanescente de vegetação nativa em 22/07/2008 (ha)</label>
-                <input id="car-native-2008" name="remanescente2008" type="number" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOn2008} onChange={(event) => setNativeOn2008(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOn2008)} className={fieldClass} />
+                <NumericInput id="car-native-2008" name="remanescente2008" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOn2008} onChange={(event) => setNativeOn2008(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOn2008)} className={fieldClass} />
                 {analysis.errors.nativeOn2008 && <p className={errorClass}>{analysis.errors.nativeOn2008}</p>}
               </div>
             )}

@@ -8,6 +8,7 @@ function loadPreload() {
   const source = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
   const syncCalls = [];
   const sentMessages = [];
+  const listeners = new Map();
   let exposedApi;
 
   const ipcRenderer = {
@@ -20,7 +21,9 @@ function loadPreload() {
     invoke: async () => null,
     send(channel, value) {
       sentMessages.push([channel, value]);
-    }
+    },
+    on(channel, listener) { listeners.set(channel, listener); },
+    removeListener(channel, listener) { if (listeners.get(channel) === listener) listeners.delete(channel); }
   };
 
   vm.runInNewContext(source, {
@@ -39,7 +42,7 @@ function loadPreload() {
     Set
   }, { filename: 'preload.js' });
 
-  return { api: exposedApi, syncCalls, sentMessages };
+  return { api: exposedApi, syncCalls, sentMessages, listeners };
 }
 
 test('preload lê porta e token uma única vez durante a inicialização', () => {
@@ -71,4 +74,26 @@ test('preload encaminha a sessão local sem persistir senha ou token em armazena
     ['set-local-session-token', 'session-token'],
     ['set-local-session-token', '']
   ]);
+});
+
+test('preload expõe a abertura da pasta de backup somente via IPC', async () => {
+  const { api } = loadPreload();
+  assert.equal(typeof api.openBackupDirectory, 'function');
+  assert.equal(await api.openBackupDirectory('C:\\Backups\\GeoGestor'), null);
+});
+
+test('preload expõe a abertura segura da pasta de diagnósticos somente via IPC', async () => {
+  const { api } = loadPreload();
+  assert.equal(typeof api.openDiagnosticsFolder, 'function');
+  assert.equal(await api.openDiagnosticsFolder(), null);
+});
+
+test('preload entrega e remove o estado de backup durante o encerramento', () => {
+  const { api, listeners } = loadPreload();
+  let received = null;
+  const unsubscribe = api.onShutdownBackupStatus((payload) => { received = payload; });
+  listeners.get('shutdown-backup-status')({}, { running: true, message: 'Salvando…' });
+  assert.deepEqual(received, { running: true, message: 'Salvando…' });
+  unsubscribe();
+  assert.equal(listeners.has('shutdown-backup-status'), false);
 });

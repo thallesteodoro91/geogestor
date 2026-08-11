@@ -14,6 +14,7 @@ import { MetricCard } from '../../components/MetricCard';
 import { cn } from '../../utils/cn';
 import { geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass } from '../../utils/geoTheme';
 import { apiClient } from '../../services/apiClient';
+import { parseAuditData, redactSensitiveAuditValue } from './auditLogData';
 
 interface AuditLog {
   id: string;
@@ -28,6 +29,7 @@ interface AuditLog {
 export function AuditLogs() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [actionFilter, setActionFilter] = useState<string>('ALL');
@@ -36,6 +38,7 @@ export function AuditLogs() {
   const fetchLogs = () => {
     Promise.resolve().then(() => {
       setLoading(true);
+      setLoadError('');
     });
     apiClient.get<AuditLog[]>('/api/audit-logs')
       .then(data => {
@@ -44,6 +47,7 @@ export function AuditLogs() {
       })
       .catch(err => {
         console.error('Error fetching audit logs:', err);
+        setLoadError(err instanceof Error ? err.message : 'Não foi possível consultar os logs de auditoria.');
         setLoading(false);
       });
   };
@@ -110,15 +114,23 @@ export function AuditLogs() {
   const activeFilterCount = [actionFilter !== 'ALL', entityFilter !== 'ALL'].filter(Boolean).length;
 
   const renderDataDiff = (log: AuditLog) => {
-    const oldObj = log.oldData ? (JSON.parse(log.oldData) as Record<string, unknown>) : null;
-    const newObj = log.newData ? (JSON.parse(log.newData) as Record<string, unknown>) : null;
+    const oldResult = parseAuditData(log.oldData);
+    const newResult = parseAuditData(log.newData);
+    const oldObj = oldResult.data;
+    const newObj = newResult.data;
+
+    if (oldResult.invalid || newResult.invalid) {
+      return <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">Os detalhes deste registro estão em um formato antigo ou inválido.</p>;
+    }
 
     // Helper to format values
-    const formatVal = (val: unknown) => {
+    const formatVal = (val: unknown, key = '') => {
+      const safeValue = redactSensitiveAuditValue(val, key);
+      if (safeValue === '[PROTEGIDO]') return <span className="font-semibold text-amber-700 dark:text-amber-300">[PROTEGIDO]</span>;
       if (val === null || val === undefined) return <span className="text-zinc-500 dark:text-zinc-400 italic">nulo</span>;
-      if (typeof val === 'object') return JSON.stringify(val);
+      if (typeof safeValue === 'object') return JSON.stringify(safeValue);
       if (typeof val === 'boolean') return val ? 'Sim' : 'Não';
-      return String(val);
+      return String(safeValue);
     };
 
     if (log.action === 'INSERT' && newObj) {
@@ -129,7 +141,7 @@ export function AuditLogs() {
             {Object.entries(newObj).map(([key, val]) => (
               <div key={key} className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-3 border border-zinc-100 dark:border-zinc-800/50">
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block uppercase tracking-wider">{key}</span>
-                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{formatVal(val)}</span>
+                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{formatVal(val, key)}</span>
               </div>
             ))}
           </div>
@@ -145,7 +157,7 @@ export function AuditLogs() {
             {Object.entries(oldObj).map(([key, val]) => (
               <div key={key} className="bg-zinc-50 dark:bg-zinc-950 rounded-xl p-3 border border-zinc-100 dark:border-zinc-800/50">
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 block uppercase tracking-wider">{key}</span>
-                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{formatVal(val)}</span>
+                <span className="text-sm text-zinc-800 dark:text-zinc-200 font-medium">{formatVal(val, key)}</span>
               </div>
             ))}
           </div>
@@ -184,11 +196,11 @@ export function AuditLogs() {
                   </div>
                   <div className="md:w-1/3 bg-rose-50/50 border border-rose-100/55 rounded-xl p-2.5">
                     <span className="text-xs font-bold text-rose-500 uppercase tracking-wider block">Antes</span>
-                    <span className="text-xs font-medium text-rose-700 break-all">{formatVal(oldVal)}</span>
+                    <span className="text-xs font-medium text-rose-700 break-all">{formatVal(oldVal, key)}</span>
                   </div>
                   <div className="md:w-1/3 bg-emerald-50/50 border border-emerald-100/55 rounded-xl p-2.5">
                     <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider block">Depois</span>
-                    <span className="text-xs font-medium text-emerald-700 break-all">{formatVal(newVal)}</span>
+                    <span className="text-xs font-medium text-emerald-700 break-all">{formatVal(newVal, key)}</span>
                   </div>
                 </div>
               ))
@@ -284,9 +296,13 @@ export function AuditLogs() {
 
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
         {loading ? (
-          <div className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria...</div>
+          <div aria-live="polite" className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria…</div>
+        ) : loadError ? (
+          <div role="alert" className="flex flex-col items-center gap-4 py-16 text-center text-red-700 dark:text-red-300"><p><strong>Não foi possível consultar os logs.</strong><br /><span className="text-sm">{loadError} Tente novamente.</span></p><button type="button" onClick={fetchLogs} className="min-h-11 rounded-xl border border-red-300 px-4 text-sm font-semibold hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:border-red-800 dark:hover:bg-red-950/30">Tentar novamente</button></div>
+        ) : logs.length === 0 ? (
+          <div className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Nenhum log de auditoria foi registrado ainda.</div>
         ) : filteredLogs.length === 0 ? (
-          <div className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Nenhum log encontrado para os filtros selecionados.</div>
+          <div className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Nenhum log corresponde aos filtros selecionados.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -316,8 +332,9 @@ export function AuditLogs() {
                     </td>
                     <td className="py-4 text-right">
                       <button
+                        type="button"
                         onClick={() => setSelectedLog(log)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-zinc-900 text-white hover:bg-zinc-800 transition-all active:scale-[0.98]"
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-zinc-900 px-4 py-2 text-xs font-bold text-white transition-[background-color,transform] hover:bg-zinc-800 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-indigo-500/40"
                       >
                         <FileText className="w-3.5 h-3.5" /> Detalhes
                       </button>

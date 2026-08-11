@@ -1,7 +1,10 @@
 import { useReducedMotion } from 'framer-motion';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { chartColors } from '../../data/chart-colors';
-import { chartBorder, chartCursor, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartAnimationDuration, chartBorder, chartCursor, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { DynamicTooltip } from './DynamicTooltip';
+
+const countFormatter = new Intl.NumberFormat('pt-BR');
 
 export function ProjectBreakdownChart({
   rows,
@@ -33,9 +36,18 @@ export function ProjectBreakdownChart({
           />
           <Tooltip
             cursor={chartCursor}
-            formatter={(value) => [new Intl.NumberFormat('pt-BR').format(Number(value)), 'Projetos']}
+            content={<DynamicTooltip formatter={(value) => `${countFormatter.format(value)} ${value === 1 ? 'projeto' : 'projetos'}`} />}
           />
-          <Bar dataKey="count" name="Projetos" fill={color} radius={[0, 6, 6, 0]} maxBarSize={24} isAnimationActive={!reduceMotion} animationDuration={250} />
+          <Bar
+            dataKey="count"
+            name="Projetos"
+            fill={color}
+            radius={[0, 6, 6, 0]}
+            maxBarSize={24}
+            activeBar={chartActiveBar(color)}
+            isAnimationActive={!reduceMotion}
+            animationDuration={chartAnimationDuration}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -23,6 +23,7 @@ import type {
   StrategicSourceOption
 } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
+import { DatePickerField, FormSelect, NumericInput } from '../../components/Form';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { cn } from '../../utils/cn';
@@ -431,10 +432,10 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Data inicial" htmlFor="cycle-start">
-                <input id="cycle-start" name="dataInicio" type="date" required value={state.dataInicio} onChange={(event) => set('dataInicio', event.target.value)} className={inputClass} />
+                <DatePickerField id="cycle-start" name="dataInicio" required autoComplete="off" value={state.dataInicio} onChange={(event) => set('dataInicio', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Data final" htmlFor="cycle-end">
-                <input id="cycle-end" name="dataFim" type="date" required min={state.dataInicio} value={state.dataFim} onChange={(event) => set('dataFim', event.target.value)} className={inputClass} />
+                <DatePickerField id="cycle-end" name="dataFim" required autoComplete="off" min={state.dataInicio} value={state.dataFim} onChange={(event) => set('dataFim', event.target.value)} className={inputClass} />
               </Field>
             </div>
             <Field label="Direcionamento estratégico" htmlFor="cycle-vision" hint="Descreva o estado que a empresa pretende alcançar ao final deste ciclo.">
@@ -442,15 +443,15 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Situação" htmlFor="cycle-status">
-                <select id="cycle-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="cycle-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="rascunho">Rascunho</option>
                   <option value="ativo">Ativo</option>
                   <option value="em_revisao">Em revisão</option>
                   <option value="encerrado">Encerrado</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Próxima revisão" htmlFor="cycle-review">
-                <input id="cycle-review" name="proximaRevisao" type="date" value={state.proximaRevisao} onChange={(event) => set('proximaRevisao', event.target.value)} className={inputClass} />
+                <DatePickerField id="cycle-review" name="proximaRevisao" autoComplete="off" value={state.proximaRevisao} onChange={(event) => set('proximaRevisao', event.target.value)} className={inputClass} />
               </Field>
             </div>
           </>
@@ -465,7 +466,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <textarea id="pillar-description" name="descricao" maxLength={1000} value={state.descricao} onChange={(event) => set('descricao', event.target.value)} className={textareaClass} />
             </Field>
             <Field label="Ordem de exibição" htmlFor="pillar-order">
-              <input id="pillar-order" name="ordem" type="number" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
+              <NumericInput id="pillar-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
             </Field>
           </>
         ) : null}
@@ -476,10 +477,10 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <input id="planning-objective-first" name="titulo" autoComplete="off" required maxLength={180} value={state.titulo} onChange={(event) => set('titulo', event.target.value)} className={inputClass} />
             </Field>
             <Field label="Pilar estratégico" htmlFor="objective-pillar">
-              <select id="objective-pillar" name="pilarId" required value={state.pilarId} onChange={(event) => set('pilarId', event.target.value)} className={inputClass}>
+              <FormSelect id="objective-pillar" name="pilarId" required value={state.pilarId} onChange={(event) => set('pilarId', event.target.value)} className={inputClass}>
                 <option value="">Selecione um pilar</option>
                 {snapshot?.pilares.map((pillar) => <option key={pillar.id} value={pillar.id}>{pillar.nome}</option>)}
-              </select>
+              </FormSelect>
             </Field>
             <Field label="Descrição" htmlFor="objective-description">
               <textarea id="objective-description" name="descricao" maxLength={2000} value={state.descricao} onChange={(event) => set('descricao', event.target.value)} className={textareaClass} />
@@ -489,27 +490,27 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 <input id="objective-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Prazo" htmlFor="objective-deadline">
-                <input id="objective-deadline" name="dataLimite" type="date" required value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
+                <DatePickerField id="objective-deadline" name="dataLimite" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="objective-status">
-                <select id="objective-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="objective-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="nao_iniciado">Não iniciado</option>
                   <option value="em_andamento">Em andamento</option>
                   <option value="em_risco">Em risco</option>
                   <option value="concluido">Concluído</option>
                   <option value="cancelado">Cancelado</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Prioridade" htmlFor="objective-priority">
-                <select id="objective-priority" name="prioridade" value={state.prioridade} onChange={(event) => set('prioridade', event.target.value)} className={inputClass}>
+                <FormSelect id="objective-priority" name="prioridade" value={state.prioridade} onChange={(event) => set('prioridade', event.target.value)} className={inputClass}>
                   <option value="baixa">Baixa</option>
                   <option value="media">Média</option>
                   <option value="alta">Alta</option>
                   <option value="critica">Crítica</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Ordem de exibição" htmlFor="objective-order">
-                <input id="objective-order" name="ordem" type="number" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
+                <NumericInput id="objective-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
               </Field>
             </div>
           </>
@@ -522,10 +523,10 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             {!dialog.parentId && !editing ? (
               <Field label="Objetivo relacionado" htmlFor="key-result-objective">
-                <select id="key-result-objective" name="objetivoId" required value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
+                <FormSelect id="key-result-objective" name="objetivoId" required value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
                   <option value="">Selecione um objetivo</option>
                   {snapshot?.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
             ) : null}
             <Field label="Descrição" htmlFor="key-result-description">
@@ -533,21 +534,21 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Linha de base" htmlFor="key-result-baseline">
-                <input id="key-result-baseline" name="linhaBase" type="number" step="any" inputMode="decimal" required value={state.linhaBase} onChange={(event) => set('linhaBase', event.target.value)} className={inputClass} />
+                <NumericInput id="key-result-baseline" name="linhaBase" step="any" inputMode="decimal" required value={state.linhaBase} onChange={(event) => set('linhaBase', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Meta" htmlFor="key-result-target">
-                <input id="key-result-target" name="meta" type="number" step="any" inputMode="decimal" required value={state.meta} onChange={(event) => set('meta', event.target.value)} className={inputClass} />
+                <NumericInput id="key-result-target" name="meta" step="any" inputMode="decimal" required value={state.meta} onChange={(event) => set('meta', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Direção desejada" htmlFor="key-result-direction">
-                <select id="key-result-direction" name="direcao" value={state.direcao} onChange={(event) => set('direcao', event.target.value)} className={inputClass}>
+                <FormSelect id="key-result-direction" name="direcao" value={state.direcao} onChange={(event) => set('direcao', event.target.value)} className={inputClass}>
                   <option value="aumentar">Aumentar</option>
                   <option value="reduzir">Reduzir</option>
                   <option value="manter">Manter</option>
-                </select>
+                </FormSelect>
               </Field>
             </div>
             <Field label="Fonte do indicador" htmlFor="key-result-source" hint={selectedSource?.regra || 'O responsável informará e revisará o valor atual.'}>
-              <select id="key-result-source" name="sourceKey" value={state.sourceKey} onChange={(event) => {
+              <FormSelect id="key-result-source" name="sourceKey" value={state.sourceKey} onChange={(event) => {
                 const value = event.target.value;
                 set('sourceKey', value);
                 const option = options?.fontes.find((item) => `${item.tipo}:${item.codigo}` === value);
@@ -555,7 +556,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               }} className={inputClass}>
                 <option value="manual">Atualização manual</option>
                 {options?.fontes.map((source) => <option key={`${source.tipo}:${source.codigo}`} value={`${source.tipo}:${source.codigo}`}>{source.nome}</option>)}
-              </select>
+              </FormSelect>
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               {selectedSource ? (
@@ -565,27 +566,27 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 </div>
               ) : (
                 <Field label="Valor atual" htmlFor="key-result-current">
-                  <input id="key-result-current" name="valorAtual" type="number" step="any" inputMode="decimal" required value={state.valorAtual} onChange={(event) => set('valorAtual', event.target.value)} className={inputClass} />
+                  <NumericInput id="key-result-current" name="valorAtual" step="any" inputMode="decimal" required value={state.valorAtual} onChange={(event) => set('valorAtual', event.target.value)} className={inputClass} />
                 </Field>
               )}
               <Field label="Unidade" htmlFor="key-result-unit">
                 <input id="key-result-unit" name="unidade" autoComplete="off" required maxLength={40} disabled={Boolean(selectedSource)} value={selectedSource?.unidade || state.unidade} onChange={(event) => set('unidade', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Frequência" htmlFor="key-result-frequency">
-                <select id="key-result-frequency" name="frequencia" value={state.frequencia} onChange={(event) => set('frequencia', event.target.value)} className={inputClass}>
+                <FormSelect id="key-result-frequency" name="frequencia" value={state.frequencia} onChange={(event) => set('frequencia', event.target.value)} className={inputClass}>
                   <option value="semanal">Semanal</option>
                   <option value="mensal">Mensal</option>
                   <option value="trimestral">Trimestral</option>
                   <option value="semestral">Semestral</option>
                   <option value="anual">Anual</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Confiança" htmlFor="key-result-confidence">
-                <select id="key-result-confidence" name="confianca" value={state.confianca} onChange={(event) => set('confianca', event.target.value)} className={inputClass}>
+                <FormSelect id="key-result-confidence" name="confianca" value={state.confianca} onChange={(event) => set('confianca', event.target.value)} className={inputClass}>
                   <option value="baixa">Baixa</option>
                   <option value="media">Média</option>
                   <option value="alta">Alta</option>
-                </select>
+                </FormSelect>
               </Field>
             </div>
           </>
@@ -598,10 +599,10 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             {!dialog.parentId && !editing ? (
               <Field label="Objetivo relacionado" htmlFor="initiative-objective">
-                <select id="initiative-objective" name="objetivoId" required value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
+                <FormSelect id="initiative-objective" name="objetivoId" required value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
                   <option value="">Selecione um objetivo</option>
                   {snapshot?.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
             ) : null}
             <Field label="Descrição" htmlFor="initiative-description">
@@ -612,37 +613,37 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 <input id="initiative-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Prazo" htmlFor="initiative-deadline">
-                <input id="initiative-deadline" name="dataLimite" type="date" required value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
+                <DatePickerField id="initiative-deadline" name="dataLimite" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Progresso (%)" htmlFor="initiative-progress">
-                <input id="initiative-progress" name="progresso" type="number" min="0" max="100" step="1" inputMode="numeric" required value={state.progresso} onChange={(event) => set('progresso', event.target.value)} className={inputClass} />
+                <NumericInput id="initiative-progress" name="progresso" min="0" max="100" step="1" inputMode="numeric" required value={state.progresso} onChange={(event) => set('progresso', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="initiative-status">
-                <select id="initiative-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="initiative-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="planejada">Planejada</option>
                   <option value="em_andamento">Em andamento</option>
                   <option value="bloqueada">Bloqueada</option>
                   <option value="concluida">Concluída</option>
                   <option value="cancelada">Cancelada</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Orçamento previsto (R$)" htmlFor="initiative-budget">
-                <input id="initiative-budget" name="orcamento" type="number" min="0" step="0.01" inputMode="decimal" value={state.orcamento} onChange={(event) => set('orcamento', event.target.value)} className={inputClass} />
+                <NumericInput id="initiative-budget" name="orcamento" min="0" step="0.01" inputMode="decimal" value={state.orcamento} onChange={(event) => set('orcamento', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Próximo marco" htmlFor="initiative-milestone">
                 <input id="initiative-milestone" name="proximoMarco" autoComplete="off" maxLength={500} value={state.proximoMarco} onChange={(event) => set('proximoMarco', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Projeto vinculado" htmlFor="initiative-project">
-                <select id="initiative-project" name="projetoId" value={state.projetoId} onChange={(event) => set('projetoId', event.target.value)} className={inputClass}>
+                <FormSelect id="initiative-project" name="projetoId" value={state.projetoId} onChange={(event) => set('projetoId', event.target.value)} className={inputClass}>
                   <option value="">Nenhum projeto</option>
                   {options?.projetos.map((project) => <option key={project.id} value={project.id}>{project.nome} · {project.status}</option>)}
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Tarefa vinculada" htmlFor="initiative-task">
-                <select id="initiative-task" name="tarefaId" value={state.tarefaId} onChange={(event) => set('tarefaId', event.target.value)} className={inputClass}>
+                <FormSelect id="initiative-task" name="tarefaId" value={state.tarefaId} onChange={(event) => set('tarefaId', event.target.value)} className={inputClass}>
                   <option value="">Nenhuma tarefa</option>
                   {options?.tarefas.map((task) => <option key={task.id} value={task.id}>{task.titulo} · {task.status}</option>)}
-                </select>
+                </FormSelect>
               </Field>
             </div>
             <Field label="Dependências" htmlFor="initiative-dependencies">
@@ -655,27 +656,27 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Data da revisão" htmlFor="planning-checkin-first">
-                <input id="planning-checkin-first" name="data" type="date" required value={state.data} onChange={(event) => set('data', event.target.value)} className={inputClass} />
+                <DatePickerField id="planning-checkin-first" name="data" required autoComplete="off" value={state.data} onChange={(event) => set('data', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Objetivo relacionado" htmlFor="checkin-objective">
-                <select id="checkin-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
+                <FormSelect id="checkin-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
                   <option value="">Revisão geral do ciclo</option>
                   {snapshot?.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Situação" htmlFor="checkin-status">
-                <select id="checkin-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="checkin-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="no_rumo">No rumo</option>
                   <option value="atencao">Atenção</option>
                   <option value="critico">Crítico</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Confiança" htmlFor="checkin-confidence">
-                <select id="checkin-confidence" name="confianca" value={state.confianca} onChange={(event) => set('confianca', event.target.value)} className={inputClass}>
+                <FormSelect id="checkin-confidence" name="confianca" value={state.confianca} onChange={(event) => set('confianca', event.target.value)} className={inputClass}>
                   <option value="baixa">Baixa</option>
                   <option value="media">Média</option>
                   <option value="alta">Alta</option>
-                </select>
+                </FormSelect>
               </Field>
             </div>
             <Field label="Leitura executiva" htmlFor="checkin-narrative">
@@ -695,7 +696,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 <textarea id="checkin-next-steps" name="proximosPassos" maxLength={2000} value={state.proximosPassos} onChange={(event) => set('proximosPassos', event.target.value)} className={textareaClass} />
               </Field>
               <Field label="Próxima revisão" htmlFor="checkin-next-review">
-                <input id="checkin-next-review" name="proximaRevisao" type="date" min={state.data} value={state.proximaRevisao} onChange={(event) => set('proximaRevisao', event.target.value)} className={inputClass} />
+                <DatePickerField id="checkin-next-review" name="proximaRevisao" autoComplete="off" min={state.data} value={state.proximaRevisao} onChange={(event) => set('proximaRevisao', event.target.value)} className={inputClass} />
               </Field>
             </div>
           </>
@@ -711,33 +712,33 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 <input id="decision-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Prazo" htmlFor="decision-deadline">
-                <input id="decision-deadline" name="prazo" type="date" required value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
+                <DatePickerField id="decision-deadline" name="prazo" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="decision-status">
-                <select id="decision-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="decision-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="pendente">Pendente</option>
                   <option value="em_andamento">Em andamento</option>
                   <option value="concluida">Concluída</option>
                   <option value="cancelada">Cancelada</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Objetivo relacionado" htmlFor="decision-objective">
-                <select id="decision-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
+                <FormSelect id="decision-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
                   <option value="">Decisão geral do ciclo</option>
                   {snapshot?.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Revisão de origem" htmlFor="decision-checkin">
-                <select id="decision-checkin" name="checkinId" value={state.checkinId} onChange={(event) => set('checkinId', event.target.value)} className={inputClass}>
+                <FormSelect id="decision-checkin" name="checkinId" value={state.checkinId} onChange={(event) => set('checkinId', event.target.value)} className={inputClass}>
                   <option value="">Sem revisão vinculada</option>
                   {snapshot?.checkins.map((checkin) => <option key={checkin.id} value={checkin.id}>{checkin.data} · {checkin.narrativa.slice(0, 70)}</option>)}
-                </select>
+                </FormSelect>
               </Field>
             </div>
             {state.status === 'concluida' ? (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Data da conclusão" htmlFor="decision-completion-date">
-                  <input id="decision-completion-date" name="dataConclusao" type="date" value={state.dataConclusao || today} onChange={(event) => set('dataConclusao', event.target.value)} className={inputClass} />
+                  <DatePickerField id="decision-completion-date" name="dataConclusao" autoComplete="off" value={state.dataConclusao || today} onChange={(event) => set('dataConclusao', event.target.value)} className={inputClass} />
                 </Field>
                 <Field label="Resultado da decisão" htmlFor="decision-completion-note" hint="Explique o desfecho para preservar o contexto histórico.">
                   <textarea id="decision-completion-note" name="notaConclusao" required maxLength={2000} value={state.notaConclusao} onChange={(event) => set('notaConclusao', event.target.value)} className={textareaClass} />
@@ -754,43 +755,43 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Objetivo relacionado" htmlFor="risk-objective">
-                <select id="risk-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
+                <FormSelect id="risk-objective" name="objetivoId" value={state.objetivoId} onChange={(event) => set('objetivoId', event.target.value)} className={inputClass}>
                   <option value="">Risco geral do ciclo</option>
                   {snapshot?.objetivos.map((objective) => <option key={objective.id} value={objective.id}>{objective.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Iniciativa relacionada" htmlFor="risk-initiative">
-                <select id="risk-initiative" name="iniciativaId" value={state.iniciativaId} onChange={(event) => set('iniciativaId', event.target.value)} className={inputClass}>
+                <FormSelect id="risk-initiative" name="iniciativaId" value={state.iniciativaId} onChange={(event) => set('iniciativaId', event.target.value)} className={inputClass}>
                   <option value="">Nenhuma iniciativa</option>
                   {snapshot?.iniciativas.map((initiative) => <option key={initiative.id} value={initiative.id}>{initiative.titulo}</option>)}
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Impacto" htmlFor="risk-impact">
-                <select id="risk-impact" name="impacto" value={state.impacto} onChange={(event) => set('impacto', event.target.value)} className={inputClass}>
+                <FormSelect id="risk-impact" name="impacto" value={state.impacto} onChange={(event) => set('impacto', event.target.value)} className={inputClass}>
                   <option value="baixo">Baixo</option>
                   <option value="medio">Médio</option>
                   <option value="alto">Alto</option>
                   <option value="critico">Crítico</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Probabilidade" htmlFor="risk-probability">
-                <select id="risk-probability" name="probabilidade" value={state.probabilidade} onChange={(event) => set('probabilidade', event.target.value)} className={inputClass}>
+                <FormSelect id="risk-probability" name="probabilidade" value={state.probabilidade} onChange={(event) => set('probabilidade', event.target.value)} className={inputClass}>
                   <option value="baixo">Baixa</option>
                   <option value="medio">Média</option>
                   <option value="alto">Alta</option>
                   <option value="critico">Crítica</option>
-                </select>
+                </FormSelect>
               </Field>
               <Field label="Responsável" htmlFor="risk-owner">
                 <input id="risk-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="risk-status">
-                <select id="risk-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                <FormSelect id="risk-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
                   <option value="aberto">Aberto</option>
                   <option value="mitigando">Em mitigação</option>
                   <option value="resolvido">Resolvido</option>
                   <option value="aceito">Aceito</option>
-                </select>
+                </FormSelect>
               </Field>
             </div>
             <Field label="Plano de mitigação" htmlFor="risk-mitigation">

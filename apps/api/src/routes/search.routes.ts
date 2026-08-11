@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq } from 'drizzle-orm';
+import { activeDocumentWhere } from '../services/document-integrity.service';
 
 type SearchResult = {
   id: string;
@@ -114,7 +115,7 @@ export async function searchRoutes(server: FastifyInstance) {
           .from(schema.compromissos)
           .leftJoin(schema.projetos, eq(schema.compromissos.projetoId, schema.projetos.id))
           .leftJoin(schema.clientes, eq(schema.compromissos.clienteId, schema.clientes.id)),
-        db.select().from(schema.documentos)
+        db.select().from(schema.documentos).where(activeDocumentWhere())
       ]);
 
       const results: SearchResult[] = [

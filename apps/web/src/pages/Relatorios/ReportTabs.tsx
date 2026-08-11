@@ -37,7 +37,7 @@ export function ReportTabs({
       ref={tabListRef}
       role="tablist"
       aria-label="Tipo de relatório"
-      className="grid w-full grid-cols-3 gap-1 rounded-xl border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-800 dark:bg-zinc-900 sm:w-fit"
+      className="flex min-w-0 gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {TABS.map(({ type, label, icon: Icon }) => {
         const selected = value === type;
@@ -54,17 +54,18 @@ export function ReportTabs({
             onClick={() => onChange(type)}
             onKeyDown={(event) => handleKeyDown(event, type)}
             className={cn(
-              'geo-focus-ring inline-flex min-h-11 min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-[background-color,color,box-shadow] motion-reduce:transition-none sm:min-w-32 sm:gap-2 sm:px-3 sm:text-sm',
+              'geo-focus-ring inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-xs font-semibold transition-[background-color,color] motion-reduce:transition-none sm:px-4 sm:text-sm',
               selected
-                ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-800 dark:text-white'
-                : 'text-zinc-600 hover:bg-white/70 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800/70 dark:hover:text-white'
+                ? 'bg-indigo-500/20 text-indigo-100'
+                : 'text-zinc-300 hover:bg-zinc-800/70 hover:text-white'
             )}
           >
-            <Icon
-              aria-hidden="true"
-              className={cn('h-4 w-4 shrink-0', selected ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-500 dark:text-zinc-500')}
-              weight={selected ? 'fill' : 'regular'}
-            />
+            <span className={cn(
+              'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
+              selected ? 'bg-indigo-500/30 text-indigo-100' : 'bg-zinc-800 text-zinc-400'
+            )}>
+              <Icon aria-hidden="true" className="h-4 w-4" weight={selected ? 'fill' : 'regular'} />
+            </span>
             <span className="truncate">{label}</span>
           </button>
         );

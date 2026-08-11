@@ -173,7 +173,20 @@ export const apiClient = {
       const response = await apiFetch(url, fetchOptions);
       clearTimeout(id);
       upstreamSignal?.removeEventListener('abort', abortFromUpstream);
-      return await handleResponse<T>(response);
+      const result = await handleResponse<T>(response);
+      const method = (fetchOptions.method || 'GET').toUpperCase();
+      if (method !== 'GET' && !new URL(url).pathname.startsWith('/api/alertas')) {
+        window.dispatchEvent(new CustomEvent('geogestor:alerts-invalidated'));
+      }
+      if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+        const pathname = new URL(url).pathname;
+        const completeRequired = /(?:arquivos|upload|anexos|diretorio-arquivos)/i.test(pathname)
+          || (typeof FormData !== 'undefined' && fetchOptions.body instanceof FormData);
+        window.dispatchEvent(new CustomEvent('geogestor:backup-invalidated', {
+          detail: { scope: completeRequired ? 'complete' : 'database', pathname }
+        }));
+      }
+      return result;
     } catch (error: unknown) {
       clearTimeout(id);
       upstreamSignal?.removeEventListener('abort', abortFromUpstream);

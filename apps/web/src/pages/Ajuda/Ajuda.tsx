@@ -1,307 +1,426 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bell,
+  BookOpen,
+  CalendarBlank,
+  ChartBar,
+  CheckCircle,
+  Coins,
+  Database,
+  FileText,
+  FolderOpen,
+  Gear,
+  ListChecks,
+  MagnifyingGlass,
+  MapTrifold,
+  Question,
+  ShieldCheck,
+  Sliders,
+  UploadSimple,
+  Users,
+  WarningCircle,
+  type Icon,
+} from '@phosphor-icons/react';
+import { motion } from 'framer-motion';
 import { Layout } from '../../components/Layout';
 import { PageFilterBar } from '../../components/PageFilterBar';
 import { PageHeader } from '../../components/PageHeader';
-import { 
-  BookOpen, MagnifyingGlass, Question, Sliders, Users, 
-  FolderOpen, Coins, Shield, Keyboard, ArrowRight,
-  type Icon
-} from '@phosphor-icons/react';
-import { motion } from 'framer-motion';
 import { APP_VERSION } from '../../version';
+import { cn } from '../../utils/cn';
 import { filterClearButtonClass, filterSearchInputClass } from '../../utils/filterStyles';
+import {
+  DEFAULT_RECOMMENDED_ARTICLE_IDS,
+  HELP_ARTICLES,
+  HELP_CATEGORIES,
+  buildHelpArticleSearch,
+  filterHelpArticles,
+  getHelpArticle,
+  isHelpCategory,
+  type HelpArticle,
+  type HelpCategoryFilter,
+  type HelpIconKey,
+} from './helpContent';
 
-interface HelpArticle {
-  id: string;
-  category: 'comeco' | 'crm' | 'projetos' | 'financeiro' | 'seguranca' | 'atalhos';
-  title: string;
-  excerpt: string;
-  content: string[];
-  icon: Icon;
+const iconByKey: Record<HelpIconKey, Icon> = {
+  start: Sliders,
+  users: Users,
+  crm: ChartBar,
+  projects: FolderOpen,
+  finance: Coins,
+  calendar: CalendarBlank,
+  environment: MapTrifold,
+  topography: MapTrifold,
+  reports: FileText,
+  planning: ListChecks,
+  records: BookOpen,
+  import: UploadSimple,
+  quality: WarningCircle,
+  audit: ShieldCheck,
+  documents: FileText,
+  backup: Database,
+  alerts: Bell,
+};
+
+function formatReviewDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium' }).format(new Date(year, month - 1, day));
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const term = query.trim();
+  if (!term) return <>{text}</>;
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
+  return <>{parts.map((part, index) => part.toLocaleLowerCase('pt-BR') === term.toLocaleLowerCase('pt-BR')
+    ? <mark key={`${part}-${index}`} className="rounded bg-amber-100 px-0.5 text-inherit dark:bg-amber-400/25">{part}</mark>
+    : part)}</>;
+}
+
+function ArticleIcon({ article, className }: { article: HelpArticle; className?: string }) {
+  const Icon = iconByKey[article.icon];
+  return <Icon aria-hidden="true" className={className} />;
 }
 
 export function Ajuda() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedArticle, setSelectedArticle] = useState<HelpArticle | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>('ALL');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedCategory = searchParams.get('categoria');
+  const activeCategory: HelpCategoryFilter = isHelpCategory(requestedCategory) ? requestedCategory : 'all';
+  const searchQuery = searchParams.get('q') ?? '';
+  const selectedArticle = getHelpArticle(searchParams.get('artigo'));
+  const articleTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const pendingArticleFocusRef = useRef<string | null>(null);
+  const restoreArticleFocusRef = useRef<string | null>(null);
 
-  const articles: HelpArticle[] = [
-    {
-      id: 'setup-local',
-      category: 'comeco',
-      title: 'Configurando a Pasta de Dados Local',
-      excerpt: 'Saiba como definir a pasta do Windows que armazenará todos os seus arquivos, plantas e relatórios.',
-      icon: Sliders,
-      content: [
-        'O GeoGestor funciona de forma 100% local e offline. Isso significa que seus dados pertencem a você e ficam armazenados no seu próprio computador.',
-        'Ao abrir o GeoGestor pela primeira vez (ou acessando o menu Configurações), você deve apontar um diretório raiz do seu Windows (ex: C:\\Users\\SeuUsuario\\Documentos\\GeoGestor).',
-        'Sempre que você cadastrar um novo cliente, o GeoGestor cria automaticamente uma pasta com o nome do cliente no diretório definido.',
-        'Sempre que você criar um projeto, uma subpasta com o nome do projeto será criada dentro da pasta do cliente. Você pode abrir essa pasta diretamente do sistema usando o botão "Abrir Pasta no Explorer".'
-      ]
-    },
-    {
-      id: 'importacao-dados',
-      category: 'comeco',
-      title: 'Importando Dados em Lote',
-      excerpt: 'Aprenda a trazer seus dados antigos de planilhas CSV ou planilhas Excel em minutos.',
-      icon: BookOpen,
-      content: [
-        'Acesse o menu Importação na barra lateral para carregar dados de Clientes ou Projetos em lote.',
-        'Você pode baixar nossos modelos de planilhas locais para garantir que os cabeçalhos das colunas correspondam perfeitamente.',
-        'Na etapa de mapeamento, associe cada coluna da planilha ao campo correspondente do GeoGestor. O esquema utilizado fica salvo para consulta.',
-        'O processamento de CSV ou XLSX é feito localmente no aplicativo, sem enviar os dados para a nuvem. Importação de PDF e OCR ainda não estão disponíveis.'
-      ]
-    },
-    {
-      id: 'gestao-crm',
-      category: 'crm',
-      title: 'CRM e área comercial',
-      excerpt: 'Entenda como acompanhar leads, oportunidades e indicadores comerciais.',
-      icon: Users,
-      content: [
-        'O CRM reúne as seções Leads, Funil de vendas e Indicadores. O cadastro de clientes continua separado para preservar cada entidade e seu histórico.',
-        'No Funil de vendas, você pode gerenciar oportunidades em colunas visuais (Prospectado, Contato, Proposta, Ganho e Perdido). Basta arrastar os cartões para atualizar a etapa da negociação.',
-        'Ao entrar nos Detalhes do Cliente, você terá acesso à Linha do Tempo do CRM. Nela, você pode cadastrar interações manuais (como ligações, mensagens de WhatsApp ou reuniões) para registrar todo o histórico de contato.'
-      ]
-    },
-    {
-      id: 'projetos-tarefas',
-      category: 'projetos',
-      title: 'Acompanhamento de Projetos e Tarefas',
-      excerpt: 'Configure especificações topográficas e crie checklists de controle operacional.',
-      icon: FolderOpen,
-      content: [
-        'Ao criar um projeto, você pode preencher dados técnicos cruciais para a topografia: área em hectares (Ha), matrícula, número do CAR, código CCIR, ITR, coordenadas (latitude e longitude) e situação de averbação.',
-        'Na tela de Detalhes do Projeto, há um gerenciador de Checklist operacional. Você pode cadastrar subtarefas específicas (ex: "Leitura de campo", "Desenho no AutoCAD", "Geração de RT", "Entrada no Cartório") e marcar conforme concluir.',
-        'O progresso do checklist atualiza automaticamente a barra de progresso visual do projeto.'
-      ]
-    },
-    {
-      id: 'orcamentos-pdf',
-      category: 'financeiro',
-      title: 'Orçamentos e Emissão de PDFs',
-      excerpt: 'Gere documentos formais de orçamento com parcelamento e baixe como PDF localmente.',
-      icon: Coins,
-      content: [
-        'Acesse o menu Orçamentos e utilize o assistente para criar uma nova proposta para um cliente.',
-        'Você pode descrever os serviços incluídos, valor unitário, aplicar descontos em centavos ou porcentagem, e configurar a forma de pagamento.',
-        'Ao aprovar o orçamento, você pode definir o número de parcelas financeiras. O GeoGestor gerará automaticamente parcelas com vencimentos mensais.',
-        'Na visualização do orçamento, clique em "Imprimir / Salvar PDF". O PDF é gerado offline no seu computador usando o pdfmake e formatado em um design executivo pronto para envio ao cliente.'
-      ]
-    },
-    {
-      id: 'despesas-fluxo',
-      category: 'financeiro',
-      title: 'Contas a pagar e visão financeira',
-      excerpt: 'Lance despesas avulsas ou atreladas a projetos e analise a rentabilidade operacional.',
-      icon: Coins,
-      content: [
-        'Você pode lançar custos da operação em Financeiro → Contas a pagar, inclusive despesas ligadas a projetos ou viagens.',
-        'Ao cadastrar uma despesa, você pode vinculá-la a um projeto específico. Isso permite calcular a real rentabilidade de cada trabalho.',
-        'Em Financeiro → Visão financeira, o sistema consolida recebimentos e despesas, apresenta o fluxo de caixa e destaca a rentabilidade por cliente.'
-      ]
-    },
-    {
-      id: 'auditoria-seguranca',
-      category: 'seguranca',
-      title: 'Auditoria de Logs e Banco SQLite',
-      excerpt: 'Como o GeoGestor garante a integridade dos seus dados operacionais.',
-      icon: Shield,
-      content: [
-        'O GeoGestor utiliza um banco de dados relacional leve (SQLite) armazenado no seu diretório local.',
-        'Para manter a segurança das informações corporativas e histórico de operações, toda criação, edição ou exclusão de clientes, projetos, orçamentos e despesas gera um Log de Auditoria.',
-        'Você pode visualizar esses logs na aba "Logs de Auditoria" na barra lateral. Ela exibe a data/hora exata do evento, a ação executada (Inserção, Atualização, Exclusão) e um comparativo de "Antes vs Depois" de cada campo editado.'
-      ]
-    },
-    {
-      id: 'atalhos-teclado',
-      category: 'atalhos',
-      title: 'Atalhos de Teclado Úteis',
-      excerpt: 'Aumente sua produtividade na navegação diária.',
-      icon: Keyboard,
-      content: [
-        'Para facilitar a operação diária no GeoGestor, disponibilizamos alguns atalhos de navegação rápida (sujeitos ao sistema operacional):',
-        '• Esc: Fecha modais abertos e visualizações de detalhes de logs.',
-        '• Ctrl + P: Abre o diálogo de impressão do navegador ou gera o PDF instantâneo na tela de relatórios.',
-        '• F5: Atualiza as consultas locais com o banco de dados SQLite.',
-        '• Dica: Ao usar a barra de busca offline na Central de Ajuda, o filtro é aplicado em tempo real à medida que você digita.'
-      ]
+  const filteredArticles = useMemo(
+    () => filterHelpArticles(HELP_ARTICLES, activeCategory, searchQuery),
+    [activeCategory, searchQuery],
+  );
+
+  const recommendedArticles = useMemo(
+    () => DEFAULT_RECOMMENDED_ARTICLE_IDS.map((id) => getHelpArticle(id)).filter((article): article is HelpArticle => Boolean(article)),
+    [],
+  );
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    if (requestedCategory && !isHelpCategory(requestedCategory)) {
+      next.delete('categoria');
+      changed = true;
     }
-  ];
+    const requestedArticle = searchParams.get('artigo');
+    if (requestedArticle && !getHelpArticle(requestedArticle)) {
+      next.delete('artigo');
+      changed = true;
+    }
+    if (changed) setSearchParams(next, { replace: true });
+  }, [requestedCategory, searchParams, setSearchParams]);
 
-  // Filter articles by query and category
-  const filteredArticles = articles.filter(art => {
-    const matchesCategory = activeCategory === 'ALL' || art.category === activeCategory;
-    const matchesQuery = searchQuery === '' || 
-      art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      art.excerpt.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      art.content.some(paragraph => paragraph.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    return matchesCategory && matchesQuery;
-  });
+  useEffect(() => {
+    if (!selectedArticle || filteredArticles.some((article) => article.id === selectedArticle.id)) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('artigo');
+    setSearchParams(next, { replace: true });
+  }, [filteredArticles, searchParams, selectedArticle, setSearchParams]);
 
-  const categories = [
-    { id: 'ALL', label: 'Tudo', icon: Question },
-    { id: 'comeco', label: 'Configuração Inicial', icon: Sliders },
-    { id: 'crm', label: 'Clientes e CRM', icon: Users },
-    { id: 'projetos', label: 'Projetos e Operações', icon: FolderOpen },
-    { id: 'financeiro', label: 'Financeiro e PDFs', icon: Coins },
-    { id: 'seguranca', label: 'Segurança & Logs', icon: Shield },
-    { id: 'atalhos', label: 'Atalhos', icon: Keyboard }
-  ];
+  useEffect(() => {
+    if (!selectedArticle || pendingArticleFocusRef.current !== selectedArticle.id) return;
+    pendingArticleFocusRef.current = null;
+    window.requestAnimationFrame(() => articleTitleRef.current?.focus({ preventScroll: true }));
+  }, [selectedArticle]);
+
+  useEffect(() => {
+    if (selectedArticle || !restoreArticleFocusRef.current) return;
+    const articleId = restoreArticleFocusRef.current;
+    restoreArticleFocusRef.current = null;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => document.getElementById(`help-card-${articleId}`)?.focus({ preventScroll: true }));
+    });
+  }, [selectedArticle]);
+
+  const updateSearch = (value: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set('q', value); else next.delete('q');
+    setSearchParams(next, { replace: true });
+  };
+
+  const selectCategory = (category: HelpCategoryFilter) => {
+    const next = new URLSearchParams(searchParams);
+    if (category === 'all') next.delete('categoria'); else next.set('categoria', category);
+    next.delete('artigo');
+    setSearchParams(next);
+  };
+
+  const openArticle = (article: HelpArticle, event?: ReactMouseEvent<HTMLButtonElement>) => {
+    const shouldMoveFocus = event?.detail === 0 || window.matchMedia('(max-width: 1023px)').matches;
+    pendingArticleFocusRef.current = shouldMoveFocus ? article.id : null;
+    const next = buildHelpArticleSearch(article, searchQuery);
+    setSearchParams(next);
+  };
+
+  const closeArticle = () => {
+    if (selectedArticle) restoreArticleFocusRef.current = selectedArticle.id;
+    const next = new URLSearchParams(searchParams);
+    next.delete('artigo');
+    setSearchParams(next);
+  };
+
+  const clearFilters = () => {
+    restoreArticleFocusRef.current = null;
+    setSearchParams(new URLSearchParams(), { replace: true });
+  };
+
+  const activeCategoryLabel = HELP_CATEGORIES.find((category) => category.id === activeCategory)?.label ?? 'Todos os guias';
+  const resultMessage = `${filteredArticles.length} ${filteredArticles.length === 1 ? 'guia encontrado' : 'guias encontrados'} em ${activeCategoryLabel}`;
 
   return (
     <Layout>
       <PageHeader
         eyebrow="Documentação interna"
         title="Central de Ajuda"
-        description="Manual operacional offline, guias rápidos e configurações do GeoGestor."
+        description="Guias operacionais revisados para usar o GeoGestor com segurança."
       />
 
-      {/* Search Input Box */}
       <PageFilterBar
+        className="mb-5"
         search={
           <div className="relative min-w-0">
-          <label htmlFor="help-search" className="sr-only">Pesquisar manuais e guias de suporte</label>
-          <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-400" />
-          <input 
-            id="help-search"
-            name="helpSearch"
-            type="search"
-            autoComplete="off"
-            placeholder="Pesquisar manuais e guias de suporte…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={`${filterSearchInputClass} pl-9`}
-          />
+            <label htmlFor="help-search" className="sr-only">Pesquisar na Central de Ajuda</label>
+            <MagnifyingGlass aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-500 dark:text-zinc-400" />
+            <input
+              id="help-search"
+              name="helpSearch"
+              type="search"
+              autoComplete="off"
+              placeholder="Pesquisar procedimentos, telas ou recursos…"
+              value={searchQuery}
+              onChange={(event) => updateSearch(event.target.value)}
+              className={`${filterSearchInputClass} pl-9`}
+            />
           </div>
         }
-        sorting={searchQuery ? (
-          <button 
+        sorting={(searchQuery || activeCategory !== 'all') ? (
+          <button
             type="button"
-            onClick={() => setSearchQuery('')}
+            onClick={clearFilters}
             className={`${filterClearButtonClass} inline-flex items-center justify-center px-4`}
           >
-            Limpar busca
+            Limpar filtros
           </button>
         ) : null}
       />
 
-      {/* Categories Horizontal Selector */}
-      <div className="flex items-center gap-3 overflow-x-auto pb-4 mb-12 border-b border-zinc-100 dark:border-zinc-800">
-        {categories.map((cat) => {
-          const Icon = cat.icon;
-          const isSelected = activeCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => {
-                setActiveCategory(cat.id);
-                setSelectedArticle(null); // Clear active reading
-              }}
-              className={`flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold whitespace-nowrap transition-all focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white ${
-                isSelected 
-                  ? 'bg-zinc-950 text-white shadow-sm' 
-                  : 'bg-zinc-50 dark:bg-zinc-800/50 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              <span>{cat.label}</span>
-            </button>
-          );
-        })}
+      <div className="relative mb-7 min-w-0 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+        <nav aria-label="Categorias da Central de Ajuda" className="flex min-w-0 gap-2 overflow-x-auto scroll-smooth pr-10 [scrollbar-width:thin]">
+          {HELP_CATEGORIES.map((category) => {
+            const Icon = iconByKey[category.icon];
+            const isSelected = activeCategory === category.id;
+            return (
+              <button
+                key={category.id}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => selectCategory(category.id)}
+                className={cn(
+                  'geo-focus-ring inline-flex min-h-11 shrink-0 touch-manipulation items-center gap-2 rounded-full px-4 text-xs font-bold transition-[background-color,color,box-shadow] motion-reduce:transition-none',
+                  isSelected
+                    ? 'bg-zinc-950 text-white shadow-sm dark:bg-white dark:text-zinc-950'
+                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 hover:text-zinc-950 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700 dark:hover:text-white',
+                )}
+              >
+                <Icon aria-hidden="true" className="h-4 w-4" />
+                {category.label}
+              </button>
+            );
+          })}
+        </nav>
+        <div aria-hidden="true" className="pointer-events-none absolute bottom-3 right-0 top-0 w-12 bg-gradient-to-l from-white via-white/90 to-transparent dark:from-zinc-950 dark:via-zinc-950/90" />
       </div>
 
-      {/* Help Content Grid (Split view if article selected, otherwise list) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12 items-start">
-        {/* List of articles */}
-        <div className={`lg:col-span-1 space-y-4 ${selectedArticle ? 'hidden lg:block' : ''}`}>
-          <h3 className="text-xs uppercase font-bold tracking-widest text-zinc-500 dark:text-zinc-400 mb-6">Manuais Disponíveis</h3>
-          {filteredArticles.map((art) => {
-            const Icon = art.icon;
-            const isSelected = selectedArticle?.id === art.id;
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="help-list-title" className="text-base font-semibold text-zinc-950 dark:text-white">Guias disponíveis</h2>
+        <p role="status" aria-live="polite" aria-atomic="true" className="text-sm font-medium tabular-nums text-zinc-600 dark:text-zinc-300">
+          {resultMessage}
+        </p>
+      </div>
+
+      <div className="grid min-w-0 grid-cols-1 items-start gap-7 lg:grid-cols-[minmax(280px,0.82fr)_minmax(0,1.7fr)]">
+        <section aria-labelledby="help-list-title" className={cn('min-w-0 space-y-3', selectedArticle && 'hidden lg:block')}>
+          {filteredArticles.map((article) => {
+            const isSelected = selectedArticle?.id === article.id;
+            const categoryLabel = HELP_CATEGORIES.find((category) => category.id === article.category)?.label;
             return (
-              <button 
-                key={art.id}
+              <button
+                id={`help-card-${article.id}`}
+                key={article.id}
                 type="button"
-                onClick={() => setSelectedArticle(art)}
-                className={`group rounded-[2rem] p-6 text-left w-full border transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-zinc-950 dark:focus:ring-white ${
-                  isSelected 
-                    ? 'bg-zinc-950 text-white border-zinc-950 shadow-md' 
-                    : 'bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 border-zinc-100 dark:border-zinc-800 hover:border-zinc-200 dark:border-zinc-800 dark:hover:border-zinc-700 shadow-sm'
-                }`}
+                aria-label={`Abrir guia: ${article.title}`}
+                aria-current={isSelected ? 'true' : undefined}
+                onClick={(event) => openArticle(article, event)}
+                className={cn(
+                  'group w-full rounded-2xl border p-5 text-left shadow-sm transition-[background-color,border-color,color,box-shadow,transform] motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-2 dark:focus-visible:ring-indigo-300/50 dark:focus-visible:ring-offset-zinc-950',
+                  isSelected
+                    ? 'border-zinc-950 bg-zinc-950 text-white shadow-md dark:border-indigo-300/50 dark:bg-indigo-400/15'
+                    : 'border-zinc-200 bg-white text-zinc-900 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md motion-reduce:hover:translate-y-0 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-indigo-400/35',
+                )}
               >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-                    isSelected ? 'bg-white dark:bg-zinc-900/10' : 'bg-zinc-50 dark:bg-zinc-800/50 group-hover:bg-zinc-100 dark:group-hover:bg-zinc-800'
-                  }`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <span className="text-xs uppercase font-bold tracking-wider text-zinc-500 dark:text-zinc-400">
-                    {categories.find(c => c.id === art.category)?.label}
+                <div className="flex items-start gap-4">
+                  <span aria-hidden="true" className={cn(
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-[background-color,color] motion-reduce:transition-none',
+                    isSelected ? 'bg-white/15 text-white dark:bg-indigo-300/15 dark:text-indigo-100' : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-400/10 dark:text-indigo-200',
+                  )}>
+                    <ArticleIcon article={article} className="h-5 w-5" />
                   </span>
-                </div>
-                <h4 className="font-bold text-sm leading-snug">{art.title}</h4>
-                <p className={`text-xs mt-2 line-clamp-2 ${
-                  isSelected ? 'text-zinc-300' : 'text-zinc-500 dark:text-zinc-400'
-                }`}>
-                  {art.excerpt}
-                </p>
-                <div className="flex justify-end mt-4">
-                  <ArrowRight className={`w-4 h-4 transition-transform group-hover:translate-x-1 ${
-                    isSelected ? 'text-white' : 'text-zinc-500 dark:text-zinc-400'
-                  }`} />
+                  <span className="min-w-0 flex-1">
+                    <span className={cn('block text-[11px] font-bold uppercase tracking-wider', isSelected ? 'text-zinc-200 dark:text-indigo-100' : 'text-zinc-600 dark:text-zinc-300')}>
+                      {categoryLabel}
+                    </span>
+                    <h3 className="mt-2 text-sm font-bold leading-snug">
+                      <HighlightedText text={article.title} query={searchQuery} />
+                    </h3>
+                    <span className={cn('mt-2 block text-xs leading-5', isSelected ? 'text-zinc-200 dark:text-zinc-200' : 'text-zinc-600 dark:text-zinc-400')}>
+                      <HighlightedText text={article.excerpt} query={searchQuery} />
+                    </span>
+                  </span>
+                  <ArrowRight aria-hidden="true" className={cn('mt-3 h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0', isSelected ? 'text-white' : 'text-zinc-500 dark:text-zinc-400')} />
                 </div>
               </button>
             );
           })}
+
           {filteredArticles.length === 0 && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400 italic py-6">Nenhum guia atende aos critérios de pesquisa.</p>
+            <div role="status" aria-live="polite" className="rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-7 text-center dark:border-zinc-700 dark:bg-zinc-900/60">
+              <Question aria-hidden="true" className="mx-auto h-9 w-9 text-zinc-500" />
+              <h3 className="mt-3 font-semibold text-zinc-950 dark:text-white">Nenhum guia encontrado</h3>
+              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">Tente outro termo ou remova a categoria selecionada.</p>
+              <button type="button" onClick={clearFilters} className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4">Limpar filtros</button>
+            </div>
           )}
-        </div>
+        </section>
 
-        {/* Selected Article Viewer */}
-        <div className="lg:col-span-2">
+        <div className="min-w-0 lg:sticky lg:top-6">
           {selectedArticle ? (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
+            <motion.article
+              key={selectedArticle.id}
+              aria-labelledby={`help-article-title-${selectedArticle.id}`}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 md:p-12 ring-1 ring-zinc-900/5 dark:ring-white/10 shadow-sm border border-zinc-100 dark:border-zinc-800/50 dark:border-zinc-800"
+              transition={{ duration: 0.18 }}
+              className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <button 
-                onClick={() => setSelectedArticle(null)}
-                className="lg:hidden flex items-center gap-2 text-xs font-bold text-zinc-500 dark:text-zinc-400 mb-6 focus:outline-none focus:ring-2 focus:ring-zinc-950"
-              >
-                ← Voltar para listagem
-              </button>
-
-              <div className="flex items-center gap-4 mb-6">
-                <span className="text-xs uppercase font-bold tracking-widest text-zinc-500 dark:text-zinc-400 px-3 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800">
-                  {categories.find(c => c.id === selectedArticle.category)?.label}
-                </span>
+              <div className="border-b border-zinc-200 bg-gradient-to-br from-indigo-50 via-white to-cyan-50/70 p-6 sm:p-8 dark:border-zinc-800 dark:from-indigo-500/10 dark:via-zinc-900 dark:to-cyan-500/5">
+                <button
+                  type="button"
+                  onClick={closeArticle}
+                  className="geo-focus-ring mb-5 inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-white/80 hover:text-zinc-950 lg:hidden dark:text-zinc-200 dark:hover:bg-zinc-800 dark:hover:text-white"
+                >
+                  <ArrowLeft aria-hidden="true" className="h-4 w-4" />
+                  Voltar para a lista
+                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-zinc-200 px-3 py-1 text-xs font-bold uppercase tracking-wider text-zinc-800 dark:bg-zinc-700 dark:text-zinc-100">
+                    {HELP_CATEGORIES.find((category) => category.id === selectedArticle.category)?.label}
+                  </span>
+                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Revisado em {formatReviewDate(selectedArticle.updatedAt)}</span>
+                </div>
+                <h2
+                  ref={articleTitleRef}
+                  id={`help-article-title-${selectedArticle.id}`}
+                  tabIndex={-1}
+                  className="mt-5 max-w-3xl text-2xl font-bold tracking-tight text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 sm:text-3xl dark:text-white"
+                >
+                  {selectedArticle.title}
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">{selectedArticle.excerpt}</p>
+                <Link to={selectedArticle.route} className="geo-button-base geo-button-primary geo-focus-ring mt-6 inline-flex min-h-11 items-center gap-2 px-4 text-sm">
+                  {selectedArticle.routeLabel}
+                  <ArrowRight aria-hidden="true" className="h-4 w-4" />
+                </Link>
               </div>
 
-              <h2 className="text-3xl font-bold tracking-tight text-zinc-950 dark:text-white mb-8">{selectedArticle.title}</h2>
+              <div className="max-w-3xl space-y-8 p-6 sm:p-8">
+                {selectedArticle.sections.map((section) => (
+                  <section key={section.title} className="space-y-4">
+                    <h3 className="text-lg font-semibold text-zinc-950 dark:text-white">{section.title}</h3>
+                    {section.paragraphs?.map((paragraph) => <p key={paragraph} className="text-sm leading-7 text-zinc-700 dark:text-zinc-300">{paragraph}</p>)}
+                    {section.steps && (
+                      <ol className="space-y-3">
+                        {section.steps.map((step, index) => (
+                          <li key={step} className="flex gap-3 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold tabular-nums text-indigo-800 dark:bg-indigo-400/15 dark:text-indigo-100">{index + 1}</span>
+                            <span className="pt-0.5">{step}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                    {section.note && (
+                      <aside className="flex gap-3 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-100">
+                        <CheckCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
+                        <p><strong>Observação:</strong> {section.note}</p>
+                      </aside>
+                    )}
+                    {section.warning && (
+                      <aside className="flex gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950 dark:border-amber-400/30 dark:bg-amber-400/10 dark:text-amber-100">
+                        <WarningCircle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
+                        <p><strong>Atenção:</strong> {section.warning}</p>
+                      </aside>
+                    )}
+                  </section>
+                ))}
 
-              <div className="space-y-6 text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed font-sans font-medium">
-                {selectedArticle.content.map((paragraph, index) => (
-                  <p key={index}>{paragraph}</p>
+                {selectedArticle.relatedArticles?.length ? (
+                  <section aria-labelledby="related-guides-title" className="border-t border-zinc-200 pt-6 dark:border-zinc-800">
+                    <h3 id="related-guides-title" className="text-base font-semibold text-zinc-950 dark:text-white">Guias relacionados</h3>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selectedArticle.relatedArticles.map((id) => {
+                        const related = getHelpArticle(id);
+                        if (!related) return null;
+                        return (
+                          <Link
+                            key={related.id}
+                            to={{ pathname: '/ajuda', search: `?${buildHelpArticleSearch(related).toString()}` }}
+                            onClick={() => { pendingArticleFocusRef.current = related.id; }}
+                            className="geo-focus-ring inline-flex min-h-11 items-center rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-700 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-100"
+                          >
+                            {related.title}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+
+              <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-zinc-200 bg-zinc-50 px-6 py-4 text-xs font-medium text-zinc-600 sm:px-8 dark:border-zinc-800 dark:bg-zinc-950/40 dark:text-zinc-300">
+                <span>Conteúdo válido desde a versão {selectedArticle.minimumVersion}</span>
+                <span>Versão instalada: GeoGestor v{APP_VERSION}</span>
+              </footer>
+            </motion.article>
+          ) : (
+            <section aria-labelledby="help-recommended-title" className="rounded-3xl border border-zinc-200 bg-gradient-to-br from-indigo-50/80 via-white to-cyan-50/60 p-6 shadow-sm sm:p-8 dark:border-zinc-800 dark:from-indigo-500/10 dark:via-zinc-900 dark:to-cyan-500/5">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-sm">
+                <Gear aria-hidden="true" className="h-6 w-6" />
+              </div>
+              <h2 id="help-recommended-title" className="mt-5 text-2xl font-bold tracking-tight text-zinc-950 dark:text-white">Comece por aqui</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">Escolha um guia na lista ou use um dos atalhos recomendados para configurar a proteção e a organização dos seus dados.</p>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                {recommendedArticles.map((article) => (
+                  <button
+                    key={article.id}
+                    type="button"
+                    onClick={(event) => openArticle(article, event)}
+                    className="geo-focus-ring group min-h-32 rounded-2xl border border-white/90 bg-white p-4 text-left shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-400/35"
+                  >
+                    <ArticleIcon article={article} className="h-5 w-5 text-indigo-700 dark:text-indigo-200" />
+                    <span className="mt-4 block text-sm font-bold text-zinc-950 dark:text-white">{article.title}</span>
+                    <span className="mt-2 block text-xs leading-5 text-zinc-600 dark:text-zinc-300">Abrir guia</span>
+                  </button>
                 ))}
               </div>
-
-              <div className="mt-12 pt-8 border-t border-zinc-100 dark:border-zinc-800 flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 font-medium">
-                <span>Versão instalada: GeoGestor v{APP_VERSION}</span>
-                <span>GeoGestor Desktop</span>
-              </div>
-            </motion.div>
-          ) : (
-            <div className="hidden lg:flex flex-col items-center justify-center bg-zinc-50/50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-16 text-center h-full min-h-[400px]">
-              <Question className="w-12 h-12 text-zinc-300 dark:text-zinc-700 mb-4 animate-pulse" />
-              <h3 className="font-bold text-zinc-900 dark:text-white mb-2">Nenhum guia selecionado</h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
-                Selecione um dos manuais na lista lateral para ler o guia explicativo completo.
-              </p>
-            </div>
+            </section>
           )}
         </div>
       </div>

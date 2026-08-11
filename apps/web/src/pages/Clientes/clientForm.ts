@@ -191,8 +191,6 @@ export const clientFormToPayload = (
   form: ClientFormState,
   existing?: ClientRecordForForm | null
 ): ClientePayload => {
-  const personLabel = form.tipoPessoa === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física';
-  const legacyCategory = [personLabel, ...form.perfis].join(', ');
   const activeDocument = form.tipoPessoa === 'PJ' ? form.cnpj : form.cpf;
 
   return {
@@ -220,7 +218,8 @@ export const clientFormToPayload = (
     origemPrincipal: (form.origemPrincipal || null) as ClientePayload['origemPrincipal'],
     origemDetalhe: form.origemPrincipal === 'Outro' ? nullable(form.origemDetalhe) : null,
     indicadoPor: form.origemPrincipal === 'Indicação' ? nullable(form.indicadoPor) : null,
-    categoria: legacyCategory,
+    // Tipo de pessoa e categoria são taxonomias independentes.
+    categoria: nullable(form.perfis.join(', ')),
     perfis: nullable(form.perfis.join(', ')),
     anotacoes: nullable(form.anotacoes),
     situacao: form.situacao || 'Ativo',

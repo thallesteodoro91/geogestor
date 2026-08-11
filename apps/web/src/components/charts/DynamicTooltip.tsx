@@ -5,6 +5,8 @@
 
 import { cn } from "../../utils/cn";
 
+const numberFormatter = new Intl.NumberFormat('pt-BR');
+
 interface TooltipPayloadItem {
   value: number;
   name?: string;
@@ -27,7 +29,7 @@ interface DynamicTooltipProps {
 }
 
 const getItemColor = (item: TooltipPayloadItem): string => {
-  return item.color || item.payload?.fill || item.payload?.color || 'hsl(var(--primary))';
+  return item.color || item.payload?.fill || item.payload?.color || 'hsl(var(--chart-primary))';
 };
 
 export const DynamicTooltip = ({
@@ -45,11 +47,12 @@ export const DynamicTooltip = ({
   return (
     <div
       className={cn(
-        "geo-surface-raised relative min-w-[180px] p-3.5 text-zinc-950 backdrop-blur-md dark:text-zinc-50",
+        "geo-surface-raised pointer-events-none relative min-w-[180px] max-w-[calc(100vw-2rem)] overflow-hidden p-3.5 text-zinc-950 backdrop-blur-md dark:text-zinc-50",
         className
       )}
       style={{ borderColor: primaryColor }}
       role="tooltip"
+      aria-live="polite"
     >
       {/* Colored side indicator */}
       <div 
@@ -61,7 +64,7 @@ export const DynamicTooltip = ({
       <div className="pl-2">
         {/* Label */}
         {label && (
-          <p className="mb-2 text-sm font-bold text-zinc-950 dark:text-white">
+          <p className="mb-2 break-words text-sm font-bold text-zinc-950 dark:text-white">
             {labelFormatter ? labelFormatter(label) : label}
           </p>
         )}
@@ -73,17 +76,17 @@ export const DynamicTooltip = ({
             const displayName = item.name || item.dataKey || 'Valor';
             const displayValue = formatter 
               ? formatter(item.value) 
-              : item.value.toLocaleString('pt-BR');
+              : numberFormatter.format(item.value);
 
             return (
               <div key={index} className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span 
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: color }}
                     aria-hidden="true"
                   />
-                  <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                  <span className="truncate text-xs font-medium text-zinc-600 dark:text-zinc-300">
                     {displayName}
                   </span>
                 </div>

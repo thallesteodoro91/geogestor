@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Modal } from '../../components/Modal';
+import { FormSelect } from '../../components/Form';
 import { apiClient } from '../../services/apiClient';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { cn } from '../../utils/cn';
@@ -165,11 +166,12 @@ export function ProjectCancellationDecisionModal({
         )}
 
         <div className="grid gap-4 md:grid-cols-2">
-          <label className={labelClass}>
-            <span>Decisão financeira</span>
-            <select
+          <div className={labelClass}>
+            <label htmlFor="project-cancellation-decision">Decisão financeira</label>
+            <FormSelect
               id="project-cancellation-decision"
               name="financialDecision"
+              aria-label="Decisão financeira"
               value={decision}
               onChange={(event) => setDecision(event.target.value as ProjectFinancialDecision)}
               className={fieldClass}
@@ -179,8 +181,8 @@ export function ProjectCancellationDecisionModal({
               <option value="cobranca_parcial">Reter/cobrar proporcionalmente ao executado</option>
               <option value="registrar_credito">Registrar crédito para o cliente</option>
               <option value="registrar_devolucao">Registrar decisão de devolução</option>
-            </select>
-          </label>
+            </FormSelect>
+          </div>
 
           {decision === 'cobranca_parcial' && (
             <label className={labelClass}>

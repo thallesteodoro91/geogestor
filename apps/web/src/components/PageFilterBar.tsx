@@ -13,6 +13,8 @@ interface PageFilterBarProps {
   activeFilterCount?: number;
   filterPanelId?: string;
   filterLabel?: string;
+  showFilterToggle?: boolean;
+  showControls?: boolean;
   className?: string;
   frameClassName?: string;
   panelClassName?: string;
@@ -28,19 +30,24 @@ export function PageFilterBar({
   activeFilterCount = 0,
   filterPanelId,
   filterLabel = 'Filtros',
+  showFilterToggle = true,
+  showControls = true,
   className,
   frameClassName,
   panelClassName,
 }: PageFilterBarProps) {
   const hasExpandableFilters = Boolean(children && onFiltersToggle);
+  const showPanel = hasExpandableFilters && filtersOpen;
+
+  if (!showControls && !showPanel) return null;
 
   return (
     <section aria-label="Busca e filtros" className={cn('mb-6 min-w-0', className)}>
       <div className={cn('mx-auto w-full min-w-0 max-w-[1400px] space-y-3', frameClassName)}>
-        <div className={cn(filterBarClass, 'flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center')}>
+        {showControls ? <div className={cn(filterBarClass, 'flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center')}>
           {search ? <div className="min-w-0 flex-1 sm:max-w-xl">{search}</div> : null}
           {sorting ? <div className="min-w-0 sm:ml-auto">{sorting}</div> : null}
-          {hasExpandableFilters ? (
+          {hasExpandableFilters && showFilterToggle ? (
             <button
               type="button"
               aria-expanded={filtersOpen}
@@ -70,9 +77,9 @@ export function PageFilterBar({
               Limpar
             </button>
           ) : null}
-        </div>
+        </div> : null}
 
-        {hasExpandableFilters && filtersOpen ? (
+        {showPanel ? (
           <div
             id={filterPanelId}
             className={cn(

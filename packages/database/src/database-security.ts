@@ -152,6 +152,7 @@ function reopenAndValidate(databasePath: string, encryptionKey: string | undefin
   const database = nativeDatabase(databasePath, encryptionKey);
   try {
     assertDatabase(database);
+    return Number(firstValue(database.prepare('PRAGMA user_version').get() as Record<string, unknown> | undefined) || 0);
   } finally {
     database.close();
   }
@@ -277,8 +278,13 @@ export function cloneDatabaseEncryptedSync(sourcePath: string, targetPath: strin
 }
 
 export function inspectProtectedDatabaseSync(databasePath: string, encryptionKey = getDatabaseEncryptionKey(true)) {
-  reopenAndValidate(databasePath, encryptionKey);
-  return { encrypted: !hasSqliteHeader(databasePath), keyId: databaseKeyId(encryptionKey) };
+  const schemaVersion = reopenAndValidate(databasePath, encryptionKey);
+  return { encrypted: !hasSqliteHeader(databasePath), keyId: databaseKeyId(encryptionKey), schemaVersion };
+}
+
+export function validateProtectedDatabaseIsolatedSync(databasePath: string, encryptionKey = getDatabaseEncryptionKey()) {
+  const schemaVersion = validateDatabaseIsolatedSync(databasePath, encryptionKey);
+  return { encrypted: !hasSqliteHeader(databasePath), keyId: databaseKeyId(encryptionKey), schemaVersion };
 }
 
 export function cloneDatabaseWithKeysSync(sourcePath: string, sourceKey: string | undefined, targetPath: string, targetKey: string | undefined) {
@@ -318,18 +324,20 @@ function cloneDatabaseIsolatedSync(sourcePath: string, sourceKey: string | undef
   }
 }
 
-function validateDatabaseIsolatedSync(databasePath: string, encryptionKey: string) {
+function validateDatabaseIsolatedSync(databasePath: string, encryptionKey: string | undefined) {
   const workerPath = process.env.GEOGESTOR_DATABASE_WORKER;
   if (!workerPath) {
-    reopenAndValidate(databasePath, encryptionKey);
-    return;
+    return reopenAndValidate(databasePath, encryptionKey);
   }
   const runner = process.env.GEOGESTOR_DATABASE_WORKER_RUNNER;
   const args = runner
     ? [runner, workerPath, 'validate', databasePath]
     : [workerPath, 'validate', databasePath];
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  if (encryptionKey) env.GEOGESTOR_DB_SOURCE_KEY = encryptionKey;
+  else delete env.GEOGESTOR_DB_SOURCE_KEY;
   const result = spawnSync(process.execPath, args, {
-    env: { ...process.env, GEOGESTOR_DB_SOURCE_KEY: encryptionKey },
+    env,
     encoding: 'utf8',
     windowsHide: true,
     timeout: 2 * 60 * 1_000
@@ -337,5 +345,11 @@ function validateDatabaseIsolatedSync(databasePath: string, encryptionKey: strin
   if (result.error || result.status !== 0) {
     const detail = result.error?.message || result.stderr?.trim() || `código ${result.status ?? 'desconhecido'}`;
     throw new Error(`A validação protegida do banco falhou: ${detail}`);
+  }
+  try {
+    const inspection = JSON.parse(result.stdout.trim()) as { schemaVersion?: unknown };
+    return Number(inspection.schemaVersion || 0);
+  } catch {
+    throw new Error('A validação protegida do banco não devolveu o resultado esperado.');
   }
 }

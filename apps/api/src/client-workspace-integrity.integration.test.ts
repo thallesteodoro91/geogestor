@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import test from 'node:test';
+import { createClient } from '@libsql/client';
+import { ensureClientWorkspaceIntegrity } from './services/runtime-migrations/v9-client-workspace-integrity';
+
+test('reconcilia clientes e documentos sem perder valores legados e é idempotente', async () => {
+  const root = path.resolve(process.cwd(), 'scratch', `client-integrity-${process.pid}`);
+  await fs.mkdir(root, { recursive: true });
+  const existingFile = path.join(root, 'documento.pdf');
+  await fs.writeFile(existingFile, 'conteúdo sintético');
+  const client = createClient({ url: `file:${path.join(root, 'test.db')}` });
+  await client.execute(`CREATE TABLE clientes (id TEXT PRIMARY KEY, nome TEXT NOT NULL, tipo_pessoa TEXT, documento TEXT, cpf TEXT, cnpj TEXT, categoria TEXT, endereco TEXT, bairro TEXT, municipio TEXT, uf TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`);
+  await client.execute(`CREATE TABLE documentos (id TEXT PRIMARY KEY, cliente_id TEXT NOT NULL, caminho TEXT, status TEXT DEFAULT 'ativo', updated_at TEXT DEFAULT CURRENT_TIMESTAMP, deleted_at TEXT)`);
+  await client.execute({ sql: `INSERT INTO clientes (id, nome, categoria, endereco, cpf) VALUES (?, ?, ?, ?, ?)`, args: ['c1', 'Cliente sintético', 'Pessoa Física, Parceiro', 'Estrada rural antiga', '52998224725'] });
+  await client.execute({ sql: `INSERT INTO documentos (id, cliente_id, caminho, status) VALUES (?, ?, ?, 'ativo')`, args: ['d1', 'c1', existingFile] });
+  await client.execute({ sql: `INSERT INTO documentos (id, cliente_id, caminho, status) VALUES (?, ?, ?, 'ativo')`, args: ['d2', 'c1', path.join(root, 'ausente.pdf')] });
+  await client.execute({ sql: `INSERT INTO documentos (id, cliente_id, caminho, status) VALUES (?, ?, ?, 'excluido')`, args: ['d3', 'c1', path.join(root, 'lixeira.pdf')] });
+  await ensureClientWorkspaceIntegrity(client);
+  await ensureClientWorkspaceIntegrity(client);
+  const migrated = (await client.execute(`SELECT * FROM clientes WHERE id = 'c1'`)).rows[0];
+  assert.equal(migrated.tipo_pessoa, 'PF');
+  assert.equal(migrated.categoria, 'Parceiro');
+  assert.equal(migrated.categoria_legada, 'Pessoa Física, Parceiro');
+  assert.equal(migrated.endereco_legado, 'Estrada rural antiga');
+  assert.equal(migrated.revisao_cadastral, 1);
+  const documents = await client.execute(`SELECT id, status, deleted_at FROM documentos ORDER BY id`);
+  assert.deepEqual(documents.rows.map((row) => [row.id, row.status, Boolean(row.deleted_at)]), [['d1', 'ativo', false], ['d2', 'revisao', false], ['d3', 'excluido', true]]);
+  await client.close();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  await fs.rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+});

@@ -19,10 +19,10 @@ test('Financeiro concentra os painéis canônicos sem editar orçamentos ou dupl
 test('seletor por ícones e ações de lançamento permanecem explícitos', () => {
   const source = read('./Financeiro.tsx');
 
-  assert.match(source, /\['visao', 'Visão geral', ChartBar/);
-  assert.match(source, /\['faturas', 'Contas a receber', CurrencyDollar/);
-  assert.match(source, /\['pagar', 'Contas a pagar', Receipt/);
-  assert.match(source, /\['auxiliares', 'Viagens e notas fiscais', Briefcase/);
+  assert.match(source, /\['visao', 'Visão geral', overviewTabIcon/);
+  assert.match(source, /\['faturas', 'Contas a receber', receivablesTabIcon/);
+  assert.match(source, /\['pagar', 'Contas a pagar', payablesTabIcon/);
+  assert.match(source, /\['auxiliares', 'Viagens e notas fiscais', travelAndInvoicesTabIcon/);
   assert.match(source, /openEmbeddedAction\('viagem'\)/);
   assert.match(source, /openEmbeddedAction\('fiscal'\)/);
 });

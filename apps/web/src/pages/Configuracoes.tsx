@@ -47,8 +47,9 @@ import { GeoGestorHealthPanel } from './Configuracoes/GeoGestorHealthPanel';
 import { AppearanceSettingsPanel } from './Configuracoes/AppearanceSettingsPanel';
 import { GoogleCalendarSettingsPanel } from './Configuracoes/GoogleCalendarSettingsPanel';
 import { DocumentTemplateSettingsPanel } from './Configuracoes/DocumentTemplateSettingsPanel';
+import { SecuritySettingsPanel } from './Configuracoes/SecuritySettingsPanel';
 
-const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
+const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'seguranca', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
 type SettingsSection = typeof SETTINGS_SECTIONS[number];
 
 interface MaintenanceOperation {
@@ -88,6 +89,7 @@ const SETTINGS_SEARCH_INDEX: Array<{ section: SettingsSection; title: string; de
   { section: 'empresa', title: 'Logotipo do aplicativo', description: 'Imagem exibida no canto superior do menu do GeoGestor.', keywords: ['logo', 'logotipo', 'imagem', 'marca', 'menu'], anchor: 'application-logo' },
   { section: 'empresa', title: 'E-mail operacional', description: 'Contato do responsável pelo sistema.', keywords: ['email', 'administrador', 'responsável'], anchor: 'admin-email' },
   { section: 'arquivos', title: 'Diretório de documentos', description: 'Pasta onde ficam os arquivos dos clientes.', keywords: ['diretório', 'pasta', 'arquivos', 'migração'], anchor: 'data-directory-target' },
+  { section: 'seguranca', title: 'Senha e acesso local', description: 'Ative, remova ou redefina a senha de abertura.', keywords: ['senha', 'segurança', 'acesso', 'bloqueio'], anchor: 'local-security-title' },
   { section: 'backups', title: 'Política de backups', description: 'Frequência, destino e retenção.', keywords: ['backup', 'retenção', 'segurança', 'destino'], anchor: 'backup-policy-title' },
   { section: 'backups', title: 'Restaurar e testar backup', description: 'Validação e recuperação isolada dos dados.', keywords: ['restaurar', 'restauração', 'checksum', 'integridade'], anchor: 'backup-actions' },
   { section: 'alertas', title: 'Alertas e prazos', description: 'Antecedência e recorrência das notificações.', keywords: ['alerta', 'prazo', 'notificação'], anchor: 'alert-settings-title' },
@@ -978,6 +980,7 @@ export function Configuracoes() {
             {([
               ['empresa', 'Empresa e usuário', Buildings, 'system'],
               ['arquivos', 'Arquivos e pastas', Files, 'field'],
+              ['seguranca', 'Segurança', ShieldCheck, 'success'],
               ['alertas', 'Alertas', Bell, 'warning'],
               ['modelos', 'Modelos e documentos', FileText, 'success'],
               ['integracoes', 'Integrações', Link, 'field'],
@@ -1214,6 +1217,8 @@ export function Configuracoes() {
               </section>
             </div>
           )}
+
+          {activeTab === 'seguranca' && <SecuritySettingsPanel />}
 
           {activeTab === 'alertas' && <AlertSettingsPanel />}
 

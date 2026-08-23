@@ -225,6 +225,7 @@ function SetupGate() {
   const statusQuery = useQuery<{
     setupRequired: boolean;
     locked: boolean;
+    authRequired: boolean;
     idleMinutes: number;
     identity: AppIdentity | null;
   }>({
@@ -282,8 +283,9 @@ function SetupGate() {
 
   const sessionValue = useMemo(() => ({
     identity: statusQuery.data?.identity || null,
+    authRequired: statusQuery.data?.authRequired || false,
     lock
-  }), [lock, statusQuery.data?.identity]);
+  }), [lock, statusQuery.data?.authRequired, statusQuery.data?.identity]);
 
   if (statusQuery.isLoading) return <AppLoading />;
 
@@ -307,7 +309,7 @@ function SetupGate() {
     return <Navigate to={APP_ROUTES.dashboard.path} replace />;
   }
 
-  if (!statusQuery.data?.setupRequired && (forcedLocked || statusQuery.data?.locked)) {
+  if (!statusQuery.data?.setupRequired && statusQuery.data?.authRequired && (forcedLocked || statusQuery.data?.locked)) {
     return (
       <DesbloqueioLocal
         idleMinutes={statusQuery.data?.idleMinutes || 15}

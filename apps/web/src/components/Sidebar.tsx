@@ -88,7 +88,7 @@ function SidebarIcon({
 }
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
-  const { identity, lock } = useAppSession();
+  const { identity, authRequired, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [applicationLogo, setApplicationLogo] = useState('');
@@ -385,7 +385,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               </p>
               <span className="block truncate text-xs leading-4 text-zinc-600 dark:text-zinc-400">{identity?.email || 'Sessão local'}</span>
             </div>
-            <button
+            {authRequired && <button
               type="button"
               onClick={() => void lock()}
               className="geo-focus-ring flex min-h-11 min-w-11 items-center justify-center rounded-lg text-zinc-600 hover:bg-zinc-200 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
@@ -393,7 +393,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               title="Bloquear sessão"
             >
               <LockKey aria-hidden="true" size={18} />
-            </button>
+            </button>}
           </div>
         </div>
       </aside>

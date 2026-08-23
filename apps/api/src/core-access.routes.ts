@@ -9,6 +9,7 @@ import { AuditLogService } from './services/audit.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
 import { LocalSecretService } from './services/local-secret.service';
 import { LocalSessionService, verifyAdminPassword } from './services/local-session.service';
+import { LocalAuthPolicyService } from './services/local-auth-policy.service';
 import { OperationalLogService } from './services/operational-log.service';
 
 const trimmedRequired = (label: string, max: number) => z.string({ required_error: `${label} é obrigatório.` })
@@ -41,6 +42,12 @@ const configuracaoPatchSchema = z.object({
 
 const unlockSchema = z.object({
   password: z.string().min(1, 'Informe a senha local.').max(200)
+}).strict();
+
+const localAuthPolicySchema = z.object({
+  enabled: z.boolean(),
+  currentPassword: z.string().max(200).optional(),
+  newPassword: z.string().min(8, 'A nova senha deve ter pelo menos 8 caracteres.').max(200).optional()
 }).strict();
 
 const GOOGLE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -103,18 +110,19 @@ server.get('/api/auth/status', async (request, reply) => {
       return {
         setupRequired: true,
         locked: false,
+        authRequired: false,
         idleMinutes: LocalSessionService.idleMinutes,
         identity: null
       };
     }
 
-    const managedAuthentication = process.env.GEOGESTOR_AUTH_DISABLED !== '1'
-      && (process.env.GEOGESTOR_REQUIRE_UNLOCK === '1' || process.env.NODE_ENV === 'production');
+    const managedAuthentication = await LocalAuthPolicyService.isRequired();
     const localSession = getRequestToken(request, 'x-local-session');
     const locked = managedAuthentication && !LocalSessionService.validate(localSession);
     return {
       setupRequired: false,
       locked,
+      authRequired: managedAuthentication,
       idleMinutes: LocalSessionService.idleMinutes,
       identity: locked ? null : {
         name: config.adminNome,
@@ -129,6 +137,49 @@ server.get('/api/auth/status', async (request, reply) => {
       code: 'database_unavailable'
     });
   }
+});
+
+server.get('/api/auth/policy', async () => ({
+  enabled: await LocalAuthPolicyService.isRequired(),
+  idleMinutes: LocalSessionService.idleMinutes
+}));
+
+server.put('/api/auth/policy', async (request, reply) => {
+  const parsed = localAuthPolicySchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+
+  const [config] = await db.select().from(schema.configuracoes).limit(1);
+  if (!config) return reply.status(409).send({ error: 'Conclua a configuração inicial antes de alterar a segurança.' });
+
+  const currentlyEnabled = await LocalAuthPolicyService.isRequired();
+  const { enabled, currentPassword, newPassword } = parsed.data;
+  if (currentlyEnabled && !verifyAdminPassword(currentPassword, config.adminSenhaHash)) {
+    return reply.status(401).send({ error: 'A senha atual está incorreta.', code: 'invalid_password' });
+  }
+  if (!currentlyEnabled && enabled && !newPassword) {
+    return reply.status(400).send({ error: 'Defina uma nova senha para ativar o bloqueio local.' });
+  }
+
+  const before = { enabled: currentlyEnabled };
+  if (newPassword) {
+    await db.update(schema.configuracoes)
+      .set({ adminSenhaHash: hashAdminPassword(newPassword), updatedAt: new Date().toISOString() })
+      .where(eq(schema.configuracoes.id, config.id));
+  }
+  await LocalAuthPolicyService.setRequired(enabled);
+  await AuditLogService.log('UPDATE', 'Segurança local', before, {
+    enabled,
+    passwordChanged: Boolean(newPassword)
+  });
+
+  LocalSessionService.revokeAll();
+  const session = enabled ? LocalSessionService.create() : null;
+  return {
+    enabled,
+    idleMinutes: LocalSessionService.idleMinutes,
+    passwordChanged: Boolean(newPassword),
+    session
+  };
 });
 
 server.post('/api/auth/unlock', async (request, reply) => {
@@ -361,4 +412,3 @@ server.post('/api/google/sync', async (request, reply) => {
 
 
 }
-

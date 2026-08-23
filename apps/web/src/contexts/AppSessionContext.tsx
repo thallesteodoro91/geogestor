@@ -8,11 +8,13 @@ export interface AppIdentity {
 
 interface AppSessionContextValue {
   identity: AppIdentity | null;
+  authRequired: boolean;
   lock: () => Promise<void>;
 }
 
 const AppSessionContext = createContext<AppSessionContextValue>({
   identity: null,
+  authRequired: false,
   lock: async () => undefined
 });
 

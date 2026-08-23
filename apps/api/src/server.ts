@@ -21,6 +21,7 @@ import { SystemHealthService } from './services/system-health.service';
 import { DataQualityService } from './services/data-quality.service';
 import { PerformanceMetricsService, normalizeRegisteredRoute } from './services/performance-metrics.service';
 import { LocalSessionService, verifyAdminPassword } from './services/local-session.service';
+import { LocalAuthPolicyService } from './services/local-auth-policy.service';
 import { DataDirectoryService } from './services/data-directory.service';
 import { MaintenanceHistoryService } from './services/maintenance-history.service';
 import { MaintenanceOperationService } from './services/maintenance-operation.service';
@@ -273,15 +274,14 @@ server.addHook('onRequest', async (request, reply) => {
     }
   }
 
-  const localAuthenticationRequired = process.env.GEOGESTOR_REQUIRE_UNLOCK === '1'
-    || process.env.NODE_ENV === 'production';
-  if (process.env.GEOGESTOR_AUTH_DISABLED === '1' || !localAuthenticationRequired) return;
-  if (request.method === 'OPTIONS') return;
-
   const isInitialSetup = request.method === 'POST' && requestPath === '/api/configuracoes';
   if (isInitialSetup || PUBLIC_API_ROUTES.has(requestPath)) {
     return;
   }
+
+  const localAuthenticationRequired = await LocalAuthPolicyService.isRequired();
+  if (!localAuthenticationRequired) return;
+  if (request.method === 'OPTIONS') return;
 
   const tileQuerySessionAllowed = request.method === 'GET' && /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath);
   const localSession = getRequestToken(request, 'x-local-session')

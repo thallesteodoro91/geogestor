@@ -23,6 +23,7 @@ const child = spawn(process.execPath, [serverPath], {
     PORT: String(port),
     GEOGESTOR_API_TOKEN: token,
     GEOGESTOR_SECRET_KEY: crypto.randomBytes(32).toString('base64'),
+    GEOGESTOR_RESTORE_AUTH_SECRET: crypto.randomBytes(32).toString('base64url'),
     GEOGESTOR_DB_ENCRYPTION_KEY: databaseKey,
     GEOGESTOR_DATABASE_WORKER: path.join(path.dirname(serverPath), 'database-security-worker.js'),
     GEOGESTOR_DB_PATH: path.join(scratch, 'geogestor.db'),
@@ -48,9 +49,9 @@ async function waitForHealth() {
 
 try {
   await waitForHealth();
-  const lockedBeforeSetup = await fetch(`http://127.0.0.1:${port}/api/clientes`, { headers });
-  if (lockedBeforeSetup.status !== 423) {
-    throw new Error(`Rota operacional sem configuração deveria retornar HTTP 423; retornou ${lockedBeforeSetup.status}.`);
+  const openBeforeSetup = await fetch(`http://127.0.0.1:${port}/api/clientes`, { headers });
+  if (!openBeforeSetup.ok) {
+    throw new Error(`Rota operacional sem bloqueio deveria abrir; retornou HTTP ${openBeforeSetup.status}.`);
   }
   const password = `smoke-${crypto.randomBytes(12).toString('hex')}`;
   const setup = await fetch(`http://127.0.0.1:${port}/api/configuracoes`, {
@@ -65,14 +66,11 @@ try {
     })
   });
   if (!setup.ok) throw new Error(`Configuração inicial retornou HTTP ${setup.status}: ${await setup.text()}`);
-  const unlocked = await fetch(`http://127.0.0.1:${port}/api/auth/unlock`, {
-    method: 'POST',
-    headers: { ...headers, 'content-type': 'application/json' },
-    body: JSON.stringify({ password })
-  });
-  if (!unlocked.ok) throw new Error(`Desbloqueio retornou HTTP ${unlocked.status}: ${await unlocked.text()}`);
-  const session = await unlocked.json();
-  const operationalHeaders = { ...headers, 'x-local-session': session.token };
+  const initialStatus = await fetch(`http://127.0.0.1:${port}/api/auth/status`, { headers }).then((response) => response.json());
+  if (initialStatus.authRequired !== false || initialStatus.locked !== false) {
+    throw new Error('O pacote não iniciou com a solicitação de senha desativada.');
+  }
+  const operationalHeaders = headers;
   for (const endpoint of ['/api/clientes', '/api/projetos', '/api/orcamentos']) {
     const response = await fetch(`http://127.0.0.1:${port}${endpoint}`, { headers: operationalHeaders });
     if (!response.ok) throw new Error(`${endpoint} retornou HTTP ${response.status}`);
@@ -89,7 +87,29 @@ try {
     throw new Error('A configuração inicial não gerou o registro de auditoria esperado.');
   }
   const serializedAudit = JSON.stringify(auditRows);
-  for (const sensitiveValue of [password, token, session.token]) {
+  const enabled = await fetch(`http://127.0.0.1:${port}/api/auth/policy`, {
+    method: 'PUT',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: true, newPassword: password })
+  });
+  if (!enabled.ok) throw new Error(`Ativação do bloqueio retornou HTTP ${enabled.status}: ${await enabled.text()}`);
+  const enabledPolicy = await enabled.json();
+  const sessionToken = enabledPolicy.session?.token;
+  if (!sessionToken) throw new Error('A ativação do bloqueio não criou uma sessão local.');
+
+  const blocked = await fetch(`http://127.0.0.1:${port}/api/clientes`, { headers });
+  if (blocked.status !== 423) throw new Error(`Bloqueio ativado deveria retornar HTTP 423 sem sessão; retornou ${blocked.status}.`);
+
+  const disabled = await fetch(`http://127.0.0.1:${port}/api/auth/policy`, {
+    method: 'PUT',
+    headers: { ...headers, 'x-local-session': sessionToken, 'content-type': 'application/json' },
+    body: JSON.stringify({ enabled: false, currentPassword: password })
+  });
+  if (!disabled.ok) throw new Error(`Remoção do bloqueio retornou HTTP ${disabled.status}: ${await disabled.text()}`);
+  const reopened = await fetch(`http://127.0.0.1:${port}/api/clientes`, { headers });
+  if (!reopened.ok) throw new Error(`Rota operacional não reabriu após remover a senha; retornou ${reopened.status}.`);
+
+  for (const sensitiveValue of [password, token, sessionToken]) {
     if (serializedAudit.includes(sensitiveValue)) {
       throw new Error('O registro de auditoria expôs uma senha ou token sensível.');
     }
@@ -103,7 +123,7 @@ try {
   if (databaseBytes.includes(Buffer.from('GeoGestor Smoke', 'utf8'))) {
     throw new Error('O banco empacotado expôs dados de teste em texto claro.');
   }
-  console.log('Smoke test aprovado: API empacotada iniciou com banco criptografado, protegeu o acesso, manteve os dados operacionais vazios e auditou a configuração sem expor segredos.');
+  console.log('Smoke test aprovado: o pacote abriu sem senha, ativou e removeu o bloqueio local, manteve o banco criptografado e não expôs segredos.');
 } finally {
   child.kill();
   await new Promise((resolve) => setTimeout(resolve, 500));

@@ -145,6 +145,56 @@ globalThis.__secretKeyHelpers = { getOrCreateSecretKey, databaseKeyId };`;
   return context.__secretKeyHelpers;
 }
 
+function loadBackupRecoveryHelpers(userDataPath) {
+  const mainPath = path.join(__dirname, 'main.js');
+  const source = `${fs.readFileSync(mainPath, 'utf8')}
+globalThis.__backupRecoveryHelpers = { getOrCreateBackupRecoveryKey, setBackupRecoveryConfirmed, writeJsonEnvelopeAtomicSync };`;
+  let protectedValue = '';
+  const app = {
+    commandLine: { appendSwitch() {} },
+    isPackaged: true,
+    requestSingleInstanceLock: () => true,
+    on() {},
+    getPath: () => userDataPath,
+    whenReady: () => new Promise(() => {})
+  };
+  const electron = {
+    app,
+    BrowserWindow: {},
+    dialog: {},
+    shell: {},
+    ipcMain: { on() {}, handle() {} },
+    safeStorage: {
+      isEncryptionAvailable: () => true,
+      encryptString(value) {
+        protectedValue = value;
+        return Buffer.from('DPAPI-RECOVERY-SYNTHETIC-CIPHERTEXT');
+      },
+      decryptString() {
+        return protectedValue;
+      }
+    },
+    session: {}
+  };
+  const context = {
+    __dirname,
+    Buffer,
+    clearTimeout,
+    console,
+    globalThis: null,
+    process,
+    require(moduleName) {
+      if (moduleName === 'electron') return electron;
+      return require(moduleName);
+    },
+    setTimeout,
+    URL
+  };
+  context.globalThis = context;
+  vm.runInNewContext(source, context, { filename: mainPath });
+  return context.__backupRecoveryHelpers;
+}
+
 test('readiness resolve somente após a mensagem IPC ready', async () => {
   const { waitForManagedApiReady } = loadReadinessHelpers();
   const child = new EventEmitter();
@@ -272,6 +322,36 @@ test('segredo local legado migra para envelope DPAPI sem manter texto puro', () 
     assert.equal(envelopeText.includes(legacyKey), false);
     assert.equal(fs.existsSync(path.join(userDataPath, 'local-secrets.key')), false);
     assert.equal(getOrCreateSecretKey(), legacyKey);
+  } finally {
+    fs.rmSync(userDataPath, { recursive: true, force: true });
+  }
+});
+
+test('confirmaÃ§Ã£o do kit substitui envelope por rename atÃ´mico e limpa temporÃ¡rios', () => {
+  const userDataPath = path.join(__dirname, '.test-backup-recovery-key');
+  fs.rmSync(userDataPath, { recursive: true, force: true });
+  fs.mkdirSync(userDataPath, { recursive: true });
+  try {
+    const helpers = loadBackupRecoveryHelpers(userDataPath);
+    const created = helpers.getOrCreateBackupRecoveryKey();
+    assert.equal(created.confirmed, false);
+    const confirmed = helpers.setBackupRecoveryConfirmed(true);
+    assert.equal(confirmed.confirmed, true);
+
+    const envelopePath = path.join(userDataPath, 'backup-recovery-key.v1.json');
+    const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
+    assert.equal(envelope.confirmed, true);
+    assert.equal(envelope.keyId, created.keyId);
+    assert.equal(fs.readdirSync(userDataPath).some((name) => name.includes('.pending-')), false);
+
+    const original = fs.readFileSync(envelopePath, 'utf8');
+    assert.throws(() => helpers.writeJsonEnvelopeAtomicSync(
+      envelopePath,
+      { ...envelope, confirmed: false },
+      () => { throw new Error('falha sintÃ©tica de validaÃ§Ã£o'); }
+    ), /falha sintÃ©tica/);
+    assert.equal(fs.readFileSync(envelopePath, 'utf8'), original);
+    assert.equal(fs.readdirSync(userDataPath).some((name) => name.includes('.pending-')), false);
   } finally {
     fs.rmSync(userDataPath, { recursive: true, force: true });
   }

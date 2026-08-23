@@ -71,6 +71,41 @@
       "when": 1785034800000,
       "tag": "0009_managerial_finance",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1785461200508,
+      "tag": "0010_strategic_planning",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1785536850844,
+      "tag": "0011_strategic_governance",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785636779991,
+      "tag": "0012_unified_deadline_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1786240961795,
+      "tag": "0013_client_workspace_integrity",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1786468311258,
+      "tag": "0014_import_runs",
+      "breakpoints": true
     }
   ]
 }

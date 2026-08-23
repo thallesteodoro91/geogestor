@@ -1,0 +1,164 @@
+name: GeoGestor CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: geogestor-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  quality:
+    name: Governança, tipos e testes
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: pnpm 11.8.0
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Dependências congeladas
+        run: pnpm install --frozen-lockfile
+
+      - name: Governança estática
+        run: pnpm --config.verify-deps-before-run=false run governance:check
+
+      - name: Testes de governança
+        run: pnpm --config.verify-deps-before-run=false run governance:test
+
+      - name: Typecheck
+        run: pnpm --config.verify-deps-before-run=false run typecheck
+
+      - name: Lint
+        run: pnpm --config.verify-deps-before-run=false run lint
+
+      - name: Testes web
+        run: pnpm --config.verify-deps-before-run=false run test:web
+
+      - name: Testes API, migrações e recuperação
+        run: pnpm --config.verify-deps-before-run=false run test:api
+
+      - name: Testes Electron
+        run: pnpm --config.verify-deps-before-run=false run test:electron
+
+      - name: Integridade, SBOM e whitespace
+        shell: pwsh
+        run: |
+          node --test scripts/release-integrity.test.mjs scripts/sbom.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git diff --check
+
+  e2e:
+    name: Jornadas comerciais E2E
+    needs: quality
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: pnpm 11.8.0
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Dependências congeladas
+        run: pnpm install --frozen-lockfile
+
+      - name: Microsoft Edge para Playwright
+        run: pnpm --config.verify-deps-before-run=false exec playwright install msedge
+
+      - name: E2E com dados sintéticos e raiz gerenciada
+        run: pnpm --config.verify-deps-before-run=false run test:e2e
+
+      - name: Prévia não destrutiva da limpeza
+        if: always()
+        run: pnpm --config.verify-deps-before-run=false run e2e:cleanup:preview
+
+      - name: Preservar somente evidências E2E de falha
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: geogestor-e2e-failure-${{ github.run_id }}
+          path: scratch/commercial-e2e/
+          if-no-files-found: warn
+          retention-days: 14
+
+  package:
+    name: Build e gates do pacote
+    needs: [quality, e2e]
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: pnpm 11.8.0
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.8.0
+
+      - name: Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Dependências congeladas
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Windows
+        run: pnpm --config.verify-deps-before-run=false run build
+
+      - name: SBOM CycloneDX e hashes do mesmo build
+        run: pnpm --config.verify-deps-before-run=false run release:evidence
+
+      - name: Smoke da API empacotada
+        run: pnpm --config.verify-deps-before-run=false run release:smoke-package
+
+      - name: Conteúdo, proveniência e integridade
+        run: pnpm --config.verify-deps-before-run=false run release:verify-package
+
+      - name: Verificação informativa de Authenticode
+        id: signature
+        continue-on-error: true
+        run: pnpm --config.verify-deps-before-run=false run release:verify-signature
+
+      - name: Registrar decisão sobre assinatura
+        if: always()
+        shell: pwsh
+        run: |
+          if ('${{ steps.signature.outcome }}' -eq 'success') {
+            Write-Host 'Assinatura digital verificada.'
+          } else {
+            Write-Host 'Assinatura digital: não implementada por decisão do proprietário — risco residual aceito.'
+          }
+
+      # O workflow verifica o instalador localmente, mas não publica release nem envia o executável como artefato.

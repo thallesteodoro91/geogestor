@@ -39,9 +39,8 @@ async function navigateInApp(page: Page, path: string) {
 }
 
 async function expectNoBlockingA11yViolations(page: Page) {
-  const results = await new AxeBuilder({ page }).include('body').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  const blocking = results.violations.filter((violation) => violation.impact === 'critical' || violation.impact === 'serious');
-  expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
+  const results = await new AxeBuilder({ page }).include('body').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 }
 
 async function expectDialogAccessibleInBothThemes(page: Page) {
@@ -52,6 +51,10 @@ async function expectDialogAccessibleInBothThemes(page: Page) {
       localStorage.setItem('geogestor_theme', useDarkTheme ? 'dark' : 'light');
       document.documentElement.classList.toggle('dark', useDarkTheme);
     }, dark);
+    await activeDialog.evaluate(async (dialog) => {
+      const animations = dialog.getAnimations({ subtree: true });
+      await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+    });
     await expectNoBlockingA11yViolations(page);
   }
   await page.evaluate(() => {
@@ -109,7 +112,7 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     await expect(page.getByRole('option', { name: SERVICE_NAME })).toBeVisible();
 
     await navigateInApp(page, '/financeiro');
-    await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Novo lançamento' }).click();
     await page.getByRole('menuitem', { name: /Nova despesa/ }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
@@ -171,11 +174,16 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     });
     await navigateInApp(page, '/cadastros');
     await page.getByRole('button', { name: 'Novo tipo de serviço' }).click();
-    await page.getByLabel('Nome do serviço').fill('Rascunho com falha de persistência');
-    await page.getByLabel('Valor sugerido (R$)').fill('800.00');
+    const serviceName = page.getByLabel('Nome do serviço');
+    const suggestedValue = page.getByLabel('Valor sugerido (R$)');
+    await expect(serviceName).toBeFocused();
+    await serviceName.fill('Rascunho com falha de persistência');
+    await suggestedValue.fill('800.00');
+    await expect(serviceName).toHaveValue('Rascunho com falha de persistência');
+    await expect(suggestedValue).toHaveValue('800.00');
     await page.getByRole('button', { name: 'Criar cadastro' }).click();
     await expect(page.getByRole('dialog', { name: 'Novo tipo de serviço' })).toBeVisible();
-    await expect(page.getByLabel('Nome do serviço')).toHaveValue('Rascunho com falha de persistência');
+    await expect(serviceName).toHaveValue('Rascunho com falha de persistência');
     await expect(page.getByText('Falha simulada. Tente novamente.')).toBeVisible();
   });
 
@@ -224,7 +232,7 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     await page.keyboard.press('Escape');
     await expect(page.getByRole('alertdialog')).toContainText('Descartar alterações');
     await page.getByRole('button', { name: 'Descartar alterações' }).click();
-    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    await expectModalPortalRemoved(page);
 
     await page.evaluate(() => {
       localStorage.setItem('geogestor_theme', 'dark');
@@ -249,7 +257,9 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await page.getByLabel('Pessoa física').check();
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
-    await page.locator('#client-cpf').fill('93541134780');
+    const cpfInput = page.getByLabel('CPF *');
+    await cpfInput.fill('93541134780');
+    await expect(cpfInput).toHaveValue('935.411.347-80');
     await page.locator('#client-celular').fill('48999996666');
     await page.getByRole('dialog', { name: /Novo cliente para o cadastro de propriedade/ }).getByRole('button', { name: 'Cadastrar cliente', exact: true }).click();
     const propertyDialog = page.getByRole('dialog', { name: 'Novo cadastro de propriedade' });

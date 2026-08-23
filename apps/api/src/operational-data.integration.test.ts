@@ -47,7 +47,7 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 10);
+    assert.equal(migration.schemaVersion, 13);
     const clientA = crypto.randomUUID();
     const clientB = crypto.randomUUID();
     const projectA = crypto.randomUUID();

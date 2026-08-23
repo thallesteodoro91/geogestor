@@ -68,6 +68,14 @@ export function getPreviewUrl(filePath: string): string {
   return `${getBaseUrl()}/api/arquivos/preview?path=${encodeURIComponent(filePath)}`;
 }
 
+export function getAuthenticatedAssetUrl(pathname: string): string {
+  const url = new URL(pathname, getBaseUrl());
+  const token = window.electronAPI?.getApiToken?.();
+  if (token) url.searchParams.set('token', token);
+  if (localSessionToken) url.searchParams.set('session', localSessionToken);
+  return url.toString().replace(/%7B/gi, '{').replace(/%7D/gi, '}');
+}
+
 function getAuthHeaders(customHeaders?: HeadersInit): Headers {
   const headers = new Headers(customHeaders || {});
   if (typeof window !== 'undefined' && window.electronAPI?.getApiToken) {
@@ -88,11 +96,20 @@ function resolveApiUrl(inputUrl: string): string {
   return normalizedUrl.startsWith('/api') ? `${getBaseUrl()}${normalizedUrl}` : normalizedUrl;
 }
 
+function notifyAlertsAfterMutation(url: string, method: string, response: Response) {
+  if (!response.ok || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) return;
+  const pathname = new URL(url).pathname;
+  if (!pathname.startsWith('/api/') || pathname.startsWith('/api/alertas')) return;
+  window.dispatchEvent(new CustomEvent('geogestor:alerts-invalidated', {
+    detail: { method: method.toUpperCase(), pathname }
+  }));
+}
+
 /**
  * Compatibility layer for screens that still need the native Response object.
  * It preserves each caller's response handling while resolving Electron's dynamic API port.
  */
-export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const inputUrl = typeof input === 'string'
     ? input
     : input instanceof URL
@@ -101,12 +118,17 @@ export function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   const url = resolveApiUrl(inputUrl);
   const headers = getAuthHeaders(init?.headers || (input instanceof Request ? input.headers : undefined));
   const options = { ...init, headers };
+  const method = (options.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
 
   if (input instanceof Request) {
-    return fetch(new Request(url, input), options);
+    const response = await fetch(new Request(url, input), options);
+    notifyAlertsAfterMutation(url, method, response);
+    return response;
   }
 
-  return fetch(url, options);
+  const response = await fetch(url, options);
+  notifyAlertsAfterMutation(url, method, response);
+  return response;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -175,9 +197,6 @@ export const apiClient = {
       upstreamSignal?.removeEventListener('abort', abortFromUpstream);
       const result = await handleResponse<T>(response);
       const method = (fetchOptions.method || 'GET').toUpperCase();
-      if (method !== 'GET' && !new URL(url).pathname.startsWith('/api/alertas')) {
-        window.dispatchEvent(new CustomEvent('geogestor:alerts-invalidated'));
-      }
       if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
         const pathname = new URL(url).pathname;
         const completeRequired = /(?:arquivos|upload|anexos|diretorio-arquivos)/i.test(pathname)

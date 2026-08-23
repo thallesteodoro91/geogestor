@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import {
+  appLinks,
   ALERT_CATEGORY_LABELS,
   DEFAULT_ALERT_SETTINGS,
   type AlertCategory,
@@ -281,45 +282,45 @@ async function loadDeadlineSources(maxDates: Record<AlertCategory, string>): Pro
   const sources: DeadlineSource[] = [];
   for (const item of projects) {
     if (!item.dueDate || CLOSED_PROJECT_STATUSES.has(normalize(item.status))) continue;
-    sources.push({ category: 'project', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.name, description: item.clientName ? `Projeto de ${item.clientName}` : 'Prazo de entrega do projeto', link: `/projetos/${item.id}` });
+    sources.push({ category: 'project', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.name, description: item.clientName ? `Projeto de ${item.clientName}` : 'Prazo de entrega do projeto', link: appLinks.project(item.id) });
   }
   for (const item of clientServices) {
     if (!item.dueDate || ['inativo', 'arquivado', 'cancelado'].includes(normalize(item.status))) continue;
-    sources.push({ category: 'project', sourceId: `cliente-${item.id}`, dueDate: item.dueDate.slice(0, 10), title: `Serviços de ${item.name}`, description: item.services || 'Previsão de entrega cadastrada no cliente', link: `/clientes/${item.id}` });
+    sources.push({ category: 'project', sourceId: `cliente-${item.id}`, dueDate: item.dueDate.slice(0, 10), title: `Serviços de ${item.name}`, description: item.services || 'Previsão de entrega cadastrada no cliente', link: appLinks.client(item.id) });
   }
   for (const item of tasks) {
     if (!item.dueDate || CLOSED_TASK_STATUSES.has(normalize(item.status))) continue;
-    sources.push({ category: 'task', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: item.projectName || item.clientName || 'Tarefa pendente', link: item.projectId ? `/projetos/${item.projectId}?tarefa=${item.id}` : `/tarefas?id=${item.id}` });
+    sources.push({ category: 'task', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: item.projectName || item.clientName || 'Tarefa pendente', link: appLinks.task(item.id) });
   }
   for (const item of receivables) {
     const remaining = Math.max(0, item.amount - (item.paidAmount || 0));
     if (!item.dueDate || remaining <= 0 || item.paidDate || item.cancelledAt || normalize(item.status) === 'pago' || normalize(item.status) === 'cancelado') continue;
     const reference = item.budgetCode || item.budgetDescription || `Parcela ${item.number}`;
-    sources.push({ category: 'receivable', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: `Receber ${reference}`, description: `${formatCurrency(remaining)} pendente${item.clientName ? ` · ${item.clientName}` : ''}`, link: `/faturas?parcela=${item.id}` });
+    sources.push({ category: 'receivable', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: `Receber ${reference}`, description: `${formatCurrency(remaining)} pendente${item.clientName ? ` · ${item.clientName}` : ''}`, link: appLinks.receivable(item.id) });
   }
   for (const item of payables) {
     if (!item.dueDate || item.paidDate || item.cancelledAt || item.reversedAt || normalize(item.status) === 'pago' || normalize(item.status) === 'cancelado') continue;
-    sources.push({ category: 'payable', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.description, description: `${formatCurrency(item.amount)} a pagar${item.clientName ? ` · ${item.clientName}` : ''}`, link: `/despesas?id=${item.id}` });
+    sources.push({ category: 'payable', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.description, description: `${formatCurrency(item.amount)} a pagar${item.clientName ? ` · ${item.clientName}` : ''}`, link: appLinks.payable(item.id) });
   }
   for (const item of budgets) {
     if (!item.dueDate || CLOSED_BUDGET_STATUSES.has(normalize(item.status)) || normalize(item.status) === 'rascunho') continue;
-    sources.push({ category: 'budget', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.code || item.description || 'Orçamento', description: item.clientName ? `Validade da proposta para ${item.clientName}` : 'Validade da proposta comercial', link: `/orcamentos/${item.id}` });
+    sources.push({ category: 'budget', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.code || item.description || 'Orçamento', description: item.clientName ? `Validade da proposta para ${item.clientName}` : 'Validade da proposta comercial', link: appLinks.budgetEdit(item.id) });
   }
   for (const item of licenses) {
     if (!item.dueDate || ['cancelada', 'arquivada'].includes(normalize(item.status))) continue;
-    sources.push({ category: 'license', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: `Licença ${item.number}`, description: item.projectName || item.clientName || 'Licença ambiental', link: `/ambiental/licencas/${item.id}` });
+    sources.push({ category: 'license', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: `Licença ${item.number}`, description: item.projectName || item.clientName || 'Licença ambiental', link: appLinks.license(item.id) });
   }
   for (const item of conditions) {
     if (!item.dueDate || ['cumprida', 'dispensada', 'cancelada'].includes(normalize(item.status))) continue;
-    sources.push({ category: 'condition', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: `${item.licenseNumber ? `Licença ${item.licenseNumber}` : 'Condicionante'}${item.projectName ? ` · ${item.projectName}` : ''}`, link: `/ambiental/licencas/${item.licenseId}?condicionante=${item.id}` });
+    sources.push({ category: 'condition', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: `${item.licenseNumber ? `Licença ${item.licenseNumber}` : 'Condicionante'}${item.projectName ? ` · ${item.projectName}` : ''}`, link: appLinks.condition(item.licenseId, item.id) });
   }
   for (const item of appointments) {
     if (!item.dueDate) continue;
-    sources.push({ category: 'appointment', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: item.clientName || 'Compromisso da agenda', link: `/calendario/${item.id}` });
+    sources.push({ category: 'appointment', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.title, description: item.clientName || 'Compromisso da agenda', link: appLinks.appointment(item.id) });
   }
   for (const item of opportunities) {
     if (!item.dueDate || item.closedAt || CLOSED_CRM_STAGES.has(normalize(item.stage))) continue;
-    sources.push({ category: 'crm', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.action || item.title, description: `${item.title}${item.clientName ? ` · ${item.clientName}` : ''}`, link: `/crm?oportunidade=${item.id}` });
+    sources.push({ category: 'crm', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.action || item.title, description: `${item.title}${item.clientName ? ` · ${item.clientName}` : ''}`, link: appLinks.opportunity(item.id) });
   }
   return sources;
 }

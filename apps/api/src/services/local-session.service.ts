@@ -44,6 +44,14 @@ function idleTimeoutMs() {
   return minutes * 60 * 1000;
 }
 
+function attemptLockoutMs() {
+  const testOverride = Number(process.env.GEOGESTOR_ATTEMPT_LOCKOUT_MS);
+  if (process.env.NODE_ENV === 'test' && Number.isFinite(testOverride) && testOverride > 0) {
+    return testOverride;
+  }
+  return LOCKOUT_MS;
+}
+
 function purgeExpired(now = Date.now()) {
   for (const [token, session] of sessions) {
     if (session.expiresAt <= now || session.lastSeenAt + idleTimeoutMs() <= now) {
@@ -74,7 +82,7 @@ export const LocalSessionService = {
     record.failures = record.failures.filter((timestamp) => timestamp > now - ATTEMPT_WINDOW_MS);
     record.failures.push(now);
     if (record.failures.length >= MAX_FAILED_ATTEMPTS) {
-      record.blockedUntil = now + LOCKOUT_MS;
+      record.blockedUntil = now + attemptLockoutMs();
       record.failures = [];
     }
     attempts.set(key, record);

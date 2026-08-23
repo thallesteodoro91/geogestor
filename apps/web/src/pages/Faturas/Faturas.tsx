@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { DatePickerField, FormSelect } from '../../components/Form';
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass } from '@phosphor-icons/react';
@@ -64,7 +64,15 @@ function PageFrame({ embedded, children }: { embedded: boolean; children: ReactN
   return embedded ? <>{children}</> : <Layout>{children}</Layout>;
 }
 
-export function Faturas({ embedded = false }: { embedded?: boolean }) {
+export function Faturas({
+  embedded = false,
+  focusParcelaId,
+  onFocusHandled
+}: {
+  embedded?: boolean;
+  focusParcelaId?: string;
+  onFocusHandled?: () => void;
+}) {
   const [parcelas, setParcelas] = useState<Parcela[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
@@ -93,6 +101,7 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
   const [search, setSearch] = useState('');
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
+  const handledReceivableIdRef = useRef<string | null>(null);
 
   const fetchDados = () => {
     Promise.resolve().then(() => {
@@ -113,7 +122,7 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
     fetchDados();
   }, []);
 
-  const fetchReceiptHistory = async (parcelaId: string) => {
+  const fetchReceiptHistory = useCallback(async (parcelaId: string) => {
     setLoadingReceiptHistory(true);
     try {
       setReceiptHistory(await apiClient.get<Receipt[]>(`/api/financeiro/parcelas/${parcelaId}/recebimentos`));
@@ -122,12 +131,32 @@ export function Faturas({ embedded = false }: { embedded?: boolean }) {
     } finally {
       setLoadingReceiptHistory(false);
     }
-  };
+  }, []);
 
-  const openDetails = (item: Parcela) => {
+  const openDetails = useCallback((item: Parcela) => {
     setSelectedFatura(item);
     void fetchReceiptHistory(item.id);
-  };
+  }, [fetchReceiptHistory]);
+
+  useEffect(() => {
+    if (!focusParcelaId) {
+      handledReceivableIdRef.current = null;
+      return;
+    }
+    if (loading || handledReceivableIdRef.current === focusParcelaId) return;
+
+    handledReceivableIdRef.current = focusParcelaId;
+    queueMicrotask(() => {
+      const focusedParcela = parcelas.find((item) => item.id === focusParcelaId);
+      if (focusedParcela) {
+        setActiveTab(focusedParcela.statusPagamento === 'Pago' ? 'recebidas' : 'pendentes');
+        openDetails(focusedParcela);
+      } else {
+        toast.info('A conta a receber indicada pelo alerta não foi encontrada.');
+      }
+      onFocusHandled?.();
+    });
+  }, [focusParcelaId, loading, onFocusHandled, openDetails, parcelas]);
 
   const parseCurrencyToCents = (value: string) => {
     const normalized = value.trim().replace(/\./g, '').replace(',', '.');

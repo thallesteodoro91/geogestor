@@ -1,0 +1,6 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "name": "Levantamento" }, "geometry": { "type": "MultiPolygon", "coordinates": [[[[-48.549,-27.595],[-48.547,-27.595],[-48.547,-27.593],[-48.549,-27.593],[-48.549,-27.595]]]] } }
+  ]
+}

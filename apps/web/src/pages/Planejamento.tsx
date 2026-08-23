@@ -488,8 +488,8 @@ export function Planejamento() {
         ) : null}
 
         {cycles.length ? (
-          <section aria-label="Ciclo estratégico selecionado" className="geo-surface flex flex-col gap-4 rounded-lg p-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="min-w-0 flex-1">
+          <section aria-label="Ciclo estratégico selecionado" className="geo-surface flex w-full flex-col gap-4 rounded-lg p-4 sm:w-fit sm:max-w-full sm:flex-row sm:items-end">
+            <div className="min-w-0 sm:w-[26rem] lg:w-[32rem]">
               <label htmlFor="strategic-cycle-select" className="block text-xs font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">
                 Ciclo estratégico
               </label>

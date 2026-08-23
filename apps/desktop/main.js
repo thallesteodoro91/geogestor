@@ -5,6 +5,7 @@ const { fork } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const { performance } = require('perf_hooks');
+const { issueRestoreAuthorization } = require('./restore-authorization.cjs');
 
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
@@ -32,6 +33,8 @@ ipcMain.on('set-local-session-token', (_event, token) => {
 });
 
 const isDev = !app.isPackaged;
+const restoreAuthorizationSecret = process.env.GEOGESTOR_RESTORE_AUTH_SECRET
+  || (isDev ? 'geogestor-development-restore-authorization-secret' : crypto.randomBytes(32).toString('base64url'));
 
 let mainWindow = null;
 let apiProcess = null;
@@ -86,7 +89,37 @@ ipcMain.handle('select-backup-bundle', async () => {
     defaultPath: path.join(app.getPath('userData'), 'backups'),
     properties: ['openDirectory']
   });
-  return result.canceled ? null : result.filePaths[0] || null;
+  const selected = result.canceled ? null : result.filePaths[0] || null;
+  if (!selected) return null;
+  const stats = await fs.promises.stat(selected);
+  if (!stats.isDirectory()) throw new Error('O backup selecionado não é um diretório válido.');
+  return issueRestoreAuthorization(selected, restoreAuthorizationSecret);
+});
+
+ipcMain.handle('select-backup-recovery-kit', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecione o kit de recuperação do GeoGestor',
+    defaultPath: app.getPath('documents'),
+    buttonLabel: 'Usar este kit',
+    properties: ['openFile'],
+    filters: [{ name: 'Kit de recuperação do GeoGestor', extensions: ['json'] }]
+  });
+  const selected = result.canceled ? null : result.filePaths[0] || null;
+  if (!selected) return null;
+  const stats = await fs.promises.stat(selected);
+  if (!stats.isFile() || stats.size <= 0 || stats.size > 1024 * 1024) {
+    throw new Error('O kit de recuperação selecionado é inválido ou excede 1 MB.');
+  }
+  let kit;
+  try {
+    kit = JSON.parse(await fs.promises.readFile(selected, 'utf8'));
+  } catch {
+    throw new Error('O kit de recuperação não contém um JSON válido.');
+  }
+  if (!kit || typeof kit !== 'object' || kit.format !== 'GeoGestor-Recovery-Kit' || kit.version !== 1) {
+    throw new Error('O arquivo selecionado não é um kit de recuperação compatível do GeoGestor.');
+  }
+  return { kit, fileName: path.basename(selected) };
 });
 
 ipcMain.handle('select-data-directory', async () => {
@@ -122,13 +155,16 @@ ipcMain.handle('open-backup-directory', async (_event, targetDirectory) => {
 
 ipcMain.handle('get-backup-recovery-status', async () => {
   const recovery = getOrCreateBackupRecoveryKey();
-  return { configured: true, confirmed: recovery.confirmed, keyId: recovery.keyId };
+  return { configured: true, confirmed: recovery.confirmed, confirmedAt: recovery.confirmedAt, keyId: recovery.keyId };
 });
 
-ipcMain.handle('confirm-backup-recovery', async () => {
+ipcMain.handle('confirm-backup-recovery', async (_event, expectedKeyId) => {
   const recovery = getOrCreateBackupRecoveryKey();
-  setBackupRecoveryConfirmed(true);
-  return { configured: true, confirmed: true, keyId: recovery.keyId };
+  if (typeof expectedKeyId !== 'string' || expectedKeyId !== recovery.keyId) {
+    throw new Error('O kit validado não corresponde à recuperação configurada neste computador.');
+  }
+  const confirmation = setBackupRecoveryConfirmed(true);
+  return { configured: true, confirmed: true, confirmedAt: confirmation.confirmedAt, keyId: recovery.keyId };
 });
 
 ipcMain.handle('save-backup-recovery-kit', async (_event, kit) => {
@@ -341,6 +377,45 @@ function databaseKeyId(key) {
   return crypto.createHash('sha256').update(key, 'utf8').digest('hex').slice(0, 16);
 }
 
+function writeJsonEnvelopeAtomicSync(targetPath, envelope, validate) {
+  const parentPath = path.dirname(targetPath);
+  const parent = fs.lstatSync(parentPath);
+  if (!parent.isDirectory() || parent.isSymbolicLink()) {
+    throw new Error('A pasta do cofre protegido possui um tipo inesperado.');
+  }
+  if (fs.existsSync(targetPath)) {
+    const current = fs.lstatSync(targetPath);
+    if (!current.isFile() || current.isSymbolicLink()) {
+      throw new Error('O arquivo do cofre protegido possui um tipo inesperado.');
+    }
+  }
+
+  const temporaryPath = path.join(parentPath, `${path.basename(targetPath)}.pending-${crypto.randomUUID()}`);
+  let descriptor = null;
+  try {
+    descriptor = fs.openSync(temporaryPath, 'wx', 0o600);
+    fs.writeFileSync(descriptor, `${JSON.stringify(envelope)}\n`, 'utf8');
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = null;
+
+    const temporary = fs.lstatSync(temporaryPath);
+    if (!temporary.isFile() || temporary.isSymbolicLink()) {
+      throw new Error('O arquivo temporário do cofre protegido possui um tipo inesperado.');
+    }
+    const verified = JSON.parse(fs.readFileSync(temporaryPath, 'utf8'));
+    validate(verified);
+    fs.renameSync(temporaryPath, targetPath);
+  } finally {
+    if (descriptor !== null) {
+      try { fs.closeSync(descriptor); } catch {}
+    }
+    if (fs.existsSync(temporaryPath)) {
+      try { fs.rmSync(temporaryPath, { force: true }); } catch {}
+    }
+  }
+}
+
 function getOrCreateDatabaseEncryptionKey() {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('O Windows DPAPI não está disponível para proteger a chave do banco de dados.');
@@ -393,7 +468,12 @@ function getOrCreateBackupRecoveryKey() {
     if (!valid || databaseKeyId(key) !== envelope.keyId) {
       throw new Error('A chave de recuperação não pôde ser validada neste perfil do sistema.');
     }
-    return { key, keyId: envelope.keyId, confirmed: envelope.confirmed === true };
+    return {
+      key,
+      keyId: envelope.keyId,
+      confirmed: envelope.confirmed === true,
+      confirmedAt: envelope.confirmed === true && typeof envelope.confirmedAt === 'string' ? envelope.confirmedAt : null
+    };
   }
   const key = crypto.randomBytes(32).toString('base64');
   const envelope = {
@@ -408,19 +488,25 @@ function getOrCreateBackupRecoveryKey() {
   const temporaryPath = `${keyPath}.pending`;
   fs.writeFileSync(temporaryPath, `${JSON.stringify(envelope)}\n`, { flag: 'wx', mode: 0o600 });
   fs.renameSync(temporaryPath, keyPath);
-  return { key, keyId: envelope.keyId, confirmed: false };
+  return { key, keyId: envelope.keyId, confirmed: false, confirmedAt: null };
 }
 
 function setBackupRecoveryConfirmed(confirmed) {
   const keyPath = path.join(app.getPath('userData'), 'backup-recovery-key.v1.json');
   const recovery = getOrCreateBackupRecoveryKey();
   const envelope = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-  const updated = { ...envelope, confirmed: Boolean(confirmed), confirmedAt: confirmed ? new Date().toISOString() : null };
-  const temporaryPath = `${keyPath}.pending-${crypto.randomUUID()}`;
-  fs.writeFileSync(temporaryPath, `${JSON.stringify(updated)}\n`, { flag: 'wx', mode: 0o600 });
-  fs.copyFileSync(temporaryPath, keyPath);
-  fs.rmSync(temporaryPath, { force: true });
-  return { keyId: recovery.keyId, confirmed: Boolean(confirmed) };
+  const confirmedAt = confirmed ? new Date().toISOString() : null;
+  const updated = { ...envelope, confirmed: Boolean(confirmed), confirmedAt };
+  writeJsonEnvelopeAtomicSync(keyPath, updated, (candidate) => {
+    if (candidate.version !== 1 || candidate.protection !== 'electron-safeStorage' || candidate.keyId !== recovery.keyId) {
+      throw new Error('A atualização da recuperação de emergência possui formato inválido.');
+    }
+    const decrypted = safeStorage.decryptString(Buffer.from(candidate.ciphertext, 'base64'));
+    if (decrypted !== recovery.key || databaseKeyId(decrypted) !== recovery.keyId) {
+      throw new Error('A atualização da recuperação de emergência não pôde ser validada.');
+    }
+  });
+  return { keyId: recovery.keyId, confirmed: Boolean(confirmed), confirmedAt };
 }
 
 function installSecurityHeaders() {
@@ -509,10 +595,12 @@ async function startApiServer() {
       GEOGESTOR_DB_PATH: dbPath,
       GEOGESTOR_WEB_DIST: path.join(process.resourcesPath, 'web'),
       GEOGESTOR_API_TOKEN: apiToken,
+      GEOGESTOR_RESTORE_AUTH_SECRET: restoreAuthorizationSecret,
       GEOGESTOR_SECRET_KEY: secretKey,
       GEOGESTOR_DB_ENCRYPTION_KEY: databaseEncryptionKey,
       GEOGESTOR_BACKUP_RECOVERY_KEY: backupRecovery.key,
       GEOGESTOR_BACKUP_RECOVERY_CONFIRMED: backupRecovery.confirmed ? '1' : '0',
+      GEOGESTOR_BACKUP_RECOVERY_CONFIRMED_AT: backupRecovery.confirmedAt || '',
       GEOGESTOR_DATABASE_WORKER: path.join(process.resourcesPath, 'api', 'database-security-worker.js'),
       GEOGESTOR_BACKUP_RESTORE_WORKER: path.join(process.resourcesPath, 'api', 'backup-restore-worker.js'),
       GEOGESTOR_DESKTOP_MANAGED: '1',

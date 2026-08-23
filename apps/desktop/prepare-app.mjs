@@ -14,7 +14,7 @@ if (fs.realpathSync(resolvedStagingParent) !== resolvedDesktopDir) {
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(stagingDir, 'build'), { recursive: true });
 
-for (const fileName of ['main.js', 'preload.js']) {
+for (const fileName of ['main.js', 'preload.js', 'restore-authorization.cjs']) {
   fs.copyFileSync(path.join(desktopDir, fileName), path.join(stagingDir, fileName));
 }
 
@@ -30,6 +30,7 @@ fs.writeFileSync(
 const sourcePackageJson = JSON.parse(
   fs.readFileSync(path.join(desktopDir, 'package.json'), 'utf8')
 );
+const commercialVersion = sourcePackageJson.version.replace(/\.0$/, '');
 
 const packageJson = {
   name: 'geogestor-desktop',
@@ -43,7 +44,7 @@ const packageJson = {
   build: {
     appId: 'com.geogestor.desktop',
     productName: 'GeoGestor',
-    artifactName: '${productName} Setup ${version}.${ext}',
+    artifactName: `\${productName} Setup ${commercialVersion}.\${ext}`,
     electronVersion: '35.7.5',
     npmRebuild: false,
     beforeBuild: './before-build.cjs',
@@ -54,6 +55,7 @@ const packageJson = {
     files: [
       'main.js',
       'preload.js',
+      'restore-authorization.cjs',
       'package.json'
     ],
     extraResources: [

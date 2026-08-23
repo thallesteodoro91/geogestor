@@ -65,6 +65,38 @@ test('apiClient aplica autenticação uma única vez por requisição', async ()
   assert.equal(capturedHeaders?.get('x-api-token'), 'synthetic-token');
 });
 
+test('apiFetch centraliza a invalidação de alertas após mutações bem-sucedidas', async () => {
+  const invalidations: Array<{ method: string; pathname: string }> = [];
+  Object.assign(globalThis, {
+    window: {
+      electronAPI: { getApiPort: () => 4321, getApiToken: () => 'synthetic-token' },
+      location: { protocol: 'http:', port: '4321', origin: 'http://127.0.0.1:4321' },
+      dispatchEvent: (event: Event) => {
+        if (event.type === 'geogestor:alerts-invalidated') {
+          invalidations.push((event as CustomEvent<{ method: string; pathname: string }>).detail);
+        }
+        return true;
+      }
+    },
+    fetch: async (input: RequestInfo | URL) => new Response('{}', {
+      status: String(input).includes('/falha') ? 400 : 200,
+      headers: { 'content-type': 'application/json' }
+    })
+  });
+  const { apiClient, apiFetch } = await import('./apiClient');
+
+  await apiFetch('/api/tarefas/11111111-1111-4111-8111-111111111111', { method: 'PATCH' });
+  await apiClient.post('/api/oportunidades', { titulo: 'Nova oportunidade' });
+  await apiFetch('/api/projetos');
+  await apiFetch('/api/alertas/ler', { method: 'POST' });
+  await apiFetch('/api/projetos/falha', { method: 'DELETE' });
+
+  assert.deepEqual(invalidations, [
+    { method: 'PATCH', pathname: '/api/tarefas/11111111-1111-4111-8111-111111111111' },
+    { method: 'POST', pathname: '/api/oportunidades' }
+  ]);
+});
+
 test('apiClient sinaliza indisponibilidade sem devolver dados vazios ou zeros', async () => {
   let unavailableEvents = 0;
   Object.assign(globalThis, {

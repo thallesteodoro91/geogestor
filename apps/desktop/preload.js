@@ -9,11 +9,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getApiPort: () => apiPort,
   setLocalSessionToken: (token) => ipcRenderer.send('set-local-session-token', token),
   selectBackupBundle: () => ipcRenderer.invoke('select-backup-bundle'),
+  selectBackupRecoveryKit: () => ipcRenderer.invoke('select-backup-recovery-kit'),
   selectDataDirectory: () => ipcRenderer.invoke('select-data-directory'),
   selectBackupDirectory: () => ipcRenderer.invoke('select-backup-directory'),
   openBackupDirectory: (directory) => ipcRenderer.invoke('open-backup-directory', directory),
   getBackupRecoveryStatus: () => ipcRenderer.invoke('get-backup-recovery-status'),
-  confirmBackupRecovery: () => ipcRenderer.invoke('confirm-backup-recovery'),
+  confirmBackupRecovery: (expectedKeyId) => ipcRenderer.invoke('confirm-backup-recovery', expectedKeyId),
   saveBackupRecoveryKit: (kit) => ipcRenderer.invoke('save-backup-recovery-kit', kit),
   onShutdownBackupStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);

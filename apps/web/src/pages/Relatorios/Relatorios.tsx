@@ -249,6 +249,12 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
+              <div
+                role="region"
+                aria-label="Valores mensais da evolução do caixa"
+                tabIndex={0}
+                className="max-w-full overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40"
+              >
               <table className="w-full min-w-[420px] text-sm">
                 <caption className="sr-only">Valores mensais exatos da evolução do caixa</caption>
                 <thead>
@@ -270,6 +276,7 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           ) : <p className="mt-5 text-sm text-zinc-600 dark:text-zinc-400">Nenhum movimento de caixa no período.</p>}
         </section>
@@ -560,7 +567,7 @@ export function Relatorios() {
           {isGeneratingPdf ? 'Preparando o arquivo PDF. Aguarde…' : ''}
         </p>
 
-        <section aria-label="Navegação e filtros dos relatórios" className="mb-6 border-b border-zinc-800 pb-4">
+        <section aria-label="Navegação e filtros dos relatórios" className="mb-6 border-b border-zinc-200 pb-4 dark:border-zinc-800">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <ReportTabs value={reportType} onChange={setReportType} />
             <ReportPeriodMenu

@@ -5,6 +5,7 @@ export const COMPANY_TEMPLATE_KEY = 'geogestor_empresa_template' as const;
 
 export const CompanyTemplateSchema = z.object({
   version: z.literal(1).default(1),
+  appLogo: z.string().max(3_000_000).default(''),
   logo: z.string().max(3_000_000).default(''),
   razao: z.string().max(200).default(''),
   cnpj: z.string().max(18).default(''),
@@ -19,6 +20,7 @@ export type CompanyTemplate = z.infer<typeof CompanyTemplateSchema>;
 
 export const DEFAULT_COMPANY_TEMPLATE: CompanyTemplate = {
   version: 1,
+  appLogo: '',
   logo: '',
   razao: '',
   cnpj: '',

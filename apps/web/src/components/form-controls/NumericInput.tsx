@@ -1,13 +1,11 @@
-import { CaretDown, CaretUp } from '@phosphor-icons/react';
-import { forwardRef, useImperativeHandle, useRef, type ChangeEvent, type InputEvent, type InputHTMLAttributes } from 'react';
+import { Minus, Plus } from '@phosphor-icons/react';
+import { forwardRef, useImperativeHandle, useRef, type InputHTMLAttributes } from 'react';
 import { cn } from '../../utils/cn';
 
 export interface NumericInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   wrapperClassName?: string;
-}
-
-function readableName(input: HTMLInputElement | null) {
-  return input?.getAttribute('aria-label') || input?.name || 'valor';
+  decrementLabel?: string;
+  incrementLabel?: string;
 }
 
 function fallbackStep(input: HTMLInputElement, direction: 1 | -1) {
@@ -22,6 +20,8 @@ function fallbackStep(input: HTMLInputElement, direction: 1 | -1) {
 export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(function NumericInput({
   className,
   wrapperClassName,
+  decrementLabel = 'Diminuir valor',
+  incrementLabel = 'Aumentar valor',
   disabled,
   onChange,
   onInput,
@@ -41,8 +41,7 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
     } catch {
       fallbackStep(input, direction);
     }
-    onChange?.({ target: input, currentTarget: input } as ChangeEvent<HTMLInputElement>);
-    onInput?.({ target: input, currentTarget: input } as unknown as InputEvent<HTMLInputElement>);
+    input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   };
 
   const current = Number(props.value);
@@ -52,7 +51,19 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
   const incrementDisabled = Boolean(disabled || (Number.isFinite(current) && current >= max));
 
   return (
-    <span className={cn('geo-numeric-input relative block min-w-0 w-full', wrapperClassName)}>
+    <span className={cn('geo-numeric-input grid w-full min-w-0 grid-cols-[2.75rem_minmax(0,1fr)_2.75rem] items-stretch gap-2', wrapperClassName)}>
+      <button
+        type="button"
+        disabled={decrementDisabled}
+        onClick={() => changeValue(-1)}
+        aria-label={decrementLabel}
+        aria-controls={props.id}
+        className="group geo-focus-ring flex h-11 w-11 touch-manipulation items-center justify-center rounded-xl transition-[background-color,box-shadow,transform] duration-150 hover:bg-zinc-100/80 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-800 motion-reduce:transition-none"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 shadow-sm transition-[background-color,border-color,color] group-hover:border-zinc-400 group-hover:bg-zinc-50 group-hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:group-hover:border-zinc-600 dark:group-hover:bg-zinc-800 dark:group-hover:text-white">
+          <Minus aria-hidden="true" weight="bold" size={16} />
+        </span>
+      </button>
       <input
         {...props}
         ref={inputRef}
@@ -61,17 +72,20 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
         aria-label={ariaLabel}
         onChange={onChange}
         onInput={onInput}
-        className={cn('geo-number-input appearance-none pr-9', className)}
+        className={cn('geo-number-input min-h-11 min-w-0 w-full appearance-none px-3 text-center tabular-nums', className)}
       />
-      <span className="absolute inset-y-[0.2rem] right-[0.2rem] flex w-[1.6rem] flex-col overflow-hidden rounded-md border border-zinc-200/80 bg-zinc-50/90 shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/80">
-        <button type="button" disabled={incrementDisabled} onClick={() => changeValue(1)} aria-label={`Aumentar ${ariaLabel || readableName(inputRef.current)}`} className="geo-focus-ring flex min-h-0 flex-1 items-center justify-center text-zinc-500 transition-[background-color,color] duration-150 hover:bg-white hover:text-brand-primary-600 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-brand-primary-300">
-          <CaretUp aria-hidden="true" weight="bold" size={10} />
-        </button>
-        <span aria-hidden="true" className="h-px bg-zinc-200/80 dark:bg-zinc-700/80" />
-        <button type="button" disabled={decrementDisabled} onClick={() => changeValue(-1)} aria-label={`Diminuir ${ariaLabel || readableName(inputRef.current)}`} className="geo-focus-ring flex min-h-0 flex-1 items-center justify-center text-zinc-500 transition-[background-color,color] duration-150 hover:bg-white hover:text-brand-primary-600 disabled:cursor-not-allowed disabled:opacity-35 dark:text-zinc-400 dark:hover:bg-zinc-700 dark:hover:text-brand-primary-300">
-          <CaretDown aria-hidden="true" weight="bold" size={10} />
-        </button>
-      </span>
+      <button
+        type="button"
+        disabled={incrementDisabled}
+        onClick={() => changeValue(1)}
+        aria-label={incrementLabel}
+        aria-controls={props.id}
+        className="group geo-focus-ring flex h-11 w-11 touch-manipulation items-center justify-center rounded-xl transition-[background-color,box-shadow,transform] duration-150 hover:bg-zinc-100/80 active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-zinc-800 motion-reduce:transition-none"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-700 shadow-sm transition-[background-color,border-color,color] group-hover:border-zinc-400 group-hover:bg-zinc-50 group-hover:text-zinc-950 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:group-hover:border-zinc-600 dark:group-hover:bg-zinc-800 dark:group-hover:text-white">
+          <Plus aria-hidden="true" weight="bold" size={16} />
+        </span>
+      </button>
     </span>
   );
 });

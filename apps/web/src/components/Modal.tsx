@@ -10,13 +10,16 @@ interface ModalProps {
   onClose: () => void;
   title: ReactNode;
   children: ReactNode;
+  footer?: ReactNode;
   maxWidth?: string; // e.g. "max-w-md", "max-w-5xl"
   panelClassName?: string;
   contentScrollable?: boolean;
   initialFocusId?: string;
+  returnFocusSelector?: string;
   closeDisabled?: boolean;
   dialogRole?: 'dialog' | 'alertdialog';
   ariaDescribedBy?: string;
+  density?: 'comfortable' | 'compact';
 }
 
 export function Modal({
@@ -24,13 +27,16 @@ export function Modal({
   onClose,
   title,
   children,
+  footer,
   maxWidth = "max-w-md",
   panelClassName,
   contentScrollable = true,
   initialFocusId,
+  returnFocusSelector,
   closeDisabled = false,
   dialogRole = 'dialog',
-  ariaDescribedBy
+  ariaDescribedBy,
+  density = 'comfortable'
 }: ModalProps) {
   const titleId = useId();
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -52,8 +58,9 @@ export function Modal({
       }
 
       // Set focus to the modal container or first input
-      setTimeout(() => {
+      const focusTimer = window.setTimeout(() => {
         if (modalRef.current) {
+          if (modalRef.current.contains(document.activeElement)) return;
           const requestedFocus = initialFocusId
             ? modalRef.current.querySelector<HTMLElement>(`#${CSS.escape(initialFocusId)}`)
             : null;
@@ -69,6 +76,17 @@ export function Modal({
           }
         }
       }, 50);
+
+      return () => {
+        window.clearTimeout(focusTimer);
+        document.body.style.overflow = 'unset';
+        const appRoot = document.getElementById('root');
+        if (appRoot) {
+          appRoot.removeAttribute('inert');
+          if (previousRootAriaHidden.current === null) appRoot.removeAttribute('aria-hidden');
+          else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
+        }
+      };
     } else {
       document.body.style.overflow = 'unset';
       const appRoot = document.getElementById('root');
@@ -77,9 +95,16 @@ export function Modal({
         if (previousRootAriaHidden.current === null) appRoot.removeAttribute('aria-hidden');
         else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
       }
-      if (previousFocus.current) {
-        previousFocus.current.focus();
-      }
+      const previousElement = previousFocus.current;
+      const previousElementIsVisible = Boolean(
+        previousElement?.isConnected && previousElement.getClientRects().length > 0
+      );
+      const visibleFallback = returnFocusSelector
+        ? Array.from(document.querySelectorAll<HTMLElement>(returnFocusSelector)).find(
+            (element) => element.isConnected && element.getClientRects().length > 0
+          )
+        : undefined;
+      (previousElementIsVisible ? previousElement : visibleFallback)?.focus();
     }
 
     return () => {
@@ -91,7 +116,7 @@ export function Modal({
         else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
       }
     };
-  }, [initialFocusId, isOpen]);
+  }, [initialFocusId, isOpen, returnFocusSelector]);
 
   // Escape key handler
   useEffect(() => {
@@ -158,16 +183,28 @@ export function Modal({
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95, y: 20 }}
             transition={modalTransition}
             className={cn(
-              'geo-surface-raised relative my-auto flex max-h-[88vh] max-h-[88dvh] min-w-0 w-full flex-col overflow-hidden rounded-lg p-4 sm:p-6 md:p-8',
+              'geo-surface-raised relative my-auto flex max-h-[88vh] max-h-[88dvh] min-w-0 w-full flex-col overflow-hidden',
+              density === 'compact' ? 'rounded-xl p-4' : 'rounded-lg p-4 sm:p-6 md:p-8',
               maxWidth,
               panelClassName
             )}
           >
             {/* Header */}
-            <div className="mb-5 flex flex-shrink-0 items-center justify-between gap-3">
-              <h3 id={titleId} className="min-w-0 break-words text-xl font-bold tracking-tight text-zinc-950 dark:text-white">
+            <div
+              className={cn(
+                'flex flex-shrink-0 items-center justify-between gap-3',
+                density === 'compact' ? 'mb-3' : 'mb-5'
+              )}
+            >
+              <h2
+                id={titleId}
+                className={cn(
+                  'min-w-0 break-words font-bold tracking-tight text-zinc-950 dark:text-white',
+                  density === 'compact' ? 'text-lg' : 'text-xl'
+                )}
+              >
                 {title}
-              </h3>
+              </h2>
               <button
                 type="button"
                 onClick={onClose}
@@ -180,9 +217,19 @@ export function Modal({
             </div>
 
             {/* Content */}
-            <div className={`min-h-0 min-w-0 flex-1 overflow-x-hidden ${contentScrollable ? 'overflow-y-auto pr-1' : 'flex flex-col overflow-y-hidden'}`}>
+            <div className={`min-h-0 min-w-0 flex-1 overflow-x-hidden overscroll-contain ${contentScrollable ? 'overflow-y-auto pr-1' : 'flex flex-col overflow-y-hidden'}`}>
               {children}
             </div>
+            {footer ? (
+              <div
+                className={cn(
+                  'min-w-0 flex-shrink-0 border-t border-zinc-200 [padding-bottom:max(0px,env(safe-area-inset-bottom))] dark:border-zinc-800',
+                  density === 'compact' ? 'mt-3 pt-3' : 'mt-5 pt-4'
+                )}
+              >
+                {footer}
+              </div>
+            ) : null}
           </motion.div>
         </div>
       )}

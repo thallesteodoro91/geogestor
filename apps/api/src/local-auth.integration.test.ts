@@ -12,6 +12,8 @@ process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_API_TOKEN = apiToken;
 process.env.GEOGESTOR_REQUIRE_UNLOCK = '1';
 process.env.GEOGESTOR_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
+process.env.GEOGESTOR_BACKUP_RECOVERY_KEY = Buffer.alloc(32, 10).toString('base64');
+process.env.GEOGESTOR_ATTEMPT_LOCKOUT_MS = '20';
 
 test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', async () => {
   await fs.rm(testRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
@@ -71,6 +73,66 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(operational.statusCode, 200, operational.body);
     assert.deepEqual(operational.json(), []);
 
+    const recoveryHeaders = {
+      ...baseHeaders,
+      'x-local-session': sessionToken,
+      'content-type': 'application/json'
+    };
+    let uniformError = '';
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const denied = await server.inject({
+        method: 'POST',
+        url: '/api/sistema/backups/recuperacao/codigo',
+        headers: recoveryHeaders,
+        payload: { password: 'senha-incorreta' }
+      });
+      assert.equal(denied.statusCode, 401, denied.body);
+      uniformError ||= denied.json<{ error: string }>().error;
+      assert.equal(denied.json<{ error: string }>().error, uniformError);
+      assert.equal(denied.json().code, 'recovery_authorization_failed');
+    }
+
+    const threshold = await server.inject({
+      method: 'POST',
+      url: '/api/sistema/backups/recuperacao/codigo',
+      headers: recoveryHeaders,
+      payload: { password: 'senha-incorreta' }
+    });
+    assert.equal(threshold.statusCode, 429, threshold.body);
+    assert.equal(threshold.json<{ error: string }>().error, uniformError);
+    assert.equal(threshold.json().code, 'too_many_attempts');
+    assert.ok(Number(threshold.headers['retry-after']) >= 1);
+
+    const blockedCorrectPassword = await server.inject({
+      method: 'POST',
+      url: '/api/sistema/backups/recuperacao/codigo',
+      headers: recoveryHeaders,
+      payload: { password: 'senha-segura-123' }
+    });
+    assert.equal(blockedCorrectPassword.statusCode, 429, blockedCorrectPassword.body);
+    assert.equal(blockedCorrectPassword.json<{ error: string }>().error, uniformError);
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const revealed = await server.inject({
+      method: 'POST',
+      url: '/api/sistema/backups/recuperacao/codigo',
+      headers: recoveryHeaders,
+      payload: { password: 'senha-segura-123' }
+    });
+    assert.equal(revealed.statusCode, 200, revealed.body);
+    assert.match(revealed.json<{ recoveryCode: string }>().recoveryCode, /^GG-R1-/);
+
+    const kit = await server.inject({
+      method: 'POST',
+      url: '/api/sistema/backups/recuperacao/kit',
+      headers: recoveryHeaders,
+      payload: { password: 'senha-segura-123', kitPassword: 'senha-forte-kit-2026' }
+    });
+    assert.equal(kit.statusCode, 200, kit.body);
+    assert.equal(kit.json().format, 'GeoGestor-Recovery-Kit');
+    assert.equal(kit.body.includes('senha-segura-123'), false);
+    assert.equal(kit.body.includes('senha-forte-kit-2026'), false);
+
     const manualLock = await server.inject({
       method: 'POST',
       url: '/api/auth/lock',
@@ -101,6 +163,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(expired.statusCode, 423, expired.body);
   } finally {
     delete process.env.GEOGESTOR_SESSION_IDLE_MS;
+    delete process.env.GEOGESTOR_ATTEMPT_LOCKOUT_MS;
     await server.close();
     await closeDb();
     await fs.rm(testRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });

@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
-import { useCallback, useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
@@ -21,7 +21,7 @@ import {
   filterControlClass,
   filterSearchInputClass
 } from '../../utils/filterStyles';
-import type { Tarefa } from '@geogestor/contracts';
+import { APP_QUERY_KEYS, type Tarefa } from '@geogestor/contracts';
 import { apiClient, apiFetch } from '../../services/apiClient';
 import { useDebounce } from '../../hooks/useDebounce';
 
@@ -29,7 +29,12 @@ type TaskPage = { items: Tarefa[]; page: number; limit: number; total: number; t
 type ProjectOption = { id: string; nome: string; clienteNome?: string | null };
 export function Tarefas() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [resolvedTaskFocus, setResolvedTaskFocus] = useState<{ id: string; found: boolean } | null>(null);
+  const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
+  const handledTaskIdRef = useRef<string | null>(null);
+  const focusClearTimer = useRef<number | null>(null);
   const [selectedProjeto, setSelectedProjeto] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [prioridadeFilter, setPrioridadeFilter] = useState('Todas');
@@ -50,7 +55,7 @@ export function Tarefas() {
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const focusedTaskId = new URLSearchParams(location.search).get('tarefaId');
+  const focusedTaskId = new URLSearchParams(location.search).get(APP_QUERY_KEYS.task);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const fetchDados = useCallback(() => {
@@ -65,12 +70,53 @@ export function Tarefas() {
       setTarefas(result.items);
       setTotalTasks(result.total);
       setTotalPages(result.totalPages);
+      if (focusedTaskId) {
+        setResolvedTaskFocus({
+          id: focusedTaskId,
+          found: result.items.some((task) => task.id === focusedTaskId)
+        });
+      }
     });
   }, [dataFimFilter, dataInicioFilter, debouncedSearchTerm, focusedTaskId, page, prioridadeFilter, selectedProjeto]);
 
   useEffect(() => {
     fetchDados();
   }, [fetchDados]);
+
+  useEffect(() => () => {
+    if (focusClearTimer.current !== null) window.clearTimeout(focusClearTimer.current);
+  }, []);
+
+  useEffect(() => {
+    if (!focusedTaskId) {
+      handledTaskIdRef.current = null;
+      return;
+    }
+    if (resolvedTaskFocus?.id !== focusedTaskId || handledTaskIdRef.current === focusedTaskId) return;
+
+    handledTaskIdRef.current = focusedTaskId;
+    window.requestAnimationFrame(() => {
+      const next = new URLSearchParams(location.search);
+      next.delete(APP_QUERY_KEYS.task);
+      navigate({
+        pathname: location.pathname,
+        search: next.size ? `?${next.toString()}` : ''
+      }, { replace: true });
+
+      if (!resolvedTaskFocus.found) {
+        toast.info('A tarefa indicada pelo alerta não foi encontrada.');
+        return;
+      }
+
+      setHighlightedTaskId(focusedTaskId);
+      document.querySelector(`[data-task-id="${focusedTaskId}"]`)?.scrollIntoView({
+        block: 'center',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+      });
+      if (focusClearTimer.current !== null) window.clearTimeout(focusClearTimer.current);
+      focusClearTimer.current = window.setTimeout(() => setHighlightedTaskId(null), 2400);
+    });
+  }, [focusedTaskId, location.pathname, location.search, navigate, resolvedTaskFocus]);
 
   const taskDraftDirty = Boolean(
     novoTitulo.trim()
@@ -398,14 +444,15 @@ export function Tarefas() {
                           {(provided, snapshot) => (
                             <div
                               ref={provided.innerRef}
+                              data-task-id={task.id}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
                               style={provided.draggableProps.style}
                               className={`group relative rounded-xl border border-zinc-200/70 bg-white p-4 transition-[border-color,box-shadow] dark:border-zinc-700/60 dark:bg-zinc-800/95 ${
                                 snapshot.isDragging ? 'opacity-90 shadow-xl ring-2 ring-indigo-500/50' : 'hover:border-zinc-300 dark:hover:border-zinc-600'
                               } ${
-                                focusedTaskId === task.id
-                                  ? 'ring-2 ring-blue-500 bg-blue-50/70 dark:bg-blue-950/20'
+                                highlightedTaskId === task.id
+                                  ? 'ring-2 ring-blue-500 bg-blue-50/70 transition-[background-color,box-shadow] motion-reduce:transition-none dark:bg-blue-950/20'
                                   : ''
                               }`}
                             >

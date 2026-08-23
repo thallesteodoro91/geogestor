@@ -1,43 +1,20 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
 import cors from '@fastify/cors';
-import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { execFile } from 'child_process';
 import { performance } from 'node:perf_hooks';
-import { closeDb, db, dbReady } from './db';
+import { closeDb, db } from './db';
 import { schema } from '@geogestor/database';
 import { eq, sql } from 'drizzle-orm';
-import { clientesRoutes } from './routes/clientes.routes';
-import { dashboardRoutes } from './routes/dashboard.routes';
-import { projetosRoutes } from './routes/projetos.routes';
-import { financeiroRoutes } from './routes/financeiro.routes';
-import { arquivosRoutes } from './routes/arquivos.routes';
-import { tarefasRoutes } from './routes/tarefas.routes';
-import { relatoriosRoutes } from './routes/relatorios.routes';
-import { compromissosRoutes } from './routes/compromissos.routes';
-import { oportunidadesRoutes } from './routes/oportunidades.routes';
-import { auditRoutes } from './routes/audit.routes';
-import { searchRoutes } from './routes/search.routes';
-import { contatosRoutes } from './routes/contatos.routes';
-import { licencasRoutes } from './routes/licencas.routes';
-import { ambientalRoutes } from './routes/ambiental.routes';
-import { orcamentosRoutes } from './routes/orcamentos.routes';
-import { strategicPlanningRoutes } from './routes/strategic-planning.routes';
-import { operationalDataRoutes } from './routes/operational-data.routes';
-import { alertasRoutes } from './routes/alertas.routes';
-import { importacoesRoutes } from './routes/importacoes.routes';
-import { runRuntimeMigrations } from './services/runtime-migrations.service';
+import { registerApiRoutes } from './routes/register-api-routes';
 import { FileSystemService } from './services/fs.service';
-import { GoogleCalendarService } from './services/google-calendar.service';
 import { SchedulerService } from './services/scheduler.service';
 import { BackupService } from './services/backup.service';
 import { BackupPolicyService } from './services/backup-policy.service';
-import { LocalSecretService } from './services/local-secret.service';
-import { AuditLogService } from './services/audit.service';
 import { OperationalLogService } from './services/operational-log.service';
 import { ResetInProgressError, SystemResetService } from './services/system-reset.service';
 import { SystemHealthService } from './services/system-health.service';
@@ -51,54 +28,61 @@ import { BackupActivityService } from './services/backup-activity.service';
 import { BackupDeviceService } from './services/backup-device.service';
 import { BackupProviderService } from './services/backup-provider.service';
 import { BackupRecoveryService } from './services/backup-recovery.service';
+import { BackupRecoverySessionService } from './services/backup-recovery-session.service';
+import { RestoreAuthorizationService } from './services/restore-authorization.service';
+import { buildBackupProtectionStatus } from './services/backup-status.service';
 import { z } from 'zod';
-import { isValidCnpj } from '@geogestor/contracts';
+import { configureProductionFrontend, startServer } from './server-lifecycle';
+import { registerConfigurationAndGoogleRoutes, registerLocalAuthRoutes } from './core-access.routes';
 
 const RESET_CONFIRMATION = 'APAGAR DADOS DO GEOGESTOR';
 const RESTORE_CONFIRMATION = 'RESTAURAR BACKUP DO GEOGESTOR';
 const apiProcessStartedAt = performance.now();
 const trimmedRequired = (label: string, max: number) => z.string({ required_error: `${label} é obrigatório.` })
   .trim().min(1, `${label} é obrigatório.`).max(max, `${label} excede o limite de ${max} caracteres.`);
-const nullableTrimmed = (max: number) => z.string().trim().max(max).nullable().optional();
-
-const configuracaoCreateSchema = z.object({
-  empresaNome: trimmedRequired('Nome da empresa', 200),
-  dadosPasta: trimmedRequired('Pasta de dados', 2_048),
-  adminNome: trimmedRequired('Nome do administrador', 200),
-  adminEmail: z.string().trim().min(1, 'E-mail é obrigatório.').max(320).email('Informe um e-mail válido.'),
-  adminSenha: z.string().min(8, 'A senha local deve ter pelo menos 8 caracteres.').max(200)
-}).strict();
-
-const configuracaoPatchSchema = z.object({
-  empresaNome: trimmedRequired('Nome da empresa', 200).optional(),
-  empresaCnpj: nullableTrimmed(18).refine((value) => !value || isValidCnpj(value), 'Informe um CNPJ válido.'),
-  dadosPasta: trimmedRequired('Pasta de dados', 2_048).optional(),
-  adminNome: trimmedRequired('Nome do administrador', 200).optional(),
-  adminEmail: z.string().trim().min(1, 'E-mail é obrigatório.').max(320).email('Informe um e-mail válido.').optional(),
-  adminSenha: z.string().min(8, 'A senha local deve ter pelo menos 8 caracteres.').max(200).optional(),
-  googleClientId: nullableTrimmed(2_048),
-  googleClientSecret: z.string().max(4_096).optional(),
-  googleRefreshToken: z.null().optional(),
-  googleAccessToken: z.null().optional(),
-  googleSyncActive: z.boolean().optional()
-}).strict().refine((value) => Object.keys(value).length > 0, {
-  message: 'Informe ao menos um campo para atualizar.'
-});
-
 const resetSchema = z.object({ confirmation: z.literal(RESET_CONFIRMATION) }).strict();
 const restoreSchema = z.object({
   bundlePath: trimmedRequired('Diretório do backup', 4_096),
+  bundleAuthorization: trimmedRequired('Autorização do backup', 2_048),
   confirmation: z.literal(RESTORE_CONFIRMATION),
-  recoveryCode: z.string().trim().max(256).nullable().optional()
+  recoveryCode: z.string().trim().max(256).nullable().optional(),
+  recoverySession: z.string().trim().max(256).nullable().optional()
 }).strict();
 const restorePreflightSchema = z.object({
   bundlePath: trimmedRequired('Diretório do backup', 4_096),
-  recoveryCode: z.string().trim().max(256).nullable().optional()
+  bundleAuthorization: trimmedRequired('Autorização do backup', 2_048),
+  recoveryCode: z.string().trim().max(256).nullable().optional(),
+  recoverySession: z.string().trim().max(256).nullable().optional()
 }).strict();
 const recoveryRevealSchema = z.object({ password: z.string().min(1).max(200) }).strict();
 const recoveryKitSchema = z.object({
   password: z.string().min(1).max(200),
   kitPassword: z.string().min(12).max(300)
+}).strict();
+const recoveryKitDocumentSchema = z.object({
+  format: z.literal('GeoGestor-Recovery-Kit'),
+  version: z.literal(1),
+  createdAt: z.string().datetime(),
+  recoveryKeyId: z.string().regex(/^[a-f0-9]{24}$/),
+  kdf: z.object({
+    algorithm: z.literal('scrypt'),
+    salt: z.string().max(256),
+    N: z.number().int(),
+    r: z.number().int(),
+    p: z.number().int(),
+    keyLength: z.literal(32)
+  }).strict(),
+  encryption: z.object({
+    algorithm: z.literal('AES-256-GCM'),
+    iv: z.string().max(256),
+    tag: z.string().max(256),
+    ciphertext: z.string().max(4_096)
+  }).strict()
+}).strict();
+const recoveryKitImportSchema = z.object({
+  kit: recoveryKitDocumentSchema,
+  kitPassword: z.string().min(12).max(300),
+  purpose: z.enum(['restore', 'confirm'])
 }).strict();
 const backupPolicySchema = z.object({
   automaticEnabled: z.boolean().optional().default(true),
@@ -156,10 +140,6 @@ const maintenanceHistoryQuerySchema = z.object({
   status: z.enum(['running', 'success', 'failed', 'cancelled']).optional(),
   limit: z.coerce.number().int().min(1).max(500).optional()
 }).strict();
-const unlockSchema = z.object({
-  password: z.string().min(1, 'Informe a senha local.').max(200)
-}).strict();
-
 function validationError(error: z.ZodError) {
   const fields: Record<string, string> = {};
   for (const issue of error.issues) {
@@ -229,44 +209,6 @@ export const server = Fastify({
 server.setValidatorCompiler(validatorCompiler);
 server.setSerializerCompiler(serializerCompiler);
 
-const GOOGLE_OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
-const googleOAuthStates = new Map<string, number>();
-
-function createGoogleOAuthState() {
-  const now = Date.now();
-  for (const [state, expiresAt] of googleOAuthStates) {
-    if (expiresAt <= now) googleOAuthStates.delete(state);
-  }
-
-  const state = crypto.randomBytes(32).toString('base64url');
-  googleOAuthStates.set(state, now + GOOGLE_OAUTH_STATE_TTL_MS);
-  return state;
-}
-
-function consumeGoogleOAuthState(state: string) {
-  const expiresAt = googleOAuthStates.get(state);
-  googleOAuthStates.delete(state);
-  return expiresAt !== undefined && expiresAt > Date.now();
-}
-
-function hashAdminPassword(password: unknown) {
-  if (typeof password !== 'string' || password.length < 8) {
-    throw new Error('A senha local deve ter pelo menos 8 caracteres.');
-  }
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function sanitizeConfiguracao(config: any | null | undefined) {
-  if (!config) return null;
-  const { adminSenhaHash, googleClientSecret, googleRefreshToken, googleAccessToken, ...safeConfig } = config;
-  return {
-    ...safeConfig,
-    googleClientSecretConfigured: Boolean(googleClientSecret)
-  };
-}
-
 function tokensMatch(candidate: unknown, expected: string) {
   if (typeof candidate !== 'string') return false;
   const candidateBuffer = Buffer.from(candidate);
@@ -313,7 +255,8 @@ server.addHook('onRequest', async (request, reply) => {
 
   if (token) {
     const queryTokenAllowed = request.method === 'GET'
-      && (requestPath === '/api/arquivos/download' || requestPath === '/api/arquivos/preview');
+      && (requestPath === '/api/arquivos/download' || requestPath === '/api/arquivos/preview'
+        || /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath));
     const requestToken = request.headers['x-api-token']
       || (request.headers['authorization']?.toString().startsWith('Bearer ')
         ? request.headers['authorization'].toString().slice(7)
@@ -340,7 +283,9 @@ server.addHook('onRequest', async (request, reply) => {
     return;
   }
 
-  const localSession = getRequestToken(request, 'x-local-session');
+  const tileQuerySessionAllowed = request.method === 'GET' && /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath);
+  const localSession = getRequestToken(request, 'x-local-session')
+    || (tileQuerySessionAllowed ? (request.query as any)?.session : undefined);
   if (!LocalSessionService.validate(localSession)) {
     return reply.status(423).send({
       error: 'A sessão local está bloqueada ou expirou.',
@@ -410,7 +355,7 @@ async function writeRestoreResult(status: 'success' | 'failed', message: string)
   await fs.rename(temporary, target);
 }
 
-async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string; recoveryCode?: string | null }) {
+async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string; recoveryCode?: string | null; recoverySecret?: string | null }) {
   let exitCode = 76;
   try {
     SchedulerService.stop();
@@ -422,6 +367,7 @@ async function executeManagedRestore(input: { bundlePath: string; targetFilesRoo
       targetFilesRoot: input.targetFilesRoot,
       allowedBackupDirectory: input.allowedBackupDirectory,
       recoveryCode: input.recoveryCode,
+      recoverySecret: input.recoverySecret,
       confirmation: 'RESTORE_GEOGESTOR'
     });
     await writeRestoreResult('success', 'Backup restaurado e validado com sucesso.');
@@ -543,26 +489,7 @@ server.register(cors, {
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 });
 
-// Registrar rotas modulares
-server.register(clientesRoutes, { prefix: '/api/clientes' });
-server.register(dashboardRoutes, { prefix: '/api/dashboard' });
-server.register(projetosRoutes, { prefix: '/api/projetos' });
-server.register(financeiroRoutes, { prefix: '/api/financeiro' });
-server.register(arquivosRoutes, { prefix: '/api/arquivos' });
-server.register(tarefasRoutes, { prefix: '/api/tarefas' });
-server.register(relatoriosRoutes, { prefix: '/api/relatorios' });
-server.register(compromissosRoutes, { prefix: '/api/compromissos' });
-server.register(oportunidadesRoutes, { prefix: '/api/oportunidades' });
-server.register(auditRoutes, { prefix: '/api/audit-logs' });
-server.register(searchRoutes, { prefix: '/api/search' });
-server.register(contatosRoutes, { prefix: '/api/contatos' });
-server.register(licencasRoutes, { prefix: '/api/licencas' });
-server.register(ambientalRoutes, { prefix: '/api/ambiental' });
-server.register(orcamentosRoutes, { prefix: '/api/orcamentos' });
-server.register(strategicPlanningRoutes, { prefix: '/api/planejamento' });
-server.register(operationalDataRoutes, { prefix: '/api/dados-operacionais' });
-server.register(alertasRoutes, { prefix: '/api/alertas' });
-server.register(importacoesRoutes, { prefix: '/api/importacoes' });
+registerApiRoutes(server);
 
 // Health check
 server.get('/api/ready', async (_request, reply) => {
@@ -584,99 +511,7 @@ server.get('/api/health', async (request, reply) => {
   }
 });
 
-server.get('/api/auth/status', async (request, reply) => {
-  try {
-    const configs = await db.select().from(schema.configuracoes).limit(1);
-    const config = configs[0];
-    if (!config) {
-      return {
-        setupRequired: true,
-        locked: false,
-        idleMinutes: LocalSessionService.idleMinutes,
-        identity: null
-      };
-    }
-
-    const managedAuthentication = process.env.GEOGESTOR_AUTH_DISABLED !== '1'
-      && (process.env.GEOGESTOR_REQUIRE_UNLOCK === '1' || process.env.NODE_ENV === 'production');
-    const localSession = getRequestToken(request, 'x-local-session');
-    const locked = managedAuthentication && !LocalSessionService.validate(localSession);
-    return {
-      setupRequired: false,
-      locked,
-      idleMinutes: LocalSessionService.idleMinutes,
-      identity: locked ? null : {
-        name: config.adminNome,
-        email: config.adminEmail,
-        company: config.empresaNome
-      }
-    };
-  } catch (error) {
-    server.log.error({ err: error }, 'Falha ao consultar o estado da sessão local');
-    return reply.status(503).send({
-      error: 'O banco local não respondeu à verificação de sessão.',
-      code: 'database_unavailable'
-    });
-  }
-});
-
-server.post('/api/auth/unlock', async (request, reply) => {
-  const parsed = unlockSchema.safeParse(request.body);
-  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
-
-  const attemptKey = request.ip || 'local';
-  const retryAfter = LocalSessionService.getRetryAfterSeconds(attemptKey);
-  if (retryAfter > 0) {
-    reply.header('Retry-After', String(retryAfter));
-    return reply.status(429).send({
-      error: `Muitas tentativas incorretas. Aguarde ${retryAfter} segundos e tente novamente.`,
-      code: 'too_many_attempts',
-      retryAfter
-    });
-  }
-
-  const configs = await db.select().from(schema.configuracoes).limit(1);
-  const config = configs[0];
-  if (!config) {
-    return reply.status(409).send({
-      error: 'Conclua a configuração inicial antes de desbloquear o GeoGestor.',
-      code: 'setup_required'
-    });
-  }
-
-  if (!verifyAdminPassword(parsed.data.password, config.adminSenhaHash)) {
-    const blockedFor = LocalSessionService.recordFailure(attemptKey);
-    if (blockedFor > 0) reply.header('Retry-After', String(blockedFor));
-    return reply.status(401).send({
-      error: blockedFor > 0
-        ? `Muitas tentativas incorretas. Aguarde ${blockedFor} segundos e tente novamente.`
-        : 'Senha local incorreta.',
-      code: blockedFor > 0 ? 'too_many_attempts' : 'invalid_password',
-      retryAfter: blockedFor || undefined
-    });
-  }
-
-  LocalSessionService.clearFailures(attemptKey);
-  const session = LocalSessionService.create();
-  await OperationalLogService.writeRequired('local-session-unlocked', {
-    idleMinutes: session.idleMinutes
-  });
-  return {
-    ...session,
-    identity: {
-      name: config.adminNome,
-      email: config.adminEmail,
-      company: config.empresaNome
-    },
-    notice: 'A senha bloqueia o acesso pelo aplicativo. Ela não criptografa integralmente o arquivo SQLite.'
-  };
-});
-
-server.post('/api/auth/lock', async (request) => {
-  LocalSessionService.revoke(getRequestToken(request, 'x-local-session'));
-  await OperationalLogService.writeRequired('local-session-locked', {});
-  return { locked: true };
-});
+registerLocalAuthRoutes(server);
 
 server.get('/api/sistema/info', async () => {
   const databasePath = getDatabasePath();
@@ -758,7 +593,7 @@ server.put('/api/sistema/backups/politica', async (request, reply) => {
     const storage = await BackupService.getStorageStatus(saved.destinationDirectory);
     return { policy: saved, storage };
   } catch (error) {
-    return reply.status(422).send({ error: getErrorMessage(error, 'NÃ£o foi possÃ­vel salvar a polÃ­tica de backup.') });
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível salvar a política de backup.') });
   }
 });
 
@@ -773,22 +608,140 @@ server.post('/api/sistema/backups/testar-destino', async (request, reply) => {
 });
 
 server.post('/api/sistema/backups/testar-restauracao', async (_request, reply) => {
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
   try {
     const policy = await BackupPolicyService.get();
-    const result = await BackupService.testLatestCompleteBackup(policy.destinationDirectory);
-    if (!result) return reply.status(404).send({ error: 'Crie um backup completo antes de testar a restauração.' });
+    const storage = await BackupService.getStorageStatus(policy.destinationDirectory);
+    const latest = storage.latestByType.complete;
+    if (!latest) return reply.status(404).send({ error: 'Crie um backup completo antes de testar a restauração.' });
+    operation = MaintenanceOperationService.begin('restore_test', {
+      totalFiles: latest.files,
+      totalBytes: latest.bytes
+    }, 'Criando área temporária isolada');
+    operation.setCancellable(false);
+    const result = await BackupService.testRestore(
+      path.join(storage.backupDirectory, latest.directory),
+      storage.backupDirectory
+    );
+    operation.update({
+      stage: 'Restauração isolada validada',
+      processedFiles: result.totals.files,
+      processedBytes: result.totals.bytes,
+      totalFiles: result.totals.files,
+      totalBytes: result.totals.bytes
+    });
+    operation.finish();
     return result;
   } catch (error) {
+    operation?.fail(error);
     return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível testar o último backup completo.') });
   }
 });
 
-async function authorizeRecoverySecret(password: string) {
+server.post('/api/sistema/backups/verificar-integridade', async (_request, reply) => {
+  const startedAt = new Date().toISOString();
+  const startedAtMs = performance.now();
+  let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
+  let sourceLabel: string | null = null;
+  try {
+    const policy = await BackupPolicyService.get();
+    const storage = await BackupService.getStorageStatus(policy.destinationDirectory);
+    const latest = storage.history[0];
+    if (!latest) return reply.status(404).send({ error: 'Crie um backup antes de verificar a integridade.' });
+    sourceLabel = latest.directory;
+    operation = MaintenanceOperationService.begin('integrity_check', {
+      totalFiles: latest.files,
+      totalBytes: latest.bytes
+    }, 'Recalculando checksums do último backup');
+    operation.setCancellable(false);
+    const bundlePath = path.join(storage.backupDirectory, latest.directory);
+    const validation = await BackupService.validateBackup(bundlePath, storage.backupDirectory);
+    operation.update({
+      stage: 'Checksums recalculados e comparados',
+      processedFiles: validation.manifest.totals.files,
+      processedBytes: validation.manifest.totals.bytes,
+      totalFiles: validation.manifest.totals.files,
+      totalBytes: validation.manifest.totals.bytes
+    });
+    const completedAt = new Date().toISOString();
+    await MaintenanceHistoryService.record({
+      type: 'integrity_check',
+      status: 'success',
+      startedAt,
+      completedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      sourceLabel,
+      destinationLabel: 'verificação local',
+      files: validation.manifest.totals.files,
+      bytes: validation.manifest.totals.bytes,
+      user: 'admin',
+      auditId: null,
+      details: { checksumsVerified: validation.checksumFilesVerified, integrity: validation.integrity }
+    });
+    operation.finish();
+    return { verified: true, completedAt, checksumFilesVerified: validation.checksumFilesVerified, integrity: validation.integrity };
+  } catch (error) {
+    operation?.fail(error);
+    await MaintenanceHistoryService.record({
+      type: 'integrity_check',
+      status: 'failed',
+      startedAt,
+      durationMs: Number((performance.now() - startedAtMs).toFixed(2)),
+      sourceLabel,
+      destinationLabel: 'verificação local',
+      files: null,
+      bytes: null,
+      user: 'admin',
+      auditId: null,
+      error
+    }).catch(() => undefined);
+    return reply.status(422).send({ error: getErrorMessage(error, 'A integridade do backup não pôde ser confirmada.') });
+  }
+});
+
+const RECOVERY_AUTHORIZATION_ERROR = 'Não foi possível autorizar esta operação de recuperação. Verifique a senha e tente novamente.';
+
+async function authorizeRecoverySecret(password: string, attemptKey: string, operation: 'reveal-code' | 'export-kit') {
+  const retryAfter = LocalSessionService.getRetryAfterSeconds(attemptKey);
+  if (retryAfter > 0) {
+    await OperationalLogService.writeRequired('backup-recovery-authorization-blocked', {
+      operation,
+      retryAfter
+    }, 'warn');
+    return { authorized: false as const, status: 429 as const, retryAfter };
+  }
+
   const [configuration] = await db.select({ adminSenhaHash: schema.configuracoes.adminSenhaHash }).from(schema.configuracoes).limit(1);
   if (!configuration || !verifyAdminPassword(password, configuration.adminSenhaHash)) {
-    throw new Error('Senha administrativa incorreta.');
+    const blockedFor = LocalSessionService.recordFailure(attemptKey);
+    await OperationalLogService.writeRequired('backup-recovery-authorization-failed', {
+      operation,
+      blocked: blockedFor > 0,
+      retryAfter: blockedFor || null
+    }, 'warn');
+    return {
+      authorized: false as const,
+      status: blockedFor > 0 ? 429 as const : 401 as const,
+      retryAfter: blockedFor || 0
+    };
   }
-  return BackupRecoveryService.getConfiguredRecoverySecret(true);
+
+  LocalSessionService.clearFailures(attemptKey);
+  const secret = BackupRecoveryService.getConfiguredRecoverySecret(true);
+  await OperationalLogService.writeRequired('backup-recovery-authorized', { operation });
+  return { authorized: true as const, secret };
+}
+
+function sendRecoveryAuthorizationError(reply: FastifyReply, authorization: {
+  status: 401 | 429;
+  retryAfter: number;
+}) {
+  if (authorization.retryAfter > 0) reply.header('Retry-After', String(authorization.retryAfter));
+  return reply.status(authorization.status).send({
+    error: RECOVERY_AUTHORIZATION_ERROR,
+    code: authorization.status === 429 ? 'too_many_attempts' : 'recovery_authorization_failed',
+    retryAfter: authorization.retryAfter || undefined
+  });
 }
 
 server.get('/api/sistema/backups/recuperacao', async () => {
@@ -796,6 +749,7 @@ server.get('/api/sistema/backups/recuperacao', async () => {
   return {
     configured: Boolean(secret),
     confirmed: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1',
+    confirmedAt: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED_AT || null,
     keyId: secret ? BackupRecoveryService.keyId(secret) : null,
     state: !secret
       ? 'device_only'
@@ -809,7 +763,9 @@ server.post('/api/sistema/backups/recuperacao/codigo', async (request, reply) =>
   const parsed = recoveryRevealSchema.safeParse(request.body);
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
   try {
-    const secret = await authorizeRecoverySecret(parsed.data.password);
+    const authorization = await authorizeRecoverySecret(parsed.data.password, `backup-recovery:${request.ip || 'local'}`, 'reveal-code');
+    if (!authorization.authorized) return sendRecoveryAuthorizationError(reply, authorization);
+    const secret = authorization.secret;
     if (!secret) throw new Error('A recuperação de emergência ainda não foi configurada.');
     return { recoveryCode: BackupRecoveryService.formatRecoveryCode(secret), keyId: BackupRecoveryService.keyId(secret) };
   } catch (error) {
@@ -821,11 +777,36 @@ server.post('/api/sistema/backups/recuperacao/kit', async (request, reply) => {
   const parsed = recoveryKitSchema.safeParse(request.body);
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
   try {
-    const secret = await authorizeRecoverySecret(parsed.data.password);
+    const authorization = await authorizeRecoverySecret(parsed.data.password, `backup-recovery:${request.ip || 'local'}`, 'export-kit');
+    if (!authorization.authorized) return sendRecoveryAuthorizationError(reply, authorization);
+    const secret = authorization.secret;
     if (!secret) throw new Error('A recuperação de emergência ainda não foi configurada.');
     return BackupRecoveryService.exportKit(secret, parsed.data.kitPassword);
   } catch (error) {
     return reply.status(401).send({ error: getErrorMessage(error, 'Não foi possível exportar o kit de recuperação.') });
+  }
+});
+
+server.post('/api/sistema/backups/recuperacao/kit/validar', async (request, reply) => {
+  const parsed = recoveryKitImportSchema.safeParse(request.body);
+  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
+  try {
+    if (parsed.data.purpose === 'confirm') {
+      const configuredSecret = BackupRecoveryService.getConfiguredRecoverySecret(true);
+      if (!configuredSecret) throw new Error('A recuperação de emergência ainda não foi configurada neste computador.');
+      const result = BackupRecoverySessionService.validate(
+        parsed.data.kit,
+        parsed.data.kitPassword,
+        BackupRecoveryService.keyId(configuredSecret)
+      );
+      const confirmedAt = new Date().toISOString();
+      process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED = '1';
+      process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED_AT = confirmedAt;
+      return { ...result, confirmedAt };
+    }
+    return BackupRecoverySessionService.create(parsed.data.kit, parsed.data.kitPassword);
+  } catch (error) {
+    return reply.status(422).send({ error: getErrorMessage(error, 'Não foi possível validar o kit de recuperação.') });
   }
 });
 
@@ -856,9 +837,11 @@ server.get('/api/sistema/backups/status', async () => {
   };
   const databaseDetails = componentDetails(state.backup);
   const completeDetails = componentDetails(state.backupComplete);
-  const databaseCompletedAt = databaseDetails.completedAt;
-  const completeCompletedAt = completeDetails.completedAt;
-  const lastBackupAt = [databaseCompletedAt, completeCompletedAt].filter((value): value is string => Boolean(value)).sort().reverse()[0] || null;
+  const databaseCompletedAt = storage.latestByType.database?.completedAt || null;
+  const completeCompletedAt = storage.latestByType.complete?.completedAt || null;
+  const lastBackupAt = [databaseCompletedAt, completeCompletedAt]
+    .filter((value): value is string => Boolean(value))
+    .sort((left, right) => right.localeCompare(left))[0] || null;
   const nextAt = (value: string | null, intervalMs: number) => value
     ? new Date(Date.parse(value) + intervalMs).toISOString()
     : null;
@@ -871,20 +854,36 @@ server.get('/api/sistema/backups/status', async () => {
   };
   const databaseIntervalMs = policy.databaseIntervalHours * 60 * 60 * 1000;
   const completeIntervalMs = policy.completeIntervalDays * 24 * 60 * 60 * 1000;
-  const running = state.backup?.status === 'running' || state.backupComplete?.status === 'running';
-  const failed = state.backupComplete?.status === 'failed' || state.backup?.status === 'failed';
-  const restoreTestFailed = restoreTests[0]?.status === 'failed';
-  const summaryState = !policy.destinationDirectory
-    ? 'not_configured'
-    : running
-      ? 'running'
-      : restoreTestFailed || (failed && activity.pendingChanges > 0)
-        ? 'failed'
-        : activity.pendingChanges > 0
-          ? 'pending'
-          : lastBackupAt
-            ? cloud.confirmation === 'confirmed' ? 'protected' : 'created'
-            : 'incomplete';
+  const databaseStatus = classify(databaseCompletedAt, databaseIntervalMs, state.backup?.status);
+  const completeStatus = classify(completeCompletedAt, completeIntervalMs, state.backupComplete?.status);
+  const recoveryConfigured = Boolean(recoverySecret);
+  const recoveryConfirmed = process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1';
+  const latestRestoreTestRecord = restoreTests[0]?.status === 'success' || restoreTests[0]?.status === 'failed' ? restoreTests[0] : null;
+  const latestRestoreTest = latestRestoreTestRecord
+    ? {
+      status: latestRestoreTestRecord.status === 'success' ? 'success' as const : 'failed' as const,
+      completedAt: latestRestoreTestRecord.completedAt,
+      durationMs: latestRestoreTestRecord.durationMs
+    }
+    : null;
+  const protectionStatus = buildBackupProtectionStatus({
+    hasDestination: Boolean(policy.destinationDirectory),
+    providerConfirmation: cloud.confirmation,
+    providerMessage: cloud.message,
+    pendingChanges: activity.pendingChanges,
+    lastBackupAt,
+    hasCompleteBackup: Boolean(completeCompletedAt),
+    databaseStatus,
+    completeStatus,
+    integrity: storage.history[0]?.integrity || null,
+    integrityFailed: storage.history[0]?.integrityState === 'failed',
+    integrityVerifiedAt: storage.history[0]?.integrityVerifiedAt || null,
+    recoveryConfigured,
+    recoveryConfirmed,
+    restoreTest: latestRestoreTest,
+    restoreTestIntervalDays: policy.restoreTestIntervalDays,
+    changeDebounceMinutes: policy.changeDebounceMinutes
+  });
   return {
     policy,
     storage,
@@ -892,42 +891,27 @@ server.get('/api/sistema/backups/status', async () => {
       ...databaseDetails,
       completedAt: databaseCompletedAt,
       nextAt: nextAt(databaseCompletedAt, databaseIntervalMs),
-      status: classify(databaseCompletedAt, databaseIntervalMs, state.backup?.status)
+      status: databaseStatus
     },
     complete: {
       ...completeDetails,
       completedAt: completeCompletedAt,
       nextAt: nextAt(completeCompletedAt, completeIntervalMs),
-      status: classify(completeCompletedAt, completeIntervalMs, state.backupComplete?.status)
+      status: completeStatus
     },
-    restoreTest: restoreTests[0] || null,
+    restoreTest: latestRestoreTestRecord,
     activeOperation: MaintenanceOperationService.snapshot(),
     activity,
     device,
     cloud,
     recovery: {
-      configured: Boolean(recoverySecret),
-      confirmed: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1',
+      configured: recoveryConfigured,
+      confirmed: recoveryConfirmed,
+      confirmedAt: process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED_AT || null,
       keyId: recoverySecret ? BackupRecoveryService.keyId(recoverySecret) : null,
-      state: !recoverySecret ? 'device_only' : process.env.GEOGESTOR_BACKUP_RECOVERY_CONFIRMED === '1' ? 'configured' : 'not_confirmed'
+      state: !recoverySecret ? 'device_only' : recoveryConfirmed ? 'configured' : 'not_confirmed'
     },
-    summary: {
-      state: summaryState,
-      configured: Boolean(policy.destinationDirectory),
-      pendingChanges: activity.pendingChanges,
-      lastBackupAt,
-      integrity: storage.history[0]?.integrity || null,
-      label: summaryState === 'not_configured' ? 'Backup não configurado'
-        : summaryState === 'running' ? 'Criando backup…'
-          : summaryState === 'failed' ? 'Atenção necessária'
-            : summaryState === 'pending' ? `${activity.pendingChanges} ${activity.pendingChanges === 1 ? 'alteração pendente' : 'alterações pendentes'}`
-              : summaryState === 'protected' ? 'Backup protegido'
-                : summaryState === 'created' ? 'Backup criado'
-                  : 'Primeiro backup pendente',
-      description: restoreTestFailed
-        ? 'O último teste de restauração falhou. Verifique o destino e execute “Testar restauração agora”.'
-        : cloud.message
-    }
+    ...protectionStatus
   };
 });
 
@@ -985,7 +969,7 @@ server.get('/api/sistema/qualidade-dados.csv', async (request, reply) => {
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
   const report = await DataQualityService.inspect(parsed.data);
   const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-  const rows = [['MÃ³dulo', 'Gravidade', 'Problema', 'Quantidade', 'RecomendaÃ§Ã£o']]
+  const rows = [['Módulo', 'Gravidade', 'Problema', 'Quantidade', 'Recomendação']]
     .concat(report.issues.map((issue) => [issue.module, issue.severity, issue.title, String(issue.count), issue.recommendation]));
   return reply.type('text/csv; charset=utf-8')
     .header('content-disposition', 'attachment; filename="qualidade-dados.csv"')
@@ -1093,9 +1077,10 @@ server.post('/api/sistema/restaurar-backup/preflight', async (request, reply) =>
   const parsed = restorePreflightSchema.safeParse(request.body);
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
   try {
-    const policy = await BackupPolicyService.get();
-    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
-    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const authorization = RestoreAuthorizationService.verify({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
+    const recovery = BackupRecoverySessionService.resolve(parsed.data.recoverySession);
+    const allowedBackupDirectory = authorization.bundlePath;
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode, recoverySecret: recovery?.recoverySecret });
     const dataDisk = await fs.statfs(getDataDirectory());
     let availableBytes = Number(dataDisk.bavail) * Number(dataDisk.bsize);
     if (validation.manifest.type === 'complete') {
@@ -1132,15 +1117,17 @@ server.post('/api/sistema/restaurar-backup/testar', async (request, reply) => {
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
   let operation: ReturnType<typeof MaintenanceOperationService.begin> | null = null;
   try {
-    const policy = await BackupPolicyService.get();
-    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
-    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const authorization = RestoreAuthorizationService.verify({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
+    const recovery = BackupRecoverySessionService.resolve(parsed.data.recoverySession);
+    const allowedBackupDirectory = authorization.bundlePath;
+    const unlock = { recoveryCode: parsed.data.recoveryCode, recoverySecret: recovery?.recoverySecret };
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, unlock);
     operation = MaintenanceOperationService.begin('restore_test', {
       totalFiles: validation.manifest.totals.files,
       totalBytes: validation.manifest.totals.bytes
     }, 'Criando área temporária isolada');
     operation.setCancellable(false);
-    const result = await BackupService.testRestore(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const result = await BackupService.testRestore(parsed.data.bundlePath, allowedBackupDirectory, unlock);
     operation.update({
       stage: 'Restauração isolada validada',
       processedFiles: result.totals.files,
@@ -1149,6 +1136,7 @@ server.post('/api/sistema/restaurar-backup/testar', async (request, reply) => {
       totalBytes: result.totals.bytes
     });
     operation.finish();
+    RestoreAuthorizationService.markTested({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
     return result;
   } catch (error) {
     operation?.fail(error);
@@ -1165,9 +1153,11 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
 
   try {
-    const policy = await BackupPolicyService.get();
-    const allowedBackupDirectory = BackupService.getBackupDirectory(policy.destinationDirectory);
-    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, { recoveryCode: parsed.data.recoveryCode });
+    const authorization = RestoreAuthorizationService.assertTested({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
+    const recovery = BackupRecoverySessionService.resolve(parsed.data.recoverySession);
+    const allowedBackupDirectory = authorization.bundlePath;
+    const unlock = { recoveryCode: parsed.data.recoveryCode, recoverySecret: recovery?.recoverySecret };
+    const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, unlock);
     const restoreDisk = await fs.statfs(getDataDirectory());
     let restoreAvailableBytes = Number(restoreDisk.bavail) * Number(restoreDisk.bsize);
     if (validation.manifest.type === 'complete') {
@@ -1182,9 +1172,17 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
     const targetFilesRoot = validation.manifest.type === 'complete'
       ? await FileSystemService.getRootFolder()
       : undefined;
+    RestoreAuthorizationService.verify({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization }, { consume: true });
+    const consumedRecovery = BackupRecoverySessionService.resolve(parsed.data.recoverySession, { consume: true });
     restoreScheduled = true;
     setTimeout(() => {
-      void executeManagedRestore({ bundlePath: parsed.data.bundlePath, targetFilesRoot, allowedBackupDirectory, recoveryCode: parsed.data.recoveryCode });
+      void executeManagedRestore({
+        bundlePath: parsed.data.bundlePath,
+        targetFilesRoot,
+        allowedBackupDirectory,
+        recoveryCode: parsed.data.recoveryCode,
+        recoverySecret: consumedRecovery?.recoverySecret || recovery?.recoverySecret
+      });
     }, 150);
     return reply.status(202).send({
       message: 'Backup validado. O GeoGestor será reiniciado para concluir a restauração.',
@@ -1279,265 +1277,16 @@ server.post('/api/sistema/abrir-pasta-arquivos', async (request, reply) => {
   }
 });
 
-// Configuracoes
-server.get('/api/configuracoes', async (request, reply) => {
-  const configs = await db.select().from(schema.configuracoes).limit(1);
-  return sanitizeConfiguracao(configs[0]);
+registerConfigurationAndGoogleRoutes(server, getErrorMessage);
+
+configureProductionFrontend(server);
+
+export const start = () => startServer({
+  server,
+  apiProcessStartedAt,
+  getDataDirectory,
+  getErrorMessage
 });
-
-server.post('/api/configuracoes', async (request, reply) => {
-  const parsed = configuracaoCreateSchema.safeParse(request.body);
-  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
-  const data = parsed.data;
-  const existingConfigs = await db.select({ id: schema.configuracoes.id }).from(schema.configuracoes).limit(1);
-  if (existingConfigs.length > 0) {
-    return reply.status(409).send({ error: 'A configuração inicial já foi concluída.' });
-  }
-
-  const config = await db.transaction(async (tx) => {
-    const created = await tx.insert(schema.configuracoes).values({
-      id: crypto.randomUUID(),
-      empresaNome: data.empresaNome,
-      dadosPasta: data.dadosPasta,
-      adminNome: data.adminNome,
-      adminEmail: data.adminEmail,
-      adminSenhaHash: hashAdminPassword(data.adminSenha),
-      setupConcluido: true
-    }).returning();
-    await AuditLogService.log('INSERT', 'Configuração', null, created[0], tx);
-    return created;
-  });
-  return sanitizeConfiguracao(config[0]);
-});
-
-server.patch('/api/configuracoes', async (request, reply) => {
-  const parsed = configuracaoPatchSchema.safeParse(request.body);
-  if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
-  const data = parsed.data;
-  try {
-    if (data.googleClientSecret && /^[*•]+$/.test(data.googleClientSecret.trim())) {
-      return reply.status(400).send({
-        error: 'Revise os campos informados e tente novamente.',
-        fields: { googleClientSecret: 'Informe o novo segredo real; valores mascarados não são aceitos.' }
-      });
-    }
-
-    const configs = await db.select().from(schema.configuracoes).limit(1);
-    
-    if (configs.length > 0) {
-      const protectedClientSecret = data.googleClientSecret?.trim()
-        ? LocalSecretService.protect(data.googleClientSecret.trim())
-        : undefined;
-      const configAtualizada = await db.transaction(async (tx) => {
-        const updated = await tx.update(schema.configuracoes).set({
-          empresaNome: data.empresaNome !== undefined ? data.empresaNome : undefined,
-          empresaCnpj: data.empresaCnpj !== undefined ? data.empresaCnpj : undefined,
-          dadosPasta: data.dadosPasta !== undefined ? data.dadosPasta : undefined,
-          adminNome: data.adminNome !== undefined ? data.adminNome : undefined,
-          adminEmail: data.adminEmail !== undefined ? data.adminEmail : undefined,
-          adminSenhaHash: data.adminSenha !== undefined ? hashAdminPassword(data.adminSenha) : undefined,
-          googleClientId: data.googleClientId !== undefined ? data.googleClientId : undefined,
-          googleClientSecret: protectedClientSecret,
-          googleRefreshToken: data.googleRefreshToken === null ? null : undefined,
-          googleAccessToken: data.googleAccessToken === null ? null : undefined,
-          googleSyncActive: data.googleSyncActive !== undefined ? data.googleSyncActive : undefined,
-          updatedAt: new Date().toISOString()
-        }).where(eq(schema.configuracoes.id, configs[0].id)).returning();
-        await AuditLogService.log('UPDATE', 'Configuração', configs[0], updated[0], tx);
-        return updated;
-      });
-      return sanitizeConfiguracao(configAtualizada[0]);
-    } else {
-      return reply.status(409).send({ error: 'Conclua a configuração inicial antes de atualizar preferências.' });
-    }
-  } catch (err) {
-    server.log.error(err);
-    return reply.status(500).send({ error: 'Erro ao atualizar configurações' });
-  }
-});
-
-// Integração com Google Agenda (Calendar)
-server.get('/api/google/status', async (request, reply) => {
-  try {
-    const configs = await db.select().from(schema.configuracoes).limit(1);
-    if (!configs[0]) {
-      return { conectado: false, syncActive: false, configured: false };
-    }
-    const hasKeys = !!(configs[0].googleClientId && configs[0].googleClientSecret);
-    const hasToken = !!configs[0].googleRefreshToken;
-    return {
-      conectado: hasToken,
-      syncActive: !!configs[0].googleSyncActive,
-      configured: hasKeys
-    };
-  } catch (err) {
-    server.log.error(err);
-    return reply.status(500).send({ error: 'Erro ao obter status da Google Agenda' });
-  }
-});
-
-server.get('/api/google/auth-url', async (request, reply) => {
-  try {
-    const state = createGoogleOAuthState();
-    const url = await GoogleCalendarService.getAuthUrl(state);
-    return { url };
-  } catch (err) {
-    server.log.error(err);
-    return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao gerar URL de autorização do Google') });
-  }
-});
-
-server.get('/api/google/callback', async (request, reply) => {
-  const { code, state, error } = request.query as { code?: string; state?: string; error?: string };
-  if (error) {
-    return reply.status(400).send({ error: `Autorização do Google não concluída: ${error}` });
-  }
-  if (!code) {
-    return reply.status(400).send({ error: 'Código de autorização inválido' });
-  }
-  if (!state || !consumeGoogleOAuthState(state)) {
-    return reply.status(400).send({
-      error: 'Sessão de autorização inválida ou expirada. Volte ao GeoGestor e tente conectar novamente.'
-    });
-  }
-
-  try {
-    await GoogleCalendarService.authenticate(code);
-    reply.type('text/html').send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="utf-8">
-          <title>GeoGestor Conectado</title>
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #09090b; color: #f4f4f5; margin: 0; }
-            .card { background-color: #18181b; padding: 2.5rem; border-radius: 1rem; box-shadow: 0 4px 30px rgba(0,0,0,0.3); text-align: center; border: 1px solid #27272a; max-width: 400px; }
-            h1 { color: #14b8a6; margin-top: 0; }
-            p { color: #a1a1aa; line-height: 1.6; }
-            .btn { background-color: #14b8a6; color: #09090b; border: none; padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: bold; cursor: pointer; margin-top: 1.5rem; font-size: 0.9rem; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>Conectado com Sucesso!</h1>
-            <p>Seu GeoGestor foi conectado com sucesso à sua conta do Google Agenda. A sincronização agora está ativa.</p>
-            <button class="btn" onclick="window.close()">Fechar esta Aba</button>
-          </div>
-        </body>
-      </html>
-    `);
-  } catch (err) {
-    server.log.error(err);
-    return reply.status(500).send({ error: 'Erro ao autenticar com o Google' });
-  }
-});
-
-server.post('/api/google/sync', async (request, reply) => {
-  try {
-    const results = await GoogleCalendarService.sync();
-    return { success: true, ...results };
-  } catch (err) {
-    server.log.error(err);
-    return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao sincronizar com Google Agenda') });
-  }
-});
-
-// In production, serve the compiled React frontend
-const isProduction = process.env.NODE_ENV === 'production';
-
-if (isProduction) {
-  // Resolve path to the web dist folder
-  // In packaged app: resources/app/apps/api/dist -> ../../web/dist
-  const webDistPath = process.env.GEOGESTOR_WEB_DIST
-    || path.resolve(__dirname, '../../web/dist');
-
-  server.register(fastifyStatic, {
-    root: webDistPath,
-    prefix: '/',
-  });
-
-  // SPA fallback: any non-API route serves index.html
-  server.setNotFoundHandler(async (request, reply) => {
-    if (request.url.startsWith('/api/')) {
-      reply.status(404).send({ error: 'Not Found' });
-    } else {
-      return reply.sendFile('index.html');
-    }
-  });
-}
-
-export const start = async () => {
-  const startupStartedAt = performance.now();
-  const startupPhases: Record<string, number> = {};
-  const measurePhase = async <T>(name: string, task: () => Promise<T>) => {
-    const startedAt = performance.now();
-    try {
-      return await task();
-    } finally {
-      startupPhases[name] = Math.round((performance.now() - startedAt) * 100) / 100;
-    }
-  };
-  try {
-    if (process.env.NODE_ENV === 'production' && !process.env.GEOGESTOR_API_TOKEN) {
-      throw new Error('Inicialização recusada: GEOGESTOR_API_TOKEN não foi configurado.');
-    }
-    if (process.env.NODE_ENV === 'production' && !process.env.GEOGESTOR_SECRET_KEY) {
-      throw new Error('Inicialização recusada: a chave local de proteção de segredos não foi configurada.');
-    }
-    const dataDir = getDataDirectory();
-    await measurePhase('dataDirectoryMs', () => fs.mkdir(dataDir, { recursive: true }));
-
-    await measurePhase('databaseReadyMs', () => dbReady);
-    
-    // Run schema migrations via code
-    try {
-      await measurePhase('runtimeMigrationsMs', () => runRuntimeMigrations());
-    } catch (error) {
-      await OperationalLogService.writeRequired('database-migration-failed', { error }, 'error');
-      throw error;
-    }
-    await measurePhase('localSecretsMs', () => LocalSecretService.migrateStoredGoogleSecrets());
-    await measurePhase('operationalStateMs', () => OperationalLogService.loadState());
-
-    const port = Number(process.env.PORT) || 3001;
-    server.listen({ port, host: '127.0.0.1' }, (err, address) => {
-      if (err) {
-        server.log.error(err);
-        process.exit(1);
-      }
-      
-      // Inicia os serviços de agendamento em background (Backups, Calendário, etc)
-      SchedulerService.start();
-
-      const startupEvidence = {
-        ...startupPhases,
-        listenMs: Math.round((performance.now() - startupStartedAt) * 100) / 100,
-        processUptimeMs: Math.round((performance.now() - apiProcessStartedAt) * 100) / 100
-      };
-      void OperationalLogService.info('api-startup-ready', startupEvidence);
-      console.log(`[GEO-API] Geogestor API Server running on ${address}`);
-      if (process.send) {
-        process.send('ready');
-      }
-    });
-
-    // Graceful Shutdown
-    process.once('SIGTERM', () => {
-      SchedulerService.stop();
-      SchedulerService.prepareForShutdown().catch((error) => {
-        server.log.error({ err: error }, 'Falha no backup configurado para o encerramento');
-        process.send?.({ type: 'shutdown-backup-failed', message: getErrorMessage(error, 'O backup de encerramento falhou.') });
-      }).then(() => server.close()).then(() => {
-        console.log('[GEO-API] Server closed gracefully.');
-        process.exit(0);
-      });
-    });
-  } catch (err) {
-    server.log.error(err);
-    process.exit(1);
-  }
-};
-
 // Auto-start when run directly (not imported by Electron)
 if (require.main === module) {
   start();

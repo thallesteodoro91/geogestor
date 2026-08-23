@@ -246,6 +246,7 @@ export function AuditLogs() {
 
       {/* Main Filter & Feed Section */}
       <PageFilterBar
+        layout="compact"
         filtersOpen={showFilters}
         onFiltersToggle={() => setShowFilters((current) => !current)}
         onClear={() => {

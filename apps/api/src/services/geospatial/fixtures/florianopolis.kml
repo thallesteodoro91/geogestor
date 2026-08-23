@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark><name>Ponto de apoio</name><ExtendedData><Data name="codigo"><value>BASE-01</value></Data></ExtendedData><Point><coordinates>-48.548220,-27.594870,5</coordinates></Point></Placemark>
+    <Placemark><name>Linha de levantamento</name><LineString><coordinates>-48.548220,-27.594870 -48.547800,-27.594500</coordinates></LineString></Placemark>
+    <Placemark><name>Imóvel com área excluída</name><Polygon>
+      <outerBoundaryIs><LinearRing><coordinates>-48.549,-27.595 -48.547,-27.595 -48.547,-27.593 -48.549,-27.593 -48.549,-27.595</coordinates></LinearRing></outerBoundaryIs>
+      <innerBoundaryIs><LinearRing><coordinates>-48.5485,-27.5945 -48.5475,-27.5945 -48.5475,-27.5935 -48.5485,-27.5935 -48.5485,-27.5945</coordinates></LinearRing></innerBoundaryIs>
+    </Polygon></Placemark>
+  </Document>
+</kml>

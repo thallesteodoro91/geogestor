@@ -2,9 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
 
-const appVersion = JSON.parse(
+const technicalVersion = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
 ).version as string
+const appVersion = technicalVersion.replace(/\.0$/, '')
 
 // https://vite.dev/config/
 export default defineConfig({

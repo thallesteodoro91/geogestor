@@ -10,6 +10,7 @@ import {
   Eye,
   FilePdf,
   FileText,
+  Funnel,
   MagnifyingGlass,
   PencilSimple,
   Plus,
@@ -28,6 +29,7 @@ import { cn } from '../../utils/cn';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { commercialContentClass } from '../../utils/commercialLayout';
+import { filterBarClass, filterClearButtonClass, filterControlClass } from '../../utils/filterStyles';
 import { BudgetDetails } from './BudgetDetails';
 import { buildBudgetEditorPath, getBudgetListPath, isSafeEntityId, loadBudgetListPosition, saveBudgetListPosition } from './budgetNavigation';
 import { currencyInputToCents, formatBasisPoints, formatCurrency, formatDate } from './budgetForm';
@@ -363,31 +365,59 @@ export function Orcamentos() {
               Novo orçamento
             </button>
           )}
-          navigation={<ModuleNavigation module="commercial" className="mb-0" />}
+          navigation={(
+            <ModuleNavigation
+              module="commercial"
+              className="mb-0"
+              trailingLayout="responsive"
+              trailing={(
+                <div className={cn(filterBarClass, 'flex min-w-0 flex-col gap-2 sm:w-fit sm:max-w-full sm:flex-row sm:items-center')}>
+                  <label className="relative block w-full min-w-0 sm:w-[32rem] sm:max-w-[55vw] 2xl:w-[26rem] 2xl:max-w-none">
+                    <span className="sr-only">Buscar por número, cliente, imóvel ou descrição</span>
+                    <MagnifyingGlass aria-hidden="true" size={18} className="pointer-events-none absolute left-3 top-2.5 text-text-muted" />
+                    <input
+                      name="query"
+                      type="search"
+                      autoComplete="off"
+                      value={searchParams.get('query') || ''}
+                      onChange={(event) => updateFilter('query', event.target.value)}
+                      placeholder="Número, cliente, imóvel…"
+                      className={cn(fieldClass, 'pl-10')}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    aria-expanded={showAdvancedFilters}
+                    aria-controls="budget-filter-panel"
+                    onClick={() => setShowAdvancedFilters((value) => !value)}
+                    className={cn(filterControlClass, 'inline-flex shrink-0 items-center justify-center gap-2 px-4 text-zinc-700 dark:text-zinc-200')}
+                  >
+                    <Funnel aria-hidden="true" className="h-4 w-4" />
+                    Filtros
+                    {activeFilters.length + (selectedStatus ? 1 : 0) > 0 ? (
+                      <span className="rounded-full bg-brand-primary-600 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">{activeFilters.length + (selectedStatus ? 1 : 0)}</span>
+                    ) : null}
+                  </button>
+                  {activeFilters.length + (selectedStatus ? 1 : 0) > 0 ? (
+                    <button type="button" onClick={clearFilters} className={cn(filterClearButtonClass, 'inline-flex items-center justify-center gap-2')}>
+                      <X aria-hidden="true" className="h-4 w-4" />
+                      Limpar
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            />
+          )}
         />
 
         <PageFilterBar
-          search={(
-            <label className="relative block">
-              <span className="sr-only">Buscar por número, cliente, imóvel ou descrição</span>
-              <MagnifyingGlass aria-hidden="true" size={18} className="pointer-events-none absolute left-3 top-2.5 text-text-muted" />
-              <input
-                name="query"
-                type="search"
-                autoComplete="off"
-                value={searchParams.get('query') || ''}
-                onChange={(event) => updateFilter('query', event.target.value)}
-                placeholder="Número, cliente, imóvel…"
-                className={cn(fieldClass, 'pl-10')}
-              />
-            </label>
-          )}
           filtersOpen={showAdvancedFilters}
           onFiltersToggle={() => setShowAdvancedFilters((value) => !value)}
           filterPanelId="budget-filter-panel"
           activeFilterCount={activeFilters.length + (selectedStatus ? 1 : 0)}
           onClear={clearFilters}
           panelClassName="lg:grid-cols-4"
+          showControls={false}
         >
           <label className="space-y-1.5 text-xs font-semibold text-text-secondary">
             <span>Cliente</span>

@@ -47,29 +47,13 @@ async function expectNoSeriousA11yViolations(page: Page) {
   }).toBe(true);
 
   const results = await new AxeBuilder({ page })
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
     .analyze();
-  const blocking = results.violations.filter((violation) =>
-    violation.impact === 'critical' || violation.impact === 'serious'
-  );
-  expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
+  expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 }
 
 test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
-  test('configuração inicial cria identidade e exige desbloqueio', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: 'Bem-vindo ao GeoGestor' })).toBeVisible();
-    await expectNoSeriousA11yViolations(page);
-
-    await page.getByLabel('Nome da empresa').fill('SkyGeo E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-E2E');
-    await page.getByLabel('Nome do administrador').fill('Thalles E2E');
-    await page.getByLabel('E-mail').fill('thalles.e2e@example.test');
-    await page.getByLabel('Senha local').fill(PASSWORD);
-    await page.getByRole('button', { name: 'Concluir configuração' }).click();
-
-    await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
-  });
+  test.setTimeout(90_000);
 
   test('senha incorreta é recusada, desbloqueio mostra identidade e bloqueio manual funciona', async ({ page }) => {
     await page.goto('/');
@@ -102,20 +86,20 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('button', { name: 'Salvar cliente' }).click();
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
-    await page.getByPlaceholder('Buscar clientes por nome, documento ou contato…').fill(CLIENT_NAME);
+    await page.getByRole('searchbox', { name: 'Buscar clientes' }).fill(CLIENT_NAME);
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
     await expect(page).toHaveURL(/\/clientes\?q=Cliente(?:\+|%20)E2E/);
     await page.getByRole('link', { name: 'CRM e Funil', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'CRM' })).toBeVisible();
     await page.goBack();
-    await expect(page.getByPlaceholder('Buscar clientes por nome, documento ou contato…')).toHaveValue(CLIENT_NAME);
+    await expect(page.getByRole('searchbox', { name: 'Buscar clientes' })).toHaveValue(CLIENT_NAME);
 
     await page.getByRole('button', { name: `Ações de ${CLIENT_NAME}` }).click();
     await page.getByRole('menuitem', { name: 'Editar' }).click();
     await page.getByLabel('Nome completo').fill(UPDATED_CLIENT_NAME);
     await page.getByRole('button', { name: 'Salvar cliente' }).click();
     await expect(page.getByRole('dialog', { name: /Editar cliente/ })).toHaveCount(0);
-    const clientSearch = page.getByPlaceholder('Buscar clientes por nome, documento ou contato…');
+    const clientSearch = page.getByRole('searchbox', { name: 'Buscar clientes' });
     await clientSearch.fill(UPDATED_CLIENT_NAME);
     await expect(clientSearch).toHaveValue(UPDATED_CLIENT_NAME);
     await expect(page.getByText(UPDATED_CLIENT_NAME, { exact: true }).first()).toBeVisible();
@@ -155,7 +139,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
   test('contas a receber ficam centralizadas no Financeiro e a rota antiga redireciona', async ({ page }) => {
     await unlock(page);
     await navigateBySidebar(page, 'Financeiro');
-    await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: 'Contas a receber' }).click();
 
     await expect(page).toHaveURL(/\/financeiro\?tab=faturas$/);
@@ -172,7 +156,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('despesas por categoria alternam entre treemap e barras e preservam a tabela', async ({ page }) => {
+  test('despesas por categoria usam barras compactas e preservam os valores exatos', async ({ page }) => {
     await unlock(page);
     const expense = (id: string, categoria: string, valor: number) => ({
       id,
@@ -195,9 +179,10 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     }));
     await navigateBySidebar(page, 'Financeiro');
 
-    await expect(page.locator('[data-chart-mode="treemap"]')).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Valores exatos das despesas por categoria' })).toBeVisible();
-    await expect(page.getByRole('row', { name: /Combustível.*1.*45/ })).toBeVisible();
+    const categoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
+    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
+    await expect(categoryChart.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(categoryChart.getByText('R$ 450,00', { exact: true })).toBeVisible();
 
     await page.unroute('**/api/financeiro/despesas');
     await page.route('**/api/financeiro/despesas', (route) => route.fulfill({
@@ -209,10 +194,12 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
     await page.getByLabel('Senha local').fill(PASSWORD);
     await page.getByRole('button', { name: 'Desbloquear' }).click();
-    await expect(page.getByRole('heading', { name: 'Gestão financeira 360' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
 
+    const updatedCategoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
     await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
-    await expect(page.getByRole('table', { name: 'Valores exatos das despesas por categoria' })).toBeVisible();
+    await expect(updatedCategoryChart.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(updatedCategoryChart.getByText('Alimentação', { exact: true })).toHaveCount(0);
     await page.unroute('**/api/financeiro/despesas');
   });
 
@@ -300,55 +287,66 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('link', { name: 'Ajuda', exact: true })).toBeVisible();
   });
 
-  test('notificações permitem ler tudo, apagar tudo e abrir o projeto informado', async ({ page }) => {
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
-    const dateKey = (date: Date) => date.toISOString().slice(0, 10);
+  test('central de alertas lê, apaga, restaura e abre o projeto informado', async ({ page }) => {
+    const projectA = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const projectB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+    const alertA = '11111111-1111-4111-8111-111111111111';
+    const alertB = '22222222-2222-4222-8222-222222222222';
+    const readIds = new Set<string>();
+    const hiddenIds = new Set<string>();
+    const alerts = [
+      {
+        id: alertA, occurrenceKey: `project:${projectA}:2026-08-10:once`, category: 'project',
+        categoryLabel: 'Projetos e serviços', sourceId: projectA, title: 'Projeto Notificação A',
+        description: 'Prazo de entrega do projeto', dueDate: '2026-08-10', daysUntilDue: -1,
+        timingLabel: 'Vencido há 1 dia', severity: 'critical', link: `/projetos/${projectA}`,
+        readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-10T12:00:00.000Z'
+      },
+      {
+        id: alertB, occurrenceKey: `project:${projectB}:2026-08-11:once`, category: 'project',
+        categoryLabel: 'Projetos e serviços', sourceId: projectB, title: 'Projeto Notificação B',
+        description: 'Prazo de entrega do projeto', dueDate: '2026-08-11', daysUntilDue: 0,
+        timingLabel: 'Vence hoje', severity: 'warning', link: `/projetos/${projectB}`,
+        readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-10T12:00:00.000Z'
+      }
+    ];
+    const settings = {
+      enabled: true, nativeEnabled: false,
+      categories: ['project', 'task', 'receivable', 'payable', 'budget', 'license', 'condition', 'appointment', 'crm']
+        .map((category) => ({ category, enabled: true, daysBefore: 7, recurrence: 'daily', intervalDays: 1, alertOnDueDate: true, keepOverdue: true }))
+    };
 
-    await page.addInitScript(() => {
-      localStorage.removeItem('geogestor_cleared_notifications');
-      localStorage.removeItem('geogestor_read_notifications');
-      localStorage.setItem('geogestor_alerta_dias', '7');
-    });
-    await page.route('**/api/projetos/deadlines*', async (route) => {
-      if (route.request().method() === 'OPTIONS') {
+    await page.route('**/api/alertas**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const cors = {
+        'access-control-allow-origin': '*',
+        'access-control-allow-headers': '*',
+        'access-control-allow-methods': 'GET,POST,OPTIONS'
+      };
+      if (request.method() === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      if (request.method() === 'GET' && pathname === '/api/alertas') {
         await route.fulfill({
-          status: 204,
-          headers: {
-            'access-control-allow-origin': '*',
-            'access-control-allow-headers': '*',
-            'access-control-allow-methods': 'GET,OPTIONS',
-          },
+          status: 200, contentType: 'application/json', headers: cors,
+          body: JSON.stringify({
+            items: alerts.filter((item) => !hiddenIds.has(item.id)).map((item) => ({
+              ...item,
+              readAt: readIds.has(item.id) ? '2026-08-11T12:00:00.000Z' : null
+            })),
+            settings,
+            generatedAt: new Date().toISOString()
+          })
         });
         return;
       }
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        headers: { 'access-control-allow-origin': '*' },
-        body: JSON.stringify([
-          {
-            id: 'notificacao-a',
-            nome: 'Projeto Notificação A',
-            status: 'Em andamento',
-            dataEntrega: dateKey(yesterday),
-          },
-          {
-            id: 'notificacao-b',
-            nome: 'Projeto Notificação B',
-            status: 'Em andamento',
-            dataEntrega: dateKey(today),
-          },
-          {
-            id: 'notificacao-finalizada',
-            nome: 'Projeto Finalizado',
-            status: 'Finalizado',
-            dataEntrega: dateKey(yesterday),
-          },
-        ]),
-      });
+      const ids = (request.postDataJSON() as { ids?: string[] } | null)?.ids ?? [];
+      if (pathname === '/api/alertas/ler') ids.forEach((id) => readIds.add(id));
+      if (pathname === '/api/alertas/ocultar') ids.forEach((id) => hiddenIds.add(id));
+      if (pathname === '/api/alertas/restaurar') ids.forEach((id) => hiddenIds.delete(id));
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: cors, body: '{"success":true}' });
     });
 
     await unlock(page);
@@ -356,43 +354,180 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(notificationTrigger).toHaveAttribute('aria-label', /2 não lida/);
     await notificationTrigger.click();
 
-    const panel = page.getByRole('dialog', { name: 'Central de notificações' });
-    await expect(panel).toContainText('2 notificações não lidas');
+    const panel = page.getByRole('dialog', { name: 'Alertas e prazos' });
+    await expect(panel).toContainText('2 não lidas');
     await expect(panel).toContainText('Projeto Notificação A');
     await expect(panel).toContainText('Projeto Notificação B');
-    await expect(panel).not.toContainText('Projeto Finalizado');
 
-    await panel
-      .locator('article')
-      .filter({ hasText: 'Projeto Notificação A' })
-      .getByRole('button')
-      .first()
-      .click();
-    await expect(page).toHaveURL(/\/projetos\/notificacao-a$/);
+    await panel.locator('article').filter({ hasText: 'Projeto Notificação A' }).getByRole('button').first().click();
+    await expect(page).toHaveURL(new RegExp(`/projetos/${projectA}$`));
+    await expect.poll(() => readIds.has(alertA)).toBe(true);
 
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /1 não lida/);
     await notificationTrigger.click();
-    await panel.getByRole('button', { name: 'Marcar todas as notificações como lidas' }).click();
-    await expect(panel).toContainText('Nenhuma notificação não lida');
+    await panel.getByRole('button', { name: 'Marcar alertas filtrados como lidos' }).click();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /0 não lida/);
-    await expect(panel.locator('article[data-unread="false"]')).toHaveCount(2);
+    await expect(panel).toContainText('Tudo lido');
 
-    await panel.getByRole('button', { name: 'Apagar todas as notificações' }).click();
-    await expect(panel).toContainText('Nenhuma notificação');
+    await panel.getByRole('button', { name: 'Apagar alertas filtrados' }).click();
     await expect(panel.locator('article')).toHaveCount(0);
+    expect(hiddenIds.size).toBe(2);
     await panel.getByRole('button', { name: 'Desfazer' }).click();
     await expect(panel.locator('article')).toHaveCount(2);
-    await panel.getByRole('button', { name: 'Apagar todas as notificações' }).click();
-    await expect(panel.locator('article')).toHaveCount(0);
+    expect(hiddenIds.size).toBe(0);
+  });
 
-    const persistedState = await page.evaluate(() => ({
-      read: JSON.parse(localStorage.getItem('geogestor_read_notifications') ?? '[]') as string[],
-      cleared: JSON.parse(localStorage.getItem('geogestor_cleared_notifications') ?? '[]') as string[],
+  test('alertas abrem todos os destinos canônicos do GeoGestor', async ({ page }) => {
+    const entityId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const relatedId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    const destinations = [
+      { title: 'Destino projeto', category: 'project', categoryLabel: 'Projetos e serviços', link: `/projetos/${entityId}` },
+      { title: 'Destino serviço do cliente', category: 'project', categoryLabel: 'Projetos e serviços', link: `/clientes/${entityId}` },
+      { title: 'Destino tarefa', category: 'task', categoryLabel: 'Tarefas', link: `/tarefas?tarefaId=${entityId}` },
+      { title: 'Destino conta a receber', category: 'receivable', categoryLabel: 'Contas a receber', link: `/financeiro?tab=faturas&parcela=${entityId}` },
+      { title: 'Destino conta a pagar', category: 'payable', categoryLabel: 'Contas a pagar', link: `/financeiro?tab=pagar&despesa=${entityId}` },
+      { title: 'Destino orçamento', category: 'budget', categoryLabel: 'Orçamentos', link: `/orcamentos/${entityId}/editar` },
+      { title: 'Destino licença', category: 'license', categoryLabel: 'Licenças ambientais', link: `/ambiental/licencas/${entityId}` },
+      { title: 'Destino condicionante', category: 'condition', categoryLabel: 'Condicionantes', link: `/ambiental/licencas/${entityId}?tab=conditions&condicionante=${relatedId}` },
+      { title: 'Destino agenda', category: 'appointment', categoryLabel: 'Agenda', link: `/calendario/compromisso/${entityId}` },
+      { title: 'Destino CRM', category: 'crm', categoryLabel: 'CRM', link: `/crm?oportunidade=${entityId}` }
+    ];
+    const items = destinations.map((destination, index) => ({
+      id: `${(index + 1).toString(16).padStart(8, '0')}-0000-4000-8000-000000000000`,
+      occurrenceKey: `${destination.category}:destination-${index}:once`,
+      category: destination.category,
+      categoryLabel: destination.categoryLabel,
+      sourceId: `destination-${index}`,
+      title: destination.title,
+      description: 'Validação do destino canônico',
+      dueDate: '2026-08-11',
+      daysUntilDue: 0,
+      timingLabel: 'Vence hoje',
+      severity: 'warning',
+      link: destination.link,
+      readAt: null,
+      nativeNotifiedAt: null,
+      createdAt: '2026-08-11T12:00:00.000Z'
     }));
-    expect(persistedState.read).toHaveLength(2);
-    expect(persistedState.cleared).toHaveLength(2);
+
+    await page.route('**/api/alertas**', async (route) => {
+      const request = route.request();
+      const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+      if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+      if (request.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', headers, body: '{"success":true}' });
+      return route.fulfill({
+        status: 200, contentType: 'application/json', headers,
+        body: JSON.stringify({
+          items,
+          settings: { enabled: true, nativeEnabled: false, categories: [] },
+          generatedAt: new Date().toISOString()
+        })
+      });
+    });
+
+    await unlock(page);
+    const trigger = page.locator('main button[aria-label^="Notificações:"]');
+    for (const destination of destinations) {
+      await trigger.click();
+      const expected = new URL(destination.link, 'http://geogestor.local');
+      const navigated = page.waitForURL((url) => (
+        url.pathname === expected.pathname
+        && [...expected.searchParams].every(([key, value]) => url.searchParams.get(key) === value)
+      ));
+      await page.getByRole('button', {
+        name: `${destination.categoryLabel}: ${destination.title}. Vence hoje`,
+        exact: true
+      }).click();
+      await navigated;
+      await page.goBack();
+      await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
+    }
+  });
+
+  test('alerta navega mesmo quando a gravação de leitura falha', async ({ page }) => {
+    const projectId = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    await page.route('**/api/alertas**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+      if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+      if (request.method() === 'POST' && pathname === '/api/alertas/ler') {
+        return route.fulfill({ status: 500, contentType: 'application/json', headers, body: '{"message":"Falha sintética"}' });
+      }
+      return route.fulfill({
+        status: 200, contentType: 'application/json', headers,
+        body: JSON.stringify({
+          items: [{
+            id: '33333333-3333-4333-8333-333333333333', occurrenceKey: 'project:test:once', category: 'project',
+            categoryLabel: 'Projetos e serviços', sourceId: projectId, title: 'Projeto resiliente', description: 'Teste de navegação',
+            dueDate: '2026-08-11', daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: `/projetos/${projectId}`,
+            readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-11T12:00:00.000Z'
+          }],
+          settings: { enabled: true, nativeEnabled: false, categories: [] },
+          generatedAt: new Date().toISOString()
+        })
+      });
+    });
+
+    await unlock(page);
+    await page.locator('main button[aria-label^="Notificações:"]').click();
+    await page.getByRole('button', { name: /Projetos e serviços: Projeto resiliente/ }).click();
+    await expect(page).toHaveURL(new RegExp(`/projetos/${projectId}$`));
+    await expect(page.getByText('O alerta foi aberto, mas não foi possível marcá-lo como lido.')).toBeVisible();
+  });
+
+  test('notificação nativa só é confirmada quando o Windows informa exibição', async ({ page }) => {
+    let nativeConfirmations = 0;
+    await page.addInitScript(() => {
+      const state = window as typeof window & { __nativeCalls?: number; __nativeShouldShow?: boolean };
+      state.__nativeCalls = 0;
+      state.__nativeShouldShow = false;
+      Object.assign(window, {
+        electronAPI: {
+          showDeadlineNotification: async () => {
+            state.__nativeCalls = (state.__nativeCalls ?? 0) + 1;
+            return state.__nativeShouldShow === true;
+          },
+          onOpenDeadlineAlert: () => () => undefined
+        }
+      });
+    });
+    await page.route('**/api/alertas**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
+      if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+      if (request.method() === 'POST' && pathname === '/api/alertas/notificacao-nativa') {
+        nativeConfirmations += 1;
+        return route.fulfill({ status: 200, contentType: 'application/json', headers, body: '{"success":true}' });
+      }
+      return route.fulfill({
+        status: 200, contentType: 'application/json', headers,
+        body: JSON.stringify({
+          items: [{
+            id: '44444444-4444-4444-8444-444444444444', occurrenceKey: 'task:test:once', category: 'task',
+            categoryLabel: 'Tarefas', sourceId: 'task-test', title: 'Tarefa nativa', description: 'Teste do Windows',
+            dueDate: '2026-08-11', daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: '/tarefas?tarefaId=task-test',
+            readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-11T12:00:00.000Z'
+          }],
+          settings: { enabled: true, nativeEnabled: true, categories: [] },
+          generatedAt: new Date().toISOString()
+        })
+      });
+    });
+
+    await unlock(page);
+    await expect.poll(() => page.evaluate(() => (window as typeof window & { __nativeCalls?: number }).__nativeCalls ?? 0)).toBe(1);
+    expect(nativeConfirmations).toBe(0);
+    await page.waitForTimeout(100);
+
+    await page.evaluate(() => {
+      (window as typeof window & { __nativeShouldShow?: boolean }).__nativeShouldShow = true;
+      window.dispatchEvent(new CustomEvent('geogestor:alerts-invalidated'));
+    });
+    await expect.poll(() => nativeConfirmations).toBe(1);
   });
 
   test('Clientes, CRM e Orçamentos mantêm corpo amplo e cabeçalho alinhado em 1400 px', async ({ page }) => {

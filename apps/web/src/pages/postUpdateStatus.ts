@@ -11,7 +11,7 @@ export type PostUpdateBackupStatus = {
   cloud: { confirmation: 'unavailable' | 'pending' | 'confirmed' | 'failed' };
   recovery: { configured: boolean; confirmed: boolean };
   summary: {
-    state: 'not_configured' | 'running' | 'failed' | 'pending' | 'protected' | 'created' | 'incomplete';
+    state: 'empty' | 'running' | 'failed' | 'pending' | 'overdue' | 'local_only' | 'external_unverified' | 'recovery_incomplete' | 'restore_test_due' | 'protected';
     configured: boolean;
     integrity: string | null;
   };
@@ -55,4 +55,3 @@ export function assessPostUpdateStatus(input: {
     warnings
   };
 }
-

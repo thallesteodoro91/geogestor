@@ -7,10 +7,12 @@ import {
   CalendarBlank,
   CaretLeft,
   CaretRight,
+  Funnel,
   MagnifyingGlass,
   Plus,
   Scales,
-  WarningCircle
+  WarningCircle,
+  X
 } from '@phosphor-icons/react';
 import type { EnvironmentalDemandListResponse } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
@@ -26,7 +28,7 @@ import {
   headerPrimaryActionIconClass,
   secondarySmallActionButtonClass,
 } from '../../utils/actionStyles';
-import { filterSearchInputClass } from '../../utils/filterStyles';
+import { filterBarClass, filterClearButtonClass, filterControlClass, filterSearchInputClass } from '../../utils/filterStyles';
 import {
   localNavigationBarClass,
   localNavigationButtonClass,
@@ -197,17 +199,18 @@ export function ListagemAmbiental() {
         className={activeTab === 'car' ? 'mb-3' : 'mb-4'}
       />
 
-      <div className={cn('relative min-w-0 max-w-full', activeTab === 'car' ? 'mb-3' : 'mb-4')}>
-        <div
-          ref={tabListRef}
-          role="tablist"
-          aria-label="Módulo Ambiental"
-          onScroll={(event) => setTabScrollCues({
-            left: event.currentTarget.scrollLeft > 2,
-            right: event.currentTarget.scrollWidth - event.currentTarget.clientWidth - event.currentTarget.scrollLeft > 2
-          })}
-          className={cn(localNavigationBarClass, 'flex scroll-px-3 gap-3')}
-        >
+      <div className={cn('min-w-0 max-w-full 2xl:flex 2xl:items-start 2xl:gap-4', activeTab === 'car' ? 'mb-3' : 'mb-4')}>
+        <div className="relative min-w-0 2xl:flex-1">
+          <div
+            ref={tabListRef}
+            role="tablist"
+            aria-label="Módulo Ambiental"
+            onScroll={(event) => setTabScrollCues({
+              left: event.currentTarget.scrollLeft > 2,
+              right: event.currentTarget.scrollWidth - event.currentTarget.clientWidth - event.currentTarget.scrollLeft > 2
+            })}
+            className={cn(localNavigationBarClass, 'flex scroll-px-3 gap-3')}
+          >
         <button
           ref={(element) => { tabRefs.current[0] = element; }}
           id="ambiental-tab-demandas"
@@ -259,17 +262,47 @@ export function ListagemAmbiental() {
           </span>
           Análise CAR
         </button>
+          </div>
+          {tabScrollCues.left && (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center rounded-l-xl bg-gradient-to-r from-white via-white to-transparent pl-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
+              <CaretLeft weight="bold" className="h-3.5 w-3.5" />
+            </span>
+          )}
+          {tabScrollCues.right && (
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end rounded-r-xl bg-gradient-to-l from-white via-white to-transparent pr-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
+              <CaretRight weight="bold" className="h-3.5 w-3.5" />
+            </span>
+          )}
         </div>
-        {tabScrollCues.left && (
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 z-10 flex w-10 items-center rounded-l-xl bg-gradient-to-r from-white via-white to-transparent pl-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
-            <CaretLeft weight="bold" className="h-3.5 w-3.5" />
-          </span>
-        )}
-        {tabScrollCues.right && (
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-end rounded-r-xl bg-gradient-to-l from-white via-white to-transparent pr-2 text-zinc-500 sm:hidden dark:from-zinc-900 dark:via-zinc-900 dark:text-zinc-300">
-            <CaretRight weight="bold" className="h-3.5 w-3.5" />
-          </span>
-        )}
+
+        {activeTab === 'ambiental' ? (
+          <div className={cn(filterBarClass, 'mt-3 flex min-w-0 flex-col gap-2 sm:w-fit sm:max-w-full sm:flex-row sm:items-center 2xl:mt-0 2xl:shrink-0')}>
+            <div className="relative w-full min-w-0 sm:w-[32rem] sm:max-w-[55vw] 2xl:w-[26rem] 2xl:max-w-none">
+              <label htmlFor={searchId} className="sr-only">Buscar demandas ambientais</label>
+              <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <input id={searchId} name="buscaAmbiental" type="search" autoComplete="off" value={searchTerm} onChange={(event) => updateParam('q', event.target.value, true)} placeholder="Buscar por demanda, cliente, órgão ou processo…" className={cn(filterSearchInputClass, 'pl-9')} />
+            </div>
+            <button
+              type="button"
+              aria-expanded={showFilters}
+              aria-controls={filterPanelId}
+              onClick={() => setShowFilters((current) => !current)}
+              className={cn(filterControlClass, 'inline-flex shrink-0 items-center justify-center gap-2 px-4 text-zinc-700 dark:text-zinc-200')}
+            >
+              <Funnel aria-hidden="true" className="h-4 w-4" />
+              Filtros
+              {activeFilterCount > 0 ? (
+                <span className="rounded-full bg-brand-primary-600 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white">{activeFilterCount}</span>
+              ) : null}
+            </button>
+            {activeFilterCount > 0 ? (
+              <button type="button" onClick={clearFilters} className={cn(filterClearButtonClass, 'inline-flex items-center justify-center gap-2')}>
+                <X aria-hidden="true" className="h-4 w-4" />
+                Limpar
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <section
@@ -284,13 +317,7 @@ export function ListagemAmbiental() {
           onClear={clearFilters}
           activeFilterCount={activeFilterCount}
           filterPanelId={filterPanelId}
-          search={
-            <div className="relative min-w-0">
-              <label htmlFor={searchId} className="sr-only">Buscar demandas ambientais</label>
-              <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-              <input id={searchId} name="buscaAmbiental" type="search" autoComplete="off" value={searchTerm} onChange={(event) => updateParam('q', event.target.value, true)} placeholder="Buscar por demanda, cliente, órgão ou processo…" className={cn(filterSearchInputClass, 'pl-9')} />
-            </div>
-          }
+          showControls={false}
         >
           <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo
             <FormSelect name="tipoAmbiental" autoComplete="off" value={tipo} onChange={(event) => updateParam('tipo', event.target.value)} className="geo-native-select mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">

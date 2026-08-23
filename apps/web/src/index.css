@@ -595,6 +595,10 @@
     border-color: hsl(var(--brand-primary-300) / 0.55);
   }
 
+  .dark .geo-button-secondary {
+    color: hsl(var(--text-primary));
+  }
+
   .geo-field {
     background-color: hsl(var(--brand-surface) / 0.96);
     border: 1px solid hsl(var(--brand-border-soft) / 0.92);
@@ -607,7 +611,12 @@
       color var(--motion-fast) var(--motion-ease-standard);
   }
 
-  .geo-field:hover {
+  .geo-field::placeholder {
+    color: hsl(var(--text-muted));
+    opacity: 1;
+  }
+
+  .geo-field:hover:not(:disabled) {
     border-color: hsl(var(--brand-border-strong) / 0.52);
   }
 
@@ -753,6 +762,55 @@
   .geo-calendar-footer-action:focus-visible {
     outline: 2px solid hsl(var(--brand-focus-ring));
     outline-offset: 2px;
+  }
+
+  .geo-field[aria-invalid="true"] {
+    border-color: #b91c1c;
+    box-shadow: 0 0 0 3px rgb(185 28 28 / 0.14);
+  }
+
+  .geo-field:disabled,
+  .geo-field[aria-disabled="true"] {
+    background-color: #f4f4f5;
+    border-color: #a1a1aa;
+    color: #52525b;
+    opacity: 1;
+  }
+
+  .geo-field:disabled::placeholder,
+  .geo-field[aria-disabled="true"]::placeholder {
+    color: #52525b;
+  }
+
+  .dark .geo-field {
+    background-color: #000000;
+    border-color: #52525b;
+    color: #ffffff;
+  }
+
+  .dark .geo-field::placeholder {
+    color: #ffffff;
+  }
+
+  .dark .geo-field:hover:not(:disabled) {
+    border-color: #a1a1aa;
+  }
+
+  .dark .geo-field[aria-invalid="true"] {
+    border-color: #f87171;
+    box-shadow: 0 0 0 3px rgb(248 113 113 / 0.22);
+  }
+
+  .dark .geo-field:disabled,
+  .dark .geo-field[aria-disabled="true"] {
+    background-color: #27272a;
+    border-color: #71717a;
+    color: #e4e4e7;
+  }
+
+  .dark .geo-field:disabled::placeholder,
+  .dark .geo-field[aria-disabled="true"]::placeholder {
+    color: #d4d4d8;
   }
 
   .geo-calendar-day {
@@ -1071,7 +1129,18 @@ select:not([multiple]):not([size]):not(.geo-form-select) {
 
 .dark input::placeholder,
 .dark textarea::placeholder {
-  color: #a1a1aa;
+  color: #d4d4d8 !important;
+  opacity: 1 !important;
+}
+
+.dark input.geo-filter-control::placeholder {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.dark .geo-select-trigger {
+  background-color: #09090b !important;
+  color: #ffffff !important;
 }
 
 .dark .shadow-sm {

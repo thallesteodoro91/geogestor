@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
-import { DEFAULT_COMPANY_TEMPLATE, loadCompanyTemplate, saveCompanyTemplate } from '../services/companyTemplate';
+import { loadCompanyTemplate, saveCompanyTemplate } from '../services/companyTemplate';
 import { APP_VERSION } from '../version';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
@@ -12,7 +12,6 @@ import {
   FolderOpen,
   Check, 
   Database,
-  DownloadSimple,
   Gear, 
   Info,
   Palette,
@@ -21,17 +20,15 @@ import {
   WarningCircle,
   Trash,
   Link,
-  Calendar,
   Bell,
   Buildings,
   Files,
   Wrench,
   ArrowClockwise,
-  Eye,
   MagnifyingGlass,
   CaretLeft,
   CaretRight,
-  ArrowCounterClockwise,
+  CaretDown,
   ShieldCheck,
   ClipboardText,
   Export,
@@ -42,16 +39,21 @@ import { cn } from '../utils/cn';
 import { geoFieldClass, geoPanelClass, geoTabButtonClass, geoTabIconClass } from '../utils/geoTheme';
 import { primarySmallActionButtonClass, primarySubmitButtonClass } from '../utils/actionStyles';
 import { BackupPolicyPanel } from '../components/BackupPolicyPanel';
+import { BackupProtectionDetails } from '../components/BackupStatusIndicator';
 import { AlertSettingsPanel } from '../components/AlertSettingsPanel';
 import { SettingsSaveBar, type SettingsSaveState } from '../components/SettingsSaveBar';
 import { requestOpenDiagnosticsFolder } from './diagnosticActions';
+import { GeoGestorHealthPanel } from './Configuracoes/GeoGestorHealthPanel';
+import { AppearanceSettingsPanel } from './Configuracoes/AppearanceSettingsPanel';
+import { GoogleCalendarSettingsPanel } from './Configuracoes/GoogleCalendarSettingsPanel';
+import { DocumentTemplateSettingsPanel } from './Configuracoes/DocumentTemplateSettingsPanel';
 
 const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
 type SettingsSection = typeof SETTINGS_SECTIONS[number];
 
 interface MaintenanceOperation {
   id: string;
-  type: 'backup_database' | 'backup_complete' | 'data_migration' | 'restore_test';
+  type: 'backup_database' | 'backup_complete' | 'data_migration' | 'restore_test' | 'integrity_check';
   status: 'running' | 'success' | 'failed' | 'cancelled';
   stage: string;
   startedAt: string;
@@ -83,6 +85,7 @@ interface MaintenanceHistoryEntry {
 
 const SETTINGS_SEARCH_INDEX: Array<{ section: SettingsSection; title: string; description: string; keywords: string[]; anchor?: string }> = [
   { section: 'empresa', title: 'Nome da empresa', description: 'Identificação usada no GeoGestor.', keywords: ['empresa', 'nome', 'responsável', 'usuário'], anchor: 'company-name' },
+  { section: 'empresa', title: 'Logotipo do aplicativo', description: 'Imagem exibida no canto superior do menu do GeoGestor.', keywords: ['logo', 'logotipo', 'imagem', 'marca', 'menu'], anchor: 'application-logo' },
   { section: 'empresa', title: 'E-mail operacional', description: 'Contato do responsável pelo sistema.', keywords: ['email', 'administrador', 'responsável'], anchor: 'admin-email' },
   { section: 'arquivos', title: 'Diretório de documentos', description: 'Pasta onde ficam os arquivos dos clientes.', keywords: ['diretório', 'pasta', 'arquivos', 'migração'], anchor: 'data-directory-target' },
   { section: 'backups', title: 'Política de backups', description: 'Frequência, destino e retenção.', keywords: ['backup', 'retenção', 'segurança', 'destino'], anchor: 'backup-policy-title' },
@@ -91,6 +94,7 @@ const SETTINGS_SEARCH_INDEX: Array<{ section: SettingsSection; title: string; de
   { section: 'modelos', title: 'Modelo oficial de documentos', description: 'Logo, cores, cabeçalho e termos.', keywords: ['modelo', 'documento', 'pdf', 'logo'], anchor: 'template-preview-title' },
   { section: 'integracoes', title: 'Google Agenda', description: 'Credenciais protegidas e sincronização.', keywords: ['google', 'agenda', 'integração', 'credencial', 'segurança'], anchor: 'google-client-id' },
   { section: 'aparencia', title: 'Tema do aplicativo', description: 'Claro, escuro ou padrão do sistema.', keywords: ['tema', 'aparência', 'escuro', 'claro'], anchor: 'appearance-title' },
+  { section: 'manutencao', title: 'Saúde do GeoGestor', description: 'Versão, banco, backups, espaço e qualidade dos dados.', keywords: ['saúde', 'versão', 'integridade', 'espaço', 'atualização'], anchor: 'geogestor-health-title' },
   { section: 'manutencao', title: 'Histórico operacional', description: 'Backups, restaurações, migrações e verificações.', keywords: ['histórico', 'auditoria', 'backup', 'migração'], anchor: 'maintenance-history-title' },
   { section: 'manutencao', title: 'Diagnóstico seguro', description: 'Pacote redigido para suporte técnico.', keywords: ['diagnóstico', 'suporte', 'exportar', 'segurança'], anchor: 'diagnostic-export-title' }
 ];
@@ -112,7 +116,7 @@ export function Configuracoes() {
   const [companySaveError, setCompanySaveError] = useState('');
   const [companyFieldErrors, setCompanyFieldErrors] = useState<Partial<Record<'empresaNome' | 'dadosPasta' | 'adminNome' | 'adminEmail', string>>>({});
   const settingsTabClass = (tab: SettingsSection, tone: Parameters<typeof geoTabButtonClass>[1]) =>
-    cn(geoTabButtonClass(activeTab === tab, tone), 'shrink-0 justify-start lg:w-full');
+    cn(geoTabButtonClass(activeTab === tab, tone), 'shrink-0 justify-start lg:w-[70%]');
   const systemPanelClass = cn(
     geoPanelClass,
     'relative overflow-hidden rounded-2xl p-5 shadow-sm before:absolute before:inset-x-0 before:top-0 before:h-1 before:bg-gradient-to-r before:from-brand-primary-500 before:via-brand-turquoise-400 before:to-brand-blue-500'
@@ -124,14 +128,13 @@ export function Configuracoes() {
   const systemFieldClass = cn(geoFieldClass, 'w-full px-3.5 py-2 text-xs font-semibold');
   const systemFieldMonoClass = cn(systemFieldClass, 'font-mono');
   const systemCompactFieldClass = cn(geoFieldClass, 'h-9 w-full px-3 text-xs font-medium');
-  const systemActionCardClass =
-    'geo-card-interactive geo-focus-ring flex min-h-[100px] items-start gap-3 rounded-2xl p-4 text-left disabled:cursor-not-allowed disabled:opacity-60';
-
   // Form states
   const [empresaNome, setEmpresaNome] = useState('');
   const [dadosPasta, setDadosPasta] = useState('');
   const [adminNome, setAdminNome] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
+  const [applicationLogoBase64, setApplicationLogoBase64] = useState('');
+  const [savedApplicationLogo, setSavedApplicationLogo] = useState('');
   const [savedCompanySnapshot, setSavedCompanySnapshot] = useState('');
   const [directoryTarget, setDirectoryTarget] = useState('');
   const [directoryStrategy, setDirectoryStrategy] = useState<'use' | 'copy' | 'move'>('copy');
@@ -141,28 +144,18 @@ export function Configuracoes() {
   const [migratingDirectory, setMigratingDirectory] = useState(false);
   const [directoryError, setDirectoryError] = useState('');
 
-  // Google Calendar States
-  const [googleClientId, setGoogleClientId] = useState('');
-  const [googleClientSecret, setGoogleClientSecret] = useState('');
-  const [savingGoogle, setSavingGoogle] = useState(false);
-  const [googleSaveState, setGoogleSaveState] = useState<SettingsSaveState>('saved');
-  const [googleSaveError, setGoogleSaveError] = useState('');
-  const [googleStatusError, setGoogleStatusError] = useState('');
-  const googlePollingRef = useRef<{ interval: number; timeout: number } | null>(null);
-  const [googleStatus, setGoogleStatus] = useState<{ conectado: boolean; syncActive: boolean; configured: boolean }>({
-    conectado: false,
-    syncActive: false,
-    configured: false
-  });
-  const [syncingGoogle, setSyncingGoogle] = useState(false);
-
   // Danger zone reset states
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetInputText, setResetInputText] = useState('');
   const [resetting, setResetting] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [restoreBundlePath, setRestoreBundlePath] = useState('');
+  const [restoreBundleAuthorization, setRestoreBundleAuthorization] = useState('');
+  const [restoreRecoveryMode, setRestoreRecoveryMode] = useState<'code' | 'kit'>('code');
   const [restoreRecoveryCode, setRestoreRecoveryCode] = useState('');
+  const [restoreKitPassword, setRestoreKitPassword] = useState('');
+  const [restoreKitFileName, setRestoreKitFileName] = useState('');
+  const [restoreRecoverySession, setRestoreRecoverySession] = useState('');
   const [restoreInputText, setRestoreInputText] = useState('');
   const [restoring, setRestoring] = useState(false);
   const [validatingRestore, setValidatingRestore] = useState(false);
@@ -170,6 +163,53 @@ export function Configuracoes() {
   const [restoreTestResult, setRestoreTestResult] = useState<{ testedAt: string; checksumFilesVerified: number; checksumCoverage: 'verified' | 'legacy-unverified'; credentialsExcluded: boolean } | null>(null);
   const [restoreValidationError, setRestoreValidationError] = useState('');
   const [restorePreview, setRestorePreview] = useState<{ type: 'database' | 'complete'; createdAt: string; schemaVersion: number; totals: { files: number; bytes: number }; encrypted: boolean; integrity: 'verified' | 'legacy-unverified'; checksumFilesVerified: number; credentialsExcluded: boolean; availableBytes: number; estimatedRequiredBytes: number; canProceed: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!showRestoreModal || restoring || validatingRestore || testingRestore) return;
+    let timeout = 0;
+    const clearSensitiveState = () => {
+      setRestoreRecoveryCode('');
+      setRestoreKitPassword('');
+      setRestoreRecoverySession('');
+      setRestoreKitFileName('');
+      setRestoreTestResult(null);
+      setRestoreValidationError('As credenciais de recuperação foram removidas após cinco minutos de inatividade. Valide novamente.');
+    };
+    const resetInactivityTimer = () => {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(clearSensitiveState, 5 * 60_000);
+    };
+    resetInactivityTimer();
+    window.addEventListener('keydown', resetInactivityTimer);
+    window.addEventListener('pointerdown', resetInactivityTimer);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener('keydown', resetInactivityTimer);
+      window.removeEventListener('pointerdown', resetInactivityTimer);
+    };
+  }, [showRestoreModal, restoring, validatingRestore, testingRestore]);
+
+  const restoreUnlockPayload = (recoverySession = restoreRecoverySession) => ({
+    bundlePath: restoreBundlePath,
+    bundleAuthorization: restoreBundleAuthorization,
+    recoveryCode: restoreRecoveryMode === 'code' ? restoreRecoveryCode || null : null,
+    recoverySession: restoreRecoveryMode === 'kit' ? recoverySession || null : null
+  });
+
+  const clearRestoreSecrets = () => {
+    setRestoreRecoveryCode('');
+    setRestoreKitPassword('');
+    setRestoreKitFileName('');
+    setRestoreRecoverySession('');
+  };
+
+  const closeRestoreModal = () => {
+    if (restoring) return;
+    setShowRestoreModal(false);
+    setRestoreInputText('');
+    setRestoreBundleAuthorization('');
+    clearRestoreSecrets();
+  };
 
   const handleResetSistema = async () => {
     if (resetInputText.trim().toUpperCase() !== 'APAGAR DADOS DO GEOGESTOR') return;
@@ -194,14 +234,21 @@ export function Configuracoes() {
     }
     const selected = await window.electronAPI.selectBackupBundle();
     if (!selected) return;
-    setRestoreBundlePath(selected);
+    setRestoreBundlePath(selected.bundlePath);
+    setRestoreBundleAuthorization(selected.authorization);
     setRestoreInputText('');
+    clearRestoreSecrets();
     setShowRestoreModal(true);
     setRestorePreview(null);
     setRestoreValidationError('');
     setValidatingRestore(true);
     try {
-      const preview = await apiClient.post<{ type: 'database' | 'complete'; createdAt: string; schemaVersion: number; totals: { files: number; bytes: number }; encrypted: boolean; integrity: 'verified' | 'legacy-unverified'; checksumFilesVerified: number; credentialsExcluded: boolean; availableBytes: number; estimatedRequiredBytes: number; canProceed: boolean }>('/api/sistema/restaurar-backup/preflight', { bundlePath: selected, recoveryCode: restoreRecoveryCode || null }, { timeoutMs: 60_000 });
+      const preview = await apiClient.post<{ type: 'database' | 'complete'; createdAt: string; schemaVersion: number; totals: { files: number; bytes: number }; encrypted: boolean; integrity: 'verified' | 'legacy-unverified'; checksumFilesVerified: number; credentialsExcluded: boolean; availableBytes: number; estimatedRequiredBytes: number; canProceed: boolean }>('/api/sistema/restaurar-backup/preflight', {
+        bundlePath: selected.bundlePath,
+        bundleAuthorization: selected.authorization,
+        recoveryCode: null,
+        recoverySession: null
+      }, { timeoutMs: 60_000 });
       setRestorePreview(preview);
       setRestoreTestResult(null);
     } catch (error) {
@@ -216,7 +263,7 @@ export function Configuracoes() {
     setValidatingRestore(true);
     setRestoreValidationError('');
     try {
-      const preview = await apiClient.post<typeof restorePreview extends infer T ? Exclude<T, null> : never>('/api/sistema/restaurar-backup/preflight', { bundlePath: restoreBundlePath, recoveryCode: restoreRecoveryCode || null }, { timeoutMs: 60_000 });
+      const preview = await apiClient.post<typeof restorePreview extends infer T ? Exclude<T, null> : never>('/api/sistema/restaurar-backup/preflight', restoreUnlockPayload(), { timeoutMs: 60_000 });
       setRestorePreview(preview);
       setRestoreTestResult(null);
     } catch (error) {
@@ -227,12 +274,48 @@ export function Configuracoes() {
     }
   };
 
+  const handleChooseRecoveryKit = async () => {
+    if (restoreKitPassword.length < 12) {
+      setRestoreValidationError('Informe a senha do kit com pelo menos 12 caracteres antes de selecionar o arquivo.');
+      return;
+    }
+    if (!window.electronAPI?.selectBackupRecoveryKit) {
+      setRestoreValidationError('A seleção do kit está disponível somente no aplicativo desktop.');
+      return;
+    }
+    setValidatingRestore(true);
+    setRestoreValidationError('');
+    try {
+      const selected = await window.electronAPI.selectBackupRecoveryKit();
+      if (!selected) return;
+      const session = await apiClient.post<{ token: string; keyId: string; expiresAt: string }>('/api/sistema/backups/recuperacao/kit/validar', {
+        kit: selected.kit,
+        kitPassword: restoreKitPassword,
+        purpose: 'restore'
+      }, { timeoutMs: 60_000 });
+      setRestoreRecoverySession(session.token);
+      setRestoreKitFileName(selected.fileName);
+      setRestoreKitPassword('');
+      const preview = await apiClient.post<typeof restorePreview extends infer T ? Exclude<T, null> : never>('/api/sistema/restaurar-backup/preflight', restoreUnlockPayload(session.token), { timeoutMs: 60_000 });
+      setRestorePreview(preview);
+      setRestoreTestResult(null);
+      toast.success('Kit validado em memória. Agora teste a restauração isolada.');
+    } catch (error) {
+      setRestoreRecoverySession('');
+      setRestoreKitFileName('');
+      setRestorePreview(null);
+      setRestoreValidationError(error instanceof Error ? error.message : 'O kit de recuperação não pôde ser validado.');
+    } finally {
+      setValidatingRestore(false);
+    }
+  };
+
   const handleTestRestore = async () => {
     if (!restoreBundlePath || !restorePreview) return;
     setTestingRestore(true);
     setRestoreValidationError('');
     try {
-      const result = await apiClient.post<{ testedAt: string; checksumFilesVerified: number; checksumCoverage: 'verified' | 'legacy-unverified'; credentialsExcluded: boolean }>('/api/sistema/restaurar-backup/testar', { bundlePath: restoreBundlePath, recoveryCode: restoreRecoveryCode || null }, { timeoutMs: 180_000 });
+      const result = await apiClient.post<{ testedAt: string; checksumFilesVerified: number; checksumCoverage: 'verified' | 'legacy-unverified'; credentialsExcluded: boolean }>('/api/sistema/restaurar-backup/testar', restoreUnlockPayload(), { timeoutMs: 180_000 });
       setRestoreTestResult(result);
       await queryClient.invalidateQueries({ queryKey: ['backup-status'] });
       toast.success(`Restauração testada em área isolada. ${result.checksumFilesVerified.toLocaleString('pt-BR')} checksum(s) confirmado(s).`);
@@ -248,9 +331,8 @@ export function Configuracoes() {
     setRestoring(true);
     try {
       await apiClient.post('/api/sistema/restaurar-backup', {
-        bundlePath: restoreBundlePath,
+        ...restoreUnlockPayload(),
         confirmation: 'RESTAURAR BACKUP DO GEOGESTOR',
-        recoveryCode: restoreRecoveryCode || null
       }, { timeoutMs: 60_000 });
       toast.success('Backup validado. O GeoGestor será reiniciado para concluir a restauração.');
     } catch (error) {
@@ -259,20 +341,6 @@ export function Configuracoes() {
     }
   };
 
-  // Template states
-  const [logoBase64, setLogoBase64] = useState('');
-  const [templateRazaoSocial, setTemplateRazaoSocial] = useState('');
-  const [templateCnpj, setTemplateCnpj] = useState('');
-  const [templateTelefone, setTemplateTelefone] = useState('');
-  const [templateEmail, setTemplateEmail] = useState('');
-  const [templateEndereco, setTemplateEndereco] = useState('');
-  const [templateCor, setTemplateCor] = useState('#059669');
-  const [templateTermos, setTemplateTermos] = useState('Validade da proposta: 15 dias úteis.\nPagamento: 50% na aprovação e 50% na entrega técnica.');
-  const [templateLoading, setTemplateLoading] = useState(true);
-  const [templateSaving, setTemplateSaving] = useState(false);
-  const [templateSaveState, setTemplateSaveState] = useState<SettingsSaveState>('saved');
-  const [templateError, setTemplateError] = useState('');
-  const [savedTemplateSnapshot, setSavedTemplateSnapshot] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState('');
   const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
@@ -330,73 +398,12 @@ export function Configuracoes() {
     loadCompanyTemplate()
       .then((template) => {
         if (!active) return;
-        setLogoBase64(template.logo);
-        setTemplateRazaoSocial(template.razao);
-        setTemplateCnpj(template.cnpj);
-        setTemplateTelefone(template.telefone);
-        setTemplateEmail(template.email);
-        setTemplateEndereco(template.endereco);
-        setTemplateCor(template.cor);
-        setTemplateTermos(template.termos);
-        setSavedTemplateSnapshot(JSON.stringify(template));
-        setTemplateError('');
+        setApplicationLogoBase64(template.appLogo);
+        setSavedApplicationLogo(template.appLogo);
       })
-      .catch((error) => setTemplateError(error instanceof Error ? error.message : 'Não foi possível carregar o modelo oficial.'))
-      .finally(() => { if (active) setTemplateLoading(false); });
+      .catch(() => undefined);
     return () => { active = false; };
   }, []);
-
-  const handleSaveTemplate = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const tData = {
-      version: 1 as const,
-      logo: logoBase64,
-      razao: templateRazaoSocial,
-      cnpj: templateCnpj,
-      telefone: templateTelefone,
-      email: templateEmail,
-      endereco: templateEndereco,
-      cor: templateCor,
-      termos: templateTermos
-    };
-    setTemplateSaving(true);
-    setTemplateError('');
-    try {
-      await saveCompanyTemplate(tData);
-      setSavedTemplateSnapshot(JSON.stringify(tData));
-      setTemplateSaveState('success');
-      window.setTimeout(() => setTemplateSaveState('saved'), 1800);
-      toast.success('Modelo oficial salvo e disponível para as próximas exportações.');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível salvar o modelo.';
-      setTemplateError(message);
-      setTemplateSaveState('error');
-      toast.error(message);
-    } finally {
-      setTemplateSaving(false);
-    }
-  };
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const f = e.target.files[0];
-      if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) {
-        toast.error('Use uma imagem PNG, JPG ou WebP.');
-        e.target.value = '';
-        return;
-      }
-      if (f.size > 2 * 1024 * 1024) {
-        toast.error('A imagem deve ter no máximo 2 MB.');
-        e.target.value = '';
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = () => {
-        setLogoBase64(reader.result as string);
-      };
-      reader.readAsDataURL(f);
-    }
-  };
 
   // 1. Fetch Current Configuration
   const { data: config, isLoading, isError: configIsError, error: configError, refetch: refetchConfig } = useQuery({
@@ -463,6 +470,10 @@ export function Configuracoes() {
     adminEmail: string;
   }
 
+  interface CompanySettingsPayload extends ConfiguracaoConfig {
+    appLogo: string;
+  }
+
   // Populate form states when data loads
   useEffect(() => {
     if (config) {
@@ -476,114 +487,19 @@ export function Configuracoes() {
           adminNome: config.adminNome || '',
           adminEmail: config.adminEmail || ''
         }));
-        setGoogleClientId(config.googleClientId || '');
-        setGoogleClientSecret('');
       });
     }
   }, [config]);
 
-  const fetchGoogleStatus = async () => {
-    try {
-      const res = await apiClient.get<{ conectado: boolean; syncActive: boolean; configured: boolean }>('/api/google/status');
-      setGoogleStatus(res);
-      setGoogleStatusError('');
-    } catch (e) {
-      setGoogleStatusError(e instanceof Error ? e.message : 'Não foi possível consultar a integração.');
-    }
-  };
-
-  useEffect(() => {
-    void Promise.resolve().then(fetchGoogleStatus);
-    return () => {
-      if (googlePollingRef.current) {
-        window.clearInterval(googlePollingRef.current.interval);
-        window.clearTimeout(googlePollingRef.current.timeout);
-      }
-    };
-  }, []);
-
-  const handleConnectGoogle = async () => {
-    try {
-      const res = await apiClient.get<{ url: string }>('/api/google/auth-url');
-      if (res.url) {
-        window.open(res.url, '_blank', 'noopener,noreferrer');
-        
-        // Polling para checar se autenticou
-        if (googlePollingRef.current) {
-          window.clearInterval(googlePollingRef.current.interval);
-          window.clearTimeout(googlePollingRef.current.timeout);
-        }
-        const interval = window.setInterval(async () => {
-          try {
-            const status = await apiClient.get<{ conectado: boolean; syncActive: boolean; configured: boolean }>('/api/google/status');
-            if (status.conectado) {
-              setGoogleStatus(status);
-              clearInterval(interval);
-              googlePollingRef.current = null;
-              toast.success('Google Agenda conectada com sucesso!');
-            }
-          } catch {
-            // Ignore polling errors
-          }
-        }, 3000);
-
-        const timeout = window.setTimeout(() => {
-          window.clearInterval(interval);
-          googlePollingRef.current = null;
-        }, 120000);
-        googlePollingRef.current = { interval, timeout };
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao gerar URL de conexão do Google.');
-    }
-  };
-
-  const handleSyncGoogle = async () => {
-    setSyncingGoogle(true);
-    try {
-      const res = await apiClient.post<{ sent?: number; received?: number }>('/api/google/sync');
-      fetchGoogleStatus();
-      toast.success(`Sincronização concluída!\nEnviados para o Google: ${res.sent || 0}\nRecebidos no GeoGestor: ${res.received || 0}`);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao sincronizar com a Google Agenda.');
-    } finally {
-      setSyncingGoogle(false);
-    }
-  };
-
-  const handleSaveGoogleCredentials = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!googleClientSecret.trim() && !config?.googleClientSecretConfigured) {
-      toast.error('Informe a Chave Secreta do Cliente para configurar a integração.');
-      return;
-    }
-    setSavingGoogle(true);
-    setGoogleSaveError('');
-    try {
-      await apiClient.patch('/api/configuracoes', {
-        googleClientId,
-        googleClientSecret
-      });
-      await queryClient.invalidateQueries({ queryKey: ['configuracoes'] });
-      fetchGoogleStatus();
-      setGoogleClientSecret('');
-      setGoogleSaveState('success');
-      window.setTimeout(() => setGoogleSaveState('saved'), 1800);
-      toast.success('Credenciais da Google Agenda salvas com sucesso!');
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erro ao salvar credenciais.';
-      setGoogleSaveError(message);
-      setGoogleSaveState('error');
-      toast.error(message);
-    } finally {
-      setSavingGoogle(false);
-    }
-  };
-
   // Mutation to update configuration
   const updateConfigMutation = useMutation({
-    mutationFn: async (payload: ConfiguracaoConfig) => {
-      await apiClient.patch('/api/configuracoes', payload);
+    mutationFn: async (payload: CompanySettingsPayload) => {
+      const { appLogo, ...configuration } = payload;
+      const template = await loadCompanyTemplate();
+      await Promise.all([
+        apiClient.patch('/api/configuracoes', configuration),
+        saveCompanyTemplate({ ...template, appLogo })
+      ]);
     },
     onMutate: () => {
       setCompanySaveState('saving');
@@ -594,6 +510,8 @@ export function Configuracoes() {
       queryClient.invalidateQueries({ queryKey: ['configuracoes'] });
       queryClient.invalidateQueries({ queryKey: ['projetos'] });
       setSavedCompanySnapshot(JSON.stringify({ empresaNome: variables.empresaNome, adminNome: variables.adminNome, adminEmail: variables.adminEmail }));
+      setSavedApplicationLogo(variables.appLogo);
+      window.dispatchEvent(new CustomEvent('geogestor:application-logo-changed', { detail: { logo: variables.appLogo } }));
       setCompanySaveState('success');
       window.setTimeout(() => setCompanySaveState('saved'), 1800);
       toast.success('Configurações salvas com sucesso!');
@@ -641,25 +559,27 @@ export function Configuracoes() {
     }
   });
 
-  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
-    const saved = localStorage.getItem('geogestor_theme');
-    return saved === 'dark' || saved === 'light' || saved === 'system' ? saved : 'system';
-  });
   const [checkingFullBackup, setCheckingFullBackup] = useState(false);
   const [fullBackupEstimate, setFullBackupEstimate] = useState<BackupPreflightInfo | null>(null);
 
-  const applyTheme = (preference: 'light' | 'dark' | 'system') => {
-    const shouldUseDark = preference === 'dark' || (preference === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.documentElement.classList.toggle('dark', shouldUseDark);
-    document.documentElement.style.colorScheme = shouldUseDark ? 'dark' : 'light';
+  const handleApplicationLogoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      toast.error('Use uma imagem PNG, JPG ou WebP.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 2 MB.');
+      event.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setApplicationLogoBase64(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
-  const handleSetTheme = (newTheme: 'light' | 'dark' | 'system') => {
-    setTheme(newTheme);
-    localStorage.setItem('geogestor_theme', newTheme);
-    applyTheme(newTheme);
-    window.dispatchEvent(new Event('geogestor:theme-change'));
-  };
 
   const exportMaintenanceHistory = async () => {
     try {
@@ -693,7 +613,7 @@ export function Configuracoes() {
 
   const openDiagnosticsFolder = async () => {
     const result = await requestOpenDiagnosticsFolder(window.electronAPI?.openDiagnosticsFolder);
-    if (!result.success) toast.error(result.error);
+    if (result.success === false) toast.error(result.error);
     else toast.success('Pasta de diagnósticos aberta.');
   };
 
@@ -724,34 +644,11 @@ export function Configuracoes() {
     }
   };
 
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = () => { if (theme === 'system') applyTheme('system'); };
-    media.addEventListener('change', handleChange);
-    return () => media.removeEventListener('change', handleChange);
-  }, [theme]);
-
   const currentCompanySnapshot = JSON.stringify({ empresaNome, adminNome, adminEmail });
-  const currentTemplateSnapshot = JSON.stringify({
-    version: 1,
-    logo: logoBase64,
-    razao: templateRazaoSocial,
-    cnpj: templateCnpj,
-    telefone: templateTelefone,
-    email: templateEmail,
-    endereco: templateEndereco,
-    cor: templateCor,
-    termos: templateTermos
-  });
-  const companyDirty = Boolean(savedCompanySnapshot) && currentCompanySnapshot !== savedCompanySnapshot;
-  const templateDirty = Boolean(savedTemplateSnapshot) && currentTemplateSnapshot !== savedTemplateSnapshot;
-  const googleDirty = googleClientId !== (config?.googleClientId || '') || Boolean(googleClientSecret);
+  const companyDirty = (Boolean(savedCompanySnapshot) && currentCompanySnapshot !== savedCompanySnapshot)
+    || applicationLogoBase64 !== savedApplicationLogo;
   const effectiveCompanySaveState: SettingsSaveState = updateConfigMutation.isPending ? 'saving' : companyDirty && companySaveState !== 'error' ? 'dirty' : companySaveState;
-  const effectiveTemplateSaveState: SettingsSaveState = templateSaving ? 'saving' : templateDirty && templateSaveState !== 'error' ? 'dirty' : templateSaveState;
-  const effectiveGoogleSaveState: SettingsSaveState = savingGoogle ? 'saving' : googleDirty && googleSaveState !== 'error' ? 'dirty' : googleSaveState;
   const hasUnsavedChanges = (activeTab === 'empresa' && companyDirty)
-    || (activeTab === 'modelos' && templateDirty)
-    || (activeTab === 'integracoes' && googleDirty)
     || externalSectionStates[activeTab] === 'dirty'
     || externalSectionStates[activeTab] === 'error';
 
@@ -839,27 +736,11 @@ export function Configuracoes() {
       setDadosPasta(config.dadosPasta || '');
       setAdminNome(config.adminNome || '');
       setAdminEmail(config.adminEmail || '');
+      setApplicationLogoBase64(savedApplicationLogo);
       setCompanyFieldErrors({});
       setCompanySaveError('');
       setCompanySaveState('saved');
-    } else if (section === 'modelos' && savedTemplateSnapshot) {
-      const saved = JSON.parse(savedTemplateSnapshot) as typeof DEFAULT_COMPANY_TEMPLATE;
-      setLogoBase64(saved.logo);
-      setTemplateRazaoSocial(saved.razao);
-      setTemplateCnpj(saved.cnpj);
-      setTemplateTelefone(saved.telefone);
-      setTemplateEmail(saved.email);
-      setTemplateEndereco(saved.endereco);
-      setTemplateCor(saved.cor);
-      setTemplateTermos(saved.termos);
-      setTemplateError('');
-      setTemplateSaveState('saved');
-    } else if (section === 'integracoes') {
-      setGoogleClientId(config?.googleClientId || '');
-      setGoogleClientSecret('');
-      setGoogleSaveError('');
-      setGoogleSaveState('saved');
-    } else if (section === 'backups' || section === 'alertas') {
+    } else if (section === 'backups' || section === 'alertas' || section === 'integracoes' || section === 'modelos') {
       window.dispatchEvent(new CustomEvent('geogestor:settings-discard', { detail: { section } }));
     }
   };
@@ -988,7 +869,8 @@ export function Configuracoes() {
       empresaNome,
       dadosPasta,
       adminNome,
-      adminEmail
+      adminEmail,
+      appLogo: applicationLogoBase64
     });
   };
 
@@ -1003,31 +885,10 @@ export function Configuracoes() {
     setDadosPasta(config.dadosPasta || '');
     setAdminNome(config.adminNome || '');
     setAdminEmail(config.adminEmail || '');
+    setApplicationLogoBase64(savedApplicationLogo);
     setCompanyFieldErrors({});
     setCompanySaveError('');
     setCompanySaveState('saved');
-  };
-
-  const discardTemplateChanges = () => {
-    if (!savedTemplateSnapshot) return;
-    const saved = JSON.parse(savedTemplateSnapshot) as typeof DEFAULT_COMPANY_TEMPLATE;
-    setLogoBase64(saved.logo);
-    setTemplateRazaoSocial(saved.razao);
-    setTemplateCnpj(saved.cnpj);
-    setTemplateTelefone(saved.telefone);
-    setTemplateEmail(saved.email);
-    setTemplateEndereco(saved.endereco);
-    setTemplateCor(saved.cor);
-    setTemplateTermos(saved.termos);
-    setTemplateError('');
-    setTemplateSaveState('saved');
-  };
-
-  const discardGoogleChanges = () => {
-    setGoogleClientId(config?.googleClientId || '');
-    setGoogleClientSecret('');
-    setGoogleSaveError('');
-    setGoogleSaveState('saved');
   };
 
   if (isLoading) {
@@ -1117,7 +978,6 @@ export function Configuracoes() {
             {([
               ['empresa', 'Empresa e usuário', Buildings, 'system'],
               ['arquivos', 'Arquivos e pastas', Files, 'field'],
-              ['backups', 'Backups', Database, 'system'],
               ['alertas', 'Alertas', Bell, 'warning'],
               ['modelos', 'Modelos e documentos', FileText, 'success'],
               ['integracoes', 'Integrações', Link, 'field'],
@@ -1135,7 +995,7 @@ export function Configuracoes() {
                 <span aria-hidden="true" className={geoTabIconClass(activeTab === section, tone)}><Icon weight={activeTab === section ? 'fill' : 'regular'} className="h-4 w-4" /></span>
                 <span className="min-w-0">{label}</span>
                 {(() => {
-                  const state = section === 'empresa' ? effectiveCompanySaveState : section === 'modelos' ? effectiveTemplateSaveState : section === 'integracoes' ? effectiveGoogleSaveState : externalSectionStates[section];
+                  const state = section === 'empresa' ? effectiveCompanySaveState : externalSectionStates[section];
                   if (!state || state === 'saved' || state === 'success') return null;
                   const text = state === 'dirty' ? 'Alterada' : state === 'saving' ? 'Salvando' : 'Erro';
                   return <span className={cn('ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-bold', state === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : state === 'dirty' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300')}>{text}</span>;
@@ -1145,9 +1005,19 @@ export function Configuracoes() {
             </div>
             {navOverflow.right && <button type="button" aria-label="Mostrar próximas seções" onClick={() => settingsNavRef.current?.scrollBy({ left: 220, behavior: 'smooth' })} className="absolute right-1 top-1/2 z-20 hidden -translate-y-1/2 rounded-full border border-zinc-300 bg-white p-1.5 text-zinc-700 shadow sm:block lg:hidden dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"><CaretRight aria-hidden="true" size={15} /></button>}
           </div>
-          <div className="hidden border-t border-zinc-200 pt-2 dark:border-zinc-800 lg:block">
-            <span className="mb-1 hidden px-2 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 lg:block">Ferramentas</span>
+          <div className="border-t border-zinc-200 pt-2 dark:border-zinc-800">
+            <span className="mb-1 block px-2 text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300">Ferramentas</span>
             <div className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0">
+              <button
+                type="button"
+                data-settings-active={activeTab === 'backups'}
+                aria-current={activeTab === 'backups' ? 'page' : undefined}
+                onClick={() => navigateToSection('backups')}
+                className={cn(geoTabButtonClass(activeTab === 'backups', 'system'), 'shrink-0 justify-start lg:w-full')}
+              >
+                <span aria-hidden="true" className={geoTabIconClass(activeTab === 'backups', 'system')}><Database className="h-4 w-4" /></span>
+                Backup e proteção
+              </button>
               <RouterLink onClick={confirmLeavingSettings} to="/importacao" className={cn(geoTabButtonClass(false, 'success'), 'shrink-0 justify-start lg:w-full')}>
                 <span aria-hidden="true" className={geoTabIconClass(false, 'success')}><UploadSimple className="h-4 w-4" /></span> Importação de dados
               </RouterLink>
@@ -1244,6 +1114,36 @@ export function Configuracoes() {
                     </div>
                   </div>
 
+                  <section id="application-logo" className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-950/35" aria-labelledby="application-logo-title">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {applicationLogoBase64 ? (
+                          <img src={applicationLogoBase64} alt="Prévia do logotipo no menu" width={64} height={64} className="h-16 w-16 shrink-0 rounded-xl object-contain bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-700" />
+                        ) : (
+                          <div aria-hidden="true" className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-sm">
+                            <div className="h-6 w-6 rounded bg-white dark:bg-zinc-900" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <h3 id="application-logo-title" className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Imagem do GeoGestor</h3>
+                          <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">Substitua o ícone exibido no canto superior do menu. PNG, JPG ou WebP, até 2 MB.</p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <input id="application-logo-file" name="application_logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleApplicationLogoUpload} className="peer sr-only" />
+                        <label htmlFor="application-logo-file" className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-xl border border-indigo-300 bg-white px-3 text-xs font-semibold text-indigo-800 transition-[background-color,color,border-color,box-shadow] hover:bg-indigo-50 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500/40 dark:border-indigo-800 dark:bg-zinc-900 dark:text-indigo-300 dark:hover:bg-indigo-950/30">
+                          <UploadSimple aria-hidden="true" size={16} />
+                          {applicationLogoBase64 ? 'Trocar imagem' : 'Adicionar imagem'}
+                        </label>
+                        {applicationLogoBase64 ? (
+                          <button type="button" onClick={() => setApplicationLogoBase64('')} className="geo-focus-ring inline-flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs font-semibold text-red-700 transition-[background-color,color] hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950/30">
+                            <Trash aria-hidden="true" size={16} /> Remover
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </section>
+
                   <div className="bg-sky-50/50 dark:bg-sky-950/20 border border-sky-200/40 dark:border-sky-900/30 rounded-xl p-3 flex gap-2.5 text-xs text-sky-800 dark:text-sky-300 font-medium">
                     <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                     <p className="leading-relaxed">
@@ -1317,94 +1217,44 @@ export function Configuracoes() {
 
           {activeTab === 'alertas' && <AlertSettingsPanel />}
 
-          {activeTab === 'aparencia' && (
-            <div className={cn(systemPanelClass, 'space-y-4')} aria-labelledby="appearance-title">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 pb-3 dark:border-zinc-800">
-                <h2 id="appearance-title" className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
-                  <Palette aria-hidden="true" className="h-5 w-5 text-zinc-400" /> Preferências visuais
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (theme === 'system') return;
-                    if (window.confirm('Restaurar o tema padrão do GeoGestor e acompanhar o tema do Windows?')) {
-                      handleSetTheme('system');
-                      toast.success('Tema padrão restaurado.');
-                    }
-                  }}
-                  disabled={theme === 'system'}
-                  className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-300 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-sky-500/40 disabled:cursor-default disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                >
-                  <ArrowCounterClockwise aria-hidden="true" size={16} /> Restaurar padrão
-                </button>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Tema do Sistema</span>
-                  <div className="grid gap-3 sm:grid-cols-3" role="group" aria-label="Tema do sistema">
-                    <button 
-                      type="button" 
-                      onClick={() => handleSetTheme('light')}
-                      aria-pressed={theme === 'light'}
-                      className={`border p-4 rounded-2xl text-left transition-[background-color,border-color,box-shadow] ${
-                        theme === 'light'
-                          ? 'border-brand-primary-200 bg-gradient-to-br from-brand-primary-50 via-white to-brand-turquoise-50 ring-2 ring-brand-primary-300/45 dark:border-brand-primary-300/20 dark:from-brand-primary-400/15 dark:via-zinc-900 dark:to-brand-turquoise-400/10 dark:ring-brand-primary-300/20'
-                          : 'border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      <span className="block font-semibold text-zinc-950 dark:text-white text-sm">Claro</span>
-                      <span className="block text-xs text-zinc-400 mt-1">Aparência clássica minimalista em tons de branco.</span>
-                    </button>
-                    <button 
-                      type="button" 
-                      onClick={() => handleSetTheme('dark')}
-                      aria-pressed={theme === 'dark'}
-                      className={`border p-4 rounded-2xl text-left transition-[background-color,border-color,box-shadow] ${
-                        theme === 'dark'
-                          ? 'border-brand-indigo-200 bg-gradient-to-br from-brand-indigo-50 via-white to-brand-blue-50 ring-2 ring-brand-indigo-300/45 dark:border-brand-indigo-300/20 dark:from-brand-indigo-400/15 dark:via-zinc-900 dark:to-brand-blue-400/10 dark:ring-brand-indigo-300/20'
-                          : 'border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      <span className="block font-semibold text-zinc-950 dark:text-white text-sm">Tema Escuro</span>
-                      <span className="block text-xs text-zinc-400 mt-1">Modo escuro para melhor legibilidade noturna.</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetTheme('system')}
-                      aria-pressed={theme === 'system'}
-                      className={`border p-4 rounded-2xl text-left transition-[background-color,border-color,box-shadow] ${
-                        theme === 'system'
-                          ? 'border-sky-300 bg-sky-50 ring-2 ring-sky-300/45 dark:border-sky-700 dark:bg-sky-950/30 dark:ring-sky-700/40'
-                          : 'border-zinc-100 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
-                    >
-                      <span className="block font-semibold text-zinc-950 dark:text-white text-sm">Usar o sistema</span>
-                      <span className="block text-xs text-zinc-400 mt-1">Acompanha automaticamente o tema do Windows.</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
+          {activeTab === 'aparencia' && <AppearanceSettingsPanel />}
           {activeTab === 'backups' && (
             <div className="space-y-6">
-              <div className={systemPanelClass}>
-                <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div>
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-zinc-950 dark:text-white">
-                      <Database className="h-5 w-5 text-zinc-400" /> Banco local do GeoGestor
-                    </h2>
-                    <p className="mt-0.5 text-xs font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      O app desktop salva os dados localmente no Windows. Use o backup antes de atualizações grandes ou manutenções.
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-600/10 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-400/20 self-start md:self-auto">
+              <BackupProtectionDetails
+                detailsPolicy={<BackupPolicyPanel />}
+                onDatabaseBackup={() => createBackupMutation.mutate()}
+                databaseBackupPending={createBackupMutation.isPending}
+                onFullBackup={() => void handleFullBackup()}
+                fullBackupPending={checkingFullBackup || createFullBackupMutation.isPending}
+                fullBackupLabel={
+                  checkingFullBackup
+                    ? 'Calculando tamanho…'
+                    : createFullBackupMutation.isPending
+                      ? 'Criando backup completo…'
+                      : fullBackupEstimate
+                        ? `Fazer backup completo (${formatBytes(fullBackupEstimate.totalBytes)})`
+                        : 'Fazer backup completo agora'
+                }
+                onRestoreBackup={() => void handleChooseRestoreBundle()}
+                restorePending={restoring}
+              />
+
+              <details className={`${systemPanelClass} group`}>
+                <summary className="geo-focus-ring flex min-h-14 cursor-pointer list-none items-center gap-3 rounded-xl touch-manipulation [&::-webkit-details-marker]:hidden">
+                  <Database aria-hidden="true" className="h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+                  <span className="min-w-0 flex-1">
+                    <strong className="block text-base font-semibold text-zinc-950 dark:text-white">Dados técnicos locais</strong>
+                    <span className="mt-0.5 block text-xs font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
+                      Caminhos do banco, dos arquivos e informações do ambiente operacional.
+                    </span>
+                  </span>
+                  <span className="hidden rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold text-emerald-700 ring-1 ring-emerald-600/10 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-400/20 sm:inline-flex">
                     {desktopInfo?.desktop ? 'Aplicativo desktop' : 'Modo local'}
                   </span>
-                </div>
+                  <CaretDown aria-hidden="true" className="h-5 w-5 shrink-0 text-zinc-500 transition-transform duration-150 group-open:rotate-180 motion-reduce:transition-none" />
+                </summary>
 
+                <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 {loadingDesktopInfo ? (
                   <div className="py-8 flex justify-center">
                     <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-6 h-6 rounded-full border-2 border-brand-primary-100 border-t-brand-primary-500 dark:border-brand-primary-400/15 dark:border-t-brand-primary-300 animate-spin" />
@@ -1448,449 +1298,32 @@ export function Configuracoes() {
                         {desktopInfo?.filesRootDirectory || 'Não identificado'}
                       </p>
                     </div>
+                    <button type="button" onClick={() => openDataFolderMutation.mutate()} disabled={openDataFolderMutation.isPending} className="geo-focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-300 px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-100 disabled:cursor-wait disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                      <FolderOpen aria-hidden="true" size={17} /> {openDataFolderMutation.isPending ? 'Abrindo pasta…' : 'Abrir pasta de dados'}
+                    </button>
                   </div>
                 )}
-              </div>
-
-              <BackupPolicyPanel />
+                </div>
+              </details>
 
               <RouterLink to="/pos-atualizacao" className="geo-focus-ring inline-flex min-h-11 items-center rounded-xl border border-zinc-300 px-4 text-sm font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
                 Executar verificação pós-atualização
               </RouterLink>
-
-              <div id="backup-actions" className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-                <button
-                  type="button"
-                  onClick={() => createBackupMutation.mutate()}
-                  disabled={createBackupMutation.isPending}
-                  className={systemActionCardClass}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
-                    <DownloadSimple aria-hidden="true" className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-xs font-semibold text-zinc-950 dark:text-white">
-                      {createBackupMutation.isPending ? 'Criando backup…' : 'Criar backup agora'}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      Copia o banco local para a pasta de backups com data e hora.
-                    </span>
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleChooseRestoreBundle}
-                  disabled={restoring}
-                  className={systemActionCardClass}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-                    <UploadSimple className="h-4 w-4" aria-hidden="true" />
-                  </span>
-                  <span>
-                    <span className="block text-xs font-semibold text-zinc-950 dark:text-white">
-                      {restoring ? 'Restaurando backup…' : 'Restaurar backup'}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      Valida o backup e reinicia o aplicativo com os dados restaurados.
-                    </span>
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleFullBackup}
-                  disabled={checkingFullBackup || createFullBackupMutation.isPending}
-                  className={systemActionCardClass}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
-                    <Database aria-hidden="true" className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-xs font-semibold text-zinc-950 dark:text-white">
-                      {checkingFullBackup ? 'Calculando tamanho…' : createFullBackupMutation.isPending ? 'Criando backup completo…' : 'Backup completo'}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      {fullBackupEstimate
-                        ? `Estimativa: ${formatBytes(fullBackupEstimate.totalBytes)} em ${fullBackupEstimate.totalFiles.toLocaleString('pt-BR')} arquivo(s).`
-                        : 'Copia o banco local e a pasta de arquivos dos clientes.'}
-                    </span>
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openDataFolderMutation.mutate()}
-                  disabled={openDataFolderMutation.isPending}
-                  className={systemActionCardClass}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                    <FolderOpen className="h-4 w-4" />
-                  </span>
-                  <span>
-                    <span className="block text-xs font-semibold text-zinc-950 dark:text-white">Abrir pasta de dados</span>
-                    <span className="mt-0.5 block text-[11px] font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
-                      Abre no Explorer a pasta onde ficam o banco local e os backups.
-                    </span>
-                  </span>
-                </button>
-              </div>
             </div>
           )}
 
-          {activeTab === 'modelos' && (
-            <form onSubmit={handleSaveTemplate} className="space-y-6" aria-busy={templateLoading || templateSaving}>
-              {templateLoading && <p aria-live="polite" className="rounded-xl bg-zinc-50 p-4 text-sm text-zinc-500 dark:bg-zinc-900">Carregando o modelo oficial…</p>}
-              {templateError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">{templateError} Corrija os dados e tente novamente.</div>}
-              <div className={cn(systemPanelLargeClass, 'md:p-8')}>
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-                  <div>
-                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
-                      <FileText className="w-5 h-5 text-emerald-500" /> Identidade Visual para Exportação de Orçamentos
-                    </h2>
-                    <p className="text-xs text-zinc-500 mt-1">Configure o cabeçalho corporativo, cores e termos padrão dos relatórios em PDF.</p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <button type="button" onClick={() => {
-                      if (!window.confirm('Restaurar os padrões do modelo?\n\nLogo, dados corporativos, cor e termos voltarão ao modelo inicial. Você poderá revisar antes de salvar.')) return;
-                      setLogoBase64(DEFAULT_COMPANY_TEMPLATE.logo);
-                      setTemplateRazaoSocial(DEFAULT_COMPANY_TEMPLATE.razao);
-                      setTemplateCnpj(DEFAULT_COMPANY_TEMPLATE.cnpj);
-                      setTemplateTelefone(DEFAULT_COMPANY_TEMPLATE.telefone);
-                      setTemplateEmail(DEFAULT_COMPANY_TEMPLATE.email);
-                      setTemplateEndereco(DEFAULT_COMPANY_TEMPLATE.endereco);
-                      setTemplateCor(DEFAULT_COMPANY_TEMPLATE.cor);
-                      setTemplateTermos(DEFAULT_COMPANY_TEMPLATE.termos);
-                      setTemplateSaveState('dirty');
-                    }} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"><ArrowCounterClockwise aria-hidden="true" size={16} /> Restaurar padrões</button>
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">PDF Engine 2.0</span>
-                  </div>
-                </div>
+          {activeTab === 'modelos' && <DocumentTemplateSettingsPanel />}
 
-                {/* Grid Logo + Cores */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                  <div className="md:col-span-1 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl p-6 text-center flex flex-col items-center justify-center relative hover:bg-zinc-50 dark:hover:bg-zinc-800/30 transition-colors">
-                    {logoBase64 ? (
-                      <div className="relative group w-full">
-                        <img src={logoBase64} alt="Logo" className="max-h-24 mx-auto object-contain mb-3" />
-                        <button 
-                          type="button" 
-                          onClick={() => setLogoBase64('')}
-                          className="text-xs text-red-500 font-bold underline cursor-pointer hover:opacity-80"
-                        >
-                          Remover logo
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="cursor-pointer flex flex-col items-center w-full">
-                        <input name="company_logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} className="hidden" />
-                        <UploadSimple className="w-8 h-8 text-zinc-400 mb-2" />
-                        <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Upload Logo (PNG/JPG)</span>
-                        <span className="text-xs text-zinc-400 mt-1">Sugerido: Fundo transparente</span>
-                      </label>
-                    )}
-                  </div>
-
-                  <div className="md:col-span-2 space-y-4">
-                    <div>
-                      <label htmlFor="template-company-name" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Razão social / nome no PDF</label>
-                      <input 
-                        id="template-company-name"
-                        name="template_company_name"
-                        autoComplete="organization"
-                        type="text"
-                        value={templateRazaoSocial}
-                        onChange={e => setTemplateRazaoSocial(e.target.value)}
-                        placeholder="Ex: TopoGeo Soluções Fundiárias Ltda"
-                          className={cn(systemCompactFieldClass, 'px-3.5 font-semibold')}
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label htmlFor="template-document" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">CNPJ / CPF oficial</label>
-                        <input 
-                          id="template-document"
-                          name="template_document"
-                          autoComplete="off"
-                          type="text"
-                          value={templateCnpj}
-                          onChange={e => setTemplateCnpj(e.target.value)}
-                          placeholder="00.000.000/0001-00"
-                          className={systemCompactFieldClass}
-                        />
-                      </div>
-                      <div>
-                        <label htmlFor="template-phone" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Telefone / WhatsApp</label>
-                        <input id="template-phone" name="template_phone" type="tel" autoComplete="tel" value={templateTelefone} onChange={(event) => setTemplateTelefone(event.target.value)} placeholder="(11) 99999-9999" className={systemCompactFieldClass} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  <div>
-                    <label htmlFor="template-email" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">E-mail comercial</label>
-                    <input 
-                      id="template-email"
-                      name="template_email"
-                      type="email"
-                      autoComplete="email"
-                      spellCheck={false}
-                      value={templateEmail}
-                      onChange={e => setTemplateEmail(e.target.value)}
-                      placeholder="orcamentos@empresa.com"
-                      className={cn(systemCompactFieldClass, 'px-3.5')}
-                    />
-                  </div>
-                  <div>
-                    <span className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Cor de destaque do orçamento</span>
-                    <div className={cn(geoFieldClass, 'flex h-9 items-center gap-3 px-2')}>
-                      {[
-                        { name: 'Emerald', hex: '#059669' },
-                        { name: 'Indigo', hex: '#4f46e5' },
-                        { name: 'Blue', hex: '#2563eb' },
-                        { name: 'Amber', hex: '#d97706' },
-                        { name: 'Rose', hex: '#e11d48' },
-                        { name: 'Zinc', hex: '#27272a' }
-                      ].map(c => (
-                        <button
-                          key={c.hex}
-                          type="button"
-                          onClick={() => setTemplateCor(c.hex)}
-                          className={`w-6 h-6 rounded-lg transition-transform ${templateCor === c.hex ? 'scale-125 ring-2 ring-brand-primary-400 ring-offset-2 dark:ring-brand-primary-300 dark:ring-offset-zinc-900' : 'hover:scale-110 opacity-70'}`}
-                          style={{ backgroundColor: c.hex }}
-                          title={c.name}
-                          aria-label={`Usar a cor ${c.name}`}
-                          aria-pressed={templateCor === c.hex}
-                        />
-                      ))}
-                      <span className="text-xs font-mono text-zinc-500 ml-auto">{templateCor}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <label htmlFor="template-address" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Endereço completo exibido no cabeçalho</label>
-                  <input 
-                    id="template-address"
-                    name="template_address"
-                    autoComplete="street-address"
-                    type="text"
-                    value={templateEndereco}
-                    onChange={e => setTemplateEndereco(e.target.value)}
-                    placeholder="Av. Engenharia Topográfica, 100 - Sala 402 - Edifício Centro Comercial"
-                    className={cn(systemCompactFieldClass, 'px-3.5')}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="template-terms" className="block text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2">Termos, prazos e condições exibidos no rodapé</label>
-                  <textarea 
-                    id="template-terms"
-                    name="template_terms"
-                    rows={4}
-                    value={templateTermos}
-                    onChange={e => setTemplateTermos(e.target.value)}
-                    placeholder="Descreva as condições contratuais, dados bancários PIX ou observações legais..."
-                    className={cn(geoFieldClass, 'w-full resize-none p-3 text-xs font-medium leading-relaxed')}
-                  />
-                </div>
-              </div>
-
-              <section className={cn(systemPanelClass, 'space-y-4')} aria-labelledby="template-preview-title">
-                <h2 id="template-preview-title" className="flex items-center gap-2 text-base font-semibold"><Eye aria-hidden="true" size={19} /> Prévia do cabeçalho</h2>
-                <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white p-5 text-zinc-900 dark:border-zinc-700" style={{ borderTopColor: templateCor, borderTopWidth: 5 }}>
-                  <div className="flex items-start gap-4">
-                    {logoBase64 ? <img src={logoBase64} alt="Prévia do logotipo da empresa" width="96" height="64" className="h-16 w-24 object-contain" /> : <div className="flex h-16 w-24 items-center justify-center rounded-lg bg-zinc-100 text-xs text-zinc-500">Sem logo</div>}
-                    <div className="min-w-0"><strong className="block break-words text-lg">{templateRazaoSocial || 'Nome da empresa'}</strong><span className="block break-words text-xs text-zinc-500">{[templateCnpj, templateTelefone, templateEmail].filter(Boolean).join(' • ') || 'Dados de contato'}</span><span className="mt-1 block break-words text-xs text-zinc-500">{templateEndereco || 'Endereço da empresa'}</span></div>
-                  </div>
-                </div>
-              </section>
-
-              <SettingsSaveBar state={effectiveTemplateSaveState} errorMessage={templateError} saveDisabled={templateLoading} onSave={() => void handleSaveTemplate()} onDiscard={discardTemplateChanges} />
-            </form>
-          )}
-
-          {activeTab === 'integracoes' && (
-            <div className="space-y-6">
-              {/* Google API Keys Form */}
-              <form onSubmit={handleSaveGoogleCredentials} className={cn(systemPanelLargeClass, 'space-y-6')}>
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-                  <div>
-                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
-                      <Gear className="w-5 h-5 text-indigo-600" /> Credenciais Google API
-                    </h2>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      Insira as chaves criadas no Google Cloud Console para sincronizar com sua Google Agenda.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-4">
-                  <div>
-                    <label htmlFor="google-client-id" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5 font-sans">ID do cliente (Client ID)</label>
-                    <input
-                      id="google-client-id"
-                      name="google_client_id"
-                      type="text"
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={googleClientId}
-                      onChange={(e) => setGoogleClientId(e.target.value)}
-                      placeholder="Cole o Client ID aqui..."
-                      className={cn(geoFieldClass, 'w-full px-4 py-2.5 text-sm font-medium')}
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="google-client-secret" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5 font-sans">Chave secreta do cliente (Client Secret)</label>
-                    <input
-                      id="google-client-secret"
-                      name="google_client_secret"
-                      type="password"
-                      autoComplete="new-password"
-                      spellCheck={false}
-                      value={googleClientSecret}
-                      onChange={(e) => setGoogleClientSecret(e.target.value)}
-                      placeholder={config?.googleClientSecretConfigured ? 'Segredo já configurado; deixe vazio para preservar' : 'Cole a Client Secret aqui…'}
-                      className={cn(geoFieldClass, 'w-full px-4 py-2.5 text-sm font-medium')}
-                    />
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs text-zinc-500"><ShieldCheck aria-hidden="true" size={14} className="text-emerald-600" /> O segredo é protegido pelo cofre do Windows e nunca volta para esta tela, logs, diagnósticos ou backups.</p>
-                  </div>
-                </div>
-              </form>
-              <SettingsSaveBar state={effectiveGoogleSaveState} errorMessage={googleSaveError} onSave={() => void handleSaveGoogleCredentials()} onDiscard={discardGoogleChanges} />
-
-              {/* Status e Sincronização */}
-              <div className={cn(systemPanelLargeClass, 'space-y-6')}>
-                <div className="flex items-center justify-between mb-6 pb-4 border-b border-zinc-100 dark:border-zinc-800">
-                  <div>
-                    <h2 className="text-lg font-bold text-zinc-950 dark:text-white flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-emerald-500" /> Sincronização da Agenda
-                    </h2>
-                    <p className="text-xs text-zinc-500 mt-1">
-                      Conecte sua conta do Google e gerencie a sincronização de seus compromissos locais e do Google Calendar.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between p-4 rounded-2xl border border-brand-primary-200/35 bg-gradient-to-r from-brand-primary-50/70 via-white to-brand-turquoise-50/65 dark:border-brand-primary-300/15 dark:from-brand-primary-400/10 dark:via-zinc-950 dark:to-brand-turquoise-400/10 gap-4">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-zinc-400 font-bold block mb-1">Status da Conexão</span>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                      googleStatus.conectado 
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400' 
-                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400'
-                    }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${googleStatus.conectado ? 'bg-emerald-500' : 'bg-zinc-400'}`} />
-                      {googleStatus.conectado ? 'Conectado à Conta Google' : 'Desconectado'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2.5">
-                    {!googleStatus.conectado ? (
-                      <button
-                        type="button"
-                        onClick={handleConnectGoogle}
-                        disabled={!googleStatus.configured}
-                        className={`flex items-center gap-2 text-white rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,color,box-shadow,transform] shadow-sm active:scale-95 ${
-                          googleStatus.configured 
-                            ? 'geo-button-base geo-button-revenue geo-focus-ring'
-                            : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed'
-                        }`}
-                      >
-                        Conectar Google Agenda
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          onClick={handleSyncGoogle}
-                          disabled={syncingGoogle}
-                          className={cn(primarySmallActionButtonClass, 'text-xs disabled:opacity-55')}
-                        >
-                          {syncingGoogle ? 'Sincronizando...' : 'Sincronização Total (Espelhada)'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (window.confirm('Deseja desconectar sua conta Google?')) {
-                              try {
-                                await apiClient.patch('/api/configuracoes', {
-                                  googleRefreshToken: null,
-                                  googleAccessToken: null,
-                                  googleSyncActive: false
-                                });
-                                fetchGoogleStatus();
-                                toast.success('Conta Google desconectada!');
-                              } catch {
-                                toast.error('Erro ao desconectar conta Google.');
-                              }
-                            }
-                          }}
-                          className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/20 dark:text-red-400 dark:border-red-900/30 rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,border-color,color]"
-                        >
-                          Desconectar
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {googleStatusError && (
-                  <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-                    <span>Não foi possível consultar o status da Google Agenda: {googleStatusError}</span>
-                    <button type="button" onClick={() => void fetchGoogleStatus()} className="min-h-11 rounded-xl border border-red-300 px-4 font-semibold hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:border-red-800">Tentar novamente</button>
-                  </div>
-                )}
-
-                {!googleStatus.configured && (
-                  <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1.5 font-semibold">
-                    <WarningCircle className="w-4 h-4" /> Cadastre o ID e a Chave Secreta acima para poder conectar sua agenda.
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
+          {activeTab === 'integracoes' && <GoogleCalendarSettingsPanel />}
 
           {activeTab === 'manutencao' && (
             <div className="space-y-6">
-              <section className={cn(systemPanelLargeClass, 'space-y-5')} aria-labelledby="maintenance-title">
-                <div>
-                  <h2 id="maintenance-title" className="flex items-center gap-2 text-lg font-bold text-zinc-950 dark:text-white"><Wrench aria-hidden="true" className="h-5 w-5 text-violet-600" /> Manutenção e diagnóstico</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Atalhos para conferir a integridade local e investigar problemas sem procurar em outros menus.</p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {([
-                    ['/pos-atualizacao', 'Verificação pós-atualização', 'Confere banco, arquivos e serviços após uma atualização.', Check],
-                    ['/qualidade-dados', 'Qualidade dos dados', 'Localiza cadastros incompletos ou inconsistentes.', WarningCircle],
-                    ['/audit-logs', 'Logs de auditoria', 'Mostra alterações importantes e a origem das ações.', FileText],
-                    ['/importacao', 'Importação de dados', 'Importe cadastros com validação antes de gravar.', UploadSimple]
-                  ] as const).map(([to, title, description, Icon]) => (
-                    <RouterLink key={to} to={to} className={systemActionCardClass}>
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"><Icon aria-hidden="true" className="h-4 w-4" /></span>
-                      <span><strong className="block text-sm text-zinc-950 dark:text-white">{title}</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-500">{description}</span></span>
-                    </RouterLink>
-                  ))}
-                  <button type="button" onClick={() => void openDiagnosticsFolder()} className={systemActionCardClass}>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"><FolderOpen aria-hidden="true" className="h-4 w-4" /></span>
-                    <span><strong className="block text-sm text-zinc-950 dark:text-white">Abrir diagnóstico local</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-500">Acessa os registros locais usados no suporte.</span></span>
-                  </button>
-                  <button id="diagnostic-export-title" type="button" onClick={() => void openDiagnosticPreview()} className={systemActionCardClass}>
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"><ShieldCheck aria-hidden="true" className="h-4 w-4" /></span>
-                    <span><strong className="block text-sm text-zinc-950 dark:text-white">Exportar diagnóstico seguro</strong><span className="mt-1 block text-xs leading-relaxed text-zinc-500">Mostra uma prévia e exclui credenciais e dados pessoais.</span></span>
-                  </button>
-                </div>
-                <details className="group border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800">
-                  <summary className="cursor-pointer rounded-lg font-semibold text-zinc-700 focus-visible:ring-2 focus-visible:ring-sky-500/40 dark:text-zinc-200">Informações técnicas do ambiente</summary>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <div><span className="block text-xs uppercase tracking-wider text-zinc-500">Versão instalada</span><strong className="tabular-nums">GeoGestor {APP_VERSION}</strong></div>
-                    <div><span className="block text-xs uppercase tracking-wider text-zinc-500">Ambiente</span><strong>{desktopInfo?.desktop ? 'Desktop gerenciado' : desktopInfo?.mode || 'Local'}</strong></div>
-                    <div className="sm:col-span-2"><span className="block text-xs uppercase tracking-wider text-zinc-500">Banco local</span><code className="mt-1 block break-all rounded-lg bg-zinc-50 p-2 text-xs dark:bg-zinc-950">{desktopInfo?.databasePath || 'Não identificado'}</code></div>
-                  </div>
-                </details>
-              </section>
+              <GeoGestorHealthPanel
+                enabled={activeTab === 'manutencao'}
+                desktopInfo={desktopInfo}
+                onOpenDiagnosticsFolder={() => void openDiagnosticsFolder()}
+                onExportDiagnostic={() => void openDiagnosticPreview()}
+              />
 
               <section className={cn(systemPanelLargeClass, 'space-y-4')} aria-labelledby="maintenance-history-title">
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1905,7 +1338,12 @@ export function Configuracoes() {
                   <div><label htmlFor="history-status" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Resultado</label><select id="history-status" value={historyStatusFilter} onChange={(event) => setHistoryStatusFilter(event.target.value)} className={systemCompactFieldClass}><option value="">Todos os resultados</option><option value="success">Concluído</option><option value="failed">Falhou</option><option value="cancelled">Cancelado</option></select></div>
                 </div>
                 {historyQuery.isLoading ? <p aria-live="polite" className="py-5 text-center text-sm text-zinc-500">Carregando histórico…</p> : historyQuery.isError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><span>Não foi possível consultar o histórico.</span><button type="button" onClick={() => void historyQuery.refetch()} className="min-h-10 rounded-xl border border-red-300 px-3 font-semibold focus-visible:ring-2 focus-visible:ring-red-500/40">Tentar novamente</button></div> : historyQuery.data?.items.length ? (
-                  <div className="overflow-x-auto rounded-xl border border-zinc-200 overscroll-contain dark:border-zinc-800">
+                  <div
+                    role="region"
+                    aria-label="Histórico operacional"
+                    tabIndex={0}
+                    className="overflow-x-auto rounded-xl border border-zinc-200 overscroll-contain focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800"
+                  >
                     <table className="min-w-[760px] w-full text-left text-xs">
                       <thead className="bg-zinc-50 text-zinc-500 dark:bg-zinc-950"><tr><th scope="col" className="px-3 py-2.5 font-semibold">Operação</th><th scope="col" className="px-3 py-2.5 font-semibold">Resultado</th><th scope="col" className="px-3 py-2.5 font-semibold">Data</th><th scope="col" className="px-3 py-2.5 font-semibold">Duração</th><th scope="col" className="px-3 py-2.5 font-semibold">Volume</th><th scope="col" className="px-3 py-2.5 font-semibold">Detalhe</th></tr></thead>
                       <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">{historyQuery.data.items.map((entry) => {
@@ -1990,8 +1428,8 @@ export function Configuracoes() {
 
         <Modal
           isOpen={showRestoreModal}
-          onClose={() => { if (!restoring) setShowRestoreModal(false); }}
-          title="Restaurar Backup"
+          onClose={closeRestoreModal}
+          title="Restaurar backup"
           maxWidth="max-w-lg"
         >
           <div className="space-y-4 pt-2">
@@ -2023,11 +1461,34 @@ export function Configuracoes() {
               <label htmlFor="restore-bundle-path" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Backup selecionado</label>
               <input id="restore-bundle-path" value={restoreBundlePath} readOnly className={systemFieldMonoClass} />
             </div>
-            <div>
-              <label htmlFor="restore-recovery-code" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Código de recuperação (se o backup veio de outro computador)</label>
-              <input id="restore-recovery-code" name="restore_recovery_code" value={restoreRecoveryCode} onChange={(event) => setRestoreRecoveryCode(event.target.value)} autoComplete="off" spellCheck={false} placeholder="GG-R1-…" className={systemFieldMonoClass} />
-              <button type="button" onClick={() => void handleValidateRestore()} disabled={validatingRestore || !restoreBundlePath} className="mt-2 min-h-10 rounded-xl border border-zinc-300 px-4 text-xs font-bold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800">Validar novamente</button>
-            </div>
+            <fieldset className="space-y-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+              <legend className="px-1 text-xs font-semibold text-zinc-700 dark:text-zinc-300">Recuperação em outro computador</legend>
+              <p className="text-xs leading-relaxed text-zinc-500">Use somente quando o backup não puder ser aberto pela chave deste dispositivo.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold dark:border-zinc-700">
+                  <input type="radio" name="restore_recovery_mode" value="code" checked={restoreRecoveryMode === 'code'} onChange={() => { setRestoreRecoveryMode('code'); setRestoreRecoverySession(''); setRestoreKitFileName(''); setRestoreTestResult(null); }} />
+                  Usar código
+                </label>
+                <label className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold dark:border-zinc-700">
+                  <input type="radio" name="restore_recovery_mode" value="kit" checked={restoreRecoveryMode === 'kit'} onChange={() => { setRestoreRecoveryMode('kit'); setRestoreRecoveryCode(''); setRestoreTestResult(null); }} />
+                  Usar kit
+                </label>
+              </div>
+              {restoreRecoveryMode === 'code' ? (
+                <div>
+                  <label htmlFor="restore-recovery-code" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Código de recuperação</label>
+                  <input id="restore-recovery-code" name="restore_recovery_code" value={restoreRecoveryCode} onChange={(event) => { setRestoreRecoveryCode(event.target.value); setRestoreTestResult(null); }} autoComplete="off" spellCheck={false} placeholder="GG-R1-…" className={systemFieldMonoClass} />
+                  <button type="button" onClick={() => void handleValidateRestore()} disabled={validatingRestore || !restoreBundlePath || !restoreRecoveryCode.trim()} className="mt-2 min-h-10 rounded-xl border border-zinc-300 px-4 text-xs font-bold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800">Validar código</button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label htmlFor="restore-kit-password" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Senha do kit</label>
+                  <input id="restore-kit-password" name="restore_kit_password" type="password" value={restoreKitPassword} onChange={(event) => setRestoreKitPassword(event.target.value)} autoComplete="off" className={systemFieldClass} />
+                  <button type="button" onClick={() => void handleChooseRecoveryKit()} disabled={validatingRestore || restoreKitPassword.length < 12} className="min-h-10 rounded-xl border border-zinc-300 px-4 text-xs font-bold hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-sky-500/50 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800">Selecionar e validar kit</button>
+                  {restoreKitFileName && <p role="status" className="break-words text-xs font-semibold text-emerald-700 dark:text-emerald-300">Kit validado: {restoreKitFileName}</p>}
+                </div>
+              )}
+            </fieldset>
             <div className={!restoreTestResult ? 'opacity-60' : undefined}>
               <label htmlFor="restore-confirmation" className="mb-2 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                 Digite <span className="font-mono font-bold text-amber-700">RESTAURAR BACKUP DO GEOGESTOR</span> para confirmar:
@@ -2044,7 +1505,7 @@ export function Configuracoes() {
               />
             </div>
             <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-              <button type="button" onClick={() => setShowRestoreModal(false)} disabled={restoring} className="h-9 rounded-xl px-4 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-800">Cancelar</button>
+              <button type="button" onClick={closeRestoreModal} disabled={restoring} className="h-9 rounded-xl px-4 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-800">Cancelar</button>
               <button
                 type="button"
                 onClick={handleRestoreBackup}

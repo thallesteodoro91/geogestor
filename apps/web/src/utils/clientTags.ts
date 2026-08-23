@@ -47,7 +47,6 @@ export const CLIENT_SERVICOS_BY_CATEGORY = {
     'Desmembramento'
   ],
   'Topografia': [
-    'Topografia',
     'Planialtimétrico',
     'Drone',
     'Lev. Pontos de Inter.',

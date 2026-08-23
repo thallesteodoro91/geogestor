@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { LockKey, X } from '@phosphor-icons/react';
 import { PreloadLink } from './PreloadLink';
 import { useAppSession } from '../contexts/AppSessionContext';
+import { loadCompanyTemplate } from '../services/companyTemplate';
 import { APP_VERSION } from '../version';
+import { APP_ROUTES } from '@geogestor/contracts';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
 import projectsIcon from '../assets/magnific-icons/project_folder.svg';
 import crmIcon from '../assets/magnific-icons/filter_9757817.svg';
@@ -89,6 +91,31 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, lock } = useAppSession();
   const location = useLocation();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [applicationLogo, setApplicationLogo] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const refreshApplicationLogo = async () => {
+      try {
+        const template = await loadCompanyTemplate();
+        if (active) setApplicationLogo(template.appLogo);
+      } catch {
+        // Keep the standard GeoGestor mark if the local setting cannot be read.
+      }
+    };
+    const handleApplicationLogoChange = (event: Event) => {
+      const logo = (event as CustomEvent<{ logo?: string }>).detail?.logo;
+      if (typeof logo === 'string') setApplicationLogo(logo);
+      else void refreshApplicationLogo();
+    };
+
+    void refreshApplicationLogo();
+    window.addEventListener('geogestor:application-logo-changed', handleApplicationLogoChange);
+    return () => {
+      active = false;
+      window.removeEventListener('geogestor:application-logo-changed', handleApplicationLogoChange);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const node = scrollContainerRef.current;
@@ -131,53 +158,53 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       title: 'NAVEGAÇÃO',
       tone: 'field',
       items: [
-        { name: 'Visão Geral', path: '/', icon: dashboardIcon, created: true },
+        { name: APP_ROUTES.dashboard.label, path: APP_ROUTES.dashboard.path, icon: dashboardIcon, created: true },
         {
           name: 'Comercial',
-          path: '/clientes',
+          path: APP_ROUTES.clients.path,
           icon: crmIcon,
           created: true,
-          activePaths: ['/clientes', '/crm', '/orcamentos'],
+          activePaths: [APP_ROUTES.clients.path, APP_ROUTES.crm.path, APP_ROUTES.budgets.path],
         },
-        { name: 'Projetos', path: '/projetos', icon: projectsIcon, created: true },
-        { name: 'Ambiental', path: '/ambiental', icon: ambientalIcon, created: true },
-        { name: 'Financeiro', path: '/financeiro', icon: financeIcon, created: true },
+        { name: APP_ROUTES.projects.label, path: APP_ROUTES.projects.path, icon: projectsIcon, created: true },
+        { name: APP_ROUTES.environmental.label, path: APP_ROUTES.environmental.path, icon: ambientalIcon, created: true },
+        { name: APP_ROUTES.finance.label, path: APP_ROUTES.finance.path, icon: financeIcon, created: true },
         {
-          name: 'Agenda',
-          path: '/calendario',
+          name: APP_ROUTES.calendar.label,
+          path: APP_ROUTES.calendar.path,
           icon: calendarIcon,
           created: true,
-          activePaths: ['/calendario', '/tarefas'],
+          activePaths: [APP_ROUTES.calendar.path, APP_ROUTES.tasks.path],
         },
         {
-          name: 'Topografia',
-          path: '/topografia',
+          name: APP_ROUTES.topography.label,
+          path: APP_ROUTES.topography.path,
           icon: topographyIcon,
           created: true,
-          activePaths: ['/topografia'],
+          activePaths: [APP_ROUTES.topography.path],
         },
       ],
     },
   ];
 
   const administrationItems: SidebarItem[] = [
-    { name: 'Relatórios', path: '/relatorios', icon: reportsIcon, created: true },
-    { name: 'Planejamento', path: '/planejamento', icon: planningIcon, created: true },
+    { name: APP_ROUTES.reports.label, path: APP_ROUTES.reports.path, icon: reportsIcon, created: true },
+    { name: APP_ROUTES.planning.label, path: APP_ROUTES.planning.path, icon: planningIcon, created: true },
     {
-      name: 'Cadastros',
-      path: '/cadastros',
+      name: APP_ROUTES.auxiliaryRecords.label,
+      path: APP_ROUTES.auxiliaryRecords.path,
       icon: recordsIcon,
       created: true,
-      activePaths: ['/cadastros', '/propriedades'],
+      activePaths: [APP_ROUTES.auxiliaryRecords.path, APP_ROUTES.properties.path],
     },
     {
-      name: 'Configurações',
-      path: '/configuracoes',
+      name: APP_ROUTES.settings.label,
+      path: APP_ROUTES.settings.path,
       icon: settingsIcon,
       created: true,
-      activePaths: ['/configuracoes', '/importacao', '/qualidade-dados', '/audit-logs'],
+      activePaths: [APP_ROUTES.settings.path, APP_ROUTES.importData.path, APP_ROUTES.dataQuality.path, APP_ROUTES.auditLogs.path],
     },
-    { name: 'Ajuda', path: '/ajuda', icon: helpIcon, created: true },
+    { name: APP_ROUTES.help.label, path: APP_ROUTES.help.path, icon: helpIcon, created: true },
   ];
 
   const isItemActive = (item: SidebarItem) => {
@@ -206,9 +233,20 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       >
         <div className="flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-5 dark:border-zinc-800">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-md">
-              <div className="h-4 w-4 rounded bg-white dark:bg-zinc-900" />
-            </div>
+            {applicationLogo ? (
+              <img
+                src={applicationLogo}
+                alt="Logotipo da empresa"
+                width={40}
+                height={40}
+                onError={() => setApplicationLogo('')}
+                className="h-10 w-10 shrink-0 rounded-xl object-contain shadow-md ring-1 ring-zinc-200 dark:ring-zinc-700"
+              />
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 shadow-md">
+                <div className="h-4 w-4 rounded bg-white dark:bg-zinc-900" />
+              </div>
+            )}
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
                 <div className="font-heading text-lg font-semibold leading-none text-zinc-900 dark:text-white">
@@ -336,7 +374,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
           </div>
         </nav>
 
-        <div className="border-t border-zinc-100 px-4 pb-[4.5rem] pt-4 dark:border-zinc-800">
+        <div className="border-t border-zinc-100 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 dark:border-zinc-800">
           <div className="flex items-center gap-3 rounded-lg border border-zinc-200/70 bg-zinc-50 p-2.5 dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-200 font-heading text-sm font-semibold text-zinc-700 dark:bg-zinc-700 dark:text-zinc-300">
               {(identity?.name || 'GG').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}

@@ -1,47 +1,37 @@
-# Homologação humana — Windows e WCAG 2.2 AA
+# Homologação humana — Windows, recuperação e WCAG 2.2 AA
 
-Data de preparação: 01/08/2026
-Pacote: GeoGestor Desktop 1.1.2
-Instalador: `apps/desktop/dist/GeoGestor Setup 1.1.2.exe`
+Data de atualização técnica: 13/08/2026
+Versão comercial de referência: 1.0 (versão técnica 1.0.0)
+Candidato final: **NÃO GERADO — WORKTREE DIRTY**
 
-## Evidência automatizada já concluída
+Testes automatizados de código, Axe, teclado e reflow fornecem evidência parcial, mas não aprovam instalação real, leitor de tela, escalas físicas, alto contraste real ou interrupção elétrica. Todos os itens abaixo começam como `PENDENTE DE HOMOLOGAÇÃO HUMANA`.
 
-- 28 combinações de rota e tema avaliadas com Axe: zero violações WCAG A/AA.
-- Movimento reduzido habilitado na auditoria automatizada.
-- Viewports de celular, tablet e desktop aprovados no E2E.
-- Navegação por teclado, foco visível, URL e leitura acessível cobertos nas jornadas E2E principais.
-- Shell persistente e apenas um `main` durante navegação interna.
+| Área | Ensaio humano obrigatório | Evidência a registrar | Status |
+|---|---|---|---|
+| Instalação | Instalar em Windows 10 e 11 limpos, como usuário comum, em caminho padrão e caminho com espaços/acentos. | Vídeo, versão do Windows, logs sanitizados. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Atualização | Atualizar uma versão anterior suportada com banco/documentos sintéticos; comparar contagens e hashes lógicos. | Matriz antes/depois e backup usado. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Desinstalação | Validar menu Iniciar, atalhos, desinstalação e preservação/remoção conforme a política aprovada. | Capturas e inventário de arquivos. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| SmartScreen | Observar aviso real do instalador sem Authenticode; confirmar que nenhum material declara editor verificado. | Captura do Windows. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Leitor de tela | Percorrer setup, desbloqueio, busca, alertas, cadastros, modais e erros com NVDA e Narrador. | Registro de anúncios, nomes, estados e landmarks. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Teclado | Repetir jornadas somente com Tab, Shift+Tab, Enter, Espaço e Esc; validar retorno de foco. | Vídeo contínuo por jornada. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Ordem e retorno de foco | Abrir e fechar páginas, modais, menus e comboboxes; confirmar ordem lógica, foco inicial, contenção e retorno ao acionador. | Vídeo e identificação do elemento focado em cada transição. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Escala e zoom | Windows 125%, 150% e 200%; zoom 200%; reflow equivalente a 320 CSS px. | Capturas por rota/tema. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Resoluções pequenas | Repetir as jornadas principais em 800×600, 1024×768 e na menor resolução suportada definida pelo produto. | Capturas por rota, resolução e tema. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Alto contraste | Ativar temas reais de contraste do Windows e validar controles, foco e gráficos. | Capturas e lista de barreiras. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Conteúdo e mensagens | Revisar textos longos/curtos, estados vazios, carregamento, sucesso e mensagens de erro, confirmando orientação acionável e ausência de corte. | Capturas e lista de textos/estados avaliados. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Operação offline | Iniciar e usar os fluxos locais sem rede; validar abertura, dados locais, mapas-base indisponíveis, integrações opcionais, PDFs, backup e mensagens de recuperação. | Vídeo, estado de rede e logs sanitizados. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Monitores | Alternar entre monitores com DPI distintos; abrir/fechar diálogos. | Vídeo e DPI de cada monitor. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Suspensão | Suspender/retomar com sessão aberta e bloqueada; validar token, relógio e persistência. | Linha do tempo e logs sanitizados. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Uso prolongado | Executar ciclos comerciais, mapas, PDFs e backups por período definido pelo homologador. | CPU, memória e incidentes. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Migração/interrupção | Interromper cópia, substituição e verificação em instalações sintéticas descartáveis. | Matriz de pontos de falha e rollback. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Backup/restauração | Criar, corromper, restaurar e recusar schema futuro pela interface instalada. | Manifestos, contagens e hashes. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Recuperação | Recuperar em outro perfil e equipamento com kit sintético protegido. | Procedimento, resultado e resíduos. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
+| Revisão visual final | Revisar todas as rotas, temas, gráficos, mapas, PDFs e diálogos no candidato final, incluindo alinhamento, hierarquia, contraste e consistência da cópia. | Matriz de rotas/temas e capturas aprovadas pelo homologador. | PENDENTE DE HOMOLOGAÇÃO HUMANA |
 
-## Checklist que exige observação humana
+## Registro mínimo por ensaio
 
-Preencha “resultado observado”, “evidência” e “status” durante a homologação. Não marque como aprovado sem executar a ação no instalador final.
-
-| Ação | Resultado esperado | Resultado observado | Windows/escala | Tema | Evidência | Status |
-|---|---|---|---|---|---|---|
-| Instalar sobre uma instalação existente com banco legado e abrir o aplicativo | Migração concluída sem perda; dados e vínculos conferidos por amostragem | A preencher | Windows 11 / 100% | Claro | Captura + relatório de qualidade | Pendente |
-| Navegar por todas as páginas apenas com Tab, Shift+Tab, Enter, Espaço e Esc | Ordem lógica, foco sempre visível e nenhum bloqueio | A preencher | Windows 11 / 100% | Claro e escuro | Vídeo curto | Pendente |
-| Navegar com NVDA pelas rotas principais | Nova página e atualizações assíncronas anunciadas; nomes e landmarks corretos | A preencher | Windows 11 / 100% | Claro e escuro | Registro do NVDA | Pendente |
-| Alterar escala do Windows para 125%, 150% e 200% | Sem corte de texto, sobreposição ou rolagem horizontal indevida | A preencher | Windows 11 / 125–200% | Claro e escuro | Capturas por escala | Pendente |
-| Usar viewport equivalente a 390 px e zoom de 200% | Conteúdo utilizável e controles acessíveis | A preencher | Windows 11 / 200% | Claro e escuro | Capturas | Pendente |
-| Abrir e fechar modais, menus e comboboxes | Foco entra no componente e retorna ao acionador; Esc fecha quando aplicável | A preencher | Windows 11 / 100% | Claro e escuro | Vídeo curto | Pendente |
-| Gerar orçamento curto e longo, relatório, laudo e PDF com acentos/valores altos | Arquivos íntegros, paginação correta e nenhum custo interno exposto | A preencher | Windows 11 / 100% | Claro | PDFs gerados | Pendente |
-| Clicar duas vezes em “Gerar PDF” e simular falha | Um único processo; estado “Gerando PDF…” e recuperação clara | A preencher | Windows 11 / 100% | Claro | Vídeo + log sem segredo | Pendente |
-| Criar, validar e restaurar backup no aplicativo instalado | Dados e documentos restaurados; backup corrompido ou chave errada é recusado | A preencher | Windows 11 / 100% | Claro | Relatório antes/depois | Pendente |
-| Encerrar o processo durante migração, restauração e rotação | Reinício recupera o estado anterior íntegro | A preencher | Windows 11 / 100% | Claro | Matriz de interrupções | Pendente |
-| Inspecionar cofre de chave e processos com ferramentas do Windows | Chave não aparece em texto claro nem chega ao processo de renderização | A preencher | Windows 11 / 100% | N/A | Relatório técnico | Pendente |
-
-## Procedimento reproduzível
-
-Use uma cópia do banco de produção anonimizada e pelo menos um documento de cada tipo aceito. Registre a versão do instalador, versão do Windows, escala, tema, data, responsável e evidência em cada execução.
-
-1. **Teclado e modais:** abra as rotas principais, percorra cada controle com Tab e Shift+Tab, acione botões com Enter e Espaço e feche modais com Esc. Confirme visualmente a entrada e o retorno do foco ao acionador.
-2. **NVDA:** com o leitor ativo, navegue pelo cabeçalho, navegação, filtros, tabelas, feedbacks assíncronos e modais. Registre nomes anunciados, landmarks e qualquer controle sem rótulo.
-3. **Escala e zoom:** repita as rotas Dashboard, Clientes, Projetos, Orçamentos, Financeiro, Relatórios e Planejamento com escalas de 125%, 150% e 200%; em seguida use viewport de 390 px com zoom de 200%. Capture qualquer corte, sobreposição ou rolagem horizontal indevida.
-4. **PDF:** gere orçamento, relatório e laudo com texto longo, acentos, valores altos e múltiplas páginas. Clique duas vezes em Gerar PDF e simule uma falha; deve haver somente uma operação ativa e uma mensagem clara de recuperação.
-5. **Backup e restauração:** crie um backup completo, altere um cliente e um documento, restaure-o e compare os dados e arquivos com o estado anterior. Em seguida tente restaurar um backup inválido para confirmar falha segura.
-6. **Migração e interrupção:** execute a atualização sobre uma cópia legada e, em cópias descartáveis, encerre o processo durante migração, restauração e rotação. Na reabertura, valide que a cópia anterior permanece íntegra ou que a recuperação foi concluída com segurança.
-7. **Proteção local:** verifique os arquivos de banco, WAL, SHM e backup com ferramentas do Windows; confirme que não exibem conteúdo operacional em texto claro e que a chave não aparece em logs nem no processo de renderização.
+Versão/commit/hash do instalador; estado `dirty`; versão e build do Windows; escala; tema; hardware relevante; responsável; data/hora; dados sintéticos usados; resultado observado; evidências; defeitos abertos e decisão de reteste.
 
 ## Critério de encerramento
 
-A nota 10/10 depende de todos os itens acima aprovados no instalador final. Falhas devem registrar reprodução, evidência e correção antes de nova homologação.
+Somente marcar um item como aprovado após executar a ação no instalador final correspondente ao hash registrado. Falha deve gerar reprodução, impacto, correção e nova execução. A ausência de Authenticode é um risco residual aceito, mas o comportamento real do SmartScreen continua pendente.

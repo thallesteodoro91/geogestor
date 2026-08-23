@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "routeAliasesSource": "packages/contracts/src/app-navigation.ts#APP_LEGACY_REDIRECTS",
+  "entries": [
+    {
+      "id": "legacy-financial-budgets-endpoint",
+      "kind": "api-endpoint",
+      "legacy": "GET /api/financeiro/orcamentos",
+      "canonical": "GET /api/orcamentos",
+      "status": "compatible",
+      "risk": "high",
+      "minimumVersion": "1.0.0",
+      "consumers": ["financeiro-reports.test.ts", "full-spreadsheet-import.integration.test.ts"],
+      "tests": ["financeiro-reports.test.ts", "full-spreadsheet-import.integration.test.ts"],
+      "removalCondition": "Migrar os consumidores legados, comprovar ausência de uso externo e anunciar uma janela de retirada."
+    },
+    {
+      "id": "legacy-dre-endpoint",
+      "kind": "api-endpoint",
+      "legacy": "GET /api/financeiro/dre",
+      "canonical": "GET /api/financeiro/resumo-mensal",
+      "status": "deprecated",
+      "risk": "medium",
+      "minimumVersion": "1.0.0",
+      "consumers": ["project-financial-polish.integration.test.ts"],
+      "tests": ["project-financial-polish.integration.test.ts"],
+      "removalCondition": "Manter ao menos uma versão com aviso e confirmar ausência de consumidores antes da retirada."
+    },
+    {
+      "id": "legacy-system-reset-endpoint",
+      "kind": "api-endpoint",
+      "legacy": "DELETE /api/sistema/reset",
+      "canonical": "POST /api/sistema/reset-dados",
+      "status": "compatible",
+      "risk": "high",
+      "minimumVersion": "1.0.0",
+      "consumers": ["release-blockers.integration.test.ts"],
+      "tests": ["release-blockers.integration.test.ts"],
+      "removalCondition": "Comprovar que instalações suportadas não usam o alias e preservar todas as barreiras de confirmação."
+    },
+    {
+      "id": "legacy-report-alert-copy",
+      "kind": "contract-field",
+      "legacy": "ReportAlert.title e ReportAlert.description",
+      "canonical": "ReportAlert.code e parâmetros estruturados",
+      "status": "compatible",
+      "risk": "medium",
+      "minimumVersion": "1.0.0",
+      "consumers": ["reportAlertCopy", "PDFs históricos"],
+      "tests": ["reports integration", "alert contracts"],
+      "removalCondition": "Remover o fallback somente quando o backend deixar de emitir os campos e PDFs históricos forem validados."
+    },
+    {
+      "id": "legacy-report-financial-fields",
+      "kind": "contract-field",
+      "legacy": "orcamentosStats, parcelasStats, despesasPorCategoria, historicoMensal e financeiro",
+      "canonical": "financial.kpis e estruturas financial",
+      "status": "compatible",
+      "risk": "high",
+      "minimumVersion": "1.0.0",
+      "consumers": ["orcamentos.integration", "reports.integration"],
+      "tests": ["orcamentos.integration", "reports.integration"],
+      "removalCondition": "Migrar consumidores e exportações, manter janela de leitura e validar documentos de versões anteriores."
+    },
+    {
+      "id": "legacy-dre-type",
+      "kind": "contract-type",
+      "legacy": "DRE",
+      "canonical": "MonthlyCashFlowSummary",
+      "status": "deprecated",
+      "risk": "low",
+      "minimumVersion": "1.0.0",
+      "consumers": [],
+      "tests": ["contracts typecheck"],
+      "removalCondition": "Confirmar ausência de pacote ou consumidor externo antes da retirada."
+    }
+  ]
+}

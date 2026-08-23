@@ -224,15 +224,16 @@ test('bloqueios de clientes, reset e configurações são recusados pelo backend
       payload: { bundlePath: path.join(testRoot, 'backup-inexistente') }
     });
     assert.equal(restoreWithoutConfirmation.statusCode, 400, restoreWithoutConfirmation.body);
-    const restoreOutsideBackupRoot = await request({
+    const restoreWithInvalidAuthorization = await request({
       method: 'POST',
       url: '/api/sistema/restaurar-backup',
       payload: {
         bundlePath: path.join(testRoot, 'backup-inexistente'),
+        bundleAuthorization: 'autorizacao-invalida',
         confirmation: 'RESTAURAR BACKUP DO GEOGESTOR'
       }
     });
-    assert.equal(restoreOutsideBackupRoot.statusCode, 422, restoreOutsideBackupRoot.body);
+    assert.equal(restoreWithInvalidAuthorization.statusCode, 422, restoreWithInvalidAuthorization.body);
 
     const acceptedReset = await request({
       method: 'POST',

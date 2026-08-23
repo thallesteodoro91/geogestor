@@ -9,6 +9,8 @@ import { DatePickerField, FormSelect } from '../../components/Form';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { apiClient, getDownloadUrl } from '../../services/apiClient';
+import { openProjectFolder } from '../../services/projectFolders';
+import { listBudgetSummaries } from '../../services/budgets';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Plus, ArrowUpRight, FolderOpen, Folder, PresentationChart, Files, FilePdf, FileDoc, FileText, FileDashed, Trash, MapPin, Compass, MapTrifold, DownloadSimple, MagnifyingGlass, ChartBar, Clock, CheckCircle, TrendUp, Warning } from '@phosphor-icons/react';
 import { Skeleton } from '../../components/Skeleton';
@@ -125,7 +127,7 @@ interface ProjectPage {
 }
 
 const projectSelectClass = cn(geoFieldClass, 'h-12 w-full cursor-pointer px-4 font-medium');
-const projectIconButtonClass = 'geo-focus-ring rounded-lg p-1 transition-[background-color,transform] duration-150 hover:bg-brand-surface-subtle hover:scale-110 active:scale-95 disabled:cursor-wait disabled:opacity-50 disabled:hover:scale-100 dark:hover:bg-brand-surface-muted';
+const projectIconButtonClass = 'geo-focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg p-1 transition-[background-color,transform] duration-150 hover:bg-brand-surface-subtle hover:scale-110 active:scale-95 disabled:cursor-wait disabled:opacity-50 disabled:hover:scale-100 dark:hover:bg-brand-surface-muted';
 
 const numberFormatter = new Intl.NumberFormat('pt-BR');
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -339,7 +341,13 @@ export function ListagemProjetos() {
     refetch: refetchBudgets
   } = useQuery<OrcamentoInfo[]>({
     queryKey: ['orcamentos-financeiro'],
-    queryFn: () => apiClient.getAllPages<OrcamentoInfo>('/api/financeiro/orcamentos'),
+    queryFn: async () => (await listBudgetSummaries()).map((budget): OrcamentoInfo => ({
+      id: budget.id,
+      clienteId: budget.clientId,
+      projetoId: budget.projectId,
+      status: budget.status,
+      valorTotal: budget.totalCents
+    })),
     enabled: viewMode === 'operacional' && totalProjetos > 0
   });
 
@@ -622,7 +630,7 @@ export function ListagemProjetos() {
 
   const handleAbrirPasta = async (id: string) => {
     try {
-      await apiClient.post(`/api/projetos/${id}/abrir-pasta`);
+      await openProjectFolder(id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao tentar abrir a pasta.';
       toast.error(msg);

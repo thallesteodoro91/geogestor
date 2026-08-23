@@ -8,7 +8,26 @@ if (!sourcePath) {
 }
 
 async function run() {
-  if (operation === 'validate') {
+  if (operation === 'checkpoint') {
+    // O checkpoint antecede a criptografia: a origem Ã© sempre o legado plaintext.
+    // NÃ£o consultar a chave do banco final neste ramo evita abrir a origem com a chave errada.
+    const client = createClient({ url: `file:${sourcePath}` });
+    try {
+      await client.execute('PRAGMA busy_timeout = 5000;');
+      const quickCheck = await client.execute('PRAGMA quick_check;');
+      const foreignKeys = await client.execute('PRAGMA foreign_key_check;');
+      const checkpoint = await client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
+      const quickCheckValue = quickCheck.rows[0] ? Object.values(quickCheck.rows[0])[0] : undefined;
+      const checkpointRow = checkpoint.rows[0];
+      if (String(quickCheckValue) !== 'ok') throw new Error('O banco legado falhou no quick_check.');
+      if (foreignKeys.rows.length > 0) throw new Error('O banco legado contÃ©m vÃ­nculos invÃ¡lidos.');
+      if (Number(checkpointRow?.busy || 0) !== 0 || Number(checkpointRow?.log || 0) !== Number(checkpointRow?.checkpointed || 0)) {
+        throw new Error('O WAL legado estÃ¡ ocupado e nÃ£o pÃ´de ser consolidado.');
+      }
+    } finally {
+      await client.close();
+    }
+  } else if (operation === 'validate') {
     const sourceKey = process.env.GEOGESTOR_DB_SOURCE_KEY;
     if (sourceKey) {
       process.stdout.write(JSON.stringify(inspectProtectedDatabaseSync(sourcePath, sourceKey)));

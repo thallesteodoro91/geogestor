@@ -6,7 +6,7 @@ import {
 } from './geoTheme';
 
 export const localNavigationBarClass =
-  'max-w-full min-w-0 overflow-x-auto overscroll-x-contain border-b border-zinc-200 pb-4 dark:border-zinc-800';
+  'max-w-full min-w-0 overflow-x-auto overscroll-x-contain pb-1';
 
 export const localNavigationItemsClass =
   'flex min-w-max items-center gap-3';

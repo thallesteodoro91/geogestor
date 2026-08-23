@@ -21,7 +21,6 @@ await esbuild.build({
   outdir: outputDir,
   external: [
     // Native Node modules that can't be bundled
-    'better-sqlite3',
     'fsevents',
   ],
   loader: {
@@ -43,38 +42,39 @@ fs.writeFileSync(path.join(outputDir, 'release-metadata.json'), `${JSON.stringif
   version: process.env.GEOGESTOR_BUILD_VERSION || process.env.npm_package_version || 'unknown',
   commit: process.env.GEOGESTOR_BUILD_COMMIT || 'unknown',
   dirty: process.env.GEOGESTOR_BUILD_DIRTY === 'true',
+  releaseRunId: process.env.GEOGESTOR_RELEASE_RUN_ID || null,
   builtAt: new Date().toISOString(),
   runtime: process.version
 }, null, 2)}\n`);
 
 console.log('✓ API build complete → dist/server.js');
 
-// Copy native bindings to dist/node_modules so they are available at runtime
-try {
-  const pnpmStorePath = path.join(monorepoRoot, 'node_modules', '.pnpm');
-  const dirs = fs.readdirSync(pnpmStorePath);
-  const msvcDirName = dirs.find(d => d.startsWith('@libsql+win32-x64-msvc'));
-  
-  if (msvcDirName) {
-    const msvcDir = path.join(pnpmStorePath, msvcDirName, 'node_modules', '@libsql', 'win32-x64-msvc');
-    const destDir = path.join(__dirname, 'dist', 'node_modules', '@libsql', 'win32-x64-msvc');
-    const nativeDestDir = path.join(__dirname, 'dist', 'native_modules', '@libsql', 'win32-x64-msvc');
-    
-    if (!fs.existsSync(destDir)) {
-      fs.mkdirSync(destDir, { recursive: true });
-    }
-    if (!fs.existsSync(nativeDestDir)) {
-      fs.mkdirSync(nativeDestDir, { recursive: true });
-    }
-    
-    fs.copyFileSync(path.join(msvcDir, 'package.json'), path.join(destDir, 'package.json'));
-    fs.copyFileSync(path.join(msvcDir, 'index.node'), path.join(destDir, 'index.node'));
-    fs.copyFileSync(path.join(msvcDir, 'package.json'), path.join(nativeDestDir, 'package.json'));
-    fs.copyFileSync(path.join(msvcDir, 'index.node'), path.join(nativeDestDir, 'index.node'));
-    console.log('✓ Native bindings copied to dist/node_modules and dist/native_modules');
-  } else {
-    console.warn('⚠️ Native bindings directory not found in .pnpm store');
-  }
-} catch (e) {
-  console.error('Failed to copy native bindings:', e.message);
+// Copy native bindings to dist/node_modules so they are available at runtime.
+// This binding is mandatory on the supported Windows target, so a partial build must fail.
+const pnpmStorePath = path.join(monorepoRoot, 'node_modules', '.pnpm');
+const dirs = fs.readdirSync(pnpmStorePath);
+const msvcDirName = dirs.find((directory) => directory.startsWith('@libsql+win32-x64-msvc'));
+if (!msvcDirName) {
+  throw new Error('Binding nativo obrigatório @libsql/win32-x64-msvc não foi encontrado na instalação congelada.');
 }
+
+const msvcDir = path.join(pnpmStorePath, msvcDirName, 'node_modules', '@libsql', 'win32-x64-msvc');
+const sourceFiles = ['package.json', 'index.node'];
+for (const sourceFile of sourceFiles) {
+  const sourcePath = path.join(msvcDir, sourceFile);
+  if (!fs.existsSync(sourcePath) || !fs.statSync(sourcePath).isFile()) {
+    throw new Error(`Binding nativo obrigatório incompleto: ${sourceFile} não foi encontrado.`);
+  }
+}
+
+const destinations = [
+  path.join(outputDir, 'node_modules', '@libsql', 'win32-x64-msvc'),
+  path.join(outputDir, 'native_modules', '@libsql', 'win32-x64-msvc')
+];
+for (const destination of destinations) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const sourceFile of sourceFiles) {
+    fs.copyFileSync(path.join(msvcDir, sourceFile), path.join(destination, sourceFile));
+  }
+}
+console.log('✓ Native bindings copied to dist/node_modules and dist/native_modules');

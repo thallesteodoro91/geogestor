@@ -138,7 +138,7 @@ export function readIdempotencyKey(headers: Record<string, unknown>) {
 }
 
 export async function ensureImportInfrastructure() {
-  infrastructure ??= ensureImportRuns().catch((error) => {
+  infrastructure ??= ensureImportRuns(db).catch((error) => {
     infrastructure = null;
     throw error;
   });

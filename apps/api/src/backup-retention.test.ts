@@ -38,3 +38,23 @@ test('retenção nunca remove a única versão mais recente de cada tipo', async
   ]);
   await fs.rm(root, { recursive: true, force: true });
 });
+
+test('backup .db legado é classificado como não verificado e nunca entra na limpeza automática', async () => {
+  await fs.rm(root, { recursive: true, force: true });
+  const backupDirectory = path.join(root, 'backups');
+  await createBundle('geogestor-backup-database-2026-08-08', 'database', '2026-08-08T12:00:00.000Z');
+  const legacyPath = path.join(backupDirectory, 'geogestor-backup-legacy-2025.db');
+  await fs.writeFile(legacyPath, 'conteúdo sintético legado', 'utf8');
+  const { BackupService } = await import('./services/backup.service');
+
+  const storage = await BackupService.getStorageStatus(backupDirectory);
+  const legacy = storage.history.find((item) => item.directory === path.basename(legacyPath));
+  assert.equal(storage.legacyVersions, 1);
+  assert.equal(legacy?.legacy, true);
+  assert.equal(legacy?.integrityState, 'legacy_unverified');
+  assert.equal(storage.latestByType.database?.legacy, false);
+
+  await BackupService.enforceRetention(1, backupDirectory, 1, 1, 1, 1);
+  assert.equal(await fs.readFile(legacyPath, 'utf8'), 'conteúdo sintético legado');
+  await fs.rm(root, { recursive: true, force: true });
+});

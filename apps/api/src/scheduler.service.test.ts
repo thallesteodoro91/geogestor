@@ -39,7 +39,7 @@ test('política de backup usa estado persistido e janela de 24 horas', async () 
 });
 
 test('backup completo usa estado separado e vence após sete dias', async () => {
-  const { isAutomaticCompleteBackupDue, SCHEDULER_DELAYS } = await import('./services/scheduler.service');
+  const { isAutomaticCompleteBackupDue, shouldCreateCompleteBackup, SCHEDULER_DELAYS } = await import('./services/scheduler.service');
   const now = Date.parse('2026-08-01T12:00:00.000Z');
 
   assert.equal(isAutomaticCompleteBackupDue({}, now), true);
@@ -57,6 +57,23 @@ test('backup completo usa estado separado e vence após sete dias', async () => 
       details: { completedAt: new Date(now - SCHEDULER_DELAYS.completeBackupDueMs).toISOString() }
     }
   }, now), true);
+  assert.equal(shouldCreateCompleteBackup({}, false, now, SCHEDULER_DELAYS.completeBackupDueMs), true);
+  assert.equal(shouldCreateCompleteBackup({
+    backupComplete: {
+      status: 'ok',
+      updatedAt: new Date(now).toISOString(),
+      details: { completedAt: new Date(now).toISOString() }
+    }
+  }, true, now, SCHEDULER_DELAYS.completeBackupDueMs), true);
+});
+
+test('encerramento não ignora alterações pendentes após aguardar outro backup', async () => {
+  const { shouldRunShutdownBackup } = await import('./services/scheduler.service');
+  const automatic = { runOnShutdown: false, automaticEnabled: true };
+  assert.equal(shouldRunShutdownBackup(automatic, 2, false), true);
+  assert.equal(shouldRunShutdownBackup(automatic, 1, true), true);
+  assert.equal(shouldRunShutdownBackup(automatic, 0, true), false);
+  assert.equal(shouldRunShutdownBackup({ runOnShutdown: true, automaticEnabled: false }, 0, false), true);
 });
 
 test('start agenda outbox cedo e posterga backup e manutenção pesada', async () => {

@@ -40,7 +40,7 @@ async function clickDesktopRoute(page: Page, name: 'Ajuda' | 'Topografia') {
   await expectSingleLayout(page);
 }
 
-test.describe.serial('persistência do layout principal', () => {
+test.describe('persistência do layout principal', () => {
   test.setTimeout(120_000);
 
   test('mantém uma única instância durante 20 navegações e no histórico', async ({ page }) => {

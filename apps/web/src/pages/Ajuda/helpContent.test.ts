@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { matchPath } from 'react-router-dom';
+import { APP_ROUTE_PATTERNS } from '@geogestor/contracts';
 import {
   HELP_ARTICLES,
   buildHelpArticleSearch,
@@ -10,7 +12,7 @@ import {
 } from './helpContent';
 
 test('catálogo cobre os módulos operacionais e possui metadados de manutenção', () => {
-  assert.equal(HELP_ARTICLES.length, 19);
+  assert.equal(HELP_ARTICLES.length, 20);
   assert.equal(new Set(HELP_ARTICLES.map((article) => article.id)).size, HELP_ARTICLES.length);
   for (const article of HELP_ARTICLES) {
     assert.ok(article.route.startsWith('/'));
@@ -34,6 +36,17 @@ test('categoria e busca são combinadas e podem produzir estado vazio', () => {
   assert.deepEqual(filterHelpArticles(HELP_ARTICLES, 'financeiro', 'licenciamento'), []);
 });
 
+test('guia geoespacial separa levantamento vetorial de mapa-base raster', () => {
+  const article = getHelpArticle('importacao-levantamento-vetorial');
+  assert.ok(article);
+  const content = JSON.stringify(article);
+  assert.match(content, /GeoPackage vetorial/);
+  assert.match(content, /somente como fundo cartográfico offline/);
+  assert.match(content, /não cria coordenadas/);
+  assert.match(content, /QGIS/);
+  assert.ok(filterHelpArticles(HELP_ARTICLES, 'operacional', 'GeoTIFF').some((item) => item.id === article.id));
+});
+
 test('estado de URL é estável e entradas inválidas possuem fallback seguro', () => {
   const article = getHelpArticle('projetos-checklist');
   assert.ok(article);
@@ -47,13 +60,12 @@ test('estado de URL é estável e entradas inválidas possuem fallback seguro', 
 });
 
 test('links internos apontam para rotas existentes e textos obsoletos não retornam', () => {
-  const appSource = readFileSync(new URL('../../App.tsx', import.meta.url), 'utf8');
   const obsolete = ['Abrir Pasta no Explorer', 'Imprimir / Salvar PDF', 'Ctrl + P', 'F5:'];
   const content = JSON.stringify(HELP_ARTICLES);
   for (const phrase of obsolete) assert.equal(content.includes(phrase), false, phrase);
   for (const article of HELP_ARTICLES) {
     const pathname = article.route.split('?')[0];
-    assert.match(appSource, new RegExp(`path=["']${pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}["']`), article.route);
+    assert.ok(APP_ROUTE_PATTERNS.some((pattern) => matchPath({ path: pattern, end: true }, pathname)), article.route);
   }
 });
 

@@ -58,7 +58,7 @@ function LayoutShell({
     <div
       data-app-layout
       className={cn(
-      'min-h-screen flex flex-col md:flex-row bg-zinc-50 dark:bg-[#121215] font-sans text-zinc-900 dark:text-zinc-100 selection:bg-indigo-100 dark:selection:bg-indigo-900/30',
+      'min-h-screen flex flex-col md:flex-row bg-zinc-50 dark:bg-[#121215] font-sans text-zinc-900 dark:text-zinc-100 selection:bg-indigo-200 selection:text-zinc-950 dark:selection:bg-indigo-700 dark:selection:text-white',
       printContentOnly && 'print:min-h-0 print:block print:bg-white print:text-zinc-950'
       )}
     >
@@ -99,7 +99,7 @@ function LayoutShell({
             className="-mr-2 rounded-xl p-2 text-zinc-500 outline-none motion-fast motion-gpu hover:bg-zinc-100 hover:text-zinc-800 active:scale-[0.96] dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/30"
             aria-label="Abrir menu de navegação"
           >
-            <List size={22} weight="bold" />
+            <List aria-hidden="true" size={22} weight="bold" />
           </button>
         </div>
       </header>

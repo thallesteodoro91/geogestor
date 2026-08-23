@@ -186,6 +186,7 @@ export function Ajuda() {
 
       <PageFilterBar
         className="mb-5"
+        layout="compact"
         search={
           <div className="relative min-w-0">
             <label htmlFor="help-search" className="sr-only">Pesquisar na Central de Ajuda</label>
@@ -213,7 +214,7 @@ export function Ajuda() {
         ) : null}
       />
 
-      <div className="relative mb-7 min-w-0 border-b border-zinc-200 pb-3 dark:border-zinc-800">
+      <div className="relative mb-7 min-w-0 pb-1">
         <nav aria-label="Categorias da Central de Ajuda" className="flex min-w-0 gap-2 overflow-x-auto scroll-smooth pr-10 [scrollbar-width:thin]">
           {HELP_CATEGORIES.map((category) => {
             const Icon = iconByKey[category.icon];
@@ -237,7 +238,7 @@ export function Ajuda() {
             );
           })}
         </nav>
-        <div aria-hidden="true" className="pointer-events-none absolute bottom-3 right-0 top-0 w-12 bg-gradient-to-l from-white via-white/90 to-transparent dark:from-zinc-950 dark:via-zinc-950/90" />
+        <div aria-hidden="true" className="pointer-events-none absolute bottom-1 right-0 top-0 w-12 bg-gradient-to-l from-white via-white/90 to-transparent dark:from-zinc-950 dark:via-zinc-950/90" />
       </div>
 
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

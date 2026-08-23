@@ -3,7 +3,14 @@ import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
-const captureDirectory = path.join(process.cwd(), 'scratch', 'header-audit');
+
+function managedCaptureDirectory() {
+  const runRoot = process.env.GEOGESTOR_E2E_ROOT;
+  if (!runRoot || !/^run-[a-z0-9-]+$/i.test(path.basename(runRoot))) {
+    throw new Error('GEOGESTOR_E2E_ROOT deve apontar para a execução comercial gerenciada.');
+  }
+  return path.join(runRoot, 'header-audit');
+}
 
 const routes = [
   { path: '/', heading: 'Visão Geral' },
@@ -12,7 +19,7 @@ const routes = [
   { path: '/orcamentos', heading: 'Orçamentos' },
   { path: '/projetos', heading: 'Projetos' },
   { path: '/ambiental', heading: 'Gestão Ambiental e Perícias' },
-  { path: '/financeiro', heading: 'Gestão financeira 360' },
+  { path: '/financeiro', heading: 'Financeiro' },
   { path: '/calendario', heading: 'Calendário' },
   { path: '/tarefas', heading: 'Tarefas' },
   { path: '/topografia', heading: 'Topografia' },
@@ -80,7 +87,10 @@ async function auditCurrentHeader(page: Page, wide: boolean) {
     const filterBar = main.querySelector<HTMLElement>('section[aria-label="Busca e filtros"]');
     const filterControls = filterBar
       ? [...filterBar.querySelectorAll<HTMLElement>('input, select, button')]
-        .filter((element) => element.getBoundingClientRect().height > 4)
+        .filter((element) => (
+          element.getBoundingClientRect().height > 4
+          && (!element.closest('.geo-numeric-input') || element.matches('input'))
+        ))
         .map((element) => ({
           height: element.getBoundingClientRect().height,
           tag: element.tagName,
@@ -113,7 +123,7 @@ async function auditCurrentHeader(page: Page, wide: boolean) {
   }
 }
 
-test.describe.serial('padronização dos cabeçalhos principais', () => {
+test.describe('padronização dos cabeçalhos principais', () => {
   test.setTimeout(180_000);
 
   test('as 17 rotas preservam ordem, dimensões e ausência de overflow em três larguras', async ({ page }) => {
@@ -192,16 +202,20 @@ test.describe.serial('padronização dos cabeçalhos principais', () => {
     const areaTabBox = await page.getByRole('tab', { name: 'Área e perímetro' }).boundingBox();
     const saveCalculationBox = await page.getByRole('button', { name: 'Salvar cálculo' }).boundingBox();
     const topographyHeaderBox = await page.locator('main header').boundingBox();
+    const spatialReferenceBox = await page.locator('section[aria-labelledby="spatial-reference-title"]').boundingBox();
     const converterPanelBox = await page.locator('#topography-panel-conversor').boundingBox();
     expect(areaTabBox).not.toBeNull();
     expect(saveCalculationBox).not.toBeNull();
     expect(topographyHeaderBox).not.toBeNull();
+    expect(spatialReferenceBox).not.toBeNull();
     expect(converterPanelBox).not.toBeNull();
     expect(Math.abs(
       areaTabBox!.y + areaTabBox!.height / 2 - (saveCalculationBox!.y + saveCalculationBox!.height / 2),
     )).toBeLessThanOrEqual(1);
-    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeGreaterThanOrEqual(14);
-    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeLessThanOrEqual(18);
+    expect(spatialReferenceBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeGreaterThanOrEqual(14);
+    expect(spatialReferenceBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeLessThanOrEqual(18);
+    expect(converterPanelBox!.y - (spatialReferenceBox!.y + spatialReferenceBox!.height)).toBeGreaterThanOrEqual(14);
+    expect(converterPanelBox!.y - (spatialReferenceBox!.y + spatialReferenceBox!.height)).toBeLessThanOrEqual(18);
 
     await navigate(page, '/configuracoes');
     await expect(page.getByRole('link', { name: 'Importação de dados' })).toBeVisible();
@@ -237,6 +251,7 @@ test.describe.serial('padronização dos cabeçalhos principais', () => {
 
   test('gera as capturas comparativas solicitadas', async ({ page }) => {
     await unlock(page);
+    const captureDirectory = managedCaptureDirectory();
     mkdirSync(captureDirectory, { recursive: true });
     await page.setViewportSize({ width: 1600, height: 900 });
     await setTheme(page, 'light');

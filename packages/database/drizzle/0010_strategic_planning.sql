@@ -114,16 +114,29 @@ CREATE TABLE IF NOT EXISTS `riscos_estrategicos` (
 );
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_ciclos_estrategicos_status_periodo` ON `ciclos_estrategicos` (`status`,`data_inicio`,`data_fim`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_pilares_estrategicos_ciclo_ordem` ON `pilares_estrategicos` (`ciclo_id`,`ordem`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_objetivos_estrategicos_ciclo_status` ON `objetivos_estrategicos` (`ciclo_id`,`status`,`data_limite`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_objetivos_estrategicos_pilar` ON `objetivos_estrategicos` (`pilar_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_resultados_chave_objetivo` ON `resultados_chave` (`objetivo_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_resultados_chave_fonte` ON `resultados_chave` (`fonte_tipo`,`fonte_codigo`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_iniciativas_estrategicas_objetivo_status` ON `iniciativas_estrategicas` (`objetivo_id`,`status`,`data_limite`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_iniciativas_estrategicas_projeto` ON `iniciativas_estrategicas` (`projeto_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_iniciativas_estrategicas_tarefa` ON `iniciativas_estrategicas` (`tarefa_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_checkins_estrategicos_ciclo_data` ON `checkins_estrategicos` (`ciclo_id`,`data`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_checkins_estrategicos_objetivo` ON `checkins_estrategicos` (`objetivo_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_riscos_estrategicos_ciclo_status` ON `riscos_estrategicos` (`ciclo_id`,`status`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_riscos_estrategicos_objetivo` ON `riscos_estrategicos` (`objetivo_id`);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS `idx_riscos_estrategicos_iniciativa` ON `riscos_estrategicos` (`iniciativa_id`);

@@ -7,21 +7,96 @@ import { createReadStream, createWriteStream } from 'fs';
 import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
 import path from 'path';
-import zlib from 'zlib';
 import { execFile } from 'child_process';
 import crypto from 'crypto';
+import { z } from 'zod';
 import { JornadaService } from '../services/jornada.service';
 import { FileSystemService } from '../services/fs.service';
 import { RecoverableFileService, type QuarantineManifest } from '../services/recoverable-file.service';
 import { assertLexicalPathInsideRoot, ensurePathInsideRoot } from '../services/path-containment.service';
+import { GeospatialImportService } from '../services/geospatial/geospatial-import.service';
+import { GeospatialAuditService } from '../services/geospatial/geospatial-audit.service';
+import { MbtilesService } from '../services/geospatial/mbtiles.service';
+import { BRAZIL_CRS_CATALOG } from '../services/geospatial/crs-detection.service';
+import { assertVectorSurveyUpload } from '../services/geospatial/vector-upload-policy.service';
 
 const ALLOWED_EXTENSIONS = ['.pdf', '.gpkg', '.kml', '.kmz', '.docx', '.csv', '.xlsx', '.dwg', '.shp', '.geojson', '.json', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.txt', '.zip'];
 const PREVIEW_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif'];
 const HEAVY_EXTENSIONS = ['.gpkg', '.kml', '.kmz', '.dwg', '.shp', '.geojson', '.zip'];
-const MAX_GEO_TEXT_BYTES = 10 * 1024 * 1024;
-const MAX_KMZ_BYTES = 50 * 1024 * 1024;
-const MAX_KMZ_ENTRIES = 10;
-const MAX_ZIP_EXPANSION_RATIO = 100;
+const LEGACY_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
+const LEGACY_UPLOAD_BODY_LIMIT = Math.ceil(LEGACY_UPLOAD_MAX_BYTES * 4 / 3) + 32 * 1024;
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+const MIME_BY_EXTENSION: Record<string, readonly string[]> = {
+  '.pdf': ['application/pdf'],
+  '.gpkg': ['application/geopackage+sqlite3', 'application/vnd.sqlite3', 'application/octet-stream'],
+  '.kml': ['application/vnd.google-earth.kml+xml', 'application/xml', 'text/xml'],
+  '.kmz': ['application/vnd.google-earth.kmz', 'application/zip'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.csv': ['text/csv', 'application/csv', 'text/plain'],
+  '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+  '.dwg': ['image/vnd.dwg', 'application/acad', 'application/octet-stream'],
+  '.shp': ['application/x-esri-shape', 'application/octet-stream'],
+  '.geojson': ['application/geo+json', 'application/json'],
+  '.json': ['application/json'],
+  '.png': ['image/png'],
+  '.jpg': ['image/jpeg'],
+  '.jpeg': ['image/jpeg'],
+  '.webp': ['image/webp'],
+  '.gif': ['image/gif'],
+  '.txt': ['text/plain'],
+  '.zip': ['application/zip', 'application/x-zip-compressed']
+};
+
+const legacyUploadSchema = z.object({
+  clienteId: z.string().trim().min(1).max(200).optional(),
+  projetoId: z.string().trim().min(1).max(200).optional(),
+  fileName: z.string().min(1).max(255),
+  fileContent: z.string().min(1).max(LEGACY_UPLOAD_BODY_LIMIT),
+  mimeType: z.string().trim().min(1).max(200).optional(),
+  category: z.string().trim().min(1).max(120).optional(),
+  uploadPurpose: z.enum(['vector-survey']).optional()
+}).strict().refine((input) => Boolean(input.clienteId || input.projetoId), {
+  message: 'Informe clienteId ou projetoId.'
+});
+
+function validateLegacyFileName(fileName: string) {
+  const normalized = fileName.normalize('NFC');
+  if (path.isAbsolute(normalized)
+    || path.posix.basename(normalized) !== normalized
+    || path.win32.basename(normalized) !== normalized
+    || normalized === '.'
+    || normalized === '..'
+    || /[\u0000-\u001f<>:"/\\|?*]/.test(normalized)
+    || /[. ]$/.test(normalized)
+    || WINDOWS_RESERVED_NAME.test(normalized)) {
+    throw new Error('Use somente um nome de arquivo simples, sem caminhos ou nomes reservados.');
+  }
+  return normalized;
+}
+
+function decodeLegacyBase64(fileContent: string, declaredMimeType: string | undefined, extension: string) {
+  const dataUrl = /^data:([^;,]+)(?:;charset=[^;,]+)?;base64,([\s\S]+)$/i.exec(fileContent);
+  const encoded = dataUrl ? dataUrl[2] : fileContent;
+  const dataMimeType = dataUrl?.[1]?.toLowerCase();
+  const mimeType = declaredMimeType?.toLowerCase() || dataMimeType || MIME_BY_EXTENSION[extension]?.[0];
+  if (declaredMimeType && dataMimeType && declaredMimeType.toLowerCase() !== dataMimeType) {
+    throw new Error('O MIME declarado diverge do MIME informado no conteÃºdo.');
+  }
+  if (!mimeType || !MIME_BY_EXTENSION[extension]?.includes(mimeType)) {
+    throw new Error(`O MIME ${mimeType || 'ausente'} nÃ£o corresponde Ã  extensÃ£o ${extension}.`);
+  }
+  if (encoded.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)) {
+    throw new Error('O conteÃºdo Base64 estÃ¡ malformado.');
+  }
+  const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+  const decodedBytes = encoded.length / 4 * 3 - padding;
+  if (decodedBytes <= 0 || decodedBytes > LEGACY_UPLOAD_MAX_BYTES) {
+    throw new Error('O upload legado aceita arquivos de atÃ© 50 MB. Use o upload por streaming para arquivos maiores.');
+  }
+  const buffer = Buffer.from(encoded, 'base64');
+  if (buffer.toString('base64') !== encoded) throw new Error('O conteÃºdo Base64 nÃ£o estÃ¡ em formato canÃ´nico.');
+  return buffer;
+}
 
 function getMaxFileSize(ext: string): number {
   return HEAVY_EXTENSIONS.includes(ext.toLowerCase()) ? 500 * 1024 * 1024 : 50 * 1024 * 1024;
@@ -52,6 +127,31 @@ async function assertFileSignature(filePath: string, ext: string) {
   } finally {
     await handle.close();
   }
+}
+
+async function readFileHead(filePath: string, length = 32) {
+  const handle = await fs.open(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, 0);
+    return buffer.subarray(0, bytesRead);
+  } finally {
+    await handle.close();
+  }
+}
+
+function getVectorSurveyProcessingError(layers: unknown[]) {
+  const parsedLayers = layers.filter((layer): layer is Record<string, unknown> => Boolean(layer) && typeof layer === 'object');
+  if (!parsedLayers.length) {
+    return 'Nenhuma camada vetorial foi encontrada. Verifique se o arquivo contém geometrias vetoriais válidas.';
+  }
+  if (parsedLayers.every((layer) => layer.status === 'error')) {
+    const firstMessage = parsedLayers.find((layer) => typeof layer.errorMessage === 'string')?.errorMessage;
+    return typeof firstMessage === 'string' && firstMessage.trim()
+      ? firstMessage
+      : 'Não foi possível processar nenhuma camada vetorial do arquivo.';
+  }
+  return null;
 }
 
 function createSizeLimiter(limitBytes: number, ext: string) {
@@ -334,196 +434,6 @@ async function collectFilesFromDir(rootDir: string, options: { excludedDirectori
   return fileList;
 }
 
-function parseKmlFeatureCollection(content: string, fileName: string) {
-  const coordMatches = [...content.matchAll(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/gi)];
-  const features: any[] = [];
-
-  for (const match of coordMatches) {
-    const rawCoords = match[1].replace(/<!\[CDATA\[|\]\]>/g, '').trim();
-    const coords = rawCoords
-      .split(/\s+/)
-      .map((str) => {
-        const parts = str.split(',');
-        const lng = Number(parts[0]);
-        const lat = Number(parts[1]);
-        return [lng, lat];
-      })
-      .filter((c) => !isNaN(c[0]) && !isNaN(c[1]));
-
-    if (coords.length > 0) {
-      let type = 'LineString';
-      let geometryCoords: any = coords;
-
-      if (coords.length === 1) {
-        type = 'Point';
-        geometryCoords = coords[0];
-      } else if (
-        coords.length > 2 &&
-        coords[0][0] === coords[coords.length - 1][0] &&
-        coords[0][1] === coords[coords.length - 1][1]
-      ) {
-        type = 'Polygon';
-        geometryCoords = [coords];
-      }
-
-      features.push({
-        type: 'Feature',
-        properties: { name: fileName },
-        geometry: {
-          type,
-          coordinates: geometryCoords
-        }
-      });
-    }
-  }
-
-  if (features.length === 0) return null;
-
-  return {
-    type: 'FeatureCollection',
-    features
-  };
-}
-
-function decodeZipEntry(data: Buffer, compressionMethod: number, uncompressedSize: number) {
-  if (uncompressedSize > MAX_GEO_TEXT_BYTES || uncompressedSize > Math.max(data.length, 1) * MAX_ZIP_EXPANSION_RATIO) {
-    throw new Error('Entrada KMZ excede os limites seguros de expansão.');
-  }
-  if (compressionMethod === 0) {
-    if (data.length > MAX_GEO_TEXT_BYTES) throw new Error('Entrada KML excede o limite seguro.');
-    return data.toString('utf-8');
-  }
-  if (compressionMethod === 8) {
-    return zlib.inflateRawSync(data, { maxOutputLength: MAX_GEO_TEXT_BYTES }).toString('utf-8');
-  }
-  return null;
-}
-
-function extractKmlEntriesFromKmz(buffer: Buffer) {
-  const entries: Array<{ name: string; content: string }> = [];
-  let offset = 0;
-
-  while (offset <= buffer.length - 46) {
-    const signature = buffer.readUInt32LE(offset);
-
-    if (signature !== 0x02014b50) {
-      offset += 1;
-      continue;
-    }
-
-    const compressionMethod = buffer.readUInt16LE(offset + 10);
-    const compressedSize = buffer.readUInt32LE(offset + 20);
-    const uncompressedSize = buffer.readUInt32LE(offset + 24);
-    const fileNameLength = buffer.readUInt16LE(offset + 28);
-    const extraLength = buffer.readUInt16LE(offset + 30);
-    const commentLength = buffer.readUInt16LE(offset + 32);
-    const localHeaderOffset = buffer.readUInt32LE(offset + 42);
-    const fileNameStart = offset + 46;
-    const fileNameEnd = fileNameStart + fileNameLength;
-    const entryName = buffer.subarray(fileNameStart, fileNameEnd).toString('utf-8');
-
-    if (entryName.toLowerCase().endsWith('.kml') && localHeaderOffset <= buffer.length - 30) {
-      const localSignature = buffer.readUInt32LE(localHeaderOffset);
-
-      if (localSignature === 0x04034b50) {
-        const localFileNameLength = buffer.readUInt16LE(localHeaderOffset + 26);
-        const localExtraLength = buffer.readUInt16LE(localHeaderOffset + 28);
-        const dataStart = localHeaderOffset + 30 + localFileNameLength + localExtraLength;
-        const dataEnd = dataStart + compressedSize;
-
-        if (dataEnd <= buffer.length) {
-          const content = decodeZipEntry(buffer.subarray(dataStart, dataEnd), compressionMethod, uncompressedSize);
-          if (content) entries.push({ name: entryName, content });
-          if (entries.length >= MAX_KMZ_ENTRIES) return entries;
-        }
-      }
-    }
-
-    offset = fileNameEnd + extraLength + commentLength;
-  }
-
-  return entries;
-}
-
-async function collectGeoFeaturesFromDir(targetDir: string, depth = 0) {
-  try {
-    await fs.access(targetDir);
-  } catch {
-    return [];
-  }
-
-  const files = await fs.readdir(targetDir, { withFileTypes: true });
-  const geoFeatures: any[] = [];
-
-  for (const file of files) {
-    if (file.isDirectory()) {
-      if (depth < MAX_FILE_SCAN_DEPTH) {
-        geoFeatures.push(...await collectGeoFeaturesFromDir(path.join(targetDir, file.name), depth + 1));
-      }
-      continue;
-    }
-
-    if (!file.isFile()) continue;
-
-    const ext = path.extname(file.name).toLowerCase();
-    const filePath = path.join(targetDir, file.name);
-
-    if (ext === '.geojson' || ext === '.json') {
-      try {
-        if ((await fs.stat(filePath)).size > MAX_GEO_TEXT_BYTES) continue;
-        const content = await fs.readFile(filePath, 'utf-8');
-        const json = JSON.parse(content);
-        if (json.type === 'FeatureCollection' || json.type === 'Feature') {
-          geoFeatures.push({
-            fileName: file.name,
-            type: 'geojson',
-            data: json
-          });
-        }
-      } catch (err) {
-        // Ignore invalid json
-      }
-    } else if (ext === '.kml') {
-      try {
-        if ((await fs.stat(filePath)).size > MAX_GEO_TEXT_BYTES) continue;
-        const content = await fs.readFile(filePath, 'utf-8');
-        const featureCollection = parseKmlFeatureCollection(content, file.name);
-
-        if (featureCollection) {
-          geoFeatures.push({
-            fileName: file.name,
-            type: 'kml',
-            data: featureCollection
-          });
-        }
-      } catch (err) {
-        // Ignore malformed kml
-      }
-    } else if (ext === '.kmz') {
-      try {
-        if ((await fs.stat(filePath)).size > MAX_KMZ_BYTES) continue;
-        const kmzBuffer = await fs.readFile(filePath);
-        const kmlEntries = extractKmlEntriesFromKmz(kmzBuffer);
-
-        for (const entry of kmlEntries) {
-          const featureCollection = parseKmlFeatureCollection(entry.content, `${file.name} / ${entry.name}`);
-
-          if (featureCollection) {
-            geoFeatures.push({
-              fileName: `${file.name} / ${entry.name}`,
-              type: 'kmz',
-              data: featureCollection
-            });
-          }
-        }
-      } catch (err) {
-        // Ignore malformed kmz
-      }
-    }
-  }
-
-  return geoFeatures;
-}
 
 export async function arquivosRoutes(server: FastifyInstance) {
   server.get('/categorias', async (request, reply) => {
@@ -738,6 +648,8 @@ export async function arquivosRoutes(server: FastifyInstance) {
       const clienteId = (data.fields.clienteId as any)?.value;
       const projetoId = (data.fields.projetoId as any)?.value;
       const category = (data.fields.category as any)?.value || DEFAULT_CATEGORY;
+      const uploadPurpose = (data.fields.uploadPurpose as any)?.value;
+      const isVectorSurvey = uploadPurpose === 'vector-survey';
       const fileName = data.filename;
 
       if (!clienteId && !projetoId) {
@@ -746,6 +658,11 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
       const safeFileName = path.basename(fileName).replace(/[<>:"/\\|?*]/g, '-').trim();
       const ext = path.extname(safeFileName).toLowerCase();
+
+      if (isVectorSurvey) {
+        try { assertVectorSurveyUpload(safeFileName); }
+        catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Levantamento vetorial inválido.' }); }
+      }
 
       if (!safeFileName || !ALLOWED_EXTENSIONS.includes(ext)) {
         return reply.status(400).send({ error: 'Tipo de arquivo não permitido' });
@@ -811,6 +728,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
       }
 
       try {
+        if (isVectorSurvey) assertVectorSurveyUpload(safeFileName, await readFileHead(filePath));
         await assertFileSignature(filePath, ext);
       } catch (signatureError) {
         await fs.unlink(filePath).catch(() => undefined);
@@ -851,7 +769,19 @@ export async function arquivosRoutes(server: FastifyInstance) {
         throw databaseError;
       }
 
-      return { success: true, ...syncedDocument };
+      let geospatialLayers: unknown[] = [];
+      if (syncedDocument.documentId && GeospatialImportService.isCandidate(filePath)) {
+        const documents = await db.select().from(schema.documentos)
+          .where(eq(schema.documentos.id, syncedDocument.documentId)).limit(1);
+        if (documents.length) geospatialLayers = await GeospatialImportService.processDocument(documents[0], dadosPasta);
+      }
+      if (isVectorSurvey) {
+        const processingError = getVectorSurveyProcessingError(geospatialLayers);
+        if (processingError) {
+          return reply.status(422).send({ error: processingError, documentStored: true, documentId: syncedDocument.documentId, geospatialLayers });
+        }
+      }
+      return { success: true, ...syncedDocument, geospatialLayers };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao processar stream de arquivo' });
@@ -859,15 +789,37 @@ export async function arquivosRoutes(server: FastifyInstance) {
   });
 
   // POST: Upload a file (Base64 payload)
-  server.post('/upload', async (request, reply) => {
-    const { clienteId, projetoId, fileName, fileContent, category } = request.body as any;
+  server.post('/upload', { bodyLimit: LEGACY_UPLOAD_BODY_LIMIT }, async (request, reply) => {
+    reply.header('Deprecation', 'true');
+    reply.header('Warning', '299 GeoGestor "Endpoint Base64 depreciado; migre para /api/arquivos/upload/stream"');
+    const parsed = legacyUploadSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: 'O upload legado possui campos invÃ¡lidos.',
+        details: parsed.error.issues.map((issue) => issue.message)
+      });
+    }
+    const { clienteId, projetoId, fileName, fileContent, mimeType, category, uploadPurpose } = parsed.data;
 
     if (!fileName || !fileContent) {
       return reply.status(400).send({ error: 'Nome do arquivo e conteúdo são obrigatórios' });
     }
 
-    const safeFileName = path.basename(fileName).replace(/[<>:"/\\|?*]/g, '-').trim();
+    let safeFileName: string;
+    let fileBuffer: Buffer;
+    try {
+      safeFileName = validateLegacyFileName(fileName);
+      fileBuffer = decodeLegacyBase64(fileContent, mimeType, path.extname(safeFileName).toLowerCase());
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Arquivo invÃ¡lido.' });
+    }
     const ext = path.extname(safeFileName).toLowerCase();
+    const isVectorSurvey = uploadPurpose === 'vector-survey';
+
+    if (isVectorSurvey) {
+      try { assertVectorSurveyUpload(safeFileName); }
+      catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Levantamento vetorial inválido.' }); }
+    }
 
     if (!safeFileName || !ALLOWED_EXTENSIONS.includes(ext)) {
       return reply.status(400).send({ error: 'Tipo de arquivo não permitido' });
@@ -925,12 +877,10 @@ export async function arquivosRoutes(server: FastifyInstance) {
       await fs.mkdir(targetDir, { recursive: true });
       targetDir = await ensurePathInsideRoot(targetDir, dadosPasta, { mustExist: true });
 
-      // Decode Base64 content
-      let base64Data = fileContent;
-      if (fileContent.includes(';base64,')) {
-        base64Data = fileContent.split(';base64,')[1];
+      if (isVectorSurvey) {
+        try { assertVectorSurveyUpload(safeFileName, fileBuffer.subarray(0, 32)); }
+        catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Levantamento vetorial inválido.' }); }
       }
-      const fileBuffer = Buffer.from(base64Data, 'base64');
       
       const limitBytes = getMaxFileSize(ext);
       if (fileBuffer.length > limitBytes) {
@@ -983,7 +933,19 @@ export async function arquivosRoutes(server: FastifyInstance) {
         throw databaseError;
       }
 
-      return { success: true, ...syncedDocument };
+      let geospatialLayers: unknown[] = [];
+      if (syncedDocument.documentId && GeospatialImportService.isCandidate(filePath)) {
+        const documents = await db.select().from(schema.documentos)
+          .where(eq(schema.documentos.id, syncedDocument.documentId)).limit(1);
+        if (documents.length) geospatialLayers = await GeospatialImportService.processDocument(documents[0], dadosPasta);
+      }
+      if (isVectorSurvey) {
+        const processingError = getVectorSurveyProcessingError(geospatialLayers);
+        if (processingError) {
+          return reply.status(422).send({ error: processingError, documentStored: true, documentId: syncedDocument.documentId, geospatialLayers });
+        }
+      }
+      return { success: true, ...syncedDocument, geospatialLayers };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao salvar o arquivo no servidor' });
@@ -1156,8 +1118,9 @@ export async function arquivosRoutes(server: FastifyInstance) {
     }
 
     let quarantined: QuarantineManifest | null = null;
+    let dadosPasta: string | null = null;
     try {
-      const dadosPasta = await getDataRoot();
+      dadosPasta = await getDataRoot();
       const safeFilePath = await ensurePathInsideRoot(filePath, dadosPasta, { mustExist: true });
 
       const documentRecord = await db.select()
@@ -1196,9 +1159,9 @@ export async function arquivosRoutes(server: FastifyInstance) {
 
       return { success: true };
     } catch (err) {
-      if (quarantined) {
+      if (quarantined && dadosPasta) {
         try {
-          await RecoverableFileService.rollback(quarantined);
+          await RecoverableFileService.rollback(quarantined, dadosPasta);
         } catch (rollbackError) {
           server.log.error(rollbackError, 'Arquivo preservado em quarentena; restauração automática falhou');
         }
@@ -1217,31 +1180,8 @@ export async function arquivosRoutes(server: FastifyInstance) {
     }
 
     try {
-      const dadosPasta = await getDataRoot();
-      const allGeoFeatures: any[] = [];
-
-      for (const id of projetoIds) {
-        const projetoInfo = await db
-          .select({
-            projetoNome: schema.projetos.nome,
-            clienteNome: schema.clientes.nome
-          })
-          .from(schema.projetos)
-          .innerJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
-          .where(eq(schema.projetos.id, id))
-          .limit(1);
-
-        if (projetoInfo.length > 0) {
-          const targetDir = getProjectDirectory(dadosPasta, projetoInfo[0].clienteNome, projetoInfo[0].projetoNome);
-          const features = await collectGeoFeaturesFromDir(targetDir);
-          
-          // Inject project ID so frontend knows which polygon belongs to which project
-          const enrichedFeatures = features.map(f => ({ ...f, projetoId: id }));
-          allGeoFeatures.push(...enrichedFeatures);
-        }
-      }
-
-      return { geoFeatures: allGeoFeatures };
+      const geoFeatures = await GeospatialImportService.listForProjects(projetoIds, await getDataRoot());
+      return { geoFeatures };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao processar múltiplos arquivos geo' });
@@ -1253,26 +1193,14 @@ export async function arquivosRoutes(server: FastifyInstance) {
     const { id } = request.params as any;
 
     try {
-      const projetoInfo = await db
-        .select({
-          projetoNome: schema.projetos.nome,
-          clienteNome: schema.clientes.nome
-        })
-        .from(schema.projetos)
-        .innerJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
-        .where(eq(schema.projetos.id, id))
-        .limit(1);
+      const projetoInfo = await db.select({ id: schema.projetos.id }).from(schema.projetos)
+        .where(eq(schema.projetos.id, id)).limit(1);
 
       if (!projetoInfo.length) {
         return reply.status(404).send({ error: 'Projeto não encontrado' });
       }
 
-      const { projetoNome, clienteNome } = projetoInfo[0];
-
-      const dadosPasta = await getDataRoot();
-      const targetDir = getProjectDirectory(dadosPasta, clienteNome, projetoNome);
-      const geoFeatures = await collectGeoFeaturesFromDir(targetDir);
-
+      const geoFeatures = await GeospatialImportService.listForProjects([id], await getDataRoot());
       return { geoFeatures };
     } catch (err) {
       server.log.error(err);
@@ -1297,14 +1225,189 @@ export async function arquivosRoutes(server: FastifyInstance) {
         return reply.status(404).send({ error: 'Cliente não encontrado' });
       }
 
-      const dadosPasta = await getDataRoot();
-      const targetDir = getClientDirectory(dadosPasta, clienteInfo[0].nome);
-      const geoFeatures = await collectGeoFeaturesFromDir(targetDir);
-
+      const geoFeatures = await GeospatialImportService.listForClient(id, await getDataRoot());
       return { geoFeatures };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao analisar arquivos geo do cliente' });
+    }
+  });
+
+  server.get('/geospatial/crs-catalog', async () => ({ items: BRAZIL_CRS_CATALOG }));
+
+  server.post('/geospatial/:documentId/preview-crs', async (request, reply) => {
+    const { documentId } = request.params as { documentId: string };
+    const { sourceCrs, axisOrder } = (request.body || {}) as {
+      sourceCrs?: string;
+      axisOrder?: 'longitude-latitude' | 'latitude-longitude';
+    };
+    try {
+      return await GeospatialImportService.previewDocumentCrs(documentId, { sourceCrs, axisOrder });
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Não foi possível gerar a prévia do SRC.' });
+    }
+  });
+
+  server.get('/geospatial/process/:documentId/progress', async (request) => {
+    const { documentId } = request.params as { documentId: string };
+    return GeospatialImportService.getProgress(documentId);
+  });
+
+  server.post('/geospatial/process/:documentId/cancel', async (request) => {
+    const { documentId } = request.params as { documentId: string };
+    return GeospatialImportService.requestCancellation(documentId);
+  });
+
+  server.get('/geospatial/:layerId/display', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    const query = request.query as { zoom?: string; bbox?: string };
+    const zoom = Number(query.zoom || 12);
+    const bboxValues = query.bbox?.split(',').map(Number);
+    const bbox = bboxValues?.length === 4 && bboxValues.every(Number.isFinite)
+      ? bboxValues as [number, number, number, number]
+      : null;
+    try { return { data: await GeospatialImportService.getDisplayData(layerId, zoom, bbox) }; }
+    catch (error) { return reply.status(404).send({ error: error instanceof Error ? error.message : 'Camada não encontrada' }); }
+  });
+
+  server.get('/geospatial/:layerId/report', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try { return await GeospatialImportService.getReport(layerId); }
+    catch (error) { return reply.status(404).send({ error: error instanceof Error ? error.message : 'Relatório não encontrado' }); }
+  });
+
+  server.get('/geospatial/:layerId/history', async (request) => {
+    const { layerId } = request.params as { layerId: string };
+    return { events: await GeospatialAuditService.listForLayer(layerId) };
+  });
+
+  server.get('/geospatial/:layerId/location-preview', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try { return await GeospatialImportService.getLocationPreview(layerId); }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Pré-visualização indisponível' }); }
+  });
+
+  server.post('/geospatial/:layerId/repair', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try { return await GeospatialImportService.repairLayer(layerId); }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Falha no reparo topológico' }); }
+  });
+
+  server.post('/geospatial/:layerId/undo-repair', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try { return await GeospatialImportService.undoRepair(layerId); }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Não foi possível desfazer o reparo' }); }
+  });
+
+  server.post('/geospatial/:layerId/undo-location', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try { return await GeospatialImportService.undoRepresentativeLocation(layerId); }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Não foi possível desfazer a localização' }); }
+  });
+
+  server.get('/geospatial/cache/maintenance', async () => GeospatialImportService.cacheMaintenance(await getDataRoot(), false));
+  server.delete('/geospatial/cache/orphans', async () => GeospatialImportService.cacheMaintenance(await getDataRoot(), true));
+
+  server.get('/geospatial/basemaps', async () => ({ basemaps: await MbtilesService.list() }));
+
+  server.get('/geospatial/basemaps/:id/history', async (request) => {
+    const { id } = request.params as { id: string };
+    return { events: await GeospatialAuditService.listForBasemap(id) };
+  });
+
+  server.post('/geospatial/basemaps/:id/active', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { active } = (request.body || {}) as { active?: boolean };
+    try { return { basemap: await MbtilesService.setActive(id, active !== false, await getDataRoot()) }; }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Falha ao alterar o mapa-base' }); }
+  });
+
+  server.post('/geospatial/basemaps', async (request, reply) => {
+    const dataRoot = await getDataRoot();
+    const temporaryDirectory = path.join(dataRoot, '.geogestor', 'tmp');
+    await fs.mkdir(temporaryDirectory, { recursive: true });
+    const temporaryPath = path.join(temporaryDirectory, `mbtiles-${crypto.randomUUID()}.tmp`);
+    try {
+      const part = await request.file();
+      if (!part || path.extname(part.filename).toLowerCase() !== '.mbtiles') return reply.status(400).send({ error: 'Selecione um arquivo .mbtiles.' });
+      await pipeline(part.file, createSizeLimiter(500 * 1024 * 1024, '.mbtiles'), createWriteStream(temporaryPath, { flags: 'wx' }));
+      const basemap = await MbtilesService.importFile(temporaryPath, path.basename(part.filename), dataRoot);
+      return reply.status(201).send({ basemap });
+    } catch (error) {
+      server.log.error(error);
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Falha ao importar o MBTiles.' });
+    } finally {
+      await fs.unlink(temporaryPath).catch(() => undefined);
+    }
+  });
+
+  server.get('/geospatial/basemaps/:id/tiles/:z/:x/:y', async (request, reply) => {
+    const { id, z, x, y } = request.params as Record<string, string>;
+    try {
+      const tile = await MbtilesService.tile(id, Number(z), Number(x), Number(y), await getDataRoot());
+      if (!tile) return reply.status(404).send();
+      const contentType = tile.format === 'jpg' || tile.format === 'jpeg' ? 'image/jpeg' : tile.format === 'webp' ? 'image/webp' : 'image/png';
+      return reply.header('Content-Type', contentType).header('Cache-Control', 'private, max-age=86400').send(tile.bytes);
+    } catch (error) {
+      return reply.status(400).send({ error: error instanceof Error ? error.message : 'Tile inválido' });
+    }
+  });
+
+  server.delete('/geospatial/basemaps/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    try { return await MbtilesService.remove(id, await getDataRoot()); }
+    catch (error) { return reply.status(400).send({ error: error instanceof Error ? error.message : 'Falha ao remover mapa-base' }); }
+  });
+
+  server.post('/geospatial/:documentId/process', async (request, reply) => {
+    const { documentId } = request.params as { documentId: string };
+    const { sourceCrs, axisOrder } = (request.body || {}) as {
+      sourceCrs?: string;
+      axisOrder?: 'longitude-latitude' | 'latitude-longitude';
+    };
+    try {
+      const geospatialLayers = await GeospatialImportService.reprocessDocument(
+        documentId,
+        await getDataRoot(),
+        { sourceCrs, axisOrder }
+      );
+      return { geospatialLayers };
+    } catch (err) {
+      server.log.error(err);
+      const message = err instanceof Error ? err.message : 'Erro ao reprocessar a camada';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  server.post('/geospatial/:layerId/use-location', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try {
+      return { success: true, ...(await GeospatialImportService.useRepresentativeLocation(layerId)) };
+    } catch (err) {
+      server.log.error(err);
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar a localização do projeto';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  server.patch('/geospatial/:layerId', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    const { visible, color, opacity } = (request.body || {}) as { visible?: boolean; color?: string; opacity?: number };
+    try {
+      return { success: true, layer: await GeospatialImportService.updateLayerStyle(layerId, { visible, color, opacity }) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar a camada';
+      return reply.status(400).send({ error: message });
+    }
+  });
+
+  server.delete('/geospatial/:layerId', async (request, reply) => {
+    const { layerId } = request.params as { layerId: string };
+    try {
+      return { success: true, ...(await GeospatialImportService.removeLayer(layerId)) };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao remover a camada';
+      return reply.status(400).send({ error: message });
     }
   });
 }

@@ -192,6 +192,67 @@ function removeFileSyncWithRetry(target: string) {
   }
 }
 
+function checkpointPlaintextLegacyLocallySync(databasePath: string) {
+  const database = nativeDatabase(databasePath);
+  try {
+    database.pragma('busy_timeout = 5000');
+    assertDatabase(database);
+    const checkpoint = database.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as Record<string, unknown> | undefined;
+    const busy = Number(checkpoint?.busy || 0);
+    const logFrames = Number(checkpoint?.log || 0);
+    const checkpointedFrames = Number(checkpoint?.checkpointed || 0);
+    if (busy !== 0 || checkpointedFrames !== logFrames) {
+      throw new Error('O banco legado estÃ¡ em uso e o WAL nÃ£o pÃ´de ser consolidado com seguranÃ§a. Feche outras instÃ¢ncias e tente novamente.');
+    }
+    assertDatabase(database);
+  } finally {
+    database.close();
+  }
+
+}
+
+function checkpointPlaintextLegacyDatabaseSync(databasePath: string) {
+  const workerPath = process.env.GEOGESTOR_DATABASE_WORKER;
+  if (workerPath) {
+    const runner = process.env.GEOGESTOR_DATABASE_WORKER_RUNNER;
+    const args = runner
+      ? [runner, workerPath, 'checkpoint', databasePath]
+      : [workerPath, 'checkpoint', databasePath];
+    const env = { ...process.env };
+    delete env[KEY_ENV];
+    delete env.GEOGESTOR_DB_SOURCE_KEY;
+    delete env.GEOGESTOR_DB_TARGET_KEY;
+    const result = spawnSync(process.execPath, args, {
+      env,
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 2 * 60 * 1_000
+    });
+    if (result.error || result.status !== 0) {
+      const detail = result.error?.message || result.stderr?.trim() || `cÃ³digo ${result.status ?? 'desconhecido'}`;
+      throw new Error(`O checkpoint protegido do banco legado falhou: ${detail}`);
+    }
+  } else {
+    if (process.platform === 'win32') {
+      throw new Error('O processo auxiliar de checkpoint do banco nÃ£o foi configurado.');
+    }
+    checkpointPlaintextLegacyLocallySync(databasePath);
+  }
+
+  for (const suffix of ['-wal', '-shm']) {
+    const sidecarPath = `${databasePath}${suffix}`;
+    if (!fs.existsSync(sidecarPath)) continue;
+    const sidecar = fs.lstatSync(sidecarPath);
+    if (sidecar.isSymbolicLink() || !sidecar.isFile()) {
+      throw new Error('A migraÃ§Ã£o foi interrompida porque um sidecar SQLite possui tipo inesperado.');
+    }
+    if (suffix === '-wal' && sidecar.size > 0) {
+      throw new Error('O WAL legado permaneceu com quadros pendentes apÃ³s o checkpoint. Feche outras instÃ¢ncias e tente novamente.');
+    }
+    removeFileSyncWithRetry(sidecarPath);
+  }
+}
+
 export function ensureDatabaseProtectionSync(databasePath: string, encryptionKey = getDatabaseEncryptionKey()): DatabaseProtectionResult {
   fs.mkdirSync(path.dirname(databasePath), { recursive: true });
   if (!encryptionKey) return { status: 'disabled', keyId: null, recoveryPath: null };
@@ -219,7 +280,11 @@ export function ensureDatabaseProtectionSync(databasePath: string, encryptionKey
   let originalMoved = false;
   let encryptedInstalled = false;
   try {
+    checkpointPlaintextLegacyDatabaseSync(databasePath);
     cloneDatabaseIsolatedSync(databasePath, undefined, pendingPath, encryptionKey);
+    // A leitura isolada pode recriar sidecars vazios ao abrir um banco em modo WAL.
+    // Uma segunda barreira tambÃ©m detecta conexÃµes concorrentes antes da troca.
+    checkpointPlaintextLegacyDatabaseSync(databasePath);
     renameSyncWithRetry(databasePath, plaintextSafetyPath);
     originalMoved = true;
     renameSyncWithRetry(pendingPath, databasePath);

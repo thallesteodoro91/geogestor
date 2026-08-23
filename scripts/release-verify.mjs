@@ -63,15 +63,41 @@ if (mode === 'source') {
   }
 
   const metadataPath = path.join(packageRoot, 'resources', 'api', 'release-metadata.json');
+  let metadata = null;
   if (!fs.existsSync(metadataPath)) errors.push('Metadado técnico do release ausente.');
   else {
-    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+    metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
     evidence.commit = metadata.commit;
     evidence.dirty = metadata.dirty;
     if (!metadata.commit || metadata.commit === 'unknown') errors.push('Commit do pacote não identificado.');
     if (metadata.dirty && !allowDirty) errors.push('O pacote foi gerado a partir de worktree sujo; gere o release final a partir de commit/tag limpo.');
   }
-  errors.push(...verifyArtifactHashes(desktopDist));
+  const sbomPath = path.join(desktopDist, 'sbom.cdx.json');
+  if (!fs.existsSync(sbomPath)) errors.push('SBOM CycloneDX da execução ausente.');
+  else {
+    try {
+      const sbom = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
+      if (sbom.bomFormat !== 'CycloneDX' || sbom.specVersion !== '1.6') {
+        errors.push('SBOM não está no formato CycloneDX 1.6 esperado.');
+      }
+      if (!Array.isArray(sbom.components) || sbom.components.length === 0) {
+        errors.push('SBOM não contém componentes.');
+      }
+      if (!Array.isArray(sbom.dependencies) || sbom.dependencies.length === 0) {
+        errors.push('SBOM não contém relações de dependência.');
+      }
+      if (escapedProfile && new RegExp(escapedProfile, 'i').test(JSON.stringify(sbom))) {
+        errors.push('SBOM contém caminho local do usuário que executou o build.');
+      }
+    } catch {
+      errors.push('SBOM CycloneDX inválido.');
+    }
+  }
+  errors.push(...verifyArtifactHashes(desktopDist, {
+    version: metadata?.version,
+    commit: metadata?.commit,
+    releaseRunId: metadata?.releaseRunId
+  }));
 }
 
 fs.mkdirSync(desktopDist, { recursive: true });

@@ -45,7 +45,7 @@ test('migração de orçamento legado é idempotente em execuções repetidas', 
       JSON.stringify([{ descricao: 'Deslocamento', valor: 25_000 }])
     ]
   });
-  await client.execute("UPDATE schema_migrations SET status = 'failed' WHERE version = 10");
+  await client.execute("UPDATE schema_migrations SET status = 'failed' WHERE version = 12");
 
   await runRuntimeMigrations();
   const firstItems = await client.execute("SELECT descricao, quantidade, valor_unitario, total FROM orcamento_itens WHERE orcamento_id = 'orcamento-legado' ORDER BY id");
@@ -64,13 +64,13 @@ test('migração de orçamento legado é idempotente em execuções repetidas', 
 
   const integrity = await client.execute('PRAGMA quick_check');
   const foreignKeys = await client.execute('PRAGMA foreign_key_check');
-  const migrations = await client.execute('SELECT version, status FROM schema_migrations WHERE version IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10) ORDER BY version');
+  const migrations = await client.execute('SELECT version, status FROM schema_migrations WHERE version BETWEEN 1 AND 13 ORDER BY version');
   const userVersion = await client.execute('PRAGMA user_version');
   const legacyJson = await client.execute("SELECT itens_json, despesas_json FROM orcamentos WHERE id = 'orcamento-legado'");
   assert.equal(integrity.rows[0]?.quick_check, 'ok');
   assert.equal(foreignKeys.rows.length, 0);
-  assert.deepEqual(migrations.rows.map((row) => [Number(row.version), row.status]), [[1, 'success'], [2, 'success'], [3, 'success'], [4, 'success'], [5, 'success'], [6, 'success'], [7, 'success'], [8, 'success'], [9, 'success'], [10, 'success']]);
-  assert.equal(Number(userVersion.rows[0]?.user_version), 10);
+  assert.deepEqual(migrations.rows.map((row) => [Number(row.version), row.status]), Array.from({ length: 13 }, (_, index) => [index + 1, 'success']));
+  assert.equal(Number(userVersion.rows[0]?.user_version), 13);
   assert.equal(legacyJson.rows[0]?.itens_json, null);
   assert.equal(legacyJson.rows[0]?.despesas_json, null);
 

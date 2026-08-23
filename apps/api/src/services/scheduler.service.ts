@@ -47,6 +47,24 @@ export function isAutomaticCompleteBackupDue(
   return !Number.isFinite(completedAtMs) || now - completedAtMs >= intervalMs;
 }
 
+export function shouldCreateCompleteBackup(
+  state: ReturnType<typeof OperationalLogService.getState>,
+  forceComplete: boolean,
+  now: number,
+  intervalMs: number
+) {
+  return forceComplete || isAutomaticCompleteBackupDue(state, now, intervalMs);
+}
+
+export function shouldRunShutdownBackup(
+  policy: Pick<BackupPolicy, 'runOnShutdown' | 'automaticEnabled'>,
+  pendingChanges: number,
+  existingBackupCompleted = false
+) {
+  if (existingBackupCompleted && pendingChanges === 0) return false;
+  return policy.runOnShutdown || (policy.automaticEnabled && pendingChanges > 0);
+}
+
 export class SchedulerService {
   private static syncIntervalId: NodeJS.Timeout | null = null;
   private static backupIntervalId: NodeJS.Timeout | null = null;
@@ -96,8 +114,9 @@ export class SchedulerService {
       await OperationalLogService.setState('backup', 'running', { attemptedAt });
       const databaseBackup = forceComplete ? null : await BackupService.createLocalBackup(executionOptions);
       let completeBackupResult: Awaited<ReturnType<typeof BackupService.createCompleteBackup>> | null = null;
-      if (forceComplete || isAutomaticCompleteBackupDue(
+      if (shouldCreateCompleteBackup(
         OperationalLogService.getState(),
+        forceComplete,
         Date.now(),
         activePolicy.completeIntervalDays * 24 * 60 * 60 * 1000
       )) {
@@ -312,14 +331,15 @@ export class SchedulerService {
 
   public static async prepareForShutdown() {
     const policy = await BackupPolicyService.get();
-    const hasPendingChanges = BackupActivityService.snapshot().pendingChanges > 0;
-    if (!policy.runOnShutdown && !(policy.automaticEnabled && hasPendingChanges)) return;
+    const initialActivity = BackupActivityService.snapshot();
+    if (!shouldRunShutdownBackup(policy, initialActivity.pendingChanges)) return;
     const existingBackupWasRunning = this.backupRunning;
     while (this.backupRunning) {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    if (existingBackupWasRunning) return;
-    await this.runBackup(policy, hasPendingChanges && BackupActivityService.snapshot().completeRequired, (progress) => {
+    const activityAfterWait = BackupActivityService.snapshot();
+    if (!shouldRunShutdownBackup(policy, activityAfterWait.pendingChanges, existingBackupWasRunning)) return;
+    await this.runBackup(policy, activityAfterWait.pendingChanges > 0 && activityAfterWait.completeRequired, (progress) => {
       process.send?.({ type: 'shutdown-backup-progress', progress });
     });
   }

@@ -1,5 +1,10 @@
 @echo off
+setlocal
 cd /d "%~dp0"
-set PATH=C:\Users\Thalles\.cache\codex-runtimes\codex-primary-runtime\dependencies\bin;%PATH%
+where pnpm.cmd >nul 2>nul
+if errorlevel 1 (
+  echo pnpm 11.8.0 nao foi encontrado no PATH.
+  exit /b 1
+)
 echo [%date% %time%] Starting GeoGestor dev server...
-pnpm dev
+pnpm.cmd dev

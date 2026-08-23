@@ -73,7 +73,7 @@ try {
   if (!unlocked.ok) throw new Error(`Desbloqueio retornou HTTP ${unlocked.status}: ${await unlocked.text()}`);
   const session = await unlocked.json();
   const operationalHeaders = { ...headers, 'x-local-session': session.token };
-  for (const endpoint of ['/api/clientes', '/api/projetos', '/api/financeiro/orcamentos']) {
+  for (const endpoint of ['/api/clientes', '/api/projetos', '/api/orcamentos']) {
     const response = await fetch(`http://127.0.0.1:${port}${endpoint}`, { headers: operationalHeaders });
     if (!response.ok) throw new Error(`${endpoint} retornou HTTP ${response.status}`);
     const body = await response.json();

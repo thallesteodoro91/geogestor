@@ -5,8 +5,10 @@ CREATE TABLE `clientes` (
 	`email` text,
 	`telefone` text,
 	`endereco` text,
+	`previsao_entrega` text,
 	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`deleted_at` text
 );
 --> statement-breakpoint
 CREATE TABLE `configuracoes` (
@@ -32,5 +34,6 @@ CREATE TABLE `projetos` (
 	`data_entrega` text,
 	`created_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	`updated_at` text DEFAULT CURRENT_TIMESTAMP NOT NULL,
+	`deleted_at` text,
 	FOREIGN KEY (`cliente_id`) REFERENCES `clientes`(`id`) ON UPDATE no action ON DELETE no action
 );

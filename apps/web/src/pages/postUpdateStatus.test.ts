@@ -40,7 +40,7 @@ test('classifica cópia externa ou kit de recuperação ausentes como atenção'
       ...protectedBackups,
       cloud: { confirmation: 'unavailable' },
       recovery: { configured: false, confirmed: false },
-      summary: { ...protectedBackups.summary, configured: false, state: 'created' }
+      summary: { ...protectedBackups.summary, configured: false, state: 'local_only' }
     }
   });
   assert.equal(result.level, 'warning');

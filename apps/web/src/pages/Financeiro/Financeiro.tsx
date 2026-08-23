@@ -61,6 +61,8 @@ import overviewTabIcon from '../../assets/magnific-icons/analysis_5706212.png';
 import receivablesTabIcon from '../../assets/magnific-icons/crisis_6283991.png';
 import payablesTabIcon from '../../assets/magnific-icons/dollar_9510014.png';
 import travelAndInvoicesTabIcon from '../../assets/magnific-icons/travel_5595118.png';
+import { APP_QUERY_KEYS } from '@geogestor/contracts';
+import { listBudgetSummaries } from '../../services/budgets';
 
 type FinanceTab = 'visao' | 'faturas' | 'pagar' | 'auxiliares';
 type PeriodKey = 'month' | '3m' | '6m' | '12m' | 'year' | 'custom';
@@ -223,6 +225,8 @@ export function Financeiro() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveTab(searchParams.get('tab'));
+  const focusedReceivableId = searchParams.get(APP_QUERY_KEYS.receivable) || undefined;
+  const focusedPayableId = searchParams.get(APP_QUERY_KEYS.payable) || undefined;
   const overviewEnabled = activeTab === 'visao';
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -254,6 +258,12 @@ export function Financeiro() {
     if (tab === 'visao') next.delete('tab');
     else next.set('tab', tab);
     setSearchParams(next);
+  };
+
+  const clearFocusedRecord = (key: typeof APP_QUERY_KEYS.receivable | typeof APP_QUERY_KEYS.payable) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(key);
+    setSearchParams(next, { replace: true });
   };
 
   const openEmbeddedAction = (type: EmbeddedFinanceAction['type']) => {
@@ -288,7 +298,21 @@ export function Financeiro() {
 
   const orcamentosQuery = useQuery<OrcamentoFinanceiro[]>({
     queryKey: ['orcamentos-financeiro'],
-    queryFn: () => apiClient.getAllPages<OrcamentoFinanceiro>('/api/financeiro/orcamentos'),
+    queryFn: async () => (await listBudgetSummaries()).map((budget) => ({
+      id: budget.id,
+      clienteId: budget.clientId,
+      clienteNome: budget.clientName,
+      projetoId: budget.projectId,
+      projetoNome: budget.projectName,
+      status: budget.status,
+      valorTotal: budget.totalCents,
+      dataOrcamento: budget.issueDate,
+      dataCompetencia: budget.issueDate,
+      createdAt: budget.createdAt,
+      impostosPrevistos: budget.estimatedTaxesCents,
+      descricao: budget.description,
+      codigoOrcamento: budget.number
+    })),
     enabled: overviewEnabled
   });
   const despesasQuery = useQuery<DespesaFinanceira[]>({
@@ -664,9 +688,9 @@ export function Financeiro() {
         <>
           {(loading || failed || hasSourceData) && (
             <section aria-label="Período e filtros financeiros" className="relative mb-6">
-            <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900/60 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                <div className="flex min-w-[220px] flex-1 items-center gap-2 sm:max-w-[280px]">
+            <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+              <div className="flex w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white p-2 shadow-sm sm:w-fit sm:max-w-full dark:border-zinc-800 dark:bg-zinc-900/60">
+                <div className="flex w-full min-w-0 items-center gap-2 sm:w-[280px]">
                   <CalendarBlank aria-hidden="true" className="h-4 w-4 shrink-0 text-zinc-400" />
                   <CustomSelect
                     ariaLabel="Selecionar período financeiro"
@@ -699,7 +723,7 @@ export function Financeiro() {
                 type="button"
                 onClick={exportOverview}
                 disabled={!hasChartData}
-                className="geo-focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white"
+                className="geo-button-base geo-button-secondary geo-focus-ring inline-flex min-h-10 items-center justify-center gap-2 px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <DownloadSimple aria-hidden="true" size={17} />
                 Exportar
@@ -1083,12 +1107,20 @@ export function Financeiro() {
         </>
       )}
 
-      {activeTab === 'faturas' && <Faturas embedded />}
+      {activeTab === 'faturas' && (
+        <Faturas
+          embedded
+          focusParcelaId={focusedReceivableId}
+          onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.receivable)}
+        />
+      )}
       {activeTab === 'pagar' && (
         <Despesas
           key={embeddedAction?.type === 'despesa' ? embeddedAction.requestId : 'financial-expenses'}
           embedded
           openCreateOnMount={embeddedAction?.type === 'despesa'}
+          focusDespesaId={focusedPayableId}
+          onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.payable)}
         />
       )}
       {activeTab === 'auxiliares' && (

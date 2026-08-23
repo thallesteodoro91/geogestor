@@ -7,8 +7,8 @@ import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { toast } from 'sonner';
-import { useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ACTIVE_OPPORTUNITY_STAGES, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { ACTIVE_OPPORTUNITY_STAGES, APP_QUERY_KEYS, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
@@ -286,7 +286,9 @@ export function CRM() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const handledOpportunityIdRef = useRef<string | null>(null);
   const requestedView = searchParams.get('view');
+  const requestedOpportunityId = searchParams.get(APP_QUERY_KEYS.opportunity);
   const activeView: CRMView = requestedView === 'leads' || requestedView === 'indicadores' || requestedView === 'funil' ? requestedView : 'funil';
   const searchTerm = searchParams.get('q') || '';
   const responsibleFilter = searchParams.get('responsavel') || '';
@@ -458,7 +460,7 @@ export function CRM() {
     setShowModal(true);
   };
 
-  const openEdit = (opportunity: OpportunityListItem) => {
+  const openEdit = useCallback((opportunity: OpportunityListItem) => {
     setSelectedOpportunity(opportunity);
     setForm(opportunityToForm(opportunity));
     const subject = commercialSubjectOptions.find((option) => (
@@ -468,7 +470,29 @@ export function CRM() {
     setFormError('');
     setFormErrors({});
     setShowModal(true);
-  };
+  }, [commercialSubjectOptions]);
+
+  useEffect(() => {
+    if (!requestedOpportunityId) {
+      handledOpportunityIdRef.current = null;
+      return;
+    }
+    if (opportunitiesQuery.isLoading || handledOpportunityIdRef.current === requestedOpportunityId) return;
+
+    handledOpportunityIdRef.current = requestedOpportunityId;
+    queueMicrotask(() => {
+      const opportunity = opportunities.find((item) => item.id === requestedOpportunityId);
+      if (opportunity) openEdit(opportunity);
+      else toast.info('A oportunidade indicada pelo alerta não foi encontrada.');
+
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete(APP_QUERY_KEYS.opportunity);
+        next.set('view', 'funil');
+        return next;
+      }, { replace: true });
+    });
+  }, [openEdit, opportunities, opportunitiesQuery.isLoading, requestedOpportunityId, setSearchParams]);
 
   const handleSubjectChange = (value: string) => {
     setSubjectSearch(value);
@@ -626,8 +650,11 @@ export function CRM() {
               <span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span>
             </button>}
           />
-          <CRMSectionNavigation activeView={activeView} />
-          <Contatos ref={leadsRef} embedded />
+          <Contatos
+            ref={leadsRef}
+            embedded
+            toolbarLeading={<CRMSectionNavigation activeView={activeView} />}
+          />
         </div>
       </Layout>
     );
@@ -722,44 +749,54 @@ export function CRM() {
           description="Acompanhe próximas ações, propostas, probabilidade de fechamento e conversões em projetos."
           action={<button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(headerPrimaryActionButtonClass, 'w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto')}><span>Nova oportunidade</span><span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span></button>}
         />
-        <CRMSectionNavigation activeView={activeView} />
-
-        <section className="geo-card p-4 sm:p-5" aria-label="Filtros do funil">
-          <div className="grid gap-3 sm:grid-cols-[minmax(260px,1fr)_auto_auto]">
-            <label className="relative"><span className="sr-only">Buscar oportunidades</span><MagnifyingGlass aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-3.5 text-text-muted" /><input type="search" name="crm-search" autoComplete="off" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Oportunidade, cliente, serviço…" className={cn(fieldClass, 'pl-10')} /></label>
-            <button
-              type="button"
-              aria-expanded={funnelFiltersOpen}
-              aria-controls="crm-funnel-filters"
-              onClick={() => setFunnelFiltersOpen((current) => !current)}
-              className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm"
-            >
-              <Funnel aria-hidden="true" size={16} />
-              Filtros
-              {activeFunnelFilterCount > 0 && <span className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-zinc-950">{activeFunnelFilterCount}</span>}
-            </button>
-            {boardFiltered && (
-              <button type="button" onClick={clearFunnelFilters} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm">
-                Limpar
-              </button>
-            )}
+        <div className="min-w-0 space-y-3">
+          <div className="min-w-0 2xl:flex 2xl:items-start 2xl:gap-4">
+            <div className="min-w-0 2xl:flex-1">
+              <CRMSectionNavigation activeView={activeView} />
+            </div>
+            <section className="geo-card mt-3 min-w-0 p-3 sm:p-4 2xl:mt-0 2xl:w-[42rem] 2xl:shrink-0" aria-label="Busca e controles do funil">
+              <div className="grid gap-3 sm:grid-cols-[minmax(260px,1fr)_auto_auto]">
+                <label className="relative"><span className="sr-only">Buscar oportunidades</span><MagnifyingGlass aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-3.5 text-text-muted" /><input type="search" name="crm-search" autoComplete="off" value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Oportunidade, cliente, serviço…" className={cn(fieldClass, 'pl-10')} /></label>
+                <button
+                  type="button"
+                  aria-expanded={funnelFiltersOpen}
+                  aria-controls="crm-funnel-filters"
+                  onClick={() => setFunnelFiltersOpen((current) => !current)}
+                  className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm"
+                >
+                  <Funnel aria-hidden="true" size={16} />
+                  Filtros
+                  {activeFunnelFilterCount > 0 && <span className="rounded-full bg-zinc-900 px-1.5 py-0.5 text-[10px] font-bold text-white dark:bg-white dark:text-zinc-950">{activeFunnelFilterCount}</span>}
+                </button>
+                {boardFiltered && (
+                  <button type="button" onClick={clearFunnelFilters} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-3 text-sm">
+                    Limpar
+                  </button>
+                )}
+              </div>
+            </section>
           </div>
-          {funnelFiltersOpen && (
-            <div id="crm-funnel-filters" className="mt-4 grid gap-3 border-t border-brand-border pt-4 md:grid-cols-3">
-              <FormSelect aria-label="Filtrar por responsável" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)} className={fieldClass}><option value="">Todos os responsáveis</option>{responsibleOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
-              <FormSelect aria-label="Filtrar por serviço" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{serviceOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
-              <FormSelect aria-label="Filtrar oportunidades que exigem atenção" value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as typeof attentionFilter)} className={fieldClass}><option value="all">Todas as oportunidades</option><option value="overdue">Próximas ações atrasadas</option><option value="stale">Paradas há mais de 14 dias</option></FormSelect>
-            </div>
+
+          {(funnelFiltersOpen || activeFunnelFilterCount > 0 || boardFiltered) && (
+            <section className="geo-card min-w-0 p-4 sm:p-5" aria-label="Filtros aplicados do funil">
+              {funnelFiltersOpen && (
+                <div id="crm-funnel-filters" className="grid gap-3 md:grid-cols-3">
+                  <FormSelect aria-label="Filtrar por responsável" value={responsibleFilter} onChange={(event) => setResponsibleFilter(event.target.value)} className={fieldClass}><option value="">Todos os responsáveis</option>{responsibleOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
+                  <FormSelect aria-label="Filtrar por serviço" value={serviceFilter} onChange={(event) => setServiceFilter(event.target.value)} className={fieldClass}><option value="">Todos os serviços</option>{serviceOptions.map((value) => <option key={value}>{value}</option>)}</FormSelect>
+                  <FormSelect aria-label="Filtrar oportunidades que exigem atenção" value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as typeof attentionFilter)} className={fieldClass}><option value="all">Todas as oportunidades</option><option value="overdue">Próximas ações atrasadas</option><option value="stale">Paradas há mais de 14 dias</option></FormSelect>
+                </div>
+              )}
+              {activeFunnelFilterCount > 0 && (
+                <div className={cn('flex flex-wrap gap-2', funnelFiltersOpen && 'mt-4 border-t border-brand-border pt-4')} aria-label="Filtros ativos do funil">
+                  {responsibleFilter && <button type="button" onClick={() => setResponsibleFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Responsável: {responsibleFilter}<X aria-hidden="true" size={13} /></button>}
+                  {serviceFilter && <button type="button" onClick={() => setServiceFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Serviço: {serviceFilter}<X aria-hidden="true" size={13} /></button>}
+                  {attentionFilter !== 'all' && <button type="button" onClick={() => setAttentionFilter('all')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{attentionFilter === 'overdue' ? 'Ações atrasadas' : 'Oportunidades paradas'}<X aria-hidden="true" size={13} /></button>}
+                </div>
+              )}
+              {boardFiltered && <p className={cn('flex items-center gap-2 text-xs text-text-muted', (funnelFiltersOpen || activeFunnelFilterCount > 0) && 'mt-3')}><WarningCircle aria-hidden="true" size={15} />O arraste fica protegido durante filtros. Use as ações do card ou limpe os filtros para reordenar.</p>}
+            </section>
           )}
-          {activeFunnelFilterCount > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2" aria-label="Filtros ativos do funil">
-              {responsibleFilter && <button type="button" onClick={() => setResponsibleFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Responsável: {responsibleFilter}<X aria-hidden="true" size={13} /></button>}
-              {serviceFilter && <button type="button" onClick={() => setServiceFilter('')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">Serviço: {serviceFilter}<X aria-hidden="true" size={13} /></button>}
-              {attentionFilter !== 'all' && <button type="button" onClick={() => setAttentionFilter('all')} className="geo-focus-ring inline-flex min-h-8 items-center gap-1.5 rounded-full bg-brand-surface-subtle px-3 text-xs font-semibold text-text-secondary hover:text-text-primary">{attentionFilter === 'overdue' ? 'Ações atrasadas' : 'Oportunidades paradas'}<X aria-hidden="true" size={13} /></button>}
-            </div>
-          )}
-          {boardFiltered && <p className="mt-3 flex items-center gap-2 text-xs text-text-muted"><WarningCircle aria-hidden="true" size={15} />O arraste fica protegido durante filtros. Use as ações do card ou limpe os filtros para reordenar.</p>}
-        </section>
+        </div>
 
         {opportunitiesQuery.isError ? (
           <div className="geo-card p-6"><FormError message={opportunitiesQuery.error instanceof Error ? opportunitiesQuery.error.message : 'Não foi possível carregar o funil.'} /><button type="button" onClick={() => opportunitiesQuery.refetch()} className="geo-button-base geo-button-secondary geo-focus-ring mt-4 min-h-10 px-4">Tentar novamente</button></div>

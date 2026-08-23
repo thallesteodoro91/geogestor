@@ -36,11 +36,11 @@ async function expectNoSeriousAxeViolations(page: Page) {
   const typeUiButton = page.getByRole('button', { name: 'Minimize TypeUI panel' });
   if (await typeUiButton.isVisible().catch(() => false)) await typeUiButton.click();
   await page.waitForTimeout(350);
-  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  expect(result.violations.filter((item) => item.impact === 'critical' || item.impact === 'serious'), JSON.stringify(result.violations, null, 2)).toEqual([]);
+  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa']).analyze();
+  expect(result.violations, JSON.stringify(result.violations, null, 2)).toEqual([]);
 }
 
-test.describe.serial('Central de Ajuda operacional e acessível', () => {
+test.describe('Central de Ajuda operacional e acessível', () => {
   test('restaura estado pela URL, combina filtros e acompanha o histórico', async ({ page }) => {
     await unlock(page);
     await navigate(page, '/ajuda?categoria=projetos&artigo=projetos-checklist&q=checklist');
@@ -89,7 +89,10 @@ test.describe.serial('Central de Ajuda operacional e acessível', () => {
       await expect(page.getByRole('status').filter({ hasText: 'guias encontrados' })).toBeVisible();
       await expectNoSeriousAxeViolations(page);
       await page.getByRole('button', { name: 'Abrir guia: Primeira configuração e pasta de dados' }).click();
-      await expect(page.locator('article')).toBeVisible();
+      const article = page.getByRole('article').filter({
+        has: page.getByRole('heading', { name: 'Primeira configuração e pasta de dados', level: 2 })
+      });
+      await expect(article).toBeVisible();
       await expectNoSeriousAxeViolations(page);
       await page.getByRole('searchbox', { name: 'Pesquisar na Central de Ajuda' }).fill('termo sem resultado xyz');
       await expect(page.getByRole('heading', { name: 'Nenhum guia encontrado' })).toBeVisible();
@@ -101,7 +104,11 @@ test.describe.serial('Central de Ajuda operacional e acessível', () => {
     await unlock(page);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await navigate(page, '/ajuda?categoria=financeiro&artigo=orcamentos-aprovacao');
-    const article = page.locator('article');
+    await expect(page).toHaveURL(/\/ajuda\?categoria=financeiro&artigo=orcamentos-aprovacao/);
+    await expect(page.getByRole('heading', { name: 'Central de Ajuda', level: 1 })).toBeVisible();
+    const article = page.getByRole('article').filter({
+      has: page.getByRole('heading', { name: 'Orçamentos, PDF e aprovação', level: 2 })
+    });
     await expect(article).toBeVisible();
     await expect(page.getByRole('link', { name: 'Abrir Orçamentos' })).toHaveAttribute('href', '/orcamentos');
     const categoryTransition = await page.getByRole('button', { name: 'Financeiro', exact: true }).evaluate((element) => getComputedStyle(element).transitionDuration);

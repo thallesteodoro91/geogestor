@@ -18,7 +18,7 @@ Software desktop para organizar a operação de empresas de topografia, georrefe
 3. Execute o instalador e siga as etapas exibidas.
 4. Abra o **GeoGestor** pelo menu Iniciar ou pelo atalho criado pelo instalador.
 
-O instalador é destinado a computadores Windows de 64 bits. O Windows pode solicitar uma confirmação de segurança antes da instalação.
+O instalador é destinado a computadores Windows de 64 bits. Nesta etapa ele não possui assinatura Authenticode por decisão do proprietário; o Windows pode apresentar aviso de origem desconhecida ou SmartScreen. O GeoGestor não deve ser anunciado como aplicativo de editor verificado.
 
 ## Requisitos recomendados
 
@@ -32,20 +32,27 @@ Os dados operacionais ficam no computador do usuário. Crie cópias de seguranç
 
 ## Uso para desenvolvimento
 
-Para executar o projeto a partir do código-fonte, instale o Node.js 20 ou superior e o pnpm 11.
+Para reproduzir os gates do projeto, use Node.js 24 e pnpm 11.8.0.
 
 ```powershell
 pnpm install
 pnpm run desktop:dev
 ```
 
-Verificações recomendadas antes de publicar alterações:
+Verificações obrigatórias antes de promover um candidato:
 
 ```powershell
-pnpm run typecheck
-pnpm run test:electron
-pnpm run release:build-candidate
+pnpm.cmd --config.verify-deps-before-run=false run governance:check
+pnpm.cmd --config.verify-deps-before-run=false run governance:test
+pnpm.cmd --config.verify-deps-before-run=false run typecheck
+pnpm.cmd --config.verify-deps-before-run=false run lint
+pnpm.cmd --config.verify-deps-before-run=false run test:web
+pnpm.cmd --config.verify-deps-before-run=false run test:api
+pnpm.cmd --config.verify-deps-before-run=false run test:electron
+pnpm.cmd --config.verify-deps-before-run=false run test:e2e
 ```
+
+O fluxo `release:build-candidate` exige checkout limpo e não publica releases automaticamente. Consulte as minutas e procedimentos em `docs/commercial` antes de qualquer oferta comercial; documentos jurídicos permanecem sujeitos a revisão profissional.
 
 ## Atualização do software
 
@@ -61,4 +68,3 @@ O código-fonte publicado fica no ramo [`main`](https://github.com/thallesteodor
 ## Suporte e problemas
 
 Para relatar um erro ou sugerir uma melhoria, abra uma [issue](https://github.com/thallesteodoro91/geogestor/issues) com uma descrição do ocorrido, passos para reproduzir o problema, versão do GeoGestor e versão do Windows. Nunca inclua dados de clientes, bancos de dados, senhas ou documentos confidenciais.
-

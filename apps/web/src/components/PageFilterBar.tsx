@@ -18,6 +18,7 @@ interface PageFilterBarProps {
   className?: string;
   frameClassName?: string;
   panelClassName?: string;
+  layout?: 'compact' | 'full';
 }
 
 export function PageFilterBar({
@@ -35,17 +36,26 @@ export function PageFilterBar({
   className,
   frameClassName,
   panelClassName,
+  layout = 'full',
 }: PageFilterBarProps) {
   const hasExpandableFilters = Boolean(children && onFiltersToggle);
   const showPanel = hasExpandableFilters && filtersOpen;
+  const compactActionOnly = layout === 'compact' && !search;
 
   if (!showControls && !showPanel) return null;
 
   return (
     <section aria-label="Busca e filtros" className={cn('mb-6 min-w-0', className)}>
       <div className={cn('mx-auto w-full min-w-0 max-w-[1400px] space-y-3', frameClassName)}>
-        {showControls ? <div className={cn(filterBarClass, 'flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center')}>
-          {search ? <div className="min-w-0 flex-1 sm:max-w-xl">{search}</div> : null}
+        {showControls ? <div className={cn(
+          compactActionOnly ? null : filterBarClass,
+          'flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center',
+          layout === 'compact' ? 'w-full sm:w-fit sm:max-w-full' : 'w-full',
+        )}>
+          {search ? <div className={cn(
+            'min-w-0',
+            layout === 'compact' ? 'w-full sm:w-[32rem] sm:max-w-[55vw]' : 'flex-1 sm:max-w-xl',
+          )}>{search}</div> : null}
           {sorting ? <div className="min-w-0 sm:ml-auto">{sorting}</div> : null}
           {hasExpandableFilters && showFilterToggle ? (
             <button

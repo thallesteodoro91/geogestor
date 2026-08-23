@@ -1,12 +1,19 @@
-import { Briefcase, ChartLineUp, Coins } from '@phosphor-icons/react';
 import { useRef, type KeyboardEvent } from 'react';
+import executiveReportIcon from '../../assets/magnific-icons/line-bars_2698159.png';
+import financialReportIcon from '../../assets/magnific-icons/money-management_9509946.png';
+import projectsReportIcon from '../../assets/magnific-icons/tool_9030221.png';
 import { cn } from '../../utils/cn';
+import {
+  localNavigationButtonClass,
+  localNavigationIconClass,
+  localNavigationItemsClass
+} from '../../utils/localNavigationStyles';
 import { REPORT_TYPES, type ReportType } from './reportPresentation';
 
 const TABS = [
-  { type: 'financeiro' as const, label: 'Financeiro', icon: Coins },
-  { type: 'projetos' as const, label: 'Projetos', icon: Briefcase },
-  { type: 'executivo' as const, label: 'Executivo', icon: ChartLineUp }
+  { type: 'financeiro' as const, label: 'Financeiro', icon: financialReportIcon, tone: 'finance' as const },
+  { type: 'projetos' as const, label: 'Projetos', icon: projectsReportIcon, tone: 'system' as const },
+  { type: 'executivo' as const, label: 'Executivo', icon: executiveReportIcon, tone: 'field' as const }
 ];
 
 export function ReportTabs({
@@ -37,9 +44,12 @@ export function ReportTabs({
       ref={tabListRef}
       role="tablist"
       aria-label="Tipo de relatório"
-      className="flex min-w-0 gap-3 overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className={cn(
+        localNavigationItemsClass,
+        'w-full max-w-full min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'
+      )}
     >
-      {TABS.map(({ type, label, icon: Icon }) => {
+      {TABS.map(({ type, label, icon, tone }) => {
         const selected = value === type;
         return (
           <button
@@ -53,18 +63,17 @@ export function ReportTabs({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(type)}
             onKeyDown={(event) => handleKeyDown(event, type)}
-            className={cn(
-              'geo-focus-ring inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full px-3 text-xs font-semibold transition-[background-color,color] motion-reduce:transition-none sm:px-4 sm:text-sm',
-              selected
-                ? 'bg-indigo-500/20 text-indigo-100'
-                : 'text-zinc-300 hover:bg-zinc-800/70 hover:text-white'
-            )}
+            className={localNavigationButtonClass(selected, tone)}
           >
-            <span className={cn(
-              'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
-              selected ? 'bg-indigo-500/30 text-indigo-100' : 'bg-zinc-800 text-zinc-400'
-            )}>
-              <Icon aria-hidden="true" className="h-4 w-4" weight={selected ? 'fill' : 'regular'} />
+            <span
+              aria-hidden="true"
+              className={localNavigationIconClass(
+                selected,
+                tone,
+                'overflow-hidden bg-transparent p-0 dark:bg-transparent'
+              )}
+            >
+              <img src={icon} alt="" width={26} height={26} className="h-[26px] w-[26px] object-contain" />
             </span>
             <span className="truncate">{label}</span>
           </button>

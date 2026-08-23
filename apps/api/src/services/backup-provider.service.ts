@@ -6,6 +6,12 @@ export type BackupProviderStatus = {
   confirmation: 'unavailable' | 'pending' | 'confirmed' | 'failed';
   remoteId: string | null;
   remoteHash: string | null;
+  confirmedAt: string | null;
+  capabilities: {
+    versioning: 'supported' | 'unsupported' | 'unknown';
+    immutability: 'supported' | 'unsupported' | 'unknown';
+    providerRestore: 'supported' | 'unsupported' | 'unknown';
+  };
   error: string | null;
   message: string;
 };
@@ -28,10 +34,12 @@ export class SynchronizedFolderBackupAdapter implements BackupProviderAdapter {
       confirmation: 'unavailable',
       remoteId: null,
       remoteHash: null,
+      confirmedAt: null,
+      capabilities: { versioning: 'unknown', immutability: 'unknown', providerRestore: 'unknown' },
       error: null,
       message: configured
-        ? 'Backup criado e verificado na pasta sincronizada. Confirmação da nuvem indisponível.'
-        : 'Escolha uma pasta sincronizada para manter uma cópia fora do armazenamento local do aplicativo.'
+        ? 'Destino separado configurado; a sincronização remota não pode ser confirmada pelo GeoGestor.'
+        : 'Escolha uma pasta externa, de rede ou sincronizada para manter uma cópia fora do armazenamento local do aplicativo.'
     };
   }
 }

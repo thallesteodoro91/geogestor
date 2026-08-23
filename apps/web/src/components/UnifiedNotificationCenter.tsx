@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Checks, Trash, WarningCircle } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   ALERT_CATEGORY_LABELS,
   type AlertCategory,
@@ -12,6 +12,7 @@ import {
 import { apiClient } from '../services/apiClient';
 import bellIcon from '../assets/magnific-icons/bell_10953632.svg';
 import { cn } from '../utils/cn';
+import { Modal } from './Modal';
 
 type AlertStatusFilter = 'all' | 'unread' | 'read';
 type AlertPeriodFilter = 'all' | 'overdue' | 'today' | '7' | '30';
@@ -58,6 +59,7 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
   const [status, setStatus] = useState<AlertStatusFilter>('all');
   const [period, setPeriod] = useState<AlertPeriodFilter>('all');
   const [undoIds, setUndoIds] = useState<string[]>([]);
+  const categoryFilterId = useId();
   const nativePending = useRef(new Set<string>());
 
   const alertsQuery = useQuery<DeadlineAlertResponse>({
@@ -116,49 +118,69 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
       const completed: string[] = [];
       for (const item of pending) {
         try {
-          await window.electronAPI?.showDeadlineNotification?.({
+          const shown = await window.electronAPI?.showDeadlineNotification?.({
             id: item.id,
             title: `${item.categoryLabel}: ${item.timingLabel}`,
             body: `${item.title} · ${item.description}`,
             link: item.link
           });
-          completed.push(item.id);
+          if (shown === true) completed.push(item.id);
+        } catch {
+          // Permanece elegível para uma nova tentativa no próximo refetch.
         } finally {
           nativePending.current.delete(item.id);
         }
       }
-      if (completed.length) await apiClient.post('/api/alertas/notificacao-nativa', { ids: completed });
+      if (completed.length) {
+        try {
+          await apiClient.post('/api/alertas/notificacao-nativa', { ids: completed });
+        } catch {
+          // Sem confirmação no banco, o alerta continua elegível para nova tentativa.
+        }
+      }
     })();
-  }, [alertsQuery.data?.settings.nativeEnabled, items, mobile]);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [open]);
+  }, [alertsQuery.data?.settings.nativeEnabled, alertsQuery.dataUpdatedAt, items, mobile]);
 
   const openAlert = async (alert: DeadlineAlert) => {
-    if (!alert.readAt) await updateIds('/api/alertas/ler', [alert.id]);
     setOpen(false);
     navigate(alert.link);
+    if (alert.readAt) return;
+    try {
+      await updateIds('/api/alertas/ler', [alert.id]);
+    } catch {
+      toast.warning('O alerta foi aberto, mas não foi possível marcá-lo como lido.');
+    }
   };
 
   const dismiss = async (ids: string[]) => {
-    setUndoIds(ids);
-    await updateIds('/api/alertas/ocultar', ids);
+    try {
+      await updateIds('/api/alertas/ocultar', ids);
+      setUndoIds(ids);
+    } catch {
+      toast.error('Não foi possível apagar os alertas selecionados.');
+    }
   };
 
   const restore = async () => {
     const ids = [...undoIds];
-    setUndoIds([]);
-    await updateIds('/api/alertas/restaurar', ids);
+    try {
+      await updateIds('/api/alertas/restaurar', ids);
+      setUndoIds([]);
+    } catch {
+      toast.error('Não foi possível restaurar os alertas.');
+    }
+  };
+
+  const markRead = async (ids: string[]) => {
+    try {
+      await updateIds('/api/alertas/ler', ids);
+    } catch {
+      toast.error('Não foi possível marcar os alertas como lidos.');
+    }
   };
 
   return (
-    <div className="relative">
+    <>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -179,30 +201,24 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
         ) : null}
       </button>
 
-      <AnimatePresence>
-        {open ? (
-          <motion.section
-            initial={{ opacity: 0, y: 10, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.97 }}
-            role="dialog"
-            aria-label="Central de alertas e prazos"
-            className={cn(
-              'absolute right-0 z-50 mt-2 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900',
-              mobile ? 'w-[min(24rem,calc(100vw-2rem))]' : 'w-[30rem]'
-            )}
-          >
+      <Modal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        title="Alertas e prazos"
+        maxWidth={mobile ? 'max-w-sm' : 'max-w-lg'}
+        initialFocusId={categoryFilterId}
+        ariaDescribedBy={`${categoryFilterId}-summary`}
+      >
             <header className="border-b border-zinc-100 p-4 dark:border-zinc-800">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-sm font-bold text-zinc-950 dark:text-white">Alertas e prazos</h2>
-                  <p aria-live="polite" className="mt-0.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+                  <p id={`${categoryFilterId}-summary`} aria-live="polite" className="mt-0.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
                     {unreadCount ? `${unreadCount} não lida${unreadCount === 1 ? '' : 's'}` : 'Tudo lido'} · {items.length} ativa{items.length === 1 ? '' : 's'}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   {filtered.some((item) => !item.readAt) ? (
-                    <button type="button" onClick={() => void updateIds('/api/alertas/ler', filtered.filter((item) => !item.readAt).map((item) => item.id))} className="geo-focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10" aria-label="Marcar alertas filtrados como lidos">
+                    <button type="button" onClick={() => void markRead(filtered.filter((item) => !item.readAt).map((item) => item.id))} className="geo-focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10" aria-label="Marcar alertas filtrados como lidos">
                       <Checks size={14} aria-hidden="true" />Ler
                     </button>
                   ) : null}
@@ -214,7 +230,7 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
                 </div>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Filtros dos alertas">
-                <select value={category} onChange={(event) => setCategory(event.target.value as AlertCategory | 'all')} className={selectClassName()} aria-label="Filtrar alertas por categoria">
+                <select id={categoryFilterId} value={category} onChange={(event) => setCategory(event.target.value as AlertCategory | 'all')} className={selectClassName()} aria-label="Filtrar alertas por categoria">
                   <option value="all">Todas</option>
                   {(Object.entries(ALERT_CATEGORY_LABELS) as Array<[AlertCategory, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </select>
@@ -227,15 +243,15 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
               </div>
             </header>
 
-            <div className="max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain p-3">
+            <div className="max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain p-3" aria-busy={alertsQuery.isLoading || alertsQuery.isFetching}>
               {undoIds.length ? (
                 <div role="status" className="flex items-center justify-between rounded-xl bg-zinc-100 px-3 py-2 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                   <span>{undoIds.length === 1 ? 'Alerta apagado' : `${undoIds.length} alertas apagados`}</span>
                   <button type="button" onClick={() => void restore()} className="geo-focus-ring min-h-8 rounded-lg px-2 font-bold text-indigo-700 hover:bg-white dark:text-indigo-200 dark:hover:bg-zinc-900">Desfazer</button>
                 </div>
               ) : null}
-              {alertsQuery.isLoading ? <p className="py-10 text-center text-xs font-medium text-zinc-500">Carregando alertas…</p> : null}
-              {!alertsQuery.isLoading && !filtered.length ? (
+              {alertsQuery.isLoading ? <p role="status" aria-live="polite" className="py-10 text-center text-xs font-medium text-zinc-600 dark:text-zinc-300">Carregando alertas…</p> : null}
+              {!alertsQuery.isLoading && !alertsQuery.isError && !filtered.length ? (
                 <div className="py-10 text-center">
                   <Checks size={30} aria-hidden="true" className="mx-auto text-emerald-500" />
                   <p className="mt-2 text-sm font-semibold text-zinc-900 dark:text-white">Nenhum alerta neste filtro</p>
@@ -265,12 +281,22 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
                 );
               })}
               {alertsQuery.isError ? (
-                <div role="alert" className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-200"><WarningCircle size={17} aria-hidden="true" />Não foi possível atualizar os alertas. O GeoGestor tentará novamente.</div>
+                <div role="alert" className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-800 dark:bg-red-500/10 dark:text-red-200">
+                  <WarningCircle size={17} aria-hidden="true" />
+                  <div className="min-w-0 flex-1">
+                    <p>Não foi possível atualizar os alertas.</p>
+                    <button
+                      type="button"
+                      onClick={() => void alertsQuery.refetch()}
+                      className="geo-focus-ring mt-2 min-h-10 rounded-lg bg-red-700 px-3 py-2 font-bold text-white transition-[background-color,box-shadow] hover:bg-red-800 dark:bg-red-600 dark:hover:bg-red-500"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                </div>
               ) : null}
             </div>
-          </motion.section>
-        ) : null}
-      </AnimatePresence>
-    </div>
+      </Modal>
+    </>
   );
 }

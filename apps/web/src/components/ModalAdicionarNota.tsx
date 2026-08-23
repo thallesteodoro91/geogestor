@@ -290,7 +290,7 @@ export function ModalAdicionarNota({ isOpen, onClose, clienteId, projetoId, onSu
             </div>
           </div>
 
-          {/* Painel Embutido Estilo Lovable para Criar Categoria */}
+          {/* Painel embutido para criar uma categoria sem sair do formulário. */}
           <AnimatePresence>
             {showCatCreator && (
               <motion.div

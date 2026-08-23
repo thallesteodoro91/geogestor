@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ import {
   WarningCircle
 } from '@phosphor-icons/react';
 import {
+  APP_QUERY_KEYS,
   daysUntilDate,
   type ConditionPayload,
   type LicenseCondition,
@@ -59,6 +60,7 @@ export function LicencaDetalhes() {
     setSearchParams(next, { replace: true });
   };
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const handledConditionIdRef = useRef<string | null>(null);
   const [showLicenseForm, setShowLicenseForm] = useState(false);
   const [showConditionForm, setShowConditionForm] = useState(false);
   const [editingCondition, setEditingCondition] = useState<LicenseCondition | null>(null);
@@ -70,6 +72,29 @@ export function LicencaDetalhes() {
     queryFn: () => apiClient.get<LicenseDetail>(`/api/licencas/${id}`),
     enabled: Boolean(id)
   });
+
+  const requestedConditionId = searchParams.get(APP_QUERY_KEYS.condition);
+  useEffect(() => {
+    if (!requestedConditionId) {
+      handledConditionIdRef.current = null;
+      return;
+    }
+    if (licenseQuery.isLoading || handledConditionIdRef.current === requestedConditionId) return;
+
+    handledConditionIdRef.current = requestedConditionId;
+    queueMicrotask(() => {
+      const condition = licenseQuery.data?.condicionantes.find((item) => item.id === requestedConditionId);
+      if (condition) toast.info(`Condicionante aberta: ${condition.titulo}`);
+      else toast.info('A condicionante indicada pelo alerta não foi encontrada.');
+
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.delete(APP_QUERY_KEYS.condition);
+        if (condition) next.set('tab', 'conditions');
+        return next;
+      }, { replace: true });
+    });
+  }, [licenseQuery.data, licenseQuery.isLoading, requestedConditionId, setSearchParams]);
 
   const invalidate = async () => {
     await Promise.all([

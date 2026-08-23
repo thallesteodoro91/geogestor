@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { sql } from 'drizzle-orm';
+import { desc, sql } from 'drizzle-orm';
 
 const timestamps = {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
@@ -616,6 +616,143 @@ export const documentos = sqliteTable('documentos', {
     projetoIdIdx: index('idx_documentos_projeto_id').on(table.projetoId),
   };
 });
+
+export const importRuns = sqliteTable('import_runs', {
+  id: text('id').primaryKey(),
+  idempotencyKey: text('idempotency_key'),
+  entity: text('entity').notNull(),
+  importType: text('import_type').notNull(),
+  status: text('status').notNull(),
+  stage: text('stage').notNull(),
+  progress: integer('progress').default(0).notNull(),
+  sourceName: text('source_name'),
+  sourceHash: text('source_hash'),
+  requestDigest: text('request_digest').notNull(),
+  previewExpiresAt: text('preview_expires_at'),
+  previewUsedAt: text('preview_used_at'),
+  payloadJson: text('payload_json'),
+  resultJson: text('result_json'),
+  errorJson: text('error_json'),
+  totalRows: integer('total_rows').default(0).notNull(),
+  importedCount: integer('imported_count').default(0).notNull(),
+  updatedCount: integer('updated_count').default(0).notNull(),
+  reusedCount: integer('reused_count').default(0).notNull(),
+  ignoredCount: integer('ignored_count').default(0).notNull(),
+  failedCount: integer('failed_count').default(0).notNull(),
+  pendingReviewCount: integer('pending_review_count').default(0).notNull(),
+  filesystemPending: integer('filesystem_pending').default(0).notNull(),
+  createdAt: text('created_at').notNull(),
+  startedAt: text('started_at'),
+  completedAt: text('completed_at'),
+  updatedAt: text('updated_at').notNull()
+}, (table) => ({
+  idempotencyIdx: uniqueIndex('uq_import_runs_idempotency')
+    .on(table.entity, table.importType, table.idempotencyKey)
+    .where(sql`${table.idempotencyKey} IS NOT NULL`),
+  singleHeavyIdx: uniqueIndex('uq_import_runs_single_heavy')
+    .on(table.importType)
+    .where(sql`${table.importType} = 'complete' AND ${table.status} IN ('queued', 'validating', 'processing')`),
+  recentIdx: index('idx_import_runs_recent').on(desc(table.createdAt)),
+  statusIdx: index('idx_import_runs_status').on(table.status, table.updatedAt)
+}));
+
+export const importRows = sqliteTable('import_rows', {
+  id: text('id').primaryKey(),
+  importId: text('import_id').references(() => importRuns.id, { onDelete: 'cascade' }).notNull(),
+  rowNumber: integer('row_number').notNull(),
+  status: text('status').notNull(),
+  action: text('action'),
+  recordId: text('record_id'),
+  errorsJson: text('errors_json'),
+  warningsJson: text('warnings_json'),
+  associationMethod: text('association_method'),
+  createdAt: text('created_at').notNull()
+}, (table) => ({
+  runRowIdx: uniqueIndex('uq_import_rows_run_row').on(table.importId, table.rowNumber),
+  runStatusIdx: index('idx_import_rows_run_status').on(table.importId, table.status, table.rowNumber)
+}));
+
+export const camadasGeoespaciais = sqliteTable('camadas_geoespaciais', {
+  id: text('id').primaryKey(),
+  documentoId: text('documento_id').references(() => documentos.id, { onDelete: 'cascade' }).notNull(),
+  clienteId: text('cliente_id').references(() => clientes.id, { onDelete: 'cascade' }).notNull(),
+  projetoId: text('projeto_id').references(() => projetos.id, { onDelete: 'cascade' }),
+  nome: text('nome').notNull(),
+  camadaOrigem: text('camada_origem'),
+  formato: text('formato').notNull(),
+  srcOriginal: text('src_original'),
+  epsgOriginal: integer('epsg_original'),
+  epsgDestino: integer('epsg_destino').default(4326).notNull(),
+  status: text('status').notNull(),
+  quantidadeFeicoes: integer('quantidade_feicoes').default(0).notNull(),
+  quantidadeVertices: integer('quantidade_vertices').default(0).notNull(),
+  tiposGeometriaJson: text('tipos_geometria_json'),
+  bboxJson: text('bbox_json'),
+  latitudeRepresentativa: real('latitude_representativa'),
+  longitudeRepresentativa: real('longitude_representativa'),
+  areaM2: real('area_m2'),
+  perimetroM: real('perimetro_m'),
+  avisosJson: text('avisos_json'),
+  mensagemErro: text('mensagem_erro'),
+  caminhoCache: text('caminho_cache'),
+  caminhoCacheVisualizacao: text('caminho_cache_visualizacao'),
+  tamanhoCacheBytes: integer('tamanho_cache_bytes').default(0).notNull(),
+  tamanhoVisualizacaoBytes: integer('tamanho_visualizacao_bytes').default(0).notNull(),
+  hashOriginal: text('hash_original'),
+  srcOrigemDeteccao: text('src_origem_deteccao'),
+  confiancaSrc: text('confianca_src'),
+  ordemEixos: text('ordem_eixos').default('longitude-latitude').notNull(),
+  problemasTopologiaJson: text('problemas_topologia_json'),
+  reparosJson: text('reparos_json'),
+  relatorioJson: text('relatorio_json'),
+  etapaProcessamento: text('etapa_processamento').default('concluido').notNull(),
+  progressoProcessamento: integer('progresso_processamento').default(100).notNull(),
+  cancelamentoSolicitado: integer('cancelamento_solicitado', { mode: 'boolean' }).default(false).notNull(),
+  metodoPontoRepresentativo: text('metodo_ponto_representativo'),
+  simplificadaVisualizacao: integer('simplificada_visualizacao', { mode: 'boolean' }).default(false).notNull(),
+  visivel: integer('visivel', { mode: 'boolean' }).default(true).notNull(),
+  cor: text('cor').default('#7c3aed').notNull(),
+  opacidade: real('opacidade').default(0.75).notNull(),
+  importadoEm: text('importado_em').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  ...timestamps
+}, (table) => ({
+  documentoIdx: index('idx_camadas_geoespaciais_documento').on(table.documentoId),
+  clienteIdx: index('idx_camadas_geoespaciais_cliente').on(table.clienteId, table.status),
+  projetoIdx: index('idx_camadas_geoespaciais_projeto').on(table.projetoId, table.status)
+}));
+
+export const eventosGeoespaciais = sqliteTable('eventos_geoespaciais', {
+  id: text('id').primaryKey(),
+  camadaId: text('camada_id').references(() => camadasGeoespaciais.id, { onDelete: 'set null' }),
+  documentoId: text('documento_id').references(() => documentos.id, { onDelete: 'set null' }),
+  projetoId: text('projeto_id').references(() => projetos.id, { onDelete: 'set null' }),
+  tipo: text('tipo').notNull(),
+  descricao: text('descricao').notNull(),
+  dadosJson: text('dados_json'),
+  usuarioId: text('usuario_id').default('admin').notNull(),
+  desfeitoEm: text('desfeito_em'),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  camadaIdx: index('idx_eventos_geoespaciais_camada').on(table.camadaId, table.createdAt),
+  projetoIdx: index('idx_eventos_geoespaciais_projeto').on(table.projetoId, table.createdAt)
+}));
+
+export const mapasBaseOffline = sqliteTable('mapas_base_offline', {
+  id: text('id').primaryKey(),
+  nome: text('nome').notNull(),
+  caminho: text('caminho').unique().notNull(),
+  formato: text('formato').notNull(),
+  minZoom: integer('min_zoom'),
+  maxZoom: integer('max_zoom'),
+  boundsJson: text('bounds_json'),
+  atribuicao: text('atribuicao'),
+  tamanhoBytes: integer('tamanho_bytes').default(0).notNull(),
+  ativo: integer('ativo', { mode: 'boolean' }).default(true).notNull(),
+  metadataJson: text('metadata_json'),
+  ...timestamps
+}, (table) => ({
+  ativoIdx: index('idx_mapas_base_offline_ativo').on(table.ativo, table.deletedAt)
+}));
 
 export const recebimentos = sqliteTable('recebimentos', {
   id: text('id').primaryKey(),

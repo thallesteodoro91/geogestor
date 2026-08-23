@@ -1,5 +1,5 @@
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from 'react-leaflet';
-import { useEffect, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from 'react-leaflet';
+import { useEffect, useState, type ComponentProps } from 'react';
 import L from 'leaflet';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -30,6 +30,15 @@ export interface ProjetosMapProps {
   projetos: ProjetoMapItem[];
 }
 
+interface ImportedGeoFeature {
+  data?: ComponentProps<typeof GeoJSON>['data'];
+  visible?: boolean;
+  projetoId?: string;
+  fileName?: string;
+  color?: string;
+  opacity?: number;
+}
+
 const getStatusColor = (status?: string) => {
   if (status === 'Concluído' || status === 'Finalizado') return '#10b981'; // emerald-500
   if (status === 'Em Andamento') return '#f59e0b'; // amber-500
@@ -53,8 +62,29 @@ const getCustomIcon = (status?: string) => {
   });
 };
 
+function FitImportedSurveyBounds({ projetos, geoFeatures }: { projetos: ProjetoMapItem[]; geoFeatures: ImportedGeoFeature[] }) {
+  const map = useMap();
+  useEffect(() => {
+    const bounds = L.latLngBounds([]);
+    projetos.forEach((projeto) => {
+      if (projeto.latitude != null && projeto.longitude != null) bounds.extend([projeto.latitude, projeto.longitude]);
+    });
+    geoFeatures.forEach((feature) => {
+      if (!feature?.data || feature.visible === false) return;
+      try {
+        const layerBounds = L.geoJSON(feature.data).getBounds();
+        if (layerBounds.isValid()) bounds.extend(layerBounds);
+      } catch {
+        // O backend expõe o erro da camada; uma geometria inválida não deve impedir as demais.
+      }
+    });
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 });
+  }, [geoFeatures, map, projetos]);
+  return null;
+}
+
 export function ProjetosMap({ projetos }: ProjetosMapProps) {
-  const [geoFeatures, setGeoFeatures] = useState<Record<string, unknown>[]>([]);
+  const [geoFeatures, setGeoFeatures] = useState<ImportedGeoFeature[]>([]);
   const [loadingGeo, setLoadingGeo] = useState(false);
   const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
   const [tileRetryKey, setTileRetryKey] = useState(0);
@@ -79,7 +109,7 @@ export function ProjetosMap({ projetos }: ProjetosMapProps) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ projetoIds: projetos.map(p => p.id) })
     })
-      .then(res => res.json())
+      .then(async (res) => await res.json() as { geoFeatures?: ImportedGeoFeature[] })
       .then(data => {
         if (data.geoFeatures) setGeoFeatures(data.geoFeatures);
         setLoadingGeo(false);
@@ -108,9 +138,9 @@ export function ProjetosMap({ projetos }: ProjetosMapProps) {
   return (
     <div className="w-full h-[600px] rounded-[2rem] overflow-hidden shadow-[0_10px_30px_-10px_rgba(0,0,0,0.03)] ring-1 ring-zinc-900/5 relative z-0">
       {loadingGeo && (
-        <div className="absolute top-4 right-4 z-[1000] bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-full shadow-sm ring-1 ring-zinc-900/5 flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full border-2 border-emerald-500 border-t-transparent animate-spin"></div>
-          <span className="text-xs font-medium text-zinc-600">Carregando polígonos...</span>
+        <div role="status" aria-live="polite" className="absolute right-4 top-4 z-[1000] flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-zinc-700 shadow-sm ring-1 ring-zinc-900/5 backdrop-blur-sm dark:bg-zinc-900/90 dark:text-zinc-200">
+          <div aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent motion-reduce:animate-none"></div>
+          <span className="text-xs font-medium">Carregando polígonos…</span>
         </div>
       )}
       <MapBaseNotice
@@ -125,6 +155,7 @@ export function ProjetosMap({ projetos }: ProjetosMapProps) {
         zoom={zoom} 
         style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
+        <FitImportedSurveyBounds projetos={mapProjetos} geoFeatures={geoFeatures} />
         <TileLayer
           key={tileRetryKey}
           attribution={MAP_TILE_ATTRIBUTION}
@@ -159,20 +190,20 @@ export function ProjetosMap({ projetos }: ProjetosMapProps) {
           </Marker>
         ))}
         {geoFeatures.map((feature, i) => {
-          if (!feature.data) return null;
+          if (!feature.data || feature.visible === false) return null;
           const proj = projetos.find(p => p.id === feature.projetoId);
           const color = getStatusColor(proj?.status);
           
           return (
             <GeoJSON 
               key={`geo-${i}`} 
-              data={feature.data as never} 
+              data={feature.data}
               style={{
-                color: color,
+                color: typeof feature.color === 'string' ? feature.color : color,
                 weight: 2,
-                opacity: 0.8,
-                fillColor: color,
-                fillOpacity: 0.3
+                opacity: typeof feature.opacity === 'number' ? feature.opacity : 0.8,
+                fillColor: typeof feature.color === 'string' ? feature.color : color,
+                fillOpacity: Math.min(0.55, (typeof feature.opacity === 'number' ? feature.opacity : 0.8) * 0.45)
               }}
               onEachFeature={(f, layer) => {
                 const name = f.properties?.name || feature.fileName;

@@ -27,21 +27,21 @@ CREATE TABLE IF NOT EXISTS import_runs (
   completed_at TEXT,
   updated_at TEXT NOT NULL
 );
-
+--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS uq_import_runs_idempotency
   ON import_runs(entity, import_type, idempotency_key)
   WHERE idempotency_key IS NOT NULL;
-
+--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS uq_import_runs_single_heavy
   ON import_runs(import_type)
   WHERE import_type = 'complete' AND status IN ('queued', 'validating', 'processing');
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_import_runs_recent
   ON import_runs(created_at DESC);
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_import_runs_status
   ON import_runs(status, updated_at);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS import_rows (
   id TEXT PRIMARY KEY,
   import_id TEXT NOT NULL REFERENCES import_runs(id) ON DELETE CASCADE,
@@ -55,22 +55,22 @@ CREATE TABLE IF NOT EXISTS import_rows (
   created_at TEXT NOT NULL,
   UNIQUE(import_id, row_number)
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_import_rows_run_status
   ON import_rows(import_id, status, row_number);
-
+--> statement-breakpoint
 UPDATE clientes
 SET situacao = 'Ativo'
 WHERE deleted_at IS NULL AND (situacao IS NULL OR trim(situacao) = '');
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_clientes_import_document
   ON clientes(documento_normalizado)
   WHERE deleted_at IS NULL AND situacao = 'Ativo';
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_clientes_import_name
   ON clientes(lower(trim(nome)))
   WHERE deleted_at IS NULL AND situacao = 'Ativo';
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_contatos_import_email
   ON contatos(lower(trim(email)))
   WHERE deleted_at IS NULL AND email IS NOT NULL;

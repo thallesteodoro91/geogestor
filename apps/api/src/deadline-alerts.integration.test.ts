@@ -40,14 +40,20 @@ test('centraliza prazos, estados e recorrências sem duplicar ocorrências', asy
     const archivedProjectId = crypto.randomUUID();
     const budgetId = crypto.randomUUID();
     const licenseId = crypto.randomUUID();
-    await db.insert(schema.clientes).values({ id: clientId, nome: 'Cliente dos alertas' });
+    const taskId = crypto.randomUUID();
+    const receivableId = crypto.randomUUID();
+    const payableId = crypto.randomUUID();
+    const conditionId = crypto.randomUUID();
+    const appointmentId = crypto.randomUUID();
+    const opportunityId = crypto.randomUUID();
+    await db.insert(schema.clientes).values({ id: clientId, nome: 'Cliente dos alertas', situacao: 'Ativo', previsaoEntrega: '2026-08-06' });
     await db.insert(schema.projetos).values([
       { id: projectId, clienteId: clientId, nome: 'Serviço RTK', status: 'Em Andamento', dataEntrega: '2026-08-05' },
       { id: archivedProjectId, clienteId: clientId, nome: 'Projeto arquivado', status: 'Arquivado', dataEntrega: '2026-08-02' }
     ]);
     await db.insert(schema.tarefas).values([
       { id: crypto.randomUUID(), clienteId: clientId, projetoId: projectId, titulo: 'Tarefa concluída', status: 'Concluído', dataLimite: '2026-08-02' },
-      { id: crypto.randomUUID(), clienteId: clientId, projetoId: projectId, titulo: 'Tarefa pendente', status: 'A Fazer', dataLimite: '2026-08-03' }
+      { id: taskId, clienteId: clientId, projetoId: projectId, titulo: 'Tarefa pendente', status: 'A Fazer', dataLimite: '2026-08-03' }
     ]);
     await db.insert(schema.orcamentos).values({
       id: budgetId,
@@ -60,10 +66,10 @@ test('centraliza prazos, estados e recorrências sem duplicar ocorrências', asy
     });
     await db.insert(schema.parcelas).values([
       { id: crypto.randomUUID(), orcamentoId: budgetId, valor: 10_000, valorPago: 10_000, numero: 1, statusPagamento: 'Pago', dataVencimento: '2026-07-31', dataPagamento: '2026-07-31' },
-      { id: crypto.randomUUID(), orcamentoId: budgetId, valor: 10_000, valorPago: 4_000, numero: 2, statusPagamento: 'Pendente', dataVencimento: '2026-07-31' }
+      { id: receivableId, orcamentoId: budgetId, valor: 10_000, valorPago: 4_000, numero: 2, statusPagamento: 'Pendente', dataVencimento: '2026-07-31' }
     ]);
     await db.insert(schema.despesas).values({
-      id: crypto.randomUUID(), clienteId: clientId, projetoId: projectId, descricao: 'Taxa de cartório',
+      id: payableId, clienteId: clientId, projetoId: projectId, descricao: 'Taxa de cartório',
       valor: 2_500, data: '2026-07-30', categoria: 'Cartório', status: 'Pendente'
     });
     await db.insert(schema.licencas).values({
@@ -71,14 +77,14 @@ test('centraliza prazos, estados e recorrências sem duplicar ocorrências', asy
       status: 'Válida', dataVencimento: '2026-08-06'
     });
     await db.insert(schema.condicionantesAmbientais).values({
-      id: crypto.randomUUID(), licencaId: licenseId, titulo: 'Enviar relatório',
+      id: conditionId, licencaId: licenseId, titulo: 'Enviar relatório',
       status: 'Pendente', dataLimite: '2026-08-02'
     });
     await db.insert(schema.compromissos).values({
-      id: crypto.randomUUID(), clienteId: clientId, projetoId: projectId, titulo: 'Visita de campo', data: '2026-08-02'
+      id: appointmentId, clienteId: clientId, projetoId: projectId, titulo: 'Visita de campo', data: '2026-08-02'
     });
     await db.insert(schema.oportunidades).values({
-      id: crypto.randomUUID(), clienteId: clientId, titulo: 'Proposta comercial', estagio: 'Proposta',
+      id: opportunityId, clienteId: clientId, titulo: 'Proposta comercial', estagio: 'Proposta',
       proximaAcao: 'Telefonar para o cliente', proximaAcaoEm: '2026-08-02'
     });
 
@@ -96,6 +102,22 @@ test('centraliza prazos, estados e recorrências sem duplicar ocorrências', asy
     assert.ok(initial.items.some((item) => item.category === 'payable' && item.severity === 'critical'));
     assert.ok(initial.items.some((item) => item.category === 'license'));
     assert.ok(initial.items.some((item) => item.category === 'condition'));
+    const expectedLinks = new Map([
+      [`project:${projectId}`, contracts.appLinks.project(projectId)],
+      [`project:cliente-${clientId}`, contracts.appLinks.client(clientId)],
+      [`task:${taskId}`, contracts.appLinks.task(taskId)],
+      [`receivable:${receivableId}`, contracts.appLinks.receivable(receivableId)],
+      [`payable:${payableId}`, contracts.appLinks.payable(payableId)],
+      [`budget:${budgetId}`, contracts.appLinks.budgetEdit(budgetId)],
+      [`license:${licenseId}`, contracts.appLinks.license(licenseId)],
+      [`condition:${conditionId}`, contracts.appLinks.condition(licenseId, conditionId)],
+      [`appointment:${appointmentId}`, contracts.appLinks.appointment(appointmentId)],
+      [`crm:${opportunityId}`, contracts.appLinks.opportunity(opportunityId)]
+    ]);
+    for (const [key, expectedLink] of expectedLinks) {
+      const [category, sourceId] = key.split(':');
+      assert.equal(initial.items.find((item) => item.category === category && item.sourceId === sourceId)?.link, expectedLink, key);
+    }
 
     const repeated = await alerts.listDeadlineAlerts('2026-08-01');
     assert.deepEqual(repeated.items.map((item) => item.id), initial.items.map((item) => item.id), 'a mesma recorrência não pode duplicar');
@@ -129,7 +151,7 @@ test('centraliza prazos, estados e recorrências sem duplicar ocorrências', asy
     assert.equal((await alerts.listDeadlineAlerts('2026-08-01')).items.some((item) => item.id === projectAlert.id), true);
 
     await db.update(schema.projetos).set({ status: 'Cancelado' }).where(eq(schema.projetos.id, projectId));
-    assert.equal((await alerts.listDeadlineAlerts('2026-08-01')).items.some((item) => item.category === 'project'), false);
+    assert.equal((await alerts.listDeadlineAlerts('2026-08-01')).items.some((item) => item.sourceId === projectId), false);
 
     assert.equal(alerts.civilDaysBetween('2026-08-01', '2026-08-02'), 1);
     assert.equal(alerts.civilDaysBetween('2026-10-17', '2026-10-18'), 1, 'datas civis não dependem de UTC ou horário de verão');

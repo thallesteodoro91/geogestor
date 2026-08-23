@@ -13,6 +13,7 @@ const restoredDbPath = path.join(root, 'restored', 'geogestor.db');
 const restoredFilesRoot = path.join(root, 'restored-files');
 
 process.env.GEOGESTOR_DB_PATH = dbPath;
+process.env.NODE_ENV = 'test';
 process.env.GEOGESTOR_BACKUP_RETENTION = '3';
 const databaseKey = Buffer.alloc(32, 73).toString('base64');
 const requireFromHere = createRequire(__filename);
@@ -30,9 +31,10 @@ async function reset() {
 
 test('backup completo validado restaura banco e arquivos relacionados', async () => {
   await reset();
-  const [{ runRuntimeMigrations }, { BackupService }] = await Promise.all([
+  const [{ runRuntimeMigrations }, { BackupService }, { RestoreAuthorizationService }] = await Promise.all([
     import('./services/runtime-migrations.service'),
-    import('./services/backup.service')
+    import('./services/backup.service'),
+    import('./services/restore-authorization.service')
   ]);
   await runRuntimeMigrations();
 
@@ -50,7 +52,9 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   await fs.writeFile(path.join(filesRoot, 'documento.txt'), 'versão preservada', 'utf8');
 
   const backup = await BackupService.createCompleteBackup(filesRoot);
-  const validation = await BackupService.validateBackup(backup.bundlePath);
+  const bundleAuthorization = RestoreAuthorizationService.issueForTests(backup.bundlePath, { expiresAt: Date.now() + 5 * 60_000 });
+  const selectedBundle = RestoreAuthorizationService.verify({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
+  const validation = await BackupService.validateBackup(selectedBundle.bundlePath, selectedBundle.bundlePath);
   assert.equal(validation.quickCheck, 'ok');
   assert.equal(validation.foreignKeyViolations, 0);
   assert.equal(validation.manifest.type, 'complete');
@@ -67,10 +71,11 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.ok(encryptedDocument);
   assert.equal((await fs.readFile(path.join(backup.bundlePath, encryptedDocument.path))).includes(Buffer.from('versão preservada')), false);
 
-  const isolatedTest = await BackupService.testRestore(backup.bundlePath);
+  const isolatedTest = await BackupService.testRestore(selectedBundle.bundlePath, selectedBundle.bundlePath);
   assert.equal(isolatedTest.tested, true);
   assert.equal(isolatedTest.temporaryDataRemoved, true);
   assert.equal(isolatedTest.credentialsExcluded, true);
+  RestoreAuthorizationService.markTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
 
   const compatibleV2Bundle = `${backup.bundlePath}-v2`;
   await fs.cp(backup.bundlePath, compatibleV2Bundle, { recursive: true });
@@ -123,8 +128,11 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   await sourceClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-posterior', 'Alteração posterior'] });
   await fs.writeFile(path.join(filesRoot, 'documento.txt'), 'versão alterada', 'utf8');
 
+  const authorizedRestore = RestoreAuthorizationService.assertTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
+  RestoreAuthorizationService.verify({ bundlePath: backup.bundlePath, authorization: bundleAuthorization }, { consume: true });
   const restore = await BackupService.restoreBackup({
-    bundlePath: backup.bundlePath,
+    bundlePath: authorizedRestore.bundlePath,
+    allowedBackupDirectory: authorizedRestore.bundlePath,
     targetDatabasePath: restoredDbPath,
     targetFilesRoot: restoredFilesRoot,
     confirmation: 'RESTORE_GEOGESTOR'

@@ -2,7 +2,8 @@ $ErrorActionPreference = 'Stop'
 $distPath = Join-Path $PSScriptRoot '..\apps\desktop\dist'
 $packagePath = Join-Path $PSScriptRoot '..\apps\desktop\package.json'
 $version = (Get-Content -LiteralPath $packagePath -Raw | ConvertFrom-Json).version
-$installers = @(Get-ChildItem -LiteralPath $distPath -File | Where-Object { $_.Name -eq "GeoGestor Setup $version.exe" })
+$commercialVersion = $version -replace '\.0$', ''
+$installers = @(Get-ChildItem -LiteralPath $distPath -File | Where-Object { $_.Name -eq "GeoGestor Setup $commercialVersion.exe" })
 
 if ($installers.Count -eq 0) {
   throw "Nenhum instalador encontrado em $distPath"

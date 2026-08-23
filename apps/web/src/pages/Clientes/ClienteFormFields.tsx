@@ -203,8 +203,8 @@ interface CheckCardProps {
 
 function CheckCard({ name, value, checked, onChange, tone = 'indigo' }: CheckCardProps) {
   const selectedClass = tone === 'emerald'
-    ? 'border-emerald-300 bg-emerald-50/75 text-emerald-950 dark:border-emerald-300/35 dark:bg-emerald-400/12 dark:text-emerald-100'
-    : 'border-indigo-300 bg-indigo-50/75 text-indigo-950 dark:border-indigo-300/35 dark:bg-indigo-400/12 dark:text-indigo-100';
+    ? 'border-emerald-500 bg-emerald-100 text-emerald-950 shadow-sm dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-100'
+    : 'border-indigo-500 bg-indigo-100 text-indigo-950 shadow-sm dark:border-indigo-500 dark:bg-indigo-950 dark:text-indigo-100';
   const indicatorClass = tone === 'emerald'
     ? 'border-emerald-600 bg-emerald-600 text-white dark:border-emerald-400 dark:bg-emerald-400 dark:text-emerald-950'
     : 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-400 dark:bg-indigo-400 dark:text-indigo-950';
@@ -278,7 +278,7 @@ function ServiceCategory({
         <span className={cn(
           'rounded-full border px-2 py-0.5 text-[11px] font-semibold tabular-nums',
           selectedCount > 0
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-300/25 dark:bg-emerald-400/12 dark:text-emerald-200'
+            ? 'border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-600 dark:bg-emerald-950 dark:text-emerald-100'
             : 'border-brand-border bg-brand-surface text-zinc-500 dark:text-zinc-400'
         )}>
           {selectedCount > 0 ? `${selectedCount} selecionado${selectedCount === 1 ? '' : 's'}` : 'Nenhum selecionado'}

@@ -1,8 +1,8 @@
 ALTER TABLE objetivos_estrategicos ADD COLUMN ordem INTEGER DEFAULT 0 NOT NULL;
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_objetivos_estrategicos_pilar_ordem
   ON objetivos_estrategicos(pilar_id, ordem);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS decisoes_estrategicas (
   id TEXT PRIMARY KEY,
   ciclo_id TEXT NOT NULL REFERENCES ciclos_estrategicos(id) ON DELETE CASCADE,
@@ -18,14 +18,16 @@ CREATE TABLE IF NOT EXISTS decisoes_estrategicas (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
   deleted_at TEXT
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_decisoes_estrategicas_ciclo_status_prazo
   ON decisoes_estrategicas(ciclo_id, status, prazo);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_decisoes_estrategicas_checkin
   ON decisoes_estrategicas(checkin_id);
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_decisoes_estrategicas_objetivo
   ON decisoes_estrategicas(objetivo_id);
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS snapshots_estrategicos (
   id TEXT PRIMARY KEY,
   ciclo_id TEXT NOT NULL REFERENCES ciclos_estrategicos(id) ON DELETE CASCADE,
@@ -41,12 +43,13 @@ CREATE TABLE IF NOT EXISTS snapshots_estrategicos (
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
   deleted_at TEXT
 );
-
+--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS idx_snapshots_estrategicos_ciclo_captura
   ON snapshots_estrategicos(ciclo_id, capturado_em);
+--> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS idx_snapshots_estrategicos_checkin_unique
   ON snapshots_estrategicos(checkin_id);
-
+--> statement-breakpoint
 INSERT INTO decisoes_estrategicas (
   id, ciclo_id, checkin_id, objetivo_id, descricao, responsavel, prazo,
   status, concluida_em, observacao_encerramento, created_at, updated_at

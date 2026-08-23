@@ -25,7 +25,7 @@ test('quarentena preserva o único exemplar e permite rollback após falha lógi
 
   const committed = await RecoverableFileService.commit(manifest);
   assert.equal(committed.state, 'committed');
-  await RecoverableFileService.rollback(committed);
+  await RecoverableFileService.rollback(committed, root);
 
   assert.equal(await fs.readFile(originalPath, 'utf8'), 'conteúdo sintético para teste');
   assert.equal((await RecoverableFileService.list(root)).length, 0);
@@ -47,6 +47,30 @@ test('documento excluído pode ser restaurado por identificador com hash validad
   await fs.rm(root, { recursive: true, force: true });
 });
 
+test('manifesto adulterado não restaura arquivo fora da pasta de dados', async () => {
+  await reset();
+  const committed = await RecoverableFileService.commit(await RecoverableFileService.quarantine({
+    sourcePath: originalPath,
+    dataRoot: root,
+    recordId: 'documento-adulterado'
+  }));
+  const sentinelPath = path.resolve(path.dirname(root), `recoverable-file-sentinel-${process.pid}.txt`);
+  await fs.writeFile(sentinelPath, 'sentinela externa intacta', 'utf8');
+  await fs.writeFile(path.join(path.dirname(committed.quarantinedPath), 'manifest.json'), `${JSON.stringify({
+    ...committed,
+    originalPath: sentinelPath
+  }, null, 2)}\n`, 'utf8');
+
+  await assert.rejects(
+    RecoverableFileService.restoreLatestByRecordId(root, 'documento-adulterado'),
+    /Nenhum arquivo recuperável/
+  );
+  assert.equal(await fs.readFile(sentinelPath, 'utf8'), 'sentinela externa intacta');
+  await fs.access(committed.quarantinedPath);
+  await fs.rm(sentinelPath, { force: true });
+  await fs.rm(root, { recursive: true, force: true });
+});
+
 test('purga remove somente entradas confirmadas e expiradas e preserva manifestos inválidos', async () => {
   await reset();
   const committed = await RecoverableFileService.commit(await RecoverableFileService.quarantine({
@@ -60,8 +84,6 @@ test('purga remove somente entradas confirmadas e expiradas e preserva manifesto
     createdAt: '2020-01-01T00:00:00.000Z',
     committedAt: '2020-01-01T00:00:01.000Z'
   }, null, 2)}\n`, 'utf8');
-  await fs.rm(committed.quarantinedPath, { force: true });
-
   const malformedDirectory = path.join(RecoverableFileService.getTrashRoot(root), 'manifesto-invalido');
   await fs.mkdir(malformedDirectory, { recursive: true });
   await fs.writeFile(path.join(malformedDirectory, 'manifest.json'), '{invalido', 'utf8');

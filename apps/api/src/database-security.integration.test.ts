@@ -18,6 +18,7 @@ const keyOne = Buffer.alloc(32, 31).toString('base64');
 const keyTwo = Buffer.alloc(32, 47).toString('base64');
 const marker = 'DADO-SENSIVEL-GEOGESTOR-987654';
 const requireFromHere = createRequire(__filename);
+const requireFromDatabase = createRequire(path.resolve(process.cwd(), 'packages', 'database', 'package.json'));
 process.env.GEOGESTOR_DATABASE_WORKER = path.resolve(process.cwd(), 'apps/api/src/database-security-worker.ts');
 process.env.GEOGESTOR_DATABASE_WORKER_RUNNER = requireFromHere.resolve('tsx/cli');
 
@@ -43,6 +44,32 @@ async function createLegacyDatabase(databasePath: string, invalidForeignKey = fa
     windowsHide: true
   });
   assert.equal(result.status, 0, result.stderr);
+}
+
+async function createLegacyDatabaseWithPendingWal(databasePath: string) {
+  await fs.mkdir(path.dirname(databasePath), { recursive: true });
+  const nativeModule = requireFromDatabase.resolve('libsql');
+  const script = `
+    const Database = require(process.argv[1]);
+    const database = new Database(process.argv[2]);
+    database.pragma('foreign_keys = ON');
+    database.pragma('journal_mode = WAL');
+    database.pragma('wal_autocheckpoint = 0');
+    database.pragma('user_version = 9');
+    database.exec(\`
+      CREATE TABLE clientes (id TEXT PRIMARY KEY, nome TEXT NOT NULL);
+      CREATE TABLE projetos (id TEXT PRIMARY KEY, cliente_id TEXT NOT NULL REFERENCES clientes(id), nome TEXT NOT NULL);
+      INSERT INTO clientes VALUES ('c1', 'Cliente WAL'), ('c2', 'Cliente Area Rural');
+      INSERT INTO projetos VALUES ('p1', 'c1', 'Projeto WAL'), ('p2', 'c2', 'Projeto Costeiro');
+    \`);
+    process.exit(0);
+  `;
+  const result = spawnSync(process.execPath, ['-e', script, nativeModule, databasePath], {
+    encoding: 'utf8',
+    windowsHide: true
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok((await fs.stat(`${databasePath}-wal`)).size > 0, 'O fixture precisa manter quadros no WAL.');
 }
 
 test('migra banco legado para arquivo criptografado e rejeita chave incorreta', async () => {
@@ -74,7 +101,7 @@ test('falha de migração preserva integralmente o banco legado', async () => {
   const databasePath = path.join(root, 'rollback', 'geogestor.db');
   await createLegacyDatabase(databasePath, true);
   const before = await fs.readFile(databasePath);
-  assert.throws(() => ensureDatabaseProtectionSync(databasePath, keyOne), /vínculo|integridade/i);
+  assert.throws(() => ensureDatabaseProtectionSync(databasePath, keyOne), /banco legado|checkpoint protegido|integridade/i);
   assert.deepEqual(await fs.readFile(databasePath), before);
   const legacy = createClient({ url: `file:${databasePath}` });
   assert.equal((await legacy.execute('SELECT nome FROM clientes')).rows[0]?.nome, marker);
@@ -114,4 +141,43 @@ test('banco e WAL não expõem conteúdo sensível em texto claro', async () => 
     assert.equal((error as NodeJS.ErrnoException).code, 'ENOENT');
   }
   client.close();
+});
+
+test('migra legado com WAL pendente sem perder relacoes nem deixar sidecars plaintext', async () => {
+  const databasePath = path.join(root, 'legacy-pending-wal', 'geogestor.db');
+  await createLegacyDatabaseWithPendingWal(databasePath);
+  const expectedRows = [
+    ['c1', 'Cliente WAL', 'p1', 'Projeto WAL'],
+    ['c2', 'Cliente Area Rural', 'p2', 'Projeto Costeiro']
+  ];
+  const expectedHash = crypto.createHash('sha256').update(JSON.stringify(expectedRows)).digest('hex');
+
+  process.env.GEOGESTOR_DB_ENCRYPTION_KEY = keyOne;
+  let result: ReturnType<typeof ensureDatabaseProtectionSync>;
+  try {
+    result = ensureDatabaseProtectionSync(databasePath, keyOne);
+  } finally {
+    delete process.env.GEOGESTOR_DB_ENCRYPTION_KEY;
+  }
+  assert.equal(result.status, 'migrated');
+  const protectedClient = createClient(databaseClientConfig(databasePath, keyOne));
+  try {
+    const rows = (await protectedClient.execute(`SELECT c.id cliente_id, c.nome cliente_nome,
+      p.id projeto_id, p.nome projeto_nome FROM clientes c
+      JOIN projetos p ON p.cliente_id = c.id ORDER BY c.id, p.id`)).rows
+      .map((row) => [row.cliente_id, row.cliente_nome, row.projeto_id, row.projeto_nome]);
+    const actualHash = crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+    assert.equal(actualHash, expectedHash);
+    assert.equal(rows.length, 2);
+    assert.equal((await protectedClient.execute('PRAGMA foreign_key_check')).rows.length, 0);
+    assert.equal(Number((await protectedClient.execute('PRAGMA user_version')).rows[0]?.user_version), 9);
+  } finally {
+    await protectedClient.close();
+  }
+
+  await assert.rejects(fs.stat(`${databasePath}-wal`), { code: 'ENOENT' });
+  await assert.rejects(fs.stat(`${databasePath}-shm`), { code: 'ENOENT' });
+  assert.equal((await fs.readFile(databasePath)).includes(Buffer.from('Cliente WAL')), false);
+  assert.ok(result.recoveryPath);
+  assert.equal((await fs.readFile(result.recoveryPath!)).includes(Buffer.from('Cliente WAL')), false);
 });

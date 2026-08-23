@@ -11,7 +11,7 @@ import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { PageHeader } from '../../components/PageHeader';
 import { motion } from 'framer-motion';
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
 import { apiFetch, apiClient } from '../../services/apiClient';
 import { notifications } from '../../services/notifications';
@@ -103,7 +103,17 @@ function newExpenseFingerprint() {
   });
 }
 
-export function Despesas({ embedded = false, openCreateOnMount = false }: { embedded?: boolean; openCreateOnMount?: boolean }) {
+export function Despesas({
+  embedded = false,
+  openCreateOnMount = false,
+  focusDespesaId,
+  onFocusHandled
+}: {
+  embedded?: boolean;
+  openCreateOnMount?: boolean;
+  focusDespesaId?: string;
+  onFocusHandled?: () => void;
+}) {
   const queryClient = useQueryClient();
   const catalogsQuery = useAuxiliaryCatalogs();
   const [showModal, setShowModal] = useState(openCreateOnMount);
@@ -322,6 +332,8 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
   });
 
   // Actions
+  const handledExpenseIdRef = useRef<string | null>(null);
+
   const openCreateModal = () => {
     const today = new Date().toISOString().split('T')[0];
     const initialValues = {
@@ -343,7 +355,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
       formaPagamento: 'Pix'
     };
     setSelectedDespesa(null);
-    setDespProjetoId('');
+    setProjetoId('');
     setViagemId('');
     setDescricao('');
     setFornecedor('');
@@ -363,7 +375,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
     setShowModal(true);
   };
 
-  const openEditModal = (desp: DespesaItem) => {
+  const openEditModal = useCallback((desp: DespesaItem) => {
     const initialValues = {
       projetoId: desp.projetoId || '',
       viagemId: desp.viagemId || '',
@@ -383,7 +395,7 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
       formaPagamento: desp.formaPagamento || 'Pix'
     };
     setSelectedDespesa(desp);
-    setDespProjetoId(desp.projetoId || '');
+    setProjetoId(desp.projetoId || '');
     setViagemId(desp.viagemId || '');
     setDescricao(desp.descricao || '');
     setFornecedor(desp.fornecedor || '');
@@ -401,7 +413,23 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
     setFormaPagamento(desp.formaPagamento || 'Pix');
     setInitialFormFingerprint(JSON.stringify(initialValues));
     setShowModal(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!focusDespesaId) {
+      handledExpenseIdRef.current = null;
+      return;
+    }
+    if (despesasLoading || handledExpenseIdRef.current === focusDespesaId) return;
+
+    handledExpenseIdRef.current = focusDespesaId;
+    queueMicrotask(() => {
+      const focusedDespesa = despesas.find((item) => item.id === focusDespesaId);
+      if (focusedDespesa) openEditModal(focusedDespesa);
+      else notifications.info('A conta a pagar indicada pelo alerta não foi encontrada.');
+      onFocusHandled?.();
+    });
+  }, [focusDespesaId, despesasLoading, despesas, onFocusHandled, openEditModal]);
 
   const closeExpenseModal = () => {
     setShowModal(false);
@@ -456,10 +484,6 @@ export function Despesas({ embedded = false, openCreateOnMount = false }: { embe
     }
 
     submitMutation.mutate(payload);
-  };
-
-  const setDespProjetoId = (id: string) => {
-    setProjetoId(id);
   };
 
   const formatCurrency = (cents: number) => {

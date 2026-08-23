@@ -11,7 +11,7 @@ export function describeArtifact(filePath) {
   };
 }
 
-export function verifyArtifactHashes(distDirectory) {
+export function verifyArtifactHashes(distDirectory, expected = {}) {
   const errors = [];
   const manifestPath = path.join(distDirectory, 'artifact-hashes.json');
   if (!fs.existsSync(manifestPath)) return ['Manifesto artifact-hashes.json ausente.'];
@@ -24,6 +24,12 @@ export function verifyArtifactHashes(distDirectory) {
   }
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     return ['Manifesto de hashes não contém artefatos.'];
+  }
+
+  if (expected.version && manifest.version !== expected.version) errors.push('Versão do manifesto divergente do pacote.');
+  if (expected.commit && manifest.commit !== expected.commit) errors.push('Commit do manifesto divergente do pacote.');
+  if (expected.releaseRunId && manifest.releaseRunId !== expected.releaseRunId) {
+    errors.push('Execução do manifesto divergente do pacote.');
   }
 
   const installers = fs.readdirSync(distDirectory)

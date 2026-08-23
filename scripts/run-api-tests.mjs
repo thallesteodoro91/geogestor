@@ -18,7 +18,7 @@ function collect(directory) {
     .sort();
 }
 
-const result = spawnSync(process.execPath, [tsxCli, '--test', ...collect(source)], {
+const result = spawnSync(process.execPath, [tsxCli, '--test', '--test-concurrency=4', '--test-force-exit', ...collect(source)], {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, NODE_ENV: 'test' }
@@ -27,8 +27,14 @@ const result = spawnSync(process.execPath, [tsxCli, '--test', ...collect(source)
 const scratch = path.join(root, 'scratch');
 if (existsSync(scratch)) {
   for (const entry of readdirSync(scratch, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !['system-reset-', 'data-directory-'].some((prefix) => entry.name.startsWith(prefix))) continue;
-    rmSync(path.join(scratch, entry.name), { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+    if (!entry.isDirectory() || !['system-reset-', 'data-directory-', 'geospatial-'].some((prefix) => entry.name.startsWith(prefix))) continue;
+    try {
+      rmSync(path.join(scratch, entry.name), { recursive: true, force: true, maxRetries: 0 });
+    } catch (error) {
+      if (!['EBUSY', 'EPERM'].includes(error?.code)) throw error;
+      // O Windows pode manter o arquivo SQLite bloqueado por alguns instantes
+      // depois que o driver encerra. O próximo ciclo de testes tenta novamente.
+    }
   }
 }
 

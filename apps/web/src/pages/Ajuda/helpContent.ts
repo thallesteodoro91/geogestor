@@ -50,8 +50,8 @@ export const HELP_CATEGORIES: HelpCategory[] = [
   { id: 'sistema', label: 'Sistema e segurança', icon: 'backup' },
 ];
 
-const reviewDate = '2026-08-08';
-const minimumVersion = '1.1.3';
+const reviewDate = '2026-08-13';
+const minimumVersion = '1.0.0';
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
@@ -339,7 +339,51 @@ export const HELP_ARTICLES: HelpArticle[] = [
         warning: 'Confira datum, hemisfério e unidade. Um resultado matematicamente válido pode estar incorreto se a referência informada não corresponder ao levantamento.',
       },
     ],
-    relatedArticles: ['projetos-checklist', 'relatorios-exportacao'],
+    relatedArticles: ['importacao-levantamento-vetorial', 'projetos-checklist', 'relatorios-exportacao'],
+  },
+  {
+    id: 'importacao-levantamento-vetorial',
+    category: 'operacional',
+    title: 'Importar levantamento vetorial e configurar mapa-base',
+    excerpt: 'Importe camadas técnicas vetoriais no local correto e mantenha o mapa-base offline em um fluxo separado.',
+    keywords: ['kml', 'kmz', 'geojson', 'shapefile', 'geopackage', 'gpkg', 'mbtiles', 'raster', 'coordenadas', 'src'],
+    route: '/clientes',
+    routeLabel: 'Abrir Clientes',
+    updatedAt: reviewDate,
+    minimumVersion,
+    icon: 'topography',
+    sections: [
+      {
+        title: 'Formatos aceitos como levantamento',
+        paragraphs: ['O GeoGestor importa KML, KMZ, GeoJSON, Shapefile e GeoPackage vetorial. As geometrias são normalizadas para EPSG:4326 somente para exibição, enquanto o arquivo original é preservado.'],
+        steps: [
+          'Abra o cliente e localize a área de levantamentos e camadas vetoriais.',
+          'Selecione Adicionar levantamento vetorial ou arraste o arquivo para o mapa.',
+          'Revise o SRC detectado, os alertas e a pré-visualização da localização.',
+          'Confirme a localização do projeto somente depois de validar o ponto representativo.',
+        ],
+        warning: 'Arquivos raster, como GeoTIFF, TIFF, COG, PNG, JPEG, ECW e JPEG 2000, não são aceitos como levantamento e não geram coordenadas ou geometrias técnicas.',
+      },
+      {
+        title: 'GeoPackage misto ou somente raster',
+        paragraphs: ['Em um GeoPackage misto, o GeoGestor importa apenas as camadas vetoriais e informa quais conteúdos raster foram ignorados. Um GeoPackage que contenha somente tiles ou cobertura raster é rejeitado com orientação específica.'],
+      },
+      {
+        title: 'Mapa-base offline MBTiles',
+        paragraphs: ['MBTiles raster é opcional e serve somente como fundo cartográfico offline. Ele não é tratado como levantamento, não cria coordenadas, não alimenta cálculos e não altera a localização de clientes, propriedades ou projetos.'],
+        steps: [
+          'Na área do mapa, abra Configurar mapa-base offline.',
+          'Selecione Importar mapa-base MBTiles.',
+          'Ative o mapa-base desejado e escolha-o no seletor de fundo cartográfico.',
+        ],
+        note: 'Remover um mapa-base offline preserva levantamentos vetoriais, documentos e projetos.',
+      },
+      {
+        title: 'Quando usar outro software',
+        paragraphs: ['Para visualizar ou analisar ortofotos, modelos digitais de elevação, GeoTIFF e outros rasters técnicos, use um SIG externo, como o QGIS. Exporte para o GeoGestor somente as feições vetoriais necessárias ao cadastro e à conferência de localização.'],
+      },
+    ],
+    relatedArticles: ['topografia-calculos', 'clientes-propriedades', 'qualidade-dados'],
   },
   {
     id: 'relatorios-exportacao',

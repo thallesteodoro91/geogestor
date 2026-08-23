@@ -6,6 +6,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useState } from 'react';
 import { CheckboxField, DatePickerField, FormSelect } from '../../components/Form';
 import { apiFetch, apiClient, getDownloadUrl } from '../../services/apiClient';
+import { openManagedFolder } from '../../services/projectFolders';
 import { getTaskPriorityTone } from '../../utils/taskPriority';
 import { geoViewTransition } from '../../utils/motion';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -400,16 +401,8 @@ export function ProjetoDetalhes() {
   });
 
   const openFolderMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/projetos/${id}/abrir-pasta`, {
-        method: 'POST'
-      });
-      if (!res.ok) throw new Error('Erro ao abrir pasta');
-      return res.json();
-    },
-    onSuccess: (data) => {
-      console.log('Pasta aberta:', data.path);
-    },
+    mutationFn: () => openManagedFolder(projetoFilesPasta),
+    onSuccess: () => undefined,
     onError: () => {
       toast.error('Não foi possível abrir a pasta local automaticamente. Verifique se o caminho existe.');
     }

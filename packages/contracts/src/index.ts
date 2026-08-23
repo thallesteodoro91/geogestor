@@ -9,6 +9,19 @@ export * from './strategic-planning';
 export * from './alerts';
 export * from './auxiliary-catalogs';
 export * from './properties';
+export {
+  APP_LEGACY_REDIRECTS,
+  APP_PATHS,
+  APP_QUERY_KEYS,
+  APP_ROUTES,
+  APP_ROUTE_PATTERNS,
+  appLinks,
+  isExternalNavigation,
+  isInternalAppLink,
+  withAppQuery,
+  resolveLegacyRedirect
+} from './app-navigation';
+export type { AppRouteDefinition, AppRouteId } from './app-navigation';
 
 export const StatusProjetoSchema = z.enum([
   'Em Andamento',
@@ -299,3 +312,101 @@ export interface MonthlyCashFlowSummary {
 
 /** @deprecated Use MonthlyCashFlowSummary. Mantido para consumidores legados. */
 export type DRE = MonthlyCashFlowSummary;
+
+export type VectorGeospatialFormat = 'kml' | 'kmz' | 'geojson' | 'shapefile' | 'geopackage';
+/** @deprecated Use VectorGeospatialFormat. */
+export type GeospatialFormat = VectorGeospatialFormat;
+export type GeospatialLayerStatus = 'ready' | 'needs_crs' | 'needs_review' | 'error';
+export type GeospatialProcessingStage = 'enviado' | 'validando' | 'processando' | 'reprojetando' | 'preparando_visualizacao' | 'concluido' | 'erro' | 'cancelado';
+export type GeospatialIssueSeverity = 'info' | 'warning' | 'blocking';
+
+export interface GeospatialTopologyIssue {
+  code: string;
+  severity: GeospatialIssueSeverity;
+  message: string;
+  featureIndex?: number;
+  geometryPath?: string;
+  repairAvailable?: boolean;
+}
+
+export interface GeospatialLayerSummary {
+  contentKind: 'vector';
+  id: string;
+  documentId: string;
+  clientId: string;
+  projectId?: string | null;
+  fileName: string;
+  name: string;
+  sourceLayer?: string | null;
+  format: VectorGeospatialFormat;
+  status: GeospatialLayerStatus;
+  sourceCrs?: string | null;
+  sourceEpsg?: number | null;
+  targetEpsg: 4326;
+  featureCount: number;
+  vertexCount: number;
+  geometryTypes: string[];
+  bbox?: [number, number, number, number] | null;
+  representativePoint?: { latitude: number; longitude: number } | null;
+  projectLocation?: { latitude: number; longitude: number } | null;
+  locationDifferenceM?: number | null;
+  areaM2?: number | null;
+  perimeterM?: number | null;
+  warnings: string[];
+  topologyIssues: GeospatialTopologyIssue[];
+  repairs: string[];
+  errorMessage?: string | null;
+  processingStage: GeospatialProcessingStage;
+  processingProgress: number;
+  sourceDetection?: string | null;
+  crsConfidence?: 'high' | 'medium' | 'low' | null;
+  axisOrder?: 'longitude-latitude' | 'latitude-longitude';
+  representativePointMethod?: string | null;
+  simplifiedForDisplay: boolean;
+  precisionCacheBytes: number;
+  displayCacheBytes: number;
+  visible: boolean;
+  color: string;
+  opacity: number;
+  importedAt: string;
+  data?: object | null;
+}
+
+export type GeospatialLayer = GeospatialLayerSummary;
+
+export interface VectorImportReport {
+  contentKind: 'vector';
+  fileName: string;
+  relativePath?: string | null;
+  format: VectorGeospatialFormat;
+  layersFound: string[];
+  ignoredRasterLayers: string[];
+  importedAt: string;
+  sourceCrs?: string | null;
+  targetCrs: 'EPSG:4326';
+  featureCount: number;
+  vertexCount: number;
+  geometryTypes: string[];
+  warnings: string[];
+  result: 'aprovado' | 'aprovado com alertas' | 'requer revisão' | 'erro';
+}
+
+export interface OfflineBasemapSummary {
+  kind: 'offline-basemap';
+  id: string;
+  name: string;
+  format: string;
+  minZoom?: number | null;
+  maxZoom?: number | null;
+  bounds?: [number, number, number, number] | null;
+  attribution?: string | null;
+  sizeBytes: number;
+  active: boolean;
+}
+
+export type OfflineBasemap = OfflineBasemapSummary;
+
+export interface GeospatialProcessRequest {
+  sourceCrs?: string;
+  axisOrder?: 'longitude-latitude' | 'latitude-longitude';
+}

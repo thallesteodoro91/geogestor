@@ -1,5 +1,7 @@
 # GeoGestor v1.1.3
 
+> **ARTEFATO HISTÓRICO — NÃO PUBLICÁVEL:** estas notas não representam a versão técnica canônica atual (`1.0.0`, apresentada como GeoGestor 1.0). Não reutilize, renomeie nem publique o instalador ou o hash de `1.1.3` como candidato vigente.
+
 ## Destaques
 
 - Consolidação de melhorias para operação comercial, financeira, ambiental e de planejamento.

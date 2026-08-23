@@ -4,8 +4,9 @@ import { MotionConfig } from 'framer-motion';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthenticatedLayout } from './components/Layout';
 import { Toaster, toast } from 'sonner';
+import { APP_LEGACY_REDIRECTS, APP_ROUTES, resolveLegacyRedirect } from '@geogestor/contracts';
 
-// Intercept global alert to use Sonner (Lovable style)
+// Converte alertas globais legados em notificações consistentes com o GeoGestor.
 if (typeof window !== 'undefined') {
   window.alert = (message?: unknown) => {
     const msg = String(message);
@@ -63,6 +64,7 @@ const AuditLogs = lazy(() => import('./pages/Relatorios/AuditLogs').then((module
 const Ajuda = lazy(() => import('./pages/Ajuda/Ajuda').then((module) => ({ default: module.Ajuda })));
 const Planejamento = lazy(() => import('./pages/Planejamento').then((module) => ({ default: module.Planejamento })));
 const ConfiguracaoInicial = lazy(() => import('./pages/ConfiguracaoInicial').then((module) => ({ default: module.ConfiguracaoInicial })));
+const NotFound = lazy(() => import('./pages/NotFound').then((module) => ({ default: module.NotFound })));
 const DevTypeUIPanel = import.meta.env.DEV
   ? lazy(() => import('./components/TypeUIPanel').then((module) => ({ default: module.TypeUIPanel })))
   : null;
@@ -84,7 +86,7 @@ function AppLoading() {
   useEffect(() => recordGlobalFallback(), []);
 
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-zinc-50 text-sm font-semibold text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
+    <div role="status" aria-live="polite" className="flex h-screen w-full items-center justify-center bg-zinc-50 text-sm font-semibold text-zinc-600 dark:bg-zinc-950 dark:text-zinc-300">
       Carregando GeoGestor…
     </div>
   );
@@ -120,6 +122,11 @@ function RouteTransition({ children }: { children: React.ReactNode }) {
   );
 }
 
+function LegacyRedirect({ to }: { to: string }) {
+  const location = useLocation();
+  return <Navigate to={resolveLegacyRedirect(to, location.search)} replace />;
+}
+
 function AppRoutes() {
   const location = useLocation();
   const previousPathnameRef = useRef(location.pathname);
@@ -140,46 +147,40 @@ function AppRoutes() {
 
   const routes = (
       <Routes location={location}>
-        <Route path="/configuracoes-iniciais" element={<ConfiguracaoInicial />} />
+        <Route path={APP_ROUTES.setup.path} element={<ConfiguracaoInicial />} />
         <Route element={<AuthenticatedLayout />}>
-          <Route path="/" element={<RouteTransition><Dashboard /></RouteTransition>} />
-          <Route path="/clientes" element={<RouteTransition><ListagemClientes /></RouteTransition>} />
-          <Route path="/clientes/:id" element={<RouteTransition><ClienteDetalhes /></RouteTransition>} />
-          <Route path="/contatos" element={<Navigate to="/crm?view=leads" replace />} />
-          <Route path="/projetos" element={<RouteTransition><ListagemProjetos /></RouteTransition>} />
-          <Route path="/projetos/:id" element={<RouteTransition><ProjetoDetalhes /></RouteTransition>} />
-          <Route path="/orcamentos" element={<RouteTransition><Orcamentos /></RouteTransition>} />
-          <Route path="/orcamentos/novo" element={<RouteTransition><BudgetEditorPage /></RouteTransition>} />
-          <Route path="/orcamentos/:id/editar" element={<RouteTransition><BudgetEditorPage /></RouteTransition>} />
-          <Route path="/financeiro" element={<RouteTransition><Financeiro /></RouteTransition>} />
-          <Route path="/dashboard-financeiro" element={<Navigate to="/financeiro" replace />} />
-          <Route path="/gestao-financeira" element={<Navigate to="/financeiro?tab=auxiliares" replace />} />
-          <Route path="/despesas" element={<Navigate to="/financeiro?tab=pagar" replace />} />
-          <Route path="/importacao" element={<RouteTransition><ImportacaoDados /></RouteTransition>} />
-          <Route path="/importacao/esquemas" element={<RouteTransition><EsquemasImportacao /></RouteTransition>} />
-          <Route path="/operacional" element={<Navigate to="/projetos?visualizacao=estatisticas" replace />} />
-          <Route path="/tarefas" element={<RouteTransition><Tarefas /></RouteTransition>} />
-          <Route path="/relatorios" element={<RouteTransition><Relatorios /></RouteTransition>} />
-          <Route path="/topografia" element={<RouteTransition><CalculadoraTopografica /></RouteTransition>} />
-          <Route path="/calculadora-ambiental" element={<Navigate to="/ambiental?tab=car" replace />} />
-          <Route path="/ambiental" element={<RouteTransition><ListagemAmbiental /></RouteTransition>} />
-          <Route path="/ambiental/licencas/:id" element={<RouteTransition><LicencaDetalhes /></RouteTransition>} />
-          <Route path="/ambiental/:id" element={<RouteTransition><AmbientalDetalhes /></RouteTransition>} />
-          <Route path="/licenciamento" element={<Navigate to="/ambiental?tab=licenciamento" replace />} />
-          <Route path="/calendario" element={<RouteTransition><Calendario /></RouteTransition>} />
-          <Route path="/calendario/:tipo/:id" element={<RouteTransition><CalendarioDetalhes /></RouteTransition>} />
-          <Route path="/faturas" element={<Navigate to="/financeiro?tab=faturas" replace />} />
-          <Route path="/crm" element={<RouteTransition><CRM /></RouteTransition>} />
-          <Route path="/configuracoes" element={<RouteTransition><Configuracoes /></RouteTransition>} />
-          <Route path="/cadastros" element={<RouteTransition><Cadastros /></RouteTransition>} />
-          <Route path="/propriedades" element={<RouteTransition><Propriedades /></RouteTransition>} />
-          <Route path="/qualidade-dados" element={<RouteTransition><QualidadeDados /></RouteTransition>} />
-          <Route path="/pos-atualizacao" element={<RouteTransition><PosAtualizacao /></RouteTransition>} />
-          <Route path="/relatorio-executivo" element={<Navigate to="/relatorios?tipo=executivo" replace />} />
-          <Route path="/audit-logs" element={<RouteTransition><AuditLogs /></RouteTransition>} />
-          <Route path="/ajuda" element={<RouteTransition><Ajuda /></RouteTransition>} />
-          <Route path="/planejamento" element={<RouteTransition><Planejamento /></RouteTransition>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path={APP_ROUTES.dashboard.path} element={<RouteTransition><Dashboard /></RouteTransition>} />
+          <Route path={APP_ROUTES.clients.path} element={<RouteTransition><ListagemClientes /></RouteTransition>} />
+          <Route path={APP_ROUTES.clientDetails.path} element={<RouteTransition><ClienteDetalhes /></RouteTransition>} />
+          <Route path={APP_ROUTES.projects.path} element={<RouteTransition><ListagemProjetos /></RouteTransition>} />
+          <Route path={APP_ROUTES.projectDetails.path} element={<RouteTransition><ProjetoDetalhes /></RouteTransition>} />
+          <Route path={APP_ROUTES.budgets.path} element={<RouteTransition><Orcamentos /></RouteTransition>} />
+          <Route path={APP_ROUTES.budgetNew.path} element={<RouteTransition><BudgetEditorPage /></RouteTransition>} />
+          <Route path={APP_ROUTES.budgetEdit.path} element={<RouteTransition><BudgetEditorPage /></RouteTransition>} />
+          <Route path={APP_ROUTES.finance.path} element={<RouteTransition><Financeiro /></RouteTransition>} />
+          <Route path={APP_ROUTES.importData.path} element={<RouteTransition><ImportacaoDados /></RouteTransition>} />
+          <Route path={APP_ROUTES.importSchemas.path} element={<RouteTransition><EsquemasImportacao /></RouteTransition>} />
+          <Route path={APP_ROUTES.tasks.path} element={<RouteTransition><Tarefas /></RouteTransition>} />
+          <Route path={APP_ROUTES.reports.path} element={<RouteTransition><Relatorios /></RouteTransition>} />
+          <Route path={APP_ROUTES.topography.path} element={<RouteTransition><CalculadoraTopografica /></RouteTransition>} />
+          <Route path={APP_ROUTES.environmental.path} element={<RouteTransition><ListagemAmbiental /></RouteTransition>} />
+          <Route path={APP_ROUTES.licenseDetails.path} element={<RouteTransition><LicencaDetalhes /></RouteTransition>} />
+          <Route path={APP_ROUTES.environmentalDetails.path} element={<RouteTransition><AmbientalDetalhes /></RouteTransition>} />
+          <Route path={APP_ROUTES.calendar.path} element={<RouteTransition><Calendario /></RouteTransition>} />
+          <Route path={APP_ROUTES.calendarDetails.path} element={<RouteTransition><CalendarioDetalhes /></RouteTransition>} />
+          <Route path={APP_ROUTES.crm.path} element={<RouteTransition><CRM /></RouteTransition>} />
+          <Route path={APP_ROUTES.settings.path} element={<RouteTransition><Configuracoes /></RouteTransition>} />
+          <Route path={APP_ROUTES.auxiliaryRecords.path} element={<RouteTransition><Cadastros /></RouteTransition>} />
+          <Route path={APP_ROUTES.properties.path} element={<RouteTransition><Propriedades /></RouteTransition>} />
+          <Route path={APP_ROUTES.dataQuality.path} element={<RouteTransition><QualidadeDados /></RouteTransition>} />
+          <Route path={APP_ROUTES.postUpdate.path} element={<RouteTransition><PosAtualizacao /></RouteTransition>} />
+          <Route path={APP_ROUTES.auditLogs.path} element={<RouteTransition><AuditLogs /></RouteTransition>} />
+          <Route path={APP_ROUTES.help.path} element={<RouteTransition><Ajuda /></RouteTransition>} />
+          <Route path={APP_ROUTES.planning.path} element={<RouteTransition><Planejamento /></RouteTransition>} />
+          {APP_LEGACY_REDIRECTS.map((redirect) => (
+            <Route key={redirect.id} path={redirect.from} element={<LegacyRedirect to={redirect.to} />} />
+          ))}
+          <Route path="*" element={<RouteTransition><NotFound /></RouteTransition>} />
         </Route>
       </Routes>
   );
@@ -298,12 +299,12 @@ function SetupGate() {
     );
   }
 
-  const isSetupRoute = location.pathname === '/configuracoes-iniciais';
+  const isSetupRoute = location.pathname === APP_ROUTES.setup.path;
   if (statusQuery.data?.setupRequired && !isSetupRoute) {
-    return <Navigate to="/configuracoes-iniciais" replace />;
+    return <Navigate to={APP_ROUTES.setup.path} replace />;
   }
   if (!statusQuery.data?.setupRequired && isSetupRoute) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={APP_ROUTES.dashboard.path} replace />;
   }
 
   if (!statusQuery.data?.setupRequired && (forcedLocked || statusQuery.data?.locked)) {

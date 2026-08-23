@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -60,7 +60,12 @@ export interface ContatosHandle {
   openCreate: () => void;
 }
 
-export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(function Contatos({ embedded = false }, ref) {
+interface ContatosProps {
+  embedded?: boolean;
+  toolbarLeading?: ReactNode;
+}
+
+export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Contatos({ embedded = false, toolbarLeading }, ref) {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchTerm = searchParams.get('q') || '';
@@ -277,8 +282,10 @@ export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(funct
         </div>}
 
         {/* Filters and Search Bar */}
-        <div className="flex min-w-0 flex-col items-stretch justify-between gap-4 rounded-[1.5rem] border border-zinc-200/70 bg-white/85 p-4 shadow-sm backdrop-blur dark:border-zinc-700/80 dark:bg-zinc-800/50 sm:flex-row sm:items-center">
-          <div className="relative w-full min-w-0 flex-1 sm:max-w-md">
+        <div className={cn('min-w-0', embedded && toolbarLeading && '2xl:flex 2xl:items-start 2xl:gap-4')}>
+          {embedded && toolbarLeading ? <div className="min-w-0 2xl:flex-1">{toolbarLeading}</div> : null}
+          <div className={cn('flex min-w-0 flex-col items-stretch gap-3 sm:flex-row sm:items-center', embedded && toolbarLeading && 'mt-3 2xl:mt-0 2xl:shrink-0')}>
+          <div className="relative w-full min-w-0 sm:w-[32rem] sm:max-w-[55vw] 2xl:w-[26rem] 2xl:max-w-none">
             <MagnifyingGlass aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <label htmlFor="lead-search" className="sr-only">Buscar leads</label>
             <input
@@ -289,11 +296,11 @@ export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(funct
               placeholder="Buscar por contato, empresa ou cidade…"
               value={searchTerm}
               onChange={(e) => updateUrlFilter('q', e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all shadow-sm"
+              className="w-full pl-10 pr-4 py-2 rounded-xl bg-white dark:bg-zinc-800/80 border border-zinc-200 dark:border-zinc-700 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-[background-color,border-color,color,box-shadow] shadow-sm"
             />
           </div>
 
-          <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200/60 bg-zinc-100 p-1 dark:border-zinc-700/60 dark:bg-zinc-800/80 sm:w-auto sm:gap-2">
+          <div className="flex w-fit max-w-full self-start items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200/60 bg-zinc-100 p-1 shadow-sm dark:border-zinc-700/60 dark:bg-zinc-800/80 sm:self-auto sm:gap-2">
             {(['Todos', 'ativo', 'convertido'] as const).map((st) => (
               <button
                 key={st}
@@ -309,6 +316,7 @@ export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(funct
                 {st === 'ativo' ? 'Leads Ativos' : st === 'convertido' ? 'Já Convertidos' : 'Todos'}
               </button>
             ))}
+          </div>
           </div>
         </div>
 
@@ -604,7 +612,7 @@ export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(funct
                                 setOrigem(opt);
                               }
                             }}
-                            className={`rounded-lg px-2 py-1 text-xs font-bold transition-all ${
+                            className={`rounded-lg px-2 py-1 text-xs font-bold transition-[background-color,border-color,color,box-shadow] ${
                               isSelected
                                 ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/30'
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
@@ -668,7 +676,7 @@ export const Contatos = forwardRef<ContatosHandle, { embedded?: boolean }>(funct
                   <button
                     type="button"
                     onClick={handleCloseModal}
-                    className="px-5 py-2.5 rounded-full text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all shadow-sm"
+                    className="px-5 py-2.5 rounded-full text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                   >
                     Cancelar
                   </button>

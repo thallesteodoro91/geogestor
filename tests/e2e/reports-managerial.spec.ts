@@ -132,7 +132,7 @@ async function navigate(page: Page, path: string) {
   }, path);
 }
 
-test.describe.serial('relatórios gerenciais', () => {
+test.describe('relatórios gerenciais', () => {
   test.beforeEach(async ({ page }) => {
     await unlock(page);
   });
@@ -144,15 +144,21 @@ test.describe.serial('relatórios gerenciais', () => {
     await expect(page).toHaveURL(/inicio=2026-07-01.*fim=2026-07-30/);
     await expect(page.locator('#report-panel')).toHaveAttribute('data-report-type', 'financeiro');
     await expect(page.getByRole('heading', { name: 'Caixa e recebíveis' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Personalizado' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('#custom-period-fields')).toBeVisible();
+    const periodTrigger = page.getByRole('button', { name: /Selecionar período de análise\. Atual: Personalizado/ });
+    await expect(periodTrigger).toHaveAttribute('aria-expanded', 'false');
+    await periodTrigger.click();
+    await expect(periodTrigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('button', { name: 'Personalizado', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('Data inicial')).toBeVisible();
+    await expect(page.getByLabel('Data final')).toBeVisible();
     await page.getByRole('button', { name: 'Todo o histórico' }).click();
     await expect(page).not.toHaveURL(/inicio=/);
-    await expect(page.locator('#custom-period-fields')).not.toBeAttached();
+    await expect(page.getByLabel('Data inicial')).not.toBeAttached();
 
-    await page.getByRole('button', { name: 'Personalizado' }).click();
+    await page.getByRole('button', { name: /Selecionar período de análise\. Atual: Todo o histórico/ }).click();
+    await page.getByRole('button', { name: 'Personalizado', exact: true }).click();
     await expect(page).toHaveURL(/periodo=personalizado/);
-    await expect(page.locator('#custom-period-fields')).toBeVisible();
+    await expect(page.getByLabel('Data inicial')).toBeVisible();
     await page.getByRole('button', { name: 'Todo o histórico' }).click();
 
     const financialTab = page.getByRole('tab', { name: 'Financeiro' });
@@ -177,9 +183,9 @@ test.describe.serial('relatórios gerenciais', () => {
 
     const results = await new AxeBuilder({ page })
       .include('main')
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22a', 'wcag22aa'])
       .analyze();
-    expect(results.violations.filter(({ impact }) => impact === 'critical' || impact === 'serious')).toEqual([]);
+    expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
   });
 
   test('mantém o conteúdo estável em celular, tablet e desktop', async ({ page }) => {
@@ -192,8 +198,23 @@ test.describe.serial('relatórios gerenciais', () => {
       await page.setViewportSize(viewport);
       await navigate(page, '/relatorios');
       await expect(page.getByRole('tab', { name: 'Financeiro' })).toBeVisible();
-      const overflow = await page.locator('main').evaluate((main) => main.scrollWidth > main.clientWidth + 1);
-      expect(overflow).toBe(false);
+      const overflow = await page.locator('main').evaluate((main) => {
+        const mainRect = main.getBoundingClientRect();
+        const offenders = [...main.querySelectorAll<HTMLElement>('*')]
+          .filter((element) => {
+            const rect = element.getBoundingClientRect();
+            return rect.width > 0 && rect.right > mainRect.right + 1;
+          })
+          .slice(0, 8)
+          .map((element) => ({
+            tag: element.tagName,
+            className: element.className,
+            right: Math.round(element.getBoundingClientRect().right),
+            mainRight: Math.round(mainRect.right)
+          }));
+        return { present: main.scrollWidth > main.clientWidth + 1, offenders };
+      });
+      expect(overflow.present, JSON.stringify(overflow.offenders, null, 2)).toBe(false);
     }
   });
 
@@ -218,7 +239,7 @@ test.describe.serial('relatórios gerenciais', () => {
     await expect(page.getByRole('heading', { name: 'Não foi possível carregar o relatório' })).toBeVisible();
     await page.getByRole('button', { name: 'Tentar novamente' }).click();
     await expect(page.getByRole('heading', { name: 'Ainda não há dados financeiros para analisar' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Cadastrar orçamento' })).toHaveAttribute('href', '/orcamentos');
+    await expect(page.getByRole('link', { name: 'Cadastrar orçamento' })).toHaveAttribute('href', '/orcamentos/novo?retorno=%2Forcamentos');
     await expect(page.getByRole('link', { name: 'Registrar recebimento' })).toHaveAttribute('href', '/financeiro?tab=faturas');
     await expect(page.getByRole('link', { name: 'Adicionar despesa' })).toHaveAttribute('href', '/financeiro?tab=pagar');
     await page.getByRole('tab', { name: 'Projetos' }).click();

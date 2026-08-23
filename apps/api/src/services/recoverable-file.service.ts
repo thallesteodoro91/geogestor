@@ -30,6 +30,81 @@ async function sha256File(filePath: string) {
   return hash.digest('hex');
 }
 
+async function assertResolvedParentInsideRoot(candidate: string, root: string) {
+  const resolvedCandidate = path.resolve(candidate);
+  const resolvedRoot = path.resolve(root);
+  assertInsideRoot(resolvedCandidate, resolvedRoot);
+
+  const realRoot = await fs.realpath(resolvedRoot);
+  let existingParent = path.dirname(resolvedCandidate);
+  while (true) {
+    try {
+      const parentStats = await fs.lstat(existingParent);
+      if (!parentStats.isDirectory() || parentStats.isSymbolicLink()) {
+        throw new Error('O caminho de restauração contém um redirecionamento não autorizado.');
+      }
+      assertInsideRoot(await fs.realpath(existingParent), realRoot);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      const nextParent = path.dirname(existingParent);
+      if (nextParent === existingParent) throw error;
+      existingParent = nextParent;
+    }
+  }
+}
+
+async function validatePersistedManifest(
+  dataRoot: string,
+  entryDirectory: string,
+  candidate: unknown
+): Promise<QuarantineManifest> {
+  if (!candidate || typeof candidate !== 'object') throw new Error('Manifesto de quarentena inválido.');
+  const manifest = candidate as Partial<QuarantineManifest>;
+  const resolvedEntryDirectory = path.resolve(entryDirectory);
+  const expectedEntryId = path.basename(resolvedEntryDirectory);
+  const trashRoot = RecoverableFileService.getTrashRoot(dataRoot);
+  assertInsideRoot(resolvedEntryDirectory, trashRoot);
+
+  const entryStats = await fs.lstat(resolvedEntryDirectory);
+  if (!entryStats.isDirectory() || entryStats.isSymbolicLink()) {
+    throw new Error('A entrada de quarentena não é um diretório regular.');
+  }
+  if (
+    manifest.version !== 1
+    || manifest.entryId !== expectedEntryId
+    || (manifest.recordId !== null && typeof manifest.recordId !== 'string')
+    || typeof manifest.originalPath !== 'string'
+    || typeof manifest.quarantinedPath !== 'string'
+    || typeof manifest.sha256 !== 'string'
+    || !/^[a-f0-9]{64}$/i.test(manifest.sha256)
+    || typeof manifest.sizeBytes !== 'number'
+    || !Number.isSafeInteger(manifest.sizeBytes)
+    || manifest.sizeBytes < 0
+    || !['pending', 'committed'].includes(manifest.state ?? '')
+    || typeof manifest.createdAt !== 'string'
+    || (manifest.committedAt !== null && typeof manifest.committedAt !== 'string')
+  ) {
+    throw new Error('Manifesto de quarentena inválido.');
+  }
+
+  const originalPath = path.resolve(manifest.originalPath);
+  const quarantinedPath = path.resolve(manifest.quarantinedPath);
+  await assertResolvedParentInsideRoot(originalPath, dataRoot);
+  if (
+    path.dirname(quarantinedPath) !== resolvedEntryDirectory
+    || !/^payload(?:\.[^\\/]+)?$/i.test(path.basename(quarantinedPath))
+  ) {
+    throw new Error('O arquivo em quarentena está fora da entrada autorizada.');
+  }
+  const quarantinedStats = await fs.lstat(quarantinedPath);
+  if (!quarantinedStats.isFile() || quarantinedStats.isSymbolicLink()) {
+    throw new Error('O arquivo em quarentena não é um arquivo regular.');
+  }
+
+  return { ...manifest, originalPath, quarantinedPath } as QuarantineManifest;
+}
+
 async function writeManifestAtomic(entryDirectory: string, manifest: QuarantineManifest) {
   const target = path.join(entryDirectory, 'manifest.json');
   const temporary = path.join(entryDirectory, 'manifest.pending.json');
@@ -47,8 +122,10 @@ export class RecoverableFileService {
     const dataRoot = path.resolve(input.dataRoot);
     assertInsideRoot(sourcePath, dataRoot);
 
-    const sourceStats = await fs.stat(sourcePath);
-    if (!sourceStats.isFile()) throw new Error('Somente arquivos regulares podem ser excluídos.');
+    const sourceStats = await fs.lstat(sourcePath);
+    if (!sourceStats.isFile() || sourceStats.isSymbolicLink()) {
+      throw new Error('Somente arquivos regulares podem ser excluídos.');
+    }
 
     const entryId = crypto.randomUUID();
     const entryDirectory = path.join(this.getTrashRoot(dataRoot), entryId);
@@ -94,8 +171,9 @@ export class RecoverableFileService {
     return committed;
   }
 
-  static async rollback(manifest: QuarantineManifest) {
+  static async rollback(manifest: QuarantineManifest, dataRoot: string) {
     const entryDirectory = path.dirname(manifest.quarantinedPath);
+    manifest = await validatePersistedManifest(dataRoot, entryDirectory, manifest);
     await fs.mkdir(path.dirname(manifest.originalPath), { recursive: true });
     try {
       await fs.access(manifest.originalPath);
@@ -122,9 +200,11 @@ export class RecoverableFileService {
       const entryDirectory = path.join(trashRoot, entry);
       assertInsideRoot(entryDirectory, trashRoot);
       try {
-        const raw = await fs.readFile(path.join(entryDirectory, 'manifest.json'), 'utf8');
-        const manifest = JSON.parse(raw) as QuarantineManifest;
-        if (manifest.version === 1 && manifest.entryId === entry) manifests.push(manifest);
+        const manifestPath = path.join(entryDirectory, 'manifest.json');
+        const manifestStats = await fs.lstat(manifestPath);
+        if (!manifestStats.isFile() || manifestStats.isSymbolicLink()) throw new Error('Manifesto inválido.');
+        const raw = await fs.readFile(manifestPath, 'utf8');
+        manifests.push(await validatePersistedManifest(dataRoot, entryDirectory, JSON.parse(raw)));
       } catch {
         // Uma entrada incompleta permanece em quarentena para inspeção; nunca é purgada silenciosamente.
       }
@@ -138,7 +218,7 @@ export class RecoverableFileService {
 
     const actualHash = await sha256File(manifest.quarantinedPath);
     if (actualHash !== manifest.sha256) throw new Error('O arquivo em quarentena falhou na verificação de integridade.');
-    await this.rollback(manifest);
+    await this.rollback(manifest, dataRoot);
     return manifest;
   }
 

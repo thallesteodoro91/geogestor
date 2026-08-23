@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-export type MaintenanceOperationType = 'backup_database' | 'backup_complete' | 'data_migration' | 'restore_test';
+export type MaintenanceOperationType = 'backup_database' | 'backup_complete' | 'data_migration' | 'restore_test' | 'integrity_check';
 
 export type MaintenanceOperationSnapshot = {
   id: string;

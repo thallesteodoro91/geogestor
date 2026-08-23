@@ -14,6 +14,10 @@ release/
 *.log
 *.err.log
 *.out.log
+playwright-report/
+test-results/
+*.trace.zip
+*.dmp
 eslint_report*.txt
 lint*_errors*.txt
 
@@ -22,6 +26,8 @@ work/
 temp-lovable/
 
 data/
+!apps/web/src/data/
+!apps/web/src/data/**
 *.db
 *.db-*
 *.sqlite

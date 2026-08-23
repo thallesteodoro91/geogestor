@@ -47,5 +47,5 @@ test('adaptador de pasta nunca inventa confirmação da nuvem', async () => {
   assert.equal(configured.availability, 'available');
   assert.equal(configured.upload, 'not_observable');
   assert.equal(configured.confirmation, 'unavailable');
-  assert.match(configured.message, /Confirmação da nuvem indisponível/);
+  assert.match(configured.message, /sincronização remota não pode ser confirmada/);
 });

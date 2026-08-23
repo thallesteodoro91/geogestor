@@ -4,6 +4,7 @@ import { ArrowCounterClockwise, FolderOpen, HardDrives, WarningCircle } from '@p
 import { toast } from 'sonner';
 import { apiClient } from '../services/apiClient';
 import { geoFieldClass, geoPanelClass } from '../utils/geoTheme';
+import { CheckboxField } from './Form';
 import { NumericInput } from './form-controls/NumericInput';
 import { SettingsSaveBar, type SettingsSaveState } from './SettingsSaveBar';
 
@@ -21,6 +22,8 @@ type BackupPolicy = {
   overdueGraceHours: number;
   runOnStartup: boolean;
   runOnShutdown: boolean;
+  runRestoreTests: boolean;
+  restoreTestIntervalDays: number;
 };
 
 type BackupStatus = {
@@ -30,10 +33,11 @@ type BackupStatus = {
     versions: number;
     totalBytes: number;
     availableBytes: number;
-    history: Array<{ directory: string; type: 'database' | 'complete'; createdAt: string; completedAt: string; files: number; bytes: number; encrypted: boolean; integrity: 'verified' | 'legacy-unverified'; credentialsExcluded: boolean; restoreTestedAt: string | null }>;
+    history: Array<{ directory: string; type: 'database' | 'complete'; createdAt: string; completedAt: string; files: number; bytes: number; encrypted: boolean; integrity: 'verified' | 'legacy-unverified'; integrityState: 'verified_at_creation' | 'verified_again' | 'failed' | 'legacy_unverified'; integrityVerifiedAt: string | null; credentialsExcluded: boolean; restoreTestedAt: string | null }>;
   };
   database: BackupOperationStatus;
   complete: BackupOperationStatus;
+  restoreTest: { status: 'success' | 'failed'; completedAt: string; durationMs: number; error: string | null } | null;
 };
 
 const DEFAULT_BACKUP_POLICY: BackupPolicy = {
@@ -49,7 +53,9 @@ const DEFAULT_BACKUP_POLICY: BackupPolicy = {
   maxStorageBytes: 0,
   overdueGraceHours: 12,
   runOnStartup: true,
-  runOnShutdown: true
+  runOnShutdown: true,
+  runRestoreTests: true,
+  restoreTestIntervalDays: 30
 };
 
 type BackupOperationStatus = {
@@ -63,15 +69,8 @@ type BackupOperationStatus = {
   status: 'current' | 'overdue' | 'incomplete' | 'failed' | 'running';
 };
 
-const statusLabel = { current: 'Atualizado', overdue: 'Vencido', incomplete: 'Incompleto', failed: 'Com falha', running: 'Em andamento…' } as const;
-const statusTone = {
-  current: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300',
-  running: 'bg-sky-100 text-sky-800 dark:bg-sky-950/50 dark:text-sky-300',
-  overdue: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
-  incomplete: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300',
-  failed: 'bg-red-100 text-red-800 dark:bg-red-950/50 dark:text-red-300'
-} as const;
-const fieldClass = `${geoFieldClass} mt-1.5 w-full px-3 py-2 text-sm`;
+const fieldClass = `${geoFieldClass} w-full px-3 py-2 text-sm`;
+const numericWrapperClass = 'mt-1.5';
 const formatDate = (value: string | null) => value
   ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
   : 'Ainda não realizado';
@@ -161,6 +160,17 @@ export function BackupPolicyPanel() {
     </div>
   );
   const status = statusQuery.data!;
+  const nextRestoreTestAt = status.restoreTest?.completedAt
+    ? new Date(Date.parse(status.restoreTest.completedAt) + policy.restoreTestIntervalDays * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+  const storageUsagePercent = policy.maxStorageBytes > 0
+    ? Math.min(100, (status.storage.totalBytes / policy.maxStorageBytes) * 100)
+    : null;
+  const averageVersionBytes = status.storage.versions > 0 ? status.storage.totalBytes / status.storage.versions : 0;
+  const estimatedVersionsPerDay = (24 / policy.databaseIntervalHours) + (1 / policy.completeIntervalDays);
+  const storageLimitEstimateDays = policy.maxStorageBytes > status.storage.totalBytes && averageVersionBytes > 0
+    ? Math.max(1, Math.floor((policy.maxStorageBytes - status.storage.totalBytes) / averageVersionBytes / estimatedVersionsPerDay))
+    : policy.maxStorageBytes > 0 && policy.maxStorageBytes <= status.storage.totalBytes ? 0 : null;
 
   return (
     <section className={`${geoPanelClass} space-y-5 rounded-2xl p-5`} aria-labelledby="backup-policy-title">
@@ -169,7 +179,7 @@ export function BackupPolicyPanel() {
           <HardDrives aria-hidden="true" size={20} /> Política automática de backups
         </h3>
         <button type="button" onClick={() => {
-          if (window.confirm('Restaurar os padrões desta seção?\n\nAutomático: ativado\nConsolidação: 5 minutos\nBanco: a cada 24 horas\nCompleto: a cada 7 dias\nRetenção: 24 horas, 30 dias e 12 meses\nBackup ao encerrar: ativado')) {
+          if (window.confirm('Restaurar os padrões desta seção?\n\nAutomático: ativado\nConsolidação: 5 minutos\nBanco: a cada 24 horas\nCompleto: a cada 7 dias\nRetenção: 24 horas, 30 dias e 12 meses\nTeste de restauração: a cada 30 dias\nBackup ao encerrar: ativado')) {
             setDraftPolicy({ ...DEFAULT_BACKUP_POLICY });
             setSaveError('');
             setSaveState('dirty');
@@ -180,69 +190,52 @@ export function BackupPolicyPanel() {
         <p className="mt-1 text-xs text-zinc-500">Alterações recentes são consolidadas em segundo plano e protegidas sem interromper o uso.</p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {([['Banco', status.database], ['Completo', status.complete]] as const).map(([label, item]) => (
-          <div key={label} className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-            <div className="flex items-center justify-between gap-3">
-              <strong className="text-sm text-zinc-900 dark:text-white">{label}</strong>
-              <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusTone[item.status]}`}>{statusLabel[item.status]}</span>
-            </div>
-            <p className="mt-2 text-xs text-zinc-500">Último: {formatDate(item.completedAt)}</p>
-            {item.attemptedAt && item.attemptedAt !== item.completedAt && <p className="text-xs text-zinc-500">Última tentativa: {formatDate(item.attemptedAt)}</p>}
-            <p className="text-xs text-zinc-500">Próximo: {formatDate(item.nextAt)}</p>
-            {item.totalBytes !== null && <p className="text-xs text-zinc-500">{formatBytes(item.totalBytes)} • {(item.totalFiles || 0).toLocaleString('pt-BR')} arquivo(s){item.durationMs !== null ? ` • ${(item.durationMs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s` : ''}</p>}
-            {item.error && <p role="alert" className="mt-2 break-words rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">Falha: {item.error}. Verifique o destino e tente novamente.</p>}
-          </div>
-        ))}
-      </div>
-
-      <div>
-        <h4 className="text-sm font-semibold text-zinc-900 dark:text-white">Histórico recente</h4>
-        {status.storage.history.length === 0 ? (
-          <p className="mt-2 rounded-xl bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-950">Nenhuma versão concluída encontrada nesta pasta.</p>
-        ) : (
-          <div className="mt-2 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <table className="w-full min-w-[560px] text-left text-xs">
-              <thead className="bg-zinc-50 text-zinc-500 dark:bg-zinc-950"><tr><th scope="col" className="px-3 py-2">Data</th><th scope="col" className="px-3 py-2">Tipo</th><th scope="col" className="px-3 py-2">Conteúdo</th><th scope="col" className="px-3 py-2">Integridade</th><th scope="col" className="px-3 py-2">Restauração</th></tr></thead>
-              <tbody>{status.storage.history.map((backup) => <tr key={backup.directory} className="border-t border-zinc-200 dark:border-zinc-800"><td className="px-3 py-2 tabular-nums">{formatDate(backup.completedAt)}</td><td className="px-3 py-2">{backup.type === 'complete' ? 'Completo' : 'Banco'}</td><td className="px-3 py-2 tabular-nums">{formatBytes(backup.bytes)} • {backup.files.toLocaleString('pt-BR')} arquivo(s)</td><td className="px-3 py-2">{backup.integrity === 'verified' ? 'Checksum verificado' : 'Legado sem checksum'}{backup.credentialsExcluded ? ' • sem credenciais' : ''}</td><td className="px-3 py-2">{backup.restoreTestedAt ? `Testada em ${formatDate(backup.restoreTestedAt)}` : 'Ainda não testada'}</td></tr>)}</tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
       <form onSubmit={(event) => { event.preventDefault(); saveMutation.mutate(); }} className="space-y-4">
-        <label className="flex min-h-14 items-center gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-          <input type="checkbox" checked={policy.automaticEnabled} onChange={(event) => setDraftPolicy({ ...policy, automaticEnabled: event.target.checked })} />
-          <span><strong className="block text-sm">Backup automático</strong><span className="text-xs text-zinc-500">Protege as alterações depois do intervalo de consolidação.</span></span>
-        </label>
+        <CheckboxField
+          id="backup-automatic-enabled"
+          name="backup_automatic_enabled"
+          checked={policy.automaticEnabled}
+          onChange={(checked) => setDraftPolicy({ ...policy, automaticEnabled: checked })}
+          className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950/20"
+          label={<span><strong className="block text-sm text-zinc-900 dark:text-zinc-100">Backup automático</strong><span className="mt-0.5 block text-xs font-normal text-zinc-500 dark:text-zinc-400">Protege as alterações depois do intervalo de consolidação.</span></span>}
+        />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="text-sm font-medium">Consolidar alterações após (minutos)
-            <NumericInput name="backup_debounce_minutes" min="1" max="1440" value={policy.changeDebounceMinutes} onChange={(event) => setDraftPolicy({ ...policy, changeDebounceMinutes: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Backup do banco a cada (horas)
-            <NumericInput name="backup_database_hours" min="1" max="720" value={policy.databaseIntervalHours} onChange={(event) => setDraftPolicy({ ...policy, databaseIntervalHours: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Backup completo a cada (dias)
-            <NumericInput name="backup_complete_days" min="1" max="365" value={policy.completeIntervalDays} onChange={(event) => setDraftPolicy({ ...policy, completeIntervalDays: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Mínimo de versões mantidas
-            <NumericInput name="backup_retention" min="1" max="365" value={policy.retention} onChange={(event) => setDraftPolicy({ ...policy, retention: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Manter versões recentes (horas)
-            <NumericInput name="backup_recent_hours" min="1" max="720" value={policy.retentionRecentHours} onChange={(event) => setDraftPolicy({ ...policy, retentionRecentHours: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Uma versão diária por (dias)
-            <NumericInput name="backup_daily_days" min="1" max="3650" value={policy.retentionDailyDays} onChange={(event) => setDraftPolicy({ ...policy, retentionDailyDays: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Uma versão mensal por (meses)
-            <NumericInput name="backup_monthly_months" min="1" max="120" value={policy.retentionMonthlyMonths} onChange={(event) => setDraftPolicy({ ...policy, retentionMonthlyMonths: Number(event.target.value) })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Limite de espaço (GB; 0 = sem limite)
-            <NumericInput name="backup_storage_gb" min="0" max="10000" value={Math.round(policy.maxStorageBytes / 1024 ** 3)} onChange={(event) => setDraftPolicy({ ...policy, maxStorageBytes: Number(event.target.value) * 1024 ** 3 })} className={fieldClass} />
-          </label>
-          <label className="text-sm font-medium">Tolerância para alerta (horas)
-            <NumericInput name="backup_grace_hours" min="0" max="720" value={policy.overdueGraceHours} onChange={(event) => setDraftPolicy({ ...policy, overdueGraceHours: Number(event.target.value) })} className={fieldClass} />
-          </label>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-debounce-minutes">Consolidar alterações após (minutos)</label>
+            <NumericInput id="backup-debounce-minutes" name="backup_debounce_minutes" min="1" max="1440" value={policy.changeDebounceMinutes} decrementLabel="Diminuir tempo de consolidação" incrementLabel="Aumentar tempo de consolidação" onChange={(event) => setDraftPolicy({ ...policy, changeDebounceMinutes: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-database-hours">Backup do banco a cada (horas)</label>
+            <NumericInput id="backup-database-hours" name="backup_database_hours" min="1" max="720" value={policy.databaseIntervalHours} decrementLabel="Diminuir intervalo do backup do banco" incrementLabel="Aumentar intervalo do backup do banco" onChange={(event) => setDraftPolicy({ ...policy, databaseIntervalHours: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-complete-days">Backup completo a cada (dias)</label>
+            <NumericInput id="backup-complete-days" name="backup_complete_days" min="1" max="365" value={policy.completeIntervalDays} decrementLabel="Diminuir intervalo do backup completo" incrementLabel="Aumentar intervalo do backup completo" onChange={(event) => setDraftPolicy({ ...policy, completeIntervalDays: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-retention">Mínimo de versões mantidas</label>
+            <NumericInput id="backup-retention" name="backup_retention" min="1" max="365" value={policy.retention} decrementLabel="Diminuir mínimo de versões" incrementLabel="Aumentar mínimo de versões" onChange={(event) => setDraftPolicy({ ...policy, retention: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-recent-hours">Manter versões recentes (horas)</label>
+            <NumericInput id="backup-recent-hours" name="backup_recent_hours" min="1" max="720" value={policy.retentionRecentHours} decrementLabel="Diminuir retenção de versões recentes" incrementLabel="Aumentar retenção de versões recentes" onChange={(event) => setDraftPolicy({ ...policy, retentionRecentHours: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-daily-days">Uma versão diária por (dias)</label>
+            <NumericInput id="backup-daily-days" name="backup_daily_days" min="1" max="3650" value={policy.retentionDailyDays} decrementLabel="Diminuir retenção diária" incrementLabel="Aumentar retenção diária" onChange={(event) => setDraftPolicy({ ...policy, retentionDailyDays: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-monthly-months">Uma versão mensal por (meses)</label>
+            <NumericInput id="backup-monthly-months" name="backup_monthly_months" min="1" max="120" value={policy.retentionMonthlyMonths} decrementLabel="Diminuir retenção mensal" incrementLabel="Aumentar retenção mensal" onChange={(event) => setDraftPolicy({ ...policy, retentionMonthlyMonths: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-storage-gb">Limite de espaço (GB; 0 = sem limite)</label>
+            <NumericInput id="backup-storage-gb" name="backup_storage_gb" min="0" max="10000" value={Math.round(policy.maxStorageBytes / 1024 ** 3)} decrementLabel="Diminuir limite de espaço" incrementLabel="Aumentar limite de espaço" onChange={(event) => setDraftPolicy({ ...policy, maxStorageBytes: Number(event.target.value) * 1024 ** 3 })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="backup-grace-hours">Tolerância para alerta (horas)</label>
+            <NumericInput id="backup-grace-hours" name="backup_grace_hours" min="0" max="720" value={policy.overdueGraceHours} decrementLabel="Diminuir tolerância para alerta" incrementLabel="Aumentar tolerância para alerta" onChange={(event) => setDraftPolicy({ ...policy, overdueGraceHours: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
           <div className="text-sm font-medium sm:col-span-2 lg:col-span-3">
             <label htmlFor="backup-destination">Pasta de destino opcional</label>
             <div className="mt-1.5 flex flex-col gap-2 sm:flex-row">
@@ -252,12 +245,29 @@ export function BackupPolicyPanel() {
             </div>
           </div>
         </div>
-        <div className="flex flex-wrap gap-4">
-          <label className="inline-flex min-h-11 items-center gap-2"><input type="checkbox" checked={policy.runOnStartup} onChange={(event) => setDraftPolicy({ ...policy, runOnStartup: event.target.checked })} /> Verificar ao iniciar</label>
-          <label className="inline-flex min-h-11 items-center gap-2"><input type="checkbox" checked={policy.runOnShutdown} onChange={(event) => setDraftPolicy({ ...policy, runOnShutdown: event.target.checked })} /> Fazer backup ao encerrar</label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <CheckboxField id="backup-run-on-startup" name="backup_run_on_startup" checked={policy.runOnStartup} onChange={(checked) => setDraftPolicy({ ...policy, runOnStartup: checked })} label="Verificar ao iniciar" className="rounded-xl border border-zinc-200 dark:border-zinc-800" />
+          <CheckboxField id="backup-run-on-shutdown" name="backup_run_on_shutdown" checked={policy.runOnShutdown} onChange={(checked) => setDraftPolicy({ ...policy, runOnShutdown: checked })} label="Fazer backup ao encerrar" className="rounded-xl border border-zinc-200 dark:border-zinc-800" />
         </div>
+        <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="automatic-restore-test-title">
+          <CheckboxField id="backup-run-restore-tests" name="backup_run_restore_tests" checked={policy.runRestoreTests} onChange={(checked) => setDraftPolicy({ ...policy, runRestoreTests: checked })} label={<span><strong id="automatic-restore-test-title" className="block text-sm text-zinc-900 dark:text-zinc-100">Testar restauração automaticamente</strong><span className="mt-0.5 block text-xs font-normal text-zinc-500 dark:text-zinc-400">Abre o último backup completo em uma área isolada e remove a cópia temporária ao terminar.</span></span>} />
+          <div className="mt-3 text-sm font-medium">
+            <label htmlFor="backup-restore-test-days">Testar a cada (dias)</label>
+            <NumericInput id="backup-restore-test-days" name="backup_restore_test_days" min="1" max="365" disabled={!policy.runRestoreTests} value={policy.restoreTestIntervalDays} decrementLabel="Diminuir intervalo do teste de restauração" incrementLabel="Aumentar intervalo do teste de restauração" onChange={(event) => setDraftPolicy({ ...policy, restoreTestIntervalDays: Number(event.target.value) })} wrapperClassName={numericWrapperClass} className={fieldClass} />
+          </div>
+          {!policy.runRestoreTests ? <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Ative o teste automático para alterar este intervalo.</p> : null}
+          <div className="mt-3 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+            <span>Último teste: <strong className="text-zinc-700 dark:text-zinc-200">{formatDate(status.restoreTest?.completedAt || null)}</strong></span>
+            <span>Próximo: <strong className="text-zinc-700 dark:text-zinc-200">{formatDate(nextRestoreTestAt)}</strong></span>
+            <span>Duração observada: <strong className="text-zinc-700 dark:text-zinc-200">{status.restoreTest?.durationMs != null ? `${(status.restoreTest.durationMs / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} s` : 'Ainda não medida'}</strong></span>
+          </div>
+          {status.restoreTest?.status === 'failed' && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-2 text-xs text-red-700 dark:bg-red-950/30 dark:text-red-300">O último teste falhou. {status.restoreTest.error || 'Execute um novo teste e verifique o destino.'}</p>}
+        </section>
         <div className="border-t border-zinc-200 pt-4 text-xs text-zinc-500 dark:border-zinc-800">
           <span>{status.storage.versions.toLocaleString('pt-BR')} versão(ões) • {formatBytes(status.storage.totalBytes)} utilizados • {formatBytes(status.storage.availableBytes)} livres</span>
+          <p className="mt-1">Retenção: todas as versões por {policy.retentionRecentHours.toLocaleString('pt-BR')} h, uma diária por {policy.retentionDailyDays.toLocaleString('pt-BR')} dias e uma mensal por {policy.retentionMonthlyMonths.toLocaleString('pt-BR')} meses.</p>
+          {storageUsagePercent !== null && <div className="mt-2"><div className="mb-1 flex justify-between"><span>Uso do limite configurado</span><span className="tabular-nums">{storageUsagePercent.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%</span></div><div className="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"><div className="h-full rounded-full bg-indigo-600" style={{ width: `${storageUsagePercent}%` }} /></div></div>}
+          {storageLimitEstimateDays !== null && <p className="mt-1">{storageLimitEstimateDays === 0 ? 'O uso atual já alcançou o limite configurado; a retenção preservará as versões mínimas obrigatórias.' : `Mantidos o tamanho médio e os intervalos atuais, o limite pode ser alcançado em aproximadamente ${storageLimitEstimateDays.toLocaleString('pt-BR')} dia(s).`}</p>}
         </div>
       </form>
       <SettingsSaveBar

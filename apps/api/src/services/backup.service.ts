@@ -12,7 +12,7 @@ import { MaintenanceHistoryService } from './maintenance-history.service';
 import { BackupDeviceService, type BackupDeviceIdentity } from './backup-device.service';
 import { BackupRecoveryService, type BackupKeyEnvelope } from './backup-recovery.service';
 import { UNIFIED_ALERTS_MIGRATION } from './runtime-migrations/v8-unified-alerts';
-import { PROPERTY_GEOGRAPHY_MIGRATION } from './runtime-migrations/v10-property-geography';
+import { GEOSPATIAL_POLISH_MIGRATION } from './runtime-migrations/v13-geospatial-polish';
 import { cloneDatabaseEncryptedSync, cloneDatabaseWithKeysSync, databaseClientConfig, databaseKeyId, getDatabaseEncryptionKey, validateProtectedDatabaseIsolatedSync } from '@geogestor/database';
 
 const BACKUP_FORMAT_VERSION = 4;
@@ -485,7 +485,10 @@ export class BackupService {
     const entries = await fs.readdir(backupDirectory, { withFileTypes: true });
     let totalBytes = 0;
     let versions = 0;
-    const restoreTests = await MaintenanceHistoryService.list({ type: 'restore_test', limit: 500 });
+    const [restoreTests, integrityChecks] = await Promise.all([
+      MaintenanceHistoryService.list({ type: 'restore_test', limit: 500 }),
+      MaintenanceHistoryService.list({ type: 'integrity_check', limit: 500 })
+    ]);
     const history: Array<{
       directory: string;
       type: BackupManifest['type'];
@@ -495,15 +498,44 @@ export class BackupService {
       bytes: number;
       encrypted: boolean;
       integrity: 'verified' | 'legacy-unverified';
+      integrityState: 'verified_at_creation' | 'verified_again' | 'failed' | 'legacy_unverified';
+      integrityVerifiedAt: string | null;
       credentialsExcluded: boolean;
       restoreTestedAt: string | null;
+      legacy: boolean;
+      formatVersion: number | null;
     }> = [];
     for (const entry of entries) {
+      if (entry.isFile() && entry.name.toLowerCase().endsWith('.db')) {
+        const stats = await fs.stat(path.join(backupDirectory, entry.name));
+        const completedAt = stats.mtime.toISOString();
+        versions += 1;
+        totalBytes += stats.size;
+        history.push({
+          directory: entry.name,
+          type: 'database',
+          createdAt: (stats.birthtimeMs > 0 ? stats.birthtime : stats.mtime).toISOString(),
+          completedAt,
+          files: 1,
+          bytes: stats.size,
+          encrypted: false,
+          integrity: 'legacy-unverified',
+          integrityState: 'legacy_unverified',
+          integrityVerifiedAt: null,
+          credentialsExcluded: false,
+          restoreTestedAt: null,
+          legacy: true,
+          formatVersion: null
+        });
+        continue;
+      }
       if (!entry.isDirectory() || !/^geogestor-backup-(database|complete)-/.test(entry.name) || entry.name.includes('.pending-')) continue;
       const manifest = await fs.readFile(path.join(backupDirectory, entry.name, 'manifest.json'), 'utf8')
         .then((raw) => JSON.parse(raw) as BackupManifest)
         .catch(() => null);
       if (!manifest) continue;
+      const latestIntegrityCheck = integrityChecks.find((check) => check.sourceLabel === entry.name);
+      const includesChecksums = manifest.files?.every((file) => Boolean(file.sha256));
       versions += 1;
       totalBytes += Number(manifest.totals?.bytes || 0);
       history.push({
@@ -514,18 +546,31 @@ export class BackupService {
         files: Number(manifest.totals?.files || 0),
         bytes: Number(manifest.totals?.bytes || 0),
         encrypted: Boolean(manifest.encryption),
-        integrity: manifest.files?.every((file) => Boolean(file.sha256)) ? 'verified' : 'legacy-unverified',
+        integrity: includesChecksums ? 'verified' : 'legacy-unverified',
+        integrityState: !includesChecksums ? 'legacy_unverified'
+          : latestIntegrityCheck?.status === 'failed' ? 'failed'
+            : latestIntegrityCheck?.status === 'success' ? 'verified_again'
+              : 'verified_at_creation',
+        integrityVerifiedAt: latestIntegrityCheck?.status === 'success' ? latestIntegrityCheck.completedAt : includesChecksums ? manifest.completedAt : null,
         credentialsExcluded: Boolean(manifest.credentialsExcluded),
-        restoreTestedAt: restoreTests.find((test) => test.status === 'success' && test.sourceLabel?.endsWith(entry.name))?.completedAt || null
+        restoreTestedAt: restoreTests.find((test) => test.status === 'success' && test.sourceLabel === entry.name)?.completedAt || null,
+        legacy: false,
+        formatVersion: manifest.formatVersion
       });
     }
+    const sortedHistory = history.sort((left, right) => right.completedAt.localeCompare(left.completedAt));
     const disk = await fs.statfs(backupDirectory);
     return {
       backupDirectory,
       versions,
       totalBytes,
       availableBytes: Number(disk.bavail) * Number(disk.bsize),
-      history: history.sort((left, right) => right.completedAt.localeCompare(left.completedAt)).slice(0, 10)
+      latestByType: {
+        database: sortedHistory.find((item) => item.type === 'database' && !item.legacy) || null,
+        complete: sortedHistory.find((item) => item.type === 'complete' && !item.legacy) || null
+      },
+      legacyVersions: history.filter((item) => item.legacy).length,
+      history: sortedHistory.slice(0, 10)
     };
   }
 
@@ -565,7 +610,7 @@ export class BackupService {
     const sourceBytes = sourceStats.reduce((sum, stats) => sum + stats.size, 0);
     const estimatedBytes = databaseBytes + sourceBytes;
     if (available < Math.max(databaseBytes * 2, Math.ceil(estimatedBytes * 1.1))) {
-      throw new Error('NÃ£o hÃ¡ espaÃ§o livre suficiente para criar e validar um novo backup.');
+      throw new Error('Não há espaço livre suficiente para criar e validar um novo backup.');
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -827,7 +872,7 @@ export class BackupService {
     if (!Number.isInteger(manifest.schemaVersion) || manifest.schemaVersion < 0) {
       throw new Error('Versão de schema inválida no manifesto do backup.');
     }
-    if (manifest.schemaVersion > PROPERTY_GEOGRAPHY_MIGRATION.version) {
+    if (manifest.schemaVersion > GEOSPATIAL_POLISH_MIGRATION.version) {
       throw new Error('Este backup foi criado por uma versão mais nova do GeoGestor. Atualize o aplicativo antes de restaurar.');
     }
     if (!Array.isArray(manifest.files) || !manifest.totals || !Number.isInteger(manifest.totals.files)) {
@@ -1095,7 +1140,7 @@ export class BackupService {
         status: 'success',
         startedAt,
         durationMs: Date.now() - startedAtMs,
-        sourceLabel: bundlePath,
+        sourceLabel: path.basename(bundlePath),
         destinationLabel: 'área temporária isolada',
         files: validation.manifest.totals.files,
         bytes: validation.manifest.totals.bytes,
@@ -1110,7 +1155,7 @@ export class BackupService {
         status: 'failed',
         startedAt,
         durationMs: Date.now() - startedAtMs,
-        sourceLabel: bundlePath,
+        sourceLabel: path.basename(bundlePath),
         destinationLabel: 'área temporária isolada',
         files: validation.manifest.totals.files,
         bytes: validation.manifest.totals.bytes,
@@ -1127,7 +1172,7 @@ export class BackupService {
   static async testLatestCompleteBackup(destinationDirectory?: string | null) {
     const backupDirectory = this.getBackupDirectory(destinationDirectory);
     const storage = await this.getStorageStatus(destinationDirectory);
-    const latest = storage.history.find((item) => item.type === 'complete');
+    const latest = storage.latestByType.complete;
     if (!latest) return null;
     return this.testRestore(path.join(backupDirectory, latest.directory), backupDirectory);
   }

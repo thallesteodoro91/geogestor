@@ -1,6 +1,7 @@
 {
   "name": "@geogestor/database",
   "version": "1.0.0",
+  "private": true,
   "main": "src/index.ts",
   "scripts": {
     "generate": "drizzle-kit generate",

@@ -19,6 +19,15 @@ function sanitizeAuditValue(value: unknown, depth = 0): unknown {
   return value;
 }
 
+export function sanitizeStoredAuditJson(value: string | null) {
+  if (!value) return null;
+  try {
+    return JSON.stringify(sanitizeAuditValue(JSON.parse(value)));
+  } catch {
+    return JSON.stringify(REDACTED);
+  }
+}
+
 export class AuditLogService {
   private static failureInjector: ((action: string, entity: string) => void | Promise<void>) | null = null;
 

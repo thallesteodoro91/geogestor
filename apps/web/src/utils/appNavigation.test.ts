@@ -27,6 +27,15 @@ function assertRoute(link: string, pattern: string) {
 test('construtores de alertas apontam para rotas declaradas e parâmetros consumíveis', () => {
   assertRoute(appLinks.project(id), APP_PATHS.projectDetails);
   assertRoute(appLinks.client(id), APP_PATHS.clientDetails);
+  assert.equal(assertRoute(appLinks.clientSection(id, 'financeiro'), APP_PATHS.clientDetails).get('aba'), 'financeiro');
+  assert.equal(assertRoute(appLinks.projectSection(id, 'documentos'), APP_PATHS.projectDetails).get('aba'), 'documentos');
+  assertRoute(appLinks.environmentalDemand(id), APP_ROUTES.environmentalDetails.path);
+  const financeAction = assertRoute(
+    appLinks.finance({ tab: 'pagar', acao: 'despesa', projeto: id }),
+    APP_PATHS.finance
+  );
+  assert.equal(financeAction.get('tab'), 'pagar');
+  assert.equal(financeAction.get('projeto'), id);
   assert.equal(assertRoute(appLinks.task(id), APP_PATHS.tasks).get(APP_QUERY_KEYS.task), id);
 
   const receivable = assertRoute(appLinks.receivable(id), APP_PATHS.finance);

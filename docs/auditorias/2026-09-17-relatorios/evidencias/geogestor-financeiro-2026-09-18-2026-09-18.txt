@@ -1,0 +1,62 @@
+RELATÓRIO FINANCEIRO
+Período: 18/09/2026 a 18/09/2026
+(48) 3333-4444 · qa@geogestor.test
+Florianópolis/SC
+Regime de caixa: data do recebimento ou do pagamento legado.
+Indicadores financeiros
+Indicador Resultado
+Receita contratada R$ 100,00
+Receita recebida R$ 40,00
+Receita pendente R$ 60,00
+Receita vencida R$ 60,00
+Despesas pagas R$ 54,00
+Resultado de caixa -R$ 14,00
+Impostos previstos R$ 10,00
+Conversão comercial 20%
+Evolução do caixa
+Mês Recebido Pago Resultado
+2026-09 R$ 40,00 R$ 54,00 -R$ 14,00
+Despesas pagas por categoria
+Categoria Pago Itens
+Campo principal R$ 30,00 1
+QA-AUDIT-S11-20260917-Categoria longa 01 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 02 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 03 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 04 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 05 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 06 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 07 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 08 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 09 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 10 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 11 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 12 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 13 com acentos & símbolo <inerte> R$ 1,00 1
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 1 de 2
+
+--- PAGE BREAK ---
+
+Categoria Pago Itens
+QA-AUDIT-S11-20260917-Categoria longa 14 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 15 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 16 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 17 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 18 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 19 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 20 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 21 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 22 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 23 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 24 com acentos & símbolo <inerte> R$ 1,00 1
+Pontos de atenção
+Recebimentos vencidos exigem atenção: Há R$ 60,00 em parcelas vencidas ainda não recebidas.
+Resultado de caixa negativo: As despesas pagas superam os recebimentos no período selecionado.
+Conversão comercial abaixo de 30%: Revise propostas rejeitadas ou expiradas para identificar oportunidades de melhoria.
+Critérios e metodologia
+Competência do orçamento: data de competência, emissão, orçamento ou criação.
+Regime de caixa: data do recebimento ou do pagamento legado.
+Competência da parcela; na ausência, vencimento. Orçamentos diretos usam sua competência.
+Regime de caixa: data de pagamento; na ausência, competência ou lançamento.
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 2 de 2

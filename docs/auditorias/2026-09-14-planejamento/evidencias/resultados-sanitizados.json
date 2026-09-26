@@ -1,0 +1,26 @@
+{
+  "session": 12,
+  "scope": "planejamento",
+  "status": "APROVADA COM RESSALVAS",
+  "timezone": "America/Sao_Paulo",
+  "schemaVersion": 15,
+  "foreignKeys": 1,
+  "oracles": {
+    "financeiro_resultado_caixa": { "receiptsCents": 10000, "expensesCents": 4000, "valueBrl": 60 },
+    "crm_taxa_conversao": { "numerator": 1, "denominator": 2, "percent": 50 },
+    "projetos_taxa_conclusao": { "numerator": 1, "denominator": 2, "percent": 50 },
+    "tarefas_taxa_conclusao": { "numerator": 1, "denominator": 2, "percent": 50 }
+  },
+  "tests": {
+    "strategicIntegration": { "passed": 1, "failed": 0, "durationMs": 11130.2685, "runDirectoryRemoved": true },
+    "web": { "passed": 194, "failed": 0 },
+    "electron": { "passed": 18, "failed": 0, "durationMs": 157.6 },
+    "planningE2e": { "passed": 2, "failed": 0, "durationMs": 40800 },
+    "apiFull": { "passed": 184, "failed": 1, "durationMs": 114091.8, "failureOutsideScope": true }
+  },
+  "realDatabases": [
+    { "path": "data/geogestor.db", "bytes": 1990656, "sha256": "BBA88E06D9EE745787469319E0AAD6CF4434776EF14DCCD27FE694815FA89471", "unchanged": true },
+    { "path": "%APPDATA%/geogestor-desktop/geogestor.db", "bytes": 1163264, "sha256": "D4B4169A496501DD3A28746AD49792DB5CFA00CF7D096AB8744B4EE0229CF4DA", "unchanged": true }
+  ],
+  "cleanup": { "syntheticRowsInRealDatabases": 0, "isolatedRunRemoved": true, "temporaryBackupRemoved": true, "numericStrategicDirectoriesRemoved": 145, "numericStrategicDirectoriesRemaining": 0 }
+}

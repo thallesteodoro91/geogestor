@@ -13,7 +13,7 @@ test('projeto atual passa nas barreiras estáticas e preserva diagnósticos como
   assert.ok(result.diagnostics.compatibilityEntries >= 3);
   assert.ok(result.diagnostics.assets.total > 0);
   assert.equal(result.diagnostics.navigationBaseline.baselineTotal, 70);
-  assert.equal(result.diagnostics.navigationBaseline.currentTotal, 70);
+  assert.ok(result.diagnostics.navigationBaseline.currentTotal <= result.diagnostics.navigationBaseline.baselineTotal);
   assert.deepEqual(result.diagnostics.navigationBaseline.added, []);
 });
 

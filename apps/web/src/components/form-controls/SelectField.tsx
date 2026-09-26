@@ -173,6 +173,7 @@ export function SelectField({
         id={id}
         type="button"
         role="combobox"
+        data-state={open ? 'open' : 'closed'}
         aria-label={ariaLabel}
         aria-describedby={ariaDescribedBy}
         aria-invalid={ariaInvalid}
@@ -187,7 +188,7 @@ export function SelectField({
         onKeyDown={handleNavigation}
         className={cn(
           geoFieldClass,
-          'geo-select-trigger flex w-full appearance-none items-center gap-3 text-left disabled:cursor-not-allowed disabled:opacity-60',
+          'geo-select-trigger geo-dropdown-trigger flex w-48 max-w-full appearance-none items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60',
           compactCaret ? 'pr-8' : 'pr-10',
           className
         )}
@@ -196,7 +197,7 @@ export function SelectField({
         <CaretDown aria-hidden="true" weight="bold" className={cn('h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 motion-reduce:transition-none dark:text-zinc-400', open && 'rotate-180')} />
       </button>
 
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={listboxId} role="listbox" ariaLabel={ariaLabel || 'Opções'} minWidth={180} className={popoverClassName}>
+      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={listboxId} role="listbox" ariaLabel={ariaLabel || 'Opções'} minWidth={192} maxWidth={192} className={cn('geo-dropdown-content', popoverClassName)}>
         {shouldSearch && (
           <div className="border-b border-brand-border p-2">
             <label className="relative block">
@@ -210,14 +211,14 @@ export function SelectField({
                 onKeyDown={handleNavigation}
                 placeholder={searchPlaceholder}
                 autoComplete="off"
-                className={cn(geoFieldClass, 'h-10 w-full pl-9 pr-9 text-sm')}
+                className={cn(geoFieldClass, 'h-8 w-full pl-8 pr-8 text-sm')}
               />
               {query && <button type="button" onClick={() => { setQuery(''); searchRef.current?.focus(); }} aria-label="Limpar pesquisa" className="geo-focus-ring absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-400 hover:bg-brand-surface-subtle hover:text-zinc-700 dark:hover:text-zinc-100"><X aria-hidden="true" size={15} /></button>}
             </label>
             <p className="mt-1.5 px-1 text-[11px] font-medium text-text-muted" aria-live="polite">{filtered.length} resultado{filtered.length === 1 ? '' : 's'}</p>
           </div>
         )}
-        <div className="geo-option-list max-h-[min(22rem,calc(100vh-6rem))] overflow-y-auto p-1.5">
+        <div className="geo-option-list max-h-[min(22rem,calc(100vh-6rem))] overflow-y-auto p-1">
           {filtered.length ? filtered.map((option, index) => {
             const isSelected = option.value === currentValue;
             const active = index === activeIndex;
@@ -231,7 +232,7 @@ export function SelectField({
                 disabled={option.disabled}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option.value)}
-                className={cn('geo-option-row', active && 'geo-option-row-active', isSelected && 'geo-option-row-selected')}
+                className={cn('geo-option-row geo-dropdown-item', active && 'geo-option-row-active', isSelected && 'geo-option-row-selected')}
               >
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {isSelected && <Check aria-hidden="true" weight="bold" className="h-4 w-4 shrink-0" />}

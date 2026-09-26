@@ -35,3 +35,51 @@ test('marca duplicidades sem remover a primeira ocorrência válida', () => {
   assert.equal(preview.validVertices.length, 1);
   assert.match(preview.rows[1].error ?? '', /duplicado/);
 });
+
+test('rejeita arquivo vazio, colunas iguais e ambiguidade de vírgula', () => {
+  assert.throws(() => analyzeVertexImport('', 'geografica', { delimiter: 'auto', decimalSeparator: 'auto', hasHeader: false }), /vazio/i);
+  assert.throws(() => analyzeVertexImport('Latitude;Longitude\n-27;-48', 'geografica', { delimiter: ';', decimalSeparator: '.', hasHeader: true, firstCoordinateColumn: 0, secondCoordinateColumn: 0 }), /colunas diferentes/i);
+  assert.throws(() => analyzeVertexImport('-27,5,-48,5', 'geografica', { delimiter: 'auto', decimalSeparator: 'auto', hasHeader: false }), /ambígu/i);
+});
+
+test('interpreta campos delimitados com aspas e delimitador dentro do texto', () => {
+  const preview = analyzeVertexImport(
+    'Código;Descrição;Latitude;Longitude\n"V;1";"Marco; inicial";-27,5;-48,5',
+    'geografica',
+    { delimiter: ';', decimalSeparator: ',', hasHeader: true },
+  );
+  assert.equal(preview.validVertices.length, 1);
+  assert.deepEqual(preview.rows[0].raw.slice(0, 2), ['V;1', 'Marco; inicial']);
+});
+
+test('aceita exatamente 10.000 linhas e limita pré-condições logo acima da borda', () => {
+  const exactlyTenThousand = Array.from({ length: 10_000 }, (_, index) => `${index};${index + 1}`).join('\n');
+  const startedAt = performance.now();
+  const preview = analyzeVertexImport(exactlyTenThousand, 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  });
+  assert.equal(preview.totalLines, 10_000);
+  assert.equal(preview.validVertices.length, 10_000);
+  assert.ok(performance.now() - startedAt < 2_000, '10.000 linhas devem ser analisadas sem bloqueio prolongado');
+
+  assert.throws(() => analyzeVertexImport(`${exactlyTenThousand}\n10000;10001`, 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  }), /10\.000 linhas/);
+  assert.doesNotThrow(() => analyzeVertexImport(Array.from({ length: 50 }, (_, index) => String(index)).join(';'), 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  }));
+  assert.throws(() => analyzeVertexImport(Array.from({ length: 51 }, (_, index) => String(index)).join(';'), 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  }), /50 colunas/);
+});
+
+test('aplica limite de 2 MB em bytes UTF-8, inclusive com conteúdo multibyte', () => {
+  const atLimit = `0;1\n${'á'.repeat(999_997)}`;
+  assert.ok(new TextEncoder().encode(atLimit).length <= 2_000_000);
+  assert.doesNotThrow(() => analyzeVertexImport(atLimit, 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  }));
+  assert.throws(() => analyzeVertexImport(`${atLimit}áá`, 'projetada', {
+    delimiter: ';', decimalSeparator: '.', hasHeader: false,
+  }), /2 MB/);
+});

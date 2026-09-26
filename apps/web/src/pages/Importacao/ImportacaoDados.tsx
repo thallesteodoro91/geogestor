@@ -1,4 +1,4 @@
-import { FormSelect } from '../../components/Form';
+import { CheckboxField, FormSelect } from '../../components/Form';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -15,11 +15,11 @@ import {
   UploadSimple,
   WarningCircle
 } from '@phosphor-icons/react';
-import Papa from 'papaparse';
+import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { PageHeader } from '../../components/PageHeader';
 import { apiClient } from '../../services/apiClient';
-import { persistOperationalSetting } from '../../services/operationalSettings';
+import { saveImportSchema } from '../../services/importSchemas';
 import { secondaryActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { FullMigrationReview, FullMigrationResultView } from './FullMigrationReview';
@@ -36,11 +36,15 @@ import {
 } from './projectImport';
 import {
   detectHeaderRowIndex,
+  headerOutsideDetectionWindow,
+  parseCsvWithSourceRows,
+  readValidatedSpreadsheet,
+  requiresManualHeaderSelection,
   selectBestWorkbookSheet,
   sha256File,
   uniqueSpreadsheetHeaders,
   validateSpreadsheetDimensions,
-  validateSpreadsheetFile,
+  validateSpreadsheetCells,
   type FullMigrationPayload,
   type FullMigrationPreview,
   type FullMigrationQueued,
@@ -51,6 +55,8 @@ import {
 type EntityKey = 'clientes' | 'projetos' | 'contatos';
 type ImportMode = 'complete' | 'simple';
 type ImportPhase = 'idle' | 'reading' | 'identifying' | 'analyzing' | 'validating' | 'preview_ready' | 'blocked' | 'saving' | 'completed' | 'partial' | 'failed';
+
+const getPerformanceTimestamp = () => performance.now();
 
 type EntityField = {
   key: string;
@@ -132,11 +138,27 @@ const normalizeText = (value: string) =>
 
 const formatCell = (value: unknown) => String(value ?? '').trim();
 
+const withSourceRows = <T,>(rows: T[], numbers: number[]) =>
+  numbers.length === rows.length && numbers.some((number, index) => number !== index + 2)
+    ? { rows, sourceRowNumbers: numbers }
+    : rows;
+
+type PendingHeaderSelection = {
+  rows: unknown[][];
+  sourceRowNumbers: number[];
+  sheetName?: string;
+  readingMs: number;
+  suggestedIndex: number;
+};
+
 export function ImportacaoDados() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
+  const [pendingHeaderSelection, setPendingHeaderSelection] = useState<PendingHeaderSelection | null>(null);
+  const [selectedHeaderIndex, setSelectedHeaderIndex] = useState<number | null>(null);
   const [data, setData] = useState<Array<Record<string, unknown>>>([]);
+  const [simpleSourceRowNumbers, setSimpleSourceRowNumbers] = useState<number[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [entity, setEntity] = useState<EntityKey>('clientes');
   const [importMode, setImportMode] = useState<ImportMode>('complete');
@@ -176,8 +198,8 @@ export function ImportacaoDados() {
     return item;
   }), [data, entity, mapping]);
   const simplePreflightIssues = useMemo(
-    () => importMode === 'simple' && entity === 'clientes' ? validateSimpleClientPayload(simplePayload) : [],
-    [entity, importMode, simplePayload]
+    () => importMode === 'simple' && entity === 'clientes' ? validateSimpleClientPayload(simplePayload, simpleSourceRowNumbers) : [],
+    [entity, importMode, simplePayload, simpleSourceRowNumbers]
   );
   const effectiveSimplePayload = useMemo(
     () => entity === 'projetos'
@@ -187,6 +209,12 @@ export function ImportacaoDados() {
   );
   const isSimpleProjectImport = importMode === 'simple' && entity === 'projetos';
   const projectConfirmationReady = !isSimpleProjectImport || canConfirmProjectImport(projectPreview, isPreviewingProjects || refreshingProjectRow !== null);
+
+  useEffect(() => {
+    if (!pendingHeaderSelection) return;
+    const frame = requestAnimationFrame(() => document.getElementById('import-header-row')?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [pendingHeaderSelection]);
 
   useEffect(() => {
     if (step !== 2 || importPhase !== 'blocked') return;
@@ -231,7 +259,7 @@ export function ImportacaoDados() {
     };
   }, [entity, importMode, mapping, simplePayload, step]);
 
-  const applyParsedRows = (rows: Array<Record<string, unknown>>) => {
+  const applyParsedRows = (rows: Array<Record<string, unknown>>, sourceRowNumbers?: number[]) => {
     setImportPhase('analyzing');
     const normalizedRows = rows.map(row =>
       Object.fromEntries(
@@ -241,9 +269,9 @@ export function ImportacaoDados() {
       )
     );
 
-    const nonEmptyRows = normalizedRows.filter(row =>
-      Object.values(row).some(value => value !== null && value !== undefined && String(value).trim() !== '')
-    );
+    const nonEmpty = normalizedRows.map((row, index) => ({ row, sourceRow: sourceRowNumbers?.[index] ?? index + 2 }))
+      .filter(({ row }) => Object.values(row).some(value => value !== null && value !== undefined && String(value).trim() !== ''));
+    const nonEmptyRows = nonEmpty.map(({ row }) => row);
 
     if (nonEmptyRows.length === 0) {
       throw new Error('O arquivo não contém registros para importar.');
@@ -277,21 +305,22 @@ export function ImportacaoDados() {
 
     setHeaders(detectedHeaders);
     setData(nonEmptyRows);
+    setSimpleSourceRowNumbers(nonEmpty.map(({ sourceRow }) => sourceRow));
     setMapping(autoMap);
     setParseError('');
     setFormError('');
     setReviewAcknowledged(false);
     setStep(2);
-    return { rows: nonEmptyRows, headers: detectedHeaders };
+    return { rows: nonEmptyRows, headers: detectedHeaders, sourceRowNumbers: nonEmpty.map(({ sourceRow }) => sourceRow) };
   };
 
   const prepareCompleteMigration = async (
     selectedFile: File,
-    parsed: { rows: Array<Record<string, unknown>>; headers: string[] },
+    parsed: { rows: Array<Record<string, unknown>>; headers: string[]; sourceRowNumbers: number[] },
     source?: { sheetName?: string; firstDataRow?: number; readingMs?: number }
   ) => {
     setImportPhase('validating');
-    const hashingStartedAt = performance.now();
+    const hashingStartedAt = getPerformanceTimestamp();
     const fileHash = await sha256File(selectedFile);
     const payload: FullMigrationPayload = {
       fileName: selectedFile.name,
@@ -300,9 +329,10 @@ export function ImportacaoDados() {
       rows: parsed.rows,
       sheetName: source?.sheetName,
       firstDataRow: source?.firstDataRow,
+      sourceRowNumbers: parsed.sourceRowNumbers,
       clientTimings: {
         readingMs: Math.round(source?.readingMs ?? 0),
-        hashingMs: Math.round(performance.now() - hashingStartedAt)
+        hashingMs: Math.round(getPerformanceTimestamp() - hashingStartedAt)
       }
     };
     const preview = await apiClient.post<FullMigrationPreview>(
@@ -315,83 +345,108 @@ export function ImportacaoDados() {
     setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
   };
 
-  const parseCsv = (selectedFile: File) =>
-    new Promise<unknown[][]>((resolve, reject) => {
-      Papa.parse<unknown[]>(selectedFile, {
-        header: false,
-        skipEmptyLines: true,
-        complete: results => {
-          if (results.errors.length > 0) {
-            reject(new Error(results.errors[0].message));
-            return;
-          }
-          resolve(results.data);
-        },
-        error: error => reject(error)
-      });
+  const applyChosenHeader = async (selectedFile: File, source: PendingHeaderSelection, headerIndex: number) => {
+    const headerRow = source.rows[headerIndex];
+    if (!headerRow?.some(value => formatCell(value))) {
+      throw new Error('Escolha uma linha que contenha nomes de colunas.');
+    }
+    const selectedHeaders = uniqueSpreadsheetHeaders(headerRow);
+    const rows = source.rows.slice(headerIndex + 1).map(row =>
+      Object.fromEntries(selectedHeaders.map((header, index) => [header, row[index] ?? '']))
+    );
+    const parsed = applyParsedRows(rows, source.sourceRowNumbers.slice(headerIndex + 1));
+    if (importMode === 'complete') await prepareCompleteMigration(selectedFile, parsed, {
+      sheetName: source.sheetName,
+      firstDataRow: headerIndex + 2,
+      readingMs: source.readingMs
     });
+    else setImportPhase('preview_ready');
+    setPendingHeaderSelection(null);
+    setSelectedHeaderIndex(null);
+  };
 
   const processFile = async (selectedFile: File) => {
     const extension = selectedFile.name.split('.').pop()?.toLowerCase() ?? '';
-    const readingStartedAt = performance.now();
+    const readingStartedAt = getPerformanceTimestamp();
 
     setFile(selectedFile);
+    setPendingHeaderSelection(null);
+    setSelectedHeaderIndex(null);
+    setHeaders([]);
+    setData([]);
+    setSimpleSourceRowNumbers([]);
+    setMapping({});
+    setFullPayload(null);
+    setFullPreview(null);
+    setProjectPreview(null);
+    setProjectOverrides({});
     setParseError('');
     setFormError('');
     setIsParsingFile(true);
     setImportPhase('reading');
     setReviewAcknowledged(false);
     setSimpleResult(null);
+    importMutation.reset();
+    fullImportMutation.reset();
+    simpleIdempotencyKey.current = crypto.randomUUID();
 
     try {
-      const fileError = validateSpreadsheetFile(selectedFile.name, selectedFile.size);
-      if (fileError) throw new Error(fileError);
+      const validatedCsv = await readValidatedSpreadsheet(selectedFile);
 
       if (extension === 'csv') {
-        const csvRows = await parseCsv(selectedFile);
+        const { rows: csvRows, sourceRowNumbers } = parseCsvWithSourceRows(validatedCsv ?? '');
+        const cellError = validateSpreadsheetCells(csvRows);
+        if (cellError) throw new Error(cellError);
+        if (headerOutsideDetectionWindow(csvRows)) throw new Error('A tabela começa depois das 20 primeiras linhas. Remova as linhas introdutórias e envie o arquivo novamente.');
         setImportPhase('identifying');
         const headerIndex = detectHeaderRowIndex(csvRows);
-        const headerRow = csvRows[headerIndex];
-        if (!headerRow?.length) throw new Error('Não foi possível identificar o cabeçalho do arquivo CSV.');
-        const csvHeaders = uniqueSpreadsheetHeaders(headerRow);
-        const rows = csvRows.slice(headerIndex + 1).map(row =>
-          Object.fromEntries(csvHeaders.map((header, index) => [header, row[index] ?? '']))
-        );
-        const parsed = applyParsedRows(rows);
-        if (importMode === 'complete') await prepareCompleteMigration(selectedFile, parsed, { firstDataRow: headerIndex + 2, readingMs: performance.now() - readingStartedAt });
-        else setImportPhase('preview_ready');
+        const source = { rows: csvRows, sourceRowNumbers, suggestedIndex: headerIndex, readingMs: getPerformanceTimestamp() - readingStartedAt };
+        if (requiresManualHeaderSelection(csvRows, headerIndex)) {
+          setPendingHeaderSelection(source);
+          setImportPhase('blocked');
+          return;
+        }
+        await applyChosenHeader(selectedFile, source, headerIndex);
         return;
       }
 
       const { default: readXlsxFile } = await import('read-excel-file/browser');
-      const workbook = await readXlsxFile(selectedFile);
+      let workbook;
+      try {
+        workbook = await readXlsxFile(selectedFile);
+      } catch {
+        throw new Error('Não foi possível ler o XLSX. Verifique se o arquivo está íntegro e desprotegido.');
+      }
       setImportPhase('identifying');
       const selectedSheet = selectBestWorkbookSheet(workbook);
       const sheetRows = selectedSheet?.data ?? [];
+      const cellError = validateSpreadsheetCells(sheetRows);
+      if (cellError) throw new Error(cellError);
+      if (headerOutsideDetectionWindow(sheetRows)) throw new Error('A tabela começa depois das 20 primeiras linhas da aba. Remova as linhas introdutórias e envie o arquivo novamente.');
       const headerIndex = detectHeaderRowIndex(sheetRows);
-      const headerRow = sheetRows[headerIndex];
-      const bodyRows = sheetRows.slice(headerIndex + 1);
-
-      if (!headerRow || headerRow.length === 0) {
+      if (!sheetRows[headerIndex]?.length) {
         throw new Error('A planilha não possui abas legíveis.');
       }
-
-      const sheetHeaders = uniqueSpreadsheetHeaders(headerRow);
-      const rows = bodyRows.map((row: unknown[]) =>
-        Object.fromEntries(sheetHeaders.map((header: string, index: number) => [header, row[index] ?? '']))
-      ) as Array<Record<string, unknown>>;
-
-      const parsed = applyParsedRows(rows);
-      if (importMode === 'complete') await prepareCompleteMigration(selectedFile, parsed, {
+      const source = {
+        rows: sheetRows,
+        sourceRowNumbers: sheetRows.map((_, index) => index + 1),
         sheetName: selectedSheet?.sheet,
-        firstDataRow: headerIndex + 2,
-        readingMs: performance.now() - readingStartedAt
-      });
-      else setImportPhase('preview_ready');
+        suggestedIndex: headerIndex,
+        readingMs: getPerformanceTimestamp() - readingStartedAt
+      };
+      if (requiresManualHeaderSelection(sheetRows, headerIndex)) {
+        setPendingHeaderSelection(source);
+        setImportPhase('blocked');
+        return;
+      }
+      await applyChosenHeader(selectedFile, source, headerIndex);
     } catch (error) {
       setStep(1);
+      setPendingHeaderSelection(null);
+      setSelectedHeaderIndex(null);
       setHeaders([]);
       setData([]);
+      setSimpleSourceRowNumbers([]);
       setMapping({});
       setFullPayload(null);
       setFullPreview(null);
@@ -422,9 +477,34 @@ export function ImportacaoDados() {
     }
   };
 
+  const confirmHeaderSelection = async () => {
+    if (!file || !pendingHeaderSelection || selectedHeaderIndex === null) return;
+    setIsParsingFile(true);
+    setParseError('');
+    setFullPayload(null);
+    setFullPreview(null);
+    setReviewAcknowledged(false);
+    try {
+      await applyChosenHeader(file, pendingHeaderSelection, selectedHeaderIndex);
+    } catch (error) {
+      setStep(1);
+      setHeaders([]);
+      setData([]);
+      setSimpleSourceRowNumbers([]);
+      setMapping({});
+      setFullPayload(null);
+      setFullPreview(null);
+      setImportPhase('failed');
+      setParseError(error instanceof Error ? error.message : 'Não foi possível usar a linha escolhida. Selecione outra linha.');
+    } finally {
+      setIsParsingFile(false);
+    }
+  };
+
   const handleMappingChange = (fieldKey: string, headerName: string) => {
     setFormError('');
     setReviewAcknowledged(false);
+    importMutation.reset();
     setProjectOverrides({});
     setProjectPreview(null);
     setMapping(prev => ({
@@ -443,9 +523,10 @@ export function ImportacaoDados() {
     setRefreshingProjectRow(index);
     setReviewAcknowledged(false);
     setFormError('');
+    importMutation.reset();
     try {
       const rowPayload = applyProjectAssociationOverride(sourceRow, override);
-      const refreshed = await apiClient.post<ProjectImportPreview>('/api/projetos/lote/preview', [rowPayload], { timeoutMs: 60_000 });
+      const refreshed = await apiClient.post<ProjectImportPreview>('/api/projetos/lote/preview', withSourceRows([rowPayload], [simpleSourceRowNumbers[index] ?? index + 2]), { timeoutMs: 60_000 });
       const replacement = refreshed.rows[0];
       if (!replacement) throw new Error('O servidor não retornou a validação da linha.');
       const next = replaceProjectPreviewRow(projectPreview, index, replacement);
@@ -453,7 +534,7 @@ export function ImportacaoDados() {
       setImportPhase(next.status === 'ready' ? 'preview_ready' : 'blocked');
     } catch (error) {
       setImportPhase('failed');
-      setFormError(error instanceof Error ? `Não foi possível revalidar a linha ${index + 2}: ${error.message}` : `Não foi possível revalidar a linha ${index + 2}.`);
+      setFormError(error instanceof Error ? `Não foi possível revalidar a linha ${simpleSourceRowNumbers[index] ?? index + 2}: ${error.message}` : `Não foi possível revalidar a linha ${simpleSourceRowNumbers[index] ?? index + 2}.`);
     } finally {
       setRefreshingProjectRow(null);
     }
@@ -481,6 +562,7 @@ export function ImportacaoDados() {
     setImportPhase('validating');
     setReviewAcknowledged(false);
     setFormError('');
+    fullImportMutation.reset();
     try {
       const preview = await apiClient.post<FullMigrationPreview>(
         '/api/importacoes/migracao-completa/preview',
@@ -499,7 +581,7 @@ export function ImportacaoDados() {
 
   const importMutation = useMutation({
     mutationFn: async (payload: Array<Record<string, unknown>>) => {
-      const result = await apiClient.post<SimpleImportResult>(`/api/${entity}/lote`, payload, {
+      const result = await apiClient.post<SimpleImportResult>(`/api/${entity}/lote`, withSourceRows(payload, simpleSourceRowNumbers), {
         headers: { 'Idempotency-Key': simpleIdempotencyKey.current }
       });
 
@@ -511,9 +593,9 @@ export function ImportacaoDados() {
         date: new Date().toISOString()
       };
 
-      const savedSchemas = JSON.parse(localStorage.getItem('import_schemas') || '[]');
-      savedSchemas.push(schemaToSave);
-      void persistOperationalSetting('import_schemas', savedSchemas).catch(() => undefined);
+      void saveImportSchema(schemaToSave).catch(() => {
+        toast.warning('A importação foi concluída, mas o esquema não pôde ser salvo. Tente novamente em uma próxima importação.');
+      });
       return result;
     },
     onMutate: () => setImportPhase('saving'),
@@ -561,15 +643,15 @@ export function ImportacaoDados() {
         const reusableMapping = Object.fromEntries(
           Object.entries(fullPreview.columns.selectedMapping).filter((entry): entry is [string, string] => Boolean(entry[1]))
         );
-        const savedSchemas = JSON.parse(localStorage.getItem('import_schemas') || '[]');
-        savedSchemas.push({
+        void saveImportSchema({
           id: crypto.randomUUID(),
           name: `Mapeamento completo - ${fullPayload?.sheetName ?? file.name}`,
           entity: 'migração completa',
           mapping: reusableMapping,
           date: new Date().toISOString()
+        }).catch(() => {
+          toast.warning('A migração foi concluída, mas o esquema não pôde ser salvo. Tente novamente em uma próxima importação.');
         });
-        void persistOperationalSetting('import_schemas', savedSchemas).catch(() => undefined);
       }
       setFullResult(result);
       setImportPhase('completed');
@@ -628,10 +710,13 @@ export function ImportacaoDados() {
 
   const resetFlow = () => {
     setFile(null);
+    setPendingHeaderSelection(null);
+    setSelectedHeaderIndex(null);
     setStep(1);
     setMapping({});
     setHeaders([]);
     setData([]);
+    setSimpleSourceRowNumbers([]);
     setParseError('');
     setFormError('');
     setFullPayload(null);
@@ -646,6 +731,73 @@ export function ImportacaoDados() {
     setImportPhase('idle');
     setFullImportProgress('');
     simpleIdempotencyKey.current = crypto.randomUUID();
+  };
+
+  const retryFailedImport = async () => {
+    if (operationInProgress) return;
+
+    setParseError('');
+    setFormError('');
+
+    if (step === 1) {
+      if (file) await processFile(file);
+      else document.getElementById('import-file')?.click();
+      return;
+    }
+
+    if (fullImportMutation.isError && fullPayload) {
+      fullImportMutation.mutate(fullPayload);
+      return;
+    }
+
+    if (importMutation.isError) {
+      importMutation.mutate(effectiveSimplePayload);
+      return;
+    }
+
+    if (importMode === 'complete' && fullPayload) {
+      setIsRefreshingFullPreview(true);
+      setImportPhase('validating');
+      setReviewAcknowledged(false);
+      try {
+        const preview = await apiClient.post<FullMigrationPreview>(
+          '/api/importacoes/migracao-completa/preview',
+          fullPayload,
+          { timeoutMs: 60_000 }
+        );
+        setFullPreview(preview);
+        setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
+      } catch (error) {
+        setImportPhase('failed');
+        setFormError(error instanceof Error ? `Não foi possível gerar novamente a prévia: ${error.message}` : 'Não foi possível gerar novamente a prévia.');
+      } finally {
+        setIsRefreshingFullPreview(false);
+      }
+      return;
+    }
+
+    if (isSimpleProjectImport && simplePayload.length > 0) {
+      setIsPreviewingProjects(true);
+      setImportPhase('validating');
+      setReviewAcknowledged(false);
+      try {
+        const preview = await apiClient.post<ProjectImportPreview>(
+          '/api/projetos/lote/preview',
+          withSourceRows(effectiveSimplePayload, simpleSourceRowNumbers),
+          { timeoutMs: 60_000 }
+        );
+        setProjectPreview(preview);
+        setImportPhase(preview.status === 'ready' ? 'preview_ready' : 'blocked');
+      } catch (error) {
+        setImportPhase('failed');
+        setFormError(error instanceof Error ? `Não foi possível validar novamente os projetos: ${error.message}` : 'Não foi possível validar novamente os projetos.');
+      } finally {
+        setIsPreviewingProjects(false);
+      }
+      return;
+    }
+
+    resetFlow();
   };
 
   return (
@@ -705,7 +857,7 @@ export function ImportacaoDados() {
                 </span>
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className={`mt-0.5 block text-xs leading-5 ${isCurrent ? 'text-brand-turquoise-800/75 dark:text-brand-turquoise-100/70' : 'opacity-75'}`}>
+                  <span className={`mt-0.5 block text-xs leading-5 ${isCurrent ? 'text-brand-turquoise-900 dark:text-brand-turquoise-100' : isDone ? 'text-emerald-900 dark:text-emerald-100' : 'text-zinc-700 dark:text-zinc-200'}`}>
                     {isDone ? 'Concluído' : item.description}
                   </span>
                 </span>
@@ -868,13 +1020,55 @@ export function ImportacaoDados() {
               </p>
 
               {parseError && (
-                <p
+                <div
                   role="alert"
-                  className="mt-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300"
+                  className="mt-4 flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm font-medium text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <WarningCircle size={18} weight="bold" aria-hidden="true" className="mt-0.5 shrink-0" />
-                  <span>{parseError}</span>
-                </p>
+                  <span className="flex min-w-0 items-start gap-2">
+                    <WarningCircle size={18} weight="bold" aria-hidden="true" className="mt-0.5 shrink-0" />
+                    <span className="break-words">{parseError}</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void retryFailedImport()}
+                    disabled={operationInProgress}
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 text-sm font-bold text-red-800 transition-colors hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/45 disabled:cursor-wait disabled:opacity-60 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200 dark:hover:bg-red-950"
+                  >
+                    <ArrowsClockwise size={17} weight="bold" aria-hidden="true" />
+                    Tentar novamente
+                  </button>
+                </div>
+              )}
+              {pendingHeaderSelection && (
+                <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100" aria-live="polite">
+                  <h3 className="text-sm font-bold">Escolha a linha de cabeçalho</h3>
+                  <p className="mt-1 text-sm leading-6">Há mais de uma linha que pode conter os nomes das colunas. Confira o conteúdo antes de continuar. Nenhuma prévia foi gerada.</p>
+                  {pendingHeaderSelection.sheetName && <p className="mt-1 break-words text-xs">Aba: {pendingHeaderSelection.sheetName}</p>}
+                  <label htmlFor="import-header-row" className="mt-3 block text-sm font-semibold">Linha com os nomes das colunas</label>
+                  <select
+                    id="import-header-row"
+                    name="linha-cabecalho-importacao"
+                    value={selectedHeaderIndex ?? ''}
+                    onChange={event => setSelectedHeaderIndex(event.target.value === '' ? null : Number(event.target.value))}
+                    disabled={isParsingFile}
+                    className="mt-1 min-h-10 w-full rounded-md border border-amber-400 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-emerald-500 dark:border-amber-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  >
+                    <option value="">Selecione a linha após conferir o conteúdo</option>
+                    {pendingHeaderSelection.rows.slice(0, 20).map((row, index) => (
+                      <option key={index} value={index}>
+                        {`Linha ${pendingHeaderSelection.sourceRowNumbers[index]}${index === pendingHeaderSelection.suggestedIndex ? ' (sugestão automática)' : ''}: ${row.slice(0, 4).map(value => formatCell(value).slice(0, 40) || '∅').join(' | ')}`}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void confirmHeaderSelection()}
+                    disabled={selectedHeaderIndex === null || isParsingFile}
+                    className="mt-3 min-h-10 rounded-md bg-emerald-700 px-4 text-sm font-bold text-white hover:bg-emerald-800 focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Usar esta linha e gerar prévia
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -914,13 +1108,26 @@ export function ImportacaoDados() {
             </div>
 
             {formError && (
-              <p
+              <div
                 role="alert"
-                className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300"
+                className="flex flex-col gap-3 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm font-medium text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300 sm:flex-row sm:items-center sm:justify-between"
               >
-                <WarningCircle size={18} weight="bold" aria-hidden="true" className="mt-0.5 shrink-0" />
-                <span>{formError}</span>
-              </p>
+                <span className="flex min-w-0 items-start gap-2">
+                  <WarningCircle size={18} weight="bold" aria-hidden="true" className="mt-0.5 shrink-0" />
+                  <span className="break-words">{formError}</span>
+                </span>
+                {importPhase === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => void retryFailedImport()}
+                    disabled={operationInProgress}
+                    className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-red-300 bg-white px-3 text-sm font-bold text-red-800 transition-colors hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/45 disabled:cursor-wait disabled:opacity-60 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200 dark:hover:bg-red-950"
+                  >
+                    <ArrowsClockwise size={17} weight="bold" aria-hidden="true" />
+                    Tentar novamente
+                  </button>
+                )}
+              </div>
             )}
 
             {importMode === 'complete' && fullPreview && (
@@ -1035,7 +1242,7 @@ export function ImportacaoDados() {
                     </p>
                   </div>
                 </div>
-                <div className="overflow-x-auto rounded-lg border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+                <div role="region" aria-label="Prévia dos dados da planilha" tabIndex={0} className="overflow-x-auto rounded-lg border border-zinc-200 bg-white focus-visible:ring-2 focus-visible:ring-emerald-600 dark:border-zinc-800 dark:bg-zinc-950">
                   <table className="w-full min-w-[640px] text-left text-sm">
                     <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
                       <tr>
@@ -1067,10 +1274,18 @@ export function ImportacaoDados() {
             </>}
 
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
-              <label className="flex cursor-pointer items-start gap-3 text-sm leading-6 text-zinc-800 dark:text-zinc-200">
-                <input type="checkbox" name="confirmacao-conferencia-importacao" checked={reviewAcknowledged} disabled={!projectConfirmationReady} onChange={event => { setReviewAcknowledged(event.target.checked); setFormError(''); }} className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-300 text-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60" />
-                <span>Revisei o mapeamento, as pendências e os totais apresentados. Estou ciente de que a importação automatizada pode exigir correções posteriores.</span>
-              </label>
+              <CheckboxField
+                id="import-review-confirmation"
+                name="confirmacao-conferencia-importacao"
+                checked={reviewAcknowledged}
+                disabled={!projectConfirmationReady}
+                onChange={checked => {
+                  setReviewAcknowledged(checked);
+                  setFormError('');
+                }}
+                label="Revisei o mapeamento, as pendências e os totais apresentados. Estou ciente de que a importação automatizada pode exigir correções posteriores."
+                className="rounded-lg"
+              />
               {importMode === 'simple' && <p className="mt-2 pl-7 text-xs text-zinc-500 dark:text-zinc-400">Linhas inválidas poderão ser rejeitadas. O resultado final mostrará exatamente o que foi ou não gravado.</p>}
               {isSimpleProjectImport && !projectConfirmationReady && <p className="mt-2 pl-7 text-xs font-semibold text-amber-800 dark:text-amber-200">A conferência final será liberada depois que todas as linhas tiverem um cliente associado.</p>}
               {importMode === 'complete' && fullPreview?.status === 'blocked' && <p className="mt-2 pl-7 text-xs font-semibold text-red-700 dark:text-red-300">A importação não está processando. Ela foi bloqueada por {fullPreview.counts.blocking} erro(s) que precisam ser corrigidos.</p>}

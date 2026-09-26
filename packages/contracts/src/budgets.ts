@@ -424,7 +424,7 @@ function addDays(dateKey: string, days: number) {
 
 export function splitInstallments(totalCents: number, count: number, approvalDate: string): CalculatedInstallment[] {
   if (!Number.isInteger(totalCents) || totalCents < 0) throw new Error('Total financiável inválido.');
-  if (!Number.isInteger(count) || count < 1 || count > 120) throw new Error('Quantidade de parcelas inválida.');
+  if (!Number.isInteger(count) || count < 1 || count > 60) throw new Error('Quantidade de parcelas inválida.');
   const total = BigInt(totalCents);
   const base = total / BigInt(count);
   return Array.from({ length: count }, (_, index) => ({
@@ -441,22 +441,42 @@ export function calculateInstallments(
   approvalDate: string
 ): CalculatedInstallment[] {
   if (definitions.length === 0) return splitInstallments(totalCents, 1, approvalDate);
+  if (!Number.isInteger(totalCents) || totalCents < 0) throw new Error('Total financiável inválido.');
+  if (definitions.length > 60) throw new Error('Quantidade de parcelas inválida.');
   const total = BigInt(totalCents);
-  let allocated = 0n;
-  const installments = definitions.map((definition, index) => {
-    const isLast = index === definitions.length - 1;
-    let value: bigint;
-    if (isLast) {
-      value = total - allocated;
-    } else if (definition.valueCents !== null && definition.valueCents !== undefined) {
-      value = cents(definition.valueCents, 'Valor da parcela');
-    } else if (definition.percentage) {
-      value = percentOf(total, definition.percentage);
-    } else {
-      throw new Error(`Informe o valor ou percentual da parcela ${index + 1}.`);
+  const values = definitions.map((definition, index) => {
+    const hasValue = definition.valueCents !== null && definition.valueCents !== undefined;
+    const hasPercentage = definition.percentage !== null && definition.percentage !== undefined && definition.percentage.trim() !== '';
+    if (hasValue === hasPercentage) {
+      if (!hasValue) {
+        throw new Error(`Informe o valor ou percentual da parcela ${index + 1}.`);
+      }
+      throw new Error(`Informe somente valor ou percentual na parcela ${index + 1}.`);
     }
+    const value = hasValue
+      ? cents(definition.valueCents, 'Valor da parcela')
+      : percentOf(total, definition.percentage!);
     if (value < 0n) throw new Error('O valor de uma parcela não pode ser negativo.');
-    allocated += value;
+    return value;
+  });
+
+  const usesOnlyPercentages = definitions.every((definition) => (
+    definition.percentage !== null && definition.percentage !== undefined && definition.percentage.trim() !== ''
+  ));
+  let allocated = values.reduce((sum, value) => sum + value, 0n);
+  if (usesOnlyPercentages) {
+    const percentageTotal = definitions.reduce((sum, definition) => sum + percentageToBasisPoints(definition.percentage!), 0);
+    if (percentageTotal !== 10_000) {
+      throw new Error('A soma dos percentuais das parcelas deve ser exatamente 100%.');
+    }
+    values[values.length - 1] += total - allocated;
+    allocated = total;
+  }
+  if (allocated !== total) throw new Error('A soma das parcelas deve corresponder ao total financiável.');
+
+  const installments = definitions.map((definition, index) => {
+    const value = values[index];
+    if (value < 0n) throw new Error('O valor de uma parcela não pode ser negativo.');
     return {
       number: index + 1,
       dueDate: definition.dueDate || addDays(approvalDate, definition.daysAfterApproval || 0),
@@ -464,15 +484,13 @@ export function calculateInstallments(
       label: definition.label?.trim() || `Parcela ${index + 1}/${definitions.length}`
     };
   });
-  const sum = installments.reduce((acc, installment) => acc + installment.valueCents, 0);
-  if (sum !== totalCents) throw new Error('A soma das parcelas deve corresponder ao total financiável.');
   return installments;
 }
 
 export const BudgetAdditionAdjustmentSchema = z.object({
   type: z.enum(['fixo', 'percentual']),
   value: z.string().regex(/^\d+(?:[.,]\d+)?$/, 'Informe um ajuste igual ou maior que zero.')
-});
+}).strict();
 
 export const BudgetDiscountAdjustmentSchema = BudgetAdditionAdjustmentSchema.superRefine((adjustment, context) => {
   if (adjustment.type !== 'percentual') return;
@@ -495,15 +513,15 @@ export const BudgetDiscountAdjustmentSchema = BudgetAdditionAdjustmentSchema.sup
 
 export const BudgetItemInputSchema = z.object({
   id: z.string().uuid().optional(),
-  code: z.string().nullable().optional(),
-  group: z.string().nullable().optional(),
-  stage: z.string().nullable().optional(),
-  category: z.string().nullable().optional(),
-  description: z.string().min(1),
-  unit: z.string().min(1),
+  code: z.string().trim().nullable().optional(),
+  group: z.string().trim().nullable().optional(),
+  stage: z.string().trim().nullable().optional(),
+  category: z.string().trim().nullable().optional(),
+  description: z.string().trim().min(1),
+  unit: z.string().trim().min(1),
   quantity: z.string().regex(/^\d+(?:[.,]\d+)?$/),
-  unitCostCents: z.number().int().min(0),
-  unitPriceCents: z.number().int().min(0),
+  unitCostCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  unitPriceCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   discount: BudgetDiscountAdjustmentSchema,
   addition: BudgetAdditionAdjustmentSchema,
   taxable: z.boolean(),
@@ -512,38 +530,59 @@ export const BudgetItemInputSchema = z.object({
   required: z.boolean().optional(),
   notes: z.string().nullable().optional(),
   order: z.number().int().optional()
-});
+}).strict();
 
 export const BudgetCostInputSchema = z.object({
   id: z.string().uuid().optional(),
-  category: z.string().min(1),
-  description: z.string().min(1),
-  amountCents: z.number().int().min(0),
+  category: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  amountCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   classification: z.enum(['custo_proprio', 'despesa_reembolsavel', 'taxa_repassada']),
   taxable: z.boolean().optional(),
   notes: z.string().nullable().optional(),
   order: z.number().int().optional()
-});
+}).strict();
 
 export const BudgetTaxInputSchema = z.object({
   id: z.string().uuid().optional(),
   taxId: z.string().uuid().nullable().optional(),
-  name: z.string().min(1),
-  acronym: z.string().min(1),
+  name: z.string().trim().min(1),
+  acronym: z.string().trim().min(1),
   ratePercent: z.string().regex(/^\d+(?:[.,]\d+)?$/),
   calculationBase: z.enum(['tributavel', 'servicos', 'taxas', 'total']),
   includedInPrice: z.boolean(),
   cumulative: z.boolean().optional(),
-  manualAdjustmentCents: z.number().int().optional(),
+  manualAdjustmentCents: z.number().int().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER).optional(),
   adjustmentReason: z.string().nullable().optional()
-});
+}).strict();
 
 export const InstallmentDefinitionSchema = z.object({
-  dueDate: z.string().nullable().optional(),
+  dueDate: z.string().refine((value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const date = new Date(`${value}T12:00:00.000Z`);
+    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  }, 'Informe uma data de vencimento válida.').nullable().optional(),
   daysAfterApproval: z.number().int().min(0).nullable().optional(),
   valueCents: z.number().int().min(0).nullable().optional(),
-  percentage: z.string().nullable().optional(),
+  percentage: z.string().regex(/^\d+(?:[.,]\d+)?$/).nullable().optional(),
   label: z.string().nullable().optional()
+}).strict().superRefine((definition, context) => {
+  const hasValue = definition.valueCents !== null && definition.valueCents !== undefined;
+  const hasPercentage = definition.percentage !== null && definition.percentage !== undefined && definition.percentage.trim() !== '';
+  if (hasValue === hasPercentage) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: hasValue ? ['valueCents'] : ['percentage'],
+      message: hasValue ? 'Informe somente valor ou percentual.' : 'Informe o valor ou percentual da parcela.'
+    });
+  }
+  if (hasPercentage && percentageToBasisPoints(definition.percentage!) > 10_000) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['percentage'],
+      message: 'O percentual da parcela deve ficar entre 0% e 100%.'
+    });
+  }
 });
 
 export const BudgetCalculationInputSchema = z.object({
@@ -552,7 +591,7 @@ export const BudgetCalculationInputSchema = z.object({
   taxes: z.array(BudgetTaxInputSchema).optional(),
   globalDiscount: BudgetDiscountAdjustmentSchema.optional(),
   globalAddition: BudgetAdditionAdjustmentSchema.optional()
-});
+}).strict();
 
 export const SERVICE_TYPES = [
   'Levantamento topográfico planimétrico',

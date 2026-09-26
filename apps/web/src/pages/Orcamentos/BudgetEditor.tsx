@@ -43,6 +43,7 @@ interface BudgetEditorProps {
   options: BudgetOptions;
   initial?: BudgetDetail | null;
   initialClientId?: string;
+  initialTerms?: string | null;
   onSaved: (budget: BudgetDetail) => void;
   presentation?: 'modal' | 'page';
 }
@@ -310,12 +311,12 @@ function getBudgetErrorSection(message: string, fallback: EditorSectionId): Edit
   return fallback;
 }
 
-export function BudgetEditor({ isOpen = true, onClose, options, initial, initialClientId, onSaved, presentation = 'modal' }: BudgetEditorProps) {
+export function BudgetEditor({ isOpen = true, onClose, options, initial, initialClientId, initialTerms, onSaved, presentation = 'modal' }: BudgetEditorProps) {
   const queryClient = useQueryClient();
   const catalogsQuery = useAuxiliaryCatalogs();
   const formRef = useRef<HTMLFormElement | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
-  const [form, setForm] = useState<BudgetFormState>(() => initial ? detailToForm(initial) : createDefaultBudgetForm(initialClientId || ''));
+  const [form, setForm] = useState<BudgetFormState>(() => initial ? detailToForm(initial) : createDefaultBudgetForm(initialClientId || '', initialTerms));
   const [initialFormSnapshot] = useState(() => JSON.stringify(form));
   const [error, setError] = useState('');
   const [validationActive, setValidationActive] = useState(false);
@@ -462,7 +463,7 @@ export function BudgetEditor({ isOpen = true, onClose, options, initial, initial
     const catalogItem = catalogsQuery.data?.services.find((item) => item.ativo && item.nome === serviceType);
     setForm((current) => {
       const firstItem = current.items[0];
-      const canSuggestValue = !initial && catalogItem && catalogItem.valorSugerido > 0 && current.items.length === 1
+      const canSuggestValue = !initial && catalogItem && catalogItem.valorSugerido >= 0 && current.items.length === 1
         && !firstItem.description.trim() && currencyInputToCents(firstItem.unitPrice || '0') === 0;
       return {
         ...current,
@@ -1440,10 +1441,25 @@ export function BudgetEditor({ isOpen = true, onClose, options, initial, initial
           >
             <div className="grid gap-3 md:grid-cols-2">
               <FormField htmlFor="payment-type" label="Forma"><FormSelect id="payment-type" value={form.paymentType} onChange={(event) => setForm({ ...form, paymentType: event.target.value })} className={fieldClass}><option value="avista">À vista</option><option value="entrada_saldo">Entrada + saldo</option><option value="etapas">Por etapas</option><option value="parcelas">Parcelas</option></FormSelect></FormField>
-              <FormField htmlFor="payment-method" label="Meio de pagamento"><input id="payment-method" value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value })} className={fieldClass} /></FormField>
-              <FormField htmlFor="financial-account" label="Conta financeira de destino"><input id="financial-account" value={form.financialAccount} onChange={(event) => setForm({ ...form, financialAccount: event.target.value })} className={fieldClass} /></FormField>
+              <FormField htmlFor="payment-method" label="Meio de pagamento visível ao cliente"><input id="payment-method" name="paymentMethod" autoComplete="off" value={form.paymentMethod} onChange={(event) => setForm({ ...form, paymentMethod: event.target.value })} className={fieldClass} placeholder="Ex.: PIX, transferência ou boleto" /></FormField>
+              <FormField htmlFor="financial-account" label="Conta financeira interna (não exportada)" hint="Usada somente nos efeitos financeiros do GeoGestor."><input id="financial-account" name="financialAccount" autoComplete="off" value={form.financialAccount} onChange={(event) => setForm({ ...form, financialAccount: event.target.value })} className={fieldClass} /></FormField>
               <FormField htmlFor="payment-description" label="Descrição da condição"><input id="payment-description" value={form.paymentDescription} onChange={(event) => setForm({ ...form, paymentDescription: event.target.value })} className={fieldClass} /></FormField>
             </div>
+            <fieldset>
+              <legend className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">Encargos e benefícios comerciais</legend>
+              <p className="mb-3 text-xs leading-5 text-text-muted">Informe percentuais de 0% a 100%. Somente valores diferentes de zero aparecem no documento do cliente.</p>
+              <div className="grid gap-3 md:grid-cols-3">
+                <FormField htmlFor="payment-interest" label="Juros (%)" error={fieldError('payment-interest')}>
+                  <input id="payment-interest" name="interestPercent" inputMode="decimal" value={form.interestBasisPoints} onChange={(event) => setForm({ ...form, interestBasisPoints: event.target.value })} className={cn(fieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y('payment-interest')} />
+                </FormField>
+                <FormField htmlFor="payment-fine" label="Multa (%)" error={fieldError('payment-fine')}>
+                  <input id="payment-fine" name="finePercent" inputMode="decimal" value={form.fineBasisPoints} onChange={(event) => setForm({ ...form, fineBasisPoints: event.target.value })} className={cn(fieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y('payment-fine')} />
+                </FormField>
+                <FormField htmlFor="payment-early-discount" label="Desconto por antecipação (%)" error={fieldError('payment-early-discount')}>
+                  <input id="payment-early-discount" name="earlyDiscountPercent" inputMode="decimal" value={form.earlyDiscountBasisPoints} onChange={(event) => setForm({ ...form, earlyDiscountBasisPoints: event.target.value })} className={cn(fieldClass, 'text-right font-mono tabular-nums')} {...fieldA11y('payment-early-discount')} />
+                </FormField>
+              </div>
+            </fieldset>
             <div className="flex flex-wrap items-end gap-2"><FormField htmlFor="installment-count" label="Quantidade de parcelas" error={fieldError('installment-count')}><NumericInput id="installment-count" min="1" max="60" inputMode="numeric" value={installmentCount} onChange={(event) => setInstallmentCount(event.target.value)} className={cn(fieldClass, 'w-36')} {...fieldA11y('installment-count')} /></FormField><button type="button" onClick={() => setForm({ ...form, installments: createEqualInstallments(Number(installmentCount) || 1) })} className="geo-button-base geo-button-secondary geo-focus-ring mb-0 min-h-11 px-4">Distribuir igualmente</button></div>
             <div className="space-y-2">
               {form.installments.map((installment, index) => (

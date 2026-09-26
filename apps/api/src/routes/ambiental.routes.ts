@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNull, like, lte, or, sql, type SQL } from 'drizzle-orm';
 import crypto from 'crypto';
 import { z } from 'zod';
-import type {
-  EnvironmentalDemandDetail,
-  EnvironmentalDemandListItem,
-  EnvironmentalDemandListResponse
+import {
+  EnvironmentalPhaseSchema,
+  StatusProjetoSchema,
+  isRealEnvironmentalDateKey,
+  type EnvironmentalDemandDetail,
+  type EnvironmentalDemandListItem,
+  type EnvironmentalDemandListResponse
 } from '@geogestor/contracts';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
@@ -21,21 +24,25 @@ const ListQuerySchema = z.object({
   status: z.string().trim().optional(),
   orgao: z.string().trim().optional(),
   tipoDemanda: z.string().trim().optional(),
-  inicio: z.string().optional(),
-  fim: z.string().optional()
+  inicio: z.string().refine(isRealEnvironmentalDateKey, 'Informe uma data inicial válida.').optional(),
+  fim: z.string().refine(isRealEnvironmentalDateKey, 'Informe uma data final válida.').optional()
+}).strict().superRefine((query, context) => {
+  if (query.inicio && query.fim && query.fim < query.inicio) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['fim'], message: 'A data final deve ser igual ou posterior à inicial.' });
+  }
 });
 
 const IdParamsSchema = z.object({ id: z.string().uuid() });
 const PhasePayloadSchema = z.object({
-  statusFase: z.string().trim().min(1).max(120),
-  status: z.string().trim().min(1).max(120).optional()
-});
+  statusFase: EnvironmentalPhaseSchema,
+  status: StatusProjetoSchema.optional()
+}).strict();
 const ProgressPayloadSchema = z.object({
   titulo: z.string().trim().min(1).max(180),
   descricao: z.string().trim().min(1).max(3000),
-  data: z.string().min(1),
-  categoria: z.string().trim().max(120).default('Andamento ambiental')
-});
+  data: z.string().trim().refine(isRealEnvironmentalDateKey, 'Informe uma data válida.'),
+  categoria: z.string().trim().min(1, 'Informe a categoria.').max(120).default('Andamento ambiental')
+}).strict();
 
 function buildFilters(query: z.infer<typeof ListQuerySchema>) {
   const filters: SQL[] = [
@@ -110,7 +117,7 @@ export async function ambientalRoutes(server: FastifyInstance) {
             inArray(schema.tarefas.projetoId, projectIds),
             isNull(schema.tarefas.deletedAt)
           ))
-          .orderBy(asc(schema.tarefas.dataLimite))
+          .orderBy(sql`case when ${schema.tarefas.dataLimite} is null then 1 else 0 end`, asc(schema.tarefas.dataLimite), asc(schema.tarefas.createdAt))
         : [];
       const nextTaskByProject = new Map<string, typeof taskRows[number]>();
       taskRows.forEach((task) => {

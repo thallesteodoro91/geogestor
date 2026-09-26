@@ -9,6 +9,7 @@ import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { Skeleton } from '../../components/Skeleton';
 import { apiClient } from '../../services/apiClient';
+import { DEFAULT_COMPANY_TEMPLATE, loadCompanyTemplate } from '../../services/companyTemplate';
 import { secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { BudgetEditor } from './BudgetEditor';
@@ -50,6 +51,12 @@ export function BudgetEditorPage() {
     queryKey: ['budget-detail', safeBudgetId],
     queryFn: () => apiClient.get(`/api/orcamentos/${safeBudgetId}`),
     enabled: editing && Boolean(safeBudgetId)
+  });
+  const companyTemplateQuery = useQuery({
+    queryKey: ['company-template', 'budget-editor'],
+    queryFn: loadCompanyTemplate,
+    enabled: !editing,
+    retry: false
   });
   const opportunityQuery = useQuery<OpportunityContext>({
     queryKey: ['opportunity-detail', safeOpportunityIdParam],
@@ -111,6 +118,7 @@ export function BudgetEditorPage() {
 
   const loading = optionsQuery.isLoading
     || (editing && Boolean(safeBudgetId) && detailQuery.isLoading)
+    || (!editing && companyTemplateQuery.isLoading)
     || (!editing && Boolean(safeOpportunityIdParam) && opportunityQuery.isLoading);
   const loadError = optionsQuery.isError || (editing && (!safeBudgetId || detailQuery.isError));
   const initialBudget = editing ? detailQuery.data : null;
@@ -170,6 +178,7 @@ export function BudgetEditorPage() {
             options={options}
             initial={initialBudget}
             initialClientId={initialClientId}
+            initialTerms={companyTemplateQuery.data?.termos || DEFAULT_COMPANY_TEMPLATE.termos}
             onClose={returnToList}
             onSaved={handleSaved}
           />

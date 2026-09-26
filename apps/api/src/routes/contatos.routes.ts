@@ -1,9 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { and, desc, eq, isNull, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, like, ne, or, sql } from 'drizzle-orm';
 import crypto from 'crypto';
 import { finishSimpleImport, type SimpleImportRowResult } from '../services/simple-import-result.service';
+import { sourceRowNumbersSchema, sourceRowsMatch } from '../services/simple-import-source-rows.service';
 import { OperationalLogService } from '../services/operational-log.service';
 import { z } from 'zod';
 import { AuditLogService } from '../services/audit.service';
@@ -17,16 +18,6 @@ import {
   readIdempotencyKey,
   reserveSimpleImport
 } from '../services/import-run.service';
-
-type ContatoInput = {
-  nome: string;
-  email?: string;
-  telefone?: string;
-  empresa?: string;
-  cidade?: string;
-  observacoes?: string;
-  origem?: string;
-};
 
 const optionalText = (max: number) => z.preprocess(
   value => typeof value === 'string' && value.trim() === '' ? undefined : value,
@@ -50,6 +41,39 @@ const ContatoLoteItemSchema = z.object({
 }).strict();
 
 const ContatoLotePayloadSchema = z.array(z.unknown()).min(1).max(500);
+const ContatoLoteRequestSchema = z.union([
+  ContatoLotePayloadSchema,
+  z.object({ rows: ContatoLotePayloadSchema, sourceRowNumbers: sourceRowNumbersSchema }).strict()
+    .refine(input => sourceRowsMatch(input.rows, input.sourceRowNumbers), { path: ['sourceRowNumbers'], message: 'As linhas de origem devem corresponder aos registros em ordem crescente.' })
+]);
+
+function isValidDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+const ContatoFieldsSchema = z.object({
+  nome: z.string().trim().min(1, 'Informe o nome do contato.').max(200),
+  email: z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().email('Informe um e-mail válido.').max(320).transform(value => normalizeEmail(value)).optional()
+  ),
+  telefone: z.preprocess(
+    value => typeof value === 'string' && value.trim() === '' ? undefined : value,
+    z.string().trim().max(30).transform(value => normalizePhone(value)).refine(value => value.length === 10 || value.length === 11, 'Informe um telefone com DDD e 10 ou 11 dígitos.').optional()
+  ),
+  empresa: optionalText(200),
+  cidade: optionalText(200),
+  observacoes: optionalText(5_000),
+  origem: optionalText(100),
+  status: z.enum(['ativo', 'convertido']).optional(),
+  dataCadastro: z.string().refine(isValidDateKey, 'Informe uma data de cadastro real.').optional()
+}).strict();
+
+const ContatoCreateSchema = ContatoFieldsSchema.omit({ status: true });
+const ContatoUpdateSchema = ContatoFieldsSchema.partial().refine(value => Object.keys(value).length > 0, 'Informe ao menos um campo para atualização.');
 
 type ContatosQuery = {
   q?: string;
@@ -73,6 +97,24 @@ function conflict(message: string) {
   const error = new Error(message) as Error & { statusCode: number };
   error.statusCode = 409;
   return error;
+}
+
+function validationMessage(error: { issues: Array<{ message: string }> }) {
+  return error.issues.map(issue => issue.message).join(' ');
+}
+
+async function assertUniqueActiveContact(email?: string, telefone?: string, excludedId?: string, tx: any = db) {
+  if (!email && !telefone) return;
+  const duplicate = await tx.select({ id: schema.contatos.id }).from(schema.contatos).where(and(
+    isNull(schema.contatos.deletedAt),
+    eq(schema.contatos.status, 'ativo'),
+    excludedId ? ne(schema.contatos.id, excludedId) : undefined,
+    or(
+      email ? sql`lower(trim(${schema.contatos.email})) = ${normalizeEmail(email)}` : undefined,
+      telefone ? sql`replace(replace(replace(replace(replace(replace(${schema.contatos.telefone}, '(', ''), ')', ''), '-', ''), ' ', ''), '+', ''), '.', '') in (${normalizePhone(telefone)}, ${`55${normalizePhone(telefone)}`})` : undefined
+    )
+  )).limit(1).get();
+  if (duplicate) throw conflict('Já existe um lead ativo com o mesmo e-mail ou telefone.');
 }
 
 export async function contatosRoutes(server: FastifyInstance) {
@@ -149,13 +191,10 @@ export async function contatosRoutes(server: FastifyInstance) {
 
   // POST /api/contatos
   server.post('/', async (request, reply) => {
-    const body = request.body as ContatoInput;
-
-    if (!body || !body.nome) {
-      return reply.status(400).send({ error: 'Nome é obrigatório' });
-    }
-
-    const now = new Date().toISOString();
+    const parsed = ContatoCreateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
+    const body = parsed.data;
+    const now = body.dataCadastro ? `${body.dataCadastro}T00:00:00.000Z` : new Date().toISOString();
     const newContato = {
       id: crypto.randomUUID(),
       nome: body.nome,
@@ -170,16 +209,29 @@ export async function contatosRoutes(server: FastifyInstance) {
       updatedAt: now
     };
 
-    await db.insert(schema.contatos).values(newContato).run();
-    return newContato;
+    try {
+      await db.transaction(async tx => {
+        await assertUniqueActiveContact(body.email, body.telefone, undefined, tx);
+        await tx.insert(schema.contatos).values(newContato).run();
+        await AuditLogService.log('INSERT', 'Contato', null, { contatoId: newContato.id, fields: Object.keys(body) }, tx);
+      });
+      return reply.status(201).send(newContato);
+    } catch (error) {
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status(Number(error.statusCode)).send({ error: error instanceof Error ? error.message : 'Conflito ao criar o lead.' });
+      }
+      throw error;
+    }
   });
 
   // PUT /api/contatos/:id
   server.put('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Record<string, any>;
-
-    const { nome, email, telefone, empresa, cidade, observacoes, origem, status, dataCadastro } = body;
+    const parsed = ContatoUpdateSchema.safeParse(request.body);
+    if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
+    const current = await db.select().from(schema.contatos).where(and(eq(schema.contatos.id, id), isNull(schema.contatos.deletedAt))).get();
+    if (!current) return reply.status(404).send({ error: 'Lead não encontrado' });
+    const { nome, email, telefone, empresa, cidade, observacoes, origem, status, dataCadastro } = parsed.data;
     
     const updateData: any = {
       nome,
@@ -194,23 +246,32 @@ export async function contatosRoutes(server: FastifyInstance) {
     };
     
     if (dataCadastro) {
-      updateData.createdAt = new Date(dataCadastro).toISOString();
+      updateData.createdAt = `${dataCadastro}T00:00:00.000Z`;
     }
     
     // Remover campos undefined
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
-    await db.update(schema.contatos)
-      .set(updateData)
-      .where(eq(schema.contatos.id, id))
-      .run();
-
-    return { success: true };
+    try {
+      await db.transaction(async tx => {
+        await assertUniqueActiveContact(email, telefone, id, tx);
+        await tx.update(schema.contatos).set(updateData).where(eq(schema.contatos.id, id)).run();
+        await AuditLogService.log('UPDATE', 'Contato', { contatoId: id }, { contatoId: id, fields: Object.keys(parsed.data) }, tx);
+      });
+      return db.select().from(schema.contatos).where(eq(schema.contatos.id, id)).get();
+    } catch (error) {
+      if (error && typeof error === 'object' && 'statusCode' in error) {
+        return reply.status(Number(error.statusCode)).send({ error: error instanceof Error ? error.message : 'Conflito ao atualizar o lead.' });
+      }
+      throw error;
+    }
   });
 
   // DELETE /api/contatos/:id
   server.delete('/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
+    const current = await db.select().from(schema.contatos).where(and(eq(schema.contatos.id, id), isNull(schema.contatos.deletedAt))).get();
+    if (!current) return reply.status(404).send({ error: 'Lead não encontrado' });
     const linkedOpportunity = await db.select({ id: schema.oportunidades.id })
       .from(schema.oportunidades)
       .where(and(
@@ -226,10 +287,14 @@ export async function contatosRoutes(server: FastifyInstance) {
       });
     }
 
-    await db.update(schema.contatos)
-      .set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
-      .where(eq(schema.contatos.id, id))
-      .run();
+    await db.transaction(async tx => {
+      const timestamp = new Date().toISOString();
+      await tx.update(schema.contatos)
+        .set({ deletedAt: timestamp, updatedAt: timestamp })
+        .where(and(eq(schema.contatos.id, id), isNull(schema.contatos.deletedAt)))
+        .run();
+      await AuditLogService.log('DELETE (SOFT)', 'Contato', { contatoId: id, status: current.status }, { contatoId: id, deletedAt: timestamp }, tx);
+    });
     return { success: true };
   });
 
@@ -460,13 +525,15 @@ export async function contatosRoutes(server: FastifyInstance) {
 
   // POST /api/contatos/lote
   server.post('/lote', async (request: FastifyRequest, reply: FastifyReply) => {
-    const payload = ContatoLotePayloadSchema.safeParse(request.body);
+    const payload = ContatoLoteRequestSchema.safeParse(request.body);
     if (!payload.success) {
       return reply.status(400).send({
         error: 'Revise os contatos enviados.',
         issues: payload.error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message }))
       });
     }
+    const rows = Array.isArray(payload.data) ? payload.data : payload.data.rows;
+    const sourceRowNumbers = Array.isArray(payload.data) ? undefined : payload.data.sourceRowNumbers;
     const startedAt = new Date().toISOString();
     const digest = importContentDigest(payload.data);
     let runId: string | null = null;
@@ -476,7 +543,7 @@ export async function contatosRoutes(server: FastifyInstance) {
       const replay = await findImportReplay('contatos', 'simple', idempotencyKey, digest);
       if (replay) return reply.status(200).send(replay);
       const reservation = await reserveSimpleImport(db, {
-        entity: 'contatos', key: idempotencyKey, digest, totalRows: payload.data.length
+        entity: 'contatos', key: idempotencyKey, digest, totalRows: rows.length
       });
       runId = reservation.runId;
       if (reservation.replay) return reply.status(200).send(reservation.replay);
@@ -488,7 +555,7 @@ export async function contatosRoutes(server: FastifyInstance) {
       const accepted: Array<{ index: number; data: z.infer<typeof ContatoLoteItemSchema>; id: string }> = [];
       const results: SimpleImportRowResult[] = [];
 
-      payload.data.forEach((raw, index) => {
+      rows.forEach((raw, index) => {
         const parsed = ContatoLoteItemSchema.safeParse(raw);
         if (!parsed.success) {
           results.push({ index, status: 'failed', errors: parsed.error.issues.map(issue => `${issue.path.join('.') || 'linha'}: ${issue.message}`) });
@@ -530,7 +597,7 @@ export async function contatosRoutes(server: FastifyInstance) {
           quantidade: accepted.length,
           ids: accepted.map(item => item.id)
         }, tx);
-        const transactionResult = finishSimpleImport(startedAt, payload.data.length, results, { importId: runId! });
+        const transactionResult = finishSimpleImport(startedAt, rows.length, results, { importId: runId!, sourceRowNumbers });
         await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
         return transactionResult;
       });
@@ -539,7 +606,7 @@ export async function contatosRoutes(server: FastifyInstance) {
       return reply.status(201).send(summary);
     } catch (err) {
       if (runId) await failImportRun(runId, err).catch(() => undefined);
-      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'contatos', status: 'failed', rows: payload.data.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
+      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'contatos', status: 'failed', rows: rows.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
       if (err instanceof ImportRunError) return reply.status(err.statusCode).send({ error: err.message, code: err.code });
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao importar contatos em lote' });

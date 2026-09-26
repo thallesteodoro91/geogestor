@@ -17,7 +17,11 @@ type DatabaseExecutor = typeof db | any;
 export async function assertActiveClient(clientId: string, database: DatabaseExecutor = db) {
   const [client] = await database.select({ id: schema.clientes.id })
     .from(schema.clientes)
-    .where(and(eq(schema.clientes.id, clientId), isNull(schema.clientes.deletedAt)))
+    .where(and(
+      eq(schema.clientes.id, clientId),
+      eq(schema.clientes.situacao, 'Ativo'),
+      isNull(schema.clientes.deletedAt)
+    ))
     .limit(1);
   if (!client) throw new RelationshipIntegrityError('O cliente informado não existe ou está inativo.');
   return client;
@@ -45,6 +49,7 @@ export async function resolveClientProjectLink(input: {
   }
 
   const project = await getActiveProject(input.projetoId, database);
+  await assertActiveClient(project.clienteId, database);
   if (input.clienteId && input.clienteId !== project.clienteId) {
     throw new RelationshipIntegrityError('O projeto informado pertence a outro cliente.');
   }
@@ -91,9 +96,13 @@ const dependencyChecks = [
 export async function inspectProjectReassignment(projectId: string, database: DatabaseExecutor = db) {
   const dependencies: Array<{ label: string; count: number; financial: boolean }> = [];
   for (const [label, table, projectColumn, financial] of dependencyChecks) {
+    const deletedAtColumn = 'deletedAt' in table ? (table as any).deletedAt : undefined;
     const rows = await database.select({ id: (table as any).id })
       .from(table as any)
-      .where(eq(projectColumn as any, projectId));
+      .where(and(
+        eq(projectColumn as any, projectId),
+        deletedAtColumn ? isNull(deletedAtColumn) : undefined
+      ));
     if (rows.length) dependencies.push({ label, count: rows.length, financial });
   }
   return {

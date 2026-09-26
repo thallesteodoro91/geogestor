@@ -3,7 +3,8 @@ import test from 'node:test';
 import {
   createEmptyProjectForm,
   projectFormToPayload,
-  resolveProjectFormCopy
+  resolveProjectFormCopy,
+  validateProjectForm
 } from './projectForm';
 
 test('inicia uma nova demanda no contexto Ambiental e usa terminologia contextual', () => {
@@ -49,4 +50,41 @@ test('preserva tipo e campos ambientais no payload compartilhado de projeto', ()
 test('resolve textos de perícia e licenciamento sem condicionais na apresentação', () => {
   assert.equal(resolveProjectFormCopy('ambiental', 'Perícia').createTitle, 'Nova perícia');
   assert.equal(resolveProjectFormCopy('ambiental', 'Licenciamento').createTitle, 'Novo processo de licenciamento');
+});
+
+test('normaliza metros quadrados e exige coordenadas em conjunto', () => {
+  const form = {
+    ...createEmptyProjectForm('projeto', '11111111-1111-4111-8111-111111111111'),
+    nome: 'Projeto de área conhecida',
+    tipo: 'Rural',
+    area: '12.500,00',
+    areaUnit: 'm2' as const,
+    latitude: '-27,59'
+  };
+
+  const result = validateProjectForm(form);
+  assert.equal(result.payload.areaHa, 1.25);
+  assert.equal(result.payload.latitude, -27.59);
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.longitude, 'Informe a longitude junto com a latitude');
+});
+
+test('licenciamento exige emissão e rejeita vencimento anterior', () => {
+  const form = {
+    ...createEmptyProjectForm('projeto', '11111111-1111-4111-8111-111111111111'),
+    nome: 'Licença de operação',
+    tipo: 'Licenciamento',
+    tipoLicenca: 'LO',
+    numeroLicenca: 'LO 123/2026',
+    orgaoAmbiental: 'IMA',
+    dataVencimentoLicenca: '2026-09-10'
+  };
+
+  const missingIssueDate = validateProjectForm(form);
+  assert.equal(missingIssueDate.valid, false);
+  assert.equal(missingIssueDate.errors.dataEmissao, 'Informe a data de emissão');
+
+  const reversedDates = validateProjectForm({ ...form, dataEmissao: '2026-09-11' });
+  assert.equal(reversedDates.valid, false);
+  assert.match(reversedDates.errors.dataVencimentoLicenca || '', /posterior|igual/);
 });

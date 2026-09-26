@@ -40,15 +40,24 @@ export function analyzeVertexImport(
 ): VertexImportPreviewData {
   if (new TextEncoder().encode(text).length > MAX_IMPORT_BYTES) throw new Error('O conteúdo excede o limite seguro de 2 MB.');
   const nonEmptyLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!nonEmptyLines.length) throw new Error('O arquivo está vazio. Informe ao menos uma linha com coordenadas.');
   if (nonEmptyLines.length > MAX_IMPORT_LINES) throw new Error(`O arquivo excede o limite de ${MAX_IMPORT_LINES.toLocaleString('pt-BR')} linhas.`);
   const delimiter = options.delimiter === 'auto' ? detectDelimiter(nonEmptyLines.slice(0, 8)) : options.delimiter;
+  if (delimiter === ',' && options.decimalSeparator === ',') {
+    throw new Error('O delimitador e o separador decimal não podem ser ambos vírgula. Use ponto e vírgula ou tabulação.');
+  }
   const parsedLines = nonEmptyLines.map((line) => splitLine(line, delimiter));
+  if (options.delimiter === 'auto' && options.decimalSeparator === 'auto' && delimiter === ',' && parsedLines.some((columns) =>
+    columns.length >= 4 && columns.every((column) => /^[+-]?\d+$/.test(column)))) {
+    throw new Error('A vírgula está ambígua entre delimitador e separador decimal. Selecione ambos explicitamente antes de importar.');
+  }
   if (parsedLines.some((columns) => columns.length > MAX_IMPORT_COLUMNS)) throw new Error(`O arquivo excede o limite de ${MAX_IMPORT_COLUMNS} colunas.`);
   const headers = options.hasHeader && parsedLines.length ? parsedLines[0] : createGenericHeaders(Math.max(0, ...parsedLines.map((columns) => columns.length)));
   const dataLines = options.hasHeader ? parsedLines.slice(1) : parsedLines;
   const detected = detectCoordinateColumns(headers, mode, parsedLines[0] ?? []);
   const firstCoordinateColumn = options.firstCoordinateColumn ?? detected[0];
   const secondCoordinateColumn = options.secondCoordinateColumn ?? detected[1];
+  if (firstCoordinateColumn === secondCoordinateColumn) throw new Error('Selecione colunas diferentes para as duas coordenadas.');
   const parsedRows = dataLines.map((columns, index): ImportPreviewRow => {
     const line = index + (options.hasHeader ? 2 : 1);
     const first = parseNumber(columns[firstCoordinateColumn], options.decimalSeparator);
@@ -92,7 +101,28 @@ function detectDelimiter(lines: string[]): Exclude<ImportDelimiter, 'auto'> {
 }
 
 function splitLine(line: string, delimiter: Exclude<ImportDelimiter, 'auto'>) {
-  return line.split(delimiter).map((column) => column.trim().replace(/^"|"$/g, ''));
+  const columns: string[] = [];
+  let value = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        value += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === delimiter && !quoted) {
+      columns.push(value.trim());
+      value = '';
+    } else {
+      value += character;
+    }
+  }
+  if (quoted) throw new Error('Há um campo com aspas sem fechamento. Corrija a linha antes de importar.');
+  columns.push(value.trim());
+  return columns;
 }
 
 function createGenericHeaders(length: number) {

@@ -1,10 +1,20 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory, relativeDate, relativeInstant } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 const CLIENT_NAME = 'Cliente E2E GeoGestor';
 const UPDATED_CLIENT_NAME = 'Cliente E2E Atualizado';
 const PROJECT_NAME = 'Projeto Topográfico E2E';
+
+function alertPayload(pathname: string, items: Array<{ readAt: string | null }>, settings: unknown) {
+  const unreadTotal = items.filter((item) => !item.readAt).length;
+  if (pathname === '/api/alertas/resumo') {
+    return { summary: { activeTotal: items.length, unreadTotal }, preview: items.slice(0, 5), settings,
+      generatedAt: new Date().toISOString() };
+  }
+  return { items, page: 1, limit: 50, total: items.length, totalPages: 1, unreadTotal };
+}
 
 async function unlock(page: Page) {
   await page.goto('/');
@@ -14,7 +24,7 @@ async function unlock(page: Page) {
   await expect(setupHeading.or(unlockHeading).or(dashboardHeading)).toBeVisible();
   if (await setupHeading.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles E2E');
     await page.getByLabel('E-mail').fill('thalles.e2e@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -52,7 +62,7 @@ async function expectNoSeriousA11yViolations(page: Page) {
   expect(results.violations, JSON.stringify(results.violations, null, 2)).toEqual([]);
 }
 
-test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
+test.describe('jornadas comerciais críticas do GeoGestor', () => {
   test.setTimeout(90_000);
 
   test('senha incorreta é recusada, desbloqueio mostra identidade e bloqueio manual funciona', async ({ page }) => {
@@ -158,25 +168,28 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
   test('despesas por categoria usam barras compactas e preservam os valores exatos', async ({ page }) => {
     await unlock(page);
-    const expense = (id: string, categoria: string, valor: number) => ({
-      id,
-      categoria,
-      valor,
-      status: 'Pago',
-      data: '2026-07-15',
-      dataPagamento: '2026-07-15'
+    const expense = (categoria: string, total: number) => ({
+      categoria, total, pago: total, aberto: 0, count: 1, percentual: 0
     });
     const fourCategories = [
-      expense('expense-1', 'Combustível', 45_000),
-      expense('expense-2', 'Taxas e cartório', 30_000),
-      expense('expense-3', 'Hospedagem', 20_000),
-      expense('expense-4', 'Alimentação', 5_000)
+      expense('Combustível', 45_000),
+      expense('Taxas e cartório', 30_000),
+      expense('Hospedagem', 20_000),
+      expense('Alimentação', 5_000)
     ];
-    await page.route('**/api/financeiro/despesas', (route) => route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(fourCategories)
-    }));
+    let visibleCategories = fourCategories;
+    await page.route('**/api/financeiro/overview**', async (route) => {
+      const response = await route.fetch();
+      const overview = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...overview,
+          analytics: { ...overview.analytics, categorias: visibleCategories },
+          meta: { ...overview.meta, hasSourceData: true, hasFilteredData: true }
+        }
+      });
+    });
     await navigateBySidebar(page, 'Financeiro');
 
     const categoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
@@ -184,12 +197,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(categoryChart.getByText('Combustível', { exact: true })).toBeVisible();
     await expect(categoryChart.getByText('R$ 450,00', { exact: true })).toBeVisible();
 
-    await page.unroute('**/api/financeiro/despesas');
-    await page.route('**/api/financeiro/despesas', (route) => route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify(fourCategories.slice(0, 3))
-    }));
+    visibleCategories = fourCategories.slice(0, 3);
     await page.reload();
     await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -200,7 +208,7 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
     await expect(updatedCategoryChart.getByText('Combustível', { exact: true })).toBeVisible();
     await expect(updatedCategoryChart.getByText('Alimentação', { exact: true })).toHaveCount(0);
-    await page.unroute('**/api/financeiro/despesas');
+    await page.unroute('**/api/financeiro/overview**');
   });
 
   test('falha da API nunca vira KPIs zerados e permite reconexão', async ({ page }) => {
@@ -217,40 +225,50 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('heading', { name: 'Desbloquear GeoGestor' })).toBeVisible();
   });
 
-  test('mapa diferencia mapa-base indisponível dos dados do projeto', async ({ page }) => {
+  test('mapa diferencia mapa-base indisponível dos pontos topográficos', async ({ page }) => {
     const tileUrl = /https:\/\/[^/]+\.tile\.openstreetmap\.org\/.*/;
     await page.route(tileUrl, (route) => route.abort('internetdisconnected'));
     await unlock(page);
-    await navigateBySidebar(page, 'Projetos');
+    await page.getByRole('link', { name: 'Topografia', exact: true }).click();
     const tileRequest = page.waitForRequest(tileUrl);
-    await page.getByRole('tab', { name: 'Mapa' }).click();
+    await page.getByRole('tab', { name: 'Distância e azimute' }).click();
     await tileRequest;
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
     await expect(page.getByText('Mapa-base indisponível')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Mapa dos pontos de origem e destino' })).toBeVisible();
     await expect(page.getByText(/marcadores, geometrias e dados próprios continuam visíveis/i)).toBeVisible();
   });
 
   test('visualizações de projetos têm estados vazios próprios, URL e navegação por teclado', async ({ page }) => {
-    await page.route('**/api/projetos*', (route) => route.fulfill({
-      status: route.request().method() === 'OPTIONS' ? 204 : 200,
-      contentType: 'application/json',
-      body: route.request().method() === 'OPTIONS' ? '' : '[]'
+    await page.route('**/api/projetos?**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ items: [], page: 1, limit: 24, total: 0, totalPages: 1 })
+    }));
+    await page.route('**/api/projetos/overview**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ total: 0, completed: 0, inProgress: 0, late: 0, other: 0,
+        productivityRate: null, avgCompletionDays: null, avgApprovedBudgetCents: null,
+        typeStats: [], statusStats: [], topProjects: [] })
+    }));
+    await page.route('**/api/projetos/filters', (route) => route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ types: [], statuses: [] })
     }));
     await unlock(page);
     await navigateBySidebar(page, 'Projetos');
 
-    const projectsTab = page.getByRole('tab', { name: 'Projetos' });
-    const mapTab = page.getByRole('tab', { name: 'Mapa' });
+    const projectsTab = page.getByRole('tab', { name: 'Lista' });
+    const gridTab = page.getByRole('tab', { name: 'Grade' });
     const statisticsTab = page.getByRole('tab', { name: 'Estatísticas' });
     await expect(projectsTab).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('heading', { name: 'Você ainda não possui projetos cadastrados' })).toBeVisible();
 
-    await mapTab.click();
-    await expect(page).toHaveURL(/\/projetos\?visualizacao=mapa$/);
-    await expect(mapTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('heading', { name: 'Nenhum projeto georreferenciado para mostrar' })).toBeVisible();
+    await gridTab.click();
+    await expect(page).toHaveURL(/\/projetos\?visualizacao=grade$/);
+    await expect(gridTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('heading', { name: 'Você ainda não possui projetos cadastrados' })).toBeVisible();
 
-    await mapTab.press('ArrowRight');
+    await gridTab.press('ArrowRight');
     await expect(statisticsTab).toBeFocused();
     await expect(statisticsTab).toHaveAttribute('aria-selected', 'true');
     await expect(page).toHaveURL(/\/projetos\?visualizacao=estatisticas$/);
@@ -258,8 +276,10 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
 
     await statisticsTab.press('Home');
     await expect(projectsTab).toBeFocused();
-    await expect(page).toHaveURL(/\/projetos$/);
-    await page.unroute('**/api/projetos*');
+    await expect(page).toHaveURL(/\/projetos\?visualizacao=lista$/);
+    await page.unroute('**/api/projetos?**');
+    await page.unroute('**/api/projetos/overview**');
+    await page.unroute('**/api/projetos/filters');
   });
 
   test('Gestão e Sistema permanece estático e visível ao navegar entre páginas', async ({ page }) => {
@@ -296,18 +316,18 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
     const hiddenIds = new Set<string>();
     const alerts = [
       {
-        id: alertA, occurrenceKey: `project:${projectA}:2026-08-10:once`, category: 'project',
+        id: alertA, occurrenceKey: `project:${projectA}:${relativeDate(-1)}:once`, category: 'project',
         categoryLabel: 'Projetos e serviços', sourceId: projectA, title: 'Projeto Notificação A',
-        description: 'Prazo de entrega do projeto', dueDate: '2026-08-10', daysUntilDue: -1,
+        description: 'Prazo de entrega do projeto', dueDate: relativeDate(-1), daysUntilDue: -1,
         timingLabel: 'Vencido há 1 dia', severity: 'critical', link: `/projetos/${projectA}`,
-        readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-10T12:00:00.000Z'
+        readAt: null, nativeNotifiedAt: null, createdAt: relativeInstant(-1)
       },
       {
-        id: alertB, occurrenceKey: `project:${projectB}:2026-08-11:once`, category: 'project',
+        id: alertB, occurrenceKey: `project:${projectB}:${relativeDate()}:once`, category: 'project',
         categoryLabel: 'Projetos e serviços', sourceId: projectB, title: 'Projeto Notificação B',
-        description: 'Prazo de entrega do projeto', dueDate: '2026-08-11', daysUntilDue: 0,
+        description: 'Prazo de entrega do projeto', dueDate: relativeDate(), daysUntilDue: 0,
         timingLabel: 'Vence hoje', severity: 'warning', link: `/projetos/${projectB}`,
-        readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-10T12:00:00.000Z'
+        readAt: null, nativeNotifiedAt: null, createdAt: relativeInstant(-1)
       }
     ];
     const settings = {
@@ -328,17 +348,14 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
         await route.fulfill({ status: 204, headers: cors });
         return;
       }
-      if (request.method() === 'GET' && pathname === '/api/alertas') {
+      if (request.method() === 'GET') {
+        const visible = alerts.filter((item) => !hiddenIds.has(item.id)).map((item) => ({
+          ...item,
+          readAt: readIds.has(item.id) ? new Date().toISOString() : null
+        }));
         await route.fulfill({
           status: 200, contentType: 'application/json', headers: cors,
-          body: JSON.stringify({
-            items: alerts.filter((item) => !hiddenIds.has(item.id)).map((item) => ({
-              ...item,
-              readAt: readIds.has(item.id) ? '2026-08-11T12:00:00.000Z' : null
-            })),
-            settings,
-            generatedAt: new Date().toISOString()
-          })
+          body: JSON.stringify(alertPayload(pathname, visible, settings))
         });
         return;
       }
@@ -402,14 +419,14 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
       sourceId: `destination-${index}`,
       title: destination.title,
       description: 'Validação do destino canônico',
-      dueDate: '2026-08-11',
+      dueDate: relativeDate(),
       daysUntilDue: 0,
       timingLabel: 'Vence hoje',
       severity: 'warning',
       link: destination.link,
       readAt: null,
       nativeNotifiedAt: null,
-      createdAt: '2026-08-11T12:00:00.000Z'
+      createdAt: relativeInstant()
     }));
 
     await page.route('**/api/alertas**', async (route) => {
@@ -419,11 +436,8 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
       if (request.method() === 'POST') return route.fulfill({ status: 200, contentType: 'application/json', headers, body: '{"success":true}' });
       return route.fulfill({
         status: 200, contentType: 'application/json', headers,
-        body: JSON.stringify({
-          items,
-          settings: { enabled: true, nativeEnabled: false, categories: [] },
-          generatedAt: new Date().toISOString()
-        })
+        body: JSON.stringify(alertPayload(new URL(request.url()).pathname, items,
+          { enabled: true, nativeEnabled: false, categories: [] }))
       });
     });
 
@@ -458,16 +472,12 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
       }
       return route.fulfill({
         status: 200, contentType: 'application/json', headers,
-        body: JSON.stringify({
-          items: [{
+        body: JSON.stringify(alertPayload(pathname, [{
             id: '33333333-3333-4333-8333-333333333333', occurrenceKey: 'project:test:once', category: 'project',
             categoryLabel: 'Projetos e serviços', sourceId: projectId, title: 'Projeto resiliente', description: 'Teste de navegação',
-            dueDate: '2026-08-11', daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: `/projetos/${projectId}`,
-            readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-11T12:00:00.000Z'
-          }],
-          settings: { enabled: true, nativeEnabled: false, categories: [] },
-          generatedAt: new Date().toISOString()
-        })
+            dueDate: relativeDate(), daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: `/projetos/${projectId}`,
+            readAt: null, nativeNotifiedAt: null, createdAt: relativeInstant()
+          }], { enabled: true, nativeEnabled: false, categories: [] }))
       });
     });
 
@@ -505,16 +515,12 @@ test.describe.serial('jornadas comerciais críticas do GeoGestor', () => {
       }
       return route.fulfill({
         status: 200, contentType: 'application/json', headers,
-        body: JSON.stringify({
-          items: [{
+        body: JSON.stringify(alertPayload(pathname, [{
             id: '44444444-4444-4444-8444-444444444444', occurrenceKey: 'task:test:once', category: 'task',
             categoryLabel: 'Tarefas', sourceId: 'task-test', title: 'Tarefa nativa', description: 'Teste do Windows',
-            dueDate: '2026-08-11', daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: '/tarefas?tarefaId=task-test',
-            readAt: null, nativeNotifiedAt: null, createdAt: '2026-08-11T12:00:00.000Z'
-          }],
-          settings: { enabled: true, nativeEnabled: true, categories: [] },
-          generatedAt: new Date().toISOString()
-        })
+            dueDate: relativeDate(), daysUntilDue: 0, timingLabel: 'Vence hoje', severity: 'warning', link: '/tarefas?tarefaId=task-test',
+            readAt: null, nativeNotifiedAt: null, createdAt: relativeInstant()
+          }], { enabled: true, nativeEnabled: true, categories: [] }))
       });
     });
 

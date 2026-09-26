@@ -10,7 +10,7 @@ import {
   type AlertSettings
 } from '@geogestor/contracts';
 import { apiClient } from '../services/apiClient';
-import { CheckboxField, NumericInput } from './Form';
+import { CheckboxField, FormSelect, NumericInput } from './Form';
 import { cn } from '../utils/cn';
 import { geoFieldClass, geoPanelClass } from '../utils/geoTheme';
 import { secondarySmallActionButtonClass } from '../utils/actionStyles';
@@ -157,9 +157,9 @@ export function AlertSettingsPanel() {
                   </label>
                   <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                     <span className="mb-1 block">Recorrência</span>
-                    <select name={`alert-recurrence-${category.category}`} value={category.recurrence} onChange={(event) => updateCategory(category.category, { recurrence: event.target.value as AlertRecurrence })} className={fieldClass}>
+                    <FormSelect name={`alert-recurrence-${category.category}`} value={category.recurrence} onChange={(event) => updateCategory(category.category, { recurrence: event.target.value as AlertRecurrence })} className={fieldClass}>
                       {(Object.entries(recurrenceLabels) as Array<[AlertRecurrence, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                    </select>
+                    </FormSelect>
                   </label>
                   <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
                     <span className="mb-1 block">Intervalo em dias</span>

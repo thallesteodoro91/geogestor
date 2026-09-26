@@ -42,7 +42,7 @@ test('versão comercial deriva da raiz e possui notas correspondentes', () => {
   assert.equal(json('apps/desktop/package.json').version, canonical);
   assert.match(read('apps/web/src/pages/Ajuda/helpContent.ts'), new RegExp(`minimumVersion = ['"]${canonical}['"]`));
   assert.equal(fs.existsSync(path.join(root, 'docs', `NOTAS-DE-VERSAO-v${commercial}.md`)), true);
-  assert.equal(json('apps/desktop/package.json').build.artifactName, `\${productName} Setup ${commercial}.\${ext}`);
+  assert.equal(json('apps/desktop/package.json').build.artifactName, '\${productName} Setup \${version}.\${ext}');
 });
 
 test('ausência de Authenticode permanece exceção informativa explícita', () => {

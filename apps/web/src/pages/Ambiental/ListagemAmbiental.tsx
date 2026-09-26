@@ -1,10 +1,8 @@
 import { DatePickerField, FormSelect } from '../../components/Form';
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  ArrowRight,
-  CalendarBlank,
   CaretLeft,
   CaretRight,
   Funnel,
@@ -37,21 +35,15 @@ import {
 import environmentalDemandsIcon from '../../assets/magnific-icons/eco-energy_3274986.png';
 import licensingIcon from '../../assets/magnific-icons/certification_5192312.png';
 import carAnalysisIcon from '../../assets/magnific-icons/calculator_9264106.svg';
+import { EnvironmentalDemandCard } from './EnvironmentalDemandCard';
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' });
 const numberFormatter = new Intl.NumberFormat('pt-BR');
 const environmentalTabs = ['ambiental', 'licenciamento', 'car'] as const;
 type EnvironmentalTab = typeof environmentalTabs[number];
-const formatDate = (date?: string | null) => date ? dateFormatter.format(new Date(`${date.slice(0, 10)}T12:00:00Z`)) : 'Não definido';
-
-function deadlineTone(date?: string | null) {
-  if (!date) return 'text-zinc-500 dark:text-zinc-400';
-  const days = Math.ceil((new Date(`${date}T12:00:00`).getTime() - Date.now()) / 86_400_000);
-  if (days < 0) return 'text-red-700 dark:text-red-300';
-  if (days <= 7) return 'text-amber-700 dark:text-amber-300';
-  return 'text-emerald-700 dark:text-emerald-300';
-}
-
+const parsePage = (value: string | null) => {
+  const parsed = Number(value || 1);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1;
+};
 export function ListagemAmbiental() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -66,13 +58,27 @@ export function ListagemAmbiental() {
   const tabListRef = useRef<HTMLDivElement | null>(null);
   const searchId = useId();
   const filterPanelId = useId();
-  const page = Math.max(1, Number(searchParams.get('page') || 1));
+  const requestedPage = searchParams.get('page');
+  const page = parsePage(requestedPage);
   const status = searchParams.get('status') || '';
   const tipo = searchParams.get('tipo') || '';
   const inicio = searchParams.get('inicio') || '';
   const fim = searchParams.get('fim') || '';
   const searchTerm = searchParams.get('q') || '';
   const demandFormOpen = activeTab === 'ambiental' && searchParams.get('action') === 'new';
+
+  useEffect(() => {
+    const invalidTab = requestedTab !== null && !environmentalTabs.includes(requestedTab as EnvironmentalTab);
+    const invalidPage = requestedPage !== null && String(page) !== requestedPage;
+    if (!invalidTab && !invalidPage) return;
+    const next = new URLSearchParams(searchParams);
+    if (invalidTab) {
+      next.set('tab', 'ambiental');
+      next.delete('action');
+    }
+    if (invalidPage) next.delete('page');
+    setSearchParams(next, { replace: true });
+  }, [page, requestedPage, requestedTab, searchParams, setSearchParams]);
 
   useEffect(() => {
     const index = environmentalTabs.indexOf(activeTab);
@@ -106,6 +112,7 @@ export function ListagemAmbiental() {
     if (tab !== 'licenciamento') setLicenseFormOpen(false);
     const next = new URLSearchParams(searchParams);
     next.set('tab', tab);
+    if (tab !== 'ambiental') next.delete('action');
     setSearchParams(next);
   };
 
@@ -326,7 +333,7 @@ export function ListagemAmbiental() {
           </label>
           <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Status
             <FormSelect name="statusAmbiental" autoComplete="off" value={status} onChange={(event) => updateParam('status', event.target.value)} className="geo-native-select mt-1.5 h-10 min-h-10 w-full rounded-lg border border-zinc-200 bg-white px-3 text-xs dark:border-zinc-700 dark:bg-zinc-950">
-              <option value="">Todos</option><option value="Planejamento">Planejamento</option><option value="Em Análise">Em análise</option><option value="Em Andamento">Em andamento</option><option value="Aguardando Órgão">Aguardando órgão</option><option value="Finalizado">Finalizado</option>
+              <option value="">Todos</option><option value="Planejamento">Planejamento</option><option value="Em Análise">Em análise</option><option value="Em Andamento">Em andamento</option><option value="Aguardando Cliente">Aguardando cliente</option><option value="Aguardando Documentação">Aguardando documentação</option><option value="Aguardando Órgão">Aguardando órgão</option><option value="Com Pendência">Com pendência</option><option value="Suspenso">Suspenso</option><option value="Finalizado">Concluído</option><option value="Cancelado">Cancelado</option>
             </FormSelect>
           </label>
           <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Prazo a partir de
@@ -363,24 +370,7 @@ export function ListagemAmbiental() {
             <p className="mb-3 text-xs font-medium text-zinc-500 dark:text-zinc-400">{numberFormatter.format(demandsQuery.data.total)} {demandsQuery.data.total === 1 ? 'demanda encontrada' : 'demandas encontradas'}</p>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {demandsQuery.data.items.map((demand) => (
-                <Link key={demand.id} to={`/ambiental/${demand.id}`} className="group flex min-w-0 flex-col rounded-xl border border-zinc-200/80 bg-white p-4 shadow-sm transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-500/40 dark:focus-visible:ring-offset-zinc-950">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <span className="rounded-lg bg-emerald-50 p-2 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"><Scales aria-hidden="true" weight="duotone" className="h-4 w-4" /></span>
-                    <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[10px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">{demand.status || 'Sem status'}</span>
-                  </div>
-                  <p className="truncate text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">{demand.tipoDemanda || demand.tipo}</p>
-                  <h2 className="mt-1 line-clamp-2 text-sm font-semibold text-zinc-950 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-300">{demand.nome}</h2>
-                  <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">{demand.clienteNome}</p>
-                  <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 text-[11px]">
-                    <div className="min-w-0"><dt className="text-zinc-400">Órgão / processo</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.orgaoAmbiental || demand.protocolo || 'Não informado'}</dd></div>
-                    <div className="min-w-0"><dt className="text-zinc-400">Fase</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.statusFase || 'Inicial'}</dd></div>
-                    <div className="col-span-2 min-w-0"><dt className="text-zinc-400">Próxima ação</dt><dd className="truncate font-medium text-zinc-700 dark:text-zinc-300">{demand.proximaAcao || 'Nenhuma ação programada'}</dd></div>
-                  </dl>
-                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3 text-[11px] dark:border-zinc-800">
-                    <span className={cn('flex min-w-0 items-center gap-1 font-semibold', deadlineTone(demand.dataEntrega))}><CalendarBlank aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{formatDate(demand.dataEntrega)}</span></span>
-                    <span className="flex shrink-0 items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">Abrir <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" /></span>
-                  </div>
-                </Link>
+                <EnvironmentalDemandCard key={demand.id} demand={demand} />
               ))}
             </div>
             {totalPages > 1 && (

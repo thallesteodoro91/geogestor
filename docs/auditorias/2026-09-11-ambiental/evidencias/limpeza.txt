@@ -1,0 +1,9 @@
+Sessao: 06 - Ambiental
+Data: 2026-09-11
+Raiz validada: C:\Users\Thalles\Documents\Codex\2026-06-22\a\work\Geogestor\scratch
+Diretorios temporarios proprios removidos: 15
+Diretorios session06-environmental-* restantes: 0
+Execucoes commercial-e2e do dia restantes: 0
+Execucao E2E aprovada: removida automaticamente pelo runner
+Banco real: tamanho, mtime e SHA-256 inalterados
+PDFs preservados: somente as quatro evidencias sinteticas no diretorio da auditoria

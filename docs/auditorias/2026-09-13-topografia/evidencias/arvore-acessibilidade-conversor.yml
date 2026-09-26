@@ -1,0 +1,79 @@
+- region "Notifications alt+T"
+- link "Pular para o conteúdo principal":
+  - /url: "#main-content"
+- complementary:
+  - text: GeoGestor v1.0.4
+  - paragraph: Gestão Topográfica
+  - navigation "Navegação principal do GeoGestor":
+    - text: NAVEGAÇÃO
+    - link "Visão Geral":
+      - /url: /
+    - link "Comercial":
+      - /url: /clientes
+    - link "Projetos":
+      - /url: /projetos
+    - link "Ambiental":
+      - /url: /ambiental
+    - link "Financeiro":
+      - /url: /financeiro
+    - link "Agenda":
+      - /url: /calendario
+    - link "Topografia":
+      - /url: /topografia
+    - text: GESTÃO E SISTEMA
+    - link "Relatórios":
+      - /url: /relatorios
+    - link "Planejamento":
+      - /url: /planejamento
+    - link "Cadastros":
+      - /url: /cadastros
+    - link "Configurações":
+      - /url: /configuracoes
+    - link "Ajuda":
+      - /url: /ajuda
+  - text: TE
+  - paragraph: Thalles E2E
+  - text: thalles.e2e@example.test
+  - button "Bloquear sessão"
+- main:
+  - button "Ativar modo escuro"
+  - 'button "Status do backup: Primeiro backup pendente. Nenhum backup realizado"'
+  - 'button "Notificações: 28 não lida(s)"'
+  - button "Buscar no GeoGestor": Buscar no GeoGestor Ctrl K
+  - text: ✓ Ferramentas técnicas
+  - heading "Topografia" [level=1]
+  - paragraph: Conversão de coordenadas e cálculos de apoio para conferência. Verifique o SRC, o datum e o método exigido antes de usar resultados em peças técnicas.
+  - tablist "Ferramentas de topografia":
+    - tab "Conversor GMS / Decimal" [selected]
+    - tab "Distância e azimute"
+    - tab "Área e perímetro"
+  - region "Referência espacial compartilhada":
+    - heading "Referência espacial compartilhada" [level=2]
+    - paragraph: SIRGAS 2000 · UTM 22S · EPSG:31982
+    - text: Conferir SRC
+    - button "Configurar"
+    - status
+  - button "Salvar cálculo"
+  - tabpanel "Conversor GMS / Decimal":
+    - paragraph: Conversor de coordenadas
+    - heading "GMS → decimal" [level=2]
+    - tablist "Tipo de conversão":
+      - tab "GMS → decimal" [selected]
+      - tab "Decimal → GMS"
+      - tab "Latitude/longitude → X/Y"
+      - tab "X/Y → latitude/longitude"
+    - tabpanel "GMS → decimal":
+      - text: Tipo de coordenada
+      - combobox "Tipo de coordenada": Latitude
+      - text: Hemisfério
+      - combobox "Hemisfério": Sul (S)
+      - text: Graus · ° (0–90)
+      - textbox "Graus · ° (0–90)": "23"
+      - text: Minutos · ′ (0–59)
+      - textbox "Minutos · ′ (0–59)": "32"
+      - text: Segundos · ″ (0–<60)
+      - textbox "Segundos · ″ (0–<60)": 41,2
+      - paragraph: Coordenada decimal
+      - paragraph: "-23,54477778°"
+      - paragraph: Hemisfério S.
+      - button "Copiar resultado"

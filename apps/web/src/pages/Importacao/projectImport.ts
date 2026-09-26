@@ -74,7 +74,7 @@ export function replaceProjectPreviewRow(
   index: number,
   replacement: ProjectImportPreviewRow
 ): ProjectImportPreview {
-  const rows = preview.rows.map(row => row.index === index ? { ...replacement, index, row: index + 2 } : row);
+  const rows = preview.rows.map(row => row.index === index ? { ...replacement, index, row: row.row } : row);
   const counts = summarizeProjectPreviewRows(rows);
   return { status: counts.pending > 0 ? 'blocked' : 'ready', counts, rows };
 }

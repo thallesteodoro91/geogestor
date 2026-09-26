@@ -20,12 +20,13 @@ test('bloqueios de clientes, reset e configurações são recusados pelo backend
   await fs.rm(testRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   await fs.mkdir(filesRoot, { recursive: true });
 
-  const [{ server }, { db, dbReady }, { runRuntimeMigrations }, { schema }, { LocalSecretService }] = await Promise.all([
+  const [{ server }, { db, dbReady }, { runRuntimeMigrations }, { schema }, { LocalSecretService }, { AuditLogService }] = await Promise.all([
     import('./server'),
     import('./db'),
     import('./services/runtime-migrations.service'),
     import('@geogestor/database'),
-    import('./services/local-secret.service')
+    import('./services/local-secret.service'),
+    import('./services/audit.service')
   ]);
 
   const request = (options: {
@@ -199,10 +200,63 @@ test('bloqueios de clientes, reset e configurações são recusados pelo backend
     const persistedAfterReplacement = await db.select().from(schema.configuracoes).limit(1);
     assert.equal(persistedAfterReplacement[0].adminEmail, 'novo@skygeo.com.br');
     assert.equal(LocalSecretService.reveal(persistedAfterReplacement[0].googleClientSecret), 'segredo-google-substituto');
+
+    const originalTemplate = { version: 1, appLogo: 'logo-original', razao: 'SkyGeo' };
+    await db.insert(schema.configuracoesOperacionais).values({
+      id: crypto.randomUUID(),
+      chave: 'geogestor_empresa_template',
+      valorJson: JSON.stringify(originalTemplate),
+      origem: 'aplicacao'
+    });
+    AuditLogService.setFailureInjectorForTests((_action, entity) => {
+      if (entity === 'Configuração') throw new Error('falha simulada entre as gravações');
+    });
+    const atomicFailure = await request({
+      method: 'PATCH',
+      url: '/api/configuracoes',
+      payload: { empresaNome: 'Não deve persistir', appLogo: 'logo-nao-deve-persistir' }
+    });
+    assert.equal(atomicFailure.statusCode, 500, atomicFailure.body);
+    AuditLogService.setFailureInjectorForTests(null);
+    const configAfterAtomicFailure = await db.select().from(schema.configuracoes).limit(1);
+    const [templateAfterAtomicFailure] = await db.select().from(schema.configuracoesOperacionais)
+      .where(eq(schema.configuracoesOperacionais.chave, 'geogestor_empresa_template'));
+    assert.equal(configAfterAtomicFailure[0].empresaNome, 'SkyGeo Atualizada');
+    assert.deepEqual(JSON.parse(templateAfterAtomicFailure.valorJson), originalTemplate);
+
+    const atomicSuccess = await request({
+      method: 'PATCH',
+      url: '/api/configuracoes',
+      payload: { empresaNome: 'SkyGeo Atômica', appLogo: 'logo-atualizado' }
+    });
+    assert.equal(atomicSuccess.statusCode, 200, atomicSuccess.body);
+    const configAfterAtomicSuccess = await db.select().from(schema.configuracoes).limit(1);
+    const [templateAfterAtomicSuccess] = await db.select().from(schema.configuracoesOperacionais)
+      .where(eq(schema.configuracoesOperacionais.chave, 'geogestor_empresa_template'));
+    assert.equal(configAfterAtomicSuccess[0].empresaNome, 'SkyGeo Atômica');
+    assert.deepEqual(JSON.parse(templateAfterAtomicSuccess.valorJson), {
+      ...originalTemplate,
+      appLogo: 'logo-atualizado'
+    });
     const auditEntries = await db.select({ oldData: schema.auditLogs.oldData, newData: schema.auditLogs.newData })
       .from(schema.auditLogs);
     assert.equal(JSON.stringify(auditEntries).includes('segredo-google-original'), false);
     assert.equal(JSON.stringify(auditEntries).includes('segredo-google-substituto'), false);
+
+    await db.insert(schema.auditLogs).values({
+      id: crypto.randomUUID(),
+      action: 'UPDATE',
+      entity: 'Registro legado inseguro',
+      userId: 'admin',
+      oldData: JSON.stringify({ email: 'pessoa@example.test', pasta: 'C:\\Dados\\Cliente' }),
+      newData: JSON.stringify({ googleClientSecret: 'segredo-legado-exposto', observacao: 'segura' })
+    });
+    const auditApi = await request({ method: 'GET', url: '/api/audit-logs?limit=100' });
+    assert.equal(auditApi.statusCode, 200, auditApi.body);
+    assert.equal(auditApi.body.includes('pessoa@example.test'), false);
+    assert.equal(auditApi.body.includes('C:\\\\Dados\\\\Cliente'), false);
+    assert.equal(auditApi.body.includes('segredo-legado-exposto'), false);
+    assert.equal(auditApi.body.includes('[REDACTED]'), true);
 
     await db.insert(schema.clientes).values({ id: crypto.randomUUID(), nome: 'Marcador de reset' });
     const resetWithoutConfirmation = await request({ method: 'DELETE', url: '/api/sistema/reset' });

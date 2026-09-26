@@ -270,9 +270,9 @@ function ClientActionsMenu({ cliente, returnTo, onEdit, onDelete }: ClientAction
         aria-label={`Ações de ${cliente.nome}`}
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-zinc-600 transition-[background-color,color] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white"
+        className="geo-focus-ring flex h-[30px] w-[30px] items-center justify-center rounded-md text-zinc-600 transition-[background-color,color] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white"
       >
-        <DotsThree aria-hidden="true" weight="bold" className="h-5 w-5" />
+        <DotsThree aria-hidden="true" weight="bold" className="h-3.5 w-3.5" />
       </button>
       {isOpen && (
         <div
@@ -443,6 +443,12 @@ export function ListagemClientes() {
   const clientFilesPasta = filesData.path;
   const filteredClientes = clientes;
   const paginatedClientes = clientes;
+  const hasClientFiltering = Boolean(
+    searchTerm.trim()
+    || situacaoFilter !== 'Todos'
+    || categoriaFilter !== 'Todos'
+    || origemFilter !== 'Todos'
+  );
   const activeClientCriteriaCount = [
     searchTerm,
     situacaoFilter !== 'Todos',
@@ -493,6 +499,9 @@ export function ListagemClientes() {
       setShowModal(false);
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['cliente-dashboard', selectedCliente?.id] });
+      queryClient.invalidateQueries({ queryKey: ['cliente-arquivos', selectedCliente?.id] });
+      queryClient.invalidateQueries({ queryKey: ['cliente-central-arquivos', selectedCliente?.id] });
+      queryClient.invalidateQueries({ queryKey: ['cliente-geo', selectedCliente?.id] });
       toast.success(feedbackMessage);
       if (selectedCliente && editReturnClienteIdRef.current) {
         const returnId = editReturnClienteIdRef.current;
@@ -717,7 +726,7 @@ export function ListagemClientes() {
     setConfirmData({
       isOpen: true,
       title: `Excluir ${name}?`,
-      description: `O cliente “${name}”, seu histórico e seus vínculos serão removidos do GeoGestor. Por segurança, os arquivos da pasta local serão preservados. Esta ação não pode ser desfeita.`,
+      description: `O cliente “${name}” e seu histórico serão removidos do GeoGestor. A exclusão será bloqueada se ainda houver propriedades, projetos, orçamentos, tarefas, compromissos, documentos, mapas ou oportunidades ativos. Por segurança, os arquivos da pasta local serão preservados. Esta ação não pode ser desfeita.`,
       confirmText: 'Excluir cliente',
       onConfirm: () => deleteClientMutation.mutate(id)
     });
@@ -823,10 +832,11 @@ export function ListagemClientes() {
           <ModuleNavigation
             module="commercial"
             className="mb-0"
+            trailingLayout="responsive"
             trailing={(
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                 <label htmlFor="client-search" className="sr-only">Buscar clientes</label>
-                <div className="relative">
+                <div className="relative min-w-0 flex-1 2xl:flex-none">
                   <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <input
                     id="client-search"
@@ -834,9 +844,9 @@ export function ListagemClientes() {
                     type="search"
                     value={searchTerm}
                     onChange={(event) => setSearchTerm(event.target.value)}
-                    placeholder="Buscar clientes por nome, documento ou contatoâ€¦"
+                    placeholder="Buscar clientes por nome, documento ou contato…"
                     autoComplete="off"
-                    className={cn(filterSearchInputClass, 'h-[52px] min-h-[52px] w-72 rounded-full sm:w-96 lg:w-[520px]')}
+                    className={cn(filterSearchInputClass, 'h-[52px] min-h-[52px] w-full rounded-full sm:w-96 lg:w-[520px]')}
                   />
                 </div>
                 <button
@@ -844,7 +854,7 @@ export function ListagemClientes() {
                   aria-expanded={showFilters}
                   aria-controls="client-filter-panel"
                   onClick={() => setShowFilters((current) => !current)}
-                  className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] shrink-0 rounded-full px-5 text-sm sm:px-6"
+                  className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] w-full shrink-0 rounded-full px-5 text-sm sm:w-auto sm:px-6"
                 >
                   <Funnel aria-hidden="true" className="h-4 w-4" />
                   Filtros
@@ -855,7 +865,7 @@ export function ListagemClientes() {
                   ) : null}
                 </button>
                 {activeClientCriteriaCount > 0 ? (
-                  <button type="button" onClick={clearClientFilters} className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] shrink-0 rounded-full px-5 text-sm">
+                  <button type="button" onClick={clearClientFilters} className="geo-button-base geo-button-secondary geo-focus-ring h-[52px] min-h-[52px] w-full shrink-0 rounded-full px-5 text-sm sm:w-auto">
                     Limpar
                   </button>
                 ) : null}
@@ -993,7 +1003,7 @@ export function ListagemClientes() {
               </div>
             ))}
           </div>
-        ) : clientes.length === 0 ? (
+        ) : clientes.length === 0 && !hasClientFiltering ? (
           <div className="geo-card mx-auto max-w-lg p-10 text-center">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg border border-brand-primary-200 bg-brand-primary-50 text-brand-primary-600 dark:border-brand-primary-300/25 dark:bg-brand-primary-400/12 dark:text-brand-primary-100">
               <Users aria-hidden="true" weight="duotone" className="h-7 w-7" />
@@ -1313,7 +1323,7 @@ export function ListagemClientes() {
           <div id="client-panel-arquivos" role="tabpanel" aria-labelledby="client-tab-arquivos" className="min-h-0 flex-1 overflow-y-auto pb-6 pr-1">
             <div className="mb-2">
               <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate" title={clientFilesPasta}>
-                Pasta do Cliente: <span className="font-mono">{clientFilesPasta || 'Buscando...'}</span>
+                Pasta do Cliente: <span className="font-mono">{clientFilesPasta || 'Buscando…'}</span>
               </p>
             </div>
 
@@ -1424,7 +1434,7 @@ export function ListagemClientes() {
                 required 
                 value={histDescricao} 
                 onChange={e => setHistDescricao(e.target.value)} 
-                placeholder="Descreva os detalhes da interação (ex: Cliente aprovou o orçamento verbalmente, pediu desconto, etc...)" 
+                placeholder="Descreva os detalhes da interação (ex.: cliente aprovou o orçamento verbalmente, pediu desconto etc.)"
                 rows={3} 
                 aria-label="Descrição da Interação"
                 className={cn(clienteTextareaClass, 'mb-3 text-sm')} 
@@ -1437,7 +1447,7 @@ export function ListagemClientes() {
             {/* Timeline Render */}
             <div className="relative ml-8 pl-8 border-l-2 border-indigo-200 dark:border-indigo-900/50 space-y-6 overflow-visible">
               {loadingHistorico ? (
-                <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando jornada do cliente...</p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">Carregando jornada do cliente…</p>
               ) : historico.length === 0 ? (
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">Nenhum histórico registrado para este cliente.</p>
               ) : (

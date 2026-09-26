@@ -1,0 +1,131 @@
+RELATÓRIO EXECUTIVO
+Período: 18/09/2026 a 18/09/2026
+(48) 3333-4444 · qa@geogestor.test
+Florianópolis/SC
+Regime de caixa: data do recebimento ou do pagamento legado.
+Síntese executiva
+O caixa encerrou o período negativo em R$ 14,00.
+A carteira vencida soma R$ 60,00.
+13 projeto(s) ativo(s) estão com prazo vencido.
+Indicadores financeiros
+Indicador Resultado
+Receita contratada R$ 100,00
+Receita recebida R$ 40,00
+Receita pendente R$ 60,00
+Receita vencida R$ 60,00
+Despesas pagas R$ 54,00
+Resultado de caixa -R$ 14,00
+Impostos previstos R$ 10,00
+Conversão comercial 20%
+Evolução do caixa
+Mês Recebido Pago Resultado
+2026-09 R$ 40,00 R$ 54,00 -R$ 14,00
+Despesas pagas por categoria
+Categoria Pago Itens
+Campo principal R$ 30,00 1
+QA-AUDIT-S11-20260917-Categoria longa 01 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 02 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 03 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 04 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 05 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 06 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 07 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 08 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 09 com acentos & símbolo <inerte> R$ 1,00 1
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 1 de 3
+
+--- PAGE BREAK ---
+
+Categoria Pago Itens
+QA-AUDIT-S11-20260917-Categoria longa 10 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 11 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 12 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 13 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 14 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 15 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 16 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 17 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 18 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 19 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 20 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 21 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 22 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 23 com acentos & símbolo <inerte> R$ 1,00 1
+QA-AUDIT-S11-20260917-Categoria longa 24 com acentos & símbolo <inerte> R$ 1,00 1
+Indicadores operacionais
+Indicador Resultado
+Projetos no recorte 18
+Projetos ativos 16
+Projetos concluídos 1
+Projetos cancelados 1
+Prazos vencidos 13
+Área ativa conhecida 27,5 ha
+Distribuição por status
+Status Projetos
+Em Andamento 13
+Aguardando Cliente 1
+Cancelado 1
+Concluído 1
+Planejamento 1
+Suspenso 1
+Agenda crítica de entregas
+Projeto Entrega Status
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 2 de 3
+
+--- PAGE BREAK ---
+
+Projeto Entrega Status
+QA-AUDIT-S11-20260917-Projeto crítico 01 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 02 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 03 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 04 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 05 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 06 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 07 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 08 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 09 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 10 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 11 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 12 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-<img src=x onerror=alert(1)> 17/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Vence hoje 18/09/2026 Planejamento
+QA-AUDIT-S11-20260917-Vence +30 18/10/2026 Aguardando Cliente
+Pontos de atenção
+Recebimentos vencidos exigem atenção: Há R$ 60,00 em parcelas vencidas ainda não recebidas.
+Resultado de caixa negativo: As despesas pagas superam os recebimentos no período selecionado.
+Conversão comercial abaixo de 30%: Revise propostas rejeitadas ou expiradas para identificar oportunidades de melhoria.
+Projetos com prazo vencido: 13 projetos ativos ultrapassaram a previsão de entrega.
+Área não informada em projetos ativos: Complete a área de 1 projeto para melhorar a leitura da carteira territorial.
+Critérios e metodologia
+Regime de caixa: data do recebimento ou do pagamento legado.
+Regime de caixa: data de pagamento; na ausência, competência ou lançamento.
+Coorte por data de início; na ausência, data de criação.
+Soma apenas áreas conhecidas de projetos ativos pertencentes ao período.
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 3 de 3

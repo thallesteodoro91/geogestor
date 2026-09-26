@@ -39,7 +39,7 @@ export function propertyFormToPayload(form: PropertyFormState) {
     areaHa: numberOrNull(form.areaHa),
     cidade: normalizeOptional(form.cidade),
     municipio: form.municipio.trim().replace(/\s+/g, ' '),
-    uf: normalizeOptional(form.uf, true),
+    uf: form.uf.trim().toLocaleUpperCase('pt-BR'),
     situacaoImovel: normalizeOptional(form.situacaoImovel),
     latitude: numberOrNull(form.latitude),
     longitude: numberOrNull(form.longitude),

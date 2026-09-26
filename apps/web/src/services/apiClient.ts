@@ -29,6 +29,7 @@ export function hasLocalSessionToken() {
 
 interface RequestOptions extends RequestInit {
   timeoutMs?: number;
+  notifyUnavailable?: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -99,9 +100,12 @@ function resolveApiUrl(inputUrl: string): string {
 function notifyAlertsAfterMutation(url: string, method: string, response: Response) {
   if (!response.ok || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase())) return;
   const pathname = new URL(url).pathname;
-  if (!pathname.startsWith('/api/') || pathname.startsWith('/api/alertas')) return;
+  if (!pathname.startsWith('/api/')) return;
+  const detail = { method: method.toUpperCase(), pathname };
+  window.dispatchEvent(new CustomEvent('geogestor:reports-invalidated', { detail }));
+  if (pathname.startsWith('/api/alertas')) return;
   window.dispatchEvent(new CustomEvent('geogestor:alerts-invalidated', {
-    detail: { method: method.toUpperCase(), pathname }
+    detail
   }));
 }
 
@@ -178,9 +182,13 @@ async function handleResponse<T>(response: Response): Promise<T> {
 
 export const apiClient = {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-    const { timeoutMs = 15000, ...fetchOptions } = options;
+    const { timeoutMs = 15000, notifyUnavailable = true, ...fetchOptions } = options;
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), timeoutMs);
+    let timedOut = false;
+    const id = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
     const upstreamSignal = fetchOptions.signal;
     const abortFromUpstream = () => controller.abort(upstreamSignal?.reason);
     if (upstreamSignal?.aborted) abortFromUpstream();
@@ -216,8 +224,11 @@ export const apiClient = {
         }
         throw error;
       }
+      if (upstreamSignal?.aborted && !timedOut) {
+        throw error;
+      }
       if (error instanceof Error && error.name === 'AbortError') {
-        window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
+        if (notifyUnavailable) window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
         throw new ApiError('Não foi possível conectar ao serviço local do GeoGestor no tempo esperado.', 0, {
           endpoint: new URL(url).pathname,
           reason: 'Tempo limite de conexão excedido.'
@@ -231,7 +242,7 @@ export const apiClient = {
         });
         lastConnectionLogAt = now;
       }
-      window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
+      if (notifyUnavailable) window.dispatchEvent(new CustomEvent('geogestor:api-unavailable'));
       throw new ApiError('Não foi possível conectar ao serviço local do GeoGestor.', 0, {
         endpoint: new URL(url).pathname,
         reason: error instanceof Error ? error.message : 'Falha na conexão de rede local.'

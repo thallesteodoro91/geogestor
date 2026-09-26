@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -58,8 +58,13 @@ const getGoogleCalendarUrl = (titulo: string, dataStr: string, descricao?: strin
 export function CalendarioDetalhes() {
   const { tipo, id } = useParams<{ tipo: string; id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const returnCandidate = (location.state as { calendarReturnTo?: unknown } | null)?.calendarReturnTo;
+  const calendarReturnTo = typeof returnCandidate === 'string' && /^\/calendario(?:\?|$)/.test(returnCandidate)
+    ? returnCandidate
+    : '/calendario';
 
   const deleteCompromissoMutation = useMutation({
     mutationFn: async () => {
@@ -69,9 +74,10 @@ export function CalendarioDetalhes() {
       if (!res.ok) throw new Error('Erro ao excluir compromisso');
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
       queryClient.invalidateQueries({ queryKey: ['compromissos'] });
       toast.success('Compromisso excluído com sucesso.');
-      navigate('/calendario');
+      navigate(calendarReturnTo);
     },
     onError: () => {
       toast.error('Não foi possível excluir o compromisso. Tente novamente.');
@@ -81,6 +87,9 @@ export function CalendarioDetalhes() {
   const { data: detalhes, isLoading, error } = useQuery({
     queryKey: ['calendario-detalhe', tipo, id],
     queryFn: async () => {
+      if (!['projeto', 'tarefa', 'compromisso'].includes(tipo || '')) {
+        throw new Error('Tipo de evento desconhecido');
+      }
       if (tipo === 'projeto') {
         const res = await apiFetch(`/api/projetos/${id}`);
         if (!res.ok) throw new Error('Projeto não encontrado');
@@ -100,9 +109,9 @@ export function CalendarioDetalhes() {
           id: proj.id
         };
       } else if (tipo === 'tarefa') {
-        const res = await apiFetch('/api/tarefas');
-        if (!res.ok) throw new Error('Erro ao carregar tarefas');
-        const list = await res.json() as Array<{
+        const res = await apiFetch(`/api/tarefas/${id}`);
+        if (!res.ok) throw new Error('Tarefa não encontrada');
+        const t = await res.json() as {
           id: string;
           titulo: string;
           descricao?: string;
@@ -113,9 +122,7 @@ export function CalendarioDetalhes() {
           clienteId?: string;
           projetoNome?: string;
           projetoId?: string;
-        }>;
-        const t = list.find((item) => item.id === id);
-        if (!t) throw new Error('Tarefa não encontrada');
+        };
         return {
           tipo: 'tarefa',
           titulo: t.titulo,
@@ -174,7 +181,7 @@ export function CalendarioDetalhes() {
           <p className="mx-auto mt-2 max-w-md text-sm font-medium leading-relaxed text-zinc-500 dark:text-zinc-400">
             O evento pode ter sido excluído ou não estar mais disponível.
           </p>
-          <Link to="/calendario" className={cn(primaryActionButtonClass, 'mx-auto mt-6 w-fit')}>
+          <Link to={calendarReturnTo} className={cn(primaryActionButtonClass, 'mx-auto mt-6 w-fit')}>
             Voltar para o calendário
           </Link>
         </section>
@@ -192,14 +199,14 @@ export function CalendarioDetalhes() {
     <Layout>
       <nav aria-label="Navegação estrutural" className="mb-8 flex min-w-0 items-center gap-3">
         <Link
-          to="/calendario"
+          to={calendarReturnTo}
           aria-label="Voltar para o calendário"
           className="geo-focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-600 transition-[background-color,border-color,color] hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-200"
         >
           <ArrowLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
         </Link>
         <div className="min-w-0 text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          <Link to="/calendario" className="geo-focus-ring rounded-md transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Calendário</Link>
+          <Link to={calendarReturnTo} className="geo-focus-ring rounded-md transition-colors hover:text-zinc-900 dark:hover:text-zinc-100">Calendário</Link>
           <span aria-hidden="true" className="mx-2 text-zinc-300 dark:text-zinc-700">/</span>
           <span aria-current="page" className="text-zinc-950 dark:text-white">Detalhes do evento</span>
         </div>

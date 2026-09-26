@@ -1,0 +1,137 @@
+- region "Notifications alt+T"
+- link "Pular para o conteúdo principal":
+  - /url: "#main-content"
+- complementary:
+  - text: GeoGestor v1.0.4
+  - paragraph: Gestão Topográfica
+  - navigation "Navegação principal do GeoGestor":
+    - text: NAVEGAÇÃO
+    - link "Visão Geral":
+      - /url: /
+    - link "Comercial":
+      - /url: /clientes
+    - link "Projetos":
+      - /url: /projetos
+    - link "Ambiental":
+      - /url: /ambiental
+    - link "Financeiro":
+      - /url: /financeiro
+    - link "Agenda":
+      - /url: /calendario
+    - link "Topografia":
+      - /url: /topografia
+    - text: GESTÃO E SISTEMA
+    - link "Relatórios":
+      - /url: /relatorios
+    - link "Planejamento":
+      - /url: /planejamento
+    - link "Cadastros":
+      - /url: /cadastros
+    - link "Configurações":
+      - /url: /configuracoes
+    - link "Ajuda":
+      - /url: /ajuda
+  - text: TE
+  - paragraph: Thalles E2E
+  - text: thalles.e2e@example.test
+  - button "Bloquear sessão"
+- main:
+  - button "Ativar modo escuro"
+  - 'button "Status do backup: Primeiro backup pendente. Nenhum backup realizado"'
+  - 'button "Notificações: 28 não lida(s)"'
+  - button "Buscar no GeoGestor": Buscar no GeoGestor Ctrl K
+  - text: ✓ Ferramentas técnicas
+  - heading "Topografia" [level=1]
+  - paragraph: Conversão de coordenadas e cálculos de apoio para conferência. Verifique o SRC, o datum e o método exigido antes de usar resultados em peças técnicas.
+  - tablist "Ferramentas de topografia":
+    - tab "Conversor GMS / Decimal"
+    - tab "Distância e azimute"
+    - tab "Área e perímetro" [selected]
+  - region "Referência espacial compartilhada":
+    - heading "Referência espacial compartilhada" [level=2]
+    - paragraph: SIRGAS 2000 · UTM 22S · EPSG:31982
+    - button "Configurar"
+    - status: Relatório técnico PDF gerado.
+  - button "Salvar cálculo"
+  - tabpanel "Área e perímetro":
+    - heading "Área e perímetro" [level=2]
+    - paragraph: Mapa, vértices e resultados em uma única área de trabalho.
+    - button "Latitude/longitude"
+    - button "X/Y projetado" [pressed]
+    - region "Mapa dos vértices do polígono":
+      - img
+      - button "Vértice 1. Arraste para reposicionar."
+      - button "Vértice 2. Arraste para reposicionar."
+      - button "Vértice 3. Arraste para reposicionar."
+      - button "Vértice 4. Arraste para reposicionar."
+      - button "Zoom in" [disabled]
+      - button "Zoom out"
+      - link "Leaflet":
+        - /url: https://leafletjs.com
+      - text: ©
+      - link "OpenStreetMap":
+        - /url: https://www.openstreetmap.org/copyright
+      - text: contributors
+    - heading "Vértices do polígono" [level=2]
+    - paragraph: A ordem define as arestas. Use sentido horário ou anti-horário e evite cruzamentos.
+    - button "Desfazer alteração nos vértices": Desfazer
+    - button "Refazer alteração nos vértices" [disabled]: Refazer
+    - button "Limpar vértices"
+    - text: V1 E 742.000,000 m N 6.945.000,000 m
+    - button "Localizar vértice 1 no mapa"
+    - button "Editar detalhes do vértice 1"
+    - button "Mover vértice 1 para cima" [disabled]
+    - button "Mover vértice 1 para baixo"
+    - button "Excluir vértice 1"
+    - text: V2 E 742.010,000 m N 6.945.000,000 m
+    - button "Localizar vértice 2 no mapa"
+    - button "Editar detalhes do vértice 2"
+    - button "Mover vértice 2 para cima"
+    - button "Mover vértice 2 para baixo"
+    - button "Excluir vértice 2"
+    - text: V3 E 742.010,000 m N 6.945.010,000 m
+    - button "Localizar vértice 3 no mapa"
+    - button "Editar detalhes do vértice 3"
+    - button "Mover vértice 3 para cima"
+    - button "Mover vértice 3 para baixo"
+    - button "Excluir vértice 3"
+    - text: V4 E 742.000,000 m N 6.945.010,000 m
+    - button "Localizar vértice 4 no mapa"
+    - button "Editar detalhes do vértice 4"
+    - button "Mover vértice 4 para cima"
+    - button "Mover vértice 4 para baixo" [disabled]
+    - button "Excluir vértice 4"
+    - paragraph: "Fechamento automático: V4 → V1"
+    - heading "Adicionar vértice" [level=3]
+    - text: Coordenada X / Este (m)
+    - textbox "Coordenada X / Este (m)":
+      - /placeholder: 745000,000
+    - text: Coordenada Y / Norte (m)
+    - textbox "Coordenada Y / Norte (m)":
+      - /placeholder: 6940000,000
+    - button "Adicionar vértice"
+    - group:
+      - text: Importar vários vértices Cole CSV ou TXT — Vértice; X; Y
+      - textbox "Cole CSV ou TXT — Vértice; X; Y":
+        - /placeholder: V1;745000,000;6940000,000
+        - text: X;Y 742000;6945000 742010;6945000 742010;6945010 742000;6945010
+      - button "Importar texto"
+      - text: Selecionar CSV/TXT
+      - button "Selecionar CSV/TXT"
+    - heading "Resultados" [level=2]
+    - paragraph: Plano projetado · EPSG:31982
+    - text: 4 vértices Técnico
+    - paragraph: Área por Gauss
+    - paragraph: 0,0100 ha
+    - paragraph: 100,00 m² · 0,0001 km²
+    - paragraph: Perímetro plano
+    - paragraph: 40,00 m
+    - paragraph: 0,040 km · unidade linear do SRC
+    - group:
+      - text: Detalhes técnicos e exportações O cálculo usa X/Y em metros no EPSG:31982. O mapa transforma apenas a visualização.
+      - paragraph: Exportar geometria e metadados
+      - button "csv"
+      - button "geojson"
+      - button "kml"
+      - button "dxf"
+      - button "Relatório PDF"

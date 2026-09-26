@@ -14,8 +14,7 @@ import {
 import { Layout } from '../../components/Layout';
 import { CalculationHistory, type SavedCalculation } from '../../components/CalculationHistory';
 import { cn } from '../../utils/cn';
-
-type ReservaLegalRegion = 'amazonia_floresta' | 'amazonia_cerrado' | 'amazonia_campos' | 'demais_regioes';
+import { calculateEnvironmentalReserve, environmentalRegionOptions as regionOptions, parseEnvironmentalArea, type ReservaLegalRegion } from './environmentalCalculation';
 
 interface CalculadoraAmbientalProps {
   embedded?: boolean;
@@ -27,14 +26,6 @@ const hectareFormatter = new Intl.NumberFormat('pt-BR', {
   maximumFractionDigits: 2
 });
 
-const regionOptions: Array<{ value: ReservaLegalRegion; label: string; percentage: number }> = [
-  { value: 'demais_regioes', label: 'Demais regiões do Brasil', percentage: 20 },
-  { value: 'amazonia_floresta', label: 'Amazônia Legal — área de floresta', percentage: 80 },
-  { value: 'amazonia_cerrado', label: 'Amazônia Legal — área de cerrado', percentage: 35 },
-  { value: 'amazonia_campos', label: 'Amazônia Legal — área de campos gerais', percentage: 20 }
-];
-
-const parseArea = (value: string) => value.trim() === '' ? null : Number(value);
 const formatArea = (value: number) => `${hectareFormatter.format(value)} ha`;
 
 export function CalculadoraAmbiental({ embedded = false, showHeader = true }: CalculadoraAmbientalProps) {
@@ -50,74 +41,19 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
   const [noNewConversion, setNoNewConversion] = useState(false);
   const [historicalCompliance, setHistoricalCompliance] = useState(false);
 
-  const analysis = useMemo(() => {
-    const total = parseArea(totalArea);
-    const app = parseArea(appArea) ?? 0;
-    const nativeOutside = parseArea(nativeOutsideApp) ?? 0;
-    const modules = parseArea(fiscalModules);
-    const remnant2008 = parseArea(nativeOn2008);
-    const errors: Record<string, string> = {};
-
-    if (total === null) return { ready: false as const, errors };
-    if (!Number.isFinite(total) || total <= 0) errors.totalArea = 'Informe uma área total maior que zero.';
-    if (!Number.isFinite(app) || app < 0) errors.appArea = 'Informe uma área de APP válida.';
-    if (!Number.isFinite(nativeOutside) || nativeOutside < 0) errors.nativeOutsideApp = 'Informe uma área de vegetação válida.';
-    if (modules !== null && (!Number.isFinite(modules) || modules <= 0)) errors.fiscalModules = 'Informe uma quantidade de módulos fiscais maior que zero.';
-    if (remnant2008 !== null && (!Number.isFinite(remnant2008) || remnant2008 < 0)) errors.nativeOn2008 = 'Informe uma área remanescente válida.';
-
-    if (total !== null && total > 0) {
-      if (app > total) errors.appArea = 'A APP não pode superar a área total do imóvel.';
-      if (nativeOutside > total) errors.nativeOutsideApp = 'A vegetação fora de APP não pode superar a área total.';
-      if (app + nativeOutside > total) errors.nativeOutsideApp = 'A soma da APP e da vegetação fora de APP supera a área total.';
-      if (remnant2008 !== null && remnant2008 > total) errors.nativeOn2008 = 'O remanescente de 2008 não pode superar a área total.';
-    }
-
-    const article15Eligible = app > 0 && carRequested && appProtected && noNewConversion;
-    const article67Candidate = modules !== null && modules <= 4 && propertyExistedOn2008;
-    if (article67Candidate && (remnant2008 === null || remnant2008 <= 0)) {
-      errors.nativeOn2008 = 'Informe o remanescente de vegetação nativa existente em 22/07/2008.';
-    }
-
-    if (Object.keys(errors).length > 0 || total === null) return { ready: true as const, valid: false as const, errors };
-
-    const percentage = regionOptions.find((option) => option.value === region)?.percentage ?? 20;
-    const generalRequirement = total * (percentage / 100);
-    const article67Applied = article67Candidate && remnant2008 !== null && remnant2008 < generalRequirement;
-    const requiredArea = article67Applied && remnant2008 !== null ? remnant2008 : generalRequirement;
-    const eligibleAppArea = article15Eligible ? app : 0;
-    const countableVegetation = nativeOutside + eligibleAppArea;
-    const deficit = Math.max(0, requiredArea - countableVegetation);
-    const potentialExcess = Math.max(0, countableVegetation - requiredArea);
-
-    return {
-      ready: true as const,
-      valid: true as const,
-      errors,
-      percentage,
-      requiredArea,
-      generalRequirement,
-      countableVegetation,
-      eligibleAppArea,
-      deficit,
-      potentialExcess,
-      article15Eligible,
-      article67Candidate,
-      article67Applied,
-      historicalCompliance
-    };
-  }, [
-    appArea,
-    appProtected,
-    carRequested,
-    fiscalModules,
-    historicalCompliance,
-    nativeOn2008,
-    nativeOutsideApp,
-    noNewConversion,
-    propertyExistedOn2008,
+  const analysis = useMemo(() => calculateEnvironmentalReserve({
     region,
-    totalArea
-  ]);
+    totalArea,
+    appArea,
+    nativeOutsideApp,
+    fiscalModules,
+    nativeOn2008,
+    propertyExistedOn2008,
+    carRequested,
+    appProtected,
+    noNewConversion,
+    historicalCompliance
+  }), [appArea, appProtected, carRequested, fiscalModules, historicalCompliance, nativeOn2008, nativeOutsideApp, noNewConversion, propertyExistedOn2008, region, totalArea]);
 
   const reopenCalculation = (calculation: SavedCalculation) => {
     const saved = calculation.entradas as Partial<{
@@ -181,12 +117,12 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="car-total-area" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Área total do imóvel (ha)</label>
-                <NumericInput id="car-total-area" name="areaTotal" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={totalArea} onChange={(event) => setTotalArea(event.target.value)} aria-invalid={Boolean(analysis.errors.totalArea)} aria-describedby={analysis.errors.totalArea ? 'car-total-area-error' : undefined} placeholder="Ex.: 100,50" className={fieldClass} />
+                <NumericInput decimalComma id="car-total-area" name="areaTotal" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={totalArea} onChange={(event) => setTotalArea(event.target.value)} aria-invalid={Boolean(analysis.errors.totalArea)} aria-describedby={analysis.errors.totalArea ? 'car-total-area-error' : undefined} placeholder="Ex.: 100,50" className={fieldClass} />
                 {analysis.errors.totalArea && <p id="car-total-area-error" className={errorClass}>{analysis.errors.totalArea}</p>}
               </div>
               <div>
                 <label htmlFor="car-fiscal-modules" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Área em módulos fiscais</label>
-                <NumericInput id="car-fiscal-modules" name="modulosFiscais" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={fiscalModules} onChange={(event) => setFiscalModules(event.target.value)} aria-invalid={Boolean(analysis.errors.fiscalModules)} aria-describedby="car-fiscal-modules-help" placeholder="Opcional" className={fieldClass} />
+                <NumericInput decimalComma id="car-fiscal-modules" name="modulosFiscais" inputMode="decimal" min="0.01" step="0.01" autoComplete="off" value={fiscalModules} onChange={(event) => setFiscalModules(event.target.value)} aria-invalid={Boolean(analysis.errors.fiscalModules)} aria-describedby="car-fiscal-modules-help" placeholder="Opcional" className={fieldClass} />
                 <p id="car-fiscal-modules-help" className="mt-1.5 text-xs text-zinc-500">Necessário para avaliar o possível enquadramento no art. 67.</p>
                 {analysis.errors.fiscalModules && <p className={errorClass}>{analysis.errors.fiscalModules}</p>}
               </div>
@@ -195,12 +131,12 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="car-app-area" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">APP conservada ou em recuperação (ha)</label>
-                <NumericInput id="car-app-area" name="areaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={appArea} onChange={(event) => setAppArea(event.target.value)} aria-invalid={Boolean(analysis.errors.appArea)} placeholder="Ex.: 8,25" className={fieldClass} />
+                <NumericInput decimalComma id="car-app-area" name="areaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={appArea} onChange={(event) => setAppArea(event.target.value)} aria-invalid={Boolean(analysis.errors.appArea)} placeholder="Ex.: 8,25" className={fieldClass} />
                 {analysis.errors.appArea && <p className={errorClass}>{analysis.errors.appArea}</p>}
               </div>
               <div>
                 <label htmlFor="car-native-outside-app" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Vegetação nativa fora de APP (ha)</label>
-                <NumericInput id="car-native-outside-app" name="vegetacaoForaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOutsideApp} onChange={(event) => setNativeOutsideApp(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOutsideApp)} placeholder="Ex.: 18,00" className={fieldClass} />
+                <NumericInput decimalComma id="car-native-outside-app" name="vegetacaoForaApp" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOutsideApp} onChange={(event) => setNativeOutsideApp(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOutsideApp)} placeholder="Ex.: 18,00" className={fieldClass} />
                 {analysis.errors.nativeOutsideApp && <p className={errorClass}>{analysis.errors.nativeOutsideApp}</p>}
               </div>
             </div>
@@ -238,10 +174,10 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
               <CheckOption tone="warning" checked={propertyExistedOn2008} onChange={setPropertyExistedOn2008} label="O imóvel já detinha essa extensão em 22/07/2008." />
               <CheckOption tone="warning" checked={historicalCompliance} onChange={setHistoricalCompliance} label="Há indícios de supressão regular conforme a legislação da época — art. 68." />
             </div>
-            {parseArea(fiscalModules) !== null && Number(fiscalModules) <= 4 && propertyExistedOn2008 && (
+            {parseEnvironmentalArea(fiscalModules) !== null && Number.isFinite(parseEnvironmentalArea(fiscalModules)) && (parseEnvironmentalArea(fiscalModules) ?? Number.POSITIVE_INFINITY) > 0 && (parseEnvironmentalArea(fiscalModules) ?? Number.POSITIVE_INFINITY) <= 4 && propertyExistedOn2008 && (
               <div className="mt-2 border-t border-amber-200/70 py-4 dark:border-amber-800/40">
                 <label htmlFor="car-native-2008" className="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Remanescente de vegetação nativa em 22/07/2008 (ha)</label>
-                <NumericInput id="car-native-2008" name="remanescente2008" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOn2008} onChange={(event) => setNativeOn2008(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOn2008)} className={fieldClass} />
+                <NumericInput decimalComma id="car-native-2008" name="remanescente2008" inputMode="decimal" min="0" step="0.01" autoComplete="off" value={nativeOn2008} onChange={(event) => setNativeOn2008(event.target.value)} aria-invalid={Boolean(analysis.errors.nativeOn2008)} className={fieldClass} />
                 {analysis.errors.nativeOn2008 && <p className={errorClass}>{analysis.errors.nativeOn2008}</p>}
               </div>
             )}
@@ -315,8 +251,8 @@ export function CalculadoraAmbiental({ embedded = false, showHeader = true }: Ca
                   <Info aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
                   <div className="text-xs leading-relaxed">
                     <p className="font-semibold">Memória do cálculo</p>
-                    <p className="mt-1">Vegetação fora de APP: {formatArea(parseArea(nativeOutsideApp) ?? 0)}. APP computada: {formatArea(analysis.eligibleAppArea)}.</p>
-                    {parseArea(appArea) !== null && (parseArea(appArea) ?? 0) > 0 && !analysis.article15Eligible && <p className="mt-1 font-medium">A APP informada não foi computada porque as três condições declarativas do art. 15 não foram confirmadas.</p>}
+                    <p className="mt-1">Vegetação fora de APP: {formatArea(parseEnvironmentalArea(nativeOutsideApp) ?? 0)}. APP computada: {formatArea(analysis.eligibleAppArea)}.</p>
+                    {parseEnvironmentalArea(appArea) !== null && (parseEnvironmentalArea(appArea) ?? 0) > 0 && !analysis.article15Eligible && <p className="mt-1 font-medium">A APP informada não foi computada porque as três condições declarativas do art. 15 não foram confirmadas.</p>}
                     {analysis.article67Applied && <p className="mt-1 font-medium">Foi utilizado o remanescente declarado de 22/07/2008 como referência do art. 67.</p>}
                     {analysis.article67Candidate && !analysis.article67Applied && <p className="mt-1 font-medium">O remanescente declarado de 2008 não é inferior ao percentual geral; por isso, o art. 67 não alterou a referência quantitativa.</p>}
                   </div>

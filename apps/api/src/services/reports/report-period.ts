@@ -14,6 +14,7 @@ export type ParsedPeriod = {
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export const DAY_MS = 86_400_000;
+export const REPORT_TIME_ZONE = 'America/Sao_Paulo';
 
 export class ReportPeriodValidationError extends Error {}
 
@@ -32,6 +33,17 @@ export function shiftDate(value: string, days: number) {
   const parsed = new Date(`${value}T12:00:00.000Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
+}
+
+export function reportTodayKey(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: REPORT_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export function parseReportPeriod(input: PeriodInput): ParsedPeriod {

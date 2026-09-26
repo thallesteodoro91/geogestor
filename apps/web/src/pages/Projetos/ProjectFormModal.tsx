@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import type { ProjetoPayload } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
-import { FormFooter } from '../../components/Form';
+import { FormFooter, FormSelect } from '../../components/Form';
 import { apiClient } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -36,6 +36,13 @@ export interface ProjectFormSavedRecord extends ProjectRecordForForm {
   tipo?: string | null;
 }
 
+interface ChecklistModelOption {
+  id: string;
+  nome: string;
+  tipoProjeto?: string | null;
+  etapas: Array<{ id: string }>;
+}
+
 interface ProjectFormModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -64,15 +71,21 @@ function ProjectFormModalContent({
   const [errors, setErrors] = useState<ProjectFormErrors>({});
   const [activeTab, setActiveTab] = useState<ProjectModalTab>(initialTab);
   const [showQuickClientModal, setShowQuickClientModal] = useState(false);
+  const [checklistTemplate, setChecklistTemplate] = useState('');
   const [pendingCancellationProject, setPendingCancellationProject] = useState<ProjectFormSavedRecord | null>(null);
   const [initialFingerprint, setInitialFingerprint] = useState(projectFormFingerprint(initialForm));
-  const dirty = projectFormFingerprint(form) !== initialFingerprint;
+  const dirty = projectFormFingerprint(form) !== initialFingerprint || (!project && checklistTemplate !== '');
   const effectiveContext: ProjectModalContext = project?.tipo === 'Ambiental'
     ? 'ambiental'
     : project?.tipo === 'Licenciamento'
       ? 'licenciamento'
       : context;
   const copy = resolveProjectFormCopy(effectiveContext, form.tipo || project?.tipo);
+  const { data: checklistModels = [] } = useQuery({
+    queryKey: ['checklist-models', 'active'],
+    queryFn: () => apiClient.get<ChecklistModelOption[]>('/api/tarefas/modelos?ativos=true'),
+    enabled: !project
+  });
 
   useEffect(() => {
     if (!dirty) return;
@@ -92,10 +105,10 @@ function ProjectFormModalContent({
     ),
     onSuccess: async (savedProject) => {
       const feedback = project ? copy.updateSuccess : copy.createSuccess;
-      const cancellationStarted = Boolean(
+      const interruptionStarted = Boolean(
         project
-        && project.status !== 'Cancelado'
-        && savedProject.status === 'Cancelado'
+        && ['Cancelado', 'Suspenso'].includes(savedProject.status || '')
+        && project.status !== savedProject.status
       );
       setInitialFingerprint(projectFormFingerprint(form));
       await Promise.all([
@@ -105,12 +118,26 @@ function ProjectFormModalContent({
         queryClient.invalidateQueries({ queryKey: ['ambiental-demandas'] }),
         invalidateFinancialQueries(queryClient)
       ]);
-      if (cancellationStarted) {
+      if (!project && checklistTemplate) {
+        try {
+          const result = await apiClient.post<{ criadas: number; ignoradas: number }>('/api/tarefas/aplicar-modelo', {
+            projetoId: savedProject.id,
+            modelo: checklistTemplate
+          });
+          await queryClient.invalidateQueries({ queryKey: ['projeto-tarefas', savedProject.id] });
+          toast.success(`Projeto criado com ${result.criadas} tarefa(s) do modelo de checklist.`);
+        } catch (error) {
+          toast.warning(error instanceof Error
+            ? `O projeto foi criado, mas o checklist não pôde ser aplicado: ${error.message}`
+            : 'O projeto foi criado, mas o checklist não pôde ser aplicado.');
+        }
+      }
+      if (interruptionStarted) {
         setPendingCancellationProject(savedProject);
-        toast.warning('Projeto cancelado. Defina agora o tratamento financeiro.');
+        toast.warning(`Projeto ${savedProject.status === 'Suspenso' ? 'suspenso' : 'cancelado'}. Defina agora o tratamento financeiro.`);
         return;
       }
-      toast.success(feedback);
+      if (project || !checklistTemplate) toast.success(feedback);
       onClose();
       onSaved?.(savedProject, effectiveContext);
     },
@@ -289,6 +316,30 @@ function ProjectFormModalContent({
                 onClearErrors={clearErrors}
                 onCreateClient={() => setShowQuickClientModal(true)}
               />
+              {!project && activeTab === 'geoloc' && (
+                <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/70">
+                  <label htmlFor="project-checklist-template" className="block text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                    Modelo de checklist inicial
+                  </label>
+                  <FormSelect
+                    id="project-checklist-template"
+                    name="checklistTemplate"
+                    value={checklistTemplate}
+                    onChange={(event) => setChecklistTemplate(event.target.value)}
+                    className="mt-2 w-full rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                  >
+                    <option value="">Não aplicar modelo</option>
+                    {checklistModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.nome} ({model.etapas.length} etapas)
+                      </option>
+                    ))}
+                  </FormSelect>
+                  <p className="mt-1.5 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    As etapas serão criadas no mesmo checklist compartilhado do projeto. Reaplicar o modelo ignora tarefas já existentes com o mesmo título.
+                  </p>
+                </div>
+              )}
             </div>
 
             <FormFooter className="relative z-0 mt-0 flex-shrink-0 flex-wrap py-4 sm:flex-nowrap">
@@ -322,7 +373,11 @@ function ProjectFormModalContent({
       />
       {pendingCancellationProject && (
         <ProjectCancellationDecisionModal
-          project={{ id: pendingCancellationProject.id, nome: pendingCancellationProject.nome || 'Projeto sem nome' }}
+          project={{
+            id: pendingCancellationProject.id,
+            nome: pendingCancellationProject.nome || 'Projeto sem nome',
+            status: pendingCancellationProject.status === 'Suspenso' ? 'Suspenso' : 'Cancelado'
+          }}
           onCompleted={() => {
             const savedProject = pendingCancellationProject;
             setPendingCancellationProject(null);

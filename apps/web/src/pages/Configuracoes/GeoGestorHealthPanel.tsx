@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { appLinks } from '@geogestor/contracts';
 import {
   CheckCircle,
   FileText,
@@ -18,7 +19,14 @@ import { assessPostUpdateStatus, type PostUpdateBackupStatus } from '../postUpda
 type Health = {
   status: 'ok' | 'degraded';
   checkedAt: string;
-  checks: { database: string; foreignKeyViolations: number; schemaVersion: number; residualMigrationTables: string[] };
+  checks: {
+    database: string;
+    foreignKeyViolations: number;
+    schemaVersion: number;
+    residualMigrationTables: string[];
+    filesDirectoryWritable: boolean | null;
+    filesDirectory: { status: 'ok' | 'not_configured' | 'failed'; code: string; guidance: string; operation?: string };
+  };
 };
 type Quality = { summary: { issues: number; critical: number; warnings: number } };
 type Backups = PostUpdateBackupStatus & {
@@ -27,7 +35,7 @@ type Backups = PostUpdateBackupStatus & {
 
 type Props = {
   enabled: boolean;
-  desktopInfo?: { desktop: boolean; mode: string; databasePath: string };
+  desktopInfo?: { desktop: boolean; mode: string; databasePath: string; filesRootDirectory?: string | null };
   onOpenDiagnosticsFolder: () => void;
   onExportDiagnostic: () => void;
 };
@@ -111,6 +119,23 @@ export function GeoGestorHealthPanel({ enabled, desktopInfo, onOpenDiagnosticsFo
               <div className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"><dt className="text-xs text-zinc-500">Qualidade dos dados</dt><dd className="mt-1 font-semibold tabular-nums">{data.quality.summary.issues.toLocaleString('pt-BR')} ocorrência(s)</dd><dd className="text-xs text-zinc-500">{data.quality.summary.critical} crítica(s) · {data.quality.summary.warnings} alerta(s)</dd></div>
               <div className="min-w-0 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"><dt className="text-xs text-zinc-500">Banco local</dt><dd className="mt-1 break-all font-mono text-xs">{desktopInfo?.databasePath || 'Não identificado'}</dd></div>
             </dl>
+            {data.health.checks.filesDirectoryWritable === false && (
+              <div role="alert" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                <strong>A pasta de documentos não pode ser utilizada.</strong>
+                <p className="mt-1 break-words text-xs leading-5">Pasta testada: <code className="font-mono">{desktopInfo?.filesRootDirectory || 'pasta configurada'}</code>.</p>
+                <p className="mt-1 text-xs leading-5">Falha durante: {data.health.checks.filesDirectory.operation || 'verificação da pasta'}. {data.health.checks.filesDirectory.guidance}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link to={`${appLinks.settings('sistema')}#data-folder`} className="rounded-lg bg-amber-900 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100">Escolher outra pasta</Link>
+                  <button type="button" onClick={() => void healthQuery.refetch()} className="rounded-lg border border-amber-300 px-3 py-2 text-xs font-semibold hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600 focus-visible:ring-offset-2 dark:border-amber-800 dark:hover:bg-amber-950">Testar novamente</button>
+                </div>
+              </div>
+            )}
+            {data.health.checks.residualMigrationTables.length > 0 && (
+              <div role="status" className="mt-4 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-100">
+                <strong>Há uma tabela temporária de migração sob análise.</strong>
+                <p className="mt-1 text-xs leading-5">Nenhuma tabela residual será removida automaticamente. Exporte um diagnóstico e confirme a origem antes de qualquer limpeza.</p>
+              </div>
+            )}
           </>
         )}
 

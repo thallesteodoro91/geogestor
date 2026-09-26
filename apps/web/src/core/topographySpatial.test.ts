@@ -72,6 +72,10 @@ test('separa fusos SIRGAS 2000 e WGS 84 e sugere o fuso brasileiro', () => {
   assert.equal(getSpatialReference('EPSG:32722')?.datum, 'WGS 84');
   assert.equal(suggestUtmZone(-48.54822), 22);
   assert.equal(suggestUtmZone(-80), null);
+  assert.equal(suggestUtmZone(-30), null);
+  assert.equal(suggestUtmZone(-30.000001), 25);
+  assert.equal(suggestSpatialReference(-48, Number.NaN), null);
+  assert.equal(suggestSpatialReference(-48, 91), null);
 });
 
 test('persiste apenas códigos conhecidos e recupera configuração inválida com segurança', () => {

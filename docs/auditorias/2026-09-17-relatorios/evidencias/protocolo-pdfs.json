@@ -1,0 +1,100 @@
+{
+  "audit": "Sessão 11 — Relatórios",
+  "source": "Playwright + Chromium, aplicação/API/SQLite isolados",
+  "documents": [
+    {
+      "file": "geogestor-executivo-2026-09-18-2026-09-18.pdf",
+      "bytes": 94231,
+      "sha256": "03e00b108e88a430d315de12026c22edcb51245107a05160fa40984fa4eac7f8",
+      "pages": 3,
+      "pageChecks": [
+        {
+          "page": 1,
+          "textCharacters": 1542,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "textCharacters": 1682,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "textCharacters": 2405,
+          "hasText": true
+        }
+      ],
+      "renderFiles": [
+        "pdf-renders/geogestor-executivo-2026-09-18-2026-09-18-1.png",
+        "pdf-renders/geogestor-executivo-2026-09-18-2026-09-18-2.png",
+        "pdf-renders/geogestor-executivo-2026-09-18-2026-09-18-3.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "companyIdentity": true,
+        "period": true,
+        "criteria": true,
+        "htmlLikeInputIsInertText": true
+      }
+    },
+    {
+      "file": "geogestor-financeiro-2026-09-18-2026-09-18.pdf",
+      "bytes": 68575,
+      "sha256": "0435118b7da2b15c2b645d75aafdf218a50ee6d1ae4bc2aafd70c2e5c4f8ff4d",
+      "pages": 2,
+      "pageChecks": [
+        {
+          "page": 1,
+          "textCharacters": 1722,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "textCharacters": 1652,
+          "hasText": true
+        }
+      ],
+      "renderFiles": [
+        "pdf-renders/geogestor-financeiro-2026-09-18-2026-09-18-1.png",
+        "pdf-renders/geogestor-financeiro-2026-09-18-2026-09-18-2.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "companyIdentity": true,
+        "period": true,
+        "criteria": true,
+        "htmlLikeInputIsInertText": true
+      }
+    },
+    {
+      "file": "geogestor-projetos-2026-09-18-2026-09-18.pdf",
+      "bytes": 66502,
+      "sha256": "0e339b82cab371b03cd87b25e4c608169e6ba57074d17b96716acd02ee0b873e",
+      "pages": 2,
+      "pageChecks": [
+        {
+          "page": 1,
+          "textCharacters": 1259,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "textCharacters": 1313,
+          "hasText": true
+        }
+      ],
+      "renderFiles": [
+        "pdf-renders/geogestor-projetos-2026-09-18-2026-09-18-1.png",
+        "pdf-renders/geogestor-projetos-2026-09-18-2026-09-18-2.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "companyIdentity": true,
+        "period": true,
+        "criteria": true,
+        "htmlLikeInputIsInertText": true
+      }
+    }
+  ],
+  "allChecksPassed": true
+}

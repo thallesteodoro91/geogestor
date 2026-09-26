@@ -29,7 +29,7 @@ async function reset() {
   await fs.mkdir(filesRoot, { recursive: true });
 }
 
-test('backup completo validado restaura banco e arquivos relacionados', async () => {
+test('backup completo validado restaura banco e arquivos relacionados', async (t) => {
   await reset();
   const [{ runRuntimeMigrations }, { BackupService }, { RestoreAuthorizationService }] = await Promise.all([
     import('./services/runtime-migrations.service'),
@@ -37,6 +37,12 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
     import('./services/restore-authorization.service')
   ]);
   await runRuntimeMigrations();
+
+  await assert.rejects(
+    BackupService.createCompleteBackup(path.join(root, 'documents-missing')),
+    /pasta de documentos.*não (?:existe|está disponível)/i,
+    'um backup completo não pode ser promovido sem a raiz de documentos'
+  );
 
   const sourceClient = createClient(databaseClientConfig(dbPath));
   await sourceClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-backup', 'Cliente sintético'] });
@@ -51,7 +57,15 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   });
   await fs.writeFile(path.join(filesRoot, 'documento.txt'), 'versão preservada', 'utf8');
 
+  const databaseOnlyBackup = await BackupService.createLocalBackup();
+  const databaseOnlyValidation = await BackupService.validateBackup(databaseOnlyBackup.bundlePath);
+  assert.equal(databaseOnlyValidation.manifest.type, 'database');
+  assert.equal(databaseOnlyValidation.manifest.files.length, 1);
+  assert.equal(databaseOnlyValidation.manifest.files[0]?.kind, 'database');
+
+  const backupStartedAtMs = performance.now();
   const backup = await BackupService.createCompleteBackup(filesRoot);
+  const backupDurationMs = performance.now() - backupStartedAtMs;
   const bundleAuthorization = RestoreAuthorizationService.issueForTests(backup.bundlePath, { expiresAt: Date.now() + 5 * 60_000 });
   const selectedBundle = RestoreAuthorizationService.verify({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
   const validation = await BackupService.validateBackup(selectedBundle.bundlePath, selectedBundle.bundlePath);
@@ -71,17 +85,20 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.ok(encryptedDocument);
   assert.equal((await fs.readFile(path.join(backup.bundlePath, encryptedDocument.path))).includes(Buffer.from('versão preservada')), false);
 
+  const isolatedTestStartedAtMs = performance.now();
   const isolatedTest = await BackupService.testRestore(selectedBundle.bundlePath, selectedBundle.bundlePath);
+  const isolatedTestDurationMs = performance.now() - isolatedTestStartedAtMs;
   assert.equal(isolatedTest.tested, true);
   assert.equal(isolatedTest.temporaryDataRemoved, true);
   assert.equal(isolatedTest.credentialsExcluded, true);
-  RestoreAuthorizationService.markTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
+  RestoreAuthorizationService.markTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization }, validation.fingerprint);
 
   const compatibleV2Bundle = `${backup.bundlePath}-v2`;
   await fs.cp(backup.bundlePath, compatibleV2Bundle, { recursive: true });
   const compatibleV2ManifestPath = path.join(compatibleV2Bundle, 'manifest.json');
   const compatibleV2Manifest = JSON.parse(await fs.readFile(compatibleV2ManifestPath, 'utf8'));
   compatibleV2Manifest.formatVersion = 2;
+  delete compatibleV2Manifest.credentialsExcluded;
   await fs.writeFile(compatibleV2ManifestPath, JSON.stringify(compatibleV2Manifest), 'utf8');
   assert.equal((await BackupService.validateBackup(compatibleV2Bundle)).integrity, 'verified');
 
@@ -90,6 +107,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   const compatibleV1ManifestPath = path.join(compatibleV1Bundle, 'manifest.json');
   const compatibleV1Manifest = JSON.parse(await fs.readFile(compatibleV1ManifestPath, 'utf8'));
   compatibleV1Manifest.formatVersion = 1;
+  delete compatibleV1Manifest.credentialsExcluded;
   for (const entry of compatibleV1Manifest.files) delete entry.sha256;
   await fs.writeFile(compatibleV1ManifestPath, JSON.stringify(compatibleV1Manifest), 'utf8');
   assert.equal((await BackupService.validateBackup(compatibleV1Bundle)).integrity, 'legacy-unverified');
@@ -102,6 +120,15 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   await fs.cp(backup.bundlePath, corruptBundle, { recursive: true });
   await fs.appendFile(path.join(corruptBundle, 'database.db'), 'corrupção sintética');
   await assert.rejects(BackupService.validateBackup(corruptBundle), /Tamanho divergente|Checksum divergente/);
+
+  const extraFileBundle = `${backup.bundlePath}-extra-file`;
+  await fs.cp(backup.bundlePath, extraFileBundle, { recursive: true });
+  await fs.writeFile(path.join(extraFileBundle, 'arquivo-nao-manifestado.txt'), 'não autorizado', 'utf8');
+  await assert.rejects(
+    BackupService.validateBackup(extraFileBundle),
+    /arquivo.*não (?:declarado|manifestado)/i,
+    'conteúdo extra precisa ser recusado antes da restauração'
+  );
 
   const incompatibleBundle = `${backup.bundlePath}-incompatible`;
   await fs.cp(backup.bundlePath, incompatibleBundle, { recursive: true });
@@ -127,9 +154,11 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
 
   await sourceClient.execute({ sql: 'INSERT INTO clientes (id, nome) VALUES (?, ?)', args: ['cliente-posterior', 'Alteração posterior'] });
   await fs.writeFile(path.join(filesRoot, 'documento.txt'), 'versão alterada', 'utf8');
+  const observedRpoMs = Math.max(0, Date.now() - Date.parse(validation.manifest.completedAt));
 
-  const authorizedRestore = RestoreAuthorizationService.assertTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization });
+  const authorizedRestore = RestoreAuthorizationService.assertTested({ bundlePath: backup.bundlePath, authorization: bundleAuthorization }, validation.fingerprint);
   RestoreAuthorizationService.verify({ bundlePath: backup.bundlePath, authorization: bundleAuthorization }, { consume: true });
+  const restoreAStartedAtMs = performance.now();
   const restore = await BackupService.restoreBackup({
     bundlePath: authorizedRestore.bundlePath,
     allowedBackupDirectory: authorizedRestore.bundlePath,
@@ -137,6 +166,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
     targetFilesRoot: restoredFilesRoot,
     confirmation: 'RESTORE_GEOGESTOR'
   });
+  const restoreADurationMs = performance.now() - restoreAStartedAtMs;
   assert.equal(restore.restored, true);
 
   const secondRestore = await BackupService.restoreBackup({
@@ -183,6 +213,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
 
   const portableTarget = path.join(root, 'portable-restored', 'geogestor.db');
   const portableFilesTarget = path.join(root, 'portable-restored-files');
+  const restoreBStartedAtMs = performance.now();
   await BackupService.restoreBackup({
     bundlePath: portableBackup.bundlePath,
     targetDatabasePath: portableTarget,
@@ -190,6 +221,7 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
     confirmation: 'RESTORE_GEOGESTOR',
     recoveryCode
   });
+  const restoreBDurationMs = performance.now() - restoreBStartedAtMs;
   const portableClient = createClient(databaseClientConfig(portableTarget));
   assert.equal((await portableClient.execute('PRAGMA quick_check')).rows[0]?.quick_check, 'ok');
   assert.equal((await portableClient.execute('SELECT COUNT(*) AS total FROM clientes')).rows[0]?.total, 2);
@@ -225,4 +257,5 @@ test('backup completo validado restaura banco e arquivos relacionados', async ()
   assert.equal((await rolledBackClient.execute('PRAGMA quick_check')).rows[0]?.quick_check, 'ok');
   await rolledBackClient.close();
   await sourceClient.close();
+  t.diagnostic(`métricas sintéticas (ms): backup=${backupDurationMs.toFixed(2)} teste-isolado=${isolatedTestDurationMs.toFixed(2)} restauração-A=${restoreADurationMs.toFixed(2)} restauração-B=${restoreBDurationMs.toFixed(2)} RPO-observado=${observedRpoMs}`);
 });

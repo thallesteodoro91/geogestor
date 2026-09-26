@@ -133,13 +133,13 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
               </FormSelect>
             </FormField>
             <FormField htmlFor="license-numero" label="Número da licença" required error={errors.numero}>
-              <input id="license-numero" name="numero" type="text" autoComplete="off" spellCheck={false} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: LAO 1234/2026" aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? 'license-numero-error' : undefined} className={fieldClass} />
+              <input id="license-numero" name="numero" type="text" autoComplete="off" spellCheck={false} maxLength={120} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: LAO 1234/2026" aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? 'license-numero-error' : undefined} className={fieldClass} />
             </FormField>
             <FormField htmlFor="license-protocolo" label="Processo ou protocolo">
-              <input id="license-protocolo" name="protocolo" type="text" autoComplete="off" spellCheck={false} value={form.protocolo} onChange={(event) => update('protocolo', event.target.value)} placeholder="Ex.: IMA 000123/2026" className={fieldClass} />
+              <input id="license-protocolo" name="protocolo" type="text" autoComplete="off" spellCheck={false} maxLength={160} value={form.protocolo} onChange={(event) => update('protocolo', event.target.value)} placeholder="Ex.: IMA 000123/2026" className={fieldClass} />
             </FormField>
             <FormField htmlFor="license-orgao" label="Órgão ambiental" required error={errors.orgao}>
-              <input id="license-orgao" name="orgao" type="text" autoComplete="organization" value={form.orgao} onChange={(event) => update('orgao', event.target.value)} placeholder="Ex.: IMA, IBAMA" aria-invalid={Boolean(errors.orgao)} aria-describedby={errors.orgao ? 'license-orgao-error' : undefined} className={fieldClass} />
+              <input id="license-orgao" name="orgao" type="text" autoComplete="organization" maxLength={160} value={form.orgao} onChange={(event) => update('orgao', event.target.value)} placeholder="Ex.: IMA, IBAMA" aria-invalid={Boolean(errors.orgao)} aria-describedby={errors.orgao ? 'license-orgao-error' : undefined} className={fieldClass} />
             </FormField>
           </div>
         </FormSection>

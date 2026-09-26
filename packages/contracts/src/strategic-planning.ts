@@ -3,8 +3,17 @@ import { z } from 'zod';
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
 const requiredText = (label: string, max: number) =>
   z.string().trim().min(1, `${label} é obrigatório.`).max(max, `${label} excede ${max} caracteres.`);
+const isRealDateKey = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+};
 const dateText = (label: string) =>
-  z.string().regex(/^\d{4}-\d{2}-\d{2}$/, `${label} deve estar no formato AAAA-MM-DD.`);
+  z.string().refine(isRealDateKey, `${label} deve ser uma data real no formato AAAA-MM-DD.`);
+const nonEmptyPatch = <T extends Record<string, unknown>>(value: T) => Object.keys(value).length > 0;
 
 export const StrategicCycleStatusSchema = z.enum(['rascunho', 'ativo', 'em_revisao', 'encerrado']);
 export const StrategicObjectiveStatusSchema = z.enum(['nao_iniciado', 'em_andamento', 'em_risco', 'concluido', 'cancelado']);
@@ -26,7 +35,7 @@ export const StrategicCyclePayloadSchema = z.object({
   visao: requiredText('Direcionamento estratégico', 2_000),
   status: StrategicCycleStatusSchema.default('rascunho'),
   proximaRevisao: dateText('Próxima revisão').nullable().optional()
-}).superRefine((value, context) => {
+}).strict().superRefine((value, context) => {
   if (value.dataFim < value.dataInicio) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['dataFim'], message: 'A data final deve ser posterior à data inicial.' });
   }
@@ -39,15 +48,16 @@ export const StrategicCycleUpdateSchema = z.object({
   visao: requiredText('Direcionamento estratégico', 2_000).optional(),
   status: StrategicCycleStatusSchema.optional(),
   proximaRevisao: dateText('Próxima revisão').nullable().optional()
-});
+}).strict().refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicPillarPayloadSchema = z.object({
   cicloId: z.string().uuid(),
   nome: requiredText('Nome do pilar', 120),
   descricao: optionalText(1_000),
   ordem: z.number().int().min(0).max(999).default(0)
-});
-export const StrategicPillarUpdateSchema = StrategicPillarPayloadSchema.omit({ cicloId: true }).partial();
+}).strict();
+export const StrategicPillarUpdateSchema = StrategicPillarPayloadSchema.omit({ cicloId: true }).partial()
+  .refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicObjectivePayloadSchema = z.object({
   cicloId: z.string().uuid(),
@@ -59,8 +69,9 @@ export const StrategicObjectivePayloadSchema = z.object({
   status: StrategicObjectiveStatusSchema.default('nao_iniciado'),
   prioridade: StrategicPrioritySchema.default('media'),
   ordem: z.number().int().min(0).max(999).default(0)
-});
-export const StrategicObjectiveUpdateSchema = StrategicObjectivePayloadSchema.omit({ cicloId: true }).partial();
+}).strict();
+export const StrategicObjectiveUpdateSchema = StrategicObjectivePayloadSchema.omit({ cicloId: true }).partial()
+  .refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 const StrategicKeyResultBaseSchema = z.object({
   objetivoId: z.string().uuid(),
@@ -79,7 +90,7 @@ const StrategicKeyResultBaseSchema = z.object({
   frequencia: StrategicFrequencySchema.default('mensal'),
   ultimaAtualizacao: z.string().datetime().nullable().optional(),
   confianca: StrategicConfidenceSchema.default('media')
-});
+}).strict();
 export const StrategicKeyResultPayloadSchema = StrategicKeyResultBaseSchema.superRefine((value, context) => {
   if (value.fonteTipo !== 'manual' && !value.fonteCodigo) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['fonteCodigo'], message: 'Selecione uma fonte automática válida.' });
@@ -88,7 +99,8 @@ export const StrategicKeyResultPayloadSchema = StrategicKeyResultBaseSchema.supe
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['valorAtual'], message: 'Informe o valor atual da fonte manual.' });
   }
 });
-export const StrategicKeyResultUpdateSchema = StrategicKeyResultBaseSchema.omit({ objetivoId: true }).partial();
+export const StrategicKeyResultUpdateSchema = StrategicKeyResultBaseSchema.omit({ objetivoId: true }).partial()
+  .refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicInitiativePayloadSchema = z.object({
   objetivoId: z.string().uuid(),
@@ -103,8 +115,9 @@ export const StrategicInitiativePayloadSchema = z.object({
   proximoMarco: optionalText(500),
   projetoId: z.string().uuid().nullable().optional(),
   tarefaId: z.string().uuid().nullable().optional()
-});
-export const StrategicInitiativeUpdateSchema = StrategicInitiativePayloadSchema.omit({ objetivoId: true }).partial();
+}).strict();
+export const StrategicInitiativeUpdateSchema = StrategicInitiativePayloadSchema.omit({ objetivoId: true }).partial()
+  .refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicCheckinPayloadSchema = z.object({
   cicloId: z.string().uuid(),
@@ -118,8 +131,23 @@ export const StrategicCheckinPayloadSchema = z.object({
   decisoesPendentes: optionalText(2_000),
   proximosPassos: optionalText(2_000),
   proximaRevisao: dateText('Próxima revisão').nullable().optional()
+}).strict().superRefine((value, context) => {
+  if (value.proximaRevisao && value.proximaRevisao < value.data) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['proximaRevisao'], message: 'A próxima revisão não pode ser anterior a esta revisão.' });
+  }
 });
-export const StrategicCheckinUpdateSchema = StrategicCheckinPayloadSchema.omit({ cicloId: true }).partial();
+export const StrategicCheckinUpdateSchema = z.object({
+  objetivoId: z.string().uuid().nullable().optional(),
+  data: dateText('Data do check-in').optional(),
+  status: StrategicCheckinStatusSchema.optional(),
+  narrativa: requiredText('Narrativa', 4_000).optional(),
+  confianca: StrategicConfidenceSchema.optional(),
+  bloqueios: optionalText(2_000),
+  decisoes: optionalText(2_000),
+  decisoesPendentes: optionalText(2_000),
+  proximosPassos: optionalText(2_000),
+  proximaRevisao: dateText('Próxima revisão').nullable().optional()
+}).strict().refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicRiskPayloadSchema = z.object({
   cicloId: z.string().uuid(),
@@ -131,8 +159,9 @@ export const StrategicRiskPayloadSchema = z.object({
   mitigacao: optionalText(2_000),
   responsavel: requiredText('Responsável', 160),
   status: StrategicRiskStatusSchema.default('aberto')
-});
-export const StrategicRiskUpdateSchema = StrategicRiskPayloadSchema.omit({ cicloId: true }).partial();
+}).strict();
+export const StrategicRiskUpdateSchema = StrategicRiskPayloadSchema.omit({ cicloId: true }).partial()
+  .refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export const StrategicDecisionPayloadSchema = z.object({
   cicloId: z.string().uuid(),
@@ -144,7 +173,7 @@ export const StrategicDecisionPayloadSchema = z.object({
   status: StrategicDecisionStatusSchema.default('pendente'),
   concluidaEm: z.string().datetime().nullable().optional(),
   observacaoEncerramento: optionalText(2_000)
-}).superRefine((value, context) => {
+}).strict().superRefine((value, context) => {
   if (value.status === 'concluida' && !value.observacaoEncerramento?.trim()) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['observacaoEncerramento'], message: 'Informe como a decisão foi concluída.' });
   }
@@ -158,7 +187,7 @@ export const StrategicDecisionUpdateSchema = z.object({
   status: StrategicDecisionStatusSchema.optional(),
   concluidaEm: z.string().datetime().nullable().optional(),
   observacaoEncerramento: optionalText(2_000)
-});
+}).strict().refine(nonEmptyPatch, 'Informe ao menos um campo para atualização.');
 
 export type StrategicCyclePayload = z.infer<typeof StrategicCyclePayloadSchema>;
 export type StrategicCycleUpdate = z.infer<typeof StrategicCycleUpdateSchema>;

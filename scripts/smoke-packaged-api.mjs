@@ -82,7 +82,8 @@ try {
   }
   const auditResponse = await fetch(`http://127.0.0.1:${port}/api/audit-logs`, { headers: operationalHeaders });
   if (!auditResponse.ok) throw new Error(`/api/audit-logs retornou HTTP ${auditResponse.status}`);
-  const auditRows = await auditResponse.json();
+  const auditPayload = await auditResponse.json();
+  const auditRows = Array.isArray(auditPayload) ? auditPayload : auditPayload?.items;
   if (!Array.isArray(auditRows) || !auditRows.some((row) => row?.action === 'INSERT' && row?.entity === 'Configuração')) {
     throw new Error('A configuração inicial não gerou o registro de auditoria esperado.');
   }

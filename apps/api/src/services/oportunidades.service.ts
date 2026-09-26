@@ -1,5 +1,7 @@
 import crypto from 'crypto';
-import { and, eq, gt, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { createClient } from '@libsql/client';
+import { drizzle } from 'drizzle-orm/libsql';
+import { and, eq, gt, gte, inArray, isNull, like, or, sql } from 'drizzle-orm';
 import {
   ACTIVE_OPPORTUNITY_STAGES,
   OPPORTUNITY_STAGES,
@@ -12,8 +14,10 @@ import {
   type OpportunityTransition,
   type OpportunityUpdate
 } from '@geogestor/contracts';
-import { schema } from '@geogestor/database';
-import { db } from '../db';
+import { databaseClientConfig, schema } from '@geogestor/database';
+import { AuditLogService } from './audit.service';
+import { db, dbPath } from '../db';
+import { withSqliteBusyRetry } from './sqlite-concurrency.service';
 import { JornadaService } from './jornada.service';
 import { getActiveProject } from './relationship-integrity.service';
 
@@ -177,14 +181,20 @@ export async function getOpportunity(id: string) {
   return { ...opportunity, history };
 }
 
-export async function getOpportunityOptions() {
+export async function getOpportunityOptions(filters: { q?: string; clientId?: string; selectedBudgetId?: string; limit?: number } = {}) {
+  const limit = Math.min(50, Math.max(1, filters.limit || 25));
+  const term = filters.q?.trim() ? `%${filters.q.trim()}%` : null;
   const [clients, leads, budgets] = await Promise.all([
     db.select({ id: schema.clientes.id, name: schema.clientes.nome }).from(schema.clientes)
-      .where(isNull(schema.clientes.deletedAt)).orderBy(schema.clientes.nome),
+      .where(and(isNull(schema.clientes.deletedAt), term ? like(schema.clientes.nome, term) : undefined))
+      .orderBy(schema.clientes.nome).limit(limit),
     db.select({ id: schema.contatos.id, name: schema.contatos.nome, company: schema.contatos.empresa })
       .from(schema.contatos)
-      .where(and(eq(schema.contatos.status, 'ativo'), isNull(schema.contatos.deletedAt)))
-      .orderBy(schema.contatos.nome),
+      .where(and(
+        eq(schema.contatos.status, 'ativo'),
+        isNull(schema.contatos.deletedAt),
+        term ? or(like(schema.contatos.nome, term), like(schema.contatos.empresa, term)) : undefined
+      )).orderBy(schema.contatos.nome).limit(limit),
     db.select({
       id: schema.orcamentos.id,
       clientId: schema.orcamentos.clienteId,
@@ -194,7 +204,11 @@ export async function getOpportunityOptions() {
       status: schema.orcamentos.status,
       totalCents: schema.orcamentos.valorTotal,
       projectId: schema.orcamentos.projetoId
-    }).from(schema.orcamentos).where(isNull(schema.orcamentos.deletedAt)).orderBy(schema.orcamentos.createdAt)
+    }).from(schema.orcamentos).where(and(
+      isNull(schema.orcamentos.deletedAt),
+      filters.clientId ? eq(schema.orcamentos.clienteId, filters.clientId) : filters.selectedBudgetId ? eq(schema.orcamentos.id, filters.selectedBudgetId) : sql`0 = 1`,
+      filters.selectedBudgetId && filters.clientId ? or(eq(schema.orcamentos.clienteId, filters.clientId), eq(schema.orcamentos.id, filters.selectedBudgetId)) : undefined
+    )).orderBy(schema.orcamentos.createdAt).limit(50)
   ]);
   return { clients, leads, budgets };
 }
@@ -234,6 +248,13 @@ export async function createOpportunity(input: OpportunityPayload) {
       updatedAt: timestamp
     });
     await insertStageHistory(tx, id, null, effectiveStage, 'Criação da oportunidade');
+    await AuditLogService.log('INSERT', 'Oportunidade', null, {
+      oportunidadeId: id,
+      clienteId: clientId,
+      leadId,
+      estagio: effectiveStage,
+      fields: Object.keys(input)
+    }, tx);
     await logClientEvent(clientId, {
       projetoId: budget?.projetoId || null,
       orcamentoId: input.orcamentoId || null,
@@ -270,6 +291,11 @@ export async function updateOpportunity(id: string, input: OpportunityUpdate) {
     }
     if (input.orcamentoId && !clientId) throw new Error('Converta o lead em cliente antes de vincular um orçamento.');
     if (input.orcamentoId && clientId) await assertBudget(input.orcamentoId, clientId, tx);
+    const effectiveNextAction = input.proximaAcao !== undefined ? input.proximaAcao : current.proximaAcao;
+    const effectiveNextActionDate = input.proximaAcaoEm !== undefined ? input.proximaAcaoEm : current.proximaAcaoEm;
+    if (Boolean(effectiveNextAction) !== Boolean(effectiveNextActionDate)) {
+      throw new Error('Informe a próxima ação e sua data em conjunto.');
+    }
     await tx.update(schema.oportunidades).set({
       clienteId: input.clienteId,
       leadId: input.leadId,
@@ -290,6 +316,11 @@ export async function updateOpportunity(id: string, input: OpportunityUpdate) {
       ultimoContatoEm: input.proximaAcao !== undefined ? nowIso() : undefined,
       updatedAt: nowIso()
     }).where(eq(schema.oportunidades.id, id));
+    await AuditLogService.log('UPDATE', 'Oportunidade', { oportunidadeId: id }, {
+      oportunidadeId: id,
+      operation: 'edit',
+      fields: Object.keys(input)
+    }, tx);
     await logClientEvent(clientId, {
       projetoId: effectiveProjectId,
       orcamentoId: effectiveBudgetId,
@@ -347,6 +378,15 @@ export async function transitionOpportunity(id: string, input: OpportunityTransi
       updatedAt: timestamp
     }).where(eq(schema.oportunidades.id, id));
     await insertStageHistory(tx, id, current.estagio, nextStage, input.motivo);
+    await AuditLogService.log('UPDATE', 'Oportunidade', {
+      oportunidadeId: id,
+      estagio: current.estagio
+    }, {
+      oportunidadeId: id,
+      operation: 'transition',
+      estagio: nextStage,
+      motivoInformado: Boolean(input.motivo)
+    }, tx);
     await logClientEvent(current.clienteId, {
       projetoId: projectId,
       orcamentoId: current.orcamentoId,
@@ -368,10 +408,24 @@ export async function reorderOpportunities(items: ReorderItem[]) {
       throw new Error('Use a transição de estágio antes de reordenar entre colunas.');
     }
   }
-  await db.transaction(async (tx) => {
-    for (const item of items) {
-      await tx.update(schema.oportunidades).set({ ordem: item.ordem, updatedAt: nowIso() })
-        .where(eq(schema.oportunidades.id, item.id));
+  await withSqliteBusyRetry(async () => {
+    const client = createClient(databaseClientConfig(dbPath));
+    try {
+      await client.execute('PRAGMA foreign_keys = ON;');
+      await client.execute('PRAGMA busy_timeout = 5000;');
+      const transactionDb = drizzle(client, { schema });
+      await transactionDb.transaction(async (tx) => {
+        for (const item of items) {
+          await tx.update(schema.oportunidades).set({ ordem: item.ordem, updatedAt: nowIso() })
+            .where(eq(schema.oportunidades.id, item.id));
+        }
+        await AuditLogService.log('UPDATE', 'Oportunidade', null, {
+          operation: 'reorder',
+          ids: items.map(item => item.id)
+        }, tx);
+      });
+    } finally {
+      client.close();
     }
   });
   return { success: true };
@@ -405,6 +459,12 @@ export async function linkOpportunityBudget(id: string, budgetId: string) {
       updatedAt: timestamp
     }).where(eq(schema.oportunidades.id, id));
     if (current.estagio !== nextStage) await insertStageHistory(tx, id, current.estagio, nextStage, 'Orçamento vinculado');
+    await AuditLogService.log('UPDATE', 'Oportunidade', { oportunidadeId: id }, {
+      oportunidadeId: id,
+      operation: 'link-budget',
+      orcamentoId: budget.id,
+      estagio: nextStage
+    }, tx);
     await logClientEvent(current.clienteId, {
       projetoId: budget.projetoId,
       orcamentoId: budget.id,
@@ -444,6 +504,11 @@ export async function convertOpportunityToProject(id: string, projectName?: stri
       });
     }
     await tx.update(schema.oportunidades).set({ projetoId: projectId, updatedAt: nowIso() }).where(eq(schema.oportunidades.id, id));
+    await AuditLogService.log('UPDATE', 'Oportunidade', { oportunidadeId: id }, {
+      oportunidadeId: id,
+      operation: 'convert-project',
+      projetoId: projectId
+    }, tx);
     await logClientEvent(current.clienteId, {
       projetoId: projectId,
       orcamentoId: current.orcamentoId,
@@ -460,6 +525,10 @@ export async function deleteOpportunity(id: string) {
   const current = await findOpportunity(id);
   await db.transaction(async (tx) => {
     await tx.update(schema.oportunidades).set({ deletedAt: nowIso(), updatedAt: nowIso() }).where(eq(schema.oportunidades.id, id));
+    await AuditLogService.log('DELETE (SOFT)', 'Oportunidade', {
+      oportunidadeId: id,
+      estagio: current.estagio
+    }, { oportunidadeId: id }, tx);
     await logClientEvent(current.clienteId, {
       projetoId: current.projetoId,
       orcamentoId: current.orcamentoId,

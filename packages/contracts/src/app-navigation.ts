@@ -102,6 +102,16 @@ export const appLinks = {
   ),
   client: (id: string) => `/clientes/${encodeSegment(id)}`,
   project: (id: string) => `/projetos/${encodeSegment(id)}`,
+  clientSection: (id: string, section: string) => withQuery(
+    `/clientes/${encodeSegment(id)}`,
+    [['aba', section]]
+  ),
+  projectSection: (id: string, section: string) => withQuery(
+    `/projetos/${encodeSegment(id)}`,
+    [['aba', section]]
+  ),
+  environmentalDemand: (id: string) => `/ambiental/${encodeSegment(id)}`,
+  finance: (query: Record<string, QueryValue>) => withAppQuery(APP_ROUTES.finance.path, query),
   task: (id: string) => withQuery(APP_PATHS.tasks, [[APP_QUERY_KEYS.task, id]]),
   receivable: (id: string) => withQuery(APP_PATHS.finance, [['tab', 'faturas'], [APP_QUERY_KEYS.receivable, id]]),
   payable: (id: string) => withQuery(APP_PATHS.finance, [['tab', 'pagar'], [APP_QUERY_KEYS.payable, id]]),

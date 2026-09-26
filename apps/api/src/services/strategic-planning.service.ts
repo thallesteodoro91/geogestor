@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { and, asc, desc, eq, gte, isNull, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, ne, sql } from 'drizzle-orm';
 import type {
   StrategicCheckinPayload,
   StrategicCheckinUpdate,
@@ -25,7 +25,17 @@ import { db } from '../db';
 import { AuditLogService } from './audit.service';
 
 const nowIso = () => new Date().toISOString();
-const todayKey = () => nowIso().slice(0, 10);
+const saoPauloDateKey = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+};
+const todayKey = () => saoPauloDateKey();
 type CycleRow = typeof schema.ciclosEstrategicos.$inferSelect;
 type PillarRow = typeof schema.pilaresEstrategicos.$inferSelect;
 type ObjectiveRow = typeof schema.objetivosEstrategicos.$inferSelect;
@@ -35,6 +45,16 @@ type CheckinRow = typeof schema.checkinsEstrategicos.$inferSelect;
 type RiskRow = typeof schema.riscosEstrategicos.$inferSelect;
 type DecisionRow = typeof schema.decisoesEstrategicas.$inferSelect;
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export class StrategicPlanningError extends Error {
+  constructor(message: string, readonly statusCode: 400 | 404) {
+    super(message);
+    this.name = 'StrategicPlanningError';
+  }
+}
+
+const invalid = (message: string) => new StrategicPlanningError(message, 400);
+const notFound = (message: string) => new StrategicPlanningError(message, 404);
 
 type ProgressSnapshot = {
   progressoGeral: number | null;
@@ -75,7 +95,7 @@ const SOURCE_OPTIONS: StrategicSourceOption[] = [
     tipo: 'projetos',
     codigo: 'projetos_taxa_conclusao',
     nome: 'Taxa de conclusão de projetos',
-    regra: 'Projetos concluídos divididos pelos projetos ativos no período do ciclo.',
+    regra: 'Projetos concluídos divididos por todos os projetos não excluídos que se sobrepõem ao período do ciclo.',
     periodo: 'Período do ciclo estratégico',
     rota: '/projetos',
     unidade: '%'
@@ -92,7 +112,7 @@ const SOURCE_OPTIONS: StrategicSourceOption[] = [
 ];
 
 function ensureFound<T>(rows: T[], message: string): T {
-  if (!rows.length) throw new Error(message);
+  if (!rows.length) throw notFound(message);
   return rows[0];
 }
 
@@ -173,7 +193,12 @@ async function activateOnlyCycle(id: string, tx: DbOrTx) {
 export async function listStrategicCycles() {
   return db.select().from(schema.ciclosEstrategicos)
     .where(isNull(schema.ciclosEstrategicos.deletedAt))
-    .orderBy(desc(sql`CASE WHEN ${schema.ciclosEstrategicos.status} = 'ativo' THEN 1 ELSE 0 END`), desc(schema.ciclosEstrategicos.dataInicio));
+    .orderBy(
+      desc(sql`CASE WHEN ${schema.ciclosEstrategicos.status} = 'ativo' THEN 1 ELSE 0 END`),
+      desc(schema.ciclosEstrategicos.dataInicio),
+      desc(schema.ciclosEstrategicos.createdAt),
+      asc(schema.ciclosEstrategicos.id)
+    );
 }
 
 export async function createStrategicCycle(input: StrategicCyclePayload) {
@@ -191,7 +216,7 @@ export async function updateStrategicCycle(id: string, input: StrategicCycleUpda
   const current = await findCycle(id);
   const nextStart = input.dataInicio ?? current.dataInicio;
   const nextEnd = input.dataFim ?? current.dataFim;
-  if (nextEnd < nextStart) throw new Error('A data final deve ser posterior à data inicial.');
+  if (nextEnd < nextStart) throw invalid('A data final deve ser posterior à data inicial.');
   await db.transaction(async (tx) => {
     if (input.status === 'ativo') await activateOnlyCycle(id, tx);
     await tx.update(schema.ciclosEstrategicos).set({ ...input, updatedAt: nowIso() })
@@ -205,6 +230,26 @@ export async function deleteStrategicCycle(id: string) {
   const current = await findCycle(id);
   const deletedAt = nowIso();
   await db.transaction(async (tx) => {
+    const objectiveIds = (await tx.select({ id: schema.objetivosEstrategicos.id }).from(schema.objetivosEstrategicos)
+      .where(eq(schema.objetivosEstrategicos.cicloId, id))).map((item) => item.id);
+    if (objectiveIds.length) {
+      await tx.update(schema.resultadosChave).set({ deletedAt, updatedAt: deletedAt })
+        .where(and(inArray(schema.resultadosChave.objetivoId, objectiveIds), isNull(schema.resultadosChave.deletedAt)));
+      await tx.update(schema.iniciativasEstrategicas).set({ deletedAt, updatedAt: deletedAt })
+        .where(and(inArray(schema.iniciativasEstrategicas.objetivoId, objectiveIds), isNull(schema.iniciativasEstrategicas.deletedAt)));
+    }
+    await tx.update(schema.snapshotsEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.snapshotsEstrategicos.cicloId, id), isNull(schema.snapshotsEstrategicos.deletedAt)));
+    await tx.update(schema.decisoesEstrategicas).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.decisoesEstrategicas.cicloId, id), isNull(schema.decisoesEstrategicas.deletedAt)));
+    await tx.update(schema.riscosEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.riscosEstrategicos.cicloId, id), isNull(schema.riscosEstrategicos.deletedAt)));
+    await tx.update(schema.checkinsEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.checkinsEstrategicos.cicloId, id), isNull(schema.checkinsEstrategicos.deletedAt)));
+    await tx.update(schema.objetivosEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.objetivosEstrategicos.cicloId, id), isNull(schema.objetivosEstrategicos.deletedAt)));
+    await tx.update(schema.pilaresEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.pilaresEstrategicos.cicloId, id), isNull(schema.pilaresEstrategicos.deletedAt)));
     await tx.update(schema.ciclosEstrategicos).set({ deletedAt, updatedAt: deletedAt })
       .where(eq(schema.ciclosEstrategicos.id, id));
     await AuditLogService.log('DELETE (SOFT)', 'Ciclo Estratégico', current, null, tx);
@@ -237,7 +282,7 @@ export async function deleteStrategicPillar(id: string) {
     .where(and(eq(schema.objetivosEstrategicos.pilarId, id), isNull(schema.objetivosEstrategicos.deletedAt)));
   if (objectives.length) {
     const examples = objectives.slice(0, 2).map((item) => `“${item.titulo}”`).join(' e ');
-    throw new Error(`Este pilar possui ${objectives.length} ${objectives.length === 1 ? 'objetivo ativo' : 'objetivos ativos'}, incluindo ${examples}. Mova ou exclua ${objectives.length === 1 ? 'esse objetivo' : 'esses objetivos'} antes de remover o pilar.`);
+    throw invalid(`Este pilar possui ${objectives.length} ${objectives.length === 1 ? 'objetivo ativo' : 'objetivos ativos'}, incluindo ${examples}. Mova ou exclua ${objectives.length === 1 ? 'esse objetivo' : 'esses objetivos'} antes de remover o pilar.`);
   }
   const deletedAt = nowIso();
   await db.transaction(async (tx) => {
@@ -248,7 +293,7 @@ export async function deleteStrategicPillar(id: string) {
 
 export async function createStrategicObjective(input: StrategicObjectivePayload) {
   const [cycle, pillar] = await Promise.all([findCycle(input.cicloId), findPillar(input.pilarId)]);
-  if (pillar.cicloId !== cycle.id) throw new Error('O pilar selecionado não pertence ao ciclo estratégico.');
+  if (pillar.cicloId !== cycle.id) throw invalid('O pilar selecionado não pertence ao ciclo estratégico.');
   const id = crypto.randomUUID();
   const created = { id, ...input };
   await db.transaction(async (tx) => {
@@ -262,7 +307,7 @@ export async function updateStrategicObjective(id: string, input: StrategicObjec
   const current = await findObjective(id);
   if (input.pilarId) {
     const pillar = await findPillar(input.pilarId);
-    if (pillar.cicloId !== current.cicloId) throw new Error('O pilar selecionado não pertence ao ciclo estratégico.');
+    if (pillar.cicloId !== current.cicloId) throw invalid('O pilar selecionado não pertence ao ciclo estratégico.');
   }
   await db.transaction(async (tx) => {
     await tx.update(schema.objetivosEstrategicos).set({ ...input, updatedAt: nowIso() }).where(eq(schema.objetivosEstrategicos.id, id));
@@ -275,9 +320,24 @@ export async function deleteStrategicObjective(id: string) {
   const current = await findObjective(id);
   const deletedAt = nowIso();
   await db.transaction(async (tx) => {
+    const initiativeIds = (await tx.select({ id: schema.iniciativasEstrategicas.id }).from(schema.iniciativasEstrategicas)
+      .where(and(eq(schema.iniciativasEstrategicas.objetivoId, id), isNull(schema.iniciativasEstrategicas.deletedAt))))
+      .map((item) => item.id);
+    if (initiativeIds.length) {
+      await tx.update(schema.riscosEstrategicos).set({ iniciativaId: null, updatedAt: deletedAt })
+        .where(and(inArray(schema.riscosEstrategicos.iniciativaId, initiativeIds), isNull(schema.riscosEstrategicos.deletedAt)));
+    }
+    await tx.update(schema.riscosEstrategicos).set({ objetivoId: null, updatedAt: deletedAt })
+      .where(and(eq(schema.riscosEstrategicos.objetivoId, id), isNull(schema.riscosEstrategicos.deletedAt)));
+    await tx.update(schema.checkinsEstrategicos).set({ objetivoId: null, updatedAt: deletedAt })
+      .where(and(eq(schema.checkinsEstrategicos.objetivoId, id), isNull(schema.checkinsEstrategicos.deletedAt)));
+    await tx.update(schema.decisoesEstrategicas).set({ objetivoId: null, updatedAt: deletedAt })
+      .where(and(eq(schema.decisoesEstrategicas.objetivoId, id), isNull(schema.decisoesEstrategicas.deletedAt)));
     await tx.update(schema.objetivosEstrategicos).set({ deletedAt, updatedAt: deletedAt }).where(eq(schema.objetivosEstrategicos.id, id));
-    await tx.update(schema.resultadosChave).set({ deletedAt, updatedAt: deletedAt }).where(eq(schema.resultadosChave.objetivoId, id));
-    await tx.update(schema.iniciativasEstrategicas).set({ deletedAt, updatedAt: deletedAt }).where(eq(schema.iniciativasEstrategicas.objetivoId, id));
+    await tx.update(schema.resultadosChave).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.resultadosChave.objetivoId, id), isNull(schema.resultadosChave.deletedAt)));
+    await tx.update(schema.iniciativasEstrategicas).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.iniciativasEstrategicas.objetivoId, id), isNull(schema.iniciativasEstrategicas.deletedAt)));
     await AuditLogService.log('DELETE (SOFT)', 'Objetivo Estratégico', current, null, tx);
   });
 }
@@ -286,25 +346,53 @@ function sourceOption(type: string, code: string | null | undefined) {
   return SOURCE_OPTIONS.find((item) => item.tipo === type && item.codigo === code);
 }
 
-async function validateKeyResultSource(input: StrategicKeyResultPayload | StrategicKeyResultUpdate) {
-  const type = input.fonteTipo;
-  if (type && type !== 'manual' && !sourceOption(type, input.fonteCodigo)) {
-    throw new Error('A fonte automática selecionada não está disponível.');
+function normalizeKeyResultSource(
+  input: StrategicKeyResultPayload | StrategicKeyResultUpdate,
+  current?: KeyResultRow
+) {
+  const sourceType = StrategicSourceTypeSchema.parse(input.fonteTipo ?? current?.fonteTipo ?? 'manual');
+  const sourceCode = input.fonteCodigo !== undefined ? input.fonteCodigo : current?.fonteCodigo;
+  const currentValue = input.valorAtual !== undefined ? input.valorAtual : current?.valorAtual;
+  const unit = input.unidade ?? current?.unidade;
+  if (!unit) throw invalid('Informe a unidade do resultado-chave.');
+  if (sourceType === 'manual') {
+    if (currentValue == null || !Number.isFinite(currentValue)) {
+      throw invalid('Informe o valor atual da fonte manual.');
+    }
+    const valueChanged = !current || current.fonteTipo !== 'manual' || input.valorAtual !== undefined && input.valorAtual !== current.valorAtual;
+    return {
+      fonteTipo: sourceType,
+      fonteCodigo: null,
+      fonteRegra: 'Valor informado pelo responsável.',
+      fontePeriodo: 'Atualização manual',
+      fonteRota: null,
+      valorAtual: currentValue,
+      ultimaAtualizacao: valueChanged ? nowIso() : current?.ultimaAtualizacao || nowIso(),
+      unidade: unit
+    };
   }
+  const option = sourceOption(sourceType, sourceCode);
+  if (!option) throw invalid('A fonte automática selecionada não está disponível.');
+  return {
+    fonteTipo: sourceType,
+    fonteCodigo: option.codigo,
+    fonteRegra: option.regra,
+    fontePeriodo: option.periodo,
+    fonteRota: option.rota,
+    valorAtual: null,
+    ultimaAtualizacao: null,
+    unidade: option.unidade
+  };
 }
 
 export async function createStrategicKeyResult(input: StrategicKeyResultPayload) {
   await findObjective(input.objetivoId);
-  await validateKeyResultSource(input);
   const id = crypto.randomUUID();
-  const option = sourceOption(input.fonteTipo, input.fonteCodigo);
+  const source = normalizeKeyResultSource(input);
   const created = {
     id,
     ...input,
-    fonteRegra: option?.regra ?? input.fonteRegra ?? null,
-    fontePeriodo: option?.periodo ?? input.fontePeriodo ?? null,
-    fonteRota: option?.rota ?? input.fonteRota ?? null,
-    ultimaAtualizacao: input.fonteTipo === 'manual' ? input.ultimaAtualizacao || nowIso() : null
+    ...source
   };
   await db.transaction(async (tx) => {
     await tx.insert(schema.resultadosChave).values(created);
@@ -315,16 +403,10 @@ export async function createStrategicKeyResult(input: StrategicKeyResultPayload)
 
 export async function updateStrategicKeyResult(id: string, input: StrategicKeyResultUpdate) {
   const current = await findKeyResult(id);
-  const sourceType = StrategicSourceTypeSchema.parse(input.fonteTipo ?? current.fonteTipo);
-  const sourceCode = input.fonteCodigo !== undefined ? input.fonteCodigo : current.fonteCodigo;
-  await validateKeyResultSource({ ...input, fonteTipo: sourceType, fonteCodigo: sourceCode });
-  const option = sourceOption(sourceType, sourceCode);
+  const source = normalizeKeyResultSource(input, current);
   const patch = {
     ...input,
-    fonteRegra: option?.regra ?? input.fonteRegra,
-    fontePeriodo: option?.periodo ?? input.fontePeriodo,
-    fonteRota: option?.rota ?? input.fonteRota,
-    ultimaAtualizacao: sourceType === 'manual' && input.valorAtual !== undefined ? nowIso() : input.ultimaAtualizacao,
+    ...source,
     updatedAt: nowIso()
   };
   await db.transaction(async (tx) => {
@@ -389,11 +471,12 @@ function strategicSnapshotValues(
   snapshot: SnapshotCaptureInput,
   extraDecisions: Array<{ id: string; status: string }> = []
 ) {
+  const capturedAt = `${reviewDate}T${nowIso().slice(11)}`;
   return {
     id: crypto.randomUUID(),
     cicloId: cycleId,
     checkinId,
-    capturadoEm: `${reviewDate}T12:00:00.000Z`,
+    capturadoEm: capturedAt,
     progressoGeral: snapshot.resumo.progressoGeral,
     objetivosJson: JSON.stringify(snapshot.objetivos.map((item) => ({ id: item.id, titulo: item.titulo, progresso: item.progresso ?? null }))),
     riscosJson: JSON.stringify(snapshot.riscos.map((item) => ({ id: item.id, impacto: item.impacto, probabilidade: item.probabilidade, status: item.status }))),
@@ -410,33 +493,35 @@ export async function deleteStrategicInitiative(id: string) {
   const current = await findInitiative(id);
   const deletedAt = nowIso();
   await db.transaction(async (tx) => {
+    await tx.update(schema.riscosEstrategicos).set({ iniciativaId: null, updatedAt: deletedAt })
+      .where(and(eq(schema.riscosEstrategicos.iniciativaId, id), isNull(schema.riscosEstrategicos.deletedAt)));
     await tx.update(schema.iniciativasEstrategicas).set({ deletedAt, updatedAt: deletedAt }).where(eq(schema.iniciativasEstrategicas.id, id));
     await AuditLogService.log('DELETE (SOFT)', 'Iniciativa Estratégica', current, null, tx);
   });
 }
 
 export async function createStrategicCheckin(input: StrategicCheckinPayload) {
-  await findCycle(input.cicloId);
-  if (input.objetivoId) {
-    const objective = await findObjective(input.objetivoId);
-    if (objective.cicloId !== input.cicloId) throw new Error('O objetivo não pertence ao ciclo selecionado.');
-  }
   const id = crypto.randomUUID();
   const created = { id, ...input };
-  const currentSnapshot = await getStrategicSnapshot(input.cicloId);
-  const legacyDecision = input.decisoesPendentes?.trim() ? {
-    id: crypto.randomUUID(),
-    cicloId: input.cicloId,
-    checkinId: id,
-    objetivoId: input.objetivoId || null,
-    descricao: input.decisoesPendentes.trim(),
-    responsavel: 'Responsável não definido',
-    prazo: input.proximaRevisao || currentSnapshot.ciclo.proximaRevisao || input.data,
-    status: 'pendente',
-    concluidaEm: null,
-    observacaoEncerramento: 'Decisão criada a partir do campo textual de compatibilidade.'
-  } : null;
   await db.transaction(async (tx) => {
+    const cycle = await findCycle(input.cicloId, tx);
+    if (input.objetivoId) {
+      const objective = await findObjective(input.objetivoId, tx);
+      if (objective.cicloId !== input.cicloId) throw invalid('O objetivo não pertence ao ciclo selecionado.');
+    }
+    const currentSnapshot = await buildStrategicSnapshot(input.cicloId, tx);
+    const legacyDecision = input.decisoesPendentes?.trim() ? {
+      id: crypto.randomUUID(),
+      cicloId: input.cicloId,
+      checkinId: id,
+      objetivoId: input.objetivoId || null,
+      descricao: input.decisoesPendentes.trim(),
+      responsavel: 'Responsável não definido',
+      prazo: input.proximaRevisao || cycle.proximaRevisao || input.data,
+      status: 'pendente',
+      concluidaEm: null,
+      observacaoEncerramento: 'Decisão criada a partir do campo textual de compatibilidade.'
+    } : null;
     await tx.insert(schema.checkinsEstrategicos).values(created);
     if (legacyDecision) {
       await tx.insert(schema.decisoesEstrategicas).values(legacyDecision);
@@ -462,27 +547,23 @@ export async function updateStrategicCheckin(id: string, input: StrategicCheckin
   const current = await findCheckin(id);
   if (input.objetivoId) {
     const objective = await findObjective(input.objetivoId);
-    if (objective.cicloId !== current.cicloId) throw new Error('O objetivo não pertence ao ciclo selecionado.');
+    if (objective.cicloId !== current.cicloId) throw invalid('O objetivo não pertence ao ciclo selecionado.');
   }
-  const currentSnapshot = await getStrategicSnapshot(current.cicloId);
   const reviewDate = input.data || current.data;
-  const snapshotValues = strategicSnapshotValues(current.cicloId, id, reviewDate, currentSnapshot);
+  const nextReview = input.proximaRevisao === undefined ? current.proximaRevisao : input.proximaRevisao;
+  if (nextReview && nextReview < reviewDate) throw invalid('A próxima revisão não pode ser anterior a esta revisão.');
   await db.transaction(async (tx) => {
     await tx.update(schema.checkinsEstrategicos).set({ ...input, updatedAt: nowIso() }).where(eq(schema.checkinsEstrategicos.id, id));
     await AuditLogService.log('UPDATE', 'Revisão Estratégica', current, { ...current, ...input }, tx);
-    await tx.insert(schema.snapshotsEstrategicos).values(snapshotValues).onConflictDoUpdate({
-      target: schema.snapshotsEstrategicos.checkinId,
-      set: {
-        capturadoEm: snapshotValues.capturadoEm,
-        progressoGeral: snapshotValues.progressoGeral,
-        objetivosJson: snapshotValues.objetivosJson,
-        riscosJson: snapshotValues.riscosJson,
-        iniciativasJson: snapshotValues.iniciativasJson,
-        decisoesJson: snapshotValues.decisoesJson,
-        dadosDesatualizados: snapshotValues.dadosDesatualizados,
-        updatedAt: nowIso()
-      }
-    });
+    if (input.data) {
+      await tx.update(schema.snapshotsEstrategicos)
+        .set({ capturadoEm: `${reviewDate}T${nowIso().slice(11)}`, updatedAt: nowIso() })
+        .where(and(eq(schema.snapshotsEstrategicos.checkinId, id), isNull(schema.snapshotsEstrategicos.deletedAt)));
+    }
+    if (input.proximaRevisao) {
+      await tx.update(schema.ciclosEstrategicos).set({ proximaRevisao: input.proximaRevisao, updatedAt: nowIso() })
+        .where(eq(schema.ciclosEstrategicos.id, current.cicloId));
+    }
   });
   return findCheckin(id);
 }
@@ -491,22 +572,35 @@ export async function deleteStrategicCheckin(id: string) {
   const current = await findCheckin(id);
   const deletedAt = nowIso();
   await db.transaction(async (tx) => {
+    await tx.update(schema.decisoesEstrategicas).set({ checkinId: null, updatedAt: deletedAt })
+      .where(and(eq(schema.decisoesEstrategicas.checkinId, id), isNull(schema.decisoesEstrategicas.deletedAt)));
+    await tx.update(schema.snapshotsEstrategicos).set({ deletedAt, updatedAt: deletedAt })
+      .where(and(eq(schema.snapshotsEstrategicos.checkinId, id), isNull(schema.snapshotsEstrategicos.deletedAt)));
     await tx.update(schema.checkinsEstrategicos).set({ deletedAt, updatedAt: deletedAt }).where(eq(schema.checkinsEstrategicos.id, id));
     await AuditLogService.log('DELETE (SOFT)', 'Revisão Estratégica', current, null, tx);
   });
 }
 
+async function validateRiskRelations(
+  cycleId: string,
+  objectiveId: string | null | undefined,
+  initiativeId: string | null | undefined
+) {
+  await findCycle(cycleId);
+  const objective = objectiveId ? await findObjective(objectiveId) : null;
+  if (objective && objective.cicloId !== cycleId) throw invalid('O objetivo não pertence ao ciclo selecionado.');
+  if (initiativeId) {
+    const initiative = await findInitiative(initiativeId);
+    const initiativeObjective = await findObjective(initiative.objetivoId);
+    if (initiativeObjective.cicloId !== cycleId) throw invalid('A iniciativa não pertence ao ciclo selecionado.');
+    if (objective && initiative.objetivoId !== objective.id) {
+      throw invalid('A iniciativa selecionada não pertence ao objetivo informado.');
+    }
+  }
+}
+
 export async function createStrategicRisk(input: StrategicRiskPayload) {
-  await findCycle(input.cicloId);
-  if (input.objetivoId) {
-    const objective = await findObjective(input.objetivoId);
-    if (objective.cicloId !== input.cicloId) throw new Error('O objetivo não pertence ao ciclo selecionado.');
-  }
-  if (input.iniciativaId) {
-    const initiative = await findInitiative(input.iniciativaId);
-    const objective = await findObjective(initiative.objetivoId);
-    if (objective.cicloId !== input.cicloId) throw new Error('A iniciativa não pertence ao ciclo selecionado.');
-  }
+  await validateRiskRelations(input.cicloId, input.objetivoId, input.iniciativaId);
   const id = crypto.randomUUID();
   const created = { id, ...input };
   await db.transaction(async (tx) => {
@@ -518,6 +612,11 @@ export async function createStrategicRisk(input: StrategicRiskPayload) {
 
 export async function updateStrategicRisk(id: string, input: StrategicRiskUpdate) {
   const current = await findRisk(id);
+  await validateRiskRelations(
+    current.cicloId,
+    input.objetivoId === undefined ? current.objetivoId : input.objetivoId,
+    input.iniciativaId === undefined ? current.iniciativaId : input.iniciativaId
+  );
   await db.transaction(async (tx) => {
     await tx.update(schema.riscosEstrategicos).set({ ...input, updatedAt: nowIso() }).where(eq(schema.riscosEstrategicos.id, id));
     await AuditLogService.log('UPDATE', 'Risco Estratégico', current, { ...current, ...input }, tx);
@@ -536,15 +635,15 @@ export async function deleteStrategicRisk(id: string) {
 
 async function validateDecisionRelations(input: StrategicDecisionPayload | StrategicDecisionUpdate, currentCycleId?: string) {
   const cycleId = 'cicloId' in input ? input.cicloId : currentCycleId;
-  if (!cycleId) throw new Error('O ciclo da decisão não foi identificado. Reabra o planejamento e tente novamente.');
+  if (!cycleId) throw invalid('O ciclo da decisão não foi identificado. Reabra o planejamento e tente novamente.');
   await findCycle(cycleId);
   if (input.checkinId) {
     const checkin = await findCheckin(input.checkinId);
-    if (checkin.cicloId !== cycleId) throw new Error('A revisão selecionada pertence a outro ciclo. Escolha uma revisão deste planejamento.');
+    if (checkin.cicloId !== cycleId) throw invalid('A revisão selecionada pertence a outro ciclo. Escolha uma revisão deste planejamento.');
   }
   if (input.objetivoId) {
     const objective = await findObjective(input.objetivoId);
-    if (objective.cicloId !== cycleId) throw new Error('O objetivo selecionado pertence a outro ciclo. Escolha um objetivo deste planejamento.');
+    if (objective.cicloId !== cycleId) throw invalid('O objetivo selecionado pertence a outro ciclo. Escolha um objetivo deste planejamento.');
   }
 }
 
@@ -555,7 +654,7 @@ function normalizeDecisionCompletion(input: StrategicDecisionPayload | Strategic
     : current?.observacaoEncerramento;
   const isNewCompletion = status === 'concluida' && current?.status !== 'concluida';
   if (status === 'concluida' && (!closureNote?.trim() || (isNewCompletion && !input.observacaoEncerramento?.trim()))) {
-    throw new Error('Explique como a decisão foi concluída para preservar o histórico e finalize novamente.');
+    throw invalid('Explique como a decisão foi concluída para preservar o histórico e finalize novamente.');
   }
   return {
     status,
@@ -599,11 +698,18 @@ export async function deleteStrategicDecision(id: string) {
   });
 }
 
-async function automaticValue(code: string, cycle: { dataInicio: string; dataFim: string }) {
-  const updatedAt = nowIso();
+function latestIso(...values: Array<string | null | undefined>) {
+  return values.filter((value): value is string => Boolean(value)).sort((a, b) => b.localeCompare(a))[0] || null;
+}
+
+async function automaticValue(source: DbOrTx, code: string, cycle: { dataInicio: string; dataFim: string }) {
   if (code === 'financeiro_resultado_caixa') {
     const [receipts, expenses] = await Promise.all([
-      db.select({ total: sql<number>`coalesce(sum(${schema.recebimentos.valorRecebido}), 0)`, count: sql<number>`count(*)` })
+      source.select({
+        total: sql<number>`coalesce(sum(${schema.recebimentos.valorRecebido}), 0)`,
+        count: sql<number>`count(*)`,
+        updatedAt: sql<string | null>`max(${schema.recebimentos.updatedAt})`
+      })
         .from(schema.recebimentos)
         .where(and(
           isNull(schema.recebimentos.deletedAt),
@@ -611,7 +717,11 @@ async function automaticValue(code: string, cycle: { dataInicio: string; dataFim
           gte(schema.recebimentos.dataRecebimento, cycle.dataInicio),
           lte(schema.recebimentos.dataRecebimento, cycle.dataFim)
         )),
-      db.select({ total: sql<number>`coalesce(sum(${schema.despesas.valor}), 0)`, count: sql<number>`count(*)` })
+      source.select({
+        total: sql<number>`coalesce(sum(${schema.despesas.valor}), 0)`,
+        count: sql<number>`count(*)`,
+        updatedAt: sql<string | null>`max(${schema.despesas.updatedAt})`
+      })
         .from(schema.despesas)
         .where(and(
           isNull(schema.despesas.deletedAt),
@@ -624,44 +734,50 @@ async function automaticValue(code: string, cycle: { dataInicio: string; dataFim
     ]);
     const records = Number(receipts[0]?.count || 0) + Number(expenses[0]?.count || 0);
     return records
-      ? { valor: (Number(receipts[0]?.total || 0) - Number(expenses[0]?.total || 0)) / 100, updatedAt }
+      ? {
+        valor: (Number(receipts[0]?.total || 0) - Number(expenses[0]?.total || 0)) / 100,
+        updatedAt: latestIso(receipts[0]?.updatedAt, expenses[0]?.updatedAt)
+      }
       : { valor: null, updatedAt: null };
   }
   if (code === 'crm_taxa_conversao') {
-    const rows = await db.select({
+    const rows = await source.select({
       won: sql<number>`sum(CASE WHEN ${schema.oportunidades.estagio} = 'Ganho' THEN 1 ELSE 0 END)`,
-      closed: sql<number>`sum(CASE WHEN ${schema.oportunidades.estagio} IN ('Ganho', 'Perdido') THEN 1 ELSE 0 END)`
+      closed: sql<number>`sum(CASE WHEN ${schema.oportunidades.estagio} IN ('Ganho', 'Perdido') THEN 1 ELSE 0 END)`,
+      updatedAt: sql<string | null>`max(${schema.oportunidades.updatedAt})`
     }).from(schema.oportunidades).where(and(
       isNull(schema.oportunidades.deletedAt),
       gte(sql`substr(coalesce(${schema.oportunidades.encerradoEm}, ${schema.oportunidades.updatedAt}), 1, 10)`, cycle.dataInicio),
       lte(sql`substr(coalesce(${schema.oportunidades.encerradoEm}, ${schema.oportunidades.updatedAt}), 1, 10)`, cycle.dataFim)
     ));
     const closed = Number(rows[0]?.closed || 0);
-    return { valor: closed ? Number(rows[0]?.won || 0) * 100 / closed : null, updatedAt };
+    return { valor: closed ? Number(rows[0]?.won || 0) * 100 / closed : null, updatedAt: closed ? rows[0]?.updatedAt || null : null };
   }
   if (code === 'projetos_taxa_conclusao') {
-    const rows = await db.select({
+    const rows = await source.select({
       completed: sql<number>`sum(CASE WHEN lower(${schema.projetos.status}) IN ('concluído', 'concluido', 'finalizado') THEN 1 ELSE 0 END)`,
-      total: sql<number>`count(*)`
+      total: sql<number>`count(*)`,
+      updatedAt: sql<string | null>`max(${schema.projetos.updatedAt})`
     }).from(schema.projetos).where(and(
       isNull(schema.projetos.deletedAt),
       lte(sql`coalesce(${schema.projetos.dataInicio}, substr(${schema.projetos.createdAt}, 1, 10))`, cycle.dataFim),
       gte(sql`coalesce(${schema.projetos.dataEntrega}, ${schema.projetos.dataInicio}, substr(${schema.projetos.createdAt}, 1, 10))`, cycle.dataInicio)
     ));
     const total = Number(rows[0]?.total || 0);
-    return { valor: total ? Number(rows[0]?.completed || 0) * 100 / total : null, updatedAt };
+    return { valor: total ? Number(rows[0]?.completed || 0) * 100 / total : null, updatedAt: total ? rows[0]?.updatedAt || null : null };
   }
   if (code === 'tarefas_taxa_conclusao') {
-    const rows = await db.select({
+    const rows = await source.select({
       completed: sql<number>`sum(CASE WHEN lower(${schema.tarefas.status}) IN ('concluída', 'concluida', 'concluído', 'concluido') THEN 1 ELSE 0 END)`,
-      total: sql<number>`count(*)`
+      total: sql<number>`count(*)`,
+      updatedAt: sql<string | null>`max(${schema.tarefas.updatedAt})`
     }).from(schema.tarefas).where(and(
       isNull(schema.tarefas.deletedAt),
       gte(schema.tarefas.dataLimite, cycle.dataInicio),
       lte(schema.tarefas.dataLimite, cycle.dataFim)
     ));
     const total = Number(rows[0]?.total || 0);
-    return { valor: total ? Number(rows[0]?.completed || 0) * 100 / total : null, updatedAt };
+    return { valor: total ? Number(rows[0]?.completed || 0) * 100 / total : null, updatedAt: total ? rows[0]?.updatedAt || null : null };
   }
   return { valor: null, updatedAt: null };
 }
@@ -782,23 +898,23 @@ function trendSummary(snapshotRows: Array<typeof schema.snapshotsEstrategicos.$i
   };
 }
 
-export async function getStrategicSnapshot(cycleId: string) {
-  const cycle = await findCycle(cycleId);
+async function buildStrategicSnapshot(cycleId: string, source: DbOrTx) {
+  const cycle = await findCycle(cycleId, source);
   const [pillars, objectives, storedResults, initiatives, checkins, risks, decisions, storedSnapshots] = await Promise.all([
-    db.select().from(schema.pilaresEstrategicos)
+    source.select().from(schema.pilaresEstrategicos)
       .where(and(eq(schema.pilaresEstrategicos.cicloId, cycleId), isNull(schema.pilaresEstrategicos.deletedAt)))
       .orderBy(asc(schema.pilaresEstrategicos.ordem), asc(schema.pilaresEstrategicos.nome)),
-    db.select().from(schema.objetivosEstrategicos)
+    source.select().from(schema.objetivosEstrategicos)
       .where(and(eq(schema.objetivosEstrategicos.cicloId, cycleId), isNull(schema.objetivosEstrategicos.deletedAt)))
       .orderBy(asc(schema.objetivosEstrategicos.ordem), asc(schema.objetivosEstrategicos.dataLimite)),
-    db.select().from(schema.resultadosChave)
+    source.select().from(schema.resultadosChave)
       .innerJoin(schema.objetivosEstrategicos, eq(schema.resultadosChave.objetivoId, schema.objetivosEstrategicos.id))
       .where(and(
         eq(schema.objetivosEstrategicos.cicloId, cycleId),
         isNull(schema.objetivosEstrategicos.deletedAt),
         isNull(schema.resultadosChave.deletedAt)
       )),
-    db.select().from(schema.iniciativasEstrategicas)
+    source.select().from(schema.iniciativasEstrategicas)
       .innerJoin(schema.objetivosEstrategicos, eq(schema.iniciativasEstrategicas.objetivoId, schema.objetivosEstrategicos.id))
       .where(and(
         eq(schema.objetivosEstrategicos.cicloId, cycleId),
@@ -806,30 +922,38 @@ export async function getStrategicSnapshot(cycleId: string) {
         isNull(schema.iniciativasEstrategicas.deletedAt)
       ))
       .orderBy(asc(schema.iniciativasEstrategicas.dataLimite)),
-    db.select().from(schema.checkinsEstrategicos)
+    source.select().from(schema.checkinsEstrategicos)
       .where(and(eq(schema.checkinsEstrategicos.cicloId, cycleId), isNull(schema.checkinsEstrategicos.deletedAt)))
       .orderBy(desc(schema.checkinsEstrategicos.data), desc(schema.checkinsEstrategicos.createdAt)),
-    db.select().from(schema.riscosEstrategicos)
+    source.select().from(schema.riscosEstrategicos)
       .where(and(eq(schema.riscosEstrategicos.cicloId, cycleId), isNull(schema.riscosEstrategicos.deletedAt)))
       .orderBy(desc(schema.riscosEstrategicos.createdAt)),
-    db.select().from(schema.decisoesEstrategicas)
+    source.select().from(schema.decisoesEstrategicas)
       .where(and(eq(schema.decisoesEstrategicas.cicloId, cycleId), isNull(schema.decisoesEstrategicas.deletedAt)))
       .orderBy(asc(schema.decisoesEstrategicas.prazo), desc(schema.decisoesEstrategicas.updatedAt)),
-    db.select().from(schema.snapshotsEstrategicos)
+    source.select().from(schema.snapshotsEstrategicos)
       .where(and(eq(schema.snapshotsEstrategicos.cicloId, cycleId), isNull(schema.snapshotsEstrategicos.deletedAt)))
-      .orderBy(desc(schema.snapshotsEstrategicos.capturadoEm), desc(schema.snapshotsEstrategicos.createdAt))
+      .orderBy(desc(schema.snapshotsEstrategicos.capturadoEm), desc(schema.snapshotsEstrategicos.createdAt), asc(schema.snapshotsEstrategicos.id))
       .limit(2)
   ]);
 
+  const automaticSources = new Map<string, ReturnType<typeof automaticValue>>();
   const results = await Promise.all(storedResults.map(async ({ resultados_chave: result }) => {
+    if (result.fonteTipo !== 'manual' && result.fonteCodigo && !automaticSources.has(result.fonteCodigo)) {
+      automaticSources.set(result.fonteCodigo, automaticValue(source, result.fonteCodigo, cycle));
+    }
     const automatic = result.fonteTipo !== 'manual' && result.fonteCodigo
-      ? await automaticValue(result.fonteCodigo, cycle)
+      ? await automaticSources.get(result.fonteCodigo)!
       : { valor: result.valorAtual, updatedAt: result.ultimaAtualizacao };
     const valorAtual = automatic.valor;
     const progresso = progressFor({ ...result, valorAtual });
     const option = sourceOption(result.fonteTipo, result.fonteCodigo);
-    const stale = !automatic.updatedAt
-      || Date.now() - Date.parse(automatic.updatedAt) > staleAfterDays(result.frequencia) * 86_400_000;
+    const updatedDate = automatic.updatedAt ? new Date(automatic.updatedAt) : null;
+    const updatedDateKey = updatedDate && Number.isFinite(updatedDate.getTime()) ? saoPauloDateKey(updatedDate) : null;
+    const ageDays = updatedDateKey
+      ? (Date.parse(`${todayKey()}T12:00:00Z`) - Date.parse(`${updatedDateKey}T12:00:00Z`)) / 86_400_000
+      : Number.POSITIVE_INFINITY;
+    const stale = valorAtual != null && ageDays > staleAfterDays(result.frequencia);
     return {
       ...result,
       valorAtual,
@@ -845,8 +969,24 @@ export async function getStrategicSnapshot(cycleId: string) {
     };
   }));
 
+  const linkedProjectIds = [...new Set(initiatives.map(({ iniciativas_estrategicas: item }) => item.projetoId).filter((id): id is string => Boolean(id)))];
+  const linkedTaskIds = [...new Set(initiatives.map(({ iniciativas_estrategicas: item }) => item.tarefaId).filter((id): id is string => Boolean(id)))];
+  const [activeProjectRows, activeTaskRows] = await Promise.all([
+    linkedProjectIds.length
+      ? source.select({ id: schema.projetos.id }).from(schema.projetos)
+        .where(and(inArray(schema.projetos.id, linkedProjectIds), isNull(schema.projetos.deletedAt)))
+      : Promise.resolve([]),
+    linkedTaskIds.length
+      ? source.select({ id: schema.tarefas.id }).from(schema.tarefas)
+        .where(and(inArray(schema.tarefas.id, linkedTaskIds), isNull(schema.tarefas.deletedAt)))
+      : Promise.resolve([])
+  ]);
+  const activeProjectIds = new Set(activeProjectRows.map((item) => item.id));
+  const activeTaskIds = new Set(activeTaskRows.map((item) => item.id));
   const initiativeRows = initiatives.map(({ iniciativas_estrategicas: initiative }) => ({
     ...initiative,
+    projetoId: initiative.projetoId && activeProjectIds.has(initiative.projetoId) ? initiative.projetoId : null,
+    tarefaId: initiative.tarefaId && activeTaskIds.has(initiative.tarefaId) ? initiative.tarefaId : null,
     atrasada: initiative.dataLimite < todayKey() && !['concluida', 'cancelada'].includes(initiative.status)
   }));
   const decisionRows = decisions.map((decision) => ({
@@ -880,7 +1020,7 @@ export async function getStrategicSnapshot(cycleId: string) {
     ...decisionRows.map((item) => ({ id: `decisao:${item.id}`, tipo: 'decisao' as const, data: (item.concluidaEm || item.updatedAt).slice(0, 10), titulo: item.descricao, descricao: `Responsável: ${item.responsavel} · prazo ${item.prazo}`, status: item.status })),
     ...risks.map((item) => ({ id: `risco:${item.id}`, tipo: 'risco' as const, data: item.updatedAt.slice(0, 10), titulo: item.descricao, descricao: `Impacto ${item.impacto} · probabilidade ${item.probabilidade}`, status: item.status })),
     ...initiativeRows.filter((item) => item.atrasada || ['concluida', 'bloqueada'].includes(item.status)).map((item) => ({ id: `iniciativa:${item.id}`, tipo: 'iniciativa' as const, data: item.updatedAt.slice(0, 10), titulo: item.titulo, descricao: item.atrasada ? `Prazo vencido em ${item.dataLimite}` : `Situação alterada para ${item.status}`, status: item.atrasada ? 'atrasada' : item.status }))
-  ].sort((a, b) => b.data.localeCompare(a.data)).slice(0, 30);
+  ].sort((a, b) => b.data.localeCompare(a.data) || a.tipo.localeCompare(b.tipo) || a.id.localeCompare(b.id)).slice(0, 30);
   const nextDecision = pendingDecisions.slice().sort((a, b) => a.prazo.localeCompare(b.prazo))[0];
 
   return {
@@ -909,6 +1049,10 @@ export async function getStrategicSnapshot(cycleId: string) {
           : null
     }
   };
+}
+
+export async function getStrategicSnapshot(cycleId: string) {
+  return db.transaction((tx) => buildStrategicSnapshot(cycleId, tx));
 }
 
 export async function getStrategicOptions() {

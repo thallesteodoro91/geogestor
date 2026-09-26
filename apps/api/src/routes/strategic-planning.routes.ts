@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import {
   StrategicCheckinPayloadSchema,
   StrategicCheckinUpdateSchema,
@@ -47,23 +48,37 @@ import {
   updateStrategicRisk
 } from '../services/strategic-planning.service';
 
-type IdParams = { id: string };
+const IdParamsSchema = z.object({ id: z.string().uuid('Identificador inválido.') }).strict();
 
 function validationMessage(error: { issues: Array<{ message: string }> }) {
   return error.issues.map((issue) => issue.message).join(' ');
 }
 
 function sendError(reply: FastifyReply, error: unknown) {
-  const message = error instanceof Error ? error.message : 'Não foi possível concluir a operação estratégica.';
-  const status = /não encontrad/i.test(message) ? 404 : 400;
+  const typed = error as Error & { statusCode?: number };
+  const status = typed?.statusCode === 400 || typed?.statusCode === 404 ? typed.statusCode : 500;
+  const message = status === 500
+    ? 'Não foi possível concluir a operação estratégica. Tente novamente.'
+    : typed.message;
   return reply.status(status).send({ error: message });
+}
+
+function parseId(params: unknown, reply: FastifyReply) {
+  const parsed = IdParamsSchema.safeParse(params);
+  if (!parsed.success) {
+    reply.status(400).send({ error: validationMessage(parsed.error) });
+    return null;
+  }
+  return parsed.data.id;
 }
 
 export async function strategicPlanningRoutes(server: FastifyInstance) {
   server.get('/ciclos', async () => listStrategicCycles());
   server.get('/ciclos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      return await getStrategicSnapshot((request.params as IdParams).id);
+      return await getStrategicSnapshot(id);
     } catch (error) {
       return sendError(reply, error);
     }
@@ -80,17 +95,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/ciclos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicCycleUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicCycle((request.params as IdParams).id, parsed.data);
+      return await updateStrategicCycle(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/ciclos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicCycle((request.params as IdParams).id);
+      await deleteStrategicCycle(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -107,17 +126,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/pilares/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicPillarUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicPillar((request.params as IdParams).id, parsed.data);
+      return await updateStrategicPillar(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/pilares/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicPillar((request.params as IdParams).id);
+      await deleteStrategicPillar(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -134,17 +157,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/objetivos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicObjectiveUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicObjective((request.params as IdParams).id, parsed.data);
+      return await updateStrategicObjective(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/objetivos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicObjective((request.params as IdParams).id);
+      await deleteStrategicObjective(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -161,17 +188,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/resultados-chave/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicKeyResultUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicKeyResult((request.params as IdParams).id, parsed.data);
+      return await updateStrategicKeyResult(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/resultados-chave/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicKeyResult((request.params as IdParams).id);
+      await deleteStrategicKeyResult(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -188,17 +219,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/iniciativas/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicInitiativeUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicInitiative((request.params as IdParams).id, parsed.data);
+      return await updateStrategicInitiative(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/iniciativas/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicInitiative((request.params as IdParams).id);
+      await deleteStrategicInitiative(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -215,17 +250,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/checkins/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicCheckinUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicCheckin((request.params as IdParams).id, parsed.data);
+      return await updateStrategicCheckin(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/checkins/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicCheckin((request.params as IdParams).id);
+      await deleteStrategicCheckin(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -242,17 +281,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/riscos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicRiskUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicRisk((request.params as IdParams).id, parsed.data);
+      return await updateStrategicRisk(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/riscos/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicRisk((request.params as IdParams).id);
+      await deleteStrategicRisk(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);
@@ -269,17 +312,21 @@ export async function strategicPlanningRoutes(server: FastifyInstance) {
     }
   });
   server.patch('/decisoes/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     const parsed = StrategicDecisionUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: validationMessage(parsed.error) });
     try {
-      return await updateStrategicDecision((request.params as IdParams).id, parsed.data);
+      return await updateStrategicDecision(id, parsed.data);
     } catch (error) {
       return sendError(reply, error);
     }
   });
   server.delete('/decisoes/:id', async (request, reply) => {
+    const id = parseId(request.params, reply);
+    if (!id) return;
     try {
-      await deleteStrategicDecision((request.params as IdParams).id);
+      await deleteStrategicDecision(id);
       return reply.status(204).send();
     } catch (error) {
       return sendError(reply, error);

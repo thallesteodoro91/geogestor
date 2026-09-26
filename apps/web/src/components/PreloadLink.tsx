@@ -1,6 +1,6 @@
 import { Link, type LinkProps } from 'react-router-dom';
 import { preloadRoute } from '../utils/routePreloaders';
-import { markNavigationIntent } from '../utils/navigationMetrics';
+import { markNavigationIntent, markNavigationUrlChanged } from '../utils/navigationMetrics';
 
 function getPathname(to: LinkProps['to']) {
   if (typeof to === 'string') return to.split(/[?#]/, 1)[0];
@@ -23,7 +23,9 @@ export function PreloadLink({
       to={to}
       onClick={(event) => {
         onClick?.(event);
-        if (!event.defaultPrevented) markNavigationIntent(pathname);
+        if (!event.defaultPrevented && markNavigationIntent(pathname)) {
+          queueMicrotask(() => markNavigationUrlChanged(window.location.pathname));
+        }
       }}
       onPointerEnter={(event) => {
         onPointerEnter?.(event);

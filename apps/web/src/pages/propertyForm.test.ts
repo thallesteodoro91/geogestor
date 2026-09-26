@@ -28,11 +28,12 @@ test('normaliza o cadastro de propriedade antes da persistência', () => {
   assert.equal(parsed.data.matricula, '12.345');
 });
 
-test('exige identificação, município e par completo de coordenadas', () => {
+test('exige identificação, município, UF alfabética e par completo de coordenadas', () => {
   const parsed = propertyFormToPayload({
     ...validForm,
     matricula: '',
     municipio: '',
+    uf: '12',
     longitude: ''
   });
   assert.equal(parsed.success, false);
@@ -40,5 +41,6 @@ test('exige identificação, município e par completo de coordenadas', () => {
   const paths = parsed.error.issues.map((issue) => issue.path[0]);
   assert.ok(paths.includes('matricula'));
   assert.ok(paths.includes('municipio'));
+  assert.ok(paths.includes('uf'));
   assert.ok(paths.includes('longitude'));
 });

@@ -37,6 +37,17 @@ test('token em query é limitado aos downloads compatíveis e CORS recusa outra 
       }
     });
     assert.equal(refusedOrigin.headers['access-control-allow-origin'], undefined);
+
+    const developmentOrigin = await server.inject({
+      method: 'OPTIONS',
+      url: '/api/auth/status',
+      headers: {
+        origin: 'http://localhost:5174',
+        'access-control-request-method': 'GET'
+      }
+    });
+    assert.equal(developmentOrigin.statusCode, 204);
+    assert.equal(developmentOrigin.headers['access-control-allow-origin'], 'http://localhost:5174');
   } finally {
     await server.close();
   }

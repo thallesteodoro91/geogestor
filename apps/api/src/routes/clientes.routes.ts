@@ -10,6 +10,7 @@ import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 import { activeClientDocumentWhere } from '../services/document-integrity.service';
 import { finishSimpleImport } from '../services/simple-import-result.service';
+import { sourceRowNumbersSchema, sourceRowsMatch } from '../services/simple-import-source-rows.service';
 import { OperationalLogService } from '../services/operational-log.service';
 import { finalizeImportFilesystem } from '../services/import-filesystem-finalization.service';
 import {
@@ -80,6 +81,20 @@ class ClientDocumentConflictError extends Error {
   }
 }
 
+class ClientNotFoundError extends Error {
+  constructor() {
+    super('Cliente não encontrado');
+    this.name = 'ClientNotFoundError';
+  }
+}
+
+class ClientDependencyConflictError extends Error {
+  constructor(readonly dependencies: string[]) {
+    super(`Remova ou reassocie os vínculos ativos antes de excluir o cliente: ${dependencies.join(', ')}.`);
+    this.name = 'ClientDependencyConflictError';
+  }
+}
+
 function isClientDocumentConflict(error: unknown) {
   return error instanceof ClientDocumentConflictError
     || (error instanceof Error && error.message.includes('CLIENT_DOCUMENT_CONFLICT'));
@@ -103,6 +118,17 @@ async function assertDocumentAvailable(
   if (existing.length) throw new ClientDocumentConflictError();
 }
 
+const validHistoryDate = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}(?:T.*)?$/, 'Data inválida')
+  .refine((value) => {
+    const [datePart] = value.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return parsed.getUTCFullYear() === year
+      && parsed.getUTCMonth() === month - 1
+      && parsed.getUTCDate() === day;
+  }, 'Data inválida');
+
 const historyBodySchema = z.object({
   projetoId: z.string().uuid().nullable().optional(),
   orcamentoId: z.string().uuid().nullable().optional(),
@@ -110,7 +136,7 @@ const historyBodySchema = z.object({
   titulo: z.string().trim().min(1).max(500).nullable().optional(),
   categoria: z.string().trim().min(1).max(100).nullable().optional(),
   manual: z.boolean().optional(),
-  data: z.string().regex(/^\d{4}-\d{2}-\d{2}(?:T.*)?$/, 'Data inválida'),
+  data: validHistoryDate,
   descricao: z.string().trim().min(1).max(20_000)
 });
 
@@ -157,6 +183,31 @@ const buildClienteChanges = (oldCliente: any, data: any) => {
     return `${label}: ${labelValue(oldCliente[field])} -> ${labelValue(data[field])}`;
   });
 };
+
+async function assertHistoryRelations(
+  clientId: string,
+  input: { projetoId?: string | null; orcamentoId?: string | null },
+  database: any = db
+) {
+  if (input.projetoId) {
+    const [project] = await database.select({ clienteId: schema.projetos.clienteId })
+      .from(schema.projetos)
+      .where(and(eq(schema.projetos.id, input.projetoId), isNull(schema.projetos.deletedAt)))
+      .limit(1);
+    if (!project || project.clienteId !== clientId) {
+      throw new Error('O projeto informado não pertence a este cliente ou está inativo.');
+    }
+  }
+  if (input.orcamentoId) {
+    const [budget] = await database.select({ clienteId: schema.orcamentos.clienteId })
+      .from(schema.orcamentos)
+      .where(and(eq(schema.orcamentos.id, input.orcamentoId), isNull(schema.orcamentos.deletedAt)))
+      .limit(1);
+    if (!budget || budget.clienteId !== clientId) {
+      throw new Error('O orçamento informado não pertence a este cliente ou está inativo.');
+    }
+  }
+}
 
 export async function clientesRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
@@ -315,7 +366,7 @@ export async function clientesRoutes(server: FastifyInstance) {
     const { id } = request.params;
     try {
       const cliente = await db.select().from(schema.clientes)
-        .where(eq(schema.clientes.id, id))
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt)))
         .limit(1);
       if (!cliente.length) {
         return reply.status(404).send({ error: 'Cliente não encontrado' });
@@ -337,7 +388,7 @@ export async function clientesRoutes(server: FastifyInstance) {
     try {
       // 1. Dados do cliente
       const clienteRes = await db.select().from(schema.clientes)
-        .where(eq(schema.clientes.id, id))
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt)))
         .limit(1);
         
       if (!clienteRes.length) {
@@ -624,7 +675,8 @@ export async function clientesRoutes(server: FastifyInstance) {
     const { id } = request.params;
     const data = request.body;
     try {
-      const oldCliente = await db.select().from(schema.clientes).where(eq(schema.clientes.id, id)).limit(1);
+      const oldCliente = await db.select().from(schema.clientes)
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
       if (!oldCliente.length) {
         return reply.status(404).send({ error: 'Cliente não encontrado' });
       }
@@ -672,7 +724,7 @@ export async function clientesRoutes(server: FastifyInstance) {
           previsaoEntrega: data.previsaoEntrega !== undefined ? data.previsaoEntrega : undefined,
           servicos: data.servicos !== undefined ? data.servicos : undefined,
           updatedAt: new Date().toISOString()
-        }).where(eq(schema.clientes.id, id)).returning();
+        }).where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).returning();
 
         // Log de Auditoria
         await AuditLogService.log('UPDATE', 'Cliente', oldCliente[0], result[0], tx);
@@ -722,13 +774,36 @@ export async function clientesRoutes(server: FastifyInstance) {
     const { id } = request.params;
     try {
       await db.transaction(async (tx) => {
-        const oldCliente = await tx.select().from(schema.clientes).where(eq(schema.clientes.id, id)).limit(1);
-        if (!oldCliente.length || oldCliente[0].deletedAt) return;
+        const oldCliente = await tx.select().from(schema.clientes)
+          .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
+        if (!oldCliente.length) throw new ClientNotFoundError();
+
+        const dependencyQueries = [
+          ['Propriedades', schema.propriedades, schema.propriedades.clienteId],
+          ['Projetos', schema.projetos, schema.projetos.clienteId],
+          ['Orçamentos', schema.orcamentos, schema.orcamentos.clienteId],
+          ['Tarefas', schema.tarefas, schema.tarefas.clienteId],
+          ['Compromissos', schema.compromissos, schema.compromissos.clienteId],
+          ['Documentos e mapas', schema.documentos, schema.documentos.clienteId],
+          ['Oportunidades', schema.oportunidades, schema.oportunidades.clienteId]
+        ] as const;
+        const dependencyCounts = await Promise.all(dependencyQueries.map(async ([label, table, clientColumn]) => {
+          const [row] = await tx.select({ value: count() }).from(table as any)
+            .where(and(eq(clientColumn as any, id), isNull((table as any).deletedAt)));
+          return { label, value: Number(row?.value || 0) };
+        }));
+        const dependencies = dependencyCounts.filter((item) => item.value > 0)
+          .map((item) => `${item.label} (${item.value})`);
+        if (dependencies.length) throw new ClientDependencyConflictError(dependencies);
 
         // Soft Delete Cliente
         await tx.update(schema.clientes)
           .set({ deletedAt: new Date().toISOString() })
-          .where(eq(schema.clientes.id, id));
+          .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt)));
+
+        await tx.update(schema.interacoes_cliente)
+          .set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+          .where(and(eq(schema.interacoes_cliente.clienteId, id), isNull(schema.interacoes_cliente.deletedAt)));
 
         await FileSystemOutboxService.cancelAggregate('client', id, tx);
 
@@ -737,6 +812,12 @@ export async function clientesRoutes(server: FastifyInstance) {
 
       return reply.status(204).send();
     } catch (err) {
+      if (err instanceof ClientNotFoundError) {
+        return reply.status(404).send({ error: err.message });
+      }
+      if (err instanceof ClientDependencyConflictError) {
+        return reply.status(409).send({ error: err.message, dependencies: err.dependencies });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao excluir cliente' });
     }
@@ -750,9 +831,12 @@ export async function clientesRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const { id } = request.params;
     try {
+      const [client] = await db.select({ id: schema.clientes.id }).from(schema.clientes)
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
+      if (!client) return reply.status(404).send({ error: 'Cliente não encontrado' });
       const historico = await db.select()
         .from(schema.interacoes_cliente)
-        .where(eq(schema.interacoes_cliente.clienteId, id));
+        .where(and(eq(schema.interacoes_cliente.clienteId, id), isNull(schema.interacoes_cliente.deletedAt)));
       
       // Ordenar do mais recente pro mais antigo
       historico.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
@@ -777,21 +861,29 @@ export async function clientesRoutes(server: FastifyInstance) {
       const client = await db.select({ id: schema.clientes.id }).from(schema.clientes)
         .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
       if (!client.length) return reply.status(404).send({ error: 'Cliente não encontrado' });
-      const novaInteracao = await db.insert(schema.interacoes_cliente).values({
-        id: crypto.randomUUID(),
-        clienteId: id,
-        projetoId: data.projetoId || null,
-        orcamentoId: data.orcamentoId || null,
-        tipo: data.tipo,
-        titulo: data.titulo || null,
-        categoria: data.categoria || null,
-        manual: data.manual !== undefined ? data.manual : true,
-        data: data.data,
-        descricao: data.descricao
-      }).returning();
+      await assertHistoryRelations(id, data);
+      const novaInteracao = await db.transaction(async (tx) => {
+        const [created] = await tx.insert(schema.interacoes_cliente).values({
+          id: crypto.randomUUID(),
+          clienteId: id,
+          projetoId: data.projetoId || null,
+          orcamentoId: data.orcamentoId || null,
+          tipo: data.tipo,
+          titulo: data.titulo || null,
+          categoria: data.categoria || null,
+          manual: data.manual !== undefined ? data.manual : true,
+          data: data.data,
+          descricao: data.descricao
+        }).returning();
+        await AuditLogService.log('INSERT', 'Interação do cliente', null, created, tx);
+        return created;
+      });
       
-      return reply.status(201).send(novaInteracao[0]);
+      return reply.status(201).send(novaInteracao);
     } catch (err) {
+      if (err instanceof Error && /não pertence a este cliente|está inativo/.test(err.message)) {
+        return reply.status(400).send({ error: err.message });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao salvar interação' });
     }
@@ -808,30 +900,45 @@ export async function clientesRoutes(server: FastifyInstance) {
     const data = request.body;
 
     try {
+      const [client] = await db.select({ id: schema.clientes.id }).from(schema.clientes)
+        .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt))).limit(1);
+      if (!client) return reply.status(404).send({ error: 'Cliente não encontrado' });
+
       const interacao = await db.select()
         .from(schema.interacoes_cliente)
-        .where(eq(schema.interacoes_cliente.id, historicoId))
+        .where(and(eq(schema.interacoes_cliente.id, historicoId), isNull(schema.interacoes_cliente.deletedAt)))
         .limit(1);
 
       if (!interacao.length || interacao[0].clienteId !== id) {
         return reply.status(404).send({ error: 'Interação não encontrada' });
       }
 
-      const interacaoAtualizada = await db.update(schema.interacoes_cliente).set({
-        projetoId: data.projetoId !== undefined ? data.projetoId || null : undefined,
-        orcamentoId: data.orcamentoId !== undefined ? data.orcamentoId || null : undefined,
-        tipo: data.tipo !== undefined ? data.tipo : undefined,
-        titulo: data.titulo !== undefined ? data.titulo || null : undefined,
-        categoria: data.categoria !== undefined ? data.categoria || null : undefined,
-        data: data.data !== undefined ? data.data : undefined,
-        descricao: data.descricao !== undefined ? data.descricao : undefined,
-        updatedAt: new Date().toISOString()
-      })
-        .where(eq(schema.interacoes_cliente.id, historicoId))
-        .returning();
+      await assertHistoryRelations(id, {
+        projetoId: data.projetoId !== undefined ? data.projetoId : interacao[0].projetoId,
+        orcamentoId: data.orcamentoId !== undefined ? data.orcamentoId : interacao[0].orcamentoId
+      });
+      const interacaoAtualizada = await db.transaction(async (tx) => {
+        const [updated] = await tx.update(schema.interacoes_cliente).set({
+          projetoId: data.projetoId !== undefined ? data.projetoId || null : undefined,
+          orcamentoId: data.orcamentoId !== undefined ? data.orcamentoId || null : undefined,
+          tipo: data.tipo !== undefined ? data.tipo : undefined,
+          titulo: data.titulo !== undefined ? data.titulo || null : undefined,
+          categoria: data.categoria !== undefined ? data.categoria || null : undefined,
+          data: data.data !== undefined ? data.data : undefined,
+          descricao: data.descricao !== undefined ? data.descricao : undefined,
+          updatedAt: new Date().toISOString()
+        })
+          .where(and(eq(schema.interacoes_cliente.id, historicoId), isNull(schema.interacoes_cliente.deletedAt)))
+          .returning();
+        await AuditLogService.log('UPDATE', 'Interação do cliente', interacao[0], updated, tx);
+        return updated;
+      });
 
-      return interacaoAtualizada[0];
+      return interacaoAtualizada;
     } catch (err) {
+      if (err instanceof Error && /não pertence a este cliente|está inativo/.test(err.message)) {
+        return reply.status(400).send({ error: err.message });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao atualizar interação' });
     }
@@ -839,8 +946,14 @@ export async function clientesRoutes(server: FastifyInstance) {
 
   // Importação em Lote
   zServer.post('/lote', {
-    schema: { body: z.array(z.unknown()).min(1).max(500) }
+    schema: { body: z.union([
+      z.array(z.unknown()).min(1).max(500),
+      z.object({ rows: z.array(z.unknown()).min(1).max(500), sourceRowNumbers: sourceRowNumbersSchema }).strict()
+        .refine(input => sourceRowsMatch(input.rows, input.sourceRowNumbers), { path: ['sourceRowNumbers'], message: 'As linhas de origem devem corresponder aos registros em ordem crescente.' })
+    ]) }
   }, async (request, reply) => {
+    const rows = Array.isArray(request.body) ? request.body : request.body.rows;
+    const sourceRowNumbers = Array.isArray(request.body) ? undefined : request.body.sourceRowNumbers;
     const startedAt = new Date().toISOString();
     const digest = importContentDigest(request.body);
     let runId: string | null = null;
@@ -850,7 +963,7 @@ export async function clientesRoutes(server: FastifyInstance) {
       const replay = await findImportReplay('clientes', 'simple', idempotencyKey, digest);
       if (replay) return reply.status(200).send(replay);
       const reservation = await reserveSimpleImport(db, {
-        entity: 'clientes', key: idempotencyKey, digest, totalRows: request.body.length
+        entity: 'clientes', key: idempotencyKey, digest, totalRows: rows.length
       });
       runId = reservation.runId;
       if (reservation.replay) return reply.status(200).send(reservation.replay);
@@ -861,7 +974,7 @@ export async function clientesRoutes(server: FastifyInstance) {
       const accepted: Array<{ index: number; data: z.infer<typeof ClientePayloadSchema>; id: string }> = [];
       const results: Array<{ index: number; status: 'success' | 'failed'; id?: string; errors?: string[] }> = [];
 
-      request.body.forEach((raw, index) => {
+      rows.forEach((raw, index) => {
         const normalized = normalizeClientImportRow(raw);
         if (!normalized.data || normalized.errors.length) {
           results.push({ index, status: 'failed', errors: normalized.errors });
@@ -936,11 +1049,11 @@ export async function clientesRoutes(server: FastifyInstance) {
             quantidade: accepted.length,
             ids: accepted.map((item) => item.id)
           }, tx);
-          const transactionResult = finishSimpleImport(startedAt, request.body.length, results, { importId: runId! });
+          const transactionResult = finishSimpleImport(startedAt, rows.length, results, { importId: runId!, sourceRowNumbers });
           await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
           return transactionResult;
         })
-        : finishSimpleImport(startedAt, request.body.length, results, { importId: runId });
+        : finishSimpleImport(startedAt, rows.length, results, { importId: runId, sourceRowNumbers });
       if (!accepted.length) {
         await completeImportRun(db, runId, summary as unknown as Record<string, unknown>, results);
       }
@@ -949,7 +1062,7 @@ export async function clientesRoutes(server: FastifyInstance) {
       return reply.status(201).send(finalized);
     } catch (err) {
       if (runId) await failImportRun(runId, err).catch(() => undefined);
-      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'clientes', status: 'failed', rows: request.body.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
+      await OperationalLogService.error('simple-spreadsheet-import-failed', { entity: 'clientes', status: 'failed', rows: rows.length, reason: err, durationMs: Date.now() - new Date(startedAt).getTime() }).catch(() => undefined);
       if (isClientDocumentConflict(err)) {
         return reply.status(409).send({ error: 'CPF/CNPJ já cadastrado ou repetido durante a importação.' });
       }

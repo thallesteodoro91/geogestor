@@ -1,4 +1,4 @@
-import { calculateBudget, percentageToBasisPoints, type BudgetCalculationResult } from '@geogestor/contracts/src/budgets';
+import { basisPointsToPercentage, calculateBudget, percentageToBasisPoints, type BudgetCalculationResult } from '@geogestor/contracts/src/budgets';
 import type { BudgetDetail, BudgetFormItem, BudgetFormState } from './types';
 
 export type BudgetValidationSection = 'header' | 'client' | 'characterization' | 'items' | 'costs' | 'taxes' | 'fees' | 'payment' | 'summary' | 'notes' | 'document';
@@ -92,7 +92,11 @@ export function emptyBudgetItem(): BudgetFormItem {
 
 export const DEFAULT_BUDGET_TERMS = 'Esta proposta contempla exclusivamente os serviços e entregáveis descritos. Alterações de escopo serão objeto de revisão formal.';
 
-export function createDefaultBudgetForm(clientId = ''): BudgetFormState {
+export function resolveBudgetTerms(companyTerms?: string | null) {
+  return companyTerms?.trim() || DEFAULT_BUDGET_TERMS;
+}
+
+export function createDefaultBudgetForm(clientId = '', companyTerms?: string | null): BudgetFormState {
   const issueDate = localDateKey();
   return {
     clientId,
@@ -101,7 +105,7 @@ export function createDefaultBudgetForm(clientId = ''): BudgetFormState {
     description: '',
     internalNotes: '',
     clientNotes: '',
-    terms: DEFAULT_BUDGET_TERMS,
+    terms: resolveBudgetTerms(companyTerms),
     issueDate,
     validUntil: addDays(issueDate, 15),
     technicalLead: '',
@@ -150,7 +154,7 @@ export function detailToForm(detail: BudgetDetail): BudgetFormState {
     description: detail.descricao || '',
     internalNotes: detail.anotacoes || '',
     clientNotes: detail.observacoesCliente || '',
-    terms: detail.termosCondicoes || base.terms,
+    terms: detail.termosCondicoes ?? base.terms,
     issueDate: detail.dataEmissao || base.issueDate,
     validUntil: detail.validadeAte || base.validUntil,
     technicalLead: detail.responsavelTecnico || '',
@@ -165,9 +169,13 @@ export function detailToForm(detail: BudgetDetail): BudgetFormState {
     executionDays: detail.prazoExecucaoDias === null || detail.prazoExecucaoDias === undefined ? '' : String(detail.prazoExecucaoDias),
     characterization: { ...base.characterization, ...characterization },
     globalDiscountType: detail.descontoGlobalTipo || 'fixo',
-    globalDiscountValue: detail.descontoGlobalValor || '0',
+    globalDiscountValue: detail.descontoGlobalTipo === 'fixo'
+      ? centsToCurrencyInput(Number(detail.descontoGlobalValor || 0))
+      : detail.descontoGlobalValor || '0',
     globalAdditionType: detail.acrescimoGlobalTipo || 'fixo',
-    globalAdditionValue: detail.acrescimoGlobalValor || '0',
+    globalAdditionValue: detail.acrescimoGlobalTipo === 'fixo'
+      ? centsToCurrencyInput(Number(detail.acrescimoGlobalValor || 0))
+      : detail.acrescimoGlobalValor || '0',
     items: detail.items.map((item) => ({
       id: item.id,
       code: item.code || '',
@@ -213,9 +221,9 @@ export function detailToForm(detail: BudgetDetail): BudgetFormState {
     paymentDescription: detail.payment?.description || '',
     paymentMethod: detail.payment?.paymentMethod || '',
     financialAccount: detail.payment?.financialAccount || '',
-    interestBasisPoints: String(detail.payment?.interestBasisPoints || 0),
-    fineBasisPoints: String(detail.payment?.fineBasisPoints || 0),
-    earlyDiscountBasisPoints: String(detail.payment?.earlyDiscountBasisPoints || 0),
+    interestBasisPoints: basisPointsToPercentage(detail.payment?.interestBasisPoints || 0),
+    fineBasisPoints: basisPointsToPercentage(detail.payment?.fineBasisPoints || 0),
+    earlyDiscountBasisPoints: basisPointsToPercentage(detail.payment?.earlyDiscountBasisPoints || 0),
     installments: detail.payment?.installments?.length ? detail.payment.installments : base.installments
   };
 }
@@ -386,6 +394,20 @@ export function validateBudgetForm(form: BudgetFormState): BudgetValidationIssue
     }
   });
 
+  const validateCommercialRate = (fieldId: string, value: string, label: string) => {
+    try {
+      const basisPoints = percentageToBasisPoints(value || '0');
+      if (basisPoints < 0 || basisPoints > 10_000) {
+        add(fieldId, `${label} deve ficar entre 0% e 100%.`, 'payment');
+      }
+    } catch {
+      add(fieldId, `Informe um percentual válido para ${label.toLocaleLowerCase('pt-BR')}.`, 'payment');
+    }
+  };
+  validateCommercialRate('payment-interest', form.interestBasisPoints, 'Juros');
+  validateCommercialRate('payment-fine', form.fineBasisPoints, 'Multa');
+  validateCommercialRate('payment-early-discount', form.earlyDiscountBasisPoints, 'Desconto por antecipação');
+
   if (!form.installments.length) {
     add('installment-count', 'Configure ao menos uma parcela.', 'payment');
   } else {
@@ -495,9 +517,9 @@ export function formToPayload(form: BudgetFormState) {
       installments: form.installments,
       paymentMethod: form.paymentMethod || null,
       financialAccount: form.financialAccount || null,
-      interestBasisPoints: Number.parseInt(form.interestBasisPoints || '0', 10),
-      fineBasisPoints: Number.parseInt(form.fineBasisPoints || '0', 10),
-      earlyDiscountBasisPoints: Number.parseInt(form.earlyDiscountBasisPoints || '0', 10)
+      interestBasisPoints: percentageToBasisPoints(form.interestBasisPoints || '0'),
+      fineBasisPoints: percentageToBasisPoints(form.fineBasisPoints || '0'),
+      earlyDiscountBasisPoints: percentageToBasisPoints(form.earlyDiscountBasisPoints || '0')
     }
   };
 }

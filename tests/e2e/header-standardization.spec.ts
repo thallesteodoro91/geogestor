@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 
@@ -41,7 +42,7 @@ async function unlock(page: Page) {
 
   if (await setupHeading.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo Header Audit');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-Header-Audit');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles Header Audit');
     await page.getByLabel('E-mail').fill('header.audit@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -212,10 +213,13 @@ test.describe('padronização dos cabeçalhos principais', () => {
     expect(Math.abs(
       areaTabBox!.y + areaTabBox!.height / 2 - (saveCalculationBox!.y + saveCalculationBox!.height / 2),
     )).toBeLessThanOrEqual(1);
-    expect(spatialReferenceBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeGreaterThanOrEqual(14);
-    expect(spatialReferenceBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeLessThanOrEqual(18);
-    expect(converterPanelBox!.y - (spatialReferenceBox!.y + spatialReferenceBox!.height)).toBeGreaterThanOrEqual(14);
-    expect(converterPanelBox!.y - (spatialReferenceBox!.y + spatialReferenceBox!.height)).toBeLessThanOrEqual(18);
+    expect(Math.abs(
+      areaTabBox!.y + areaTabBox!.height / 2 - (spatialReferenceBox!.y + spatialReferenceBox!.height / 2),
+    )).toBeLessThanOrEqual(1);
+    expect(spatialReferenceBox!.x - (areaTabBox!.x + areaTabBox!.width)).toBeGreaterThanOrEqual(8);
+    expect(spatialReferenceBox!.x - (areaTabBox!.x + areaTabBox!.width)).toBeLessThanOrEqual(16);
+    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeGreaterThanOrEqual(14);
+    expect(converterPanelBox!.y - (topographyHeaderBox!.y + topographyHeaderBox!.height)).toBeLessThanOrEqual(18);
 
     await navigate(page, '/configuracoes');
     await expect(page.getByRole('link', { name: 'Importação de dados' })).toBeVisible();

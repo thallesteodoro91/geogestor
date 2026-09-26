@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, asc, desc, eq, isNull, like, or, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, like, or, type SQL } from 'drizzle-orm';
 import crypto from 'crypto';
 import { z } from 'zod';
 import {
@@ -8,6 +8,7 @@ import {
   ConditionPatchPayloadSchema,
   LicensePayloadSchema,
   LicensePatchPayloadSchema,
+  isRecognizedLicenseStatus,
   normalizeLicenseStatus,
   resolveEffectiveLicenseStatus,
   type LicenseCondition,
@@ -30,18 +31,21 @@ const ListQuerySchema = z.object({
   tipo: z.string().trim().optional(),
   clienteId: z.string().uuid().optional(),
   vencimento: z.enum(['vencida', '30d', '60d', '90d', '120d']).optional()
-});
+}).strict();
 
 type LicenseRow = {
   license: typeof schema.licencas.$inferSelect;
-  project: { id: string; nome: string; clienteId: string };
+  project: { id: string; nome: string; clienteId: string; status: string | null };
   client: { id: string; nome: string } | null;
 };
 
 function resolveConditionStatus(condition: typeof schema.condicionantesAmbientais.$inferSelect): LicenseCondition['status'] {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
   if (
     condition.dataLimite
-    && condition.dataLimite < new Date().toISOString().slice(0, 10)
+    && condition.dataLimite < today
     && (condition.status === 'Pendente' || condition.status === 'Em andamento')
   ) return 'Vencida';
   return condition.status as LicenseCondition['status'];
@@ -74,9 +78,11 @@ function serializeLicense(
     .filter((item) => item.dataLimite && ['Pendente', 'Em andamento', 'Vencida'].includes(item.status))
     .sort((a, b) => String(a.dataLimite).localeCompare(String(b.dataLimite)))[0];
 
+  const registeredStatus = row.license.status?.trim() || 'Em análise';
   return {
     id: row.license.id,
     projetoId: row.license.projetoId,
+    trabalhoStatus: row.project.status || 'Planejamento',
     clienteId: row.license.clienteId || row.project.clienteId,
     clienteNome: row.client?.nome || 'Cliente não informado',
     projetoNome: row.project.nome,
@@ -87,7 +93,10 @@ function serializeLicense(
     dataEmissao: row.license.dataEmissao,
     dataVencimento: row.license.dataVencimento,
     status: resolveEffectiveLicenseStatus(row.license.status, row.license.dataVencimento),
-    statusRegistrado: normalizeLicenseStatus(row.license.status),
+    statusRegistrado: isRecognizedLicenseStatus(registeredStatus)
+      ? normalizeLicenseStatus(registeredStatus)
+      : registeredStatus,
+    statusRegistradoReconhecido: isRecognizedLicenseStatus(registeredStatus),
     observacoes: row.license.observacoes,
     condicionantesPendentes: activeConditions.filter((item) => item.status === 'Pendente' || item.status === 'Em andamento').length,
     condicionantesVencidas: activeConditions.filter((item) => item.status === 'Vencida').length,
@@ -101,7 +110,7 @@ export async function licencasRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
 
   zServer.get('/', { schema: { querystring: ListQuerySchema } }, async (request, reply) => {
-    const filters: SQL[] = [isNull(schema.licencas.deletedAt)];
+    const filters: SQL[] = [isNull(schema.licencas.deletedAt), isNull(schema.projetos.deletedAt)];
     if (request.query.clienteId) filters.push(eq(schema.projetos.clienteId, request.query.clienteId));
     if (request.query.tipo) filters.push(eq(schema.licencas.tipoLicenca, request.query.tipo));
     if (request.query.q) {
@@ -121,7 +130,8 @@ export async function licencasRoutes(server: FastifyInstance) {
         project: {
           id: schema.projetos.id,
           nome: schema.projetos.nome,
-          clienteId: schema.projetos.clienteId
+          clienteId: schema.projetos.clienteId,
+          status: schema.projetos.status
         },
         client: {
           id: schema.clientes.id,
@@ -134,9 +144,13 @@ export async function licencasRoutes(server: FastifyInstance) {
         .where(and(...filters))
         .orderBy(asc(schema.licencas.dataVencimento), desc(schema.licencas.updatedAt));
 
-      const conditionRows = await db.select()
+      const licenseIds = rows.map((row) => row.license.id);
+      const conditionRows = licenseIds.length ? await db.select()
         .from(schema.condicionantesAmbientais)
-        .where(isNull(schema.condicionantesAmbientais.deletedAt));
+        .where(and(
+          inArray(schema.condicionantesAmbientais.licencaId, licenseIds),
+          isNull(schema.condicionantesAmbientais.deletedAt)
+        )) : [];
       const conditionsByLicense = new Map<string, LicenseCondition[]>();
       conditionRows.forEach((row) => {
         const list = conditionsByLicense.get(row.licencaId) || [];
@@ -176,14 +190,19 @@ export async function licencasRoutes(server: FastifyInstance) {
         project: {
           id: schema.projetos.id,
           nome: schema.projetos.nome,
-          clienteId: schema.projetos.clienteId
+          clienteId: schema.projetos.clienteId,
+          status: schema.projetos.status
         },
         client: { id: schema.clientes.id, nome: schema.clientes.nome }
       })
         .from(schema.licencas)
         .innerJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
         .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
-        .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
+        .where(and(
+          eq(schema.licencas.id, request.params.id),
+          isNull(schema.licencas.deletedAt),
+          isNull(schema.projetos.deletedAt)
+        ))
         .limit(1);
       if (!rows.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
 
@@ -275,6 +294,22 @@ export async function licencasRoutes(server: FastifyInstance) {
           })
         : null;
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
+      if (request.body.projetoId !== undefined && request.body.projetoId !== current[0].projetoId) {
+        return reply.status(409).send({ error: 'O projeto de uma licença existente não pode ser alterado.' });
+      }
+      const merged = LicensePayloadSchema.safeParse({
+        projetoId: request.body.projetoId ?? current[0].projetoId,
+        clienteId: request.body.clienteId === undefined ? current[0].clienteId : request.body.clienteId,
+        numero: request.body.numero ?? current[0].numero,
+        protocolo: request.body.protocolo === undefined ? current[0].protocolo : request.body.protocolo,
+        orgao: request.body.orgao ?? current[0].orgao,
+        tipoLicenca: request.body.tipoLicenca ?? current[0].tipoLicenca,
+        dataEmissao: request.body.dataEmissao === undefined ? current[0].dataEmissao : request.body.dataEmissao,
+        dataVencimento: request.body.dataVencimento ?? current[0].dataVencimento,
+        status: request.body.status ?? normalizeLicenseStatus(current[0].status),
+        observacoes: request.body.observacoes === undefined ? current[0].observacoes : request.body.observacoes
+      });
+      if (!merged.success) return reply.status(400).send({ error: merged.error.issues[0]?.message || 'Dados inválidos.' });
       const updated = await db.transaction(async (tx) => {
         const license = await tx.update(schema.licencas).set({
           ...request.body,
@@ -312,6 +347,9 @@ export async function licencasRoutes(server: FastifyInstance) {
           })
         : null;
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
+      if (request.body.projetoId !== current[0].projetoId) {
+        return reply.status(409).send({ error: 'O projeto de uma licença existente não pode ser alterado.' });
+      }
       const updated = await db.transaction(async (tx) => {
         const license = await tx.update(schema.licencas).set({
           ...request.body,
@@ -342,10 +380,18 @@ export async function licencasRoutes(server: FastifyInstance) {
         .limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
       await db.transaction(async (tx) => {
+        const deletedAt = new Date().toISOString();
         await tx.update(schema.licencas).set({
-          deletedAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
+          deletedAt,
+          updatedAt: deletedAt
         }).where(eq(schema.licencas.id, request.params.id));
+        await tx.update(schema.condicionantesAmbientais).set({
+          deletedAt,
+          updatedAt: deletedAt
+        }).where(and(
+          eq(schema.condicionantesAmbientais.licencaId, request.params.id),
+          isNull(schema.condicionantesAmbientais.deletedAt)
+        ));
         await AuditLogService.log('DELETE (SOFT)', 'Licença', current[0], null, tx);
       });
       return reply.status(204).send();
@@ -357,6 +403,10 @@ export async function licencasRoutes(server: FastifyInstance) {
 
   zServer.get('/:id/condicionantes', { schema: { params: IdParamsSchema } }, async (request, reply) => {
     try {
+      const license = await db.select({ id: schema.licencas.id }).from(schema.licencas)
+        .where(and(eq(schema.licencas.id, request.params.id), isNull(schema.licencas.deletedAt)))
+        .limit(1);
+      if (!license.length) return reply.status(404).send({ error: 'Licença não encontrada.' });
       const rows = await db.select().from(schema.condicionantesAmbientais)
         .where(and(
           eq(schema.condicionantesAmbientais.licencaId, request.params.id),
@@ -412,9 +462,24 @@ export async function licencasRoutes(server: FastifyInstance) {
           isNull(schema.condicionantesAmbientais.deletedAt)
         )).limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Condicionante não encontrada.' });
+      const merged = ConditionPayloadSchema.safeParse({
+        titulo: request.body.titulo ?? current[0].titulo,
+        descricao: request.body.descricao === undefined ? current[0].descricao : request.body.descricao,
+        dataLimite: request.body.dataLimite === undefined ? current[0].dataLimite : request.body.dataLimite,
+        periodicidade: request.body.periodicidade === undefined ? current[0].periodicidade : request.body.periodicidade,
+        responsavel: request.body.responsavel === undefined ? current[0].responsavel : request.body.responsavel,
+        status: request.body.status ?? current[0].status,
+        dataCumprimento: request.body.dataCumprimento === undefined ? current[0].dataCumprimento : request.body.dataCumprimento,
+        observacoes: request.body.observacoes === undefined ? current[0].observacoes : request.body.observacoes,
+        comprovante: request.body.comprovante === undefined ? current[0].comprovante : request.body.comprovante
+      });
+      if (!merged.success) return reply.status(400).send({ error: merged.error.issues[0]?.message || 'Dados inválidos.' });
       const updated = await db.transaction(async (tx) => {
         const condition = await tx.update(schema.condicionantesAmbientais).set({
           ...request.body,
+          dataCumprimento: request.body.status !== undefined && request.body.status !== 'Cumprida'
+            ? null
+            : request.body.dataCumprimento,
           updatedAt: new Date().toISOString()
         }).where(eq(schema.condicionantesAmbientais.id, request.params.conditionId)).returning();
         await AuditLogService.log('UPDATE', 'Condicionante Ambiental', current[0], condition[0], tx);

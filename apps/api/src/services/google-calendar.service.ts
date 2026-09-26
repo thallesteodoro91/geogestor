@@ -1,9 +1,10 @@
 import { google } from 'googleapis';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import crypto from 'crypto';
 import { LocalSecretService } from './local-secret.service';
+import { buildGoogleCalendarEvent, googleEventStartToLocal } from './google-calendar-mapping';
 
 const getErrorStatus = (err: unknown) => {
   const value = err as { code?: unknown; status?: unknown };
@@ -15,6 +16,14 @@ const getErrorMessage = (err: unknown) => (
 );
 
 export class GoogleCalendarService {
+  public static async isSyncEnabled() {
+    const [config] = await db.select({
+      active: schema.configuracoes.googleSyncActive,
+      refreshToken: schema.configuracoes.googleRefreshToken
+    }).from(schema.configuracoes).limit(1);
+    return Boolean(config?.active && config.refreshToken);
+  }
+
   private static async getOAuth2Client() {
     const configs = await db.select().from(schema.configuracoes).limit(1);
     if (!configs[0] || !configs[0].googleClientId || !configs[0].googleClientSecret) {
@@ -93,6 +102,9 @@ export class GoogleCalendarService {
 
   // Sincroniza compromissos Locais -> Google Calendar E Google -> Local (Bidirecional)
   public static async sync(): Promise<{ sent: number; received: number }> {
+    if (!await this.isSyncEnabled()) {
+      throw new Error('Sincronização da Google Agenda está desativada.');
+    }
     const oauth2Client = await this.getOAuth2Client();
     
     // Verifica se os tokens de fato existem
@@ -111,26 +123,7 @@ export class GoogleCalendarService {
 
     for (const comp of compromissosLocais) {
       try {
-        // Resolve Timezone shift: parse local em vez de UTC nativo
-        const [y, m, d] = comp.data.split('-').map(Number);
-        const nextDay = new Date(y, m - 1, d);
-        nextDay.setDate(nextDay.getDate() + 1);
-        
-        const yearStr = nextDay.getFullYear();
-        const monthStr = String(nextDay.getMonth() + 1).padStart(2, '0');
-        const dayStr = String(nextDay.getDate()).padStart(2, '0');
-        const dataFimStr = `${yearStr}-${monthStr}-${dayStr}`;
-
-        const eventData = {
-          summary: `[GeoGestor] ${comp.titulo}`,
-          description: comp.descricao || `Tipo: ${comp.tipo}`,
-          start: {
-            date: comp.data // YYYY-MM-DD
-          },
-          end: {
-            date: dataFimStr // YYYY-MM-DD (exclusivo)
-          }
-        };
+        const eventData = buildGoogleCalendarEvent(comp);
 
         if (comp.googleEventId) {
           // Evento já existe no Google, vamos atualizar
@@ -140,6 +133,9 @@ export class GoogleCalendarService {
               eventId: comp.googleEventId,
               requestBody: eventData
             });
+            await db.update(schema.compromissos).set({
+              ultimoSyncGoogle: new Date().toISOString()
+            }).where(eq(schema.compromissos.id, comp.id));
           } catch (updateErr) {
             // Se o evento foi deletado no Google, o update lança 404. Recriamos.
             if (getErrorStatus(updateErr) === 404) {
@@ -213,15 +209,8 @@ export class GoogleCalendarService {
           ? event.summary.replace('[GeoGestor] ', '') 
           : 'Sem Título (Google Agenda)';
 
-        // Obtém a data (seja data cheia de dia inteiro ou data de hora)
-        let dataCompromisso = '';
-        if (event.start?.date) {
-          dataCompromisso = event.start.date;
-        } else if (event.start?.dateTime) {
-          dataCompromisso = event.start.dateTime.split('T')[0];
-        }
-
-        if (!dataCompromisso) continue;
+        const localStart = googleEventStartToLocal(event.start);
+        if (!localStart) continue;
 
         // Checar se já existe no banco local via googleEventId
         const localExistente = await db.select().from(schema.compromissos)
@@ -231,13 +220,16 @@ export class GoogleCalendarService {
           // Já existe, atualiza localmente caso o título/data/descrição mudaram
           if (
             localExistente[0].titulo !== cleanTitle ||
-            localExistente[0].data !== dataCompromisso ||
-            localExistente[0].descricao !== event.description
+            localExistente[0].data !== localStart.data ||
+            localExistente[0].hora !== localStart.hora ||
+            localExistente[0].descricao !== (event.description || '')
           ) {
             await db.update(schema.compromissos).set({
               titulo: cleanTitle,
-              data: dataCompromisso,
+              data: localStart.data,
+              hora: localStart.hora,
               descricao: event.description || '',
+              ultimoSyncGoogle: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             }).where(eq(schema.compromissos.id, localExistente[0].id));
             received++;
@@ -248,7 +240,8 @@ export class GoogleCalendarService {
             id: crypto.randomUUID(),
             titulo: cleanTitle,
             descricao: event.description || '',
-            data: dataCompromisso,
+            data: localStart.data,
+            hora: localStart.hora,
             tipo: 'Outro',
             googleEventId: event.id,
             ultimoSyncGoogle: new Date().toISOString()

@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { ManagerialReport } from '@geogestor/contracts';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory, relativeDate, relativeInstant } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 
@@ -12,7 +13,7 @@ async function unlock(page: Page) {
   await expect(setup.or(locked).or(dashboard)).toBeVisible();
   if (await setup.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo Reports E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-Reports-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles Reports E2E');
     await page.getByLabel('E-mail').fill('reports.e2e@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -27,15 +28,19 @@ async function unlock(page: Page) {
 }
 
 function fixture(overrides: Partial<ManagerialReport['state']> = {}): ManagerialReport {
+  const startDate = relativeDate(-30);
+  const endDate = relativeDate(-1);
+  const previousStartDate = relativeDate(-60);
+  const previousEndDate = relativeDate(-31);
   return {
-    generatedAt: '2026-07-30T12:00:00.000Z',
+    generatedAt: relativeInstant(),
     period: {
-      startDate: '2026-07-01',
-      endDate: '2026-07-30',
-      previousStartDate: '2026-06-01',
-      previousEndDate: '2026-06-30',
-      label: '2026-07-01 a 2026-07-30',
-      comparisonLabel: '2026-06-01 a 2026-06-30',
+      startDate,
+      endDate,
+      previousStartDate,
+      previousEndDate,
+      label: `${startDate} a ${endDate}`,
+      comparisonLabel: `${previousStartDate} a ${previousEndDate}`,
       rules: {
         contractedRevenue: 'Competência do orçamento.',
         receivedRevenue: 'Regime de caixa por data do recebimento.',
@@ -71,7 +76,7 @@ function fixture(overrides: Partial<ManagerialReport['state']> = {}): Managerial
         paidExpenses: 800_000,
         cashResult: 400_000
       },
-      monthly: [{ month: '2026-07', receivedRevenue: 1_500_000, paidExpenses: 900_000, cashResult: 600_000 }],
+      monthly: [{ month: endDate.slice(0, 7), receivedRevenue: 1_500_000, paidExpenses: 900_000, cashResult: 600_000 }],
       expensesByCategory: [{
         category: 'Deslocamentos, hospedagens e alimentação de equipes em levantamentos de campo',
         paidTotal: 900_000,
@@ -105,7 +110,7 @@ function fixture(overrides: Partial<ManagerialReport['state']> = {}): Managerial
         id: 'project-1',
         name: 'Projeto com uma descrição deliberadamente longa para validar quebra de linha',
         status: 'Em andamento',
-        dueDate: '2026-07-20',
+        dueDate: relativeDate(-10),
         daysUntilDue: -10
       }],
       alerts: [{
@@ -139,9 +144,9 @@ test.describe('relatórios gerenciais', () => {
 
   test('preserva URL, atalhos, teclado, leitura acessível e impressão', async ({ page }) => {
     await mockReport(page);
-    await navigate(page, '/relatorios?inicio=2026-07-01&fim=2026-07-30');
+    await navigate(page, `/relatorios?inicio=${relativeDate(-30)}&fim=${relativeDate(-1)}`);
     await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible();
-    await expect(page).toHaveURL(/inicio=2026-07-01.*fim=2026-07-30/);
+    await expect(page).toHaveURL(new RegExp(`inicio=${relativeDate(-30)}.*fim=${relativeDate(-1)}`));
     await expect(page.locator('#report-panel')).toHaveAttribute('data-report-type', 'financeiro');
     await expect(page.getByRole('heading', { name: 'Caixa e recebíveis' })).toBeVisible();
     const periodTrigger = page.getByRole('button', { name: /Selecionar período de análise\. Atual: Personalizado/ });
@@ -173,7 +178,7 @@ test.describe('relatórios gerenciais', () => {
     await page.getByRole('tab', { name: 'Executivo' }).click();
     await expect(page.locator('#report-panel')).toHaveAttribute('data-report-type', 'executivo');
     await expect(page.getByRole('heading', { name: 'O que merece sua atenção neste período' })).toBeVisible();
-    await expect(page.getByText('Recebimentos vencidos exigem atenção')).toBeVisible();
+    await expect(page.getByText('Recebimentos vencidos exigem atenção', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Pré-visualização do documento' }).click();
     await expect(page.locator('[data-report-document]').first()).toBeVisible();

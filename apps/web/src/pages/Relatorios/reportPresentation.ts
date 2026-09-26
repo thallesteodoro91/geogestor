@@ -10,6 +10,7 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
 const numberFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const dateFormatter = new Intl.DateTimeFormat('pt-BR');
 const monthFormatter = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit', timeZone: 'UTC' });
+const instantDateFormatter = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' });
 
 export function formatCurrency(cents: number) {
   return currencyFormatter.format(cents / 100);
@@ -21,6 +22,10 @@ export function formatNumber(value: number) {
 
 export function formatDate(value: string) {
   return dateFormatter.format(new Date(`${value.slice(0, 10)}T12:00:00`));
+}
+
+export function formatGeneratedAt(value: string) {
+  return instantDateFormatter.format(new Date(value));
 }
 
 export function formatMonth(value: string) {
@@ -62,6 +67,24 @@ export function reportFileName(type: ReportType, report: ManagerialReport) {
   const start = report.period.startDate || 'inicio';
   const end = report.period.endDate || 'atual';
   return `geogestor-${type}-${start}-${end}.pdf`;
+}
+
+export function canonicalReportSearch(search: string) {
+  const params = new URLSearchParams(search);
+  const type = params.get('tipo');
+  params.delete('tipo');
+  if (type && REPORT_TYPES.includes(type as ReportType) && type !== 'financeiro') params.set('tipo', type);
+
+  for (const key of ['inicio', 'fim'] as const) {
+    const value = params.get(key)?.trim() || '';
+    params.delete(key);
+    if (value) params.set(key, value);
+  }
+
+  const custom = params.get('periodo') === 'personalizado';
+  params.delete('periodo');
+  if (custom) params.set('periodo', 'personalizado');
+  return params.toString();
 }
 
 export function executiveSummary(report: ManagerialReport) {

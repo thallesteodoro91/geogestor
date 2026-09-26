@@ -51,6 +51,22 @@ import {
   ensureGeospatialPolish,
   GEOSPATIAL_POLISH_MIGRATION
 } from './runtime-migrations/v13-geospatial-polish';
+import {
+  ensureFinancialPerformance,
+  FINANCIAL_PERFORMANCE_MIGRATION
+} from './runtime-migrations/v14-financial-performance';
+import {
+  ensureSharedWorkspacePolish,
+  SHARED_WORKSPACE_POLISH_MIGRATION
+} from './runtime-migrations/v15-shared-workspace-polish';
+import {
+  ensurePropertyIntegrity,
+  PROPERTY_INTEGRITY_MIGRATION
+} from './runtime-migrations/v16-property-integrity';
+import {
+  ensureMultiprocessFinanceIntegrity,
+  MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION
+} from './runtime-migrations/v17-multiprocess-finance-integrity';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
 import { OperationalLogService } from './operational-log.service';
 import {
@@ -69,8 +85,8 @@ import {
 } from './runtime-migrations/v1-legacy-schema';
 
 const dbPath = process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
-const RUNTIME_MIGRATION_VERSION = GEOSPATIAL_POLISH_MIGRATION.version;
-const RUNTIME_MIGRATION_NAME = GEOSPATIAL_POLISH_MIGRATION.name;
+const RUNTIME_MIGRATION_VERSION = MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.version;
+const RUNTIME_MIGRATION_NAME = MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.name;
 const MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 
 export async function ensureRuntimeMigrations() {
@@ -550,6 +566,10 @@ async function executeRuntimeMigrations() {
     await ensureImportRunsWithClient(client);
     await ensureGeospatialLayers(client);
     await ensureGeospatialPolish(client);
+    await ensureFinancialPerformance(client);
+    await ensureSharedWorkspacePolish(client);
+    await ensurePropertyIntegrity(client);
+    await ensureMultiprocessFinanceIntegrity(client);
 
     // Após migrar, os campos originais poderiam ser descartados, mas o SQLite não permite DROP COLUMN facilmente.
     // Vamos apenas deixá-los null ou ignora-los nas queries futuras.
@@ -644,6 +664,30 @@ async function executeRuntimeMigrations() {
       args: [GEOSPATIAL_LAYERS_MIGRATION.version, GEOSPATIAL_LAYERS_MIGRATION.name, appliedAt, appliedAt, appliedAt]
     });
     await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [GEOSPATIAL_POLISH_MIGRATION.version, GEOSPATIAL_POLISH_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [FINANCIAL_PERFORMANCE_MIGRATION.version, FINANCIAL_PERFORMANCE_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [SHARED_WORKSPACE_POLISH_MIGRATION.version, SHARED_WORKSPACE_POLISH_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+          version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+        ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [PROPERTY_INTEGRITY_MIGRATION.version, PROPERTY_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
       sql: `UPDATE schema_migrations
         SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
         WHERE version IN (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -683,6 +727,12 @@ async function executeRuntimeMigrations() {
         SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
         WHERE version = ?`,
       args: [appliedAt, appliedAt, GEOSPATIAL_LAYERS_MIGRATION.version]
+    });
+    await client.execute({
+      sql: `UPDATE schema_migrations
+        SET status = 'success', error_message = NULL, applied_at = ?, updated_at = ?
+        WHERE version = ?`,
+      args: [appliedAt, appliedAt, GEOSPATIAL_POLISH_MIGRATION.version]
     });
     await client.execute(`PRAGMA user_version = ${RUNTIME_MIGRATION_VERSION};`);
     await client.execute('COMMIT;');

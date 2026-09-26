@@ -21,6 +21,13 @@ function localDateKey(day = 15) {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function futureDateKey(days = 30) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 test('exclusões, estornos e cancelamentos recalculam KPIs sem apagar o histórico financeiro', async () => {
   await fs.mkdir(testRoot, { recursive: true });
   await removeTestDatabase();
@@ -52,6 +59,7 @@ test('exclusões, estornos e cancelamentos recalculam KPIs sem apagar o históri
     const approvedBudgetId = crypto.randomUUID();
     const installmentId = crypto.randomUUID();
     const currentDate = localDateKey();
+    const futureDueDate = futureDateKey();
     const currentMonth = currentDate.slice(0, 7);
 
     await db.insert(schema.clientes).values({ id: clientId, nome: 'Cliente das simulações financeiras' });
@@ -124,7 +132,7 @@ test('exclusões, estornos e cancelamentos recalculam KPIs sem apagar o históri
       orcamentoId: approvedBudgetId,
       valor: 10_001,
       valorPago: 0,
-      dataVencimento: currentDate,
+      dataVencimento: futureDueDate,
       statusPagamento: 'Pendente'
     });
 

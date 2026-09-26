@@ -16,7 +16,18 @@ export const OPPORTUNITY_STAGE_PROBABILITY_BASIS_POINTS: Record<OpportunityStage
 };
 
 const optionalText = (max: number) => z.string().trim().max(max).nullable().optional();
-const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use uma data válida no formato AAAA-MM-DD').nullable().optional();
+
+function isValidDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+const optionalDate = z.string()
+  .refine(isValidDateKey, 'Use uma data real no formato AAAA-MM-DD')
+  .nullable()
+  .optional();
 
 const OpportunityFieldsSchema = z.object({
   clienteId: z.string().min(1).nullable().optional(),
@@ -32,7 +43,7 @@ const OpportunityFieldsSchema = z.object({
   probabilidadePontosBase: z.number().int().min(0).max(10_000).optional(),
   observacoes: optionalText(4_000),
   orcamentoId: z.string().min(1).nullable().optional()
-});
+}).strict();
 
 export const OpportunityPayloadSchema = OpportunityFieldsSchema.superRefine((payload, context) => {
   const subjects = Number(Boolean(payload.clienteId)) + Number(Boolean(payload.leadId));
@@ -50,6 +61,13 @@ export const OpportunityPayloadSchema = OpportunityFieldsSchema.superRefine((pay
       message: 'Converta o lead em cliente antes de vincular um orçamento'
     });
   }
+  if (Boolean(payload.proximaAcao) !== Boolean(payload.proximaAcaoEm)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: payload.proximaAcao ? ['proximaAcaoEm'] : ['proximaAcao'],
+      message: 'Informe a próxima ação e sua data em conjunto'
+    });
+  }
 });
 export type OpportunityPayload = z.infer<typeof OpportunityPayloadSchema>;
 
@@ -64,7 +82,15 @@ export const OpportunityReorderItemSchema = z.object({
   estagio: OpportunityStageSchema,
   ordem: z.number().int().min(0)
 });
-export const OpportunityReorderSchema = z.array(OpportunityReorderItemSchema).min(1).max(1_000);
+export const OpportunityReorderSchema = z.array(OpportunityReorderItemSchema).min(1).max(1_000).superRefine((items, context) => {
+  const ids = new Set<string>();
+  items.forEach((item, index) => {
+    if (ids.has(item.id)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: [index, 'id'], message: 'Não repita oportunidades na reordenação' });
+    }
+    ids.add(item.id);
+  });
+});
 
 export const OpportunityTransitionSchema = z.object({
   estagio: OpportunityStageSchema,

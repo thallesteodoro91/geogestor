@@ -19,9 +19,9 @@ const nullableTrimmed = (max: number) => z.string().trim().max(max).nullable().o
 const configuracaoCreateSchema = z.object({
   empresaNome: trimmedRequired('Nome da empresa', 200),
   dadosPasta: trimmedRequired('Pasta de dados', 2_048),
-  adminNome: trimmedRequired('Nome do administrador', 200),
-  adminEmail: z.string().trim().min(1, 'E-mail é obrigatório.').max(320).email('Informe um e-mail válido.'),
-  adminSenha: z.string().min(8, 'A senha local deve ter pelo menos 8 caracteres.').max(200)
+  adminNome: trimmedRequired('Nome do responsável', 200).optional(),
+  adminEmail: z.string().trim().min(1, 'E-mail é obrigatório.').max(320).email('Informe um e-mail válido.').optional(),
+  adminSenha: z.string().min(8, 'A senha local deve ter pelo menos 8 caracteres.').max(200).optional()
 }).strict();
 
 const configuracaoPatchSchema = z.object({
@@ -35,7 +35,8 @@ const configuracaoPatchSchema = z.object({
   googleClientSecret: z.string().max(4_096).optional(),
   googleRefreshToken: z.null().optional(),
   googleAccessToken: z.null().optional(),
-  googleSyncActive: z.boolean().optional()
+  googleSyncActive: z.boolean().optional(),
+  appLogo: z.string().max(3_000_000, 'O logotipo excede o limite permitido.').optional()
 }).strict().refine((value) => Object.keys(value).length > 0, {
   message: 'Informe ao menos um campo para atualizar.'
 });
@@ -267,9 +268,10 @@ server.post('/api/configuracoes', async (request, reply) => {
       id: crypto.randomUUID(),
       empresaNome: data.empresaNome,
       dadosPasta: data.dadosPasta,
-      adminNome: data.adminNome,
-      adminEmail: data.adminEmail,
-      adminSenhaHash: hashAdminPassword(data.adminSenha),
+      adminNome: data.adminNome || data.empresaNome,
+      adminEmail: data.adminEmail || 'local@geogestor.invalid',
+      // A senha só passa a ter efeito quando o usuário ativa voluntariamente o bloqueio local.
+      adminSenhaHash: hashAdminPassword(data.adminSenha || crypto.randomBytes(32).toString('base64url')),
       setupConcluido: true
     }).returning();
     await AuditLogService.log('INSERT', 'Configuração', null, created[0], tx);
@@ -311,7 +313,42 @@ server.patch('/api/configuracoes', async (request, reply) => {
           googleSyncActive: data.googleSyncActive !== undefined ? data.googleSyncActive : undefined,
           updatedAt: new Date().toISOString()
         }).where(eq(schema.configuracoes.id, configs[0].id)).returning();
-        await AuditLogService.log('UPDATE', 'Configuração', configs[0], updated[0], tx);
+        if (data.appLogo !== undefined) {
+          const key = 'geogestor_empresa_template';
+          const [currentTemplateRow] = await tx.select().from(schema.configuracoesOperacionais)
+            .where(eq(schema.configuracoesOperacionais.chave, key)).limit(1);
+          let currentTemplate: Record<string, unknown> = { version: 1 };
+          if (currentTemplateRow) {
+            try {
+              const parsedTemplate = JSON.parse(currentTemplateRow.valorJson) as unknown;
+              if (parsedTemplate && typeof parsedTemplate === 'object' && !Array.isArray(parsedTemplate)) {
+                currentTemplate = parsedTemplate as Record<string, unknown>;
+              }
+            } catch {
+              currentTemplate = { version: 1 };
+            }
+          }
+          const timestamp = new Date().toISOString();
+          await tx.insert(schema.configuracoesOperacionais).values({
+            id: crypto.randomUUID(),
+            chave: key,
+            valorJson: JSON.stringify({ ...currentTemplate, appLogo: data.appLogo }),
+            origem: 'aplicacao',
+            updatedAt: timestamp
+          }).onConflictDoUpdate({
+            target: schema.configuracoesOperacionais.chave,
+            set: {
+              valorJson: JSON.stringify({ ...currentTemplate, appLogo: data.appLogo }),
+              origem: 'aplicacao',
+              updatedAt: timestamp,
+              deletedAt: null
+            }
+          });
+        }
+        await AuditLogService.log('UPDATE', 'Configuração', configs[0], {
+          ...updated[0],
+          appLogoChanged: data.appLogo !== undefined
+        }, tx);
         return updated;
       });
       return sanitizeConfiguracao(configAtualizada[0]);

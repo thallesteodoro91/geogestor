@@ -6,7 +6,7 @@ import { schema } from '@geogestor/database';
 import { db } from '../db';
 import { AuditLogService } from '../services/audit.service';
 import { activeDocumentWhere } from '../services/document-integrity.service';
-import { centsSchema, isoDateSchema } from './financeiro.schemas';
+import { centsSchema, entityIdSchema, isoDateSchema, safeHttpUrlSchema } from './financeiro.schemas';
 
 type IdParams = { id: string };
 
@@ -49,8 +49,8 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
 
   server.post('/viagens', async (request, reply) => {
     const parsed = z.object({
-      clienteId: z.string().uuid().nullable().optional(),
-      projetoId: z.string().uuid().nullable().optional(),
+      clienteId: entityIdSchema.nullable().optional(),
+      projetoId: entityIdSchema.nullable().optional(),
       finalidade: z.string().trim().min(1).max(300),
       destino: z.string().trim().min(1).max(300),
       dataInicio: isoDateSchema,
@@ -61,7 +61,7 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
       valorReembolsavel: centsSchema.optional().default(0),
       status: z.enum(['planejada', 'em_andamento', 'prestacao_pendente', 'encerrada', 'cancelada']).optional(),
       observacoes: z.string().trim().max(3000).nullable().optional()
-    }).safeParse(request.body);
+    }).strict().safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
     let clienteId = parsed.data.clienteId || null;
     if (parsed.data.dataFim && parsed.data.dataFim < parsed.data.dataInicio) {
@@ -77,6 +77,13 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
         return reply.status(400).send({ error: 'O projeto não pertence ao cliente informado.' });
       }
       clienteId = project.clienteId;
+    }
+    if (clienteId) {
+      const [client] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(
+        eq(schema.clientes.id, clienteId),
+        isNull(schema.clientes.deletedAt)
+      )).limit(1);
+      if (!client) return reply.status(400).send({ error: 'Cliente não encontrado.' });
     }
     const [created] = await db.transaction(async (tx) => {
       const result = await tx.insert(schema.viagens).values({
@@ -108,13 +115,16 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
       valorReembolsavel: centsSchema.optional(),
       status: z.enum(['planejada', 'em_andamento', 'prestacao_pendente', 'encerrada', 'cancelada']).optional(),
       observacoes: z.string().trim().max(3000).nullable().optional()
-    }).safeParse(request.body);
+    }).strict().safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
     const [old] = await db.select().from(schema.viagens).where(and(
       eq(schema.viagens.id, id),
       isNull(schema.viagens.deletedAt)
     )).limit(1);
     if (!old) return reply.status(404).send({ error: 'Viagem não encontrada' });
+    if (old.encerradaEm && parsed.data.status === 'encerrada') {
+      return reply.status(409).send({ error: 'A prestação de contas desta viagem já foi encerrada.' });
+    }
     const nextStart = parsed.data.dataInicio || old.dataInicio;
     const nextEnd = parsed.data.dataFim !== undefined ? parsed.data.dataFim : old.dataFim;
     if (nextEnd && nextEnd < nextStart) {
@@ -148,29 +158,40 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
 
   server.post('/notas-fiscais', async (request, reply) => {
     const parsed = z.object({
-      clienteId: z.string().uuid(),
-      projetoId: z.string().uuid().nullable().optional(),
-      orcamentoId: z.string().uuid().nullable().optional(),
-      documentoId: z.string().uuid().nullable().optional(),
+      clienteId: entityIdSchema,
+      projetoId: entityIdSchema.nullable().optional(),
+      orcamentoId: entityIdSchema.nullable().optional(),
+      documentoId: entityIdSchema.nullable().optional(),
       numero: z.string().trim().min(1).max(100),
       codigoVerificacao: z.string().trim().max(200).nullable().optional(),
       dataEmissao: isoDateSchema,
       valor: centsSchema.refine((value) => value > 0, 'O valor deve ser maior que zero.'),
       status: z.enum(['emitida', 'cancelada', 'substituida']).optional(),
       municipio: z.string().trim().max(200).nullable().optional(),
-      link: z.string().url().max(2000).nullable().optional(),
-      substituiNotaId: z.string().uuid().nullable().optional()
-    }).safeParse(request.body);
+      link: safeHttpUrlSchema.nullable().optional(),
+      substituiNotaId: entityIdSchema.nullable().optional()
+    }).strict().safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
     const input = parsed.data;
+    const [client] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(
+      eq(schema.clientes.id, input.clienteId),
+      isNull(schema.clientes.deletedAt)
+    )).limit(1);
+    if (!client) return reply.status(400).send({ error: 'Cliente não encontrado.' });
     if (input.projetoId) {
-      const [project] = await db.select().from(schema.projetos).where(eq(schema.projetos.id, input.projetoId)).limit(1);
+      const [project] = await db.select().from(schema.projetos).where(and(
+        eq(schema.projetos.id, input.projetoId),
+        isNull(schema.projetos.deletedAt)
+      )).limit(1);
       if (!project || project.clienteId !== input.clienteId) {
         return reply.status(400).send({ error: 'O projeto não pertence ao cliente informado.' });
       }
     }
     if (input.orcamentoId) {
-      const [budget] = await db.select().from(schema.orcamentos).where(eq(schema.orcamentos.id, input.orcamentoId)).limit(1);
+      const [budget] = await db.select().from(schema.orcamentos).where(and(
+        eq(schema.orcamentos.id, input.orcamentoId),
+        isNull(schema.orcamentos.deletedAt)
+      )).limit(1);
       if (!budget || budget.clienteId !== input.clienteId) {
         return reply.status(400).send({ error: 'O orçamento não pertence ao cliente informado.' });
       }
@@ -179,6 +200,18 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
       const [document] = await db.select().from(schema.documentos).where(and(eq(schema.documentos.id, input.documentoId), activeDocumentWhere())).limit(1);
       if (!document || document.clienteId !== input.clienteId) {
         return reply.status(400).send({ error: 'O documento não pertence ao cliente informado.' });
+      }
+    }
+    if (input.substituiNotaId) {
+      const [replaced] = await db.select().from(schema.notasFiscais).where(and(
+        eq(schema.notasFiscais.id, input.substituiNotaId),
+        isNull(schema.notasFiscais.deletedAt)
+      )).limit(1);
+      if (!replaced || replaced.clienteId !== input.clienteId) {
+        return reply.status(400).send({ error: 'O documento fiscal substituído não pertence ao cliente informado ou não existe.' });
+      }
+      if (replaced.canceladaEm) {
+        return reply.status(409).send({ error: 'Um documento fiscal cancelado não pode ser substituído.' });
       }
     }
     const [created] = await db.transaction(async (tx) => {
@@ -205,7 +238,7 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
     const parsed = z.object({
       motivo: z.string().trim().min(5).max(1000),
       dataCancelamento: isoDateSchema.optional()
-    }).safeParse(request.body);
+    }).strict().safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });
     const [old] = await db.select().from(schema.notasFiscais).where(and(
       eq(schema.notasFiscais.id, id),
@@ -316,4 +349,3 @@ export async function registerFinanceiroOperacionalRoutes(server: FastifyInstanc
     };
   });
 }
-

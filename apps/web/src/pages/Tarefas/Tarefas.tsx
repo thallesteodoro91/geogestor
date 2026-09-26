@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
@@ -11,7 +12,7 @@ import { DatePickerField, FormError, FormFooter, FormSection, FormSelect } from 
 
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import type { DropResult } from '@hello-pangea/dnd';
-import { Plus, Trash, BookmarkSimple, Calendar, Funnel, MagnifyingGlass } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, CheckCircle, DotsSixVertical, PencilSimple, Plus, Trash, BookmarkSimple, Calendar, Funnel, MagnifyingGlass } from '@phosphor-icons/react';
 import { cn } from '../../utils/cn';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primaryActionButtonClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
@@ -24,13 +25,41 @@ import {
 import { APP_QUERY_KEYS, type Tarefa } from '@geogestor/contracts';
 import { apiClient, apiFetch } from '../../services/apiClient';
 import { useDebounce } from '../../hooks/useDebounce';
+import { localDateKey } from '../../utils/localDate';
 
-type TaskPage = { items: Tarefa[]; page: number; limit: number; total: number; totalPages: number };
+type TaskPage = {
+  items: Tarefa[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  statusTotals: Record<'A Fazer' | 'Em Progresso' | 'Concluído' | 'outros', number>;
+};
 type ProjectOption = { id: string; nome: string; clienteNome?: string | null };
+type BoardTask = Tarefa & { originalStatus?: string; originalPriority?: string };
+const taskPageRequests = new Map<string, Promise<TaskPage>>();
+const validTaskStatuses = new Set(['A Fazer', 'Em Progresso', 'Concluído']);
+const validTaskPriorities = new Set(['Baixa', 'Média', 'Alta']);
+
+const taskDraftKey = (draft: {
+  titulo: string; descricao: string; projetoId: string; prioridade: string; dataLimite: string;
+}) => JSON.stringify(draft);
+
+function loadTaskPage(endpoint: string) {
+  const existing = taskPageRequests.get(endpoint);
+  if (existing) return existing;
+  const request = apiClient.get<TaskPage>(endpoint).finally(() => taskPageRequests.delete(endpoint));
+  taskPageRequests.set(endpoint, request);
+  return request;
+}
+
 export function Tarefas() {
   const location = useLocation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(true);
+  const [tasksError, setTasksError] = useState('');
   const [resolvedTaskFocus, setResolvedTaskFocus] = useState<{ id: string; found: boolean } | null>(null);
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
   const handledTaskIdRef = useRef<string | null>(null);
@@ -44,43 +73,90 @@ export function Tarefas() {
 
   // Form states
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaDescricao, setNovaDescricao] = useState('');
   const [novoProjetoId, setNovoProjetoId] = useState('');
   const [novaPrioridade, setNovaPrioridade] = useState('Média');
   const [novaDataLimite, setNovaDataLimite] = useState('');
   const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Tarefa | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [page, setPage] = useState(1);
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [statusTotals, setStatusTotals] = useState<TaskPage['statusTotals']>({ 'A Fazer': 0, 'Em Progresso': 0, 'Concluído': 0, outros: 0 });
   const focusedTaskId = new URLSearchParams(location.search).get(APP_QUERY_KEYS.task);
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+  const taskListRequestRef = useRef(0);
+  const statusRequestVersionRef = useRef(new Map<string, number>());
+  const [initialTaskDraftKey, setInitialTaskDraftKey] = useState(
+    taskDraftKey({ titulo: '', descricao: '', projetoId: '', prioridade: 'Média', dataLimite: '' })
+  );
+  const [editingDirectClient, setEditingDirectClient] = useState(false);
 
   const fetchDados = useCallback(() => {
+    const requestVersion = taskListRequestRef.current + 1;
+    taskListRequestRef.current = requestVersion;
+    if (!focusedTaskId && dataInicioFilter && dataFimFilter && dataInicioFilter > dataFimFilter) {
+      setTasksError('O prazo inicial não pode ser posterior ao prazo final. Ajuste o intervalo para continuar.');
+      setLoadingTasks(false);
+      return;
+    }
     const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '100' });
-    if (focusedTaskId && !debouncedSearchTerm) params.set('id', focusedTaskId);
-    if (debouncedSearchTerm) params.set('q', debouncedSearchTerm);
-    if (selectedProjeto !== 'all') params.set('projetoId', selectedProjeto);
-    if (prioridadeFilter !== 'Todas') params.set('prioridade', prioridadeFilter);
-    if (dataInicioFilter) params.set('inicio', dataInicioFilter);
-    if (dataFimFilter) params.set('fim', dataFimFilter);
-    apiClient.get<TaskPage>(`/api/tarefas?${params}`).then((result) => {
+    if (focusedTaskId) {
+      params.set('id', focusedTaskId);
+      params.set('page', '1');
+    } else {
+      if (debouncedSearchTerm) params.set('q', debouncedSearchTerm);
+      if (selectedProjeto !== 'all') params.set('projetoId', selectedProjeto);
+      if (prioridadeFilter !== 'Todas') params.set('prioridade', prioridadeFilter);
+      if (dataInicioFilter) params.set('inicio', dataInicioFilter);
+      if (dataFimFilter) params.set('fim', dataFimFilter);
+    }
+    setLoadingTasks(true);
+    setTasksError('');
+    loadTaskPage(`/api/tarefas?${params}`).then((result) => {
+      if (taskListRequestRef.current !== requestVersion) return;
+      if (!focusedTaskId && page > result.totalPages) {
+        setPage(result.totalPages);
+        return;
+      }
       setTarefas(result.items);
       setTotalTasks(result.total);
       setTotalPages(result.totalPages);
+      setStatusTotals(result.statusTotals);
       if (focusedTaskId) {
         setResolvedTaskFocus({
           id: focusedTaskId,
           found: result.items.some((task) => task.id === focusedTaskId)
         });
       }
+    }).catch((error: unknown) => {
+      if (taskListRequestRef.current !== requestVersion) return;
+      setTasksError(error instanceof Error ? error.message : 'Não foi possível carregar as tarefas.');
+    }).finally(() => {
+      if (taskListRequestRef.current === requestVersion) setLoadingTasks(false);
     });
   }, [dataFimFilter, dataInicioFilter, debouncedSearchTerm, focusedTaskId, page, prioridadeFilter, selectedProjeto]);
 
   useEffect(() => {
-    fetchDados();
+    if (!focusedTaskId) return;
+    const resetTimer = window.setTimeout(() => {
+      setSearchTerm('');
+      setSelectedProjeto('all');
+      setPrioridadeFilter('Todas');
+      setDataInicioFilter('');
+      setDataFimFilter('');
+      setPage(1);
+    }, 0);
+    return () => window.clearTimeout(resetTimer);
+  }, [focusedTaskId]);
+
+  useEffect(() => {
+    const fetchTimer = window.setTimeout(fetchDados, 0);
+    return () => window.clearTimeout(fetchTimer);
   }, [fetchDados]);
 
   useEffect(() => () => {
@@ -96,35 +172,39 @@ export function Tarefas() {
 
     handledTaskIdRef.current = focusedTaskId;
     window.requestAnimationFrame(() => {
-      const next = new URLSearchParams(location.search);
-      next.delete(APP_QUERY_KEYS.task);
-      navigate({
-        pathname: location.pathname,
-        search: next.size ? `?${next.toString()}` : ''
-      }, { replace: true });
-
       if (!resolvedTaskFocus.found) {
         toast.info('A tarefa indicada pelo alerta não foi encontrada.');
+        const next = new URLSearchParams(location.search);
+        next.delete(APP_QUERY_KEYS.task);
+        navigate({ pathname: location.pathname, search: next.size ? `?${next.toString()}` : '' }, { replace: true });
         return;
       }
 
       setHighlightedTaskId(focusedTaskId);
-      document.querySelector(`[data-task-id="${focusedTaskId}"]`)?.scrollIntoView({
+      const taskElement = document.querySelector<HTMLElement>(`[data-task-id="${focusedTaskId}"]`);
+      taskElement?.scrollIntoView({
         block: 'center',
         behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
       });
+      taskElement?.focus({ preventScroll: true });
       if (focusClearTimer.current !== null) window.clearTimeout(focusClearTimer.current);
-      focusClearTimer.current = window.setTimeout(() => setHighlightedTaskId(null), 2400);
+      focusClearTimer.current = window.setTimeout(() => {
+        setHighlightedTaskId(null);
+        const next = new URLSearchParams(location.search);
+        next.delete(APP_QUERY_KEYS.task);
+        navigate({ pathname: location.pathname, search: next.size ? `?${next.toString()}` : '' }, { replace: true });
+      }, 2400);
     });
   }, [focusedTaskId, location.pathname, location.search, navigate, resolvedTaskFocus]);
 
-  const taskDraftDirty = Boolean(
-    novoTitulo.trim()
-    || novaDescricao.trim()
-    || novoProjetoId
-    || novaDataLimite
-    || novaPrioridade !== 'Média'
-  );
+  const currentTaskDraftKey = taskDraftKey({
+    titulo: novoTitulo,
+    descricao: novaDescricao,
+    projetoId: novoProjetoId,
+    prioridade: novaPrioridade,
+    dataLimite: novaDataLimite
+  });
+  const taskDraftDirty = currentTaskDraftKey !== initialTaskDraftKey;
 
   useEffect(() => {
     if (!showAddForm || !taskDraftDirty) return undefined;
@@ -142,6 +222,9 @@ export function Tarefas() {
     setNovaPrioridade('Média');
     setNovaDataLimite('');
     setFormError('');
+    setEditingTaskId(null);
+    setEditingDirectClient(false);
+    setInitialTaskDraftKey(taskDraftKey({ titulo: '', descricao: '', projetoId: '', prioridade: 'Média', dataLimite: '' }));
   };
 
   const closeTaskForm = () => {
@@ -151,36 +234,59 @@ export function Tarefas() {
   };
 
   const openTaskForm = () => {
-    setFormError('');
+    resetTaskForm();
     setShowAddForm(true);
   };
 
-  useEffect(() => {
-    if (!focusedTaskId || tarefas.length === 0) return;
-    const tarefa = tarefas.find((item) => item.id === focusedTaskId);
-    if (!tarefa) return;
-    setTimeout(() => {
-      setSearchTerm(tarefa.titulo);
-      setSelectedProjeto('all');
-    }, 0);
-  }, [focusedTaskId, tarefas]);
+  const openEditTaskForm = (task: Tarefa) => {
+    setEditingTaskId(task.id);
+    setNovoTitulo(task.titulo);
+    setNovaDescricao(task.descricao || '');
+    setNovoProjetoId(task.projetoId || '');
+    setNovaPrioridade(task.prioridade || 'Média');
+    setNovaDataLimite(task.dataLimite || '');
+    setFormError('');
+    setEditingDirectClient(Boolean(task.clienteId && !task.projetoId));
+    setInitialTaskDraftKey(taskDraftKey({
+      titulo: task.titulo,
+      descricao: task.descricao || '',
+      projetoId: task.projetoId || '',
+      prioridade: task.prioridade || 'Média',
+      dataLimite: task.dataLimite || ''
+    }));
+    setShowAddForm(true);
+  };
+
+  const invalidateTaskIntegrations = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['dashboard-overview'] }),
+    queryClient.invalidateQueries({ queryKey: ['stats-geral'] }),
+    queryClient.invalidateQueries({ queryKey: ['tarefas'] }),
+    queryClient.invalidateQueries({ queryKey: ['recent-audit-logs'] }),
+  ]);
 
   const handleUpdateStatus = async (id: string, newStatus: string) => {
+    const previousTask = tarefas.find((task) => task.id === id);
+    if (!previousTask || previousTask.status === newStatus) return;
+    const requestVersion = (statusRequestVersionRef.current.get(id) || 0) + 1;
+    statusRequestVersionRef.current.set(id, requestVersion);
+    setTarefas((current) => current.map((task) => task.id === id ? { ...task, status: newStatus } : task));
     try {
       const res = await apiFetch(`/api/tarefas/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus })
       });
-      if (res.ok) {
-        setTarefas(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-      }
+      if (!res.ok) throw new Error('Não foi possível atualizar o status da tarefa.');
+      if (statusRequestVersionRef.current.get(id) === requestVersion) await invalidateTaskIntegrations();
     } catch {
-      toast.error('Erro ao atualizar status da tarefa');
+      if (statusRequestVersionRef.current.get(id) === requestVersion) {
+        setTarefas((current) => current.map((task) => task.id === id ? previousTask : task));
+        toast.error('Não foi possível atualizar o status da tarefa. A alteração foi desfeita.');
+      }
     }
   };
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
     if (!novoTitulo.trim()) {
@@ -194,29 +300,27 @@ export function Tarefas() {
       return;
     }
 
+    setSubmitting(true);
     try {
-      const res = await apiFetch('/api/tarefas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projetoId: novoProjetoId,
-          titulo: novoTitulo,
-          descricao: novaDescricao,
-          prioridade: novaPrioridade,
-          dataLimite: novaDataLimite,
-          status: 'A Fazer'
-        })
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || 'Não foi possível criar a tarefa.');
-      }
+      const payload = {
+        projetoId: novoProjetoId,
+        titulo: novoTitulo,
+        descricao: novaDescricao,
+        prioridade: novaPrioridade,
+        dataLimite: novaDataLimite,
+        ...(editingTaskId ? {} : { status: 'A Fazer' })
+      };
+      if (editingTaskId) await apiClient.patch(`/api/tarefas/${editingTaskId}`, payload);
+      else await apiClient.post('/api/tarefas', payload);
       resetTaskForm();
       setShowAddForm(false);
       fetchDados();
+      await invalidateTaskIntegrations();
+      toast.success(editingTaskId ? 'Tarefa atualizada.' : 'Tarefa criada.');
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Não foi possível criar a tarefa.');
+      setFormError(err instanceof Error ? err.message : `Não foi possível ${editingTaskId ? 'atualizar' : 'criar'} a tarefa.`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -228,13 +332,12 @@ export function Tarefas() {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      const res = await apiFetch(`/api/tarefas/${deleteTarget.id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setTarefas(prev => prev.filter(t => t.id !== deleteTarget.id));
-        setDeleteTarget(null);
-      } else {
-        throw new Error('Não foi possível excluir a tarefa.');
-      }
+      await apiClient.delete(`/api/tarefas/${deleteTarget.id}`);
+      setTarefas(prev => prev.filter(t => t.id !== deleteTarget.id));
+      setTotalTasks((current) => Math.max(0, current - 1));
+      setDeleteTarget(null);
+      await invalidateTaskIntegrations();
+      toast.success('Tarefa excluída.');
     } catch {
       toast.error('Não foi possível excluir a tarefa. Tente novamente.');
     } finally {
@@ -249,30 +352,20 @@ export function Tarefas() {
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
-    // Optimistic UI Update
-    const newTarefas = Array.from(tarefas);
-    const taskIndex = newTarefas.findIndex(t => t.id === draggableId);
-    
-    if (taskIndex === -1) return;
-    
-    // Change status locally
-    const originalStatus = newTarefas[taskIndex].status;
-    newTarefas[taskIndex].status = destination.droppableId;
-    
-    setTarefas(newTarefas);
-
-    if (originalStatus !== destination.droppableId) {
-      handleUpdateStatus(draggableId, destination.droppableId);
-    }
+    void handleUpdateStatus(draggableId, destination.droppableId);
   };
 
-  const filteredTarefas = tarefas;
+  const filteredTarefas: BoardTask[] = tarefas.map((task) => ({
+    ...task,
+    ...(validTaskStatuses.has(task.status) ? {} : { originalStatus: task.status, status: 'A Fazer' }),
+    ...(validTaskPriorities.has(task.prioridade) ? {} : { originalPriority: task.prioridade, prioridade: 'Média' })
+  }));
   const hasTaskFilters = Boolean(searchTerm || selectedProjeto !== 'all' || prioridadeFilter !== 'Todas' || dataInicioFilter || dataFimFilter);
 
   const columns = [
-    { id: 'A Fazer', title: 'A Fazer', color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30' },
+    { id: 'A Fazer', title: 'A Fazer', color: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30' },
     { id: 'Em Progresso', title: 'Em Progresso', color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 border border-blue-500/30' },
-    { id: 'Concluído', title: 'Concluído', color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30' }
+    { id: 'Concluído', title: 'Concluído', color: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30' }
   ];
 
   return (
@@ -380,17 +473,30 @@ export function Tarefas() {
           </div>
         )}
         <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {filteredTarefas.length} de {totalTasks} tarefa(s) exibidas
+          {filteredTarefas.length} {filteredTarefas.length === 1 ? 'tarefa exibida' : 'tarefas exibidas'} nesta página · {totalTasks} {totalTasks === 1 ? 'tarefa no conjunto filtrado' : 'tarefas no conjunto filtrado'}
         </p>
+        {statusTotals.outros > 0 && (
+          <p role="status" className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
+            {statusTotals.outros} {statusTotals.outros === 1 ? 'tarefa possui' : 'tarefas possuem'} status legado. Para impedir perda silenciosa, {statusTotals.outros === 1 ? 'ela foi exibida' : 'elas foram exibidas'} em “A Fazer” com identificação própria.
+          </p>
+        )}
       </div>
 
       {/* Kanban Board Columns */}
-      {filteredTarefas.length === 0 ? (
+      {tasksError && (
+        <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <span>{tarefas.length ? 'Não foi possível atualizar as tarefas. Os dados anteriores foram preservados.' : 'Não foi possível carregar as tarefas.'}</span>
+          <button type="button" onClick={fetchDados} className="geo-button-base geo-focus-ring min-h-10 border border-current px-3 text-xs font-bold">Tentar novamente</button>
+        </div>
+      )}
+      {loadingTasks && tarefas.length === 0 ? (
+        <div role="status" aria-live="polite" className="rounded-2xl border border-zinc-200 px-6 py-12 text-center text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300">Carregando tarefas…</div>
+      ) : !tasksError && filteredTarefas.length === 0 ? (
         <section className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700" aria-labelledby="tasks-first-use-title">
           <BookmarkSimple aria-hidden="true" className="mx-auto h-9 w-9 text-zinc-400" />
-          <h2 id="tasks-first-use-title" className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">{tarefas.length === 0 ? 'Nenhuma tarefa cadastrada' : 'Nenhuma tarefa encontrada'}</h2>
-          <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">{tarefas.length === 0 ? 'Crie a primeira atividade operacional e acompanhe sua evolução pelo quadro.' : 'Revise a busca ou remova os filtros para voltar a visualizar o quadro.'}</p>
-          {tarefas.length === 0 ? (
+          <h2 id="tasks-first-use-title" className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">{hasTaskFilters ? 'Nenhuma tarefa encontrada' : 'Nenhuma tarefa cadastrada'}</h2>
+          <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-zinc-500 dark:text-zinc-400">{hasTaskFilters ? 'Revise a busca ou remova os filtros para voltar a visualizar o quadro.' : 'Crie a primeira atividade operacional e acompanhe sua evolução pelo quadro.'}</p>
+          {!hasTaskFilters ? (
             <button type="button" onClick={openTaskForm} className={cn(primaryActionButtonClass, 'mx-auto mt-5')}>
               <Plus aria-hidden="true" className="h-4 w-4" />
               Nova tarefa
@@ -413,20 +519,22 @@ export function Tarefas() {
         </section>
       ) : (
         <DragDropContext onDragEnd={onDragEnd}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+        <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-3" aria-busy={loadingTasks}>
           {columns.map(col => {
             const colTasks = filteredTarefas.filter(t => t.status === col.id);
+            const columnHeadingId = `task-column-${col.id.replace(/\s+/g, '-').toLowerCase()}`;
             return (
-              <div 
+              <section
                 key={col.id} 
+                aria-labelledby={columnHeadingId}
                 className="flex min-h-[500px] flex-col rounded-2xl border border-zinc-200/80 bg-zinc-100/70 p-4 dark:border-zinc-700/60 dark:bg-zinc-800/60"
               >
                 <div className="flex items-center justify-between mb-6 px-2">
                   <div className="flex items-center gap-3">
-                    <span className={`text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full ${col.color}`}>
+                    <h2 id={columnHeadingId} className={`text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full ${col.color}`}>
                       {col.title}
-                    </span>
-                    <span className="text-sm font-medium text-zinc-400">
+                    </h2>
+                    <span className="text-sm font-medium tabular-nums text-zinc-600 dark:text-zinc-300" aria-label={`${colTasks.length} ${colTasks.length === 1 ? 'tarefa nesta coluna' : 'tarefas nesta coluna'}`}>
                       {colTasks.length}
                     </span>
                   </div>
@@ -437,16 +545,18 @@ export function Tarefas() {
                     <div 
                       ref={provided.innerRef} 
                       {...provided.droppableProps}
+                      role="group"
+                      aria-label={`Tarefas em ${col.title}`}
                       className={`flex-1 space-y-4 rounded-xl transition-colors ${snapshot.isDraggingOver ? 'bg-zinc-200/30 dark:bg-zinc-900/40' : ''}`}
                     >
                       {colTasks.map((task, index) => (
                         <Draggable key={task.id} draggableId={task.id} index={index}>
                           {(provided, snapshot) => (
-                            <div
+                            <article
                               ref={provided.innerRef}
                               data-task-id={task.id}
+                              tabIndex={-1}
                               {...provided.draggableProps}
-                              {...provided.dragHandleProps}
                               style={provided.draggableProps.style}
                               className={`group relative rounded-xl border border-zinc-200/70 bg-white p-4 transition-[border-color,box-shadow] dark:border-zinc-700/60 dark:bg-zinc-800/95 ${
                                 snapshot.isDragging ? 'opacity-90 shadow-xl ring-2 ring-indigo-500/50' : 'hover:border-zinc-300 dark:hover:border-zinc-600'
@@ -457,15 +567,44 @@ export function Tarefas() {
                               }`}
                             >
                               <div className="flex items-start justify-between gap-4 mb-2">
-                                <h4 className="font-semibold text-zinc-950 dark:text-white leading-tight pr-16">
+                                <h3 className="font-semibold text-zinc-950 dark:text-white leading-tight pr-28">
                                   {task.titulo}
-                                </h4>
+                                </h3>
                                 <div className="absolute right-4 top-4 flex items-center gap-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                                  <button
+                                    type="button"
+                                    {...provided.dragHandleProps}
+                                    className="geo-focus-ring cursor-grab rounded-lg bg-zinc-100 p-1.5 text-zinc-700 shadow-sm transition-[background-color,color,box-shadow] hover:bg-zinc-200 active:cursor-grabbing dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
+                                    aria-label={`Mover tarefa: ${task.titulo}`}
+                                    title="Mover tarefa"
+                                  >
+                                    <DotsSixVertical aria-hidden="true" className="h-4 w-4" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleUpdateStatus(task.id, task.status === 'Concluído' ? 'A Fazer' : 'Concluído')}
+                                    className="geo-focus-ring rounded-lg bg-emerald-50 p-1.5 text-emerald-700 shadow-sm transition-[background-color,color,box-shadow] hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                    aria-label={`${task.status === 'Concluído' ? 'Reabrir' : 'Concluir'} tarefa: ${task.titulo}`}
+                                    title={task.status === 'Concluído' ? 'Reabrir tarefa' : 'Concluir tarefa'}
+                                  >
+                                    {task.status === 'Concluído'
+                                      ? <ArrowCounterClockwise aria-hidden="true" className="h-4 w-4" />
+                                      : <CheckCircle aria-hidden="true" className="h-4 w-4" />}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditTaskForm(task)}
+                                    className="geo-focus-ring rounded-lg bg-zinc-100 p-1.5 text-zinc-700 shadow-sm transition-[background-color,color,box-shadow] hover:bg-zinc-200 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600"
+                                    aria-label={`Editar tarefa: ${task.titulo}`}
+                                    title="Editar tarefa"
+                                  >
+                                    <PencilSimple aria-hidden="true" className="h-4 w-4" />
+                                  </button>
                                   <button 
                                     type="button"
                                     onClick={() => handleDelete(task.id)}
-                                    className="rounded-lg bg-red-50 p-1.5 text-red-600 shadow-sm transition-[background-color,color,box-shadow] hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400"
-                                    aria-label="Excluir tarefa"
+                                    className="geo-focus-ring rounded-lg bg-red-50 p-1.5 text-red-600 shadow-sm transition-[background-color,color,box-shadow] hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400"
+                                    aria-label={`Excluir tarefa: ${task.titulo}`}
                                     title="Excluir tarefa"
                                   >
                                     <Trash aria-hidden="true" className="h-4 w-4" />
@@ -480,6 +619,16 @@ export function Tarefas() {
                               )}
 
                               <div className="flex flex-wrap items-center gap-2 mt-4">
+                                {task.originalStatus && (
+                                  <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-200">
+                                    Status legado: {task.originalStatus} · exibida em A Fazer
+                                  </span>
+                                )}
+                                {task.originalPriority && (
+                                  <span className="rounded-full border border-violet-300 bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/10 dark:text-violet-200">
+                                    Prioridade legada: {task.originalPriority}
+                                  </span>
+                                )}
                                 <span className={`text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                                   task.prioridade === 'Alta' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400' :
                                   task.prioridade === 'Média' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400' :
@@ -489,35 +638,41 @@ export function Tarefas() {
                                 </span>
                                 
                                 {task.dataLimite && (
-                                  <span className="flex items-center gap-1 text-xs font-semibold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
-                                    <Calendar className="w-3 h-3" />
-                                    {new Date(task.dataLimite).toLocaleDateString()}
+                                  <span className="flex items-center gap-1 text-xs font-semibold text-zinc-600 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full">
+                                    <Calendar aria-hidden="true" className="w-3 h-3" />
+                                    {new Intl.DateTimeFormat('pt-BR').format((() => {
+                                      const [year, month, day] = task.dataLimite!.slice(0, 10).split('-').map(Number);
+                                      return new Date(year, month - 1, day);
+                                    })())}
                                   </span>
+                                )}
+                                {task.dataLimite && task.status !== 'Concluído' && task.dataLimite.slice(0, 10) < localDateKey() && (
+                                  <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-800 dark:bg-red-500/15 dark:text-red-200">Atrasada</span>
                                 )}
 
                                 {(task.projetoNome || task.clienteNome) && (
-                                  <span className="flex items-center gap-1 text-xs font-semibold text-zinc-500 bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded-full ml-auto">
-                                    <BookmarkSimple className="w-3 h-3" />
+                                  <span className="ml-auto flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                                    <BookmarkSimple aria-hidden="true" className="w-3 h-3" />
                                     <span className="truncate max-w-[120px]">
                                       {task.projetoNome || task.clienteNome}
                                     </span>
                                   </span>
                                 )}
                               </div>
-                            </div>
+                            </article>
                           )}
                         </Draggable>
                       ))}
                       {provided.placeholder}
                       {colTasks.length === 0 && !snapshot.isDraggingOver && (
-                        <div className="h-40 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl flex items-center justify-center text-zinc-400 text-sm">
+                        <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-zinc-300 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-300">
                           Solte tarefas aqui
                         </div>
                       )}
                     </div>
                   )}
                 </Droppable>
-              </div>
+              </section>
             );
           })}
         </div>
@@ -536,10 +691,17 @@ export function Tarefas() {
       <Modal
         isOpen={showAddForm}
         onClose={closeTaskForm}
-        title="Nova Tarefa"
+        title={editingTaskId ? 'Editar Tarefa' : 'Nova Tarefa'}
+        initialFocusId="tarefa-titulo"
+        closeDisabled={submitting}
       >
-        <form onSubmit={handleCreate} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <FormError message={formError} />
+          {editingDirectClient && (
+            <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+              Esta tarefa está ligada diretamente ao cliente. Para editá-la nesta tela, selecione conscientemente um projeto; o vínculo passará a ser o cliente desse projeto.
+            </p>
+          )}
           <FormSection title="Planejamento da tarefa" description="Defina o que precisa ser feito, o projeto associado e a prioridade operacional.">
           <div>
             <label htmlFor="tarefa-titulo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Título da Tarefa</label>
@@ -549,6 +711,7 @@ export function Tarefas() {
               type="text" 
               autoComplete="off"
               required 
+              maxLength={180}
               value={novoTitulo} 
               onChange={e => setNovoTitulo(e.target.value)} 
               placeholder="Ex: Executar levantamento RTK" 
@@ -604,6 +767,7 @@ export function Tarefas() {
               name="descricao"
               value={novaDescricao} 
               onChange={e => setNovaDescricao(e.target.value)} 
+              maxLength={2000}
               rows={3} 
               placeholder="Adicione detalhes…"
               className="w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-900 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
@@ -616,15 +780,17 @@ export function Tarefas() {
             <button 
               type="button" 
               onClick={closeTaskForm}
+              disabled={submitting}
               className="px-6 py-3 rounded-full text-zinc-500 dark:text-zinc-400 font-medium hover:text-zinc-900 dark:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancelar
             </button>
             <button 
               type="submit" 
+              disabled={submitting}
               className={cn(primarySubmitButtonClass, 'px-6 py-3')}
             >
-              Criar Tarefa
+              {submitting ? 'Salvando…' : editingTaskId ? 'Salvar alterações' : 'Criar Tarefa'}
             </button>
           </FormFooter>
         </form>

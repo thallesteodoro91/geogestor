@@ -3,17 +3,20 @@ import {
   executiveSummary,
   formatCurrency,
   formatDate,
+  formatGeneratedAt,
   formatNumber,
   formatPeriod,
   reportTitle,
   type ReportType
 } from './reportPresentation';
+import { reportAlertCopy } from './reportAlertCopy';
 
 export interface ReportDocumentModel {
   title: string;
   period: string;
   issuedAt: string;
   summary: string[];
+  alerts: Array<{ title: string; description: string }>;
   criteria: string[];
   sections: Array<{
     title: string;
@@ -48,25 +51,58 @@ export function buildReportDocumentModel(report: ManagerialReport, type: ReportT
       value: operational.activeAreaHa === null ? 'Não informada' : `${formatNumber(operational.activeAreaHa)} ha`
     }
   ];
+  const monthlyRows = report.financial.monthly.map((item) => ({
+    label: item.month,
+    value: `Recebido ${formatCurrency(item.receivedRevenue)} · Pago ${formatCurrency(item.paidExpenses)} · Resultado ${formatCurrency(item.cashResult)}`
+  }));
+  const categoryRows = report.financial.expensesByCategory.map((item) => ({
+    label: item.category,
+    value: `${formatCurrency(item.paidTotal)} · ${item.count} lançamento(s) pago(s)`
+  }));
+  const statusRows = report.operational.byStatus.map((item) => ({ label: item.label, value: String(item.count) }));
+  const deadlineRows = report.operational.deadlines.map((item) => ({
+    label: item.name,
+    value: `${formatDate(item.dueDate)} · ${item.status}`
+  }));
+  const financialSections = [
+    { title: 'Indicadores financeiros', rows: financialRows },
+    ...(monthlyRows.length ? [{ title: 'Evolução do caixa', rows: monthlyRows }] : []),
+    ...(categoryRows.length ? [{ title: 'Despesas pagas por categoria', rows: categoryRows }] : [])
+  ];
+  const operationalSections = [
+    { title: 'Indicadores operacionais', rows: operationalRows },
+    ...(statusRows.length ? [{ title: 'Distribuição por status', rows: statusRows }] : []),
+    ...(deadlineRows.length ? [{ title: 'Agenda crítica de entregas', rows: deadlineRows }] : [])
+  ];
   const sections = type === 'financeiro'
-    ? [{ title: 'Indicadores financeiros', rows: financialRows }]
+    ? financialSections
     : type === 'projetos'
-      ? [{ title: 'Indicadores operacionais', rows: operationalRows }]
-      : [
-        { title: 'Indicadores financeiros', rows: financialRows },
-        { title: 'Indicadores operacionais', rows: operationalRows }
-      ];
+      ? operationalSections
+      : [...financialSections.slice(0, 1), ...operationalSections.slice(0, 1)];
+  const alerts = (type === 'financeiro'
+    ? report.financial.alerts
+    : type === 'projetos'
+      ? report.operational.alerts
+      : [...report.financial.alerts, ...report.operational.alerts])
+    .map(reportAlertCopy);
+  const criteria = type === 'financeiro'
+    ? [
+        report.period.rules.contractedRevenue,
+        report.period.rules.receivedRevenue,
+        report.period.rules.pendingRevenue,
+        report.period.rules.paidExpenses
+      ]
+    : type === 'projetos'
+      ? [report.period.rules.projects, report.period.rules.activeArea]
+      : [report.period.rules.receivedRevenue, report.period.rules.paidExpenses, report.period.rules.projects, report.period.rules.activeArea];
 
   return {
     title: reportTitle(type),
     period: formatPeriod(report),
-    issuedAt: formatDate(report.generatedAt),
-    summary: executiveSummary(report),
-    criteria: [
-      report.period.rules.receivedRevenue,
-      report.period.rules.paidExpenses,
-      report.period.rules.projects
-    ],
+    issuedAt: formatGeneratedAt(report.generatedAt),
+    summary: type === 'executivo' ? executiveSummary(report) : [],
+    alerts,
+    criteria,
     sections
   };
 }

@@ -1,0 +1,74 @@
+{
+  "type": "Feature",
+  "properties": {
+    "datum": "WGS 84",
+    "epsg": "EPSG:4326",
+    "sourceDatum": "SIRGAS 2000",
+    "sourceEpsg": "EPSG:31982",
+    "zone": 22,
+    "hemisphere": "S",
+    "unit": "grau",
+    "generatedAt": "2026-09-19T18:46:04.968Z",
+    "vertices": [
+      {
+        "index": 1,
+        "code": "=QA-V1",
+        "description": "Marco sintético Açores <b>inerte</b>",
+        "altitude": -1.25,
+        "precision": "0,02 m",
+        "notes": "Somente dados QA"
+      },
+      {
+        "index": 2,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      },
+      {
+        "index": 3,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      },
+      {
+        "index": 4,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      }
+    ]
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -48.54819723762172,
+          -27.597352882422104
+        ],
+        [
+          -48.54809599883373,
+          -27.597351093282445
+        ],
+        [
+          -48.548098007073015,
+          -27.59726089803671
+        ],
+        [
+          -48.548199245778285,
+          -27.59726268716954
+        ],
+        [
+          -48.54819723762172,
+          -27.597352882422104
+        ]
+      ]
+    ]
+  }
+}

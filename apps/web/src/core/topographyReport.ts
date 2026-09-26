@@ -66,6 +66,17 @@ export function buildTopographyReportDefinition(input: TopographyReportInput): T
       : [coordinate.format((vertex as ProjectedPosition).x), coordinate.format((vertex as ProjectedPosition).y)];
     return [`V${index + 1}`, ...values];
   });
+  const metadataRows = input.vertices.flatMap((vertex, index) => {
+    if (![vertex.code, vertex.description, vertex.altitude, vertex.precision, vertex.notes].some((value) => value !== undefined && value !== '')) return [];
+    return [[
+      `V${index + 1}`,
+      vertex.code ?? '—',
+      vertex.description ?? '—',
+      vertex.altitude === undefined ? '—' : `${number.format(vertex.altitude)} m`,
+      vertex.precision ?? '—',
+      vertex.notes ?? '—',
+    ]];
+  });
   const metadata: Content[] = [
     { text: `Cliente: ${input.client?.trim() || 'Não informado'}` },
     { text: `Projeto: ${input.project?.trim() || 'Não informado'}` },
@@ -107,6 +118,19 @@ export function buildTopographyReportDefinition(input: TopographyReportInput): T
         layout: 'lightHorizontalLines',
         margin: [0, 6, 0, 16],
       },
+      ...(metadataRows.length ? [{
+        text: 'Metadados dos vértices',
+        style: 'section',
+      }, {
+        table: {
+          headerRows: 1,
+          widths: [30, 45, '*', 48, 48, '*'],
+          body: [[{ text: 'Vértice', bold: true }, { text: 'Código', bold: true }, { text: 'Descrição', bold: true }, { text: 'Altitude', bold: true }, { text: 'Precisão', bold: true }, { text: 'Observações', bold: true }], ...metadataRows],
+        },
+        layout: 'lightHorizontalLines',
+        fontSize: 7.5,
+        margin: [0, 0, 0, 16],
+      } as Content] : []),
       { text: 'Croqui esquemático', style: 'section' },
       buildSketch(input.vertices, input.mode),
       { text: 'Representação para conferência visual, sem escala cartográfica.', fontSize: 8, color: '#71717a', margin: [0, 4, 0, 16] },

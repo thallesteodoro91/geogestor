@@ -36,7 +36,10 @@ function sendError(reply: any, error: unknown) {
 export async function oportunidadesRoutes(server: FastifyInstance) {
   server.get('/', async () => listOpportunities());
   server.get('/analytics', async () => getOpportunityAnalytics());
-  server.get('/options', async () => getOpportunityOptions());
+  server.get('/options', async (request) => {
+    const query = request.query as { q?: string; clientId?: string; selectedBudgetId?: string; limit?: string };
+    return getOpportunityOptions({ ...query, limit: Number(query.limit) || 25 });
+  });
   server.get('/:id', async (request, reply) => {
     try {
       return await getOpportunity((request.params as IdParams).id);

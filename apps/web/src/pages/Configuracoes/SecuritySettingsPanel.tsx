@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { LockKey, ShieldCheck, ShieldSlash, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { apiClient, clearLocalSessionToken, setLocalSessionToken } from '../../services/apiClient';
+import { SwitchField } from '../../components/Form';
 import { cn } from '../../utils/cn';
 import { geoFieldClass, geoPanelClass } from '../../utils/geoTheme';
 import { primarySubmitButtonClass } from '../../utils/actionStyles';
@@ -104,22 +105,15 @@ export function SecuritySettingsPanel() {
           </div>
         </div>
 
-        <label htmlFor="local-auth-enabled" className="flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 p-4 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
-          <input
-            id="local-auth-enabled"
-            name="local_auth_enabled"
-            type="checkbox"
-            checked={enabled}
-            onChange={(event) => { setEnabledDraft(event.target.checked); setError(''); }}
-            className="h-5 w-5 rounded border-zinc-300 text-indigo-600 focus-visible:ring-2 focus-visible:ring-indigo-500/40"
-          />
-          <span className="min-w-0">
-            <strong className="block text-sm text-zinc-950 dark:text-white">Pedir senha ao abrir o GeoGestor</strong>
-            <span className="mt-1 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-              {enabled ? `A sessão será bloqueada após ${policyQuery.data.idleMinutes} minutos sem uso.` : 'Desativado: o aplicativo abre diretamente, sem tela de desbloqueio.'}
-            </span>
-          </span>
-        </label>
+        <SwitchField
+          id="local-auth-enabled"
+          name="local_auth_enabled"
+          label="Pedir senha ao abrir o GeoGestor"
+          description={enabled ? `A sessão será bloqueada após ${policyQuery.data.idleMinutes} minutos sem uso.` : 'Desativado: o aplicativo abre diretamente, sem tela de desbloqueio.'}
+          checked={enabled}
+          onChange={(checked) => { setEnabledDraft(checked); setError(''); }}
+          className="min-h-16 rounded-xl p-4"
+        />
       </section>
 
       <section className={cn(geoPanelClass, 'space-y-4 rounded-2xl p-5')} aria-labelledby="change-local-password-title">

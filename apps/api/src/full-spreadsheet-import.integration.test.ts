@@ -72,7 +72,7 @@ function syntheticInput(hashSeed: string, clientName = 'Cliente Migração Segur
   };
 }
 
-test('migração completa reconhece a planilha real, grava vínculos, concilia, evita reimportação e faz rollback', async () => {
+test('migração completa sintética grava vínculos, concilia, evita reimportação e faz rollback', async () => {
   await fs.mkdir(testRoot, { recursive: true });
   await removeDatabase();
   const [{ db, dbReady, closeDb }, { schema }, migration, service, { server }, { AuditLogService }] = await Promise.all([
@@ -164,7 +164,9 @@ test('migração completa reconhece a planilha real, grava vínculos, concilia, 
 
     let realImportedProjects = 0;
     let realImportedBudgets = 0;
-    try {
+    // A planilha privada só pode ser usada em uma campanha separada e explicitamente autorizada.
+    if (process.env.GEOGESTOR_RUN_PRIVATE_WORKBOOK_TEST === '1') {
+      try {
       await fs.access(workbookPath);
       const requireFromWeb = createRequire(path.resolve(process.cwd(), 'apps/web/package.json'));
       const excelModule = requireFromWeb('read-excel-file/node') as { readSheet: (file: string) => Promise<unknown[][]> };
@@ -228,8 +230,9 @@ test('migração completa reconhece a planilha real, grava vínculos, concilia, 
       assert.equal((await db.select().from(schema.orcamentos)).length, 73);
       assert.equal((await db.select().from(schema.notasFiscais)).length, 73);
       assert.equal((await db.select().from(schema.despesas)).length, 72);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
     }
 
     const input = syntheticInput('successful-full-import');

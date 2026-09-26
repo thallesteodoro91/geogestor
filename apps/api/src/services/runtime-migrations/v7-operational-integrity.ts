@@ -1,5 +1,6 @@
 import type { Client } from '@libsql/client';
 import crypto from 'node:crypto';
+import { normalizePropertyIdentifier } from '@geogestor/contracts/src/properties';
 
 export const OPERATIONAL_INTEGRITY_MIGRATION = {
   version: 7,
@@ -30,12 +31,13 @@ async function migrateLegacyProjectProperties(client: Client) {
     let propertyId = legacyPropertyId(projectId);
     if (row.matricula) {
       const existing = await client.execute({
-        sql: `SELECT id FROM propriedades
-          WHERE cliente_id = ? AND deleted_at IS NULL AND lower(trim(matricula)) = lower(trim(?))
-          LIMIT 1`,
-        args: [clientId, String(row.matricula)]
+        sql: `SELECT id, matricula FROM propriedades
+          WHERE cliente_id = ? AND deleted_at IS NULL AND matricula IS NOT NULL`,
+        args: [clientId]
       });
-      if (existing.rows[0]?.id) propertyId = String(existing.rows[0].id);
+      const normalized = normalizePropertyIdentifier(String(row.matricula));
+      const match = existing.rows.find((candidate) => normalizePropertyIdentifier(String(candidate.matricula || '')) === normalized);
+      if (match?.id) propertyId = String(match.id);
     }
     await client.execute({
       sql: `INSERT OR IGNORE INTO propriedades (

@@ -67,6 +67,7 @@ test('apiClient aplica autenticação uma única vez por requisição', async ()
 
 test('apiFetch centraliza a invalidação de alertas após mutações bem-sucedidas', async () => {
   const invalidations: Array<{ method: string; pathname: string }> = [];
+  const reportInvalidations: Array<{ method: string; pathname: string }> = [];
   Object.assign(globalThis, {
     window: {
       electronAPI: { getApiPort: () => 4321, getApiToken: () => 'synthetic-token' },
@@ -74,6 +75,9 @@ test('apiFetch centraliza a invalidação de alertas após mutações bem-sucedi
       dispatchEvent: (event: Event) => {
         if (event.type === 'geogestor:alerts-invalidated') {
           invalidations.push((event as CustomEvent<{ method: string; pathname: string }>).detail);
+        }
+        if (event.type === 'geogestor:reports-invalidated') {
+          reportInvalidations.push((event as CustomEvent<{ method: string; pathname: string }>).detail);
         }
         return true;
       }
@@ -94,6 +98,11 @@ test('apiFetch centraliza a invalidação de alertas após mutações bem-sucedi
   assert.deepEqual(invalidations, [
     { method: 'PATCH', pathname: '/api/tarefas/11111111-1111-4111-8111-111111111111' },
     { method: 'POST', pathname: '/api/oportunidades' }
+  ]);
+  assert.deepEqual(reportInvalidations, [
+    { method: 'PATCH', pathname: '/api/tarefas/11111111-1111-4111-8111-111111111111' },
+    { method: 'POST', pathname: '/api/oportunidades' },
+    { method: 'POST', pathname: '/api/alertas/ler' }
   ]);
 });
 
@@ -128,6 +137,34 @@ test('apiClient sinaliza indisponibilidade sem devolver dados vazios ou zeros', 
       && error.message === 'Não foi possível conectar ao serviço local do GeoGestor.'
   );
   assert.equal(unavailableEvents, 1);
+});
+
+test('cancelamento solicitado pelo consumidor não dispara reconexão global', async () => {
+  let unavailableEvents = 0;
+  Object.assign(globalThis, {
+    window: {
+      electronAPI: { getApiPort: () => 4321, getApiToken: () => 'synthetic-token' },
+      location: { protocol: 'http:', port: '4321', origin: 'http://127.0.0.1:4321' },
+      dispatchEvent: (event: Event) => {
+        if (event.type === 'geogestor:api-unavailable') unavailableEvents += 1;
+        return true;
+      }
+    },
+    fetch: async (_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      const rejectFromAbort = () => reject(signal?.reason || new DOMException('Abortado', 'AbortError'));
+      if (signal?.aborted) rejectFromAbort();
+      else signal?.addEventListener('abort', rejectFromAbort, { once: true });
+    })
+  });
+  const { apiClient } = await import('./apiClient');
+  const controller = new AbortController();
+  const request = apiClient.get('/api/projetos', { signal: controller.signal });
+
+  controller.abort();
+
+  await assert.rejects(request, (error: unknown) => error instanceof Error && error.name === 'AbortError');
+  assert.equal(unavailableEvents, 0);
 });
 
 test('getAllPages percorre todas as páginas e remove ids duplicados', async () => {

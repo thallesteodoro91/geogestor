@@ -34,10 +34,7 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
       headers: jsonHeaders,
       payload: {
         empresaNome: 'Empresa sem bloqueio',
-        dadosPasta: testRoot,
-        adminNome: 'Pessoa Administradora',
-        adminEmail: 'admin@example.test',
-        adminSenha: 'senha-inicial-123'
+        dadosPasta: testRoot
       }
     });
     assert.equal(setup.statusCode, 200, setup.body);

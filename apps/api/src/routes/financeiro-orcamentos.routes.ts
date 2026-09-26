@@ -9,6 +9,7 @@ import { db } from '../db';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
 import { LegacyFinanceDomainService } from '../services/legacy-finance-domain.service';
+import { PerformanceMetricsService } from '../services/performance-metrics.service';
 import {
   centsSchema,
   legacyBudgetCostSchema,
@@ -34,6 +35,10 @@ export async function registerFinanceiroOrcamentoRoutes(server: FastifyInstance)
     }
   }, async (request, reply) => {
     const { page, limit, mode } = request.query;
+    if (mode === 'legacy') {
+      reply.header('deprecation', 'true');
+      PerformanceMetricsService.recordLegacyContract('GET /api/financeiro/orcamentos');
+    }
     const offset = (page - 1) * limit;
 
     const data = await db

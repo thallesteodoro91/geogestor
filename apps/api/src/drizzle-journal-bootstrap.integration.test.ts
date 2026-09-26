@@ -82,7 +82,7 @@ test('journal oficial 0000-0014 inicializa schema completo e permanece contido n
       [],
       'O bootstrap Drizzle nÃ£o pode criar tabelas desconhecidas pelo runtime desktop.'
     );
-    assert.equal(Number((await runtimeClient.execute('PRAGMA user_version')).rows[0]?.user_version), 13);
+    assert.equal(Number((await runtimeClient.execute('PRAGMA user_version')).rows[0]?.user_version), 17);
   } finally {
     await drizzleClient.close();
     await runtimeClient.close();

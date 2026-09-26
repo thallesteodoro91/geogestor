@@ -282,7 +282,7 @@ export const projectFormToPayload = (form: ProjectFormState): ProjetoPayload => 
     clienteId: form.clienteId,
     propriedadeId: form.propriedadeId || null,
     descricao: nullable(form.descricao),
-    status: form.status || 'Planejamento',
+    status: (form.status || 'Planejamento') as ProjetoPayload['status'],
     dataInicio: nullable(form.dataInicio),
     dataEntrega: nullable(form.dataEntrega),
     areaHa,
@@ -293,15 +293,15 @@ export const projectFormToPayload = (form: ProjectFormState): ProjetoPayload => 
     cidade: nullable(form.uf.toUpperCase()),
     municipio: nullable(form.municipio),
     situacaoImovel: nullable(form.situacaoImovel),
-    tipo: nullable(form.tipo),
+    tipo: nullable(form.tipo) as ProjetoPayload['tipo'],
     averbacao: nullable(form.averbacao),
     latitude: latitude === null || Number.isNaN(latitude) ? null : latitude,
     longitude: longitude === null || Number.isNaN(longitude) ? null : longitude,
-    possuiMemorialDescritivo: nullable(form.possuiMemorialDescritivo),
+    possuiMemorialDescritivo: nullable(form.possuiMemorialDescritivo) as ProjetoPayload['possuiMemorialDescritivo'],
     observacoes: nullable(form.observacoes),
     orgaoAmbiental: form.tipo === 'Ambiental' || form.tipo === 'Licenciamento' ? nullable(form.orgaoAmbiental) : null,
     tipoDemanda: form.tipo === 'Ambiental' ? nullable(form.tipoDemanda) : null,
-    tipoLicenca: form.tipo === 'Licenciamento' ? nullable(form.tipoLicenca) : null,
+    tipoLicenca: form.tipo === 'Licenciamento' ? nullable(form.tipoLicenca) as ProjetoPayload['tipoLicenca'] : null,
     numeroLicenca: form.tipo === 'Licenciamento' ? nullable(form.numeroLicenca) : null,
     dataEmissao: form.tipo === 'Licenciamento' ? nullable(form.dataEmissao) : null,
     dataVencimentoLicenca: form.tipo === 'Licenciamento' ? nullable(form.dataVencimentoLicenca) : null,
@@ -309,7 +309,7 @@ export const projectFormToPayload = (form: ProjectFormState): ProjetoPayload => 
     observacoesLicenca: form.tipo === 'Licenciamento' ? nullable(form.observacoesLicenca) : null,
     protocolo: form.tipo === 'Ambiental' || form.tipo === 'Licenciamento' ? nullable(form.protocolo) : null,
     numeroProcesso: form.tipo === 'Perícia' ? nullable(form.numeroProcesso) : null,
-    tipoPericia: form.tipo === 'Perícia' ? nullable(form.tipoPericia) : null,
+    tipoPericia: form.tipo === 'Perícia' ? nullable(form.tipoPericia) as ProjetoPayload['tipoPericia'] : null,
     dataVistoria: form.tipo === 'Perícia' ? nullable(form.dataVistoria) : null
   };
 };
@@ -355,6 +355,7 @@ export const validateProjectForm = (form: ProjectFormState) => {
     if (!form.tipoLicenca) errors.tipoLicenca = 'Selecione o tipo da licença';
     if (!form.numeroLicenca.trim()) errors.numeroLicenca = 'Informe o número da licença';
     if (!form.orgaoAmbiental.trim()) errors.orgaoAmbiental = 'Informe o órgão ambiental';
+    if (!form.dataEmissao) errors.dataEmissao = 'Informe a data de emissão';
     if (!form.dataVencimentoLicenca) errors.dataVencimentoLicenca = 'Informe a data de vencimento';
     if (form.dataEmissao && form.dataVencimentoLicenca && form.dataVencimentoLicenca < form.dataEmissao) {
       errors.dataVencimentoLicenca = 'O vencimento deve ser posterior ou igual à emissão';

@@ -21,17 +21,21 @@ const routePreloaders: Record<string, () => Promise<unknown>> = {
   '/ajuda': () => import('../pages/Ajuda/Ajuda')
 };
 
-const preloadedRoutes = new Set<string>();
+const routePreloadPromises = new Map<string, Promise<unknown>>();
 
 export function preloadRoute(path?: string) {
-  if (!path || preloadedRoutes.has(path)) return;
+  if (!path) return undefined;
+  const existing = routePreloadPromises.get(path);
+  if (existing) return existing;
   const preload = routePreloaders[path];
-  if (!preload) return;
+  if (!preload) return undefined;
 
-  preloadedRoutes.add(path);
-  void preload().catch(() => {
-    preloadedRoutes.delete(path);
+  const promise = preload().catch(() => {
+    routePreloadPromises.delete(path);
+    return undefined;
   });
+  routePreloadPromises.set(path, promise);
+  return promise;
 }
 
 const COMMON_ROUTES = [
@@ -39,9 +43,11 @@ const COMMON_ROUTES = [
   '/projetos',
   '/financeiro',
   '/calendario',
+  '/relatorios',
+  '/topografia',
+  '/configuracoes',
   '/crm',
-  '/orcamentos',
-  '/relatorios'
+  '/orcamentos'
 ] as const;
 
 type IdleCapableWindow = Window & {
@@ -52,23 +58,34 @@ type IdleCapableWindow = Window & {
 export function scheduleCommonRoutePreload() {
   const browserWindow = window as IdleCapableWindow;
   const timers: number[] = [];
+  const idleHandles: number[] = [];
+  let cancelled = false;
 
-  const preloadCommonRoutes = () => {
-    COMMON_ROUTES.forEach((route, index) => {
-      timers.push(window.setTimeout(() => void preloadRoute(route), index * 150));
-    });
+  const scheduleRoute = (index: number) => {
+    if (cancelled || index >= COMMON_ROUTES.length) return;
+
+    const run = () => {
+      if (cancelled) return;
+      void Promise.resolve(preloadRoute(COMMON_ROUTES[index]))
+        .catch(() => undefined)
+        .finally(() => scheduleRoute(index + 1));
+    };
+
+    if (browserWindow.requestIdleCallback) {
+      idleHandles.push(browserWindow.requestIdleCallback(run, { timeout: 1_200 + index * 350 }));
+      return;
+    }
+
+    timers.push(window.setTimeout(run, index === 0 ? 600 : 200));
   };
 
-  const idleHandle = browserWindow.requestIdleCallback
-    ? browserWindow.requestIdleCallback(preloadCommonRoutes, { timeout: 2_500 })
-    : window.setTimeout(preloadCommonRoutes, 1_000);
+  scheduleRoute(0);
 
   return () => {
+    cancelled = true;
     timers.forEach((timer) => window.clearTimeout(timer));
     if (browserWindow.cancelIdleCallback) {
-      browserWindow.cancelIdleCallback(idleHandle);
-    } else {
-      window.clearTimeout(idleHandle);
+      idleHandles.forEach((handle) => browserWindow.cancelIdleCallback?.(handle));
     }
   };
 }

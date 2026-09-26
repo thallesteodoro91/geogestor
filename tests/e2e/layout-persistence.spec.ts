@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 
@@ -11,7 +12,7 @@ async function unlock(page: Page, target = '/') {
 
   if (await setupHeading.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo Layout E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-Layout-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles Layout E2E');
     await page.getByLabel('E-mail').fill('layout@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);

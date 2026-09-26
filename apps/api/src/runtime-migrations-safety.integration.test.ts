@@ -64,13 +64,13 @@ test('migração de orçamento legado é idempotente em execuções repetidas', 
 
   const integrity = await client.execute('PRAGMA quick_check');
   const foreignKeys = await client.execute('PRAGMA foreign_key_check');
-  const migrations = await client.execute('SELECT version, status FROM schema_migrations WHERE version BETWEEN 1 AND 13 ORDER BY version');
+  const migrations = await client.execute('SELECT version, status FROM schema_migrations WHERE version BETWEEN 1 AND 17 ORDER BY version');
   const userVersion = await client.execute('PRAGMA user_version');
   const legacyJson = await client.execute("SELECT itens_json, despesas_json FROM orcamentos WHERE id = 'orcamento-legado'");
   assert.equal(integrity.rows[0]?.quick_check, 'ok');
   assert.equal(foreignKeys.rows.length, 0);
-  assert.deepEqual(migrations.rows.map((row) => [Number(row.version), row.status]), Array.from({ length: 13 }, (_, index) => [index + 1, 'success']));
-  assert.equal(Number(userVersion.rows[0]?.user_version), 13);
+  assert.deepEqual(migrations.rows.map((row) => [Number(row.version), row.status]), Array.from({ length: 17 }, (_, index) => [index + 1, 'success']));
+  assert.equal(Number(userVersion.rows[0]?.user_version), 17);
   assert.equal(legacyJson.rows[0]?.itens_json, null);
   assert.equal(legacyJson.rows[0]?.despesas_json, null);
 

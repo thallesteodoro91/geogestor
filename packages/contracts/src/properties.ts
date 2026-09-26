@@ -12,12 +12,12 @@ export const PropertyFieldsSchema = z.object({
   itr: optionalText(120),
   cidade: optionalText(160),
   municipio: z.string().trim().min(1, 'Informe o município.').max(160, 'Use até 160 caracteres no município.'),
-  uf: z.string().trim().length(2, 'Use a sigla da UF com duas letras.').toUpperCase().nullable().optional(),
+  uf: z.string().trim().regex(/^[A-Za-z]{2}$/, 'Use a sigla da UF com duas letras.').toUpperCase(),
   situacaoImovel: optionalText(160),
   latitude: z.number().finite().min(-90, 'Informe uma latitude entre -90 e 90.').max(90, 'Informe uma latitude entre -90 e 90.').nullable().optional(),
   longitude: z.number().finite().min(-180, 'Informe uma longitude entre -180 e 180.').max(180, 'Informe uma longitude entre -180 e 180.').nullable().optional(),
   observacoes: optionalText(4000)
-});
+}).strict();
 
 function validateProperty(payload: z.infer<typeof PropertyFieldsSchema>, context: z.RefinementCtx) {
   if (![payload.matricula, payload.car, payload.ccir, payload.itr].some((value) => Boolean(value?.trim()))) {
@@ -39,7 +39,10 @@ function validateProperty(payload: z.infer<typeof PropertyFieldsSchema>, context
 }
 
 export const PropertyPayloadSchema = PropertyFieldsSchema.superRefine(validateProperty);
-export const PropertyPatchSchema = PropertyFieldsSchema.partial();
+export const PropertyPatchSchema = PropertyFieldsSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  'Informe ao menos um campo para atualizar.'
+);
 export type PropertyPayload = z.infer<typeof PropertyPayloadSchema>;
 
 export function normalizePropertyIdentifier(value?: string | null) {

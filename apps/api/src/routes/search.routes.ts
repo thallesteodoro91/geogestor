@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { activeDocumentWhere } from '../services/document-integrity.service';
 
 type SearchResult = {
@@ -23,7 +23,12 @@ const normalize = (value: any) =>
 const matchesQuery = (query: string, values: any[]) =>
   values.some((value) => normalize(value).includes(query));
 
-const take = <T>(items: T[], limit = 8) => items.slice(0, limit);
+const take = <T extends Pick<SearchResult, 'id' | 'title'>>(items: T[], limit = 8) => [...items]
+  .sort((left, right) => (
+    normalize(left.title).localeCompare(normalize(right.title), 'pt-BR')
+    || left.id.localeCompare(right.id)
+  ))
+  .slice(0, limit);
 
 const clientTabPath = (clienteId: string | null | undefined, tab: string, params: Record<string, string | null | undefined> = {}) => {
   const query = new URLSearchParams({ tab });
@@ -51,7 +56,7 @@ export async function searchRoutes(server: FastifyInstance) {
         compromissos,
         documentos
       ] = await Promise.all([
-        db.select().from(schema.clientes),
+        db.select().from(schema.clientes).where(isNull(schema.clientes.deletedAt)),
         db.select({
           id: schema.projetos.id,
           nome: schema.projetos.nome,
@@ -67,7 +72,8 @@ export async function searchRoutes(server: FastifyInstance) {
           updatedAt: schema.projetos.updatedAt
         })
           .from(schema.projetos)
-          .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id)),
+          .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
+          .where(and(isNull(schema.projetos.deletedAt), isNull(schema.clientes.deletedAt))),
         db.select({
           id: schema.orcamentos.id,
           clienteId: schema.orcamentos.clienteId,
@@ -82,7 +88,8 @@ export async function searchRoutes(server: FastifyInstance) {
         })
           .from(schema.orcamentos)
           .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
-          .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id)),
+          .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+          .where(and(isNull(schema.orcamentos.deletedAt), isNull(schema.clientes.deletedAt))),
         db.select({
           id: schema.tarefas.id,
           clienteId: schema.tarefas.clienteId,
@@ -99,7 +106,12 @@ export async function searchRoutes(server: FastifyInstance) {
         })
           .from(schema.tarefas)
           .leftJoin(schema.projetos, eq(schema.tarefas.projetoId, schema.projetos.id))
-          .leftJoin(schema.clientes, eq(schema.tarefas.clienteId, schema.clientes.id)),
+          .leftJoin(schema.clientes, eq(schema.tarefas.clienteId, schema.clientes.id))
+          .where(and(
+            isNull(schema.tarefas.deletedAt),
+            isNull(schema.projetos.deletedAt),
+            isNull(schema.clientes.deletedAt)
+          )),
         db.select({
           id: schema.compromissos.id,
           clienteId: schema.compromissos.clienteId,
@@ -114,10 +126,16 @@ export async function searchRoutes(server: FastifyInstance) {
         })
           .from(schema.compromissos)
           .leftJoin(schema.projetos, eq(schema.compromissos.projetoId, schema.projetos.id))
-          .leftJoin(schema.clientes, eq(schema.compromissos.clienteId, schema.clientes.id)),
+          .leftJoin(schema.clientes, eq(schema.compromissos.clienteId, schema.clientes.id))
+          .where(and(
+            isNull(schema.compromissos.deletedAt),
+            isNull(schema.projetos.deletedAt),
+            isNull(schema.clientes.deletedAt)
+          )),
         db.select().from(schema.documentos).where(activeDocumentWhere())
       ]);
 
+      const activeClientIds = new Set(clientes.map((client) => client.id));
       const results: SearchResult[] = [
         ...take(clientes.filter((item) => matchesQuery(query, [
           item.nome,
@@ -205,7 +223,7 @@ export async function searchRoutes(server: FastifyInstance) {
           path: `/calendario/compromisso/${item.id}`,
           date: item.data || item.updatedAt
         }))),
-        ...take(documentos.filter((item) => matchesQuery(query, [
+        ...take(documentos.filter((item) => activeClientIds.has(item.clienteId) && matchesQuery(query, [
           item.nome,
           item.nomeOriginal,
           item.categoria,

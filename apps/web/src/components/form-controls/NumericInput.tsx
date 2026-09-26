@@ -6,11 +6,12 @@ export interface NumericInputProps extends Omit<InputHTMLAttributes<HTMLInputEle
   wrapperClassName?: string;
   decrementLabel?: string;
   incrementLabel?: string;
+  decimalComma?: boolean;
 }
 
 function fallbackStep(input: HTMLInputElement, direction: 1 | -1) {
   const step = input.step && input.step !== 'any' ? Number(input.step) : 1;
-  const current = Number(input.value || input.min || 0);
+  const current = Number((input.value || input.min || '0').replace(',', '.'));
   const min = input.min === '' ? -Infinity : Number(input.min);
   const max = input.max === '' ? Infinity : Number(input.max);
   const next = Math.min(max, Math.max(min, current + (Number.isFinite(step) && step > 0 ? step : 1) * direction));
@@ -22,6 +23,7 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
   wrapperClassName,
   decrementLabel = 'Diminuir valor',
   incrementLabel = 'Aumentar valor',
+  decimalComma = false,
   disabled,
   onChange,
   onInput,
@@ -44,7 +46,7 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
     input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
   };
 
-  const current = Number(props.value);
+  const current = Number(String(props.value ?? '').replace(',', '.'));
   const min = props.min === undefined ? -Infinity : Number(props.min);
   const max = props.max === undefined ? Infinity : Number(props.max);
   const decrementDisabled = Boolean(disabled || (Number.isFinite(current) && current <= min));
@@ -67,7 +69,8 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
       <input
         {...props}
         ref={inputRef}
-        type="number"
+        type={decimalComma ? 'text' : 'number'}
+        pattern={decimalComma ? '[0-9]*[.,]?[0-9]*' : props.pattern}
         disabled={disabled}
         aria-label={ariaLabel}
         onChange={onChange}

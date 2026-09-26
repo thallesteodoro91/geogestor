@@ -89,6 +89,7 @@ export interface BudgetApprovalInput {
 export interface BudgetFilters {
   query?: string;
   clientId?: string;
+  projectId?: string;
   property?: string;
   municipality?: string;
   serviceType?: string;
@@ -156,13 +157,15 @@ async function validateRelations(database: DbOrTx, payload: Pick<BudgetPayload, 
 }
 
 function calculatePayload(payload: BudgetPayload) {
-  return calculateBudget({
+  const calculation = calculateBudget({
     items: payload.items,
     costs: payload.costs,
     taxes: payload.taxes,
     globalDiscount: payload.globalDiscount,
     globalAddition: payload.globalAddition
   });
+  calculateInstallments(calculation.totalCents, payload.payment.installments, payload.issueDate || dateKey());
+  return calculation;
 }
 
 function budgetValues(payload: BudgetPayload, calculation: BudgetCalculationResult) {
@@ -502,6 +505,7 @@ function filterConditions(filters: BudgetFilters) {
     if (queryCondition) conditions.push(queryCondition);
   }
   if (filters.clientId) conditions.push(eq(schema.orcamentos.clienteId, filters.clientId));
+  if (filters.projectId) conditions.push(eq(schema.orcamentos.projetoId, filters.projectId));
   if (filters.property) conditions.push(like(schema.orcamentos.imovelNome, `%${filters.property}%`));
   if (filters.municipality) conditions.push(like(schema.orcamentos.municipio, `%${filters.municipality}%`));
   if (filters.serviceType) conditions.push(eq(schema.orcamentos.servicoTipo, filters.serviceType));
@@ -519,7 +523,7 @@ function filterConditions(filters: BudgetFilters) {
   return conditions;
 }
 
-export async function listBudgets(filters: BudgetFilters = {}) {
+export function listBudgets(filters: BudgetFilters = {}) {
   return db.select({
     id: schema.orcamentos.id,
     groupId: schema.orcamentos.grupoId,
@@ -555,6 +559,20 @@ export async function listBudgets(filters: BudgetFilters = {}) {
     .orderBy(desc(schema.orcamentos.createdAt));
 }
 
+export async function listBudgetsPage(filters: BudgetFilters, page: number, limit: number) {
+  const conditions = filterConditions(filters);
+  const [items, countRows] = await Promise.all([
+    listBudgets(filters).limit(limit).offset((page - 1) * limit),
+    db.select({ total: sql<number>`count(*)` })
+      .from(schema.orcamentos)
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+      .where(and(...conditions))
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+  return { items, page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
+
 export async function expireOverdueBudgets(userId = 'system') {
   const today = dateKey();
   const overdue = await db.select().from(schema.orcamentos).where(and(
@@ -571,6 +589,25 @@ export async function expireOverdueBudgets(userId = 'system') {
     }
   });
   return overdue.length;
+}
+
+let expirationCheckInFlight: Promise<number> | null = null;
+let lastExpirationCheckAt = 0;
+
+/** Coalesces concurrent reads and avoids rewriting the same expiration scan on every list/KPI request. */
+export function expireOverdueBudgetsIfDue(intervalMs = 60_000) {
+  const now = Date.now();
+  if (expirationCheckInFlight) return expirationCheckInFlight;
+  if (now - lastExpirationCheckAt < intervalMs) return Promise.resolve(0);
+  expirationCheckInFlight = expireOverdueBudgets()
+    .then((expired) => {
+      lastExpirationCheckAt = Date.now();
+      return expired;
+    })
+    .finally(() => {
+      expirationCheckInFlight = null;
+    });
+  return expirationCheckInFlight;
 }
 
 async function nextBudgetNumber(database: DbOrTx, issueDate: string) {
@@ -1041,55 +1078,117 @@ export async function deleteBudget(budgetId: string, userId = 'admin') {
 }
 
 export async function getBudgetKpis(filters: BudgetFilters = {}) {
-  const budgets = await listBudgets(filters);
-  const ids = budgets.map((budget) => budget.id);
-  const installments = ids.length
-    ? await db.select().from(schema.parcelas).where(and(inArray(schema.parcelas.orcamentoId, ids), isNull(schema.parcelas.deletedAt)))
-    : [];
-  const installmentIds = installments.map((installment) => installment.id);
-  const receipts = installmentIds.length
-    ? await db.select().from(schema.recebimentos).where(and(
-      inArray(schema.recebimentos.parcelaId, installmentIds),
-      isNull(schema.recebimentos.deletedAt),
-      isNull(schema.recebimentos.estornadoEm)
-    ))
-    : [];
-  const installmentIdsWithReceipts = new Set(receipts.map((receipt) => receipt.parcelaId));
+  const conditions = filterConditions(filters);
+  const joinedBudgetQuery = () => db
+    .select({
+      status: schema.orcamentos.status,
+      count: sql<number>`count(*)`,
+      viewed: sql<number>`sum(case when ${schema.orcamentos.visualizadoEm} is not null then 1 else 0 end)`,
+      totalCents: sql<number>`coalesce(sum(${schema.orcamentos.valorTotal}), 0)`,
+      estimatedTaxesCents: sql<number>`coalesce(sum(${schema.orcamentos.impostosPrevistos}), 0)`,
+      estimatedNetFeesCents: sql<number>`coalesce(sum(${schema.orcamentos.honorariosLiquidos}), 0)`
+    })
+    .from(schema.orcamentos)
+    .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+    .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+    .where(and(...conditions))
+    .groupBy(schema.orcamentos.status);
+
+  const [statusRows, serviceRows, receivableRows, receiptRows, legacyPaidRows] = await Promise.all([
+    joinedBudgetQuery(),
+    db.select({
+      serviceType: schema.orcamentos.servicoTipo,
+      status: schema.orcamentos.status,
+      count: sql<number>`count(*)`
+    }).from(schema.orcamentos)
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+      .where(and(...conditions))
+      .groupBy(schema.orcamentos.servicoTipo, schema.orcamentos.status),
+    db.select({
+      value: sql<number>`coalesce(sum(case when ${schema.parcelas.statusPagamento} not in ('Pago', 'Cancelado') then max(0, ${schema.parcelas.valor} - ${schema.parcelas.valorPago}) else 0 end), 0)`
+    }).from(schema.parcelas)
+      .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+      .where(and(
+        ...conditions,
+        isNull(schema.parcelas.deletedAt)
+      )),
+    db.select({ value: sql<number>`coalesce(sum(${schema.recebimentos.valorRecebido}), 0)` })
+      .from(schema.recebimentos)
+      .innerJoin(schema.parcelas, eq(schema.recebimentos.parcelaId, schema.parcelas.id))
+      .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+      .where(and(...conditions, isNull(schema.parcelas.deletedAt), isNull(schema.recebimentos.deletedAt), isNull(schema.recebimentos.estornadoEm))),
+    db.select({
+      value: sql<number>`coalesce(sum(coalesce(nullif(${schema.parcelas.valorPago}, 0), ${schema.parcelas.valor})), 0)`
+    }).from(schema.parcelas)
+      .innerJoin(schema.orcamentos, eq(schema.parcelas.orcamentoId, schema.orcamentos.id))
+      .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
+      .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
+      .where(and(
+        ...conditions,
+        isNull(schema.parcelas.deletedAt),
+        eq(schema.parcelas.statusPagamento, 'Pago'),
+        sql`not exists (
+          select 1 from recebimentos r
+          where r.parcela_id = ${schema.parcelas.id}
+            and r.deleted_at is null
+            and r.estornado_em is null
+        )`
+      ))
+  ]);
+
   const counts = Object.fromEntries([
     'rascunho', 'emitido', 'enviado', 'em_negociacao', 'aprovado', 'rejeitado', 'expirado', 'cancelado', 'substituido'
   ].map((status) => [status, 0])) as Record<BudgetStatus, number>;
-  for (const budget of budgets) counts[normalizeBudgetStatus(budget.status)] += 1;
-  const validForBudgeted = budgets.filter((budget) => !['rascunho', 'cancelado', 'substituido'].includes(normalizeBudgetStatus(budget.status)));
-  const approved = budgets.filter((budget) => normalizeBudgetStatus(budget.status) === 'aprovado');
-  const eligibleClosed = budgets.filter((budget) => ['aprovado', 'rejeitado', 'expirado'].includes(normalizeBudgetStatus(budget.status)));
-  const openReceivables = installments
-    .filter((installment) => !['Pago', 'Cancelado'].includes(installment.statusPagamento))
-    .reduce((sum, installment) => sum + Math.max(0, installment.valor - (installment.valorPago || 0)), 0);
-  const received = receipts.reduce((sum, receipt) => sum + receipt.valorRecebido, 0)
-    + installments
-      .filter((installment) => installment.statusPagamento === 'Pago' && !installmentIdsWithReceipts.has(installment.id))
-      .reduce((sum, installment) => sum + (installment.valorPago || installment.valor), 0);
-  const totalApproved = approved.reduce((sum, budget) => sum + budget.totalCents, 0);
+  let total = 0;
+  let viewed = 0;
+  let totalBudgetedCents = 0;
+  let totalApprovedCents = 0;
+  let approvedCount = 0;
+  let eligibleClosedCount = 0;
+  let estimatedTaxesCents = 0;
+  let estimatedNetFeesCents = 0;
+  for (const row of statusRows) {
+    const status = normalizeBudgetStatus(row.status);
+    const count = Number(row.count || 0);
+    counts[status] += count;
+    total += count;
+    viewed += Number(row.viewed || 0);
+    if (!['rascunho', 'cancelado', 'substituido'].includes(status)) totalBudgetedCents += Number(row.totalCents || 0);
+    if (status === 'aprovado') {
+      approvedCount += count;
+      totalApprovedCents += Number(row.totalCents || 0);
+      estimatedTaxesCents += Number(row.estimatedTaxesCents || 0);
+      estimatedNetFeesCents += Number(row.estimatedNetFeesCents || 0);
+    }
+    if (['aprovado', 'rejeitado', 'expirado'].includes(status)) eligibleClosedCount += count;
+  }
   const byService = new Map<string, { eligible: number; approved: number }>();
-  for (const budget of eligibleClosed) {
-    const service = budget.serviceType || 'Não informado';
+  for (const row of serviceRows) {
+    const status = normalizeBudgetStatus(row.status);
+    if (!['aprovado', 'rejeitado', 'expirado'].includes(status)) continue;
+    const service = row.serviceType || 'Não informado';
     const current = byService.get(service) || { eligible: 0, approved: 0 };
-    current.eligible += 1;
-    if (normalizeBudgetStatus(budget.status) === 'aprovado') current.approved += 1;
+    current.eligible += Number(row.count || 0);
+    if (status === 'aprovado') current.approved += Number(row.count || 0);
     byService.set(service, current);
   }
   return {
-    total: budgets.length,
+    total,
     counts,
-    viewed: budgets.filter((budget) => Boolean(budget.viewedAt)).length,
-    totalBudgetedCents: validForBudgeted.reduce((sum, budget) => sum + budget.totalCents, 0),
-    totalApprovedCents: totalApproved,
-    averageApprovedTicketCents: approved.length ? Math.round(totalApproved / approved.length) : 0,
-    conversionBasisPoints: eligibleClosed.length ? Math.round((approved.length / eligibleClosed.length) * 10_000) : 0,
-    estimatedTaxesCents: approved.reduce((sum, budget) => sum + (budget.estimatedTaxesCents || 0), 0),
-    estimatedNetFeesCents: approved.reduce((sum, budget) => sum + (budget.netFeesCents || 0), 0),
-    accountsReceivableCents: openReceivables,
-    receivedCents: received,
+    viewed,
+    totalBudgetedCents,
+    totalApprovedCents,
+    averageApprovedTicketCents: approvedCount ? Math.round(totalApprovedCents / approvedCount) : 0,
+    conversionBasisPoints: eligibleClosedCount ? Math.round((approvedCount / eligibleClosedCount) * 10_000) : 0,
+    estimatedTaxesCents,
+    estimatedNetFeesCents,
+    accountsReceivableCents: Number(receivableRows[0]?.value || 0),
+    receivedCents: Number(receiptRows[0]?.value || 0) + Number(legacyPaidRows[0]?.value || 0),
     conversionByService: Array.from(byService, ([serviceType, value]) => ({
       serviceType,
       eligible: value.eligible,
@@ -1125,4 +1224,18 @@ export async function getBudgetOptions() {
     templates: templates.map((template) => ({ ...template, content: json(template.conteudoJson, {}) })),
     pricingParameters: parameters
   };
+}
+
+export async function getBudgetFilterOptions() {
+  const [clients, projects] = await Promise.all([
+    db.select({ id: schema.clientes.id, name: schema.clientes.nome })
+      .from(schema.clientes)
+      .where(isNull(schema.clientes.deletedAt))
+      .orderBy(asc(schema.clientes.nome)),
+    db.select({ id: schema.projetos.id, clientId: schema.projetos.clienteId, name: schema.projetos.nome, status: schema.projetos.status })
+      .from(schema.projetos)
+      .where(isNull(schema.projetos.deletedAt))
+      .orderBy(asc(schema.projetos.nome))
+  ]);
+  return { clients, projects };
 }

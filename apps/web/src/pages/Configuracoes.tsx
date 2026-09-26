@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../services/apiClient';
-import { loadCompanyTemplate, saveCompanyTemplate } from '../services/companyTemplate';
+import { cacheCompanyTemplate, loadCompanyTemplate } from '../services/companyTemplate';
 import { APP_VERSION } from '../version';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
@@ -47,7 +47,9 @@ import { GeoGestorHealthPanel } from './Configuracoes/GeoGestorHealthPanel';
 import { AppearanceSettingsPanel } from './Configuracoes/AppearanceSettingsPanel';
 import { GoogleCalendarSettingsPanel } from './Configuracoes/GoogleCalendarSettingsPanel';
 import { DocumentTemplateSettingsPanel } from './Configuracoes/DocumentTemplateSettingsPanel';
+import { ChecklistTemplateSettingsPanel } from './Configuracoes/ChecklistTemplateSettingsPanel';
 import { SecuritySettingsPanel } from './Configuracoes/SecuritySettingsPanel';
+import { FormSelect } from '../components/Form';
 
 const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'seguranca', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
 type SettingsSection = typeof SETTINGS_SECTIONS[number];
@@ -93,7 +95,8 @@ const SETTINGS_SEARCH_INDEX: Array<{ section: SettingsSection; title: string; de
   { section: 'backups', title: 'Política de backups', description: 'Frequência, destino e retenção.', keywords: ['backup', 'retenção', 'segurança', 'destino'], anchor: 'backup-policy-title' },
   { section: 'backups', title: 'Restaurar e testar backup', description: 'Validação e recuperação isolada dos dados.', keywords: ['restaurar', 'restauração', 'checksum', 'integridade'], anchor: 'backup-actions' },
   { section: 'alertas', title: 'Alertas e prazos', description: 'Antecedência e recorrência das notificações.', keywords: ['alerta', 'prazo', 'notificação'], anchor: 'alert-settings-title' },
-  { section: 'modelos', title: 'Modelo oficial de documentos', description: 'Logo, cores, cabeçalho e termos.', keywords: ['modelo', 'documento', 'pdf', 'logo'], anchor: 'template-preview-title' },
+  { section: 'modelos', title: 'Modelo dos PDFs', description: 'Identidade aplicada aos orçamentos e relatórios exportados.', keywords: ['modelo', 'documento', 'pdf', 'logo', 'relatório', 'orçamento'], anchor: 'template-preview-title' },
+  { section: 'modelos', title: 'Modelos de checklist', description: 'Etapas reutilizáveis aplicadas aos projetos.', keywords: ['modelo', 'checklist', 'tarefas', 'etapas', 'projeto'], anchor: 'checklist-template-title' },
   { section: 'integracoes', title: 'Google Agenda', description: 'Credenciais protegidas e sincronização.', keywords: ['google', 'agenda', 'integração', 'credencial', 'segurança'], anchor: 'google-client-id' },
   { section: 'aparencia', title: 'Tema do aplicativo', description: 'Claro, escuro ou padrão do sistema.', keywords: ['tema', 'aparência', 'escuro', 'claro'], anchor: 'appearance-title' },
   { section: 'manutencao', title: 'Saúde do GeoGestor', description: 'Versão, banco, backups, espaço e qualidade dos dados.', keywords: ['saúde', 'versão', 'integridade', 'espaço', 'atualização'], anchor: 'geogestor-health-title' },
@@ -214,7 +217,7 @@ export function Configuracoes() {
   };
 
   const handleResetSistema = async () => {
-    if (resetInputText.trim().toUpperCase() !== 'APAGAR DADOS DO GEOGESTOR') return;
+    if (resetInputText !== 'APAGAR DADOS DO GEOGESTOR') return;
     setResetting(true);
     try {
       const result = await apiClient.post<{ removedTotal: number; recoveryBackupPath: string; removedByTable: Record<string, number> }>('/api/sistema/reset-dados', { confirmation: 'APAGAR DADOS DO GEOGESTOR' });
@@ -329,7 +332,7 @@ export function Configuracoes() {
   };
 
   const handleRestoreBackup = async () => {
-    if (restoreInputText.trim().toUpperCase() !== 'RESTAURAR BACKUP DO GEOGESTOR') return;
+    if (restoreInputText !== 'RESTAURAR BACKUP DO GEOGESTOR') return;
     setRestoring(true);
     try {
       await apiClient.post('/api/sistema/restaurar-backup', {
@@ -496,12 +499,9 @@ export function Configuracoes() {
   // Mutation to update configuration
   const updateConfigMutation = useMutation({
     mutationFn: async (payload: CompanySettingsPayload) => {
-      const { appLogo, ...configuration } = payload;
       const template = await loadCompanyTemplate();
-      await Promise.all([
-        apiClient.patch('/api/configuracoes', configuration),
-        saveCompanyTemplate({ ...template, appLogo })
-      ]);
+      await apiClient.patch('/api/configuracoes', payload);
+      cacheCompanyTemplate({ ...template, appLogo: payload.appLogo });
     },
     onMutate: () => {
       setCompanySaveState('saving');
@@ -715,15 +715,21 @@ export function Configuracoes() {
   }, [configIsError, isLoading, refreshNavOverflow]);
 
   useEffect(() => {
-    revealActiveSettingsSection();
+    if (isLoading) return;
+    const frame = window.requestAnimationFrame(() => revealActiveSettingsSection('auto'));
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, isLoading, revealActiveSettingsSection]);
+
+  useEffect(() => {
     const focusId = searchParams.get('foco');
     if (!focusId) return;
-    window.setTimeout(() => {
+    const timeout = window.setTimeout(() => {
       const target = document.getElementById(focusId);
       target?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       if (target instanceof HTMLElement && target.matches('input,button,select,textarea,[tabindex]')) target.focus();
     }, 120);
-  }, [activeTab, revealActiveSettingsSection, searchParams]);
+    return () => window.clearTimeout(timeout);
+  }, [activeTab, searchParams]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -982,7 +988,7 @@ export function Configuracoes() {
               ['arquivos', 'Arquivos e pastas', Files, 'field'],
               ['seguranca', 'Segurança', ShieldCheck, 'success'],
               ['alertas', 'Alertas', Bell, 'warning'],
-              ['modelos', 'Modelos e documentos', FileText, 'success'],
+              ['modelos', 'Modelo dos PDFs', FileText, 'success'],
               ['integracoes', 'Integrações', Link, 'field'],
               ['aparencia', 'Aparência', Palette, 'warning'],
               ['manutencao', 'Manutenção e segurança', Wrench, 'system']
@@ -1206,7 +1212,7 @@ export function Configuracoes() {
                     </fieldset>
                     <div>
                       <label htmlFor="directory-confirmation" className="mb-1.5 block text-sm font-medium">Digite <code className="rounded bg-sky-100 px-1 text-xs dark:bg-sky-950">ALTERAR PASTA DE DADOS DO GEOGESTOR</code> para confirmar</label>
-                      <input id="directory-confirmation" name="directory_confirmation" autoComplete="off" value={directoryConfirmation} onChange={(event) => setDirectoryConfirmation(event.target.value.toUpperCase())} className={systemFieldClass} />
+                      <input id="directory-confirmation" name="directory_confirmation" autoComplete="off" value={directoryConfirmation} onChange={(event) => setDirectoryConfirmation(event.target.value)} className={systemFieldClass} />
                     </div>
                     <div className="flex justify-end"><button type="button" onClick={() => void migrateDataDirectory()} disabled={migratingDirectory || directoryPreflight.availableBytes < Math.ceil(directoryPreflight.current.bytes * 1.1) || directoryConfirmation !== 'ALTERAR PASTA DE DADOS DO GEOGESTOR'} className={cn(primarySubmitButtonClass, 'min-h-11 disabled:opacity-40')}><FolderOpen aria-hidden="true" size={17} /> {migratingDirectory ? 'Migrando e verificando…' : 'Aplicar alteração segura'}</button></div>
                   </div>
@@ -1317,7 +1323,12 @@ export function Configuracoes() {
             </div>
           )}
 
-          {activeTab === 'modelos' && <DocumentTemplateSettingsPanel />}
+          {activeTab === 'modelos' && (
+            <>
+              <DocumentTemplateSettingsPanel />
+              <ChecklistTemplateSettingsPanel />
+            </>
+          )}
 
           {activeTab === 'integracoes' && <GoogleCalendarSettingsPanel />}
 
@@ -1339,8 +1350,8 @@ export function Configuracoes() {
                   <button type="button" onClick={() => void exportMaintenanceHistory()} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200"><Export aria-hidden="true" size={16} /> Exportar CSV</button>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div><label htmlFor="history-type" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Tipo de operação</label><select id="history-type" value={historyTypeFilter} onChange={(event) => setHistoryTypeFilter(event.target.value)} className={systemCompactFieldClass}><option value="">Todos os tipos</option><option value="backup_database">Backup do banco</option><option value="backup_complete">Backup completo</option><option value="restore_test">Teste de restauração</option><option value="restore">Restauração real</option><option value="data_migration">Migração de dados</option><option value="operational_reset">Limpeza operacional</option><option value="integrity_check">Verificação</option><option value="diagnostic_export">Diagnóstico</option></select></div>
-                  <div><label htmlFor="history-status" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Resultado</label><select id="history-status" value={historyStatusFilter} onChange={(event) => setHistoryStatusFilter(event.target.value)} className={systemCompactFieldClass}><option value="">Todos os resultados</option><option value="success">Concluído</option><option value="failed">Falhou</option><option value="cancelled">Cancelado</option></select></div>
+                  <div><label htmlFor="history-type" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Tipo de operação</label><FormSelect id="history-type" value={historyTypeFilter} onChange={(event) => setHistoryTypeFilter(event.target.value)} className={systemCompactFieldClass}><option value="">Todos os tipos</option><option value="backup_database">Backup do banco</option><option value="backup_complete">Backup completo</option><option value="restore_test">Teste de restauração</option><option value="restore">Restauração real</option><option value="data_migration">Migração de dados</option><option value="operational_reset">Limpeza operacional</option><option value="integrity_check">Verificação</option><option value="diagnostic_export">Diagnóstico</option></FormSelect></div>
+                  <div><label htmlFor="history-status" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Resultado</label><FormSelect id="history-status" value={historyStatusFilter} onChange={(event) => setHistoryStatusFilter(event.target.value)} className={systemCompactFieldClass}><option value="">Todos os resultados</option><option value="success">Concluído</option><option value="failed">Falhou</option><option value="cancelled">Cancelado</option></FormSelect></div>
                 </div>
                 {historyQuery.isLoading ? <p aria-live="polite" className="py-5 text-center text-sm text-zinc-500">Carregando histórico…</p> : historyQuery.isError ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><span>Não foi possível consultar o histórico.</span><button type="button" onClick={() => void historyQuery.refetch()} className="min-h-10 rounded-xl border border-red-300 px-3 font-semibold focus-visible:ring-2 focus-visible:ring-red-500/40">Tentar novamente</button></div> : historyQuery.data?.items.length ? (
                   <div
@@ -1405,9 +1416,9 @@ export function Configuracoes() {
                 type="text"
                 autoComplete="off"
                 value={resetInputText}
-                onChange={e => setResetInputText(e.target.value.toUpperCase())}
+                onChange={e => setResetInputText(e.target.value)}
                 placeholder="Digite APAGAR DADOS DO GEOGESTOR"
-                className="w-full h-10 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl px-3 text-xs font-bold text-zinc-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-red-500"
+                className="w-full h-10 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 rounded-xl px-3 text-xs font-bold text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
               />
             </div>
 
@@ -1421,7 +1432,7 @@ export function Configuracoes() {
               </button>
               <button
                 type="button"
-                disabled={resetInputText.trim().toUpperCase() !== 'APAGAR DADOS DO GEOGESTOR' || resetting}
+                disabled={resetInputText !== 'APAGAR DADOS DO GEOGESTOR' || resetting}
                 onClick={handleResetSistema}
                 className="h-9 px-5 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:pointer-events-none text-white font-bold text-xs rounded-xl shadow-sm transition-[background-color,opacity] flex items-center gap-2"
               >
@@ -1502,7 +1513,7 @@ export function Configuracoes() {
                 id="restore-confirmation"
                 type="text"
                 value={restoreInputText}
-                onChange={(event) => setRestoreInputText(event.target.value.toUpperCase())}
+                onChange={(event) => setRestoreInputText(event.target.value)}
                 disabled={!restoreTestResult || restoring}
                 autoComplete="off"
                 placeholder="Digite a frase de confirmação"
@@ -1514,7 +1525,7 @@ export function Configuracoes() {
               <button
                 type="button"
                 onClick={handleRestoreBackup}
-                disabled={restoring || testingRestore || !restorePreview?.canProceed || !restoreTestResult || restoreInputText.trim().toUpperCase() !== 'RESTAURAR BACKUP DO GEOGESTOR'}
+                disabled={restoring || testingRestore || !restorePreview?.canProceed || !restoreTestResult || restoreInputText !== 'RESTAURAR BACKUP DO GEOGESTOR'}
                 className="h-9 rounded-xl bg-amber-600 px-5 text-xs font-bold text-white hover:bg-amber-700 disabled:pointer-events-none disabled:opacity-40"
               >
                 {restoring ? 'Restaurando…' : 'Restaurar de verdade'}

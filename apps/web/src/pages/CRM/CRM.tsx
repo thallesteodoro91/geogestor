@@ -1,4 +1,4 @@
-import { AddressBook, ArrowCounterClockwise, ArrowsLeftRight, CalendarBlank, CalendarCheck, CaretLeft, CaretRight, Check, ClockCountdown, ClockCounterClockwise, CurrencyDollar, Eye, FileText, Funnel, Handshake, MagnifyingGlass, PencilSimple, Plus, Target, Trash, TrendUp, WarningCircle, X
+import { AddressBook, ArrowCounterClockwise, ArrowsLeftRight, CalendarBlank, CalendarCheck, CaretLeft, CaretRight, Check, ClockCountdown, ClockCounterClockwise, CurrencyDollar, DotsSixVertical, Eye, FileText, Funnel, Handshake, MagnifyingGlass, PencilSimple, Plus, Target, Trash, TrendUp, WarningCircle, X
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
@@ -28,6 +28,7 @@ import {
 import { commercialContentClass } from '../../utils/commercialLayout';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
 import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
+import { useDebounce } from '../../hooks/useDebounce';
 
 type CRMOptions = {
   clients: Array<{ id: string; name: string }>;
@@ -313,6 +314,7 @@ export function CRM() {
   const [formError, setFormError] = useState('');
   const [formErrors, setFormErrors] = useState<OpportunityFormErrors>({});
   const [subjectSearch, setSubjectSearch] = useState('');
+  const debouncedSubjectSearch = useDebounce(subjectSearch, 250);
   const [deleteTarget, setDeleteTarget] = useState<OpportunityListItem | null>(null);
   const [pendingOutcome, setPendingOutcome] = useState<{ opportunity: OpportunityListItem; stage: 'Ganho' | 'Perdido' } | null>(null);
   const [outcomeReason, setOutcomeReason] = useState('');
@@ -325,8 +327,16 @@ export function CRM() {
     queryFn: () => apiClient.get('/api/oportunidades')
   });
   const optionsQuery = useQuery<CRMOptions>({
-    queryKey: ['opportunity-options'],
-    queryFn: () => apiClient.get('/api/oportunidades/options')
+    queryKey: ['opportunity-options', debouncedSubjectSearch, form.clienteId, form.orcamentoId],
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: '50' });
+      if (debouncedSubjectSearch.trim()) params.set('q', debouncedSubjectSearch.trim());
+      if (form.clienteId) params.set('clientId', form.clienteId);
+      if (form.orcamentoId) params.set('selectedBudgetId', form.orcamentoId);
+      return apiClient.get(`/api/oportunidades/options?${params}`);
+    },
+    enabled: showModal,
+    staleTime: 30_000
   });
   const analyticsQuery = useQuery<OpportunityAnalytics>({
     queryKey: ['opportunity-analytics'],
@@ -747,7 +757,7 @@ export function CRM() {
       <div className="min-w-0 space-y-8">
         <CRMPageHeader
           description="Acompanhe próximas ações, propostas, probabilidade de fechamento e conversões em projetos."
-          action={<button type="button" onClick={openCreate} disabled={!options.clients.length && !options.leads.length} className={cn(headerPrimaryActionButtonClass, 'w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto')}><span>Nova oportunidade</span><span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span></button>}
+          action={<button type="button" onClick={openCreate} className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}><span>Nova oportunidade</span><span aria-hidden="true" className={headerPrimaryActionIconClass}><Plus size={15} weight="bold" /></span></button>}
         />
         <div className="min-w-0 space-y-3">
           <div className="min-w-0 2xl:flex 2xl:items-start 2xl:gap-4">
@@ -806,7 +816,7 @@ export function CRM() {
           <div>
             <div className="mb-3 flex items-center justify-end gap-2 text-xs text-text-muted min-[1440px]:hidden"><ArrowsLeftRight aria-hidden="true" size={15} />Role horizontalmente para navegar entre todas as etapas</div>
             <div className="relative">
-            <div className="snap-x snap-proximity overflow-x-auto pb-5 pr-8 overscroll-x-contain min-[1440px]:overflow-x-visible min-[1440px]:pr-0" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(148, 163, 184, 0.35) transparent' }} aria-label="Etapas do funil com rolagem horizontal">
+            <div className="geo-focus-ring snap-x snap-proximity overflow-x-auto rounded-xl pb-5 pr-8 overscroll-x-contain min-[1440px]:overflow-x-visible min-[1440px]:pr-0" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(148, 163, 184, 0.35) transparent' }} aria-label="Etapas do funil com rolagem horizontal" tabIndex={0}>
               <DragDropContext onDragEnd={handleDragEnd}>
                 <div className="flex min-w-max items-start gap-5 min-[1440px]:w-full min-[1440px]:min-w-0 min-[1440px]:gap-3">
                   {OPPORTUNITY_STAGES.map((stage) => {
@@ -826,10 +836,13 @@ export function CRM() {
                                 return (
                                   <Draggable key={opportunity.id} draggableId={opportunity.id} index={index} isDragDisabled={boardFiltered}>
                                     {(dragProvided, dragSnapshot) => (
-                                      <article ref={dragProvided.innerRef} {...dragProvided.draggableProps} {...dragProvided.dragHandleProps} style={dragProvided.draggableProps.style} className={cn('group mb-3 min-w-0 rounded-xl border border-brand-border bg-brand-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-150 min-[1440px]:p-3', !boardFiltered && 'hover:-translate-y-0.5 hover:shadow-md', dragSnapshot.isDragging && 'rotate-1 border-brand-primary-400 shadow-xl')}>
+                                      <article ref={dragProvided.innerRef} {...dragProvided.draggableProps} style={dragProvided.draggableProps.style} className={cn('group mb-3 min-w-0 rounded-xl border border-brand-border bg-brand-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-150 min-[1440px]:p-3', !boardFiltered && 'hover:-translate-y-0.5 hover:shadow-md', dragSnapshot.isDragging && 'rotate-1 border-brand-primary-400 shadow-xl')}>
                                         <div className="flex items-start justify-between gap-3">
                                           <span className="min-w-0 truncate rounded-full bg-brand-surface-subtle px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-text-secondary" title={`${opportunity.vinculoTipo === 'lead' ? 'Lead' : 'Cliente'}: ${opportunity.clienteNome}`}>{opportunity.vinculoTipo === 'lead' ? 'Lead · ' : ''}{opportunity.clienteNome}</span>
-                                          <span className="shrink-0 font-mono text-[11px] font-bold tabular-nums text-brand-primary-700 dark:text-brand-primary-200">{formatPercentage(opportunity.probabilidadePontosBase)}</span>
+                                          <div className="flex shrink-0 items-center gap-1">
+                                            <span className="font-mono text-[11px] font-bold tabular-nums text-brand-primary-700 dark:text-brand-primary-200">{formatPercentage(opportunity.probabilidadePontosBase)}</span>
+                                            <button type="button" {...dragProvided.dragHandleProps} disabled={boardFiltered} aria-label={`Arrastar ${opportunity.titulo}`} title={boardFiltered ? 'Limpe os filtros para reordenar' : 'Arrastar oportunidade'} className="geo-focus-ring rounded-md p-1 text-text-muted hover:bg-brand-surface-subtle hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40"><DotsSixVertical aria-hidden="true" size={16} weight="bold" /></button>
+                                          </div>
                                         </div>
                                         <h3 className="mt-3 line-clamp-2 text-sm font-semibold leading-5 text-text-primary">{opportunity.titulo}</h3>
                                         {opportunity.servicoTipo && <p className="mt-1 truncate text-xs text-text-muted" title={opportunity.servicoTipo}>{opportunity.servicoTipo}</p>}
@@ -837,7 +850,7 @@ export function CRM() {
                                           <span className="font-mono text-xs font-bold tabular-nums text-text-secondary">{formatCurrency(opportunity.valorEstimado)}</span>
                                           {(overdue || stale) && <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', overdue ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-100')}>{overdue ? 'Ação vencida' : 'Parada'}</span>}
                                         </div>
-                                        {opportunity.proximaAcao && <div className="mt-3 rounded-lg bg-brand-surface-subtle p-2.5"><p className="line-clamp-2 text-xs font-medium text-text-secondary">{opportunity.proximaAcao}</p><p className={cn('mt-1 text-[10px]', overdue ? 'font-bold text-rose-600 dark:text-rose-300' : 'text-text-muted')}>{formatDate(opportunity.proximaAcaoEm)}</p></div>}
+                                        {opportunity.proximaAcao && <div className="mt-3 rounded-lg bg-brand-surface-subtle p-2.5"><p className="line-clamp-2 text-xs font-medium text-text-secondary">{opportunity.proximaAcao}</p><p className={cn('mt-1 text-[10px]', overdue ? 'font-bold text-rose-700 dark:text-rose-300' : 'text-text-muted')}>{formatDate(opportunity.proximaAcaoEm)}</p></div>}
                                         {!isActiveOpportunityStage(opportunity.estagio) && <div className={cn('mt-3 rounded-lg border p-2.5', opportunity.estagio === 'Ganho' ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-400/20 dark:bg-emerald-500/[0.07]' : 'border-rose-200 bg-rose-50/60 dark:border-rose-400/20 dark:bg-rose-500/[0.07]')}>
                                           <p className={cn('flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide', opportunity.estagio === 'Ganho' ? 'text-emerald-700 dark:text-emerald-200' : 'text-rose-700 dark:text-rose-200')}>{opportunity.estagio === 'Ganho' ? <Check aria-hidden="true" size={13} /> : <X aria-hidden="true" size={13} />}Encerrada em {formatDate(opportunity.encerradoEm)}</p>
                                           {opportunity.estagio === 'Perdido' && <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-text-secondary" title={opportunity.motivoPerda || 'Motivo não informado'}>{opportunity.motivoPerda || 'Motivo não informado'}</p>}
@@ -985,7 +998,7 @@ export function CRM() {
       <Modal isOpen={Boolean(historyTarget)} onClose={() => setHistoryTarget(null)} title="Histórico da oportunidade" maxWidth="max-w-2xl">
         <div className="space-y-5">
           <div className="rounded-xl border border-brand-border bg-brand-surface-subtle p-4">
-            <p className="text-xs font-bold uppercase tracking-wide text-text-muted">{historyTarget?.clienteNome}</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-200">{historyTarget?.clienteNome}</p>
             <h3 className="mt-1 text-base font-semibold text-text-primary">{historyTarget?.titulo}</h3>
           </div>
           {historyQuery.isLoading ? (
@@ -998,8 +1011,8 @@ export function CRM() {
                 <li key={item.id} className="relative rounded-xl border border-brand-border bg-brand-surface p-4 pl-12">
                   <span className="absolute left-4 top-4 flex h-6 w-6 items-center justify-center rounded-full bg-brand-surface-subtle text-brand-primary-700 ring-1 ring-brand-border dark:text-brand-primary-200"><ClockCounterClockwise aria-hidden="true" size={14} /></span>
                   <p className="text-sm font-semibold text-text-primary">{item.estagioAnterior ? `${item.estagioAnterior} → ${item.estagioNovo}` : `Oportunidade criada em ${item.estagioNovo}`}</p>
-                  {item.motivo && <p className="mt-1 break-words text-sm leading-6 text-text-secondary">{item.motivo}</p>}
-                  <p className="mt-2 text-xs text-text-muted">{formatDateTime(item.createdAt)}</p>
+                  {item.motivo && <p className="mt-1 break-words text-sm leading-6 text-zinc-800 dark:text-zinc-100">{item.motivo}</p>}
+                  <p className="mt-2 text-xs text-zinc-700 dark:text-zinc-300">{formatDateTime(item.createdAt)}</p>
                 </li>
               ))}
               {!historyQuery.data?.history.length && <li className="rounded-xl border border-dashed border-brand-border p-6 text-center text-sm text-text-muted">Nenhuma alteração de etapa registrada.</li>}

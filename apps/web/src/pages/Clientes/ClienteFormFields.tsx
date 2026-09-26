@@ -185,7 +185,7 @@ function PersonTypeOption({ value, label, description, icon, checked, onChange }
         </span>
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-bold">{label}</span>
-          <span className="block text-xs text-zinc-500 dark:text-zinc-400">{description}</span>
+          <span className="block text-xs text-zinc-600 dark:text-zinc-400">{description}</span>
         </span>
         <CheckCircle aria-hidden="true" weight={checked ? 'fill' : 'regular'} className={cn('h-5 w-5 shrink-0', checked ? 'text-indigo-600 dark:text-indigo-300' : 'text-zinc-300 dark:text-zinc-600')} />
       </span>

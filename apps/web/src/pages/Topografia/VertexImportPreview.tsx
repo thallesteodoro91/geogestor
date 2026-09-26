@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import { Modal } from '../../components/Modal';
+import { FormSelect } from '../../components/Form';
 import { analyzeVertexImport, type DecimalSeparator, type ImportDelimiter } from '../../core/topographyImport';
 import { validateGeographicPositions, validateProjectedPositions, type CoordinateMode, type GeographicPosition, type ProjectedPosition, type SpatialReference } from '../../core/topographySpatial';
 
@@ -48,15 +49,15 @@ export function VertexImportPreview({ open, text, fileName, mode, reference, onC
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <label className="text-xs font-semibold">Delimitador<select value={delimiter} onChange={(event) => { setDelimiter(event.target.value as ImportDelimiter); setFirstColumn(undefined); setSecondColumn(undefined); }} className={`${fieldClass} mt-1.5`}><option value="auto">Detectar</option><option value=";">Ponto e vírgula</option><option value=",">Vírgula</option><option value="\t">Tabulação</option></select></label>
-          <label className="text-xs font-semibold">Separador decimal<select value={decimalSeparator} onChange={(event) => setDecimalSeparator(event.target.value as DecimalSeparator)} className={`${fieldClass} mt-1.5`}><option value="auto">Detectar</option><option value=",">Vírgula</option><option value=".">Ponto</option></select></label>
+          <label className="text-xs font-semibold">Delimitador<FormSelect aria-label="Delimitador" value={delimiter} onChange={(event) => { setDelimiter(event.target.value as ImportDelimiter); setFirstColumn(undefined); setSecondColumn(undefined); }} className={`${fieldClass} mt-1.5`}><option value="auto">Detectar</option><option value=";">Ponto e vírgula</option><option value=",">Vírgula</option><option value="\t">Tabulação</option></FormSelect></label>
+          <label className="text-xs font-semibold">Separador decimal<FormSelect aria-label="Separador decimal" value={decimalSeparator} onChange={(event) => setDecimalSeparator(event.target.value as DecimalSeparator)} className={`${fieldClass} mt-1.5`}><option value="auto">Detectar</option><option value=",">Vírgula</option><option value=".">Ponto</option></FormSelect></label>
           <label className="flex min-h-10 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold sm:mt-[22px] dark:border-zinc-700"><input type="checkbox" checked={hasHeader} onChange={(event) => { setHasHeader(event.target.checked); setFirstColumn(undefined); setSecondColumn(undefined); }} />Primeira linha é cabeçalho</label>
-          <label className="text-xs font-semibold">{mode === 'geografica' ? 'Coluna latitude' : 'Coluna X / Este'}<select value={firstColumn ?? data?.firstCoordinateColumn ?? 0} onChange={(event) => setFirstColumn(Number(event.target.value))} className={`${fieldClass} mt-1.5`}>{data?.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{header}</option>)}</select></label>
-          <label className="text-xs font-semibold">{mode === 'geografica' ? 'Coluna longitude' : 'Coluna Y / Norte'}<select value={secondColumn ?? data?.secondCoordinateColumn ?? 1} onChange={(event) => setSecondColumn(Number(event.target.value))} className={`${fieldClass} mt-1.5`}>{data?.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{header}</option>)}</select></label>
+          <label className="text-xs font-semibold">{mode === 'geografica' ? 'Coluna latitude' : 'Coluna X / Este'}<FormSelect aria-label={mode === 'geografica' ? 'Coluna latitude' : 'Coluna X ou Este'} value={firstColumn ?? data?.firstCoordinateColumn ?? 0} onChange={(event) => setFirstColumn(Number(event.target.value))} className={`${fieldClass} mt-1.5`}>{data?.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{header}</option>)}</FormSelect></label>
+          <label className="text-xs font-semibold">{mode === 'geografica' ? 'Coluna longitude' : 'Coluna Y / Norte'}<FormSelect aria-label={mode === 'geografica' ? 'Coluna longitude' : 'Coluna Y ou Norte'} value={secondColumn ?? data?.secondCoordinateColumn ?? 1} onChange={(event) => setSecondColumn(Number(event.target.value))} className={`${fieldClass} mt-1.5`}>{data?.headers.map((header, index) => <option key={`${header}-${index}`} value={index}>{header}</option>)}</FormSelect></label>
         </div>
 
         {preview.error && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">{preview.error}</p>}
-        {spatialIssues.length > 0 && <ul role="alert" className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{spatialIssues.map((issue) => <li key={`${issue.code}-${issue.message}`}><strong>{issue.message}</strong> {issue.fix}</li>)}</ul>}
+        {spatialIssues.length > 0 && <ul aria-live="assertive" className="space-y-1 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{spatialIssues.map((issue) => <li key={`${issue.code}-${issue.message}`}><strong>{issue.message}</strong> {issue.fix}</li>)}</ul>}
         {data && (
           <>
             <div className="max-h-64 overflow-auto rounded-xl border border-zinc-200 dark:border-zinc-800">

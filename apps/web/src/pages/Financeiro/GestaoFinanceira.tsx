@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
@@ -66,6 +66,7 @@ function PageFrame({ embedded, children }: { embedded: boolean; children: ReactN
 }
 
 type AuxiliaryTab = 'viagens' | 'fiscal' | 'diagnostico';
+const auxiliaryTabIds: AuxiliaryTab[] = ['viagens', 'fiscal', 'diagnostico'];
 
 export function GestaoFinanceira({
   embedded = false,
@@ -149,6 +150,20 @@ export function GestaoFinanceira({
     }
   });
 
+  const handleAuxiliaryTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, current: AuxiliaryTab) => {
+    let nextIndex: number | null = null;
+    const currentIndex = auxiliaryTabIds.indexOf(current);
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % auxiliaryTabIds.length;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + auxiliaryTabIds.length) % auxiliaryTabIds.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = auxiliaryTabIds.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = auxiliaryTabIds[nextIndex];
+    setActiveTab(nextTab);
+    document.getElementById(`auxiliary-tab-${nextTab}`)?.focus();
+  };
+
   return (
     <PageFrame embedded={embedded}>
       <div className={embedded ? 'mb-8' : 'mb-10'}>
@@ -167,9 +182,13 @@ export function GestaoFinanceira({
         ] as const).map(([id, label]) => (
           <button
             key={id}
+            id={`auxiliary-tab-${id}`}
             type="button"
             role="tab"
             aria-selected={activeTab === id}
+            aria-controls={`auxiliary-panel-${id}`}
+            tabIndex={activeTab === id ? 0 : -1}
+            onKeyDown={(event) => handleAuxiliaryTabKeyDown(event, id)}
             onClick={() => setActiveTab(id)}
             className={`min-h-10 rounded-xl px-4 text-sm font-semibold focus-visible:ring-2 focus-visible:ring-emerald-500/30 ${
               activeTab === id ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-950' : 'bg-white text-zinc-600 ring-1 ring-zinc-200 hover:text-zinc-950 dark:bg-zinc-900 dark:text-zinc-300 dark:ring-zinc-800'
@@ -181,7 +200,7 @@ export function GestaoFinanceira({
       </div>
 
       {activeTab === 'viagens' && (
-        <section aria-labelledby="travel-heading">
+        <section id="auxiliary-panel-viagens" role="tabpanel" aria-labelledby="auxiliary-tab-viagens" tabIndex={0}>
           <h2 id="travel-heading" className="sr-only">Viagens e prestação de contas</h2>
           {loadingTravels ? <p className="text-sm text-zinc-500">Carregando viagens…</p> : viagens.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
@@ -219,7 +238,7 @@ export function GestaoFinanceira({
       )}
 
       {activeTab === 'fiscal' && (
-        <section aria-labelledby="fiscal-heading">
+        <section id="auxiliary-panel-fiscal" role="tabpanel" aria-labelledby="auxiliary-tab-fiscal" tabIndex={0}>
           <h2 id="fiscal-heading" className="sr-only">Documentos fiscais informados</h2>
           <div className="mb-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-100 dark:ring-amber-500/20">
             O GeoGestor apenas registra os dados informados. Ele não emite NFS-e e não calcula tributos.
@@ -253,7 +272,7 @@ export function GestaoFinanceira({
       )}
 
       {activeTab === 'diagnostico' && (
-        <section aria-labelledby="diagnostic-heading">
+        <section id="auxiliary-panel-diagnostico" role="tabpanel" aria-labelledby="auxiliary-tab-diagnostico" tabIndex={0}>
           <div className="mb-5 flex items-center justify-between gap-4">
             <div><h2 id="diagnostic-heading" className="text-xl font-semibold text-zinc-950 dark:text-white">Integridade dos vínculos</h2><p className="mt-1 text-sm text-zinc-500">O diagnóstico não altera os registros.</p></div>
             <button type="button" onClick={() => refetchDiagnostic()} className="min-h-10 rounded-xl border border-zinc-200 px-3 text-xs font-semibold hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:hover:bg-zinc-800">Executar novamente</button>

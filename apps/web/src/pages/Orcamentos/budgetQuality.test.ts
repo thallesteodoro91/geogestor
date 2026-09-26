@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDefaultBudgetForm, validateBudgetForm } from './budgetForm';
+import { createDefaultBudgetForm, formToPayload, resolveBudgetTerms, validateBudgetForm } from './budgetForm';
 import {
   createProfessionalBudgetPdfDefinition,
+  downloadProfessionalBudgetPdf,
   professionalBudgetPdfFileName
 } from './budgetPdfGenerator';
 import type { BudgetDetail } from './types';
@@ -119,6 +120,32 @@ test('aceita um rascunho profissionalmente completo', () => {
   assert.deepEqual(validateBudgetForm(validForm()), []);
 });
 
+test('usa termos corporativos como snapshot e preserva fallback seguro', () => {
+  const corporateTerms = 'Termos oficiais da SkyGeo para novas propostas.';
+  const created = createDefaultBudgetForm('client-1', corporateTerms);
+  assert.equal(created.terms, corporateTerms);
+  assert.equal(resolveBudgetTerms('   '), createDefaultBudgetForm('client-1').terms);
+
+  const laterTemplateTerms = 'Termos corporativos alterados posteriormente.';
+  assert.equal(created.terms, corporateTerms);
+  assert.notEqual(created.terms, laterTemplateTerms);
+});
+
+test('valida encargos comerciais como percentuais e persiste em pontos-base', () => {
+  const form = validForm();
+  form.interestBasisPoints = '1,25';
+  form.fineBasisPoints = '2';
+  form.earlyDiscountBasisPoints = '0,5';
+  assert.deepEqual(validateBudgetForm(form), []);
+  const payload = formToPayload(form);
+  assert.equal(payload.payment.interestBasisPoints, 125);
+  assert.equal(payload.payment.fineBasisPoints, 200);
+  assert.equal(payload.payment.earlyDiscountBasisPoints, 50);
+
+  form.fineBasisPoints = '100,01';
+  assert.ok(validateBudgetForm(form).some((issue) => issue.fieldId === 'payment-fine'));
+});
+
 test('valida ajustes globais negativos, percentuais e desconto acima da base', () => {
   const negative = validForm();
   negative.globalAdditionType = 'fixo';
@@ -150,7 +177,27 @@ test('permite acréscimo global superior a 100% e valida desconto por item', () 
 
 test('definição do PDF preserva conteúdo longo e não expõe custos ou notas internas', () => {
   const budget = budgetFixture();
-  const definition = createProfessionalBudgetPdfDefinition(budget, { razao: 'SkyGeo', cor: '#0891b2' });
+  budget.descontoGlobalTipo = 'percentual';
+  budget.descontoGlobalValor = '5';
+  budget.acrescimoGlobalTipo = 'fixo';
+  budget.acrescimoGlobalValor = '2000';
+  budget.items[0].discount = { type: 'percentual', value: '10' };
+  budget.items[0].addition = { type: 'fixo', value: '5000' };
+  budget.payment = {
+    ...budget.payment!,
+    paymentMethod: 'PIX',
+    financialAccount: 'CONTA_INTERNA_SIGILOSA',
+    interestBasisPoints: 100,
+    fineBasisPoints: 200,
+    earlyDiscountBasisPoints: 50
+  };
+  const definition = createProfessionalBudgetPdfDefinition(budget, {
+    razao: 'SkyGeo',
+    cor: '#059669',
+    termos: 'Termos alterados depois do snapshot',
+    conselhoProfissional: 'CREA-SC',
+    registroProfissional: '000000-0'
+  });
   const serialized = JSON.stringify(definition);
   assert.equal(definition.pageSize, 'A4');
   assert.match(serialized, /SkyGeo/);
@@ -159,5 +206,76 @@ test('definição do PDF preserva conteúdo longo e não expõe custos ou notas 
   assert.match(serialized, /detalhado detalhado/);
   assert.doesNotMatch(serialized, /SIGILO_INTERNO_NOTAS/);
   assert.doesNotMatch(serialized, /SIGILO_INTERNO_CUSTO/);
+  assert.doesNotMatch(serialized, /CONTA_INTERNA_SIGILOSA/);
+  assert.doesNotMatch(serialized, /Termos alterados depois do snapshot/);
+  assert.match(serialized, /Validade e condições comerciais desta proposta/);
+  assert.match(serialized, /Subtotal faturável/);
+  assert.match(serialized, /Desconto: − R\$\s*100,00/);
+  assert.match(serialized, /Acréscimo: \+ R\$\s*50,00/);
+  assert.match(serialized, /Desconto global/);
+  assert.match(serialized, /Acréscimo global/);
+  assert.match(serialized, /Meio de pagamento: PIX/);
+  assert.match(serialized, /Juros: 1,00%/);
+  assert.match(serialized, /Multa: 2,00%/);
+  assert.match(serialized, /Desconto por antecipação: 0,50%/);
+  assert.match(serialized, /CREA-SC 000000-0/);
   assert.equal(professionalBudgetPdfFileName(budget), 'ORC-2026_001_v2_Cliente_Cao_Filhos.pdf');
+});
+
+test('documento mínimo omite seções e linhas financeiras sem conteúdo', () => {
+  const budget = budgetFixture();
+  budget.descricao = 'Levantamento topográfico';
+  budget.metodologia = null;
+  budget.entregaveis = null;
+  budget.observacoesCliente = null;
+  budget.items = [budget.items[0]];
+  budget.taxes = [];
+  budget.payment = null;
+  budget.valorTotal = 100_000;
+  const serialized = JSON.stringify(createProfessionalBudgetPdfDefinition(budget, { razao: 'SkyGeo', cor: '#4f46e5' }));
+
+  assert.match(serialized, /INVESTIMENTO TOTAL/);
+  assert.match(serialized, /R\$\s*1\.000,00/);
+  assert.doesNotMatch(serialized, /ITENS OPCIONAIS/);
+  assert.doesNotMatch(serialized, /Desconto global/);
+  assert.doesNotMatch(serialized, /Acréscimo global/);
+  assert.doesNotMatch(serialized, /Impostos cobrados por fora/);
+  assert.doesNotMatch(serialized, /Despesas reembolsáveis incluídas/);
+  assert.doesNotMatch(serialized, /Taxas repassadas incluídas/);
+});
+
+test('marca somente estados não aptos para envio e preserva documentos emitidos', () => {
+  const draft = createProfessionalBudgetPdfDefinition({ ...budgetFixture(), status: 'rascunho' }, { cor: '#d97706' });
+  assert.match(JSON.stringify(draft.watermark), /RASCUNHO — NÃO ENVIAR/);
+
+  const issued = createProfessionalBudgetPdfDefinition({ ...budgetFixture(), status: 'emitido' }, { cor: '#d97706' });
+  assert.equal(issued.watermark, undefined);
+
+  const canceled = createProfessionalBudgetPdfDefinition({ ...budgetFixture(), status: 'cancelado' }, { cor: '#d97706' });
+  assert.match(JSON.stringify(canceled.watermark), /CANCELADO/);
+});
+
+test('download da proposta só resolve após a gravação e propaga falha', async () => {
+  let release!: () => void;
+  let completed = false;
+  const pending = new Promise<void>((resolve) => {
+    release = () => {
+      completed = true;
+      resolve();
+    };
+  });
+  const make = { createPdf: () => ({ download: () => pending }) };
+  const operation = downloadProfessionalBudgetPdf(make, { content: [] }, 'proposta.pdf');
+  await Promise.resolve();
+  assert.equal(completed, false);
+  release();
+  await operation;
+  assert.equal(completed, true);
+
+  await assert.rejects(
+    () => downloadProfessionalBudgetPdf({
+      createPdf: () => ({ download: async () => { throw new Error('download bloqueado'); } })
+    }, { content: [] }, 'proposta.pdf'),
+    /download bloqueado/
+  );
 });

@@ -47,7 +47,7 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 13);
+    assert.equal(migration.schemaVersion, 17);
     const clientA = crypto.randomUUID();
     const clientB = crypto.randomUUID();
     const projectA = crypto.randomUUID();
@@ -67,7 +67,8 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
       matricula: '12.345',
       car: 'SC-123',
       areaHa: 42.5,
-      municipio: 'Florianópolis'
+      municipio: 'Florianópolis',
+      uf: 'SC'
     });
     assert.equal(propertyResponse.statusCode, 201, propertyResponse.body);
     const propertyId = propertyResponse.json<{ id: string }>().id;
@@ -75,14 +76,16 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
       clienteId: clientA,
       nome: '  fazenda modelo ',
       matricula: '99.999',
-      municipio: 'Florianópolis'
+      municipio: 'Florianópolis',
+      uf: 'SC'
     });
     assert.equal(duplicateProperty.statusCode, 409, duplicateProperty.body);
     const duplicateIdentifier = await request('POST', '/api/dados-operacionais/propriedades', {
       clienteId: clientB,
       nome: 'Outra Fazenda',
       matricula: '12 345',
-      municipio: 'Palhoça'
+      municipio: 'Palhoça',
+      uf: 'SC'
     });
     assert.equal(duplicateIdentifier.statusCode, 409, duplicateIdentifier.body);
     const propertyList = await request('GET', `/api/dados-operacionais/propriedades?clienteId=${clientA}`);

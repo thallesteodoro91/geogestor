@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { and, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte } from 'drizzle-orm';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import {
@@ -26,6 +26,41 @@ export interface DeadlineSource {
   title: string;
   description: string;
   link: string;
+}
+
+export type DeadlineAlertStatusFilter = 'all' | 'unread' | 'read';
+export type DeadlineAlertPeriodFilter = 'all' | 'overdue' | 'today' | '7' | '30';
+
+export interface DeadlineAlertSummaryResponse {
+  summary: {
+    activeTotal: number;
+    unreadTotal: number;
+    byCategory: Record<string, number>;
+    bySeverity: Record<string, number>;
+  };
+  preview: DeadlineAlert[];
+  settings: AlertSettings;
+  generatedAt: string;
+}
+
+export interface DeadlineAlertPageResponse extends DeadlineAlertResponse {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  unreadTotal: number;
+}
+
+type DeadlineAlertCacheEntry = {
+  today: string;
+  expiresAt: number;
+  promise: Promise<DeadlineAlertResponse>;
+};
+
+let deadlineAlertCache: DeadlineAlertCacheEntry | null = null;
+
+export function invalidateDeadlineAlertCache() {
+  deadlineAlertCache = null;
 }
 
 function normalize(value?: string | null) {
@@ -194,6 +229,7 @@ export async function saveAlertSettings(settings: AlertSettings) {
       });
     }
   });
+  invalidateDeadlineAlertCache();
   return getAlertSettings();
 }
 
@@ -221,7 +257,8 @@ async function loadDeadlineSources(maxDates: Record<AlertCategory, string>): Pro
     }).from(schema.tarefas)
       .leftJoin(schema.projetos, eq(schema.tarefas.projetoId, schema.projetos.id))
       .leftJoin(schema.clientes, eq(schema.tarefas.clienteId, schema.clientes.id))
-      .where(and(isNull(schema.tarefas.deletedAt), lte(schema.tarefas.dataLimite, maxDates.task))).limit(500),
+      .where(and(isNull(schema.tarefas.deletedAt), lte(schema.tarefas.dataLimite, maxDates.task)))
+      .orderBy(asc(schema.tarefas.dataLimite), asc(schema.tarefas.id)),
     db.select({
       id: schema.parcelas.id, number: schema.parcelas.numero, amount: schema.parcelas.valor,
       paidAmount: schema.parcelas.valorPago, status: schema.parcelas.statusPagamento,
@@ -254,7 +291,11 @@ async function loadDeadlineSources(maxDates: Record<AlertCategory, string>): Pro
     }).from(schema.licencas)
       .leftJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
       .leftJoin(schema.clientes, eq(schema.licencas.clienteId, schema.clientes.id))
-      .where(and(isNull(schema.licencas.deletedAt), lte(schema.licencas.dataVencimento, maxDates.license))).limit(500),
+      .where(and(
+        isNull(schema.licencas.deletedAt),
+        isNull(schema.projetos.deletedAt),
+        lte(schema.licencas.dataVencimento, maxDates.license)
+      )).limit(500),
     db.select({
       id: schema.condicionantesAmbientais.id, title: schema.condicionantesAmbientais.titulo,
       status: schema.condicionantesAmbientais.status, dueDate: schema.condicionantesAmbientais.dataLimite,
@@ -263,7 +304,12 @@ async function loadDeadlineSources(maxDates: Record<AlertCategory, string>): Pro
     }).from(schema.condicionantesAmbientais)
       .innerJoin(schema.licencas, eq(schema.condicionantesAmbientais.licencaId, schema.licencas.id))
       .leftJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
-      .where(and(isNull(schema.condicionantesAmbientais.deletedAt), lte(schema.condicionantesAmbientais.dataLimite, maxDates.condition))).limit(500),
+      .where(and(
+        isNull(schema.condicionantesAmbientais.deletedAt),
+        isNull(schema.licencas.deletedAt),
+        isNull(schema.projetos.deletedAt),
+        lte(schema.condicionantesAmbientais.dataLimite, maxDates.condition)
+      )).limit(500),
     db.select({
       id: schema.compromissos.id, title: schema.compromissos.titulo, dueDate: schema.compromissos.data,
       projectId: schema.compromissos.projetoId, clientName: schema.clientes.nome
@@ -307,7 +353,7 @@ async function loadDeadlineSources(maxDates: Record<AlertCategory, string>): Pro
     sources.push({ category: 'budget', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: item.code || item.description || 'Orçamento', description: item.clientName ? `Validade da proposta para ${item.clientName}` : 'Validade da proposta comercial', link: appLinks.budgetEdit(item.id) });
   }
   for (const item of licenses) {
-    if (!item.dueDate || ['cancelada', 'arquivada'].includes(normalize(item.status))) continue;
+    if (!item.dueDate || ['cancelada', 'arquivada', 'encerrada'].includes(normalize(item.status))) continue;
     sources.push({ category: 'license', sourceId: item.id, dueDate: item.dueDate.slice(0, 10), title: `Licença ${item.number}`, description: item.projectName || item.clientName || 'Licença ambiental', link: appLinks.license(item.id) });
   }
   for (const item of conditions) {
@@ -334,7 +380,7 @@ async function occurrenceRows(keys: string[]) {
   return rows;
 }
 
-export async function listDeadlineAlerts(today = saoPauloDateKey()): Promise<DeadlineAlertResponse> {
+async function buildDeadlineAlerts(today: string): Promise<DeadlineAlertResponse> {
   const settings = await getAlertSettings();
   if (!settings.enabled) return { items: [], settings, generatedAt: new Date().toISOString() };
   const configByCategory = new Map(settings.categories.map((item) => [item.category, item]));
@@ -349,16 +395,20 @@ export async function listDeadlineAlerts(today = saoPauloDateKey()): Promise<Dea
     return [{ source, cycle, occurrenceKey, daysUntilDue: civilDaysBetween(today, source.dueDate) }];
   });
 
-  for (const item of scheduled) {
-    await db.insert(schema.alertaOcorrencias).values({
-      id: crypto.randomUUID(),
-      chaveOcorrencia: item.occurrenceKey,
-      categoria: item.source.category,
-      origemId: item.source.sourceId,
-      dataVencimento: item.source.dueDate,
-      ciclo: item.cycle
-    }).onConflictDoNothing();
-  }
+  await db.transaction(async (tx) => {
+    for (let index = 0; index < scheduled.length; index += 100) {
+      const batch = scheduled.slice(index, index + 100);
+      if (!batch.length) continue;
+      await tx.insert(schema.alertaOcorrencias).values(batch.map((item) => ({
+        id: crypto.randomUUID(),
+        chaveOcorrencia: item.occurrenceKey,
+        categoria: item.source.category,
+        origemId: item.source.sourceId,
+        dataVencimento: item.source.dueDate,
+        ciclo: item.cycle
+      }))).onConflictDoNothing();
+    }
+  });
 
   const states = new Map((await occurrenceRows(scheduled.map((item) => item.occurrenceKey)))
     .map((item) => [item.chaveOcorrencia, item]));
@@ -386,9 +436,77 @@ export async function listDeadlineAlerts(today = saoPauloDateKey()): Promise<Dea
   items.sort((left, right) => {
     const leftGroup = left.daysUntilDue < 0 ? 0 : left.daysUntilDue === 0 ? 1 : 2;
     const rightGroup = right.daysUntilDue < 0 ? 0 : right.daysUntilDue === 0 ? 1 : 2;
-    return leftGroup - rightGroup || left.dueDate.localeCompare(right.dueDate) || left.title.localeCompare(right.title, 'pt-BR');
+    const dateOrder = leftGroup === 0
+      ? right.dueDate.localeCompare(left.dueDate)
+      : left.dueDate.localeCompare(right.dueDate);
+    return leftGroup - rightGroup || dateOrder || left.title.localeCompare(right.title, 'pt-BR');
   });
   return { items, settings, generatedAt: new Date().toISOString() };
+}
+
+export function listDeadlineAlerts(today?: string): Promise<DeadlineAlertResponse> {
+  if (today !== undefined) return buildDeadlineAlerts(today);
+  const currentDay = saoPauloDateKey();
+  const now = Date.now();
+  if (deadlineAlertCache && deadlineAlertCache.today === currentDay && deadlineAlertCache.expiresAt > now) return deadlineAlertCache.promise;
+  const promise = buildDeadlineAlerts(currentDay).catch((error) => {
+    if (deadlineAlertCache?.promise === promise) deadlineAlertCache = null;
+    throw error;
+  });
+  deadlineAlertCache = { today: currentDay, expiresAt: now + 30_000, promise };
+  return promise;
+}
+
+export async function getDeadlineAlertSummary(previewLimit = 5): Promise<DeadlineAlertSummaryResponse> {
+  const response = await listDeadlineAlerts();
+  const byCategory: Record<string, number> = {};
+  const bySeverity: Record<string, number> = {};
+  let unreadTotal = 0;
+  for (const item of response.items) {
+    byCategory[item.category] = (byCategory[item.category] ?? 0) + 1;
+    bySeverity[item.severity] = (bySeverity[item.severity] ?? 0) + 1;
+    if (!item.readAt) unreadTotal += 1;
+  }
+  return {
+    summary: { activeTotal: response.items.length, unreadTotal, byCategory, bySeverity },
+    preview: response.items.slice(0, Math.max(0, previewLimit)),
+    settings: response.settings,
+    generatedAt: response.generatedAt
+  };
+}
+
+export async function listDeadlineAlertsPage(options: {
+  page: number;
+  limit: number;
+  category?: AlertCategory;
+  status: DeadlineAlertStatusFilter;
+  period: DeadlineAlertPeriodFilter;
+}): Promise<DeadlineAlertPageResponse> {
+  const response = await listDeadlineAlerts();
+  const filtered = response.items.filter((item) => {
+    if (options.category && item.category !== options.category) return false;
+    if (options.status === 'unread' && item.readAt) return false;
+    if (options.status === 'read' && !item.readAt) return false;
+    if (options.period === 'overdue' && item.daysUntilDue >= 0) return false;
+    if (options.period === 'today' && item.daysUntilDue !== 0) return false;
+    if ((options.period === '7' || options.period === '30')
+      && (item.daysUntilDue < 0 || item.daysUntilDue > Number(options.period))) return false;
+    return true;
+  });
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / options.limit));
+  const page = Math.min(options.page, totalPages);
+  const offset = (page - 1) * options.limit;
+  return {
+    items: filtered.slice(offset, offset + options.limit),
+    settings: response.settings,
+    generatedAt: response.generatedAt,
+    page,
+    limit: options.limit,
+    total,
+    totalPages,
+    unreadTotal: response.items.reduce((count, item) => count + (item.readAt ? 0 : 1), 0)
+  };
 }
 
 async function updateOccurrences(ids: string[], values: Partial<typeof schema.alertaOcorrencias.$inferInsert>) {
@@ -396,6 +514,7 @@ async function updateOccurrences(ids: string[], values: Partial<typeof schema.al
     await db.update(schema.alertaOcorrencias).set({ ...values, updatedAt: new Date().toISOString() })
       .where(inArray(schema.alertaOcorrencias.id, ids.slice(index, index + 300)));
   }
+  invalidateDeadlineAlertCache();
 }
 
 export const DeadlineAlertStateService = {

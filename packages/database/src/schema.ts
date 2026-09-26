@@ -453,6 +453,7 @@ export const despesas = sqliteTable('despesas', {
   comprovanteDocumentoId: text('comprovante_documento_id'),
   categoria: text('categoria').notNull(), // Combustível, Cartório, Alimentação, Equipamento
   categoriaCodigo: text('categoria_codigo').default('outros').notNull(),
+  subcategoria: text('subcategoria'),
   observacoes: text('observacoes'),
   status: text('status'),
   formaPagamento: text('forma_pagamento'),
@@ -493,6 +494,39 @@ export const tarefas = sqliteTable('tarefas', {
     statusIdx: index('idx_tarefas_status').on(table.status),
   };
 });
+
+export const checklistModelos = sqliteTable('checklist_modelos', {
+  id: text('id').primaryKey(),
+  chave: text('chave').unique(),
+  nome: text('nome').notNull(),
+  descricao: text('descricao'),
+  tipoProjeto: text('tipo_projeto'),
+  ativo: integer('ativo', { mode: 'boolean' }).default(true).notNull(),
+  ...timestamps
+});
+
+export const checklistModeloEtapas = sqliteTable('checklist_modelo_etapas', {
+  id: text('id').primaryKey(),
+  modeloId: text('modelo_id').notNull().references(() => checklistModelos.id),
+  titulo: text('titulo').notNull(),
+  descricao: text('descricao'),
+  prioridade: text('prioridade').default('Média').notNull(),
+  ordem: integer('ordem').default(0).notNull(),
+  ...timestamps
+}, (table) => ({
+  modeloOrdemIdx: index('idx_checklist_modelo_etapas_modelo_ordem').on(table.modeloId, table.ordem)
+}));
+
+export const checklistModeloAplicacoes = sqliteTable('checklist_modelo_aplicacoes', {
+  id: text('id').primaryKey(),
+  modeloId: text('modelo_id').notNull().references(() => checklistModelos.id),
+  projetoId: text('projeto_id').notNull().references(() => projetos.id),
+  tarefasCriadas: integer('tarefas_criadas').default(0).notNull(),
+  tarefasIgnoradas: integer('tarefas_ignoradas').default(0).notNull(),
+  createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull()
+}, (table) => ({
+  projetoIdx: index('idx_checklist_modelo_aplicacoes_projeto').on(table.projetoId, table.createdAt)
+}));
 
 export const compromissos = sqliteTable('compromissos', {
   id: text('id').primaryKey(),
@@ -944,11 +978,16 @@ export const propriedades = sqliteTable('propriedades', {
   id: text('id').primaryKey(),
   clienteId: text('cliente_id').references(() => clientes.id, { onDelete: 'cascade' }).notNull(),
   nome: text('nome').notNull(),
+  nomeNormalizado: text('nome_normalizado'),
   areaHa: real('area_ha'),
   matricula: text('matricula'),
+  matriculaNormalizada: text('matricula_normalizada'),
   car: text('car'),
+  carNormalizado: text('car_normalizado'),
   ccir: text('ccir'),
+  ccirNormalizado: text('ccir_normalizado'),
   itr: text('itr'),
+  itrNormalizado: text('itr_normalizado'),
   cidade: text('cidade'),
   municipio: text('municipio'),
   uf: text('uf'),

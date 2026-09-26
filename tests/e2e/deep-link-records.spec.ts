@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { relativeDate, relativeInstant } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 
@@ -30,7 +31,7 @@ async function navigate(page: Page, target: string) {
   }, target);
 }
 
-test.describe.serial('deep links abrem registros somente uma vez', () => {
+test.describe('deep links abrem registros somente uma vez', () => {
   test.setTimeout(60_000);
 
   test.beforeEach(async ({ page }) => unlock(page));
@@ -64,9 +65,9 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
       orcamentoStatus: null,
       projetoId: null,
       projetoNome: null,
-      estagioAlteradoEm: '2026-08-13T12:00:00.000Z',
-      createdAt: '2026-08-13T12:00:00.000Z',
-      updatedAt: '2026-08-13T12:00:00.000Z'
+      estagioAlteradoEm: relativeInstant(-7),
+      createdAt: relativeInstant(-7),
+      updatedAt: relativeInstant(-7)
     }]));
     await page.route('**/api/oportunidades/options', (route) => json(route, {
       clients: [{ id: 'cliente-alerta', name: 'Cliente do alerta' }], leads: [], budgets: []
@@ -83,7 +84,7 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
 
   test('conta a receber abre o demonstrativo e consome somente a parcela', async ({ page }) => {
     const receivableId = '22222222-2222-4222-8222-222222222222';
-    await page.route('**/api/financeiro/parcelas', (route) => json(route, [{
+    await page.route('**/api/financeiro/parcelas?**', (route) => json(route, { items: [{
       id: receivableId,
       orcamentoId: 'orcamento-alerta',
       orcamentoDescricao: 'Serviço do alerta',
@@ -95,9 +96,10 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
       valor: 250000,
       valorPago: 0,
       recebidoCaixa: 0,
-      dataVencimento: '2026-08-20',
+      dataVencimento: relativeDate(7),
       statusPagamento: 'Pendente'
-    }]));
+    }], page: 1, limit: 25, total: 1, totalPages: 1,
+      summary: { faturamentoTotal: 250000, totalRecebido: 0, totalPendente: 250000, totalAtrasado: 0 } }));
     await page.route('**/api/financeiro/parcelas/*/recebimentos', (route) => json(route, []));
 
     await navigate(page, `/financeiro?tab=faturas&parcela=${receivableId}&origem=alerta`);
@@ -109,7 +111,7 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
 
   test('conta a pagar abre a edição e consome somente a despesa', async ({ page }) => {
     const payableId = '33333333-3333-4333-8333-333333333333';
-    await page.route('**/api/financeiro/despesas', (route) => json(route, [{
+    await page.route('**/api/financeiro/despesas?**', (route) => json(route, { items: [{
       id: payableId,
       projetoId: null,
       viagemId: null,
@@ -117,8 +119,8 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
       fornecedor: 'Posto E2E',
       numeroDocumento: 'NF-1',
       valor: 30000,
-      data: '2026-08-13',
-      dataCompetencia: '2026-08-13',
+      data: relativeDate(-7),
+      dataCompetencia: relativeDate(-7),
       dataPagamento: null,
       categoria: 'Combustível',
       tipoCusto: 'Variável de campo',
@@ -127,7 +129,8 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
       observacoes: null,
       status: 'Pendente',
       formaPagamento: 'Pix'
-    }]));
+    }], page: 1, limit: 25, total: 1, totalPages: 1,
+      summary: { totalPrevisto: 30000, totalPago: 0, totalPendente: 30000, totalAtrasado: 0 } }));
 
     await navigate(page, `/financeiro?tab=pagar&despesa=${payableId}&origem=alerta`);
     await expect(page.getByRole('dialog', { name: 'Editar Despesa' })).toBeVisible();
@@ -146,12 +149,13 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
         descricao: 'Conferir documentos',
         status: 'A Fazer',
         prioridade: 'Alta',
-        dataLimite: '2026-08-20'
+        dataLimite: relativeDate(7)
       }],
       page: 1,
       limit: 100,
       total: 1,
-      totalPages: 1
+      totalPages: 1,
+      statusTotals: { 'A Fazer': 1, 'Em Progresso': 0, 'Concluído': 0, outros: 0 }
     }));
 
     await navigate(page, `/tarefas?tarefaId=${taskId}&origem=alerta`);
@@ -175,30 +179,30 @@ test.describe.serial('deep links abrem registros somente uma vez', () => {
       protocolo: null,
       orgao: 'IMA',
       tipoLicenca: 'LAO',
-      dataEmissao: '2026-01-01',
-      dataVencimento: '2027-01-01',
+      dataEmissao: relativeDate(-90),
+      dataVencimento: relativeDate(275),
       status: 'Válida',
       statusRegistrado: 'Válida',
       observacoes: null,
       condicionantesPendentes: 1,
       condicionantesVencidas: 0,
-      proximaCondicionante: '2026-09-01',
-      createdAt: '2026-01-01T12:00:00.000Z',
-      updatedAt: '2026-08-13T12:00:00.000Z',
+      proximaCondicionante: relativeDate(7),
+      createdAt: relativeInstant(-90),
+      updatedAt: relativeInstant(-7),
       condicionantes: [{
         id: conditionId,
         licencaId: licenseId,
         titulo: 'Enviar relatório semestral',
         descricao: null,
-        dataLimite: '2026-09-01',
+        dataLimite: relativeDate(7),
         periodicidade: 'Semestral',
         responsavel: 'Thalles',
         status: 'Pendente',
         dataCumprimento: null,
         observacoes: null,
         comprovante: null,
-        createdAt: '2026-01-01T12:00:00.000Z',
-        updatedAt: '2026-08-13T12:00:00.000Z'
+        createdAt: relativeInstant(-90),
+        updatedAt: relativeInstant(-7)
       }],
       history: []
     }));

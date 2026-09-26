@@ -1,12 +1,15 @@
 import { toast } from 'sonner';
 import { DatePickerField, FormSelect } from '../../components/Form';
-import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
-import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass } from '@phosphor-icons/react';
-import { matchesSearch } from '../../utils/searchHelpers';
+import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass, Plus } from '@phosphor-icons/react';
 import { cn } from '../../utils/cn';
 import { apiFetch, apiClient } from '../../services/apiClient';
+import type { PaginatedResponse } from '../../services/apiClient';
+import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
+import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import {
   geoGreenLabelClass,
   geoGreenSurfaceClass,
@@ -18,6 +21,7 @@ import {
   geoPurpleSurfaceClass,
   geoPurpleValueClass
 } from '../../utils/geoTheme';
+import { formatDateKey, localDateKey } from '../../utils/localDate';
 
 interface Parcela {
   id: string;
@@ -33,6 +37,10 @@ interface Parcela {
   recebidoCaixa?: number | null;
   dataVencimento: string;
   statusPagamento: string;
+}
+
+interface InstallmentPage extends PaginatedResponse<Parcela> {
+  summary: { faturamentoTotal: number; totalRecebido: number; totalPendente: number; totalAtrasado: number };
 }
 
 interface ReceiptDocument {
@@ -60,21 +68,45 @@ interface Receipt {
   motivoEstorno?: string | null;
 }
 
+interface BudgetOption {
+  id: string;
+  number?: string | null;
+  description: string;
+  status: string;
+  totalCents: number;
+  clientId: string;
+  clientName: string;
+  projectId?: string | null;
+  projectName?: string | null;
+}
+
+interface ProjectContextOption {
+  id: string;
+  nome: string;
+  clienteId: string;
+  clienteNome?: string | null;
+}
+
 function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
   return embedded ? <>{children}</> : <Layout>{children}</Layout>;
 }
 
 export function Faturas({
   embedded = false,
+  openCreateOnMount = false,
+  initialProjectId = '',
+  initialClientId = '',
   focusParcelaId,
   onFocusHandled
 }: {
   embedded?: boolean;
+  openCreateOnMount?: boolean;
+  initialProjectId?: string;
+  initialClientId?: string;
   focusParcelaId?: string;
   onFocusHandled?: () => void;
 }) {
-  const [parcelas, setParcelas] = useState<Parcela[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
   const [selectedFatura, setSelectedFatura] = useState<Parcela | null>(null);
   const [receivingFatura, setReceivingFatura] = useState<Parcela | null>(null);
@@ -84,7 +116,7 @@ export function Faturas({
     multa: '0',
     desconto: '0',
     taxas: '0',
-    dataRecebimento: new Date().toISOString().slice(0, 10),
+    dataRecebimento: localDateKey(),
     meioPagamento: '',
     comprovanteDocumentoId: '',
     observacoes: ''
@@ -94,33 +126,80 @@ export function Faturas({
   const [loadingReceiptHistory, setLoadingReceiptHistory] = useState(false);
   const [reversingReceipt, setReversingReceipt] = useState<Receipt | null>(null);
   const [reversalReason, setReversalReason] = useState('');
-  const [reversalDate, setReversalDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reversalDate, setReversalDate] = useState(localDateKey());
   const [savingReversal, setSavingReversal] = useState(false);
   const [loadingReceiptDocuments, setLoadingReceiptDocuments] = useState(false);
   const [savingReceipt, setSavingReceipt] = useState(false);
   const [search, setSearch] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(openCreateOnMount);
+  const [installmentForm, setInstallmentForm] = useState({
+    orcamentoId: '', valor: '', dataVencimento: localDateKey(), statusPagamento: 'Pendente'
+  });
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
+  const installmentFilterKey = [activeTab, search, dataInicioFilter, dataFimFilter].join('\u001f');
+  const [installmentPagination, setInstallmentPagination] = useState({ filterKey: '', page: 1 });
+  const page = installmentPagination.filterKey === installmentFilterKey ? installmentPagination.page : 1;
   const handledReceivableIdRef = useRef<string | null>(null);
 
-  const fetchDados = () => {
-    Promise.resolve().then(() => {
-      setLoading(true);
-    });
-    apiClient.get<Parcela[]>('/api/financeiro/parcelas')
-      .then(data => {
-        setParcelas(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error(err);
-        setLoading(false);
-      });
-  };
+  const installmentQueryString = useMemo(() => {
+    const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '25', status: activeTab });
+    if (focusParcelaId) {
+      params.set('selectedId', focusParcelaId);
+    } else {
+      if (search.trim()) params.set('q', search.trim());
+      if (dataInicioFilter) params.set('dataInicio', dataInicioFilter);
+      if (dataFimFilter) params.set('dataFim', dataFimFilter);
+    }
+    return params.toString();
+  }, [activeTab, dataFimFilter, dataInicioFilter, focusParcelaId, page, search]);
+  const { data: installmentPage, isLoading: loading, isError: failed, refetch } = useQuery<InstallmentPage>({
+    queryKey: ['parcelas', installmentQueryString],
+    queryFn: () => apiClient.get<InstallmentPage>(`/api/financeiro/parcelas?${installmentQueryString}`),
+    placeholderData: (previous) => previous
+  });
+  const parcelas = useMemo(() => installmentPage?.items ?? [], [installmentPage?.items]);
+  const fetchDados = () => { void refetch(); };
+  const { data: projectContextOptions = [] } = useQuery<ProjectContextOption[]>({
+    queryKey: ['receivable-project-context', initialProjectId],
+    queryFn: () => apiClient.get<ProjectContextOption[]>(`/api/projetos/options?selectedId=${encodeURIComponent(initialProjectId)}&limit=1`),
+    enabled: Boolean(initialProjectId)
+  });
+  const projectContext = projectContextOptions.find((item) => item.id === initialProjectId);
+  const effectiveClientId = projectContext?.clienteId || initialClientId;
+  const budgetQueryString = useMemo(() => {
+    const params = new URLSearchParams({ mode: 'legacy', limit: '100' });
+    if (initialProjectId) params.set('projectId', initialProjectId);
+    else if (effectiveClientId) params.set('clientId', effectiveClientId);
+    return params.toString();
+  }, [effectiveClientId, initialProjectId]);
+  const { data: budgetOptions = [] } = useQuery<BudgetOption[]>({
+    queryKey: ['receivable-budget-options', budgetQueryString],
+    queryFn: () => apiClient.get<BudgetOption[]>(`/api/orcamentos?${budgetQueryString}`),
+    enabled: showCreateModal
+  });
+  const approvedBudgets = budgetOptions.filter((budget) => budget.status === 'aprovado');
+  const selectedBudgetId = installmentForm.orcamentoId || approvedBudgets[0]?.id || '';
 
-  useEffect(() => {
-    fetchDados();
-  }, []);
+  const createInstallmentMutation = useMutation({
+    mutationFn: () => apiClient.post<Parcela>('/api/financeiro/parcelas', {
+      orcamentoId: selectedBudgetId,
+      valor: parseCurrencyToCents(installmentForm.valor),
+      dataVencimento: installmentForm.dataVencimento,
+      statusPagamento: installmentForm.statusPagamento
+    }),
+    onSuccess: async () => {
+      setShowCreateModal(false);
+      setInstallmentForm({ orcamentoId: '', valor: '', dataVencimento: localDateKey(), statusPagamento: 'Pendente' });
+      await Promise.all([
+        invalidateFinancialQueries(queryClient),
+        queryClient.invalidateQueries({ queryKey: ['projeto-contexto-financeiro', initialProjectId] }),
+        queryClient.invalidateQueries({ queryKey: ['cliente-financeiro', effectiveClientId] })
+      ]);
+      toast.success('Parcela configurada. Ela já aparece no projeto e no consolidado do cliente.');
+    },
+    onError: (error: unknown) => toast.error(error instanceof Error ? error.message : 'Não foi possível criar a parcela.')
+  });
 
   const fetchReceiptHistory = useCallback(async (parcelaId: string) => {
     setLoadingReceiptHistory(true);
@@ -173,7 +252,7 @@ export function Faturas({
       multa: '0',
       desconto: '0',
       taxas: '0',
-      dataRecebimento: new Date().toISOString().slice(0, 10),
+      dataRecebimento: localDateKey(),
       meioPagamento: '',
       comprovanteDocumentoId: '',
       observacoes: ''
@@ -256,32 +335,15 @@ export function Faturas({
   const getFaturaStatus = (item: Parcela) => {
     if (item.statusPagamento === 'Pago') return 'Pago';
     if ((item.valorPago || 0) > 0) return 'Parcial';
-    const venc = new Date(item.dataVencimento);
-    const hoje = new Date();
-    hoje.setHours(0,0,0,0);
-    return venc < hoje ? 'Atrasado' : 'Pendente';
+    return item.dataVencimento.slice(0, 10) < localDateKey() ? 'Atrasado' : 'Pendente';
   };
 
   // Calcular estatísticas
-  const faturamentoTotal = parcelas.reduce((acc, curr) => acc + curr.valor, 0);
-  const totalRecebido = parcelas.reduce((acc, curr) => acc + (curr.recebidoCaixa || curr.valorPago || 0), 0);
-  const totalAtrasado = parcelas.filter(p => {
-    return p.statusPagamento !== 'Pago' && new Date(p.dataVencimento) < new Date();
-  }).reduce((acc, curr) => acc + Math.max(0, curr.valor - (curr.valorPago || 0)), 0);
-  const totalPendente = parcelas.filter(p => {
-    return p.statusPagamento !== 'Pago' && new Date(p.dataVencimento) >= new Date();
-  }).reduce((acc, curr) => acc + Math.max(0, curr.valor - (curr.valorPago || 0)), 0);
+  const summary = installmentPage?.summary ?? { faturamentoTotal: 0, totalRecebido: 0, totalPendente: 0, totalAtrasado: 0 };
+  const { faturamentoTotal, totalRecebido, totalPendente, totalAtrasado } = summary;
 
   // Filtrar parcelas
-  const filteredParcelas = parcelas.filter(p => {
-    const status = getFaturaStatus(p);
-    const matchesTab = activeTab === 'pendentes' ? status !== 'Pago' : status === 'Pago';
-    const matchesSearchTerm = matchesSearch(p.clienteNome, search) || 
-                              matchesSearch(p.orcamentoDescricao, search);
-    const matchesStart = !dataInicioFilter || p.dataVencimento >= dataInicioFilter;
-    const matchesEnd = !dataFimFilter || p.dataVencimento <= dataFimFilter;
-    return matchesTab && matchesSearchTerm && matchesStart && matchesEnd;
-  });
+  const filteredParcelas = parcelas;
   const hasInvoiceFilters = Boolean(search || dataInicioFilter || dataFimFilter);
 
   return (
@@ -301,6 +363,20 @@ export function Faturas({
             </p>
           </div>
         </div>}
+
+        <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 p-4 text-sky-950 dark:border-sky-400/20 dark:bg-sky-400/[0.08] dark:text-sky-100 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-bold">Parcelas compartilhadas</p>
+            <p className="mt-1 text-xs leading-relaxed text-sky-800 dark:text-sky-200/80">
+              {initialProjectId
+                ? `Você está configurando cobranças de ${projectContext?.nome || 'um projeto selecionado'} para ${projectContext?.clienteNome || 'o cliente vinculado'}. A parcela será um único registro, visível aqui, no projeto e no cliente.`
+                : 'Cada parcela pertence a um orçamento aprovado e aparece automaticamente no projeto e no cliente vinculados.'}
+            </p>
+          </div>
+          <button type="button" onClick={() => setShowCreateModal(true)} className={secondarySmallActionButtonClass}>
+            <Plus aria-hidden="true" /> Configurar parcela
+          </button>
+        </div>
 
         {/* Stats Bento Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
@@ -329,6 +405,7 @@ export function Faturas({
               <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <input 
                 type="text" 
+                aria-label="Buscar contas a receber"
                 placeholder="Buscar por cliente ou orçamento..."
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -362,7 +439,7 @@ export function Faturas({
             )}
           </div>
           <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-              {filteredParcelas.length} de {parcelas.length} parcela(s) exibidas
+              {filteredParcelas.length} de {installmentPage?.total ?? 0} parcela(s) exibidas
           </p>
         </div>
 
@@ -394,6 +471,12 @@ export function Faturas({
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm">
           {loading ? (
               <p className="text-zinc-500 dark:text-zinc-400 text-sm">Carregando contas a receber…</p>
+          ) : failed ? (
+              <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">
+                <p className="font-semibold">Não foi possível carregar as contas a receber.</p>
+                <p className="mt-1 text-xs">Verifique a conexão e tente novamente.</p>
+                <button type="button" onClick={() => void refetch()} className="mt-3 min-h-10 rounded-xl border border-rose-300 px-3 font-semibold hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:border-rose-500/40 dark:hover:bg-rose-500/20">Tentar novamente</button>
+              </div>
           ) : filteredParcelas.length === 0 ? (
               <p className="text-zinc-400 text-sm">Nenhuma conta a receber encontrada.</p>
           ) : (
@@ -412,7 +495,7 @@ export function Faturas({
                         }`}>
                           {status}
                         </span>
-                        <span className="text-xs text-zinc-400">Vencimento: {new Date(item.dataVencimento).toLocaleDateString()}</span>
+                        <span className="text-xs text-zinc-400">Vencimento: {formatDateKey(item.dataVencimento)}</span>
                       </div>
                       <p className="font-semibold text-zinc-950 dark:text-white truncate">{item.clienteNome}</p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{item.orcamentoDescricao || 'Sem descrição do orçamento'}</p>
@@ -451,8 +534,53 @@ export function Faturas({
               })}
             </div>
           )}
+          {(installmentPage?.totalPages ?? 1) > 1 && (
+            <nav aria-label="Paginação de contas a receber" className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-4 text-xs dark:border-zinc-800">
+              <button type="button" disabled={page <= 1} onClick={() => setInstallmentPagination({ filterKey: installmentFilterKey, page: Math.max(1, page - 1) })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+              <span className="font-mono tabular-nums">Página {page} de {installmentPage?.totalPages}</span>
+              <button type="button" disabled={page >= (installmentPage?.totalPages ?? 1)} onClick={() => setInstallmentPagination({ filterKey: installmentFilterKey, page: page + 1 })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima</button>
+            </nav>
+          )}
         </div>
       </div>
+
+      <Modal isOpen={showCreateModal} onClose={() => { if (!createInstallmentMutation.isPending) setShowCreateModal(false); }} closeDisabled={createInstallmentMutation.isPending} title="Configurar conta a receber" maxWidth="max-w-xl" initialFocusId="installment-budget">
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (!selectedBudgetId) { toast.error('Selecione um orçamento aprovado.'); return; }
+          if (parseCurrencyToCents(installmentForm.valor) <= 0) { toast.error('Informe um valor maior que zero.'); return; }
+          createInstallmentMutation.mutate();
+        }} className="space-y-5">
+          {initialProjectId && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-900 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-100">
+              <strong>Contexto predefinido:</strong> {projectContext?.clienteNome || 'Cliente vinculado'} → {projectContext?.nome || 'Projeto selecionado'}. Para evitar vínculos incorretos, somente orçamentos aprovados deste contexto são exibidos.
+            </div>
+          )}
+          <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200" htmlFor="installment-budget">Orçamento aprovado *
+            <FormSelect id="installment-budget" name="orcamentoId" required value={selectedBudgetId} onChange={(event) => setInstallmentForm({ ...installmentForm, orcamentoId: event.target.value })} className="mt-1.5 w-full">
+              <option value="">Selecione…</option>
+              {approvedBudgets.map((budget) => <option key={budget.id} value={budget.id}>{budget.number || 'Sem número'} · {budget.description} · {formatCurrency(budget.totalCents)}</option>)}
+            </FormSelect>
+          </label>
+          {approvedBudgets.length === 0 && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">Nenhum orçamento aprovado foi encontrado neste contexto. Aprove um orçamento antes de criar parcelas.</p>}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-200" htmlFor="installment-value">Valor (R$) *
+              <input id="installment-value" name="valor" required inputMode="decimal" autoComplete="off" value={installmentForm.valor} onChange={(event) => setInstallmentForm({ ...installmentForm, valor: event.target.value })} placeholder="0,00" className="geo-field mt-1.5 w-full tabular-nums" />
+            </label>
+            <label className="text-sm font-semibold text-zinc-700 dark:text-zinc-200" htmlFor="installment-due-date">Vencimento *
+              <DatePickerField id="installment-due-date" name="dataVencimento" required autoComplete="off" value={installmentForm.dataVencimento} onChange={(event) => setInstallmentForm({ ...installmentForm, dataVencimento: event.target.value })} className="mt-1.5 w-full" />
+            </label>
+          </div>
+          <label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-200" htmlFor="installment-status">Situação inicial
+            <FormSelect id="installment-status" name="statusPagamento" value={installmentForm.statusPagamento} onChange={(event) => setInstallmentForm({ ...installmentForm, statusPagamento: event.target.value })} className="mt-1.5 w-full"><option value="Pendente">Pendente</option><option value="Pago">Pago</option></FormSelect>
+          </label>
+          <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">O sistema bloqueia uma segunda parcela do mesmo orçamento quando valor e vencimento forem idênticos.</p>
+          <div className="flex flex-wrap justify-end gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+            <button type="button" onClick={() => setShowCreateModal(false)} disabled={createInstallmentMutation.isPending} className={secondarySmallActionButtonClass}>Cancelar</button>
+            <button type="submit" disabled={createInstallmentMutation.isPending || approvedBudgets.length === 0} className={primarySubmitButtonClass}>{createInstallmentMutation.isPending ? 'Salvando…' : 'Criar parcela'}</button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal
         isOpen={!!selectedFatura}
@@ -476,7 +604,7 @@ export function Faturas({
               </div>
               <div className="text-right">
                 <span className="text-xs font-bold text-zinc-500 dark:text-zinc-400 uppercase tracking-wider block mb-1">Vencimento</span>
-                <p className="font-semibold text-zinc-900 dark:text-zinc-100">{new Date(selectedFatura.dataVencimento).toLocaleDateString()}</p>
+                <p className="font-semibold text-zinc-900 dark:text-zinc-100">{formatDateKey(selectedFatura.dataVencimento)}</p>
                 <span className={`inline-block mt-2 text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                   selectedFatura.statusPagamento === 'Pago' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                 }`}>
@@ -520,7 +648,7 @@ export function Faturas({
                     <article key={receipt.id} className="flex flex-col justify-between gap-3 rounded-xl bg-zinc-50 p-3 text-xs dark:bg-zinc-950 sm:flex-row sm:items-center">
                       <div>
                         <p className="font-semibold text-zinc-900 dark:text-zinc-100">
-                          {formatCurrency(receipt.valorRecebido)} em {new Date(receipt.dataRecebimento).toLocaleDateString('pt-BR')}
+                          {formatCurrency(receipt.valorRecebido)} em {formatDateKey(receipt.dataRecebimento)}
                         </p>
                         <p className="mt-1 text-zinc-500">
                           Principal {formatCurrency(receipt.valorPrincipal)}
@@ -535,7 +663,7 @@ export function Faturas({
                           onClick={() => {
                             setReversingReceipt(receipt);
                             setReversalReason('');
-                            setReversalDate(new Date().toISOString().slice(0, 10));
+                            setReversalDate(localDateKey());
                           }}
                           className="inline-flex min-h-9 items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 font-semibold text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/30 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-200"
                         >

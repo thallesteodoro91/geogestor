@@ -51,7 +51,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
 ];
 
 const reviewDate = '2026-08-13';
-const minimumVersion = '1.0.1';
+const minimumVersion = '1.0.4';
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {
@@ -538,23 +538,23 @@ export const HELP_ARTICLES: HelpArticle[] = [
   {
     id: 'modelos-documentos',
     category: 'sistema',
-    title: 'Modelos de documentos',
-    excerpt: 'Configure identidade visual, cabeçalho e termos padrão dos PDFs.',
+    title: 'Modelo dos PDFs',
+    excerpt: 'Configure a identidade visual aplicada aos orçamentos e relatórios exportados.',
     keywords: ['modelo', 'documento', 'logo', 'cores', 'cabeçalho', 'termos', 'pdf'],
     route: '/configuracoes?secao=modelos',
-    routeLabel: 'Abrir Modelos e documentos',
+    routeLabel: 'Abrir Modelo dos PDFs',
     updatedAt: reviewDate,
     minimumVersion,
     icon: 'documents',
     sections: [
       {
-        title: 'Configurar o modelo oficial',
+        title: 'Configurar o padrão visual',
         steps: [
-          'Abra Configurações e selecione Modelos e documentos.',
+          'Abra Configurações e selecione Modelo dos PDFs.',
           'Informe nome, dados corporativos, endereço e termos padrão.',
           'Escolha as cores e carregue a identidade visual quando necessário.',
-          'Revise a Prévia do cabeçalho e salve as alterações.',
-          'Gere um PDF de teste antes de enviar um documento ao cliente.',
+          'Confira a prévia completa do documento e salve as alterações.',
+          'Verifique o resultado em um orçamento ou relatório antes de enviá-lo ao cliente.',
         ],
       },
     ],

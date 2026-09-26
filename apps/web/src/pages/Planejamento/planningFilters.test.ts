@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { StrategicDecision, StrategicKeyResult, StrategicObjective } from '@geogestor/contracts';
+import type { StrategicCheckin, StrategicDecision, StrategicKeyResult, StrategicObjective } from '@geogestor/contracts';
 import {
   emptyPlanningFilters,
+  filterCheckins,
   filterAndSortObjectives,
   filterDecisions,
   hasPlanningFilters,
@@ -14,6 +15,22 @@ const objective = (overrides: Partial<StrategicObjective>): StrategicObjective =
   responsavel: 'Ana', dataLimite: '2026-09-01', status: 'em_andamento', prioridade: 'media',
   ordem: 0, progresso: 50, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
   ...overrides
+});
+
+test('separa próximos 30 dias de prazos realmente futuros', () => {
+  const items = [
+    objective({ id: 'today', dataLimite: '2026-09-15' }),
+    objective({ id: 'boundary', dataLimite: '2026-10-15' }),
+    objective({ id: 'future', dataLimite: '2026-10-16' })
+  ];
+  assert.deepEqual(filterAndSortObjectives(items, [], { ...emptyPlanningFilters, prazo: 'proximos_30' }, '2026-09-15').map((item) => item.id), ['today', 'boundary']);
+  assert.deepEqual(filterAndSortObjectives(items, [], { ...emptyPlanningFilters, prazo: 'futuro' }, '2026-09-15').map((item) => item.id), ['future']);
+});
+
+test('ignora filtros sem significado para check-ins em vez de ocultar toda a coleção', () => {
+  const checkins = [{ id: 'checkin-a', status: 'no_rumo', objetivoId: 'objective-a' }] as StrategicCheckin[];
+  const filtered = filterCheckins(checkins, { ...emptyPlanningFilters, responsavel: 'Ana', prioridade: 'alta', dados: 'desatualizado' });
+  assert.deepEqual(filtered.map((item) => item.id), ['checkin-a']);
 });
 
 test('preserva filtros e ordenação na URL', () => {

@@ -3,9 +3,29 @@ import test from 'node:test';
 import {
   calculateForm,
   createDefaultBudgetForm,
+  detailToForm,
   emptyBudgetItem,
   formToPayload
 } from './budgetForm';
+import type { BudgetDetail } from './types';
+
+test('converte ajustes globais fixos de centavos ao reabrir um rascunho', () => {
+  const form = detailToForm({
+    clienteId: 'cliente-1',
+    descontoGlobalTipo: 'fixo',
+    descontoGlobalValor: '852',
+    acrescimoGlobalTipo: 'fixo',
+    acrescimoGlobalValor: '1234',
+    items: [],
+    costs: [],
+    taxes: [],
+    payment: null,
+    characterization: null
+  } as unknown as BudgetDetail);
+
+  assert.equal(form.globalDiscountValue, '8,52');
+  assert.equal(form.globalAdditionValue, '12,34');
+});
 
 test('preserva cálculos, impostos e flags dos itens após a reorganização visual', () => {
   const requiredItem = {

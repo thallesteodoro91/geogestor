@@ -1,0 +1,110 @@
+{
+  "method": "Python Decimal/inteiros; sem imports do produto",
+  "budget": {
+    "actual": {
+      "subtotalServicesCents": 14752,
+      "subtotalExpensesCents": 7600,
+      "subtotalFeesCents": 3500,
+      "billableBeforeGlobalCents": 25852,
+      "globalDiscountCents": 852,
+      "globalAdditionCents": 2585,
+      "taxableBaseCents": 21076,
+      "taxesCents": [
+        750,
+        632,
+        70,
+        276,
+        220
+      ],
+      "includedTaxesCents": 750,
+      "outsideTaxesCents": 1198,
+      "totalCents": 28783,
+      "estimatedCostCents": 12500,
+      "netFeesCents": 14991,
+      "estimatedProfitCents": 12335,
+      "marginBasisPoints": 5850,
+      "markupBasisPoints": 9868,
+      "installmentsCents": [
+        9593,
+        9593,
+        9597
+      ],
+      "installmentSumCents": 28783
+    },
+    "expected": {
+      "subtotalServicesCents": 14752,
+      "subtotalExpensesCents": 7600,
+      "subtotalFeesCents": 3500,
+      "billableBeforeGlobalCents": 25852,
+      "globalDiscountCents": 852,
+      "globalAdditionCents": 2585,
+      "taxableBaseCents": 21076,
+      "taxesCents": [
+        750,
+        632,
+        70,
+        276,
+        220
+      ],
+      "includedTaxesCents": 750,
+      "outsideTaxesCents": 1198,
+      "totalCents": 28783,
+      "estimatedCostCents": 12500,
+      "netFeesCents": 14991,
+      "estimatedProfitCents": 12335,
+      "marginBasisPoints": 5850,
+      "markupBasisPoints": 9868,
+      "installmentsCents": [
+        9593,
+        9593,
+        9597
+      ],
+      "installmentSumCents": 28783
+    },
+    "passed": true
+  },
+  "reports": {
+    "actual": {
+      "contractedRevenueCents": 10000,
+      "receivedRevenueCents": 4000,
+      "pendingRevenueCents": 6000,
+      "overdueRevenueCents": 6000,
+      "paidExpensesCents": 5400,
+      "cashResultCents": -1400,
+      "estimatedTaxesCents": 1000,
+      "approvedBudgets": 1,
+      "decidedBudgets": 5,
+      "conversionRatePercent": 20,
+      "totalProjects": 18,
+      "activeProjects": 16,
+      "completedProjects": 1,
+      "cancelledProjects": 1,
+      "overdueProjects": 13,
+      "dueSoonProjects": 2,
+      "activeAreaHa": "27.5",
+      "projectsWithKnownArea": 15
+    },
+    "expected": {
+      "contractedRevenueCents": 10000,
+      "receivedRevenueCents": 4000,
+      "pendingRevenueCents": 6000,
+      "overdueRevenueCents": 6000,
+      "paidExpensesCents": 5400,
+      "cashResultCents": -1400,
+      "estimatedTaxesCents": 1000,
+      "approvedBudgets": 1,
+      "decidedBudgets": 5,
+      "conversionRatePercent": 20,
+      "totalProjects": 18,
+      "activeProjects": 16,
+      "completedProjects": 1,
+      "cancelledProjects": 1,
+      "overdueProjects": 13,
+      "dueSoonProjects": 2,
+      "activeAreaHa": "27.5",
+      "projectsWithKnownArea": 15
+    },
+    "passed": true
+  },
+  "allChecksPassed": true
+}

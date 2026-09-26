@@ -1,0 +1,587 @@
+{
+  "generatedAt": "2026-09-18T21:19:54.659Z",
+  "period": {
+    "startDate": "2026-09-18",
+    "endDate": "2026-09-18",
+    "previousStartDate": "2026-09-17",
+    "previousEndDate": "2026-09-17",
+    "label": "2026-09-18 a 2026-09-18",
+    "comparisonLabel": "2026-09-17 a 2026-09-17",
+    "rules": {
+      "contractedRevenue": "Competência do orçamento: data de competência, emissão, orçamento ou criação.",
+      "receivedRevenue": "Regime de caixa: data do recebimento ou do pagamento legado.",
+      "pendingRevenue": "Competência da parcela; na ausência, vencimento. Orçamentos diretos usam sua competência.",
+      "paidExpenses": "Regime de caixa: data de pagamento; na ausência, competência ou lançamento.",
+      "projects": "Coorte por data de início; na ausência, data de criação.",
+      "activeArea": "Soma apenas áreas conhecidas de projetos ativos pertencentes ao período."
+    }
+  },
+  "state": {
+    "hasSourceData": true,
+    "hasFilteredData": true,
+    "sourceRecordCount": 50,
+    "filteredRecordCount": 50
+  },
+  "financial": {
+    "kpis": {
+      "contractedRevenue": 10000,
+      "receivedRevenue": 4000,
+      "pendingRevenue": 6000,
+      "overdueRevenue": 6000,
+      "paidExpenses": 5400,
+      "cashResult": -1400,
+      "estimatedTaxes": 1000,
+      "approvedBudgets": 1,
+      "decidedBudgets": 5,
+      "conversionRate": 20
+    },
+    "composition": {
+      "contractedBudgetCount": 1,
+      "receivedEventCount": 1,
+      "pendingItemCount": 1,
+      "paidExpenseCount": 25
+    },
+    "previous": {
+      "contractedRevenue": 0,
+      "receivedRevenue": 0,
+      "paidExpenses": 0,
+      "cashResult": 0
+    },
+    "monthly": [
+      {
+        "month": "2026-09",
+        "receivedRevenue": 4000,
+        "paidExpenses": 5400,
+        "cashResult": -1400
+      }
+    ],
+    "expensesByCategory": [
+      {
+        "category": "Campo principal",
+        "paidTotal": 3000,
+        "launchedTotal": 3000,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 01 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 02 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 03 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 04 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 05 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 06 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 07 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 08 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 09 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 10 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 11 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 12 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 13 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 14 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 15 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 16 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 17 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 18 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 19 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 20 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 21 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 22 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 23 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      },
+      {
+        "category": "QA-AUDIT-S11-20260917-Categoria longa 24 com acentos & símbolo <inerte>",
+        "paidTotal": 100,
+        "launchedTotal": 100,
+        "count": 1
+      }
+    ],
+    "alerts": [
+      {
+        "id": "overdue-revenue",
+        "code": "overdue_revenue",
+        "severity": "critical",
+        "valueCents": 6000,
+        "href": "/financeiro"
+      },
+      {
+        "id": "negative-cash",
+        "code": "negative_cash",
+        "severity": "warning",
+        "valueCents": -1400,
+        "href": "/financeiro"
+      },
+      {
+        "id": "low-conversion",
+        "code": "low_conversion",
+        "severity": "info",
+        "threshold": 30,
+        "href": "/orcamentos"
+      }
+    ]
+  },
+  "operational": {
+    "kpis": {
+      "totalProjects": 18,
+      "activeProjects": 16,
+      "completedProjects": 1,
+      "cancelledProjects": 1,
+      "overdueProjects": 13,
+      "dueSoonProjects": 2,
+      "activeAreaHa": 27.5,
+      "projectsWithKnownArea": 15
+    },
+    "previousCompletedProjects": 0,
+    "byStatus": [
+      {
+        "label": "Em Andamento",
+        "count": 13
+      },
+      {
+        "label": "Aguardando Cliente",
+        "count": 1
+      },
+      {
+        "label": "Cancelado",
+        "count": 1
+      },
+      {
+        "label": "Concluído",
+        "count": 1
+      },
+      {
+        "label": "Planejamento",
+        "count": 1
+      },
+      {
+        "label": "Suspenso",
+        "count": 1
+      }
+    ],
+    "byType": [
+      {
+        "label": "Rural",
+        "count": 18
+      }
+    ],
+    "byMunicipality": [
+      {
+        "label": "Florianópolis",
+        "count": 18
+      }
+    ],
+    "deadlines": [
+      {
+        "id": "914b2f5c-b5ec-4a25-86f7-0a612384ebff",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 01 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "31830a31-eeaa-4945-8d54-9f3c9c1b9222",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 02 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "d31936b5-d7b8-48e6-9def-f1116989a3dd",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 03 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "d3ee6b0d-b408-49a5-a7d8-7e843fba6333",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 04 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "a4f90a9d-9fc0-4393-b115-b873645d809a",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 05 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "481ee1a6-b0e9-429e-99e9-ffca5bb63e15",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 06 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "f110fd4d-91e6-4685-bed1-4e520b120c60",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 07 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "500402cc-1b8c-4a5e-8ca8-775d3692bc6e",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 08 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "3235c7a6-8149-472a-93de-d50d37de79aa",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 09 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "a54b7e77-261b-4d88-8108-b84160cca8bc",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 10 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "267d673a-669e-4a12-bdbc-913db398b210",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 11 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "2bd9fe42-b5a7-407e-a195-8d5210df857c",
+        "name": "QA-AUDIT-S11-20260917-Projeto crítico 12 com nome longo para documento multipágina",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-16",
+        "daysUntilDue": -2
+      },
+      {
+        "id": "c711d60a-c849-48c8-ac79-d37605e84edc",
+        "name": "QA-AUDIT-S11-20260917-<img src=x onerror=alert(1)>",
+        "status": "Em Andamento",
+        "dueDate": "2026-09-17",
+        "daysUntilDue": -1
+      },
+      {
+        "id": "af7bf830-2870-462e-b5aa-c65384a6dbc9",
+        "name": "QA-AUDIT-S11-20260917-Vence hoje",
+        "status": "Planejamento",
+        "dueDate": "2026-09-18",
+        "daysUntilDue": 0
+      },
+      {
+        "id": "ad088c6a-62d9-4bbc-9349-0bf4ff74122e",
+        "name": "QA-AUDIT-S11-20260917-Vence +30",
+        "status": "Aguardando Cliente",
+        "dueDate": "2026-10-18",
+        "daysUntilDue": 30
+      }
+    ],
+    "alerts": [
+      {
+        "id": "overdue-projects",
+        "code": "overdue_projects",
+        "severity": "critical",
+        "count": 13,
+        "href": "/projetos"
+      },
+      {
+        "id": "unknown-area",
+        "code": "unknown_area",
+        "severity": "info",
+        "count": 1,
+        "href": "/projetos"
+      }
+    ]
+  },
+  "projetosPorStatus": [
+    {
+      "status": "Em Andamento",
+      "count": 13
+    },
+    {
+      "status": "Aguardando Cliente",
+      "count": 1
+    },
+    {
+      "status": "Cancelado",
+      "count": 1
+    },
+    {
+      "status": "Concluído",
+      "count": 1
+    },
+    {
+      "status": "Planejamento",
+      "count": 1
+    },
+    {
+      "status": "Suspenso",
+      "count": 1
+    }
+  ],
+  "projetosPorTipo": [
+    {
+      "tipo": "Rural",
+      "count": 18
+    }
+  ],
+  "areaTotal": 27.5,
+  "orcamentosStats": [
+    {
+      "status": "aprovado",
+      "count": 1,
+      "total": 10000
+    },
+    {
+      "status": "rejeitado",
+      "count": 4,
+      "total": 3999996
+    }
+  ],
+  "parcelasStats": [
+    {
+      "statusPagamento": "Pago",
+      "total": 4000
+    },
+    {
+      "statusPagamento": "Pendente",
+      "total": 6000
+    }
+  ],
+  "despesasPorCategoria": [
+    {
+      "categoria": "Campo principal",
+      "total": 3000
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 01 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 02 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 03 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 04 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 05 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 06 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 07 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 08 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 09 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 10 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 11 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 12 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 13 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 14 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 15 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 16 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 17 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 18 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 19 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 20 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 21 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 22 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 23 com acentos & símbolo <inerte>",
+      "total": 100
+    },
+    {
+      "categoria": "QA-AUDIT-S11-20260917-Categoria longa 24 com acentos & símbolo <inerte>",
+      "total": 100
+    }
+  ],
+  "financeiro": {
+    "receitaContratada": 10000,
+    "receitaRecebida": 4000,
+    "receitaPendente": 6000,
+    "despesasPagas": 5400,
+    "impostosPrevistos": 1000,
+    "resultadoCaixa": -1400
+  },
+  "historicoMensal": {
+    "receitasMensais": [
+      {
+        "mes": "2026-09",
+        "total": 4000
+      }
+    ],
+    "despesasMensais": [
+      {
+        "mes": "2026-09",
+        "total": 5400
+      }
+    ]
+  }
+}

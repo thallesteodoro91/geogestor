@@ -6,6 +6,7 @@ import { useAppSession } from '../contexts/AppSessionContext';
 import { loadCompanyTemplate } from '../services/companyTemplate';
 import { APP_VERSION } from '../version';
 import { APP_ROUTES } from '@geogestor/contracts';
+import { usePendingNavigationPath } from '../hooks/usePendingNavigationPath';
 import dashboardIcon from '../assets/magnific-icons/laptop_5938907.svg';
 import projectsIcon from '../assets/magnific-icons/project_folder.svg';
 import crmIcon from '../assets/magnific-icons/filter_9757817.svg';
@@ -90,6 +91,7 @@ function SidebarIcon({
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const { identity, authRequired, lock } = useAppSession();
   const location = useLocation();
+  const pendingNavigationPath = usePendingNavigationPath();
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [applicationLogo, setApplicationLogo] = useState('');
 
@@ -207,14 +209,19 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
     { name: APP_ROUTES.help.label, path: APP_ROUTES.help.path, icon: helpIcon, created: true },
   ];
 
-  const isItemActive = (item: SidebarItem) => {
+  const pathMatchesItem = (item: SidebarItem, pathname: string) => {
     const paths = item.activePaths ?? (item.path ? [item.path] : []);
     return paths.some((path) => (
       path === '/'
-        ? location.pathname === '/'
-        : location.pathname === path || location.pathname.startsWith(`${path}/`)
+        ? pathname === '/'
+        : pathname === path || pathname.startsWith(`${path}/`)
     ));
   };
+  const effectivePathname = pendingNavigationPath ?? location.pathname;
+  const isItemActive = (item: SidebarItem) => pathMatchesItem(item, effectivePathname);
+  const isItemPending = (item: SidebarItem) => Boolean(
+    pendingNavigationPath && pathMatchesItem(item, pendingNavigationPath)
+  );
 
   return (
     <>
@@ -285,6 +292,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
               <div className="space-y-1">
                 {section.items.map((item) => {
                   const isActive = isItemActive(item);
+                  const isPending = isItemPending(item);
 
                   if (item.created && item.path) {
                     return (
@@ -293,6 +301,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                         to={item.path}
                         onClick={onClose}
                         aria-current={isActive ? 'page' : undefined}
+                        aria-busy={isPending || undefined}
                         className={`group relative flex min-h-[58px] items-center justify-between rounded-lg py-2.5 pl-3 pr-3 text-[14.5px] font-semibold leading-5 outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES[section.tone]} ${
                           isActive
                             ? SECTION_ACTIVE_CLASSES[section.tone]
@@ -306,6 +315,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                           <SidebarIcon src={item.icon} isActive={isActive} />
                           <span className="truncate">{item.name}</span>
                         </div>
+                        {isPending && (
+                          <span aria-hidden="true" className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-brand-turquoise-600 motion-reduce:animate-none dark:bg-brand-turquoise-300" />
+                        )}
                       </PreloadLink>
                     );
                   }
@@ -339,13 +351,15 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
             <div className="space-y-1">
               {administrationItems.map((item) => {
                 const isActive = isItemActive(item);
+                const isPending = isItemPending(item);
                 return (
                   <PreloadLink
                     key={item.name}
                     to={item.path!}
                     onClick={onClose}
                     aria-current={isActive ? 'page' : undefined}
-                    className={`group relative flex min-h-[50px] items-center rounded-lg px-2.5 text-[13px] font-semibold outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES.system} ${
+                    aria-busy={isPending || undefined}
+                    className={`group relative flex min-h-[50px] items-center justify-between rounded-lg px-2.5 text-[13px] font-semibold outline-none motion-fast motion-gpu active:scale-[0.99] focus-visible:ring-2 ${SECTION_FOCUS_CLASSES.system} ${
                       isActive
                         ? SECTION_ACTIVE_CLASSES.system
                         : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800/60 dark:hover:text-white'
@@ -367,6 +381,9 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                       </span>
                       <span className="truncate">{item.name}</span>
                     </span>
+                    {isPending && (
+                      <span aria-hidden="true" className="mr-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-brand-primary-600 motion-reduce:animate-none dark:bg-brand-primary-300" />
+                    )}
                   </PreloadLink>
                 );
               })}

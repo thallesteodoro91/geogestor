@@ -1,0 +1,1212 @@
+{
+  "tool": "pypdf + pypdfium2",
+  "documents": [
+    {
+      "file": "interface/orcamentos/pdfs/emitido-ORC-2026-0001_v1_QA-AUDIT-S04-20260910-Cliente_Principal.pdf",
+      "bytes": 36254,
+      "sha256": "fe8d15ffc0be6b63b223c05dffdb4eeb34e44bd7556900332895b0337ff494f7",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 3,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1380,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1121,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 551,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 3,
+          "fonts": 2,
+          "xObjects": 0
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144505Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [],
+      "textFile": "pdf-texto/interface_orcamentos_pdfs_emitido-ORC-2026-0001_v1_QA-AUDIT-S04-20260910-Cliente_Principal.txt",
+      "renderFiles": [
+        "renderizados/interface_orcamentos_pdfs_emitido-ORC-2026-0001_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-01.png",
+        "renderizados/interface_orcamentos_pdfs_emitido-ORC-2026-0001_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-02.png",
+        "renderizados/interface_orcamentos_pdfs_emitido-ORC-2026-0001_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-03.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "interface/orcamentos/pdfs/rascunho-Orcamento_v1_QA-AUDIT-S04-20260910-Cliente_Principal.pdf",
+      "bytes": 36629,
+      "sha256": "fc9fdcf0b9d9ec3b4a073da612d4fc78122966e9779b88f1bef7c043993ce3d6",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 3,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1401,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1138,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 563,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 3,
+          "fonts": 2,
+          "xObjects": 0
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144449Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [
+        1,
+        2,
+        3
+      ],
+      "textFile": "pdf-texto/interface_orcamentos_pdfs_rascunho-Orcamento_v1_QA-AUDIT-S04-20260910-Cliente_Principal.txt",
+      "renderFiles": [
+        "renderizados/interface_orcamentos_pdfs_rascunho-Orcamento_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-01.png",
+        "renderizados/interface_orcamentos_pdfs_rascunho-Orcamento_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-02.png",
+        "renderizados/interface_orcamentos_pdfs_rascunho-Orcamento_v1_QA-AUDIT-S04-20260910-Cliente_Principal/page-03.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "interface/relatorios/geogestor-executivo-2026-09-19-2026-09-19.pdf",
+      "bytes": 94260,
+      "sha256": "8311ed87d1edee3c89953d2f3ab79085e29b993bdc13b030a8eba99eb911766f",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 3,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1542,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1682,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 2405,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 1
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 1
+        },
+        {
+          "page": 3,
+          "fonts": 2,
+          "xObjects": 1
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144303Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [],
+      "textFile": "pdf-texto/interface_relatorios_geogestor-executivo-2026-09-19-2026-09-19.txt",
+      "renderFiles": [
+        "renderizados/interface_relatorios_geogestor-executivo-2026-09-19-2026-09-19/page-01.png",
+        "renderizados/interface_relatorios_geogestor-executivo-2026-09-19-2026-09-19/page-02.png",
+        "renderizados/interface_relatorios_geogestor-executivo-2026-09-19-2026-09-19/page-03.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "interface/relatorios/geogestor-financeiro-2026-09-19-2026-09-19.pdf",
+      "bytes": 68571,
+      "sha256": "0e734a4ff4431fa41938eecfb6c344bf29112b3caf6081974dbd08d2f816f701",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 2,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1722,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1652,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 1
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 1
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144302Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [],
+      "textFile": "pdf-texto/interface_relatorios_geogestor-financeiro-2026-09-19-2026-09-19.txt",
+      "renderFiles": [
+        "renderizados/interface_relatorios_geogestor-financeiro-2026-09-19-2026-09-19/page-01.png",
+        "renderizados/interface_relatorios_geogestor-financeiro-2026-09-19-2026-09-19/page-02.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "interface/relatorios/geogestor-projetos-2026-09-19-2026-09-19.pdf",
+      "bytes": 66525,
+      "sha256": "f815a65ea518f9be7ded4fc6ac014a90ad07bb48c63fcda7b1f720975191dc38",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 2,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1259,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1313,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 1
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 1
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144302Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [],
+      "textFile": "pdf-texto/interface_relatorios_geogestor-projetos-2026-09-19-2026-09-19.txt",
+      "renderFiles": [
+        "renderizados/interface_relatorios_geogestor-projetos-2026-09-19-2026-09-19/page-01.png",
+        "renderizados/interface_relatorios_geogestor-projetos-2026-09-19-2026-09-19/page-02.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "pdf/long-emitido/ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso.pdf",
+      "bytes": 97608,
+      "sha256": "63cbc714a0fe230d25b8979abb98ecfe92934c6b6ebd11a7036602d50cbb2736",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 16,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 2992,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 2832,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 4,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 5,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 6,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 7,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 8,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1686,
+          "hasText": true
+        },
+        {
+          "page": 9,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1728,
+          "hasText": true
+        },
+        {
+          "page": 10,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1735,
+          "hasText": true
+        },
+        {
+          "page": 11,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1735,
+          "hasText": true
+        },
+        {
+          "page": 12,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1536,
+          "hasText": true
+        },
+        {
+          "page": 13,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1970,
+          "hasText": true
+        },
+        {
+          "page": 14,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1740,
+          "hasText": true
+        },
+        {
+          "page": 15,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 3822,
+          "hasText": true
+        },
+        {
+          "page": 16,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 627,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 3,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 4,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 5,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 6,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 7,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 8,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 9,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 10,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 11,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 12,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 13,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 14,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 15,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 16,
+          "fonts": 2,
+          "xObjects": 0
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144657Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [],
+      "textFile": "pdf-texto/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso.txt",
+      "renderFiles": [
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-01.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-02.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-03.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-04.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-05.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-06.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-07.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-08.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-09.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-10.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-11.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-12.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-13.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-14.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-15.png",
+        "renderizados/pdf_long-emitido_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-16.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    },
+    {
+      "file": "pdf/long-rascunho/ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso.pdf",
+      "bytes": 100004,
+      "sha256": "5ad649b1dcbae8db8777137d0cfa23cde85bfc1d41ffc3a949ed4f5a5c368706",
+      "pdfVersion": "%PDF-1.3",
+      "pages": 16,
+      "dimensions": [
+        {
+          "page": 1,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 3016,
+          "hasText": true
+        },
+        {
+          "page": 2,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 2855,
+          "hasText": true
+        },
+        {
+          "page": 3,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 4,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 5,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 6,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 7,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 8,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1709,
+          "hasText": true
+        },
+        {
+          "page": 9,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1751,
+          "hasText": true
+        },
+        {
+          "page": 10,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1758,
+          "hasText": true
+        },
+        {
+          "page": 11,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1758,
+          "hasText": true
+        },
+        {
+          "page": 12,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1559,
+          "hasText": true
+        },
+        {
+          "page": 13,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1993,
+          "hasText": true
+        },
+        {
+          "page": 14,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 1763,
+          "hasText": true
+        },
+        {
+          "page": 15,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 3845,
+          "hasText": true
+        },
+        {
+          "page": 16,
+          "widthPt": 595.28,
+          "heightPt": 841.89,
+          "a4": true,
+          "textCharacters": 650,
+          "hasText": true
+        }
+      ],
+      "resources": [
+        {
+          "page": 1,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 2,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 3,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 4,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 5,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 6,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 7,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 8,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 9,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 10,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 11,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 12,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 13,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 14,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 15,
+          "fonts": 2,
+          "xObjects": 0
+        },
+        {
+          "page": 16,
+          "fonts": 2,
+          "xObjects": 0
+        }
+      ],
+      "metadata": {
+        "/Producer": "pdfmake",
+        "/Creator": "pdfmake",
+        "/CreationDate": "D:20260919144657Z"
+      },
+      "accessibility": {
+        "tagged": false,
+        "language": null,
+        "title": null
+      },
+      "activeTokens": [],
+      "forbiddenMarkers": {
+        "CONTEUDO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONFIDENCIAL-QA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CUSTO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "CONTA_FINANCEIRA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "SIGILO_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARGEM_INTERNA": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        },
+        "MARKUP_INTERNO": {
+          "text": false,
+          "rawBytes": false,
+          "metadata": false
+        }
+      },
+      "draftWatermarkPages": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "textFile": "pdf-texto/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso.txt",
+      "renderFiles": [
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-01.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-02.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-03.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-04.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-05.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-06.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-07.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-08.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-09.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-10.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-11.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-12.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-13.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-14.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-15.png",
+        "renderizados/pdf_long-rascunho_ORC-2026-TESTE-100-ITENS_v3_Cliente_de_Validacao_PDF_Conteudo_Extenso/page-16.png"
+      ],
+      "checks": {
+        "pdfHeader": true,
+        "hasPages": true,
+        "allPagesA4": true,
+        "allPagesHaveExtractableText": true,
+        "noForbiddenMarkers": true,
+        "noActiveContent": true,
+        "draftWatermark": true,
+        "renderCountMatches": true
+      },
+      "passed": true
+    }
+  ],
+  "pdfCount": 7,
+  "pageCount": 45,
+  "allChecksPassed": true
+}

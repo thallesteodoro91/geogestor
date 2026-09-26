@@ -117,12 +117,13 @@ export function Cadastros() {
   const [despCategoria, setDespCategoria] = useState('Combustível');
   const [despCategoriaCustom, setDespCategoriaCustom] = useState('');
   const [despDescricao, setDespDescricao] = useState('');
+  const [despSubcategorias, setDespSubcategorias] = useState('');
 
   const currentServiceCategory = servCategoria === 'Outro' ? servCategoriaCustom : servCategoria;
   const currentExpenseCategory = despCategoria === 'Outro' ? despCategoriaCustom : despCategoria;
   const editorFingerprint = JSON.stringify(activeTab === 'servicos'
     ? { servNome, categoria: currentServiceCategory, servValor }
-    : { categoria: currentExpenseCategory, despDescricao });
+    : { categoria: currentExpenseCategory, despDescricao, despSubcategorias });
   const hasUnsavedChanges = showModal && Boolean(initialFingerprint) && editorFingerprint !== initialFingerprint;
 
   const persistMutation = useMutation({
@@ -188,7 +189,9 @@ export function Cadastros() {
     setDespCategoria(isPreset ? category : 'Outro');
     setDespCategoriaCustom(isPreset ? '' : category);
     setDespDescricao(item?.descricao || '');
-    return JSON.stringify({ categoria: category, despDescricao: item?.descricao || '' });
+    const subcategories = (item?.subcategorias || []).join('\n');
+    setDespSubcategorias(subcategories);
+    return JSON.stringify({ categoria: category, despDescricao: item?.descricao || '', despSubcategorias: subcategories });
   };
 
   const openCreateModal = () => {
@@ -225,7 +228,7 @@ export function Cadastros() {
       const valorSugerido = parseCurrencyToCents(servValor);
       if (!nome) return showFieldError('Informe o nome do serviço.', 'cadastro-serv-nome');
       if (!categoria) return showFieldError('Informe o nome da categoria.', 'cadastro-serv-cat-custom');
-      if (!valorSugerido || valorSugerido <= 0) return showFieldError('Informe um valor sugerido maior que zero.', 'cadastro-serv-valor');
+      if (valorSugerido === null || valorSugerido < 0) return showFieldError('Informe um valor sugerido igual ou maior que zero.', 'cadastro-serv-valor');
       if (services.some((item) => item.id !== selectedId && normalizeCatalogLabel(item.nome) === normalizeCatalogLabel(nome))) {
         return showFieldError('Já existe um tipo de serviço com este nome.', 'cadastro-serv-nome');
       }
@@ -238,12 +241,22 @@ export function Cadastros() {
     }
     const categoria = currentExpenseCategory.trim().replace(/\s+/g, ' ');
     const descricao = despDescricao.trim().replace(/\s+/g, ' ');
+    const normalizedSubcategories = new Set<string>();
+    const subcategorias = despSubcategorias.split(/[\n,;]/)
+      .map((value) => value.trim().replace(/\s+/g, ' '))
+      .filter((value) => {
+        if (!value) return false;
+        const normalized = normalizeCatalogLabel(value);
+        if (normalizedSubcategories.has(normalized)) return false;
+        normalizedSubcategories.add(normalized);
+        return true;
+      });
     if (!categoria) return showFieldError('Informe o nome da categoria.', 'cadastro-desp-cat-custom');
     if (!descricao) return showFieldError('Informe uma descrição para a categoria.', 'cadastro-desp-desc');
     if (expenses.some((item) => item.id !== selectedId && normalizeCatalogLabel(item.categoria) === normalizeCatalogLabel(categoria))) {
       return showFieldError('Já existe uma categoria de despesa com este nome.', 'cadastro-desp-cat');
     }
-    const item: ExpenseCatalogItem = { id: selectedId || crypto.randomUUID(), categoria, descricao, ativo: expenses.find((current) => current.id === selectedId)?.ativo ?? true };
+    const item: ExpenseCatalogItem = { id: selectedId || crypto.randomUUID(), categoria, descricao, subcategorias, ativo: expenses.find((current) => current.id === selectedId)?.ativo ?? true };
     persistMutation.mutate({
       type: 'despesas',
       expenses: sortExpenses(selectedId ? expenses.map((current) => current.id === selectedId ? item : current) : [...expenses, item])
@@ -282,7 +295,7 @@ export function Cadastros() {
   const filteredExpenses = useMemo(() => {
     const query = normalizeCatalogLabel(search);
     const byStatus = expenses.filter((item) => status === 'todos' || (status === 'ativos' ? item.ativo : !item.ativo));
-    return query ? byStatus.filter((item) => normalizeCatalogLabel(`${item.categoria} ${item.descricao}`).includes(query)) : byStatus;
+    return query ? byStatus.filter((item) => normalizeCatalogLabel(`${item.categoria} ${item.descricao} ${item.subcategorias.join(' ')}`).includes(query)) : byStatus;
   }, [expenses, search, status]);
   const currentSearch = search;
   const activeItems = activeTab === 'servicos' ? filteredServices : filteredExpenses;
@@ -342,7 +355,7 @@ export function Cadastros() {
           )) : filteredExpenses.map((item) => (
             <article key={item.id} className="grid min-w-0 gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm [content-visibility:auto] dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
               <div aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200"><SquaresFour weight="duotone" className="h-6 w-6" /></div>
-              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words font-semibold leading-snug text-zinc-950 dark:text-white">{item.categoria}</h2>{!item.ativo && <span className="rounded-full bg-zinc-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">Inativo</span>}</div><p className="mt-1 break-words text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{item.descricao}</p></div>
+              <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words font-semibold leading-snug text-zinc-950 dark:text-white">{item.categoria}</h2>{!item.ativo && <span className="rounded-full bg-zinc-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">Inativo</span>}</div><p className="mt-1 break-words text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{item.descricao}</p>{item.subcategorias.length > 0 && <p className="mt-1 break-words text-xs text-zinc-500 dark:text-zinc-400">Subcategorias: {item.subcategorias.join(' · ')}</p>}</div>
               <div className="flex shrink-0 justify-end gap-2"><button type="button" onClick={() => openEditModal(item)} aria-label={`Editar ${item.categoria}`} className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 transition-[background-color,border-color,color] hover:bg-indigo-100 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"><PencilSimple aria-hidden="true" className="h-4 w-4" /></button><button type="button" onClick={() => { setCatalogActionError(''); setStatusTarget({ id: item.id, name: item.categoria, type: 'despesas', nextActive: !item.ativo }); }} aria-label={`${item.ativo ? 'Inativar' : 'Reativar'} ${item.categoria}`} className={cn('geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,color]', item.ativo ? 'border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20' : 'border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20')}>
                 {item.ativo ? <Prohibit aria-hidden="true" className="h-4 w-4" /> : <ArrowCounterClockwise aria-hidden="true" className="h-4 w-4" />}
               </button></div>
@@ -356,13 +369,14 @@ export function Cadastros() {
           <FormSection title={activeTab === 'servicos' ? 'Tipo de serviço' : 'Categoria de despesa'} description={activeTab === 'servicos' ? 'Defina o serviço e o valor inicial sugerido para novos orçamentos.' : 'Defina como a categoria aparecerá nos lançamentos e relatórios.'} className="bg-white/70 dark:border-zinc-700/80 dark:bg-zinc-800/35">
             {activeTab === 'servicos' ? <>
               <FormField htmlFor="cadastro-serv-nome" label="Nome do serviço" required><input id="cadastro-serv-nome" name="serviceName" type="text" required autoComplete="off" value={servNome} onChange={(event) => setServNome(event.target.value)} placeholder="Ex.: Demarcação topográfica" className="geo-field" /></FormField>
-              <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="cadastro-serv-cat" label="Categoria" required><FormSelect id="cadastro-serv-cat" name="serviceCategory" value={servCategoria} onChange={(event) => setServCategoria(event.target.value)} required>{SERVICE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField><FormField htmlFor="cadastro-serv-valor" label="Valor sugerido (R$)" required><NumericInput id="cadastro-serv-valor" name="suggestedValue" inputMode="decimal" min="0.01" step="0.01" required autoComplete="off" value={servValor} onChange={(event) => setServValor(event.target.value)} placeholder="0,00" className="tabular-nums" /></FormField></div>
+              <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="cadastro-serv-cat" label="Categoria" required><FormSelect id="cadastro-serv-cat" name="serviceCategory" value={servCategoria} onChange={(event) => setServCategoria(event.target.value)} required>{SERVICE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField><FormField htmlFor="cadastro-serv-valor" label="Valor sugerido (R$)" required><NumericInput id="cadastro-serv-valor" name="suggestedValue" inputMode="decimal" min="0" step="0.01" required autoComplete="off" value={servValor} onChange={(event) => setServValor(event.target.value)} placeholder="0,00" className="tabular-nums" /></FormField></div>
               {servCategoria === 'Outro' && <FormField htmlFor="cadastro-serv-cat-custom" label="Nome da categoria" required><input id="cadastro-serv-cat-custom" name="customServiceCategory" required autoComplete="off" value={servCategoriaCustom} onChange={(event) => setServCategoriaCustom(event.target.value)} className="geo-field" /></FormField>}
               <p className="rounded-xl border border-indigo-200/70 bg-indigo-50/80 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-100">O valor será sugerido ao iniciar um item vazio no orçamento e continuará editável.</p>
             </> : <>
               <FormField htmlFor="cadastro-desp-cat" label="Categoria da despesa" required><FormSelect id="cadastro-desp-cat" name="expenseCategory" value={despCategoria} onChange={(event) => setDespCategoria(event.target.value)} required>{EXPENSE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField>
               {despCategoria === 'Outro' && <FormField htmlFor="cadastro-desp-cat-custom" label="Nome da categoria" required><input id="cadastro-desp-cat-custom" name="customExpenseCategory" required autoComplete="off" value={despCategoriaCustom} onChange={(event) => setDespCategoriaCustom(event.target.value)} className="geo-field" /></FormField>}
               <FormField htmlFor="cadastro-desp-desc" label="Descrição" required><textarea id="cadastro-desp-desc" name="expenseCategoryDescription" value={despDescricao} onChange={(event) => setDespDescricao(event.target.value)} rows={3} required autoComplete="off" placeholder="Ex.: Abastecimento e combustível para atividades operacionais." className="geo-field resize-y" /></FormField>
+              <FormField htmlFor="cadastro-desp-subcategorias" label="Subcategorias"><textarea id="cadastro-desp-subcategorias" name="expenseSubcategories" value={despSubcategorias} onChange={(event) => setDespSubcategorias(event.target.value)} rows={4} autoComplete="off" placeholder={'Uma por linha, por exemplo:\nGasolina\nEtanol\nDiesel'} className="geo-field resize-y" /><p className="mt-1 text-xs text-zinc-500">Separe por linha, vírgula ou ponto e vírgula.</p></FormField>
               <p className="rounded-xl border border-indigo-200/70 bg-indigo-50/80 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-100">Uma descrição clara mantém filtros e relatórios financeiros consistentes.</p>
             </>}
           </FormSection>

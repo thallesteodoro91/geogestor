@@ -18,6 +18,7 @@ type SimpleImportOptions = {
   requestReused?: boolean;
   warnings?: string[];
   filesystemPending?: boolean;
+  sourceRowNumbers?: number[];
 };
 
 export function finishSimpleImport(startedAt: string, rowsRead: number, results: SimpleImportRowResult[], options: SimpleImportOptions = {}) {
@@ -46,6 +47,6 @@ export function finishSimpleImport(startedAt: string, rowsRead: number, results:
     durationMs: Math.max(0, Date.parse(completedAt) - Date.parse(startedAt)),
     results: results
       .sort((left, right) => left.index - right.index)
-      .map((item) => ({ ...item, row: item.index + 2 }))
+      .map((item) => ({ ...item, row: options.sourceRowNumbers?.[item.index] ?? item.index + 2 }))
   };
 }

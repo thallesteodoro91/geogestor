@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, Route, RouterProvider, Routes, useLocation } from 'react-router-dom';
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { MotionConfig } from 'framer-motion';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthenticatedLayout } from './components/Layout';
@@ -31,6 +31,8 @@ import { AppSessionProvider, type AppIdentity } from './contexts/AppSessionConte
 import { scheduleCommonRoutePreload } from './utils/routePreloaders';
 import {
   initializeNavigationMetrics,
+  markNavigationContentMounted,
+  markNavigationRenderStarted,
   markNavigationUrlChanged,
   markNavigationUsable,
   recordGlobalFallback
@@ -70,6 +72,29 @@ const DevTypeUIPanel = import.meta.env.DEV
   : null;
 
 let hasReportedFirstRouteUsable = false;
+let operationalHydrationStarted = false;
+let authStatusCache: { value: AuthStatus; expiresAt: number } | null = null;
+let authStatusInFlight: Promise<AuthStatus> | null = null;
+
+type AuthStatus = {
+  setupRequired: boolean;
+  locked: boolean;
+  authRequired: boolean;
+  idleMinutes: number;
+  identity: AppIdentity | null;
+};
+
+function loadAuthStatus() {
+  if (authStatusCache && authStatusCache.expiresAt > Date.now()) return Promise.resolve(authStatusCache.value);
+  if (authStatusInFlight) return authStatusInFlight;
+  authStatusInFlight = apiClient.get<AuthStatus>('/api/auth/status', { timeoutMs: 2_500, notifyUnavailable: false })
+    .then((value) => {
+      authStatusCache = { value, expiresAt: Date.now() + 5_000 };
+      return value;
+    })
+    .finally(() => { authStatusInFlight = null; });
+  return authStatusInFlight;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -92,32 +117,50 @@ function AppLoading() {
   );
 }
 
-function RouteTransition({ children }: { children: React.ReactNode }) {
-  useEffect(() => {
-    const reportStartupMilestone = (
-      window.electronAPI as typeof window.electronAPI & {
-        reportStartupMilestone?: (milestone: string) => void;
-      }
-    )?.reportStartupMilestone;
+function RouteReadyContent({ children, pathname }: { children: React.ReactNode; pathname: string }) {
+  useLayoutEffect(() => {
+    markNavigationRenderStarted(pathname);
+    markNavigationContentMounted(pathname);
 
-    if (!reportStartupMilestone || hasReportedFirstRouteUsable) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('main-content')?.focus({ preventScroll: true });
+      markNavigationUsable(pathname);
 
-    requestAnimationFrame(() => {
-      if (hasReportedFirstRouteUsable) return;
+      const reportStartupMilestone = (
+        window.electronAPI as typeof window.electronAPI & {
+          reportStartupMilestone?: (milestone: string) => void;
+        }
+      )?.reportStartupMilestone;
+
+      if (!reportStartupMilestone || hasReportedFirstRouteUsable) return;
       hasReportedFirstRouteUsable = true;
       reportStartupMilestone('first-route-usable');
     });
-  }, []);
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [pathname]);
+
+  return <div className="h-full w-full" data-route-pathname={pathname}>{children}</div>;
+}
+
+function RouteLoading({ pathname }: { pathname: string }) {
+  useLayoutEffect(() => {
+    markNavigationRenderStarted(pathname);
+  }, [pathname]);
 
   return (
-    <Suspense
-      fallback={(
-        <div role="status" aria-live="polite" className="flex min-h-[50vh] items-center justify-center text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-          Carregando tela…
-        </div>
-      )}
-    >
-      <div className="h-full w-full">{children}</div>
+    <div role="status" aria-live="polite" className="flex min-h-[50vh] items-center justify-center text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+      Carregando tela…
+    </div>
+  );
+}
+
+function RouteTransition({ children }: { children: React.ReactNode }) {
+  const { pathname } = useLocation();
+
+  return (
+    <Suspense fallback={<RouteLoading pathname={pathname} />}>
+      <RouteReadyContent pathname={pathname}>{children}</RouteReadyContent>
     </Suspense>
   );
 }
@@ -129,21 +172,10 @@ function LegacyRedirect({ to }: { to: string }) {
 
 function AppRoutes() {
   const location = useLocation();
-  const previousPathnameRef = useRef(location.pathname);
 
   useEffect(() => {
     markNavigationUrlChanged(location.pathname);
   }, [location.key, location.pathname]);
-
-  useEffect(() => {
-    if (previousPathnameRef.current === location.pathname) return;
-    previousPathnameRef.current = location.pathname;
-
-    window.requestAnimationFrame(() => {
-      document.getElementById('main-content')?.focus({ preventScroll: true });
-      window.requestAnimationFrame(() => markNavigationUsable(location.pathname));
-    });
-  }, [location.pathname]);
 
   const routes = (
       <Routes location={location}>
@@ -188,8 +220,42 @@ function AppRoutes() {
   return routes;
 }
 
+/*
+ * Route readiness is tied to the committed lazy subtree above. Keep the setup
+ * gate below independent so authentication and recovery screens remain eager.
+ */
 function SetupGate() {
+  const location = useLocation();
+  const [forcedLocked, setForcedLocked] = useState(false);
+  const [connectionError, setConnectionError] = useState<unknown>(null);
+  const reconnectingRef = useRef(false);
+  const statusQuery = useQuery<AuthStatus>({
+    queryKey: ['auth-status'],
+    queryFn: loadAuthStatus,
+    retry: false,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true
+  });
+
   useEffect(() => {
+    const invalidateReports = () => {
+      void queryClient.invalidateQueries({ queryKey: ['relatorio-geral'], refetchType: 'active' });
+    };
+    window.addEventListener('geogestor:reports-invalidated', invalidateReports);
+    return () => window.removeEventListener('geogestor:reports-invalidated', invalidateReports);
+  }, []);
+
+  useEffect(() => {
+    const auth = statusQuery.data;
+    if (
+      operationalHydrationStarted
+      || !auth
+      || auth.setupRequired
+      || (auth.authRequired && (auth.locked || forcedLocked))
+    ) return;
+
+    operationalHydrationStarted = true;
     const marker = 'geogestor_operational_storage_migrated_v1';
     void (async () => {
       if (localStorage.getItem(marker) !== 'true') {
@@ -218,46 +284,33 @@ function SetupGate() {
       }
       await hydrateOperationalSettingsCache();
     })().catch(() => undefined);
-  }, []);
-  const location = useLocation();
-  const [forcedLocked, setForcedLocked] = useState(false);
-  const [connectionError, setConnectionError] = useState<unknown>(null);
-  const statusQuery = useQuery<{
-    setupRequired: boolean;
-    locked: boolean;
-    authRequired: boolean;
-    idleMinutes: number;
-    identity: AppIdentity | null;
-  }>({
-    queryKey: ['auth-status'],
-    queryFn: () => apiClient.get('/api/auth/status', { timeoutMs: 2_500 }),
-    retry: false,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
-    refetchOnWindowFocus: true
-  });
+  }, [forcedLocked, statusQuery.data]);
 
-  const retryConnection = useCallback(async () => {
-    setConnectionError(connectionError || new Error('Reconexão solicitada.'));
-    const result = await statusQuery.refetch();
-    if (result.isSuccess) {
-      setConnectionError(null);
-      await queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] !== 'auth-status'
-      });
-    }
-  }, [connectionError, statusQuery]);
-
-  useEffect(() => {
-    const handleUnavailable = () => {
-      setConnectionError(new Error('O serviço local interrompeu a resposta durante o uso.'));
-      void statusQuery.refetch().then(async (result) => {
-        if (!result.isSuccess) return;
+  const recoverConnection = useCallback(async () => {
+    if (reconnectingRef.current) return;
+    reconnectingRef.current = true;
+    try {
+      const result = await statusQuery.refetch();
+      if (result.isSuccess) {
         setConnectionError(null);
         await queryClient.invalidateQueries({
           predicate: (query) => query.queryKey[0] !== 'auth-status'
         });
-      });
+      }
+    } finally {
+      reconnectingRef.current = false;
+    }
+  }, [statusQuery]);
+
+  const retryConnection = useCallback(async () => {
+    setConnectionError((current: unknown) => current || new Error('Reconexão solicitada.'));
+    await recoverConnection();
+  }, [recoverConnection]);
+
+  useEffect(() => {
+    const handleUnavailable = () => {
+      setConnectionError(new Error('O serviço local interrompeu a resposta durante o uso.'));
+      void recoverConnection();
     };
     const handleLocked = () => setForcedLocked(true);
     window.addEventListener('geogestor:api-unavailable', handleUnavailable);
@@ -266,7 +319,7 @@ function SetupGate() {
       window.removeEventListener('geogestor:api-unavailable', handleUnavailable);
       window.removeEventListener('geogestor:session-locked', handleLocked);
     };
-  }, [statusQuery]);
+  }, [recoverConnection]);
 
   const lock = useCallback(async () => {
     try {
@@ -315,6 +368,7 @@ function SetupGate() {
         idleMinutes={statusQuery.data?.idleMinutes || 15}
         onUnlocked={async () => {
           setForcedLocked(false);
+          authStatusCache = null;
           await statusQuery.refetch();
           await queryClient.invalidateQueries();
         }}

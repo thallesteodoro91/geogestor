@@ -1,0 +1,123 @@
+- region "Notifications alt+T"
+- link "Pular para o conteúdo principal":
+  - /url: "#main-content"
+- complementary:
+  - text: GeoGestor v1.0.4
+  - paragraph: Gestão Topográfica
+  - navigation "Navegação principal do GeoGestor":
+    - text: NAVEGAÇÃO
+    - link "Visão Geral":
+      - /url: /
+    - link "Comercial":
+      - /url: /clientes
+    - link "Projetos":
+      - /url: /projetos
+    - link "Ambiental":
+      - /url: /ambiental
+    - link "Financeiro":
+      - /url: /financeiro
+    - link "Agenda":
+      - /url: /calendario
+    - link "Topografia":
+      - /url: /topografia
+    - text: GESTÃO E SISTEMA
+    - link "Relatórios":
+      - /url: /relatorios
+    - link "Planejamento":
+      - /url: /planejamento
+    - link "Cadastros":
+      - /url: /cadastros
+    - link "Configurações":
+      - /url: /configuracoes
+    - link "Ajuda":
+      - /url: /ajuda
+  - text: TE
+  - paragraph: Thalles E2E
+  - text: thalles.e2e@example.test
+  - button "Bloquear sessão"
+- main:
+  - button "Ativar modo escuro"
+  - 'button "Status do backup: Primeiro backup pendente. Nenhum backup realizado"'
+  - 'button "Notificações: 28 não lida(s)"'
+  - button "Buscar no GeoGestor": Buscar no GeoGestor Ctrl K
+  - text: ✓ Ferramentas técnicas
+  - heading "Topografia" [level=1]
+  - paragraph: Conversão de coordenadas e cálculos de apoio para conferência. Verifique o SRC, o datum e o método exigido antes de usar resultados em peças técnicas.
+  - tablist "Ferramentas de topografia":
+    - tab "Conversor GMS / Decimal"
+    - tab "Distância e azimute" [selected]
+    - tab "Área e perímetro"
+  - region "Referência espacial compartilhada":
+    - heading "Referência espacial compartilhada" [level=2]
+    - paragraph: SIRGAS 2000 · UTM 22S · EPSG:31982
+    - text: Conferir SRC
+    - button "Configurar"
+    - status: Origem e destino foram invertidos.
+  - button "Salvar cálculo" [disabled]
+  - tabpanel "Distância e azimute":
+    - heading "Distância e direção" [level=2]
+    - paragraph: Escolha entre cálculo elipsoidal e cálculo plano de quadrícula.
+    - button "Latitude/longitude"
+    - button "X/Y projetado" [pressed]
+    - button "Inverter origem/destino"
+    - group "Ponto de partida":
+      - text: Ponto de partida X / Este (m)
+      - textbox "X / Este (m)": "742000"
+      - text: Y / Norte (m)
+      - textbox "Y / Norte (m)": "6945000"
+    - group "Ponto de destino":
+      - text: Ponto de destino X / Este (m)
+      - textbox "X / Este (m)": "742010"
+      - text: Y / Norte (m)
+      - textbox "Y / Norte (m)": "11000000"
+    - paragraph: Definir pontos pelo mapa
+    - paragraph: Clique para definir o ponto selecionado ou arraste os marcadores A/B.
+    - button "Origem A"
+    - button "Destino B" [pressed]
+    - status:
+      - paragraph: Mapa-base indisponível
+      - paragraph: A camada do OpenStreetMap depende da internet. Marcadores, geometrias e dados próprios continuam visíveis quando disponíveis.
+      - button "Recarregar"
+    - region "Mapa dos pontos de origem e destino":
+      - img
+      - button "Origem. Arraste para reposicionar."
+      - button "Destino. Arraste para reposicionar."
+      - button "Zoom in"
+      - button "Zoom out"
+      - link "Leaflet":
+        - /url: https://leafletjs.com
+      - text: ©
+      - link "OpenStreetMap":
+        - /url: https://www.openstreetmap.org/copyright
+      - text: contributors
+    - list:
+      - listitem:
+        - strong: O Norte 11000000.000 m está fora do intervalo UTM.
+        - text: Use um Norte entre 0 e 10.000.000 m e confira o hemisfério.
+      - listitem:
+        - strong: A coordenada transformada cai no hemisfério Norte, diferente do S informado.
+        - text: Selecione o EPSG do hemisfério correto.
+      - listitem:
+        - strong: A posição transformada está fora da extensão territorial brasileira esperada.
+        - text: Prossiga se o levantamento for externo; caso contrário, confira SRC e eixos.
+    - paragraph: Distância de quadrícula
+    - paragraph: —
+    - paragraph: O Norte 11000000.000 m está fora do intervalo UTM.
+    - paragraph: Azimute de quadrícula
+    - paragraph: —
+    - paragraph: O Norte 11000000.000 m está fora do intervalo UTM.
+    - group:
+      - text: Detalhes técnicos
+      - paragraph: Método
+      - paragraph: Quadrícula e comparação elipsoidal
+      - paragraph: Datum
+      - paragraph: SIRGAS 2000
+      - paragraph: SRC
+      - paragraph: EPSG:31982
+      - paragraph: Distância geodésica
+      - paragraph: —
+      - paragraph: Karney / GeographicLib · SIRGAS 2000
+      - paragraph: Azimute geodésico inicial
+      - paragraph: —
+      - paragraph: Referenciado ao norte verdadeiro.
+      - text: Distância geodésica e distância de quadrícula são grandezas diferentes. Relevo e redução ao plano topográfico local não são aplicados automaticamente.

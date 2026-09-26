@@ -8,6 +8,7 @@ import darkModeIcon from '../assets/magnific-icons/night-mode_5510495.svg';
 import { cn } from '../utils/cn';
 import { UnifiedNotificationCenter } from './UnifiedNotificationCenter';
 import { BackupStatusIndicator } from './BackupStatusIndicator';
+import { usePendingNavigationPath } from '../hooks/usePendingNavigationPath';
 
 interface LayoutProps {
   children: ReactNode;
@@ -23,14 +24,17 @@ function LayoutShell({
   printContentOnly = false
 }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const pendingNavigationPath = usePendingNavigationPath();
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     const saved = localStorage.getItem('geogestor_theme');
     return saved === 'dark' || saved === 'light' || saved === 'system' ? saved : 'system';
   });
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => {
+      setSystemDark(media.matches);
       const dark = theme === 'dark' || (theme === 'system' && media.matches);
       document.documentElement.classList.toggle('dark', dark);
       document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
@@ -48,11 +52,9 @@ function LayoutShell({
     window.dispatchEvent(new Event('geogestor:theme-change'));
   };
 
-  const themeIcon = theme === 'dark'
-    ? lightModeIcon
-    : theme === 'light'
-      ? darkModeIcon
-      : document.documentElement.classList.contains('dark') ? lightModeIcon : darkModeIcon;
+  const isEffectiveDark = theme === 'dark' || (theme === 'system' && systemDark);
+  const themeIcon = isEffectiveDark ? lightModeIcon : darkModeIcon;
+  const themeToggleLabel = isEffectiveDark ? 'Ativar modo claro' : 'Ativar modo escuro';
 
   return (
     <div
@@ -89,7 +91,7 @@ function LayoutShell({
           <button
             onClick={toggleTheme}
             className="rounded-xl p-2 text-zinc-500 outline-none motion-fast motion-gpu hover:bg-zinc-100 hover:text-zinc-800 active:scale-[0.96] dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/30"
-            aria-label={theme === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}
+            aria-label={themeToggleLabel}
           >
             <img src={themeIcon} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 object-contain transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]" />
           </button>
@@ -113,18 +115,22 @@ function LayoutShell({
       <main
         id="main-content"
         tabIndex={-1}
+        aria-busy={pendingNavigationPath ? true : undefined}
         className={cn(
           'relative z-10 min-h-screen min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 focus:outline-none sm:p-6 md:p-12 md:pt-24',
           compactBottom && 'md:pb-0',
           printContentOnly && 'print:min-h-0 print:overflow-visible print:bg-white print:p-0'
         )}
       >
+        {pendingNavigationPath && (
+          <p role="status" aria-live="polite" className="sr-only">Abrindo nova tela…</p>
+        )}
         <div className="hidden print:hidden md:block absolute top-8 right-12 z-30">
           <button
             onClick={toggleTheme}
             className="flex items-center justify-center rounded-full p-2.5 text-zinc-500 outline-none motion-fast motion-gpu hover:bg-zinc-100 hover:text-zinc-800 active:scale-[0.96] dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-indigo-500/30"
-            aria-label={theme === 'light' ? 'Ativar modo escuro' : 'Ativar modo claro'}
-            title={theme === 'light' ? 'Modo Escuro' : 'Modo Claro'}
+            aria-label={themeToggleLabel}
+            title={isEffectiveDark ? 'Modo claro' : 'Modo escuro'}
           >
             <img src={themeIcon} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 object-contain transition-transform duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]" />
           </button>

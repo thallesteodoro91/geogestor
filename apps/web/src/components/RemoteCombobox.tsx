@@ -136,13 +136,14 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
   return (
     <div ref={rootRef} className="relative min-w-0">
       <input type="hidden" name={name} value={value} required={required} />
-      <div className="relative">
-        <MagnifyingGlass aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+      <div className="relative w-48 max-w-full">
+        <MagnifyingGlass aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
         <input
           ref={inputRef}
           id={id}
           type="text"
           role="combobox"
+          data-state={open ? 'open' : 'closed'}
           autoComplete="off"
           value={displayValue}
           disabled={disabled}
@@ -164,9 +165,9 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
             }
           }}
           onKeyDown={onKeyDown}
-          className={cn(geoFieldClass, 'h-12 w-full pl-10 pr-10', className)}
+          className={cn(geoFieldClass, 'geo-dropdown-trigger w-full', className)}
         />
-        <button type="button" tabIndex={-1} aria-label="Abrir opções" onClick={() => setOpen((current) => !current)} className="absolute right-0 top-0 flex h-12 w-10 items-center justify-center rounded-r-xl text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
+        <button type="button" tabIndex={-1} aria-label="Abrir opções" onClick={() => setOpen((current) => !current)} className="absolute right-0 top-0 flex h-8 w-8 items-center justify-center rounded-r-md text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
           <CaretDown aria-hidden="true" className={cn('h-4 w-4 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
         </button>
       </div>
@@ -174,12 +175,12 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
         {optionsQuery.isFetching ? 'Carregando opções…' : optionsQuery.isError ? 'Falha ao carregar opções.' : `${options.length} resultado(s).`}
       </span>
       {open && (
-        <div className="absolute z-50 mt-2 max-h-64 w-full overflow-y-auto overscroll-contain rounded-xl border border-zinc-200 bg-white p-1.5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900" id={listboxId} role="listbox">
+        <div className="geo-popover-surface geo-dropdown-content absolute left-0 z-50 mt-1 max-h-64 w-48 max-w-[calc(100vw-1rem)] overflow-y-auto overscroll-contain p-1" id={listboxId} role="listbox">
           {!required && (
-            <button type="button" role="option" aria-selected={!value} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm text-zinc-600 hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:text-zinc-300 dark:hover:bg-zinc-800">{emptyLabel}</button>
+            <button type="button" role="option" aria-selected={!value} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(null)} className="geo-option-row geo-dropdown-item">{emptyLabel}</button>
           )}
           {optionsQuery.isError ? (
-            <button type="button" onClick={() => optionsQuery.refetch()} className="min-h-11 w-full rounded-lg px-3 text-left text-sm text-red-700 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:text-red-300 dark:hover:bg-red-950/30">Não foi possível carregar. Tentar novamente</button>
+            <button type="button" onClick={() => optionsQuery.refetch()} className="geo-option-row geo-dropdown-item text-red-700 hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:text-red-300 dark:hover:bg-red-950/30">Não foi possível carregar. Tentar novamente</button>
           ) : !optionsQuery.isFetching && options.length === 0 ? (
             <p className="px-3 py-4 text-sm text-zinc-500">Nenhum resultado encontrado.</p>
           ) : options.map((option, index) => {
@@ -194,7 +195,7 @@ export function RemoteCombobox<T extends RemoteOptionRecord>({
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActiveIndex(index)}
                 onClick={() => choose(option)}
-                className={cn('flex min-h-11 w-full flex-col justify-center rounded-lg px-3 py-2 text-left hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-emerald-500/40 dark:hover:bg-zinc-800', index === activeIndex && 'bg-zinc-100 dark:bg-zinc-800')}
+                className={cn('geo-option-row geo-dropdown-item geo-dropdown-item-multiline flex-col', index === activeIndex && 'geo-option-row-active', option.id === value && 'geo-option-row-selected')}
               >
                 <span className="truncate text-sm font-medium text-zinc-950 dark:text-white">{getOptionLabel(option)}</span>
                 {description && <span className="truncate text-xs text-zinc-600 dark:text-zinc-300">{description}</span>}

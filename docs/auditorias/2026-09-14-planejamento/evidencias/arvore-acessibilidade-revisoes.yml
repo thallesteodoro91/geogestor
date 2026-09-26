@@ -1,0 +1,118 @@
+- region "Notifications alt+T"
+- link "Pular para o conteúdo principal":
+  - /url: "#main-content"
+- complementary:
+  - text: GeoGestor v1.0.4
+  - paragraph: Gestão Topográfica
+  - navigation "Navegação principal do GeoGestor":
+    - text: NAVEGAÇÃO
+    - link "Visão Geral":
+      - /url: /
+    - link "Comercial":
+      - /url: /clientes
+    - link "Projetos":
+      - /url: /projetos
+    - link "Ambiental":
+      - /url: /ambiental
+    - link "Financeiro":
+      - /url: /financeiro
+    - link "Agenda":
+      - /url: /calendario
+    - link "Topografia":
+      - /url: /topografia
+    - text: GESTÃO E SISTEMA
+    - link "Relatórios":
+      - /url: /relatorios
+    - link "Planejamento":
+      - /url: /planejamento
+    - link "Cadastros":
+      - /url: /cadastros
+    - link "Configurações":
+      - /url: /configuracoes
+    - link "Ajuda":
+      - /url: /ajuda
+  - text: TE
+  - paragraph: Thalles E2E
+  - text: thalles.e2e@example.test
+  - button "Bloquear sessão"
+- main:
+  - button "Ativar modo escuro"
+  - 'button "Status do backup: Primeiro backup pendente. Nenhum backup realizado"'
+  - 'button "Notificações: 43 não lida(s)"'
+  - button "Buscar no GeoGestor": Buscar no GeoGestor Ctrl K
+  - text: ✓ Estratégia e execução
+  - heading "Planejamento estratégico" [level=1]
+  - paragraph: Conecte direção, objetivos, iniciativas, riscos e decisões em um ciclo mensurável.
+  - button "Registrar revisão"
+  - paragraph: Registro estratégico criado.
+  - region "Ciclo estratégico selecionado":
+    - text: Ciclo estratégico
+    - combobox "Ciclo estratégico": Ciclo E2E 659406
+    - text: Ativo
+    - paragraph: 19 de set. de 2026 a 19 de set. de 2027 · Próxima revisão não definida
+    - button "Editar ciclo"
+  - navigation "Áreas do planejamento estratégico":
+    - tablist:
+      - tab "Visão estratégica"
+      - tab "Objetivos e metas"
+      - tab "Iniciativas"
+      - tab "Revisões e riscos" [selected]
+  - tabpanel "Revisões e riscos":
+    - text: O que exige decisão?
+    - heading "Revisões, decisões e riscos" [level=2]
+    - paragraph: Registre a leitura do ciclo e mantenha mitigação e responsabilidade explícitas.
+    - button "Nova decisão"
+    - button "Novo risco"
+    - button "Registrar revisão"
+    - region "Filtros do planejamento":
+      - paragraph: 3 de 3 registros
+      - text: Responsável
+      - combobox "Filtrar por responsável": Todos
+      - text: Situação
+      - combobox "Filtrar por situação": Todas
+      - text: Objetivo
+      - combobox "Filtrar por objetivo": Todos
+      - text: Prazo
+      - combobox "Filtrar por prazo": Todos
+      - text: Impacto do risco
+      - combobox "Filtrar por impacto do risco": Todos
+      - text: Ordenar por
+      - combobox "Ordenar registros": Prazo e relevância
+    - region "Decisões estratégicas":
+      - text: Governança
+      - heading "Decisões estratégicas" [level=3]
+      - list:
+        - listitem:
+          - text: Pendente
+          - paragraph: Padronizar a revisão 659406
+          - button "Editar decisão estratégica"
+          - button "Excluir decisão estratégica"
+          - term: Responsável
+          - definition: Responsável 659406
+          - term: Prazo
+          - definition: 19 de set. de 2027
+    - region "Revisões estratégicas":
+      - text: Histórico de decisão
+      - heading "Revisões estratégicas" [level=3]
+      - list:
+        - listitem:
+          - text: No rumo 19 de set. de 2026
+          - paragraph: O ciclo avançou, com indicador confiável e execução iniciada.
+          - button "Editar revisão de 19 de set. de 2026"
+          - button "Excluir revisão de 19 de set. de 2026"
+          - term: Próximos passos
+          - definition: Concluir o próximo marco e atualizar o indicador.
+    - region "Riscos estratégicos":
+      - text: Gestão preventiva
+      - heading "Riscos estratégicos" [level=3]
+      - list:
+        - listitem:
+          - text: Aberto Impacto alto · probabilidade medio
+          - paragraph: Atraso de insumos 659406
+          - button "Editar risco estratégico"
+          - button "Excluir risco estratégico"
+          - paragraph:
+            - text: "Responsável:"
+            - strong: Responsável 659406
+          - strong: "Mitigação:"
+          - text: Antecipar compras e revisar fornecedores semanalmente.

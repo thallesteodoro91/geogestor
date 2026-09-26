@@ -110,6 +110,7 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     await runRuntimeMigrations();
 
     const clientId = crypto.randomUUID();
+    const existingProjectId = crypto.randomUUID();
     await db.insert(schema.clientes).values({
       id: clientId,
       nome: 'Cliente Integração',
@@ -117,6 +118,54 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
       email: 'cliente@teste.local',
       telefone: '48999999999'
     });
+    await db.insert(schema.projetos).values({
+      id: existingProjectId,
+      clienteId: clientId,
+      nome: 'Projeto existente para aprovação',
+      status: 'Em Andamento'
+    });
+
+    const filterOptionsResponse = await request({ method: 'GET', url: '/api/orcamentos/filter-options' });
+    assert.equal(filterOptionsResponse.statusCode, 200, filterOptionsResponse.body);
+    assert.ok(filterOptionsResponse.json<{ projects: Array<{ id: string; clientId: string }> }>().projects
+      .some((project) => project.id === existingProjectId && project.clientId === clientId));
+
+    const extraFieldResponse = await request({
+      method: 'POST',
+      url: '/api/orcamentos',
+      payload: { ...payload(clientId), campoNaoPermitido: 'mass-assignment' }
+    });
+    assert.equal(extraFieldResponse.statusCode, 400, extraFieldResponse.body);
+
+    const invalidDateResponse = await request({
+      method: 'POST',
+      url: '/api/orcamentos',
+      payload: { ...payload(clientId), issueDate: '2026-02-31', validUntil: '2026-02-01' }
+    });
+    assert.equal(invalidDateResponse.statusCode, 400, invalidDateResponse.body);
+
+    const invertedFilterResponse = await request({
+      method: 'GET',
+      url: '/api/orcamentos?mode=page&issueFrom=2026-09-10&issueTo=2026-09-01&minValueCents=200&maxValueCents=100'
+    });
+    assert.equal(invertedFilterResponse.statusCode, 400, invertedFilterResponse.body);
+
+    const excessiveInstallmentsResponse = await request({
+      method: 'POST',
+      url: '/api/orcamentos',
+      payload: {
+        ...payload(clientId),
+        payment: {
+          ...payload(clientId).payment,
+          installments: Array.from({ length: 61 }, (_, index) => ({
+            percentage: index === 60 ? '40' : '1',
+            daysAfterApproval: index * 30,
+            label: `Parcela ${index + 1}`
+          }))
+        }
+      }
+    });
+    assert.equal(excessiveInstallmentsResponse.statusCode, 400, excessiveInstallmentsResponse.body);
 
     const templateResponse = await request({
       method: 'POST',
@@ -137,6 +186,13 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
       payload: { name: 'Modelo topográfico revisado' }
     });
     assert.equal(updateTemplateResponse.statusCode, 200, updateTemplateResponse.body);
+
+    const missingTemplateResponse = await request({
+      method: 'PATCH',
+      url: `/api/orcamentos/templates/${crypto.randomUUID()}`,
+      payload: { name: 'Modelo inexistente' }
+    });
+    assert.equal(missingTemplateResponse.statusCode, 404, missingTemplateResponse.body);
 
     const taxProfileResponse = await request({
       method: 'POST',
@@ -167,7 +223,7 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
       method: 'POST',
       url: '/api/orcamentos/pricing-parameters',
       payload: {
-        key: 'deslocamento-integracao', name: 'Deslocamento de integração', category: 'Deslocamento',
+        key: '  DESLOCAMENTO-INTEGRACAO  ', name: 'Deslocamento de integração', category: 'Deslocamento',
         unit: 'km', valueCents: 425, notes: 'Valor revisado'
       }
     });
@@ -389,6 +445,23 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.equal(projectFinancialContext.statusCode, 200, projectFinancialContext.body);
     assert.ok(projectFinancialContext.json<{ custoPrevisto: number }>().custoPrevisto > 0);
     assert.equal(projectFinancialContext.json<{ custoRealizado: number }>().custoRealizado, 0);
+
+    const prematureFinancialDecision = await request({
+      method: 'POST',
+      url: `/api/projetos/${approval.projectId}/decisao-financeira`,
+      payload: {
+        tipo: 'manter_sem_alteracao',
+        motivo: 'Contrato e parcelas permanecem válidos após a revisão operacional.'
+      }
+    });
+    assert.equal(prematureFinancialDecision.statusCode, 409, prematureFinancialDecision.body);
+
+    const suspendProject = await request({
+      method: 'PATCH',
+      url: `/api/projetos/${approval.projectId}`,
+      payload: { status: 'Suspenso' }
+    });
+    assert.equal(suspendProject.statusCode, 200, suspendProject.body);
 
     const projectFinancialDecision = await request({
       method: 'POST',

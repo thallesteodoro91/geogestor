@@ -10,9 +10,29 @@ export interface LaudoOptions {
   observacoes: string;
 }
 
+export const sanitizeLaudoFileName = (projectName: string) => {
+  const sanitized = projectName
+    .normalize('NFC')
+    .split('')
+    .map((character) => character.charCodeAt(0) < 32 || '<>:"/\\|?*'.includes(character) ? ' ' : character)
+    .join('')
+    .replace(/\s+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/[. ]+$/g, '')
+    .slice(0, 100);
+  return sanitized || 'projeto';
+};
+
+export const formatLaudoDate = (dateKey: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) return dateKey;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+};
+
 export const gerarLaudoTecnico = async (options: LaudoOptions) => {
   const pdfMake = await loadPdfMake();
-  const dataAtual = new Date().toLocaleDateString('pt-BR');
+  const dataAtual = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  const safeProjectName = sanitizeLaudoFileName(options.projetoNome);
 
   const tituloLaudo = options.tipoLaudo === 'vistoria' ? 'LAUDO DE VISTORIA TÉCNICA' :
                       options.tipoLaudo === 'fauna' ? 'RELATÓRIO DE MONITORAMENTO DE FAUNA' :
@@ -20,7 +40,7 @@ export const gerarLaudoTecnico = async (options: LaudoOptions) => {
 
   const docDefinition: TDocumentDefinitions = {
     info: {
-      title: `Laudo_${options.projetoNome.replace(/\s+/g, '_')}`,
+      title: `Laudo_${safeProjectName}`,
       author: 'Geogestor',
     },
     pageSize: 'A4',
@@ -64,7 +84,7 @@ export const gerarLaudoTecnico = async (options: LaudoOptions) => {
           body: [
             [{ text: 'Empreendimento/Projeto:', style: 'label' }, { text: options.projetoNome, style: 'value' }],
             [{ text: 'Cliente:', style: 'label' }, { text: options.clienteNome, style: 'value' }],
-            [{ text: 'Data da Vistoria:', style: 'label' }, { text: options.dataVistoria, style: 'value' }],
+            [{ text: 'Data da Vistoria:', style: 'label' }, { text: formatLaudoDate(options.dataVistoria), style: 'value' }],
             [{ text: 'Técnico Responsável:', style: 'label' }, { text: options.tecnicoResponsavel, style: 'value' }]
           ]
         },
@@ -141,5 +161,5 @@ export const gerarLaudoTecnico = async (options: LaudoOptions) => {
     }
   };
 
-  pdfMake.createPdf(docDefinition).download(`Laudo_${options.projetoNome.replace(/\s+/g, '_')}.pdf`);
+  pdfMake.createPdf(docDefinition).download(`Laudo_${safeProjectName}.pdf`);
 };

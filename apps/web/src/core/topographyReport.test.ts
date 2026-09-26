@@ -13,7 +13,7 @@ test('monta memória de cálculo PDF com SRC, método, resultados e coordenadas'
     responsible: 'Responsável teste',
     mode: 'projetada',
     reference,
-    vertices: [{ x: 742000, y: 6945275 }, { x: 742100, y: 6945275 }, { x: 742100, y: 6945375 }],
+    vertices: [{ x: 742000, y: 6945275, code: 'M-01', description: 'Marco inicial', altitude: -2.5, precision: '0,02 m', notes: 'Conferido' }, { x: 742100, y: 6945275 }, { x: 742100, y: 6945375 }],
     area: 5000,
     perimeter: 341.421,
     method: 'Gauss e distância plana',
@@ -24,5 +24,10 @@ test('monta memória de cálculo PDF com SRC, método, resultados e coordenadas'
   assert.match(serialized, /EPSG:31982/);
   assert.match(serialized, /Gauss e distância plana/);
   assert.match(serialized, /742000/);
+  assert.match(serialized, /M-01/);
+  assert.match(serialized, /Marco inicial/);
+  assert.match(serialized, /-2,5/);
+  assert.match(serialized, /0,02 m/);
+  assert.match(serialized, /Conferido/);
   assert.match(serialized, /validade registral/);
 });

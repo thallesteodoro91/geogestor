@@ -596,6 +596,7 @@ export async function arquivosRoutes(server: FastifyInstance) {
   // GET: List files for a client (general files only)
   server.get('/cliente/:id', async (request, reply) => {
     const { id } = request.params as any;
+    const { scope = 'general' } = request.query as { scope?: 'general' | 'all' };
 
     try {
       const clienteInfo = await db
@@ -619,18 +620,36 @@ export async function arquivosRoutes(server: FastifyInstance) {
       await fs.mkdir(targetDir, { recursive: true });
 
       const projetosCliente = await db
-        .select({ nome: schema.projetos.nome })
+        .select({ id: schema.projetos.id, nome: schema.projetos.nome })
         .from(schema.projetos)
         .where(eq(schema.projetos.clienteId, id));
 
       const fileList = await collectFilesFromDir(targetDir, {
         excludedDirectories: projetosCliente.map(projeto => projeto.nome)
       });
-      const syncedFiles = await Promise.all(
-        fileList.map((file) => syncDocumentRecord(file, { clienteId: id }))
+      const generalFiles = await Promise.all(
+        fileList.map(async (file) => ({
+          ...(await syncDocumentRecord(file, { clienteId: id })),
+          originType: 'client' as const,
+          projetoId: null,
+          projetoNome: null
+        }))
       );
 
-      return { files: syncedFiles, path: targetDir };
+      if (scope !== 'all') return { files: generalFiles, path: targetDir };
+
+      const projectFiles = (await Promise.all(projetosCliente.map(async (projeto) => {
+        const projectDir = getProjectDirectory(dadosPasta, clienteNome, projeto.nome);
+        const files = await collectFilesFromDir(projectDir);
+        return Promise.all(files.map(async (file) => ({
+          ...(await syncDocumentRecord(file, { clienteId: id, projetoId: projeto.id })),
+          originType: 'project' as const,
+          projetoId: projeto.id,
+          projetoNome: projeto.nome
+        })));
+      }))).flat();
+
+      return { files: [...generalFiles, ...projectFiles], path: targetDir };
     } catch (err) {
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao processar arquivos do cliente' });

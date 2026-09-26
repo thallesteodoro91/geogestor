@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory, relativeDate, relativeInstant } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 const CORS_HEADERS = {
@@ -16,7 +17,7 @@ async function unlock(page: Page) {
   await expect(setup.or(locked).or(dashboard)).toBeVisible();
   if (await setup.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo A11y E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-A11y-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles A11y E2E');
     await page.getByLabel('E-mail').fill('a11y@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -101,14 +102,26 @@ test.describe('navegação e diálogos globais acessíveis', () => {
   });
 
   test('Central de Alertas contém o foco, preserva filtros e oferece retentativa', async ({ page }) => {
-    let attempts = 0;
+    let pageRequestsShouldFail = true;
     await page.route('**/api/alertas**', async (route) => {
       if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS_HEADERS });
       if (route.request().method() === 'POST') {
         return route.fulfill({ status: 200, headers: CORS_HEADERS, contentType: 'application/json', body: '{"success":true}' });
       }
-      attempts += 1;
-      if (attempts <= 2) {
+      if (new URL(route.request().url()).pathname === '/api/alertas/resumo') {
+        return route.fulfill({
+          status: 200,
+          headers: CORS_HEADERS,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            summary: { activeTotal: 1, unreadTotal: 0 },
+            preview: [],
+            settings: { enabled: true, nativeEnabled: false, categories: [] },
+            generatedAt: relativeInstant()
+          })
+        });
+      }
+      if (pageRequestsShouldFail) {
         return route.fulfill({ status: 500, headers: CORS_HEADERS, contentType: 'application/json', body: '{"message":"Falha sintética"}' });
       }
       return route.fulfill({
@@ -124,17 +137,22 @@ test.describe('navegação e diálogos globais acessíveis', () => {
             sourceId: 'a11y',
             title: 'Revisar acessibilidade',
             description: 'Alerta sintético',
-            dueDate: '2026-08-13',
+            dueDate: relativeDate(),
             daysUntilDue: 0,
             timingLabel: 'Vence hoje',
             severity: 'warning',
             link: '/tarefas?tarefaId=a11y',
-            readAt: '2026-08-13T12:00:00.000Z',
+            readAt: relativeInstant(),
             nativeNotifiedAt: null,
-            createdAt: '2026-08-13T12:00:00.000Z'
+            createdAt: relativeInstant()
           }],
+          page: 1,
+          limit: 50,
+          total: 1,
+          totalPages: 1,
+          unreadTotal: 0,
           settings: { enabled: true, nativeEnabled: false, categories: [] },
-          generatedAt: '2026-08-13T12:00:00.000Z'
+          generatedAt: relativeInstant()
         })
       });
     });
@@ -148,9 +166,18 @@ test.describe('navegação e diálogos globais acessíveis', () => {
     await expect(dialog).toBeVisible();
     await expect(categoryFilter).toBeFocused();
     await expect(page.locator('#root')).toHaveAttribute('inert', '');
-    await statusFilter.selectOption('read');
+    await expect(dialog.getByRole('button', { name: 'Tentar novamente' })).toBeVisible();
+    await statusFilter.click();
+    const failedFilteredRequest = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/alertas' && url.searchParams.get('status') === 'read' && response.status() === 500;
+    });
+    await page.getByRole('option', { name: 'Lidas', exact: true }).click();
+    await failedFilteredRequest;
+    await expect(dialog.getByRole('button', { name: 'Tentar novamente' })).toBeVisible();
+    pageRequestsShouldFail = false;
     await dialog.getByRole('button', { name: 'Tentar novamente' }).click();
-    await expect(statusFilter).toHaveValue('read');
+    await expect(statusFilter).toContainText('Lidas');
     await expect(dialog.getByRole('button', { name: 'Tarefas: Revisar acessibilidade. Vence hoje' })).toBeVisible();
 
     const closeButton = dialog.getByRole('button', { name: 'Fechar modal' });

@@ -16,7 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
 import { useReducedMotion } from 'framer-motion';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Area, Bar, ComposedChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
@@ -27,6 +27,7 @@ import { Layout } from '../../components/Layout';
 import { PageHeader } from '../../components/PageHeader';
 import { KpiTransparency, type KpiCompositionItem } from '../../components/KpiTransparency';
 import { apiClient } from '../../services/apiClient';
+import { getCachedCompanyTemplate } from '../../services/companyTemplate';
 import { cn } from '../../utils/cn';
 import { chartColors } from '../../data/chart-colors';
 import { chartActiveBar, chartActiveDot, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
@@ -40,12 +41,14 @@ import { buildReportDocumentModel } from './reportDocumentModel';
 import {
   REPORT_PERIOD_PRESETS,
   activeReportPeriodPreset,
+  reportPeriodError,
   reportPeriodGuidance,
   reportPeriodPresetRange,
   type ReportPeriodPreset
 } from './reportPeriodPresets';
 import {
   comparisonText,
+  canonicalReportSearch,
   formatCurrency,
   formatDate,
   formatMonth,
@@ -146,7 +149,7 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
             transparency={{
               definition: report.period.rules.receivedRevenue,
               period: report.period.label,
-              recordCount: report.state.filteredRecordCount,
+              recordCount: report.financial.composition?.receivedEventCount ?? report.state.filteredRecordCount,
               updatedAt: report.generatedAt,
               records: monthly.map((item) => ({ id: item.month, label: formatMonth(item.month), value: formatCurrency(item.receivedRevenue) }))
             }}
@@ -160,9 +163,12 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
             transparency={{
               definition: report.period.rules.pendingRevenue,
               period: report.period.label,
-              recordCount: report.state.filteredRecordCount,
+              recordCount: report.financial.composition?.pendingItemCount ?? report.state.filteredRecordCount,
               updatedAt: report.generatedAt,
-              warnings: kpis.overdueRevenue > 0 ? [`${formatCurrency(kpis.overdueRevenue)} estão vencidos.`] : []
+              warnings: [
+                ...(kpis.overdueRevenue > 0 ? [`${formatCurrency(kpis.overdueRevenue)} estão vencidos.`] : []),
+                'A abertura por parcela permanece disponível no módulo Financeiro.'
+              ]
             }}
           />
           <KpiCard
@@ -174,7 +180,7 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
             transparency={{
               definition: report.period.rules.paidExpenses,
               period: report.period.label,
-              recordCount: report.state.filteredRecordCount,
+              recordCount: report.financial.composition?.paidExpenseCount ?? report.state.filteredRecordCount,
               updatedAt: report.generatedAt,
               records: monthly.map((item) => ({ id: item.month, label: formatMonth(item.month), value: formatCurrency(item.paidExpenses) }))
             }}
@@ -188,7 +194,9 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
             transparency={{
               definition: 'Recebimentos confirmados menos despesas pagas no período.',
               period: report.period.label,
-              recordCount: report.state.filteredRecordCount,
+              recordCount: report.financial.composition
+                ? report.financial.composition.receivedEventCount + report.financial.composition.paidExpenseCount
+                : report.state.filteredRecordCount,
               updatedAt: report.generatedAt,
               records: monthly.map((item) => ({ id: item.month, label: formatMonth(item.month), value: formatCurrency(item.cashResult) })),
               warnings: kpis.cashResult < 0 ? ['As saídas pagas superam os recebimentos confirmados.'] : []
@@ -259,10 +267,10 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
                 <caption className="sr-only">Valores mensais exatos da evolução do caixa</caption>
                 <thead>
                   <tr className="text-left text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
-                    <th className="pb-3">Mês</th>
-                    <th className="pb-3 text-right">Recebido</th>
-                    <th className="pb-3 text-right">Pago</th>
-                    <th className="pb-3 text-right">Resultado</th>
+                    <th scope="col" className="pb-3">Mês</th>
+                    <th scope="col" className="pb-3 text-right">Recebido</th>
+                    <th scope="col" className="pb-3 text-right">Pago</th>
+                    <th scope="col" className="pb-3 text-right">Resultado</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -339,13 +347,14 @@ function OperationalReport({ report }: { report: ManagerialReport }) {
             <Breakdown title="Por tipo" rows={byType} chartLabel="Gráfico de projetos por tipo" color={chartColors.secondary} />
           </div>
           <div className="mt-5 border-t border-zinc-200 pt-5 dark:border-zinc-800">
-            <Breakdown title="Principais municípios" rows={byMunicipality.slice(0, 6)} chartLabel="Gráfico dos principais municípios dos projetos" color={chartColors.positive} />
+            <Breakdown title="Principais municípios" rows={byMunicipality} chartLabel="Gráfico dos principais municípios dos projetos" color={chartColors.positive} chartLimit={6} />
           </div>
         </section>
         <section aria-labelledby="deadlines-title" className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
           <h2 id="deadlines-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Agenda crítica de entregas</h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Projetos vencidos ou com entrega nos próximos 30 dias.</p>
           {deadlines.length ? (
+            <>
             <ul className="mt-5 divide-y divide-zinc-200 dark:divide-zinc-800">
               {deadlines.slice(0, 8).map((deadline) => (
                 <li key={deadline.id} className="flex items-center justify-between gap-4 py-3">
@@ -366,6 +375,10 @@ function OperationalReport({ report }: { report: ManagerialReport }) {
                 </li>
               ))}
             </ul>
+            {deadlines.length > 8 ? (
+              <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">Mostrando 8 de {deadlines.length} entregas; consulte Projetos para a lista completa.</p>
+            ) : null}
+            </>
           ) : <p className="mt-5 text-sm text-zinc-600 dark:text-zinc-400">Nenhuma entrega crítica no recorte.</p>}
         </section>
       </div>
@@ -377,12 +390,14 @@ function Breakdown({
   title,
   rows,
   chartLabel,
-  color
+  color,
+  chartLimit = 8
 }: {
   title: string;
   rows: Array<{ label: string; count: number }>;
   chartLabel: string;
   color: string;
+  chartLimit?: number;
 }) {
   const total = rows.reduce((sum, row) => sum + row.count, 0) || 1;
   return (
@@ -390,7 +405,10 @@ function Breakdown({
       <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
       {rows.length ? (
         <>
-          <ProjectBreakdownChart rows={rows} ariaLabel={chartLabel} color={color} />
+          <ProjectBreakdownChart rows={rows.slice(0, chartLimit)} ariaLabel={chartLabel} color={color} />
+          {rows.length > chartLimit ? (
+            <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">O gráfico mostra {chartLimit} de {rows.length} grupos; a lista abaixo contém todos.</p>
+          ) : null}
           <ul className="mt-4 space-y-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
             {rows.map((row) => (
               <li key={row.label}>
@@ -412,19 +430,28 @@ function Breakdown({
 
 function ReportDocument({ report, type }: { report: ManagerialReport; type: ReportType }) {
   const model = buildReportDocumentModel(report, type);
+  const documentId = useId().replace(/:/g, '');
+  const company = getCachedCompanyTemplate();
+  const identity = [company.razao || 'GeoGestor', company.cnpj ? `CNPJ ${company.cnpj}` : '', company.email || ''].filter(Boolean).join(' · ');
   return (
     <article data-report-document className="mx-auto max-w-4xl rounded-2xl bg-white p-6 text-zinc-950 ring-1 ring-zinc-200 sm:p-10 print:max-w-none print:rounded-none print:p-0 print:ring-0">
       <header className="flex flex-col gap-4 border-b border-zinc-300 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-700">GeoGestor · Relatório gerencial</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-700">{identity}</p>
           <h2 className="mt-2 text-2xl font-semibold">{model.title}</h2>
           <p className="mt-1 text-sm text-zinc-600">Período: {model.period}</p>
         </div>
         <p className="text-sm text-zinc-600">Emitido em {model.issuedAt}</p>
       </header>
+      {model.summary.length ? (
+        <section aria-labelledby={`${documentId}-summary`} className="mt-7 break-inside-avoid">
+          <h3 id={`${documentId}-summary`} className="text-base font-semibold">Síntese executiva</h3>
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm">{model.summary.map((item) => <li key={item}>{item}</li>)}</ul>
+        </section>
+      ) : null}
       {model.sections.map((section, sectionIndex) => (
-        <section key={section.title} aria-labelledby={`document-section-${sectionIndex}`} className="mt-7 break-inside-avoid">
-          <h3 id={`document-section-${sectionIndex}`} className="text-base font-semibold">{section.title}</h3>
+        <section key={section.title} aria-labelledby={`${documentId}-section-${sectionIndex}`} className="mt-7 break-inside-avoid">
+          <h3 id={`${documentId}-section-${sectionIndex}`} className="text-base font-semibold">{section.title}</h3>
           <table className="mt-3 w-full border-collapse text-sm">
             <tbody className="divide-y divide-zinc-200">
               {section.rows.map(({ label, value }) => (
@@ -437,6 +464,12 @@ function ReportDocument({ report, type }: { report: ManagerialReport; type: Repo
           </table>
         </section>
       ))}
+      {model.alerts.length ? (
+        <section aria-labelledby={`${documentId}-alerts`} className="mt-7 break-inside-avoid">
+          <h3 id={`${documentId}-alerts`} className="text-base font-semibold">Pontos de atenção</h3>
+          <ul className="mt-3 space-y-3 text-sm">{model.alerts.map((alert) => <li key={`${alert.title}-${alert.description}`}><strong>{alert.title}:</strong> {alert.description}</li>)}</ul>
+        </section>
+      ) : null}
       <section className="mt-7 border-t border-zinc-300 pt-5 text-xs leading-5 text-zinc-600">
         <h3 className="font-semibold text-zinc-800">Critérios do recorte</h3>
         {model.criteria.map((criterion, index) => <p key={criterion} className={index === 0 ? 'mt-1' : undefined}>{criterion}</p>)}
@@ -454,7 +487,13 @@ export function Relatorios() {
     : 'financeiro';
   const startDate = searchParams.get('inicio') || '';
   const endDate = searchParams.get('fim') || '';
-  const invalidRange = Boolean(startDate && endDate && startDate > endDate);
+  const periodError = reportPeriodError(startDate, endDate);
+  const serializedSearch = searchParams.toString();
+
+  useEffect(() => {
+    const canonical = canonicalReportSearch(serializedSearch);
+    if (canonical !== serializedSearch) setSearchParams(canonical, { replace: true });
+  }, [serializedSearch, setSearchParams]);
   const matchedPreset = activeReportPeriodPreset(startDate, endDate);
   const customPeriodSelected = searchParams.get('periodo') === 'personalizado'
     || (Boolean(startDate || endDate) && !matchedPreset);
@@ -466,10 +505,11 @@ export function Relatorios() {
 
   const reportQuery = useQuery<ManagerialReport>({
     queryKey: ['relatorio-geral', startDate || null, endDate || null],
-    queryFn: () => apiClient.get<ManagerialReport>(
-      `/api/relatorios/geral${endpointParams.size ? `?${endpointParams.toString()}` : ''}`
+    queryFn: ({ signal }) => apiClient.get<ManagerialReport>(
+      `/api/relatorios/geral${endpointParams.size ? `?${endpointParams.toString()}` : ''}`,
+      { signal }
     ),
-    enabled: !invalidRange,
+    enabled: !periodError,
     retry: false,
     staleTime: 30_000
   });
@@ -492,7 +532,7 @@ export function Relatorios() {
     const next = new URLSearchParams(searchParams);
     next.delete('inicio');
     next.delete('fim');
-    next.set('periodo', 'personalizado');
+    next.delete('periodo');
     setSearchParams(next, { replace: true });
   };
   const selectCustomPeriod = () => {
@@ -576,7 +616,7 @@ export function Relatorios() {
               customSelected={customPeriodSelected}
               startDate={startDate}
               endDate={endDate}
-              invalidRange={invalidRange}
+              periodError={periodError}
               guidance={periodGuidance}
               onSelectPreset={applyPeriodPreset}
               onSelectCustom={selectCustomPeriod}
@@ -597,7 +637,12 @@ export function Relatorios() {
         data-report-type={reportType}
         className="min-w-0"
       >
-        {reportQuery.isLoading ? (
+        {periodError ? (
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-950 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-100">
+            <h2 className="font-semibold">Período inválido</h2>
+            <p className="mt-1 text-sm">{periodError} Abra o seletor de período para corrigir as datas.</p>
+          </div>
+        ) : reportQuery.isLoading ? (
           <div role="status" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <span className="sr-only">Carregando relatório…</span>
             {[0, 1, 2, 3].map((item) => <div key={item} className="h-40 animate-pulse rounded-2xl bg-zinc-200 motion-reduce:animate-none dark:bg-zinc-800" />)}

@@ -1,0 +1,298 @@
+{
+  "runtime": {
+    "python": "3.12.14",
+    "pyproj": "3.7.2",
+    "proj": "9.5.1",
+    "geographiclib": "2.1",
+    "shapely": "2.1.2",
+    "axisPolicy": "always_xy=True (longitude/easting, latitude/northing)"
+  },
+  "crs": {
+    "epsg31982": {
+      "$schema": "https://proj.org/schemas/v0.7/projjson.schema.json",
+      "type": "ProjectedCRS",
+      "name": "SIRGAS 2000 / UTM zone 22S",
+      "base_crs": {
+        "name": "SIRGAS 2000",
+        "datum": {
+          "type": "GeodeticReferenceFrame",
+          "name": "Sistema de Referencia Geocentrico para las AmericaS 2000",
+          "ellipsoid": {
+            "name": "GRS 1980",
+            "semi_major_axis": 6378137,
+            "inverse_flattening": 298.257222101
+          }
+        },
+        "coordinate_system": {
+          "subtype": "ellipsoidal",
+          "axis": [
+            {
+              "name": "Geodetic latitude",
+              "abbreviation": "Lat",
+              "direction": "north",
+              "unit": "degree"
+            },
+            {
+              "name": "Geodetic longitude",
+              "abbreviation": "Lon",
+              "direction": "east",
+              "unit": "degree"
+            }
+          ]
+        },
+        "id": {
+          "authority": "EPSG",
+          "code": 4674
+        }
+      },
+      "conversion": {
+        "name": "UTM zone 22S",
+        "method": {
+          "name": "Transverse Mercator",
+          "id": {
+            "authority": "EPSG",
+            "code": 9807
+          }
+        },
+        "parameters": [
+          {
+            "name": "Latitude of natural origin",
+            "value": 0,
+            "unit": "degree",
+            "id": {
+              "authority": "EPSG",
+              "code": 8801
+            }
+          },
+          {
+            "name": "Longitude of natural origin",
+            "value": -51,
+            "unit": "degree",
+            "id": {
+              "authority": "EPSG",
+              "code": 8802
+            }
+          },
+          {
+            "name": "Scale factor at natural origin",
+            "value": 0.9996,
+            "unit": "unity",
+            "id": {
+              "authority": "EPSG",
+              "code": 8805
+            }
+          },
+          {
+            "name": "False easting",
+            "value": 500000,
+            "unit": "metre",
+            "id": {
+              "authority": "EPSG",
+              "code": 8806
+            }
+          },
+          {
+            "name": "False northing",
+            "value": 10000000,
+            "unit": "metre",
+            "id": {
+              "authority": "EPSG",
+              "code": 8807
+            }
+          }
+        ]
+      },
+      "coordinate_system": {
+        "subtype": "Cartesian",
+        "axis": [
+          {
+            "name": "Easting",
+            "abbreviation": "E",
+            "direction": "east",
+            "unit": "metre"
+          },
+          {
+            "name": "Northing",
+            "abbreviation": "N",
+            "direction": "north",
+            "unit": "metre"
+          }
+        ]
+      },
+      "scope": "Engineering survey, topographic mapping.",
+      "area": "Brazil - between 54°W and 48°W, northern and southern hemispheres, onshore and offshore. In remainder of South America - between 54°W and 48°W, southern hemisphere, onshore and offshore.",
+      "bbox": {
+        "south_latitude": -54.18,
+        "west_longitude": -54,
+        "north_latitude": 7.04,
+        "east_longitude": -47.99
+      },
+      "id": {
+        "authority": "EPSG",
+        "code": 31982
+      }
+    },
+    "florianopolisSirgas2000To31982": {
+      "longitude": -48.54822,
+      "latitude": -27.59487,
+      "x": 742003.210469342,
+      "y": 6945275.21488603,
+      "roundTripLongitude": -48.54822,
+      "roundTripLatitude": -27.594870000000004,
+      "roundTripErrorDegrees": 3.552713678800501e-15
+    },
+    "florianopolisWgs84To32722": {
+      "longitude": -48.54822,
+      "latitude": -27.59487,
+      "x": 742003.2104684887,
+      "y": 6945275.214796459,
+      "roundTripLongitude": -48.54822,
+      "roundTripLatitude": -27.594870000000004,
+      "roundTripErrorDegrees": 3.552713678800501e-15
+    },
+    "boaVistaSirgas2000To31974": {
+      "longitude": -60.6758,
+      "latitude": 2.8235,
+      "x": 758384.4041682747,
+      "y": 312342.38111573394,
+      "roundTripLongitude": -60.6758,
+      "roundTripLatitude": 2.8235000000000006,
+      "roundTripErrorDegrees": 4.440892098500626e-16
+    },
+    "zoneBoundaryWest": {
+      "longitude": -54.000001,
+      "latitude": -1e-06,
+      "x": 833978.4454907656,
+      "y": 9999999.889317244,
+      "roundTripLongitude": -54.000001,
+      "roundTripLatitude": -9.99999998436273e-07,
+      "roundTripErrorDegrees": 1.5637270056839507e-15
+    },
+    "zoneBoundaryEast": {
+      "longitude": -54.0,
+      "latitude": 1e-06,
+      "x": 166021.4430805355,
+      "y": 10000000.110682756,
+      "roundTripLongitude": -54.0,
+      "roundTripLatitude": 9.99999997515403e-07,
+      "roundTripErrorDegrees": 2.4845968737415925e-15
+    },
+    "utmMetadataFlorianopolis": {
+      "meridianConvergenceDegrees": -1.136258829477666,
+      "meridionalScale": 1.0003229671041056,
+      "parallelScale": 1.0003229670328937,
+      "arealScale": 1.0006460384447269
+    }
+  },
+  "geodesicsGrs80": {
+    "saoPauloToRio": {
+      "distanceMeters": 361260.8611460836,
+      "initialBearingDegrees": 79.305445859348,
+      "finalBearingDegrees": 77.94028501162146
+    },
+    "rioToSaoPaulo": {
+      "distanceMeters": 361260.8611460836,
+      "initialBearingDegrees": 257.9402850116214,
+      "finalBearingDegrees": 259.30544585934797
+    },
+    "coincident": {
+      "distanceMeters": 0.0,
+      "initialBearingDegrees": null,
+      "finalBearingDegrees": null
+    },
+    "almostCoincident": {
+      "distanceMeters": 0.00014841375856261893,
+      "initialBearingDegrees": 41.699122099532126,
+      "finalBearingDegrees": 41.69912209906891
+    },
+    "almostAntipodal": {
+      "distanceMeters": 20003920.40011045,
+      "initialBearingDegrees": 0.009500228450510958,
+      "finalBearingDegrees": 179.99049977154948
+    },
+    "antimeridian": {
+      "distanceMeters": 21927.872477948196,
+      "initialBearingDegrees": 89.9826351650211,
+      "finalBearingDegrees": 90.0173648349789
+    },
+    "shortNorth": {
+      "distanceMeters": 9.973165388999865,
+      "initialBearingDegrees": 0.0,
+      "finalBearingDegrees": 0.0
+    }
+  },
+  "planar": {
+    "square10": {
+      "areaSquareMeters": 100.0,
+      "perimeterMeters": 40.0
+    },
+    "rectangle20x5": {
+      "areaSquareMeters": 100.0,
+      "perimeterMeters": 50.0
+    },
+    "triangle": {
+      "areaSquareMeters": 50.0,
+      "perimeterMeters": 34.14213562373095
+    },
+    "irregular": {
+      "areaSquareMeters": 67.5,
+      "perimeterMeters": 31.78452938193187
+    }
+  },
+  "geographicPolygonsGrs80": {
+    "small": {
+      "areaSquareMeters": 10940.29728782177,
+      "perimeterMeters": 419.0811109626364
+    },
+    "smallReversed": {
+      "areaSquareMeters": 10940.29728782177,
+      "perimeterMeters": 419.0811109626364
+    },
+    "antimeridian": {
+      "areaSquareMeters": 969868070.037529,
+      "perimeterMeters": 131927.7754060098
+    },
+    "antimeridianReversed": {
+      "areaSquareMeters": 969868070.037529,
+      "perimeterMeters": 131927.7754060098
+    }
+  },
+  "topologyShapely": {
+    "duplicate": {
+      "isValid": true,
+      "reason": "Valid Geometry",
+      "area": 50.0
+    },
+    "collinear": {
+      "isValid": false,
+      "reason": "Self-intersection[5 0]",
+      "area": 0.0
+    },
+    "bowTie": {
+      "isValid": false,
+      "reason": "Self-intersection[5 5]",
+      "area": 0.0
+    },
+    "overlap": {
+      "isValid": false,
+      "reason": "Ring Self-intersection[1 0]",
+      "area": 21.0
+    }
+  },
+  "unitIdentities": {
+    "oneHectareSquareMeters": 10000,
+    "oneSquareKilometerSquareMeters": 1000000,
+    "oneKilometerMeters": 1000
+  },
+  "tolerances": {
+    "projectedCoordinateMeters": 0.01,
+    "crsRoundTripDegrees": 1e-08,
+    "geodesicDistanceMeters": 0.005,
+    "geodesicBearingDegrees": 1e-07,
+    "geodesicAreaSquareMeters": 0.05,
+    "planarComputational": 1e-09,
+    "visualCoordinateMeters": 0.001,
+    "visualDistanceMeters": 0.001,
+    "visualBearingDegrees": 0.01
+  }
+}

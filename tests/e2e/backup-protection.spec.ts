@@ -2,6 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { e2eDataDirectory, e2eEvidenceRoot, relativeDate, relativeInstant } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 const CORS_HEADERS = {
@@ -10,12 +11,12 @@ const CORS_HEADERS = {
   'access-control-allow-methods': 'GET,POST,OPTIONS'
 };
 
-const completedAt = '2026-08-22T15:00:00.000Z';
+const completedAt = relativeInstant(-1);
 
 function backupStatus() {
   return {
     policy: {
-      destinationDirectory: 'D:\\GeoGestor Backups\\SkyGeo',
+      destinationDirectory: path.join(e2eEvidenceRoot(), 'backups'),
       automaticEnabled: true,
       changeDebounceMinutes: 5,
       databaseIntervalHours: 6,
@@ -32,13 +33,13 @@ function backupStatus() {
       restoreTestIntervalDays: 30
     },
     storage: {
-      backupDirectory: 'D:\\GeoGestor Backups\\SkyGeo',
+      backupDirectory: path.join(e2eEvidenceRoot(), 'backups'),
       versions: 1,
       totalBytes: 48 * 1024 * 1024,
       availableBytes: 500 * 1024 * 1024,
       history: [
         {
-          directory: 'backup-2026-08-22',
+          directory: `backup-${relativeDate(-1)}`,
           type: 'complete',
           createdAt: completedAt,
           completedAt,
@@ -68,8 +69,8 @@ function backupStatus() {
       keyId: 'key-a11y-e2e',
       state: 'not_confirmed'
     },
-    database: { attemptedAt: completedAt, completedAt, nextAt: '2026-08-22T21:00:00.000Z', durationMs: 1200, totalBytes: 1024, totalFiles: 1, status: 'current', error: null },
-    complete: { attemptedAt: completedAt, completedAt, nextAt: '2026-08-23T15:00:00.000Z', durationMs: 2400, totalBytes: 48 * 1024 * 1024, totalFiles: 18, status: 'current', error: null },
+    database: { attemptedAt: completedAt, completedAt, nextAt: relativeInstant(), durationMs: 1200, totalBytes: 1024, totalFiles: 1, status: 'current', error: null },
+    complete: { attemptedAt: completedAt, completedAt, nextAt: relativeInstant(1), durationMs: 2400, totalBytes: 48 * 1024 * 1024, totalFiles: 18, status: 'current', error: null },
     restoreTest: null,
     activeOperation: null as null | Record<string, unknown>,
     protection: {
@@ -117,7 +118,7 @@ async function unlock(page: Page) {
   await expect(setup.or(locked).or(dashboard)).toBeVisible();
   if (await setup.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo Backup E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-Backup-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles Backup E2E');
     await page.getByLabel('E-mail').fill('backup@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);

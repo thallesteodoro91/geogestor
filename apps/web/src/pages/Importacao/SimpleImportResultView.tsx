@@ -45,7 +45,7 @@ export function SimpleImportResultView({ result }: { result: SimpleImportResult 
       {failures.length > 0 && (
         <section aria-labelledby="simple-import-failures-title">
           <h3 id="simple-import-failures-title" className="text-sm font-bold">Falhas por linha</h3>
-          <div className="mt-2 max-h-72 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <div role="region" aria-label="Falhas por linha da importação" tabIndex={0} className="mt-2 max-h-72 overflow-auto rounded-lg border border-zinc-200 focus-visible:ring-2 focus-visible:ring-emerald-600 dark:border-zinc-800">
             <table className="w-full min-w-[560px] text-left text-sm"><thead className="sticky top-0 bg-zinc-50 text-xs uppercase dark:bg-zinc-950"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">Como corrigir</th></tr></thead><tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">{failures.map((item) => <tr key={item.index}><td className="px-3 py-2 tabular-nums">{item.row}</td><td className="px-3 py-2">{item.errors?.join(' ') || 'Revise os dados desta linha.'}</td></tr>)}</tbody></table>
           </div>
         </section>
@@ -53,7 +53,7 @@ export function SimpleImportResultView({ result }: { result: SimpleImportResult 
       {associations.length > 0 && (
         <section aria-labelledby="simple-import-associations-title">
           <h3 id="simple-import-associations-title" className="text-sm font-bold">Associações dos projetos importados</h3>
-          <div className="mt-2 max-h-72 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+          <div role="region" aria-label="Associações dos projetos importados" tabIndex={0} className="mt-2 max-h-72 overflow-auto rounded-lg border border-zinc-200 focus-visible:ring-2 focus-visible:ring-emerald-600 dark:border-zinc-800">
             <table className="w-full min-w-[640px] text-left text-sm"><thead className="sticky top-0 bg-zinc-50 text-xs uppercase dark:bg-zinc-950"><tr><th className="px-3 py-2">Linha</th><th className="px-3 py-2">Cliente</th><th className="px-3 py-2">Critério</th></tr></thead><tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">{associations.map(item => <tr key={item.index}><td className="px-3 py-2 tabular-nums">{item.row}</td><td className="px-3 py-2 font-medium">{item.association?.clientName}</td><td className="px-3 py-2">{item.association ? associationMethod[item.association.method] : '—'}</td></tr>)}</tbody></table>
           </div>
         </section>

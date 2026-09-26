@@ -1,0 +1,37 @@
+{
+  "auditoria": "Sessao 06 - Ambiental",
+  "data": "2026-09-11",
+  "prefixo": "QA-AUDIT-S06-20260911-",
+  "ambiente": "SQLite temporario isolado",
+  "demandas": {
+    "total": 2,
+    "proximaAcaoEsperada": "QA-AUDIT-S06-20260911-Acao vencida prioritaria"
+  },
+  "licencasPorJanela": {
+    "30d": 2,
+    "60d": 3,
+    "90d": 4,
+    "120d": 5,
+    "vencida": 1
+  },
+  "fronteirasDias": [-1, 0, 30, 60, 90, 120, 121],
+  "statusLegado": {
+    "valor": "Status legado inesperado",
+    "reconhecido": false
+  },
+  "condicionante": {
+    "antes": "Vencida",
+    "depois": "Cumprida",
+    "dataCumprimento": "2026-09-11"
+  },
+  "calculoCar": {
+    "totalHa": 100,
+    "referenciaGeralHa": 20,
+    "vegetacaoSemArt15Ha": 15,
+    "deficitSemArt15Ha": 5,
+    "vegetacaoComArt15Ha": 25,
+    "excedenteComArt15Ha": 5
+  },
+  "httpInvalidos": [400, 404, 409],
+  "segredosOuDadosReais": false
+}

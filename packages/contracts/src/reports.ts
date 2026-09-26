@@ -106,6 +106,12 @@ export interface ManagerialReport {
   };
   financial: {
     kpis: ReportFinancialKpis;
+    composition?: {
+      contractedBudgetCount: number;
+      receivedEventCount: number;
+      pendingItemCount: number;
+      paidExpenseCount: number;
+    };
     previous: ReportFinancialComparison | null;
     monthly: ReportMonthlyPoint[];
     expensesByCategory: ReportExpenseCategory[];

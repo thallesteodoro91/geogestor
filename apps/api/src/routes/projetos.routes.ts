@@ -7,7 +7,7 @@ import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { normalizeBudgetStatus, ProjetoPayloadSchema } from '@geogestor/contracts';
+import { normalizeBudgetStatus, ProjetoPatchPayloadSchema, ProjetoPayloadSchema } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   RelationshipIntegrityError,
@@ -16,6 +16,7 @@ import {
   inspectProjectReassignment
 } from '../services/relationship-integrity.service';
 import { finishSimpleImport, type SimpleImportRowResult } from '../services/simple-import-result.service';
+import { sourceRowNumbersSchema, sourceRowsMatch } from '../services/simple-import-source-rows.service';
 import { OperationalLogService } from '../services/operational-log.service';
 import { finalizeImportFilesystem } from '../services/import-filesystem-finalization.service';
 import {
@@ -35,6 +36,38 @@ import {
   summarizeProjectImportPreview,
   type ProjectImportPreviewRow
 } from '../services/project-import-client-resolution.service';
+import { getProjectOverview } from '../services/project-overview.service';
+import {
+  buildProjectWhere,
+  normalizedProjectType,
+  projectStatusBucketExpression,
+  type ProjectFilters
+} from '../services/project-filters.service';
+
+const isRealDateKey = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
+const ProjectFilterQueryFields = {
+  clienteId: z.string().uuid().optional(),
+  q: z.string().trim().max(200).optional(),
+  status: z.string().trim().max(100).optional(),
+  tipo: z.string().trim().max(100).optional(),
+  inicio: z.string().refine(isRealDateKey, 'Use uma data inicial real no formato AAAA-MM-DD').optional(),
+  fim: z.string().refine(isRealDateKey, 'Use uma data final real no formato AAAA-MM-DD').optional(),
+  situacao: z.enum(['late', 'in_progress', 'completed', 'other']).optional()
+};
+
+const refineProjectDateRange = (value: { inicio?: string; fim?: string }, context: z.RefinementCtx) => {
+  if (value.inicio && value.fim && value.fim < value.inicio) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['fim'], message: 'A data final deve ser igual ou posterior à inicial' });
+  }
+};
+
+const ProjectFilterQuerySchema = z.object(ProjectFilterQueryFields).strict().superRefine(refineProjectDateRange);
 
 const ProjetoLoteItemSchema = z.object({
   clienteId: z.string().uuid().optional(),
@@ -51,6 +84,11 @@ const ProjetoLoteItemSchema = z.object({
   )
 }).strict();
 const ProjetoLotePayloadSchema = z.array(z.unknown()).min(1).max(500);
+const ProjetoLoteRequestSchema = z.union([
+  ProjetoLotePayloadSchema,
+  z.object({ rows: ProjetoLotePayloadSchema, sourceRowNumbers: sourceRowNumbersSchema }).strict()
+    .refine(input => sourceRowsMatch(input.rows, input.sourceRowNumbers), { path: ['sourceRowNumbers'], message: 'As linhas de origem devem corresponder aos registros em ordem crescente.' })
+]);
 
 const normalizeImportName = (value: string) => value.normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase('pt-BR');
 
@@ -63,7 +101,8 @@ async function loadRelevantProjectClients(items: Array<z.infer<typeof ProjetoLot
   }))];
   const names = [...new Set(items.flatMap(item => {
     const value = item.clienteReferencia?.trim();
-    return value && !/^\d+$/.test(value.replace(/\D/g, '')) ? [normalizeImportName(value)] : [];
+    const digitCount = value?.replace(/\D/g, '').length ?? 0;
+    return value && digitCount !== 11 && digitCount !== 14 ? [normalizeImportName(value)] : [];
   }))];
   const matches = [];
   if (ids.length) matches.push(inArray(schema.clientes.id, ids));
@@ -143,38 +182,32 @@ export async function projetosRoutes(server: FastifyInstance) {
   zServer.get('/', {
     schema: {
       querystring: z.object({
-        page: z.coerce.number().min(1).default(1),
-        limit: z.coerce.number().min(1).max(100).default(50),
-        clienteId: z.string().uuid().optional(),
-        q: z.string().trim().max(200).optional(),
-        status: z.string().trim().max(100).optional(),
-        tipo: z.string().trim().max(100).optional(),
-        inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-        fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+        ...ProjectFilterQueryFields,
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+        sort: z.enum(['updated', 'deadline', 'name', 'client', 'status']).default('updated'),
+        direction: z.enum(['asc', 'desc']).default('desc'),
         mode: z.enum(['legacy', 'page']).default('legacy')
-      })
+      }).strict().superRefine(refineProjectDateRange)
     }
   }, async (request, reply) => {
-    const { page, limit, mode, q } = request.query;
+    const { page, limit, mode, sort, direction } = request.query;
     try {
       const offset = (page - 1) * limit;
-      const whereClause = and(
-        isNull(schema.projetos.deletedAt),
-        request.query.clienteId ? eq(schema.projetos.clienteId, request.query.clienteId) : undefined,
-        request.query.status ? eq(schema.projetos.status, request.query.status) : undefined,
-        request.query.tipo ? eq(schema.projetos.tipo, request.query.tipo) : undefined,
-        request.query.inicio ? gte(schema.projetos.dataInicio, request.query.inicio) : undefined,
-        request.query.fim ? lte(schema.projetos.dataInicio, request.query.fim) : undefined,
-        q ? or(
-          like(schema.projetos.nome, `%${q}%`),
-          like(schema.clientes.nome, `%${q}%`),
-          like(schema.projetos.descricao, `%${q}%`),
-          like(schema.projetos.cidade, `%${q}%`),
-          like(schema.projetos.municipio, `%${q}%`),
-          like(schema.projetos.matricula, `%${q}%`),
-          like(schema.projetos.car, `%${q}%`)
-        ) : undefined
-      );
+      const whereClause = buildProjectWhere(request.query);
+      const orderedColumn = sort === 'deadline'
+        ? schema.projetos.dataEntrega
+        : sort === 'name'
+          ? schema.projetos.nome
+          : sort === 'client'
+            ? schema.clientes.nome
+            : sort === 'status'
+              ? schema.projetos.status
+              : schema.projetos.updatedAt;
+      const primaryOrder = direction === 'asc' ? asc(orderedColumn) : desc(orderedColumn);
+      const orderBy = sort === 'deadline'
+        ? [asc(sql`${schema.projetos.dataEntrega} is null`), primaryOrder, asc(schema.projetos.id)]
+        : [primaryOrder, asc(schema.projetos.id)];
       const projetosList = await db.select({
         projeto: schema.projetos,
         cliente: {
@@ -187,7 +220,7 @@ export async function projetosRoutes(server: FastifyInstance) {
       .where(whereClause)
       .limit(limit)
       .offset(offset)
-      .orderBy(q ? asc(schema.projetos.nome) : desc(schema.projetos.createdAt));
+      .orderBy(...orderBy);
       
       const items = projetosList.map(row => ({
         ...row.projeto,
@@ -218,6 +251,7 @@ export async function projetosRoutes(server: FastifyInstance) {
       nome: schema.projetos.nome,
       clienteId: schema.projetos.clienteId,
       status: schema.projetos.status,
+      statusCategory: projectStatusBucketExpression(new Date().toISOString().slice(0, 10)),
       cidade: schema.projetos.cidade,
       clienteNome: schema.clientes.nome,
       tipo: schema.projetos.tipo
@@ -258,9 +292,9 @@ export async function projetosRoutes(server: FastifyInstance) {
 
   zServer.get('/calendar', {
     schema: { querystring: z.object({
-      inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-    }) }
+      inicio: z.string().refine(isRealDateKey, 'Use uma data inicial real no formato AAAA-MM-DD'),
+      fim: z.string().refine(isRealDateKey, 'Use uma data final real no formato AAAA-MM-DD')
+    }).strict().superRefine(refineProjectDateRange) }
   }, async (request) => db.select({
     id: schema.projetos.id,
     nome: schema.projetos.nome,
@@ -276,7 +310,30 @@ export async function projetosRoutes(server: FastifyInstance) {
         and(gte(schema.projetos.dataInicio, request.query.inicio), lte(schema.projetos.dataInicio, request.query.fim)),
         and(gte(schema.projetos.dataEntrega, request.query.inicio), lte(schema.projetos.dataEntrega, request.query.fim))
       )
-    )).orderBy(asc(schema.projetos.dataInicio), asc(schema.projetos.id)).limit(500));
+    )).orderBy(asc(schema.projetos.dataInicio), asc(schema.projetos.id)));
+
+  zServer.get('/filters', async () => {
+    const [typeRows, statusRows] = await Promise.all([
+      db.select({ value: normalizedProjectType, count: count() })
+        .from(schema.projetos)
+        .where(isNull(schema.projetos.deletedAt))
+        .groupBy(normalizedProjectType)
+        .orderBy(asc(normalizedProjectType)),
+      db.select({ value: schema.projetos.status, count: count() })
+        .from(schema.projetos)
+        .where(isNull(schema.projetos.deletedAt))
+        .groupBy(schema.projetos.status)
+        .orderBy(asc(schema.projetos.status))
+    ]);
+    return {
+      types: typeRows.map((row) => ({ value: row.value, count: row.count })),
+      statuses: statusRows.filter((row) => row.value?.trim()).map((row) => ({ value: row.value, count: row.count }))
+    };
+  });
+
+  zServer.get('/overview', {
+    schema: { querystring: ProjectFilterQuerySchema }
+  }, async (request) => getProjectOverview(request.query as ProjectFilters));
 
   zServer.get('/:id', {
     schema: {
@@ -338,10 +395,9 @@ export async function projetosRoutes(server: FastifyInstance) {
     }
   }, async (request, reply) => {
     const data = request.body;
-    if (data.tipo === 'Licenciamento' && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataVencimentoLicenca)) {
-      return reply.status(400).send({ error: 'Número, órgão, tipo e vencimento da licença são obrigatórios.' });
-    }
     try {
+      await assertActiveClient(data.clienteId);
+      await assertPropertyBelongsToClient(data.propriedadeId, data.clienteId);
       const novoProjeto = await db.transaction(async (tx) => {
         const result = await tx.insert(schema.projetos).values({
           id: crypto.randomUUID(),
@@ -441,6 +497,9 @@ export async function projetosRoutes(server: FastifyInstance) {
 
       return reply.status(201).send(novoProjeto);
     } catch (err) {
+      if (err instanceof RelationshipIntegrityError) {
+        return reply.status(err.statusCode).send({ error: err.message });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao criar projeto' });
     }
@@ -498,17 +557,19 @@ export async function projetosRoutes(server: FastifyInstance) {
   });
 
   zServer.post('/lote/preview', {
-    schema: { body: ProjetoLotePayloadSchema }
+    schema: { body: ProjetoLoteRequestSchema }
   }, async (request, reply) => {
     try {
-      const parsedItems = request.body.map(raw => ProjetoLoteItemSchema.safeParse(raw));
+      const data = Array.isArray(request.body) ? request.body : request.body.rows;
+      const sourceRowNumbers = Array.isArray(request.body) ? undefined : request.body.sourceRowNumbers;
+      const parsedItems = data.map(raw => ProjetoLoteItemSchema.safeParse(raw));
       const activeClients = await loadRelevantProjectClients(parsedItems.flatMap(parsed => parsed.success ? [parsed.data] : []));
-      const resolvedRows: ProjectImportPreviewRow[] = request.body.map((raw, index) => {
+      const resolvedRows: ProjectImportPreviewRow[] = data.map((raw, index) => {
         const parsed = parsedItems[index];
         if (!parsed.success) {
           return {
             index,
-            row: index + 2,
+            row: sourceRowNumbers?.[index] ?? index + 2,
             projectName: raw && typeof raw === 'object' && 'nome' in raw ? String(raw.nome || 'Projeto sem nome') : 'Projeto sem nome',
             reference: raw && typeof raw === 'object' && 'clienteReferencia' in raw ? String(raw.clienteReferencia || '') : '',
             status: 'pending',
@@ -517,7 +578,7 @@ export async function projetosRoutes(server: FastifyInstance) {
             message: [...new Set(parsed.error.issues.map(issue => issue.message))].join(' ')
           };
         }
-        return projectImportPreviewRow(parsed.data, index, activeClients);
+        return { ...projectImportPreviewRow(parsed.data, index, activeClients), row: sourceRowNumbers?.[index] ?? index + 2 };
       });
       const rows = await applyProjectDuplicatePreviewRules(resolvedRows);
       const counts = summarizeProjectImportPreview(rows);
@@ -531,12 +592,13 @@ export async function projetosRoutes(server: FastifyInstance) {
 
   zServer.post('/lote', {
     schema: {
-      body: ProjetoLotePayloadSchema
+      body: ProjetoLoteRequestSchema
     }
   }, async (request, reply) => {
-    const data = request.body;
+    const data = Array.isArray(request.body) ? request.body : request.body.rows;
+    const sourceRowNumbers = Array.isArray(request.body) ? undefined : request.body.sourceRowNumbers;
     const startedAt = new Date().toISOString();
-    const digest = importContentDigest(data);
+    const digest = importContentDigest(request.body);
     let runId: string | null = null;
 
     if (data.length === 0) {
@@ -659,7 +721,7 @@ export async function projetosRoutes(server: FastifyInstance) {
           quantidade: created.length,
           projetos: created.map(projeto => projeto.nome)
         }, tx);
-        const transactionResult = finishSimpleImport(startedAt, data.length, results, { importId: runId! });
+        const transactionResult = finishSimpleImport(startedAt, data.length, results, { importId: runId!, sourceRowNumbers });
         await completeImportRun(tx, runId!, transactionResult as unknown as Record<string, unknown>, results);
         return transactionResult;
       });
@@ -766,7 +828,7 @@ export async function projetosRoutes(server: FastifyInstance) {
   zServer.patch('/:id', {
     schema: {
       params: z.object({ id: z.string().uuid() }),
-      body: ProjetoPayloadSchema.partial()
+      body: ProjetoPatchPayloadSchema
     }
   }, async (request, reply) => {
     const { id } = request.params;
@@ -782,6 +844,16 @@ export async function projetosRoutes(server: FastifyInstance) {
         data.propriedadeId !== undefined ? data.propriedadeId : oldProjeto[0].propriedadeId,
         targetClientId
       );
+      const resolvedStartDate = data.dataInicio !== undefined ? data.dataInicio : oldProjeto[0].dataInicio;
+      const resolvedDeadline = data.dataEntrega !== undefined ? data.dataEntrega : oldProjeto[0].dataEntrega;
+      if (resolvedStartDate && resolvedDeadline && resolvedDeadline < resolvedStartDate) {
+        return reply.status(400).send({ error: 'A entrega deve ser igual ou posterior ao início.' });
+      }
+      const resolvedLatitude = data.latitude !== undefined ? data.latitude : oldProjeto[0].latitude;
+      const resolvedLongitude = data.longitude !== undefined ? data.longitude : oldProjeto[0].longitude;
+      if ((resolvedLatitude == null) !== (resolvedLongitude == null)) {
+        return reply.status(400).send({ error: 'Informe latitude e longitude em conjunto.' });
+      }
       if (targetClientId !== oldProjeto[0].clienteId) {
         const impact = await inspectProjectReassignment(id);
         if (impact.dependencies.length > 0) {
@@ -819,8 +891,13 @@ export async function projetosRoutes(server: FastifyInstance) {
       }
       if (requestedType === 'Licenciamento') {
         const existingLicense = await db.select().from(schema.licencas).where(eq(schema.licencas.projetoId, id)).limit(1);
-        if (!existingLicense.length && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataVencimentoLicenca)) {
-          return reply.status(400).send({ error: 'Número, órgão, tipo e vencimento da licença são obrigatórios.' });
+        if (!existingLicense.length && (!data.numeroLicenca || !data.orgaoAmbiental || !data.tipoLicenca || !data.dataEmissao || !data.dataVencimentoLicenca)) {
+          return reply.status(400).send({ error: 'Número, órgão, tipo, emissão e vencimento da licença são obrigatórios.' });
+        }
+        const resolvedIssueDate = data.dataEmissao !== undefined ? data.dataEmissao : existingLicense[0]?.dataEmissao;
+        const resolvedExpirationDate = data.dataVencimentoLicenca !== undefined ? data.dataVencimentoLicenca : existingLicense[0]?.dataVencimento;
+        if (resolvedIssueDate && resolvedExpirationDate && resolvedExpirationDate < resolvedIssueDate) {
+          return reply.status(400).send({ error: 'O vencimento da licença deve ser igual ou posterior à emissão.' });
         }
       }
 
@@ -940,20 +1017,22 @@ export async function projetosRoutes(server: FastifyInstance) {
           }, tx);
         }
 
-        const projectWasCancelled = oldProjeto[0].status !== 'Cancelado'
-          && result[0].status === 'Cancelado';
-        if (projectWasCancelled) {
+        const interruptionStatus = result[0].status === 'Cancelado' || result[0].status === 'Suspenso'
+          ? result[0].status
+          : null;
+        const projectWasInterrupted = interruptionStatus !== null && oldProjeto[0].status !== interruptionStatus;
+        if (projectWasInterrupted) {
           const timestamp = new Date().toISOString();
           await tx.insert(schema.financeiroEventos).values({
             id: crypto.randomUUID(),
-            tipo: 'cancelamento_projeto_pendente',
+            tipo: interruptionStatus === 'Cancelado' ? 'cancelamento_projeto_pendente' : 'suspensao_projeto_pendente',
             entidade: 'projeto',
             entidadeId: id,
             clienteId: result[0].clienteId,
             projetoId: id,
             valor: 0,
             dataEvento: timestamp.slice(0, 10),
-            motivo: 'Projeto cancelado; decisão financeira pendente.',
+            motivo: `Projeto ${interruptionStatus.toLocaleLowerCase('pt-BR')}; decisão financeira pendente.`,
             metadataJson: JSON.stringify({
               statusAnterior: oldProjeto[0].status,
               statusAtual: result[0].status
@@ -1050,9 +1129,11 @@ export async function projetosRoutes(server: FastifyInstance) {
       ? latestExecutionDecision.valorExecutado
         ?? Math.round(valorContratado * (latestExecutionDecision.percentualExecutado || 0) / 100)
       : null;
-    const latestPendingCancellation = financialEvents.find((event) => event.tipo === 'cancelamento_projeto_pendente');
+    const latestPendingCancellation = financialEvents.find((event) => (
+      event.tipo === 'cancelamento_projeto_pendente' || event.tipo === 'suspensao_projeto_pendente'
+    ));
     const latestFinancialDecision = financialEvents.find((event) => event.tipo === 'decisao_financeira_projeto');
-    const decisaoFinanceiraPendente = project.status === 'Cancelado' && (
+    const decisaoFinanceiraPendente = ['Cancelado', 'Suspenso'].includes(project.status) && (
       (!latestPendingCancellation && !decisions.length)
       || Boolean(
         latestPendingCancellation
@@ -1071,6 +1152,7 @@ export async function projetosRoutes(server: FastifyInstance) {
       valorFaturado: fiscalNotes.reduce((sum, note) => sum + note.valor, 0),
       valorExecutadoInformado,
       valorRecebido: installments.reduce((sum, installment) => sum + installment.valorPago, 0),
+      parcelasConfiguradas: installments.filter((installment) => !installment.canceladaEm).length,
       saldoAberto: installments
         .filter((installment) => !installment.canceladaEm)
         .reduce((sum, installment) => sum + Math.max(0, installment.valor - installment.valorPago), 0),
@@ -1106,7 +1188,7 @@ export async function projetosRoutes(server: FastifyInstance) {
         percentualExecutado: z.number().min(0).max(100).nullable().optional(),
         valorExecutado: z.number().int().min(0).nullable().optional(),
         motivo: z.string().trim().min(5).max(2000)
-      })
+      }).strict()
     }
   }, async (request, reply) => {
     const { id } = request.params;
@@ -1116,6 +1198,12 @@ export async function projetosRoutes(server: FastifyInstance) {
       isNull(schema.projetos.deletedAt)
     )).limit(1);
     if (!project) return reply.status(404).send({ error: 'Projeto não encontrado' });
+    if (!['Cancelado', 'Suspenso'].includes(project.status)) {
+      return reply.status(409).send({
+        error: 'A decisão financeira só pode ser registrada após cancelar ou suspender o projeto.',
+        code: 'PROJECT_FINANCIAL_DECISION_NOT_REQUIRED'
+      });
+    }
     if (input.tipo === 'cobranca_parcial' && input.percentualExecutado == null && input.valorExecutado == null) {
       return reply.status(400).send({ error: 'Informe o percentual ou o valor executado para a cobrança parcial.' });
     }
@@ -1139,8 +1227,32 @@ export async function projetosRoutes(server: FastifyInstance) {
           ? null
           : Math.round(contractedTotal * input.percentualExecutado / 100))
       : input.valorExecutado ?? null;
+    if (input.tipo === 'cobranca_parcial' && resolvedExecutedValue != null && resolvedExecutedValue > contractedTotal) {
+      return reply.status(400).send({ error: 'O valor executado não pode superar o total contratado.' });
+    }
+    if (
+      input.tipo === 'cobranca_parcial'
+      && input.percentualExecutado != null
+      && input.valorExecutado != null
+      && input.valorExecutado !== Math.round(contractedTotal * input.percentualExecutado / 100)
+    ) {
+      return reply.status(400).send({ error: 'O percentual e o valor executado informados são conflitantes.' });
+    }
     const decisionTimestamp = new Date().toISOString();
-    const decision = await db.transaction(async (tx) => {
+    const transactionResult = await db.transaction(async (tx) => {
+      const [latestDecision] = await tx.select().from(schema.projetoFinanceiroDecisoes)
+        .where(eq(schema.projetoFinanceiroDecisoes.projetoId, id))
+        .orderBy(desc(schema.projetoFinanceiroDecisoes.createdAt), desc(schema.projetoFinanceiroDecisoes.id))
+        .limit(1);
+      if (
+        latestDecision
+        && latestDecision.tipo === input.tipo
+        && latestDecision.percentualExecutado === (input.percentualExecutado ?? null)
+        && latestDecision.valorExecutado === resolvedExecutedValue
+        && latestDecision.motivo === input.motivo
+      ) {
+        return { decision: latestDecision, replayed: true };
+      }
       const [created] = await tx.insert(schema.projetoFinanceiroDecisoes).values({
         id: crypto.randomUUID(),
         projetoId: id,
@@ -1154,13 +1266,16 @@ export async function projetosRoutes(server: FastifyInstance) {
       }).returning();
       if (input.tipo === 'cancelar_parcelas_futuras') {
         const timestamp = new Date().toISOString();
+        const today = timestamp.slice(0, 10);
         for (const budget of budgets) {
           const installments = await tx.select().from(schema.parcelas).where(and(
             eq(schema.parcelas.orcamentoId, budget.id),
             isNull(schema.parcelas.deletedAt),
             isNull(schema.parcelas.canceladaEm)
           ));
-          for (const installment of installments.filter((item) => item.valorPago < item.valor)) {
+          for (const installment of installments.filter((item) => (
+            item.dataVencimento > today && item.valorPago < item.valor
+          ))) {
             await tx.update(schema.parcelas).set({
               statusPagamento: 'Cancelado',
               canceladaEm: timestamp,
@@ -1192,9 +1307,9 @@ export async function projetosRoutes(server: FastifyInstance) {
         descricao: `${input.tipo}\n${input.motivo}`
       }, tx);
       await AuditLogService.log('INSERT', 'ProjetoDecisaoFinanceira', null, created, tx);
-      return created;
+      return { decision: created, replayed: false };
     });
-    return reply.status(201).send(decision);
+    return reply.status(transactionResult.replayed ? 200 : 201).send(transactionResult.decision);
   });
 
   zServer.delete('/:id', {
@@ -1206,7 +1321,17 @@ export async function projetosRoutes(server: FastifyInstance) {
     try {
       await db.transaction(async (tx) => {
         const oldProjeto = await tx.select().from(schema.projetos).where(eq(schema.projetos.id, id)).limit(1);
-        if (!oldProjeto.length || oldProjeto[0].deletedAt) return;
+        if (!oldProjeto.length || oldProjeto[0].deletedAt) {
+          throw new RelationshipIntegrityError('Projeto não encontrado.', 404);
+        }
+        const impact = await inspectProjectReassignment(id, tx);
+        if (impact.dependencies.length > 0) {
+          const summary = impact.dependencies.map((item) => `${item.label}: ${item.count}`).join('; ');
+          throw new RelationshipIntegrityError(
+            `O projeto não pode ser excluído enquanto possuir vínculos ativos. Resolva ou desvincule: ${summary}.`,
+            409
+          );
+        }
 
         await tx.update(schema.projetos)
           .set({ deletedAt: new Date().toISOString() })
@@ -1219,6 +1344,9 @@ export async function projetosRoutes(server: FastifyInstance) {
 
       return reply.status(204).send();
     } catch (err) {
+      if (err instanceof RelationshipIntegrityError) {
+        return reply.status(err.statusCode).send({ error: err.message });
+      }
       server.log.error(err);
       return reply.status(500).send({ error: 'Erro ao excluir projeto' });
     }

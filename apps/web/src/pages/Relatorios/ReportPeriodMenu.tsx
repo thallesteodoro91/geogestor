@@ -14,7 +14,7 @@ interface ReportPeriodMenuProps {
   customSelected: boolean;
   startDate: string;
   endDate: string;
-  invalidRange: boolean;
+  periodError: string | null;
   guidance: string | null;
   onSelectPreset: (preset: ReportPeriodPreset) => void;
   onSelectCustom: () => void;
@@ -28,7 +28,7 @@ export function ReportPeriodMenu({
   customSelected,
   startDate,
   endDate,
-  invalidRange,
+  periodError,
   guidance,
   onSelectPreset,
   onSelectCustom,
@@ -133,16 +133,16 @@ export function ReportPeriodMenu({
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="min-w-0 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                 Data inicial
-                <DatePickerField name="report-start-date" autoComplete="off" value={startDate} max={endDate || undefined} onChange={(event) => onUpdateCustomDate('inicio', event.target.value)} className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'report-period-error' : undefined} />
+                <DatePickerField name="report-start-date" autoComplete="off" value={startDate} max={endDate || undefined} onChange={(event) => onUpdateCustomDate('inicio', event.target.value)} className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')} aria-invalid={Boolean(periodError)} aria-describedby={periodError ? 'report-period-error' : undefined} />
               </label>
               <label className="min-w-0 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
                 Data final
-                <DatePickerField name="report-end-date" autoComplete="off" value={endDate} min={startDate || undefined} onChange={(event) => onUpdateCustomDate('fim', event.target.value)} className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')} aria-invalid={invalidRange} aria-describedby={invalidRange ? 'report-period-error' : undefined} />
+                <DatePickerField name="report-end-date" autoComplete="off" value={endDate} min={startDate || undefined} onChange={(event) => onUpdateCustomDate('fim', event.target.value)} className={cn(geoFieldClass, 'mt-1 h-11 min-h-11 w-full')} aria-invalid={Boolean(periodError)} aria-describedby={periodError ? 'report-period-error' : undefined} />
               </label>
             </div>
             {startDate || endDate ? <button type="button" onClick={onClearCustomPeriod} className="geo-focus-ring mt-2 min-h-10 rounded-lg px-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white">Limpar período</button> : null}
-            {invalidRange ? <p id="report-period-error" role="alert" className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">A data inicial deve ser anterior ou igual à data final.</p> : null}
-            {!invalidRange && guidance ? <p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{guidance}</p> : null}
+            {periodError ? <p id="report-period-error" role="alert" className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">{periodError}</p> : null}
+            {!periodError && guidance ? <p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-400">{guidance}</p> : null}
           </div>
         ) : null}
       </PopoverSurface>

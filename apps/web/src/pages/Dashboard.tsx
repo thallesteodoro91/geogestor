@@ -1,7 +1,9 @@
-import { FormSelect } from '../components/Form';
-import type { ManagerialReport } from '@geogestor/contracts';
-import { useState, useMemo } from 'react';
+import { DatePickerField, FormSelect } from '../components/Form';
+import { appLinks, type ManagerialReport } from '@geogestor/contracts';
+import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Info } from '@phosphor-icons/react';
 import { apiClient } from '../services/apiClient';
 import { KpiTransparency } from '../components/KpiTransparency';
 import { Layout } from '../components/Layout';
@@ -9,19 +11,28 @@ import { PageHeader } from '../components/PageHeader';
 import { RecentActivities } from '../components/RecentActivities';
 import { MetricCard } from '../components/MetricCard';
 import { Skeleton } from '../components/Skeleton';
-import { motion, useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from 'framer-motion';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend
+  PieChart, Pie, Cell
 } from 'recharts';
 import {
-  chartActiveDot, chartAnimationDuration, chartTextColor, chartBorder, chartLegendStyle,
+  chartActiveDot, chartTextColor, chartBorder,
   chartCursor, chartSegmentStyle, responsiveChartProps
 } from '../utils/chartHelpers';
 import { chartColors, colorblindSafeColors } from '../data/chart-colors';
 import { DynamicTooltip } from '../components/charts/DynamicTooltip';
 import { RichTooltip } from '../components/charts/RichTooltip';
+import { DismissibleDetails } from '../components/DismissibleDetails';
 import { commercialContentClass } from '../utils/commercialLayout';
+import {
+  formatTaskPeriodLabel,
+  getTaskPeriodRange,
+  resolveProjectScope,
+  resolveTaskCompletionPeriod,
+  validateCustomTaskRange,
+  type TaskCompletionPeriod,
+} from '../utils/dashboardFilters';
 
 import valueChainIcon from '../assets/magnific-icons/value-chain_10220236.svg';
 import coexistenceIcon from '../assets/magnific-icons/coexistence_10415362.svg';
@@ -50,6 +61,49 @@ const getStatusColor = (status: string, index: number) => {
   }
 };
 
+const cashFlowChartSeries = [
+  {
+    dataKey: 'recebimentos',
+    label: 'Recebimentos',
+    color: chartColors.positive,
+    gradientId: 'dashboardRecebimentosGradient',
+    gradientOpacity: 0.34,
+  },
+  {
+    dataKey: 'pagamentos',
+    label: 'Pagamentos',
+    color: chartColors.negative,
+    gradientId: 'dashboardPagamentosGradient',
+    gradientOpacity: 0.3,
+  },
+] as const;
+
+const projectPercentFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'percent',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+const areaNumberFormatter = new Intl.NumberFormat('pt-BR', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+function MetricDefinition({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <DismissibleDetails className="relative shrink-0">
+      <summary
+        aria-label={label}
+        className="geo-focus-ring flex size-9 cursor-pointer list-none items-center justify-center rounded-lg text-text-muted transition-colors hover:bg-zinc-100 hover:text-text-primary dark:hover:bg-zinc-800"
+      >
+        <Info aria-hidden="true" className="size-4" />
+      </summary>
+      <div className="absolute right-0 z-30 mt-2 w-[min(78vw,300px)] rounded-xl border border-brand-border bg-brand-surface p-3 text-xs leading-5 text-text-secondary shadow-xl">
+        {children}
+      </div>
+    </DismissibleDetails>
+  );
+}
+
 interface TaskItem {
   id: string;
   titulo: string;
@@ -67,9 +121,20 @@ interface DashboardOverview {
   tasksCompleted: number;
   tasksPending: number;
   taskCompletionRate: number;
+  taskCompletion: {
+    inicio: string | null;
+    fim: string | null;
+    total: number;
+    completed: number;
+    pending: number;
+    rate: number;
+  };
+  projectScope: 'active' | 'all';
+  projectsInScope: number;
   projectByType: Array<{ name: string; value: number }>;
   projectByTypeStatus: Array<{ type: string; status: string; value: number }>;
   upcomingTasks: TaskItem[];
+  upcomingLicenses: LicencaItem[];
 }
 
 interface LicencaItem {
@@ -100,33 +165,138 @@ const getDaysLeftText = (targetDate: Date) => {
     return { text: 'Vence hoje', className: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20' };
   }
   if (diffDays === 1) {
-    return { text: 'Amanhã', className: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20' };
+    return { text: 'Amanhã', className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/20' };
   }
   return { text: `Em ${diffDays} dias`, className: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/80' };
 };
 
 export function Dashboard() {
   const reduceMotion = useReducedMotion();
-  const [projetoFilterMode, setProjetoFilterMode] = useState<'macro' | 'unitario'>('macro');
-  const [selectedProjetoTipo, setSelectedProjetoTipo] = useState<string>('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dashboardReferenceDate = useMemo(() => new Date(), []);
+  const projectScope = resolveProjectScope(searchParams.get('projetosEscopo'));
+  const projetoFilterMode = searchParams.get('projetosAgrupamento') === 'unitario' ? 'unitario' : 'macro';
+  const selectedProjetoTipo = searchParams.get('projetosTipo') ?? '';
+  const taskPeriod = resolveTaskCompletionPeriod(searchParams.get('tarefasPeriodo'));
+  const currentMonthRange = useMemo(
+    () => getTaskPeriodRange('month', '', '', dashboardReferenceDate)!,
+    [dashboardReferenceDate],
+  );
+  const taskCustomStart = searchParams.get('tarefasInicio') ?? '';
+  const taskCustomEnd = searchParams.get('tarefasFim') ?? '';
+  const taskCustomError = taskPeriod === 'custom'
+    ? validateCustomTaskRange(taskCustomStart, taskCustomEnd)
+    : null;
+  const selectedTaskRange = getTaskPeriodRange(
+    taskPeriod,
+    taskCustomStart,
+    taskCustomEnd,
+    dashboardReferenceDate,
+  );
+  const requestedTaskRange = selectedTaskRange ?? currentMonthRange;
+  const taskPeriodLabel = formatTaskPeriodLabel(taskPeriod, selectedTaskRange ?? currentMonthRange);
   const [activeProjectStatusIndex, setActiveProjectStatusIndex] = useState<number | null>(null);
+  const [financeChartReady, setFinanceChartReady] = useState(false);
+  const [operationalPanelsReady, setOperationalPanelsReady] = useState(false);
+  const [activityPanelsReady, setActivityPanelsReady] = useState(false);
+  const [projectChartReady, setProjectChartReady] = useState(false);
 
-  const { data: overview, isLoading: overviewLoading, isError: overviewError } = useQuery<DashboardOverview>({
-    queryKey: ['dashboard-overview'],
-    queryFn: () => apiClient.get<DashboardOverview>('/api/dashboard/overview')
+  const updateDashboardFilters = (updates: Record<string, string | null>) => {
+    const next = new URLSearchParams(searchParams);
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '') next.delete(key);
+      else next.set(key, value);
+    });
+    setSearchParams(next, { replace: true });
+  };
+
+  const changeTaskPeriod = (period: TaskCompletionPeriod) => {
+    if (period === 'custom') {
+      updateDashboardFilters({
+        tarefasPeriodo: period,
+        tarefasInicio: taskCustomStart || currentMonthRange.start,
+        tarefasFim: taskCustomEnd || currentMonthRange.end,
+      });
+      return;
+    }
+    updateDashboardFilters({
+      tarefasPeriodo: period,
+      tarefasInicio: null,
+      tarefasFim: null,
+    });
+  };
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    let changed = false;
+    if (!['active', 'all'].includes(next.get('projetosEscopo') ?? '')) {
+      next.set('projetosEscopo', 'active');
+      changed = true;
+    }
+    if (!['macro', 'unitario'].includes(next.get('projetosAgrupamento') ?? '')) {
+      next.set('projetosAgrupamento', 'macro');
+      changed = true;
+    }
+    if (!['month', 'three_months', 'year', 'custom'].includes(next.get('tarefasPeriodo') ?? '')) {
+      next.set('tarefasPeriodo', 'month');
+      changed = true;
+    }
+    if (changed) setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    let operationalPanelsTimer: number | undefined;
+    let activityPanelsTimer: number | undefined;
+    let projectChartTimer: number | undefined;
+    const firstFrame = window.requestAnimationFrame(() => {
+      startTransition(() => setFinanceChartReady(true));
+      operationalPanelsTimer = window.setTimeout(() => {
+        startTransition(() => setOperationalPanelsReady(true));
+      }, 70);
+      activityPanelsTimer = window.setTimeout(() => {
+        startTransition(() => setActivityPanelsReady(true));
+      }, 170);
+      projectChartTimer = window.setTimeout(() => {
+        startTransition(() => setProjectChartReady(true));
+      }, 280);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (operationalPanelsTimer !== undefined) window.clearTimeout(operationalPanelsTimer);
+      if (activityPanelsTimer !== undefined) window.clearTimeout(activityPanelsTimer);
+      if (projectChartTimer !== undefined) window.clearTimeout(projectChartTimer);
+    };
+  }, []);
+
+  const { data: overview, isLoading: overviewLoading, isFetching: overviewFetching, isError: overviewError } = useQuery<DashboardOverview>({
+    queryKey: ['dashboard-overview', projectScope, requestedTaskRange.start, requestedTaskRange.end],
+    placeholderData: (previousData) => previousData,
+    refetchOnMount: 'always',
+    queryFn: () => {
+      const query = new URLSearchParams({
+        projectScope,
+        tasksInicio: requestedTaskRange.start,
+        tasksFim: requestedTaskRange.end,
+      });
+      return apiClient.get<DashboardOverview>(`/api/dashboard/overview?${query.toString()}`);
+    }
   });
+  const filteredOverview = overview
+    && overview.projectScope === projectScope
+    && overview.taskCompletion.inicio === requestedTaskRange.start
+    && overview.taskCompletion.fim === requestedTaskRange.end
+    ? overview
+    : undefined;
 
   const { data: stats, isLoading: loadingStats, isError: statsError } = useQuery<ManagerialReport>({
     queryKey: ['stats-geral'],
-    queryFn: () => apiClient.get<ManagerialReport>('/api/relatorios/geral')
+    queryFn: () => apiClient.get<ManagerialReport>('/api/relatorios/geral'),
+    refetchOnMount: 'always'
   });
 
-  const { data: licencasData, isError: licencasError } = useQuery<LicencaItem[]>({
-    queryKey: ['licencas'],
-    queryFn: () => apiClient.get<LicencaItem[]>('/api/licencas')
-  });
   const tasks = useMemo(() => overview?.upcomingTasks ?? [], [overview]);
-  const licencas = useMemo(() => licencasData ?? [], [licencasData]);
+  const licencas = useMemo(() => overview?.upcomingLicenses ?? [], [overview]);
 
   // Calcular balanço financeiro
   const { netProfit, areaTotal } = useMemo(() => {
@@ -137,25 +307,56 @@ export function Dashboard() {
   }, [stats]);
 
   // Porcentagem de tarefas concluídas
-  const { completedTasks, taskCompletionRate } = useMemo(() => {
+  const taskCompletionRate = useMemo(() => {
     const completed = overview?.tasksCompleted ?? tasks.filter((t) => t.status === 'Concluído').length;
-    const rate = overview?.taskCompletionRate ?? (tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0);
-    return { completedTasks: completed, taskCompletionRate: rate };
+    return overview?.taskCompletionRate ?? (tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0);
   }, [overview, tasks]);
+
+  const taskSummary = useMemo(() => {
+    const total = filteredOverview?.taskCompletion.total ?? 0;
+    const completed = filteredOverview?.taskCompletion.completed ?? 0;
+    const pending = filteredOverview?.taskCompletion.pending ?? 0;
+    const completedPart = filteredOverview?.taskCompletion.rate ?? 0;
+
+    return {
+      total,
+      completed,
+      rate: completedPart,
+      pending,
+      segments: [
+        {
+          label: 'Concluídas',
+          count: completed,
+          part: completedPart,
+          color: chartColors.positive,
+        },
+        {
+          label: 'Pendentes',
+          count: pending,
+          part: total > 0 ? Math.max(0, 100 - completedPart) : 0,
+          color: chartColors.warning,
+        },
+      ],
+    };
+  }, [filteredOverview?.taskCompletion]);
 
   // Preparar dados do gráfico financeiro
   const financeChartData = useMemo(() => {
-    const chartMap = new Map<string, { mes: string; receita: number; despesa: number }>();
+    const chartMap = new Map<string, { mes: string; recebimentos: number; pagamentos: number }>();
     stats?.financial.monthly.forEach((point) => {
       chartMap.set(point.month, {
         mes: point.month,
-        receita: point.receivedRevenue / 100,
-        despesa: point.paidExpenses / 100
+        recebimentos: point.receivedRevenue / 100,
+        pagamentos: point.paidExpenses / 100
       });
     });
     let data = Array.from(chartMap.values()).sort((a, b) => a.mes.localeCompare(b.mes));
     if (data.length === 0) {
-      data = [{ mes: 'Jan', receita: 0, despesa: 0 }, { mes: 'Fev', receita: 0, despesa: 0 }, { mes: 'Mar', receita: 0, despesa: 0 }];
+      data = [
+        { mes: 'Jan', recebimentos: 0, pagamentos: 0 },
+        { mes: 'Fev', recebimentos: 0, pagamentos: 0 },
+        { mes: 'Mar', recebimentos: 0, pagamentos: 0 },
+      ];
     }
     return data;
   }, [stats]);
@@ -163,20 +364,33 @@ export function Dashboard() {
 
 
   // Preparar os tipos de projetos disponíveis a partir dos dados reais
-  const availableProjectTypes = useMemo(() => overview?.projectByType.map((item) => item.name) || [], [overview]);
+  const availableProjectTypes = useMemo(() => filteredOverview?.projectByType.map((item) => item.name) || [], [filteredOverview]);
 
   const effectiveProjetoTipo = selectedProjetoTipo || availableProjectTypes[0] || '';
+
+  useEffect(() => {
+    if (projetoFilterMode !== 'unitario' || availableProjectTypes.length === 0) return;
+    if (availableProjectTypes.includes(selectedProjetoTipo)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('projetosTipo', availableProjectTypes[0]);
+    setSearchParams(next, { replace: true });
+  }, [availableProjectTypes, projetoFilterMode, searchParams, selectedProjetoTipo, setSearchParams]);
 
   // Preparar dados de distribuição de projetos
   const projetosStatusData = useMemo(() => {
     if (projetoFilterMode === 'macro') {
-      return overview?.projectByType || [];
+      return filteredOverview?.projectByType || [];
     } else {
-      return (overview?.projectByTypeStatus || [])
+      return (filteredOverview?.projectByTypeStatus || [])
         .filter((item) => item.type === effectiveProjetoTipo)
         .map((item) => ({ name: item.status, value: item.value }));
     }
-  }, [overview, projetoFilterMode, effectiveProjetoTipo]);
+  }, [filteredOverview, projetoFilterMode, effectiveProjetoTipo]);
+
+  const projectDistributionTotal = useMemo(
+    () => projetosStatusData.reduce((total, item) => total + item.value, 0),
+    [projetosStatusData]
+  );
 
 
 
@@ -189,6 +403,7 @@ export function Dashboard() {
       data: Date;
       dataString: string;
       badgeColor: string;
+      link: string;
     }> = [];
 
     tasks.forEach(t => {
@@ -204,7 +419,8 @@ export function Dashboard() {
             contexto: t.projetoNome || t.clienteNome || 'Interno',
             data: date,
             dataString: formattedDate,
-            badgeColor: t.prioridade === 'Alta' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+            badgeColor: t.prioridade === 'Alta' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20',
+            link: appLinks.task(t.id)
           });
         }
       }
@@ -223,7 +439,8 @@ export function Dashboard() {
             contexto: l.projetoNome || 'Sem projeto',
             data: date,
             dataString: formattedDate,
-            badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+            badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+            link: appLinks.license(l.id)
           });
         }
       }
@@ -232,8 +449,7 @@ export function Dashboard() {
     return items.sort((a, b) => a.data.getTime() - b.data.getTime()).slice(0, 5);
   }, [tasks, licencas]);
   const failedWithoutData = (overviewError && !overview)
-    || (statsError && !stats)
-    || (licencasError && !licencasData);
+    || (statsError && !stats);
 
   if (failedWithoutData) {
     return (
@@ -259,10 +475,7 @@ export function Dashboard() {
       <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
         
         {/* Fluxo de Caixa (Large Bento Box) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, type: "spring", stiffness: 100 }}
+        <div
           className="geo-card col-span-1 flex min-h-[320px] flex-col p-5 sm:min-h-[360px] sm:p-6 lg:p-8 xl:col-span-8"
         >
           <div className="mb-5 flex flex-wrap items-start justify-between gap-4 sm:mb-6 sm:items-center">
@@ -293,28 +506,39 @@ export function Dashboard() {
           </div>
 
           <div className="flex-1 min-h-[200px] w-full">
-            <ResponsiveContainer {...responsiveChartProps}>
+            {financeChartReady ? <ResponsiveContainer {...responsiveChartProps}>
               <AreaChart data={financeChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="dashboardReceitaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chartColors.positive} stopOpacity={0.32}/>
-                    <stop offset="95%" stopColor={chartColors.positive} stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="dashboardDespesaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={chartColors.negative} stopOpacity={0.28}/>
-                    <stop offset="95%" stopColor={chartColors.negative} stopOpacity={0}/>
-                  </linearGradient>
+                  {cashFlowChartSeries.map((series) => (
+                    <linearGradient key={series.gradientId} id={series.gradientId} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={series.color} stopOpacity={series.gradientOpacity} />
+                      <stop offset="95%" stopColor={series.color} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} opacity={0.4} />
                 <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} minTickGap={18} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} tickFormatter={(value) => `R$ ${value}`} />
                 <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
-                <Area type="monotone" name="Receita" dataKey="receita" stroke={chartColors.positive} strokeWidth={3} fillOpacity={1} fill="url(#dashboardReceitaGradient)" dot={false} activeDot={chartActiveDot(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                <Area type="monotone" name="Despesa" dataKey="despesa" stroke={chartColors.negative} strokeWidth={3} fillOpacity={1} fill="url(#dashboardDespesaGradient)" dot={false} activeDot={chartActiveDot(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                {cashFlowChartSeries.map((series) => (
+                  <Area
+                    key={series.dataKey}
+                    type="monotone"
+                    name={series.label}
+                    dataKey={series.dataKey}
+                    stroke={series.color}
+                    strokeWidth={3}
+                    fill={`url(#${series.gradientId})`}
+                    fillOpacity={1}
+                    dot={false}
+                    activeDot={chartActiveDot(series.color)}
+                    isAnimationActive={false}
+                  />
+                ))}
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer> : <div aria-hidden="true" className="h-full min-h-[200px] rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />}
           </div>
-        </motion.div>
+        </div>
 
         {/* Indicadores rápidos */}
         <section
@@ -330,6 +554,8 @@ export function Dashboard() {
               tone="overview"
               layout="total"
               delay={0.2}
+              animateOnMount={false}
+              spotlight
             />
             <MetricCard
               label="Projetos"
@@ -338,14 +564,18 @@ export function Dashboard() {
               tone="overview"
               layout="total"
               delay={0.3}
+              animateOnMount={false}
+              spotlight
             />
             <MetricCard
               label="Área sob Gestão (ha)"
-              value={loadingStats ? <Skeleton className="h-9 w-24" /> : areaTotal.toFixed(1)}
+              value={loadingStats ? <Skeleton className="h-9 w-24" /> : areaNumberFormatter.format(areaTotal)}
               icon={<img src={mapIcon} alt="" className="h-6 w-6 object-contain" />}
               tone="overview"
               layout="total"
               delay={0.4}
+              animateOnMount={false}
+              spotlight
             />
             <MetricCard
               label="Eficiência Operacional"
@@ -355,6 +585,8 @@ export function Dashboard() {
               tone="overview"
               layout="total"
               delay={0.5}
+              animateOnMount={false}
+              spotlight
             />
           </div>
         </section>
@@ -362,13 +594,10 @@ export function Dashboard() {
       </div>
 
       {/* Row 2: Vencimentos & Eficiência */}
-      <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
+      {operationalPanelsReady ? <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
         
         {/* Próximos Vencimentos */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, type: "spring", stiffness: 100 }}
+        <div
           className="geo-card col-span-1 flex min-h-[300px] flex-col justify-between p-5 sm:min-h-[340px] sm:p-6 lg:min-h-[360px] lg:p-8 xl:col-span-8"
         >
           <div>
@@ -391,7 +620,12 @@ export function Dashboard() {
                 upcomingItems.map((item) => {
                   const daysBadge = getDaysLeftText(item.data);
                   return (
-                    <div key={item.id} className="flex items-center justify-between gap-4 p-3 bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-100 dark:border-zinc-800/80 rounded-2xl hover:bg-zinc-100/50 dark:hover:bg-zinc-800/70 transition-colors">
+                    <Link
+                      key={`${item.tipo}-${item.id}`}
+                      to={item.link}
+                      aria-label={`Abrir ${item.tipo === 'tarefa' ? 'tarefa' : 'licença'}: ${item.titulo}`}
+                      className="geo-focus-ring flex items-center justify-between gap-4 rounded-2xl border border-zinc-100 bg-zinc-50 p-3 transition-colors hover:bg-zinc-100/50 dark:border-zinc-800/80 dark:bg-zinc-800/40 dark:hover:bg-zinc-800/70"
+                    >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-10 h-10 flex items-center justify-center shrink-0">
                           {item.tipo === 'tarefa' ? (
@@ -401,7 +635,7 @@ export function Dashboard() {
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-xs font-bold text-text-primary truncate">{item.titulo}</h4>
+                          <h3 className="text-xs font-bold text-text-primary truncate">{item.titulo}</h3>
                           <p className="text-[10px] text-text-secondary truncate mt-0.5">{item.contexto}</p>
                         </div>
                       </div>
@@ -411,96 +645,205 @@ export function Dashboard() {
                           {daysBadge.text}
                         </span>
                       </div>
-                    </div>
+                    </Link>
                   );
                 })
               )}
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Eficiência Operacional */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.7, type: "spring", stiffness: 100 }}
-          className="geo-card col-span-1 flex min-h-[300px] flex-col justify-between p-5 sm:min-h-[340px] sm:p-6 lg:min-h-[360px] lg:p-8 xl:col-span-4"
+        {/* Taxa de conclusão */}
+        <div
+          className="geo-card col-span-1 flex min-h-[300px] flex-col p-5 sm:min-h-[340px] sm:p-6 lg:min-h-[360px] lg:p-8 xl:col-span-4"
+          aria-busy={overviewFetching}
         >
-          <div>
-            <div className="mb-5 flex items-center gap-3 sm:mb-6">
-              <div className="w-12 h-12 flex items-center justify-center">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center">
                 <img src={stopwatchIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">Eficiência Operacional</h2>
-            </div>
-
-            <div className="flex items-baseline gap-2 mb-4">
-              <span className="text-5xl font-bold tracking-tight text-text-primary">{taskCompletionRate}%</span>
-              <span className="text-xs text-text-secondary font-medium">das tarefas concluídas</span>
-            </div>
-
-            {/* Detalhamento compacto */}
-            <div className="space-y-2 mt-4 border-t border-zinc-100 dark:border-zinc-800/80 pt-4 text-[11px]">
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Concluídas:</span>
-                <span className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{completedTasks}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Pendentes:</span>
-                <span className="font-bold text-amber-600 dark:text-amber-400 tabular-nums">{overview?.tasksPending ?? tasks.length - completedTasks}</span>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-text-primary">Taxa de conclusão</h2>
+                <p className="mt-1 text-xs leading-5 text-text-secondary">
+                  {taskPeriodLabel} · tarefas com prazo no período
+                </p>
               </div>
             </div>
+            <MetricDefinition label="Como a taxa de conclusão é calculada">
+              Tarefas concluídas com prazo no período divididas pelo total de tarefas com prazo no mesmo período. Tarefas sem prazo e registros excluídos não entram no cálculo.
+            </MetricDefinition>
           </div>
 
           <div className="mt-4">
-            <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800" role="progressbar" aria-label="Conclusão das tarefas" aria-valuemin={0} aria-valuemax={100} aria-valuenow={taskCompletionRate}>
-              <div
-                className="h-full rounded-full bg-emerald-600 transition-[width] duration-1000 dark:bg-emerald-500"
-                style={{ width: `${taskCompletionRate}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-text-secondary">Métrica de conclusão de atividades.</p>
+            <label htmlFor="dashboard-task-period" className="sr-only">Período da taxa de conclusão</label>
+            <FormSelect
+              id="dashboard-task-period"
+              name="dashboardTaskPeriod"
+              aria-label="Período da taxa de conclusão"
+              value={taskPeriod}
+              onChange={(event) => changeTaskPeriod(event.target.value as TaskCompletionPeriod)}
+              wrapperClassName="w-full"
+              className="geo-focus-ring"
+              searchable={false}
+            >
+              <option value="month">Este mês</option>
+              <option value="three_months">Últimos 3 meses</option>
+              <option value="year">Este ano</option>
+              <option value="custom">Personalizado</option>
+            </FormSelect>
           </div>
-        </motion.div>
 
-      </div>
+          {taskPeriod === 'custom' && (
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="dashboard-task-start" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-text-muted">Data inicial</label>
+                <DatePickerField
+                  id="dashboard-task-start"
+                  name="dashboardTaskStart"
+                  value={taskCustomStart}
+                  onChange={(event) => updateDashboardFilters({ tarefasInicio: event.target.value })}
+                  required
+                  autoComplete="off"
+                  aria-invalid={Boolean(taskCustomError)}
+                  aria-describedby={taskCustomError ? 'dashboard-task-range-error' : undefined}
+                />
+              </div>
+              <div>
+                <label htmlFor="dashboard-task-end" className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-text-muted">Data final</label>
+                <DatePickerField
+                  id="dashboard-task-end"
+                  name="dashboardTaskEnd"
+                  value={taskCustomEnd}
+                  onChange={(event) => updateDashboardFilters({ tarefasFim: event.target.value })}
+                  required
+                  autoComplete="off"
+                  aria-invalid={Boolean(taskCustomError)}
+                  aria-describedby={taskCustomError ? 'dashboard-task-range-error' : undefined}
+                />
+              </div>
+              {taskCustomError && (
+                <p id="dashboard-task-range-error" className="text-xs font-semibold leading-5 text-rose-600 dark:text-rose-300 sm:col-span-2" role="alert">
+                  {taskCustomError}
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="mt-5 flex-1" aria-live="polite">
+            {taskCustomError ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200">
+                Corrija o período personalizado para calcular a taxa de conclusão.
+              </div>
+            ) : !filteredOverview ? (
+              <div aria-hidden="true" className="space-y-5">
+                <Skeleton className="h-9 w-44" />
+                <Skeleton className="h-[34px] w-full" />
+                <div className="grid grid-cols-2 gap-5"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
+              </div>
+            ) : taskSummary.total === 0 ? (
+              <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 text-center text-sm text-text-secondary dark:border-zinc-700 dark:bg-zinc-800/30" role="status">
+                Sem tarefas com prazo neste período.
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
+                  <span className="text-3xl font-bold leading-none tracking-tight text-text-primary tabular-nums">
+                    {taskSummary.completed.toLocaleString('pt-BR')} de {taskSummary.total.toLocaleString('pt-BR')}
+                  </span>
+                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                    {taskSummary.rate}%
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-text-secondary">tarefas concluídas no período selecionado</p>
+
+                <div
+                  className="mt-6 flex h-[34px] w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
+                  role="img"
+                  aria-label={`${taskSummary.segments[0].count} tarefas concluídas e ${taskSummary.segments[1].count} pendentes`}
+                >
+                  {taskSummary.segments.map((segment) => segment.part > 0 && (
+                    <div
+                      key={segment.label}
+                      className="flex h-full items-center justify-center text-xs font-bold leading-none text-white dark:text-zinc-950 tabular-nums"
+                      style={{ width: `${segment.part}%`, backgroundColor: segment.color }}
+                      aria-hidden="true"
+                    >
+                      {segment.part > 10 ? `${segment.part}%` : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                  {taskSummary.segments.map((segment) => (
+                    <div key={segment.label} className="border-b-[3px] pb-1.5" style={{ borderBottomColor: segment.color }}>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{segment.label}</p>
+                      <div className="mt-1 flex items-end justify-between gap-2">
+                        <span className="font-bold text-text-primary tabular-nums">{segment.count.toLocaleString('pt-BR')}</span>
+                        <span className="text-sm font-bold leading-tight tabular-nums" style={{ color: segment.color }}>{segment.part}%</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+      </div> : <div aria-hidden="true" className="mb-5 min-h-[360px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35 lg:mb-6" />}
 {/* Row 3: Distribuição e Despesas */}
-      <div className="grid grid-cols-1 gap-5 lg:gap-6 xl:grid-cols-12">
+      {activityPanelsReady ? <div className="grid grid-cols-1 gap-5 lg:gap-6 xl:grid-cols-12">
         
         {/* Atividades Recentes (span 8) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
+        <div
           className="geo-card col-span-1 flex h-[420px] flex-col p-5 sm:h-[460px] sm:p-6 lg:p-8 xl:col-span-8"
         >
           <RecentActivities />
-        </motion.div>
+        </div>
 
         {/* Distribuição de Projetos (span 4) */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5, type: "spring", stiffness: 100 }}
+        <div
           className="geo-card col-span-1 flex h-[380px] flex-col p-5 sm:h-[460px] sm:p-6 lg:p-8 xl:col-span-4"
+          aria-busy={overviewFetching}
         >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 flex items-center justify-center shrink-0">
-                <img src={blueprintIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center">
+                  <img src={blueprintIcon} alt="" className="h-8 w-8 object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-text-primary">Distribuição de projetos</h2>
+                  <p className="mt-1 text-xs leading-5 text-text-secondary">
+                    {projectScope === 'active'
+                      ? `Carteira atual · ${(filteredOverview?.projectsInScope ?? 0).toLocaleString('pt-BR')} ${(filteredOverview?.projectsInScope ?? 0) === 1 ? 'projeto ativo' : 'projetos ativos'}`
+                      : `Todos os projetos · ${(filteredOverview?.projectsInScope ?? 0).toLocaleString('pt-BR')} cadastrados`}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="block text-sm font-semibold uppercase tracking-wider text-text-muted">Distribuição de Projetos</h2>
-                <span className="text-[10px] text-text-secondary font-medium block mt-0.5">
-                  {projetoFilterMode === 'macro' ? 'Por tipo/categoria' : `Status (${effectiveProjetoTipo})`}
-                </span>
-              </div>
+              <MetricDefinition label="Como a distribuição de projetos é calculada">
+                A carteira atual exclui projetos concluídos, finalizados, cancelados, arquivados e registros excluídos. O escopo “Todos os projetos” inclui os demais registros históricos, mas nunca os excluídos.
+              </MetricDefinition>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="dashboard-project-scope" className="sr-only">Escopo da distribuição de projetos</label>
+              <FormSelect
+                id="dashboard-project-scope"
+                name="dashboardProjectScope"
+                aria-label="Escopo da distribuição de projetos"
+                value={projectScope}
+                onChange={(event) => updateDashboardFilters({ projetosEscopo: event.target.value, projetosTipo: null })}
+                wrapperClassName="min-w-[138px] flex-1"
+                className="geo-focus-ring"
+                searchable={false}
+              >
+                <option value="active">Carteira atual</option>
+                <option value="all">Todos os projetos</option>
+              </FormSelect>
               <div className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800/60" role="group" aria-label="Agrupamento da distribuição de projetos">
                 <button
                   type="button"
-                  onClick={() => setProjetoFilterMode('macro')} 
+                  onClick={() => updateDashboardFilters({ projetosAgrupamento: 'macro' })}
                   aria-pressed={projetoFilterMode === 'macro'}
                   className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'macro' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-600 hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-white'}`}
                 >
@@ -508,7 +851,7 @@ export function Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setProjetoFilterMode('unitario')} 
+                  onClick={() => updateDashboardFilters({ projetosAgrupamento: 'unitario' })}
                   aria-pressed={projetoFilterMode === 'unitario'}
                   className={`geo-focus-ring rounded-lg px-3 py-1 text-[10px] font-medium transition-[color,background-color,box-shadow] ${projetoFilterMode === 'unitario' ? 'bg-white text-zinc-900 shadow dark:bg-zinc-700 dark:text-white' : 'text-zinc-600 hover:text-zinc-800 dark:text-zinc-300 dark:hover:text-white'}`}
                 >
@@ -521,7 +864,8 @@ export function Dashboard() {
                   aria-label="Filtrar distribuição por tipo de projeto"
                   name="dashboardProjectType"
                   value={effectiveProjetoTipo}
-                  onChange={(e) => setSelectedProjetoTipo(e.target.value)}
+                  onChange={(event) => updateDashboardFilters({ projetosTipo: event.target.value })}
+                  wrapperClassName="w-full"
                   className="geo-focus-ring cursor-pointer animate-in rounded-xl border border-zinc-200 bg-zinc-50 px-2 py-1.5 text-[10px] font-medium text-text-primary transition-[border-color,box-shadow] duration-200 fade-in zoom-in-95 dark:border-zinc-700/80 dark:bg-zinc-800/60"
                 >
                   {availableProjectTypes.map((tipo) => (
@@ -531,44 +875,96 @@ export function Dashboard() {
               )}
             </div>
           </div>
-          <div className="min-h-0 flex-1">
-            {projetosStatusData.length === 0 ? (
+          <div className="min-h-0 flex-1 py-2" aria-live="polite">
+            {!filteredOverview ? (
+              <div aria-hidden="true" className="h-full rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />
+            ) : projetosStatusData.length === 0 ? (
               <div className="flex h-full flex-col items-center justify-center px-4 text-center">
                 <img src={blueprintIcon} alt="" className="h-10 w-10 opacity-45 grayscale" />
-                <p className="mt-3 text-sm font-semibold text-text-secondary">Nenhum projeto para distribuir</p>
-                <p className="mt-1 max-w-xs text-xs leading-5 text-text-muted">Os dados aparecerão aqui quando houver projetos cadastrados.</p>
+                <p className="mt-3 text-sm font-semibold text-text-secondary">Nenhum projeto neste escopo.</p>
+                <p className="mt-1 max-w-xs text-xs leading-5 text-text-muted">Selecione outro escopo ou cadastre um novo projeto para preencher o gráfico.</p>
               </div>
-            ) : <ResponsiveContainer {...responsiveChartProps}>
-              <PieChart>
-                <Pie
-                  data={projetosStatusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={70}
-                  outerRadius={105}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                  isAnimationActive={!reduceMotion}
-                  animationDuration={chartAnimationDuration}
-                  onMouseEnter={(_, index) => setActiveProjectStatusIndex(index)}
-                  onMouseLeave={() => setActiveProjectStatusIndex(null)}
-                >
-                  {projetosStatusData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={getStatusColor(entry.name, index)}
-                      style={chartSegmentStyle(Boolean(reduceMotion), activeProjectStatusIndex !== null && activeProjectStatusIndex !== index)}
-                    />
+            ) : projectChartReady ? (
+              <div
+                className="relative mx-auto h-full max-h-[240px] w-full max-w-[240px]"
+                role="img"
+                aria-label={`Distribuição de ${projectDistributionTotal} ${projectDistributionTotal === 1 ? 'projeto' : 'projetos'} no escopo selecionado`}
+              >
+                <ResponsiveContainer {...responsiveChartProps}>
+                  <PieChart>
+                    <Pie
+                      data={projetosStatusData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="48%"
+                      outerRadius="78%"
+                      paddingAngle={0}
+                      cornerRadius={0}
+                      dataKey="value"
+                      nameKey="name"
+                      stroke="none"
+                      isAnimationActive={false}
+                      onMouseEnter={(_, index) => setActiveProjectStatusIndex(index)}
+                      onMouseLeave={() => setActiveProjectStatusIndex(null)}
+                    >
+                      {projetosStatusData.map((entry, index) => (
+                        <Cell
+                          key={`${entry.name}-${index}`}
+                          fill={getStatusColor(entry.name, index)}
+                          style={chartSegmentStyle(Boolean(reduceMotion), activeProjectStatusIndex !== null && activeProjectStatusIndex !== index)}
+                        />
+                      ))}
+                    </Pie>
+                    <text
+                      x="50%"
+                      y="47%"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="hsl(var(--text-primary))"
+                      className="text-[2rem] font-bold tabular-nums"
+                    >
+                      {projectDistributionTotal}
+                    </text>
+                    <text
+                      x="50%"
+                      y="57%"
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill={chartTextColor}
+                      className="text-xs font-medium"
+                    >
+                      {projectDistributionTotal === 1 ? 'Projeto' : 'Projetos'}
+                    </text>
+                    <RechartsTooltip content={<DynamicTooltip formatter={(value) => {
+                      const percent = projectDistributionTotal > 0 ? projectPercentFormatter.format(value / projectDistributionTotal) : '0%';
+                      return `${value.toLocaleString('pt-BR')} ${value === 1 ? 'projeto' : 'projetos'} · ${percent}`;
+                    }} />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <ul className="sr-only">
+                  {projetosStatusData.map((item) => (
+                    <li key={item.name}>
+                      {item.name}: {item.value.toLocaleString('pt-BR')} ({projectDistributionTotal > 0 ? projectPercentFormatter.format(item.value / projectDistributionTotal) : '0%'})
+                    </li>
                   ))}
-                </Pie>
-                <RechartsTooltip content={<DynamicTooltip formatter={(v) => `${v} projetos`} />} />
-                <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
-              </PieChart>
-            </ResponsiveContainer>}
+                </ul>
+              </div>
+            ) : <div aria-hidden="true" className="h-full rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />}
           </div>
-        </motion.div>
-      </div>
+          {projetosStatusData.length > 0 && (
+            <div className="flex flex-col gap-1 border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800/80">
+              <div className="font-medium leading-none text-text-primary">Base de cálculo</div>
+              <p className="leading-5 text-text-secondary">
+                {projetoFilterMode === 'macro'
+                  ? projectScope === 'active'
+                    ? `${projectDistributionTotal.toLocaleString('pt-BR')} ${projectDistributionTotal === 1 ? 'projeto ativo' : 'projetos ativos'}, agrupados por categoria.`
+                    : `${projectDistributionTotal.toLocaleString('pt-BR')} ${projectDistributionTotal === 1 ? 'projeto cadastrado' : 'projetos cadastrados'}, agrupados por categoria.`
+                  : `${projectDistributionTotal.toLocaleString('pt-BR')} ${projectDistributionTotal === 1 ? 'projeto' : 'projetos'} do tipo ${effectiveProjetoTipo}, agrupados por status.`}
+              </p>
+            </div>
+          )}
+        </div>
+      </div> : <div aria-hidden="true" className="min-h-[420px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35" />}
     </Layout>
   );
 }

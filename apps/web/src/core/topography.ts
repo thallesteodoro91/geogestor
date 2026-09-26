@@ -8,6 +8,13 @@ const { Geodesic } = GeographicLib;
 
 type SupportedDatum = 'SIRGAS 2000' | 'WGS 84';
 
+export function parseTopographyNumber(input: string): number | null {
+  const normalized = input.trim().replace(',', '.');
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function geodesicForDatum(datum: SupportedDatum) {
   return datum === 'WGS 84'
     ? Geodesic.WGS84
@@ -414,15 +421,20 @@ export function parseCoordinateText(
     return { value: null, hemisphere, error: 'Longitude deve usar hemisfério E, W, L ou O.' };
   }
   const numericText = hemisphere ? trimmed.slice(0, -1).trim() : trimmed;
-  const parts = numericText
+  const hasExplicitPositiveSign = /^\+/.test(numericText);
+  const hasExplicitNegativeSign = /^-/.test(numericText);
+  const rawParts = numericText
     .replace(/[°'′"″]/g, ' ')
     .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => Number(part.replace(',', '.')));
-  if (parts.length < 1 || parts.length > 3 || parts.some((part) => !Number.isFinite(part))) {
+    .filter(Boolean);
+  const parts = rawParts.map(parseTopographyNumber);
+  if (parts.length < 1 || parts.length > 3 || parts.some((part) => part === null)) {
     return { value: null, hemisphere, error: 'Use graus decimais ou o formato 27°35\'40,2"S.' };
   }
-  const [degrees, minutes = 0, seconds = 0] = parts;
+  const [degrees, minutes = 0, seconds = 0] = parts as number[];
+  if (parts.length > 1 && (!Number.isInteger(degrees) || !Number.isInteger(minutes))) {
+    return { value: null, hemisphere, error: 'No formato GMS, graus e minutos devem ser inteiros.' };
+  }
   if (minutes < 0 || minutes >= 60 || seconds < 0 || seconds >= 60) {
     return { value: null, hemisphere, error: 'Minutos e segundos devem estar entre 0 e menos de 60.' };
   }
@@ -430,10 +442,14 @@ export function parseCoordinateText(
   const magnitude = Math.abs(degrees) + minutes / 60 + seconds / 3600;
   if (magnitude > limit) return { value: null, hemisphere, error: `Use um valor entre ${-limit} e ${limit}.` };
   const hemisphereSign = hemisphere && ['S', 'W'].includes(hemisphere) ? -1 : 1;
-  if (degrees < 0 && hemisphere && hemisphereSign > 0) {
-    return { value: null, hemisphere, error: 'O sinal negativo contradiz o hemisfério informado.' };
+  if (hemisphere && ((hasExplicitNegativeSign && hemisphereSign > 0) || (hasExplicitPositiveSign && hemisphereSign < 0))) {
+    return {
+      value: null,
+      hemisphere,
+      error: `${hasExplicitNegativeSign ? 'O sinal negativo' : 'O sinal positivo'} contradiz o hemisfério informado.`,
+    };
   }
-  const sign = hemisphere ? hemisphereSign : degrees < 0 ? -1 : 1;
+  const sign = hemisphere ? hemisphereSign : hasExplicitNegativeSign ? -1 : 1;
   return { value: magnitude * sign, hemisphere, error: null };
 }
 
@@ -490,15 +506,17 @@ export function decimaisParaGMS(decimal: number): {
   minutos: number;
   segundos: number;
 } {
-  const graus = Math.floor(Math.abs(decimal));
-  const minutosDecimal = (Math.abs(decimal) - graus) * 60;
-  const minutos = Math.floor(minutosDecimal);
-  const segundos = (minutosDecimal - minutos) * 60;
+  const negative = decimal < 0 || Object.is(decimal, -0);
+  const roundedTotalSeconds = Math.round(Math.abs(decimal) * 3600 * 100) / 100;
+  const graus = Math.floor(roundedTotalSeconds / 3600);
+  const remainder = roundedTotalSeconds - graus * 3600;
+  const minutos = Math.floor(remainder / 60);
+  const segundos = Math.round((remainder - minutos * 60) * 100) / 100;
 
   return {
-    graus: decimal < 0 ? -graus : graus,
+    graus: negative ? -graus : graus,
     minutos,
-    segundos: parseFloat(segundos.toFixed(2)),
+    segundos,
   };
 }
 
@@ -548,7 +566,7 @@ export function calcularAzimute(
  * @returns String formatada
  */
 export function formatarCoordenadas(latitude: number, longitude: number): string {
-  const lat = latitude >= 0 ? 'N' : 'S';
-  const lon = longitude >= 0 ? 'E' : 'W';
+  const lat = latitude < 0 || Object.is(latitude, -0) ? 'S' : 'N';
+  const lon = longitude < 0 || Object.is(longitude, -0) ? 'W' : 'E';
   return `${Math.abs(latitude).toFixed(6)}° ${lat}, ${Math.abs(longitude).toFixed(6)}° ${lon}`;
 }

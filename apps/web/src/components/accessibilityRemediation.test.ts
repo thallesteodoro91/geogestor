@@ -47,6 +47,8 @@ test('busca e alertas reutilizam o modal canônico e distinguem erro de vazio', 
     assert.match(source, /role="status" aria-live="polite"/);
   }
   assert.match(search, /Nenhum resultado encontrado/);
+  assert.match(search, /aria-label="Buscar no GeoGestor"/);
+  assert.match(search, /className="geo-focus-ring flex h-10 w-10 touch-manipulation/);
   assert.match(alerts, /!alertsQuery\.isError && !filtered\.length/);
 });
 
@@ -63,16 +65,20 @@ test('rota curinga renderiza 404 depois dos aliases legados', () => {
 
 test('loaders globais anunciam estado e não restam transition-all nas telas corrigidas', () => {
   const app = read('../App.tsx');
+  const layout = read('./Layout.tsx');
   assert.match(app, /role="status" aria-live="polite"[\s\S]*Carregando GeoGestor…/);
+  assert.match(layout, /role="status" aria-live="polite" className="sr-only">Abrindo nova tela…/);
+  assert.doesNotMatch(layout, /animate-pulse bg-gradient-to-r/);
+  assert.doesNotMatch(layout, /pendingNavigationPath && 'opacity-60'/);
   assert.doesNotMatch(read('../pages/Clientes/ClienteDetalhes.tsx'), /transition-all/);
   assert.doesNotMatch(read('../pages/Contatos/Contatos.tsx'), /transition-all/);
 });
 
-test('modal não rouba foco já posicionado e ações de projeto não encolhem', () => {
+test('modal não rouba foco já posicionado e ações de projeto mantêm alvo de toque acessível', () => {
   const modal = read('./Modal.tsx');
   const projects = read('../pages/Projetos/ListagemProjetos.tsx');
 
   assert.match(modal, /modalRef\.current\.contains\(document\.activeElement\)/);
   assert.match(modal, /window\.clearTimeout\(focusTimer\)/);
-  assert.match(projects, /projectIconButtonClass = '[^']*h-8 w-8 shrink-0/);
+  assert.match(projects, /projectIconButtonClass = '[^']*h-\[30px\] w-\[30px\] shrink-0/);
 });

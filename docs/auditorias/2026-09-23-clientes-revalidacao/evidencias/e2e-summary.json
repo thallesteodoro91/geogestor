@@ -1,0 +1,27 @@
+{
+  "isolation": "database-per-spec-file",
+  "referenceDate": "2026-09-23",
+  "totals": {
+    "expected": 2,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0,
+    "files": 1
+  },
+  "results": [
+    {
+      "specFile": "session02-clients.spec.ts",
+      "specRoot": "specs\\run-01-session02-clients",
+      "exitCode": 0,
+      "stats": {
+        "startTime": "2026-09-23T23:48:27.558Z",
+        "duration": 51514.008,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "errors": []
+    }
+  ]
+}

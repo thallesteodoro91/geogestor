@@ -16,13 +16,15 @@ export function SettingsSaveBar({
   onSave,
   onDiscard,
   saveDisabled = false,
+  submit = false,
   errorMessage,
   className
 }: {
   state: SettingsSaveState;
-  onSave: () => void;
+  onSave?: () => void;
   onDiscard: () => void;
   saveDisabled?: boolean;
+  submit?: boolean;
   errorMessage?: string;
   className?: string;
 }) {
@@ -61,8 +63,8 @@ export function SettingsSaveBar({
           <X aria-hidden="true" size={15} /> Descartar alterações
         </button>
         <button
-          type="button"
-          onClick={onSave}
+          type={submit ? 'submit' : 'button'}
+          onClick={submit ? undefined : onSave}
           disabled={!canAct || busy || saveDisabled}
           className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-indigo-500 bg-indigo-600 px-4 text-xs font-semibold text-white hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-500/50 disabled:cursor-not-allowed disabled:opacity-45"
         >

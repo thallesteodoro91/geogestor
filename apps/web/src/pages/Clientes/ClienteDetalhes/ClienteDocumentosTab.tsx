@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ElementType } from 'react';
+import { appLinks } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
@@ -26,11 +27,13 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { FormSelect } from '../../../components/Form';
+import { SharedDataNotice } from '../../../components/SharedDataNotice';
 import { ConfirmDialog } from '../../../components/ConfirmDialog';
 import { Modal } from '../../../components/Modal';
 import { apiFetch, getDownloadUrl } from '../../../services/apiClient';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../../utils/actionStyles';
 import { cn } from '../../../utils/cn';
+import { Link } from 'react-router-dom';
 
 export interface ClienteArquivoItem {
   documentId?: string;
@@ -46,6 +49,9 @@ export interface ClienteArquivoItem {
   categoryTone?: string;
   relativePath?: string;
   tags?: string[];
+  originType?: 'client' | 'project';
+  projetoId?: string | null;
+  projetoNome?: string | null;
 }
 
 interface DocumentoCategoria {
@@ -151,6 +157,8 @@ export function ClienteDocumentosTab({
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [documentCategoryFilter, setDocumentCategoryFilter] = useState('Todas');
+  const [documentOriginFilter, setDocumentOriginFilter] = useState<'all' | 'client' | 'project'>('all');
+  const [documentProjectFilter, setDocumentProjectFilter] = useState('all');
   const [documentSearchTerm, setDocumentSearchTerm] = useState('');
   const [documentUploadCategory, setDocumentUploadCategory] = useState('Documentos');
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -177,7 +185,7 @@ export function ClienteDocumentosTab({
   }>({
     queryKey: ['cliente-arquivos', clienteId],
     queryFn: async () => {
-      const res = await apiFetch(`/api/arquivos/cliente/${clienteId}`);
+      const res = await apiFetch(`/api/arquivos/cliente/${clienteId}?scope=all`);
       if (res.ok) {
         const data = await res.json();
         return { files: data.files || [], path: data.path || '' };
@@ -213,6 +221,13 @@ export function ClienteDocumentosTab({
     });
     return counts;
   }, [clientFiles]);
+  const documentProjects = useMemo(() => Array.from(
+    new Map(
+      clientFiles
+        .filter((file) => file.originType === 'project' && file.projetoId)
+        .map((file) => [file.projetoId as string, file.projetoNome || 'Projeto vinculado'])
+    )
+  ), [clientFiles]);
 
   const createDocumentCategoryMutation = useMutation({
     mutationFn: async (payload: { nome: string; icone: string; cor: string }) => {
@@ -479,9 +494,15 @@ export function ClienteDocumentosTab({
     }
   };
 
-  const categoryFilteredClientFiles = documentCategoryFilter === 'Todas'
+  const originFilteredClientFiles = documentOriginFilter === 'all'
     ? clientFiles
-    : clientFiles.filter((file) => getDocumentCategory(file) === documentCategoryFilter);
+    : clientFiles.filter((file) => (file.originType || 'client') === documentOriginFilter);
+  const projectFilteredClientFiles = documentProjectFilter === 'all'
+    ? originFilteredClientFiles
+    : originFilteredClientFiles.filter((file) => file.projetoId === documentProjectFilter);
+  const categoryFilteredClientFiles = documentCategoryFilter === 'Todas'
+    ? projectFilteredClientFiles
+    : projectFilteredClientFiles.filter((file) => getDocumentCategory(file) === documentCategoryFilter);
   const documentQuery = documentSearchTerm.trim().toLowerCase();
   const filteredClientFiles = documentQuery
     ? categoryFilteredClientFiles.filter((file) => [
@@ -496,6 +517,11 @@ export function ClienteDocumentosTab({
 
   return (
     <>
+          <div className="mb-4">
+            <SharedDataNotice preferenceKey="client-documents-shared-data">
+              Esta central reúne documentos gerais do cliente e arquivos vinculados aos seus projetos. Os arquivos permanecem nas pastas originais; nenhuma cópia é criada.
+            </SharedDataNotice>
+          </div>
           <div className="flex flex-col rounded-lg border border-zinc-100 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 md:p-8">
             {/* Top Header */}
             <div className="mb-6 flex flex-col gap-4 border-b border-zinc-100 pb-6 dark:border-zinc-800/80 md:flex-row md:items-center md:justify-between">
@@ -732,6 +758,52 @@ export function ClienteDocumentosTab({
                   )}
               </div>
 
+              <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Filtrar documentos por origem">
+                <span className="mr-1 text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">Origem:</span>
+                {([
+                  ['all', 'Todos'],
+                  ['client', 'Documentos gerais'],
+                  ['project', 'Por projeto']
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-pressed={documentOriginFilter === value}
+                    onClick={() => {
+                      setDocumentOriginFilter(value);
+                      if (value === 'client') setDocumentProjectFilter('all');
+                    }}
+                    className={cn(
+                      'geo-focus-ring rounded-lg border px-2.5 py-1 text-xs font-semibold transition-[background-color,border-color,color]',
+                      documentOriginFilter === value
+                        ? 'border-sky-400 bg-sky-50 text-sky-800 dark:bg-sky-400/10 dark:text-sky-200'
+                        : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {documentProjects.length > 0 && documentOriginFilter !== 'client' && (
+                  <div className="ml-auto flex min-w-[14rem] items-center gap-2">
+                    <label htmlFor="document-project-filter" className="shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">
+                      Projeto:
+                    </label>
+                    <FormSelect
+                      id="document-project-filter"
+                      name="documentProjectFilter"
+                      value={documentProjectFilter}
+                      onChange={(event) => setDocumentProjectFilter(event.target.value)}
+                      className="h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-2 text-xs font-semibold text-zinc-700 outline-none transition-[border-color,box-shadow] focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                    >
+                      <option value="all">Todos os projetos</option>
+                      {documentProjects.map(([projectId, projectName]) => (
+                        <option key={projectId} value={projectId}>{projectName}</option>
+                      ))}
+                    </FormSelect>
+                  </div>
+                )}
+              </div>
+
               {/* Filtro por Pasta / Categoria (Faixa Inferior Organizada) */}
               <div className="mt-4 flex flex-wrap items-center gap-1.5">
                 <span className="mr-1 shrink-0 text-[10px] font-extrabold uppercase tracking-widest text-zinc-400">Filtrar Pasta:</span>
@@ -821,11 +893,17 @@ export function ClienteDocumentosTab({
                           {formatFileSize(file.sizeBytes)} • {new Date(file.modifiedAt).toLocaleDateString('pt-BR')}
                           {file.relativePath ? ` • ${file.relativePath}` : ''}
                         </p>
+                        <p className="mt-1 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                          {file.originType === 'project' && file.projetoId ? (
+                            <>Projeto: <Link to={appLinks.projectSection(file.projetoId, 'documentos')} className="geo-focus-ring rounded font-semibold text-indigo-700 underline underline-offset-2 dark:text-indigo-300">{file.projetoNome || 'Projeto vinculado'}</Link></>
+                          ) : 'Documento geral do cliente'}
+                        </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => onPreviewFile(file)}
+                          aria-label={`${canPreviewFile(file) ? 'Visualizar' : 'Abrir'} arquivo ${file.name}`}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 border border-indigo-200/80 dark:border-indigo-800/60 text-indigo-600 dark:text-indigo-300 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                           title={canPreviewFile(file) ? 'Visualizar no GeoGestor' : 'Abrir arquivo'}
                         >
@@ -834,6 +912,7 @@ export function ClienteDocumentosTab({
                         <button
                           type="button"
                           onClick={() => handleOpenFile(file.path)}
+                          aria-label={`Abrir arquivo ${file.name} no aplicativo padrão`}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-violet-50 dark:bg-violet-950/40 hover:bg-violet-100 border border-violet-200/80 dark:border-violet-800/60 text-violet-600 dark:text-violet-300 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                           title="Abrir no aplicativo padrão"
                         >
@@ -842,6 +921,7 @@ export function ClienteDocumentosTab({
                         <button
                           type="button"
                           onClick={() => window.open(getDownloadUrl(file.path))}
+                          aria-label={`Baixar arquivo ${file.name}`}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-sky-50 dark:bg-sky-950/40 hover:bg-sky-100 border border-sky-200/80 dark:border-sky-800/60 text-sky-600 dark:text-sky-300 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                           title="Baixar Arquivo"
                         >
@@ -850,6 +930,7 @@ export function ClienteDocumentosTab({
                         <button
                           type="button"
                           onClick={() => handleFileDelete(file.path, file.name)}
+                          aria-label={`Excluir arquivo ${file.name}`}
                           className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-50 dark:bg-red-950/40 hover:bg-red-100 border border-red-200/80 dark:border-red-800/60 text-red-600 dark:text-red-400 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                           title="Excluir Arquivo"
                         >

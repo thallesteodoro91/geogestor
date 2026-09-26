@@ -50,6 +50,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
   const [projectName, setProjectName] = useState(detail ? `${detail.descricao || detail.servicoTipo || 'Projeto'} — ${detail.clientName}` : '');
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [showDraftPdfConfirm, setShowDraftPdfConfirm] = useState(false);
 
   const clientProjects = useMemo(() => options.projects.filter((project) => project.clientId === detail?.clienteId), [detail?.clienteId, options.projects]);
 
@@ -66,7 +67,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
     await invalidateFinancialQueries(queryClient);
   };
 
-  const generatePdf = async () => {
+  const downloadPdf = async () => {
     if (!detail || isGeneratingPdf) return;
     setIsGeneratingPdf(true);
     try {
@@ -76,6 +77,15 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
     } finally {
       setIsGeneratingPdf(false);
     }
+  };
+
+  const generatePdf = () => {
+    if (!detail || isGeneratingPdf) return;
+    if (detail.status === 'rascunho') {
+      setShowDraftPdfConfirm(true);
+      return;
+    }
+    void downloadPdf();
   };
 
   const transitionMutation = useMutation({
@@ -182,7 +192,7 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
               <h2 className="mt-3 break-words text-2xl font-semibold tracking-tight text-text-primary">{detail.descricao || 'Orçamento sem título'}</h2>
               <p className="mt-1 text-sm text-text-secondary">{detail.clientName} • {detail.servicoTipo || 'Serviço não informado'} • validade {formatDate(detail.validadeAte)}</p>
             </div>
-            <div className="text-left lg:text-right"><p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Valor total</p><p className="font-mono text-3xl font-bold tabular-nums text-text-primary">{formatCurrency(detail.valorTotal)}</p><p className="mt-1 text-xs text-text-muted">Honorários líquidos previstos: {formatCurrency(detail.honorariosLiquidos)}</p></div>
+            <div className="text-left lg:text-right"><p className="text-xs font-semibold uppercase tracking-wider text-text-secondary">Valor total</p><p className="font-mono text-3xl font-bold tabular-nums text-text-primary">{formatCurrency(detail.valorTotal)}</p><p className="mt-1 text-xs text-text-secondary">Honorários líquidos previstos: {formatCurrency(detail.honorariosLiquidos)}</p></div>
           </header>
 
           <div className="flex flex-wrap gap-2" aria-label="Ações do orçamento">
@@ -195,21 +205,21 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
             {detail.status === 'aprovado' && <button type="button" onClick={() => setReasonAction('revision')} className={actionClass}><ArrowClockwise aria-hidden="true" size={17} /> Criar revisão</button>}
             {!detail.visualizadoEm && detail.status !== 'rascunho' && <button type="button" onClick={markViewed} className={actionClass}><Eye aria-hidden="true" size={17} /> Registrar visualização</button>}
             <button type="button" onClick={() => cloneMutation.mutate('duplicate')} className={actionClass}><Copy aria-hidden="true" size={17} /> Duplicar</button>
-            <button type="button" onClick={() => void generatePdf()} disabled={isGeneratingPdf} aria-busy={isGeneratingPdf} className={cn(actionClass, 'disabled:cursor-wait disabled:opacity-60')}><FilePdf aria-hidden="true" size={17} /> {isGeneratingPdf ? 'Gerando PDF…' : 'Gerar PDF'}</button>
+            <button type="button" onClick={generatePdf} disabled={isGeneratingPdf} aria-busy={isGeneratingPdf} className={cn(actionClass, 'disabled:cursor-wait disabled:opacity-60')}><FilePdf aria-hidden="true" size={17} /> {isGeneratingPdf ? 'Gerando PDF…' : 'Gerar PDF'}</button>
           </div>
 
           <section aria-labelledby="budget-financial-statement-title" className="border-y border-brand-border">
             <div className="flex flex-col gap-1 border-b border-brand-border bg-brand-surface-subtle/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <div>
                 <h3 id="budget-financial-statement-title" className="text-sm font-semibold text-text-primary">Demonstrativo financeiro</h3>
-                <p className="mt-0.5 text-xs text-text-muted">Composi&ccedil;&atilde;o interna da proposta e resultado estimado.</p>
+                <p className="mt-0.5 text-xs text-text-secondary">Composi&ccedil;&atilde;o interna da proposta e resultado estimado.</p>
               </div>
-              <p className="text-xs text-text-muted">Valores previstos, sujeitos &agrave; liquida&ccedil;&atilde;o.</p>
+              <p className="text-xs text-text-secondary">Valores previstos, sujeitos &agrave; liquida&ccedil;&atilde;o.</p>
             </div>
             <div className="grid divide-y divide-brand-border xl:grid-cols-[1fr_0.85fr_1fr_0.72fr] xl:divide-x xl:divide-y-0">
               {financialGroups.map((group) => (
                 <div key={group.title} className="min-w-0 px-4 py-4 sm:px-5">
-                  <h4 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-muted">{group.title}</h4>
+                  <h4 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-secondary">{group.title}</h4>
                   <dl className="mt-2 divide-y divide-brand-border">
                     {group.items.map(([label, value]) => <div key={String(label)} className="flex items-center justify-between gap-4 py-2.5"><dt className="text-xs text-text-secondary">{label}</dt><dd className="whitespace-nowrap font-mono text-sm font-bold tabular-nums text-text-primary">{formatCurrency(value as number | undefined)}</dd></div>)}
                   </dl>
@@ -279,6 +289,16 @@ export function BudgetDetails({ detail, options, onClose, onEdit, onOpenBudget }
 
       <Modal isOpen={showApproval} onClose={() => { if (!approveMutation.isPending) setShowApproval(false); }} title="Confirmar aprovação e efeitos financeiros" maxWidth="max-w-2xl">
         <div className="space-y-5"><FormError message={approvalError} /><div className="rounded-xl border border-brand-border bg-brand-surface-subtle/60 p-4"><dl className="grid gap-3 sm:grid-cols-2"><div><dt className="text-xs text-text-muted">Cliente</dt><dd className="font-semibold">{detail.clientName}</dd></div><div><dt className="text-xs text-text-muted">Total contratado</dt><dd className="font-mono font-bold tabular-nums">{formatCurrency(detail.valorTotal)}</dd></div><div><dt className="text-xs text-text-muted">Honorários líquidos previstos</dt><dd className="font-mono font-bold tabular-nums">{formatCurrency(detail.honorariosLiquidos)}</dd></div><div><dt className="text-xs text-text-muted">Impostos previstos</dt><dd className="font-mono font-bold tabular-nums">{formatCurrency(detail.impostosPrevistos)}</dd></div><div><dt className="text-xs text-text-muted">Parcelas</dt><dd className="font-semibold">{detail.payment?.installments.length || 0}</dd></div><div><dt className="text-xs text-text-muted">Conta financeira</dt><dd className="font-semibold">{detail.payment?.financialAccount || 'Não informada'}</dd></div></dl></div><fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wider text-text-muted">Projeto</legend><label className="flex min-h-11 cursor-pointer items-center gap-2"><input type="radio" name="projectMode" checked={projectMode === 'existing'} onChange={() => setProjectMode('existing')} /> Vincular projeto existente</label>{projectMode === 'existing' && <FormSelect aria-label="Projeto existente para vincular" value={projectId} onChange={(event) => setProjectId(event.target.value)} className={fieldClass}><option value="">Selecione…</option>{clientProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</FormSelect>}<label className="flex min-h-11 cursor-pointer items-center gap-2"><input type="radio" name="projectMode" checked={projectMode === 'create'} onChange={() => setProjectMode('create')} /> Criar novo projeto</label>{projectMode === 'create' && <input aria-label="Nome do novo projeto" value={projectName} onChange={(event) => setProjectName(event.target.value)} className={fieldClass} />}</fieldset><p className="rounded-xl border border-brand-turquoise-200 bg-brand-turquoise-50 p-3 text-sm text-brand-turquoise-900 dark:border-brand-turquoise-300/25 dark:bg-brand-turquoise-500/10 dark:text-brand-turquoise-100">A aprovação criará contas a receber previstas. Nenhum valor será registrado como recebido, receita realizada ou entrada de caixa até a liquidação confirmada.</p><div className="flex justify-end gap-3"><button type="button" onClick={() => setShowApproval(false)} className={actionClass}>Voltar</button><button type="button" disabled={approveMutation.isPending || (projectMode === 'existing' ? !projectId : !projectName.trim())} onClick={() => approveMutation.mutate()} className="geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5 disabled:opacity-50">{approveMutation.isPending ? 'Aprovando…' : 'Aprovar e gerar efeitos'}</button></div></div>
+      </Modal>
+
+      <Modal isOpen={showDraftPdfConfirm} onClose={() => { if (!isGeneratingPdf) setShowDraftPdfConfirm(false); }} title="Exportar orçamento em rascunho" maxWidth="max-w-lg">
+        <div className="space-y-5">
+          <p className="text-sm leading-6 text-text-secondary">Este orçamento ainda não foi emitido. O PDF terá a marca-d’água “RASCUNHO — NÃO ENVIAR” em todas as páginas para evitar envio acidental ao cliente.</p>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => setShowDraftPdfConfirm(false)} disabled={isGeneratingPdf} className={actionClass}>Continuar editando</button>
+            <button type="button" onClick={() => { setShowDraftPdfConfirm(false); void downloadPdf(); }} disabled={isGeneratingPdf} className="geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5 disabled:cursor-wait disabled:opacity-60">Exportar com marca-d’água</button>
+          </div>
+        </div>
       </Modal>
     </>
   );

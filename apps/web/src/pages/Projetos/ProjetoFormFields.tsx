@@ -157,8 +157,11 @@ export function ProjetoFormFields({
                 <option value="Em Análise">Em análise</option>
                 <option value="Em Andamento">Em andamento</option>
                 <option value="Aguardando Cliente">Aguardando cliente</option>
+                <option value="Aguardando Documentação">Aguardando documentação</option>
                 <option value="Aguardando Órgão">Aguardando órgão</option>
-                <option value="Finalizado">Finalizado</option>
+                <option value="Com Pendência">Com pendência</option>
+                <option value="Suspenso">Suspenso</option>
+                <option value="Finalizado">Concluído</option>
                 <option value="Cancelado">Cancelado</option>
               </FormSelect>
             </FormField>
@@ -226,8 +229,8 @@ export function ProjetoFormFields({
                   <FormField htmlFor="project-numeroLicenca" label="Número da licença" required error={errors.numeroLicenca}>
                     <input id="project-numeroLicenca" name="numeroLicenca" type="text" autoComplete="off" spellCheck={false} value={form.numeroLicenca} onChange={(event) => update('numeroLicenca', event.target.value)} placeholder="Ex.: LAO 1234/2026" aria-invalid={Boolean(errors.numeroLicenca)} aria-describedby={describedBy('numeroLicenca', errors)} className={fieldClass} />
                   </FormField>
-                  <FormField htmlFor="project-dataEmissao" label="Data de emissão">
-                    <DatePickerField id="project-dataEmissao" name="dataEmissao" autoComplete="off" value={form.dataEmissao} onChange={(event) => update('dataEmissao', event.target.value)} className={fieldClass} />
+                  <FormField htmlFor="project-dataEmissao" label="Data de emissão" required error={errors.dataEmissao}>
+                    <DatePickerField id="project-dataEmissao" name="dataEmissao" autoComplete="off" value={form.dataEmissao} onChange={(event) => update('dataEmissao', event.target.value)} aria-invalid={Boolean(errors.dataEmissao)} aria-describedby={describedBy('dataEmissao', errors)} className={fieldClass} />
                   </FormField>
                   <FormField htmlFor="project-dataVencimentoLicenca" label="Data de vencimento" required error={errors.dataVencimentoLicenca}>
                     <DatePickerField id="project-dataVencimentoLicenca" name="dataVencimentoLicenca" autoComplete="off" min={form.dataEmissao || undefined} value={form.dataVencimentoLicenca} onChange={(event) => update('dataVencimentoLicenca', event.target.value)} aria-invalid={Boolean(errors.dataVencimentoLicenca)} aria-describedby={describedBy('dataVencimentoLicenca', errors)} className={fieldClass} />

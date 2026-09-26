@@ -1,10 +1,12 @@
 import { toast } from 'sonner';
+import { appLinks } from '@geogestor/contracts';
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { PopoverSurface } from '../../components/form-controls/PopoverSurface';
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
+import { SharedDataNotice } from '../../components/SharedDataNotice';
 import { motion } from 'framer-motion';
 import { 
   ArrowLeft, 
@@ -35,6 +37,7 @@ import {
   CurrencyDollar,
   CalendarCheck,
   Briefcase,
+  CaretDown,
   Minus,
   PencilSimple,
   CheckCircle,
@@ -52,7 +55,7 @@ import {
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
 import { formatCnpj, formatCpf, formatPhoneBR } from '../../utils/formatters';
-import { apiClient, apiFetch, getPreviewUrl } from '../../services/apiClient';
+import { apiClient, apiFetch } from '../../services/apiClient';
 import { listBudgetSummaries } from '../../services/budgets';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
@@ -166,6 +169,90 @@ function isCompletedStatus(status?: string | null) {
   return status === 'Concluído' || status === 'Concluido';
 }
 
+function AreaUnitDropdown({ value, onChange }: { value: AreaUnit; onChange: (unit: AreaUnit) => void }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuId = 'cliente-area-unit-menu';
+  const options: Array<{ value: AreaUnit; label: string; description: string }> = [
+    { value: 'ha', label: 'ha', description: 'Hectares' },
+    { value: 'm2', label: 'm²', description: 'Metros quadrados' }
+  ];
+
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', dismiss);
+    document.addEventListener('keydown', escape);
+    return () => {
+      document.removeEventListener('mousedown', dismiss);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`Unidade da área total: ${value === 'ha' ? 'hectares' : 'metros quadrados'}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        onClick={() => setOpen((current) => !current)}
+        className="geo-focus-ring inline-flex h-8 min-w-16 items-center justify-between gap-2 rounded-md border border-stone-600 bg-stone-900/75 px-2.5 text-xs font-semibold text-stone-100 shadow-sm transition-[background-color,border-color,color,box-shadow] hover:border-stone-400 hover:bg-stone-800"
+      >
+        <span>{value === 'ha' ? 'ha' : 'm²'}</span>
+        <CaretDown aria-hidden="true" weight="bold" className={cn('h-3.5 w-3.5 text-stone-400 transition-transform duration-150 motion-reduce:transition-none', open && 'rotate-180')} />
+      </button>
+      <PopoverSurface
+        ref={menuRef}
+        open={open}
+        anchorRef={triggerRef}
+        id={menuId}
+        role="menu"
+        ariaLabel="Selecionar unidade de área"
+        minWidth={176}
+        maxWidth={176}
+        className="geo-dropdown-content p-1"
+      >
+        <p className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-text-muted">Unidade de área</p>
+        {options.map((option) => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={selected}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+                window.requestAnimationFrame(() => triggerRef.current?.focus());
+              }}
+              className={cn('geo-option-row geo-dropdown-item', selected && 'geo-option-row-selected')}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-text-primary">{option.label}</span>
+                <span className="block text-[11px] font-normal text-text-muted">{option.description}</span>
+              </span>
+              {selected && <Check aria-hidden="true" weight="bold" className="h-4 w-4 shrink-0 text-zinc-700 dark:text-zinc-200" />}
+            </button>
+          );
+        })}
+      </PopoverSurface>
+    </>
+  );
+}
+
 export function ClienteDetalhes() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -178,6 +265,8 @@ export function ClienteDetalhes() {
     : 'visao-geral';
 
   const [previewFile, setPreviewFile] = useState<ClienteArquivoItem | null>(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState('');
+  const [previewError, setPreviewError] = useState('');
   const [areaUnit, setAreaUnit] = useState<AreaUnit>('ha');
   const [copiedContactField, setCopiedContactField] = useState<string | null>(null);
   const [showAlertasPopover, setShowAlertasPopover] = useState(false);
@@ -245,6 +334,42 @@ export function ClienteDetalhes() {
     document.title = `${cliente.nome} — GeoGestor`;
     return () => { document.title = previousTitle; };
   }, [cliente?.nome]);
+
+  useEffect(() => {
+    if (!previewFile) return undefined;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreviewFile(null);
+        setPreviewObjectUrl('');
+        setPreviewError('');
+      }
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    return () => document.removeEventListener('keydown', closeOnEscape);
+  }, [previewFile]);
+
+  useEffect(() => {
+    if (!previewFile) return undefined;
+
+    const controller = new AbortController();
+    let objectUrl = '';
+
+    void apiFetch(`/api/arquivos/preview?path=${encodeURIComponent(previewFile.path)}`, {
+      signal: controller.signal
+    }).then(async (response) => {
+      if (!response.ok) throw new Error('Não foi possível carregar a pré-visualização.');
+      objectUrl = URL.createObjectURL(await response.blob());
+      setPreviewObjectUrl(objectUrl);
+    }).catch((error: unknown) => {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      setPreviewError(error instanceof Error ? error.message : 'Não foi possível carregar a pré-visualização.');
+    });
+
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewFile]);
 
   // Prefetch tabs on load
   useEffect(() => {
@@ -660,23 +785,6 @@ export function ClienteDetalhes() {
   const clientOrcamentos = orcamentos;
 
   // 5. Fetch Client Files
-  const { data: filesData = { files: [], path: '' } } = useQuery<{
-    files: ClienteArquivoItem[];
-    path: string;
-  }>({
-    queryKey: ['cliente-arquivos', id],
-    queryFn: async () => {
-      const res = await apiFetch(`/api/arquivos/cliente/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        return { files: data.files || [], path: data.path || '' };
-      }
-      return { files: [], path: '' };
-    },
-    enabled: !!id && activeTab === 'visao-geral'
-  });
-
-  const clientFiles = filesData.files;
   const projectIdsForAlerts = clientProjetos.map((project) => project.id).join('|');
   const clientProjectIdSet = useMemo(() => new Set(clientProjetos.map((project) => project.id)), [clientProjetos]);
 
@@ -703,25 +811,20 @@ export function ClienteDetalhes() {
   }>({
     queryKey: ['cliente-central-arquivos', id, projectIdsForAlerts],
     queryFn: async () => {
-      const clienteFilesResumo = await apiFetch(`/api/arquivos/cliente/${id}`)
+      const consolidated = await apiFetch(`/api/arquivos/cliente/${id}?scope=all`)
         .then((res) => (res.ok ? res.json() : { files: [] }))
         .catch(() => ({ files: [] }));
-
-      const projetosFiles = await Promise.all(clientProjetos.map(async (project) => {
-        const data = await apiFetch(`/api/arquivos/projeto/${project.id}`)
-          .then((res) => (res.ok ? res.json() : { files: [] }))
-          .catch(() => ({ files: [] }));
-        return [project.id, Array.isArray(data.files) ? data.files.length : 0] as const;
-      }));
-
-      const projetosMap = Object.fromEntries(projetosFiles);
-      const clienteCount = Array.isArray(clienteFilesResumo.files) ? clienteFilesResumo.files.length : 0;
-      const projetosCount = Object.values(projetosMap).reduce((acc, count) => acc + count, 0);
+      const files = Array.isArray(consolidated.files) ? consolidated.files as Array<{ originType?: string; projetoId?: string | null }> : [];
+      const projetosMap = files.reduce<Record<string, number>>((counts, file) => {
+        if (file.originType === 'project' && file.projetoId) counts[file.projetoId] = (counts[file.projetoId] || 0) + 1;
+        return counts;
+      }, {});
+      const clienteCount = files.filter((file) => file.originType !== 'project').length;
 
       return {
         cliente: clienteCount,
         projetos: projetosMap,
-        total: clienteCount + projetosCount
+        total: files.length
       };
     },
     enabled: !!id
@@ -741,6 +844,8 @@ export function ClienteDetalhes() {
 
   const handlePreviewFile = (file: ClienteArquivoItem) => {
     if (canPreviewFile(file)) {
+      setPreviewObjectUrl('');
+      setPreviewError('');
       setPreviewFile(file);
       return;
     }
@@ -879,9 +984,9 @@ export function ClienteDetalhes() {
       <Layout>
         <div className="text-center py-12">
           <h2 className="text-2xl font-bold mb-4">Cliente não encontrado</h2>
-          <button onClick={() => navigate('/clientes')} className="px-4 py-2 bg-zinc-950 text-white rounded-xl">
+          <Link to="/clientes" className="inline-flex rounded-xl bg-zinc-950 px-4 py-2 text-white hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
             Voltar para lista de clientes
-          </button>
+          </Link>
         </div>
       </Layout>
     );
@@ -1086,24 +1191,58 @@ export function ClienteDetalhes() {
     {
       id: 'arquivos' as const,
       label: 'Arquivos',
-      count: activeTab === 'arquivos' ? clientFiles.length : Number(dashboardData?.kpis?.documentos || 0),
+      count: arquivosResumoOperacional.total,
       tone: 'border-slate-300/30 bg-zinc-100/85 text-slate-700 ring-slate-300/20 shadow-[inset_0_-2px_0_rgba(148,163,184,0.55)] dark:bg-zinc-800/90 dark:text-slate-300 dark:ring-slate-300/20 dark:shadow-[inset_0_-2px_0_rgba(203,213,225,0.45)]',
       iconTone: 'text-slate-300',
       icon: <Files weight="duotone" className="h-5 w-5" />
     }
   ];
 
+  const secondaryTabsPanel = (
+    <ClienteSecondaryTabs
+      activeTab={activeTab}
+      clienteId={id!}
+      clienteName={cliente.nome}
+      clientProperties={clientProperties}
+      clientProjetos={clientProjetos}
+      clientAmbientalProjetos={clientAmbientalProjetos}
+      clientOrcamentos={clientOrcamentos}
+      focusedOrcamentoId={focusedOrcamentoId}
+      clientFinancialKpis={clientFinancialKpis}
+      orcamentosPorStatus={orcamentosPorStatus}
+      focusedDocumentId={focusedDocumentId}
+      initialDocumentSearch={initialDocumentSearch}
+      onPreviewFile={handlePreviewFile}
+      onCreateProperty={() => navigate('/propriedades', { state: { createForClienteId: id, clientName: cliente.nome } })}
+      onOpenProperty={(propertyId) => navigate('/propriedades', { state: { editPropertyId: propertyId, clientFilterId: id } })}
+      onCreateEnvironmentalProject={() => navigate('/projetos', { state: { createForClienteId: id, openCreateModal: true, contexto: 'ambiental' } })}
+      onCreateService={() => navigate('/projetos', { state: { createForClienteId: id, modalTab: 'projeto' } })}
+      renderEnvironmentalProjectLink={(project) => (
+        <Link to={`/ambiental/${project.id}`} className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300">
+          Abrir demanda
+          <ArrowSquareOut className="h-3.5 w-3.5" aria-hidden="true" />
+        </Link>
+      )}
+      renderProjectTitleLink={(proj) => <Link to={`/projetos/${proj.id}`}>{proj.nome}</Link>}
+      renderProjectDetailsLink={(proj) => (
+        <Link to={`/projetos/${proj.id}`} className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:bg-zinc-950 rounded-xl text-xs font-bold transition-[background-color,border-color,color,box-shadow,transform]">
+          Detalhes
+        </Link>
+      )}
+    />
+  );
+
   return (
     <Layout contentClassName="max-w-none">
       {/* Top Bar with back button */}
       <div className="mb-6 flex items-center gap-4">
-        <button 
-          onClick={() => navigate('/clientes')}
+        <Link
+          to="/clientes"
           aria-label="Voltar para clientes"
           className="w-10 h-10 rounded-full border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-950 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
         >
-          <ArrowLeft weight="bold" className="w-4 h-4" />
-        </button>
+          <ArrowLeft weight="bold" className="w-4 h-4" aria-hidden="true" />
+        </Link>
         <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
           <Link to="/clientes" className="hover:text-zinc-900 dark:text-zinc-100 transition-colors">Clientes</Link>
           <span className="mx-2 text-zinc-300">/</span>
@@ -1132,7 +1271,7 @@ export function ClienteDetalhes() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 items-start gap-x-5 gap-y-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(310px,0.8fr)]">
-        <div className={cn('flex w-full min-w-0 flex-col gap-4', activeTab === 'visao-geral' ? 'xl:col-start-1' : 'xl:col-span-2')}>
+        <div className="flex w-full min-w-0 flex-col gap-4 xl:col-start-1">
         <div
           className="grid w-full min-w-0 self-start gap-4 lg:grid-cols-[92px_minmax(0,1fr)] lg:grid-rows-[auto_auto]"
         >
@@ -1178,11 +1317,9 @@ export function ClienteDetalhes() {
               </button>
             </div>
           </div>
-          {(activeTab === 'visao-geral' || activeTab === 'propriedades') && (
-            <div className="w-full min-w-0 min-h-44">
-              <ClienteMapaCard clienteId={id!} clienteNome={cliente.nome} className="w-full min-w-0" />
-            </div>
-          )}
+          <div className="w-full min-w-0 min-h-44">
+            <ClienteMapaCard clienteId={id!} clienteNome={cliente.nome} className="w-full min-w-0" />
+          </div>
 
         </div>
 
@@ -1245,10 +1382,10 @@ export function ClienteDetalhes() {
           />
         </div>
         )}
+        {activeTab !== 'visao-geral' && secondaryTabsPanel}
         </div>
 
       {/* Bento Grid layout for basic info and KPIs */}
-      {activeTab === 'visao-geral' && (
       <div className="grid gap-4 content-start xl:col-start-2">
         <div className="grid gap-4 content-start">
         {/* Client details card */}
@@ -1409,7 +1546,7 @@ export function ClienteDetalhes() {
 
           {cliente.anotacoes && (
             <div className="mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-              <p className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              <p className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-zinc-600 dark:text-zinc-400">
                 <Note className="h-3.5 w-3.5" /> Anotações Fixas
               </p>
               <p className="rounded-2xl bg-zinc-50 p-3 text-sm font-medium leading-relaxed text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
@@ -1471,16 +1608,7 @@ export function ClienteDetalhes() {
                       <MapTrifold weight="duotone" className="h-3 w-3 shrink-0 text-emerald-400" />
                       <span>Área Total Mapeada</span>
                     </p>
-                    <FormSelect
-                      aria-label="Unidade da área total"
-                      value={areaUnit}
-                      onChange={(event) => setAreaUnit(event.target.value as AreaUnit)}
-                      wrapperClassName="w-16 shrink-0"
-                      className="h-7 rounded-xl border border-emerald-400/20 bg-stone-900 px-2 text-[11px] font-semibold text-stone-100 outline-none transition-colors focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
-                    >
-                      <option value="ha">ha</option>
-                      <option value="m2">m²</option>
-                    </FormSelect>
+                    <AreaUnitDropdown value={areaUnit} onChange={setAreaUnit} />
                   </div>
                   <p className="text-2xl font-bold tracking-tight text-emerald-400">
                     {formatAreaValue(totalAreaMapeadaM2, areaUnit)} {areaUnit === 'ha' ? 'ha' : 'm²'}
@@ -1576,7 +1704,7 @@ export function ClienteDetalhes() {
                         </span>
                       ))
                     ) : (
-                      <span className="rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs font-semibold text-stone-500">
+                      <span className="rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs font-semibold text-stone-300">
                         Sem categoria
                       </span>
                     )}
@@ -1620,7 +1748,7 @@ export function ClienteDetalhes() {
             <div>
               <h3 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-zinc-500 dark:text-zinc-400" />
-                Checklist
+                Tarefas do cliente
               </h3>
               <p className="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">Progresso</p>
             </div>
@@ -1629,6 +1757,12 @@ export function ClienteDetalhes() {
 
           <div className="h-2 rounded-full bg-zinc-100 dark:bg-zinc-800 overflow-hidden mb-4">
             <div className="h-full rounded-full bg-indigo-600 transition-[width]" style={{ width: `${taskProgress}%` }} />
+          </div>
+
+          <div className="mb-4">
+            <SharedDataNotice preferenceKey="client-tasks-shared-data">
+              Esta lista reúne tarefas gerais do cliente e tarefas dos projetos vinculados. Uma tarefa de projeto aparece nos dois locais, mas é o mesmo registro: alterações feitas aqui também aparecem no projeto.
+            </SharedDataNotice>
           </div>
 
           <button
@@ -1642,37 +1776,61 @@ export function ClienteDetalhes() {
 
           {showTaskForm && (
             <form onSubmit={handleAddTask} className="mt-4 space-y-3 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/90 p-4 shadow-sm">
-              <FormSelect
-                value={taskProjetoId}
-                onChange={event => setTaskProjetoId(event.target.value)}
-                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-              >
-                <option value="">Cliente geral</option>
-                {clientProjetos.map((projeto) => (
-                  <option key={projeto.id} value={projeto.id}>{projeto.nome}</option>
-                ))}
-              </FormSelect>
+              <div>
+                <label htmlFor="client-task-scope" className="mb-1.5 block text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                  Esta tarefa pertence a
+                </label>
+                <FormSelect
+                  id="client-task-scope"
+                  name="taskScope"
+                  value={taskProjetoId}
+                  onChange={event => setTaskProjetoId(event.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                >
+                  <option value="">Cliente geral — sem projeto</option>
+                  {clientProjetos.map((projeto) => (
+                    <option key={projeto.id} value={projeto.id}>Projeto — {projeto.nome}</option>
+                  ))}
+                </FormSelect>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  Ao escolher um projeto, a tarefa também será exibida no checklist dele.
+                </p>
+              </div>
+              <label htmlFor="client-task-title" className="sr-only">Título da tarefa</label>
               <input
+                id="client-task-title"
+                name="taskTitle"
+                autoComplete="off"
                 value={taskTitulo}
                 onChange={event => setTaskTitulo(event.target.value)}
                 placeholder="Título da tarefa"
                 className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
               />
               <div className="grid grid-cols-2 gap-2">
-                <FormSelect
-                  value={taskPrioridade}
-                  onChange={event => setTaskPrioridade(event.target.value as TaskPriority)}
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                >
-                  <option value="Baixa">Baixa</option>
-                  <option value="Média">Média</option>
-                  <option value="Alta">Alta</option>
-                </FormSelect>
-                <DatePickerField
-                  value={taskDataLimite}
-                  onChange={event => setTaskDataLimite(event.target.value)}
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                />
+                <div>
+                  <label htmlFor="client-task-priority" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Prioridade</label>
+                  <FormSelect
+                    id="client-task-priority"
+                    name="taskPriority"
+                    value={taskPrioridade}
+                    onChange={event => setTaskPrioridade(event.target.value as TaskPriority)}
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  >
+                    <option value="Baixa">Baixa</option>
+                    <option value="Média">Média</option>
+                    <option value="Alta">Alta</option>
+                  </FormSelect>
+                </div>
+                <div>
+                  <label htmlFor="client-task-due-date" className="mb-1 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Prazo</label>
+                  <DatePickerField
+                    id="client-task-due-date"
+                    name="taskDueDate"
+                    value={taskDataLimite}
+                    onChange={event => setTaskDataLimite(event.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3 py-2.5 text-sm font-medium text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  />
+                </div>
               </div>
               <button type="submit" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-500 py-2.5 text-sm font-semibold text-white transition-[background-color,color,box-shadow,transform] shadow-sm">
                 Salvar tarefa
@@ -1682,13 +1840,21 @@ export function ClienteDetalhes() {
 
           <div className="mt-4 space-y-3 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
             {loadingTarefas ? (
-              <p className="py-6 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">Carregando tarefas...</p>
+              <p className="py-6 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">Carregando tarefas…</p>
             ) : clienteTarefas.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-850 p-4 text-center mt-2">
                 <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Nenhuma tarefa neste cliente.</p>
               </div>
             ) : (
-              clienteTarefas.map((tarefa) => {
+              [
+                { key: 'general', label: 'Tarefas gerais do cliente', tasks: clienteTarefas.filter((tarefa) => !tarefa.projetoId) },
+                { key: 'projects', label: 'Tarefas por projeto', tasks: clienteTarefas.filter((tarefa) => Boolean(tarefa.projetoId)) }
+              ].filter((group) => group.tasks.length > 0).map((group) => (
+                <section key={group.key} aria-labelledby={`client-task-group-${group.key}`} className="space-y-2">
+                  <h4 id={`client-task-group-${group.key}`} className="sticky top-0 z-10 bg-white/95 py-1 text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 backdrop-blur dark:bg-zinc-900/95 dark:text-zinc-400">
+                    {group.label} <span className="tabular-nums">({group.tasks.length})</span>
+                  </h4>
+                  {group.tasks.map((tarefa) => {
                 const priorityTone = getTaskPriorityTone(tarefa.prioridade);
 
                 return (
@@ -1713,7 +1879,11 @@ export function ClienteDetalhes() {
                       </button>
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm font-semibold text-zinc-950 dark:text-white ${isDone(tarefa.status) ? 'line-through opacity-60' : ''}`}>{tarefa.titulo}</p>
-                        <p className="mt-1 text-xs font-medium text-zinc-500 dark:text-zinc-400 truncate">{tarefa.projetoNome || clientProjetos.find((projeto) => projeto.id === tarefa.projetoId)?.nome || tarefa.clienteNome || 'Cliente geral'}</p>
+                        <p className="mt-1 truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                          {tarefa.projetoId ? (
+                            <>Projeto: <Link to={appLinks.projectSection(tarefa.projetoId, 'checklist')} className="geo-focus-ring rounded font-semibold text-indigo-700 underline underline-offset-2 dark:text-indigo-300">{tarefa.projetoNome || clientProjetos.find((projeto) => projeto.id === tarefa.projetoId)?.nome || 'Projeto vinculado'}</Link></>
+                          ) : 'Tarefa geral do cliente'}
+                        </p>
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ring-1 ring-inset ${priorityTone.badgeClass}`}>
                             {priorityTone.label}
@@ -1739,7 +1909,9 @@ export function ClienteDetalhes() {
                     </div>
                   </div>
                 );
-              })
+                  })}
+                </section>
+              ))
             )}
           </div>
         </section>
@@ -1818,7 +1990,7 @@ export function ClienteDetalhes() {
 
           <div className="space-y-3 max-h-60 overflow-y-auto pr-1 scrollbar-thin">
             {loadingCompromissos ? (
-              <p className="py-5 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">Carregando agenda...</p>
+              <p className="py-5 text-center text-sm font-medium text-zinc-500 dark:text-zinc-400">Carregando agenda…</p>
             ) : nextCompromissos.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-zinc-200 dark:border-zinc-700 p-5 text-center">
                 <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Nenhum compromisso futuro vinculado.</p>
@@ -1868,47 +2040,19 @@ export function ClienteDetalhes() {
         </div>
         )}
       </div>
-      )}
-
-      <ClienteSecondaryTabs
-        activeTab={activeTab}
-        clienteId={id!}
-        clienteName={cliente.nome}
-        clientProperties={clientProperties}
-        clientProjetos={clientProjetos}
-        clientAmbientalProjetos={clientAmbientalProjetos}
-        clientOrcamentos={clientOrcamentos}
-        focusedOrcamentoId={focusedOrcamentoId}
-        clientFinancialKpis={clientFinancialKpis}
-        orcamentosPorStatus={orcamentosPorStatus}
-        focusedDocumentId={focusedDocumentId}
-        initialDocumentSearch={initialDocumentSearch}
-        onPreviewFile={handlePreviewFile}
-        onCreateProperty={() => navigate('/propriedades', { state: { createForClienteId: id, clientName: cliente.nome } })}
-        onOpenProperty={(propertyId) => navigate('/propriedades', { state: { editPropertyId: propertyId, clientFilterId: id } })}
-        onCreateEnvironmentalProject={() => navigate('/projetos', { state: { createForClienteId: id, openCreateModal: true, contexto: 'ambiental' } })}
-        onCreateService={() => navigate('/projetos', { state: { createForClienteId: id, modalTab: 'projeto' } })}
-        renderEnvironmentalProjectLink={(project) => (
-          <Link to={`/ambiental/${project.id}`} className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300">
-            Abrir demanda
-            <ArrowSquareOut className="h-3.5 w-3.5" aria-hidden="true" />
-          </Link>
-        )}
-        renderProjectTitleLink={(proj) => <Link to={`/projetos/${proj.id}`}>{proj.nome}</Link>}
-        renderProjectDetailsLink={(proj) => (
-          <Link to={`/projetos/${proj.id}`} className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:bg-zinc-950 rounded-xl text-xs font-bold transition-[background-color,border-color,color,box-shadow,transform]">
-            Detalhes
-          </Link>
-        )}
-      />
       </div>
 
       {previewFile && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="client-file-preview-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
+        >
           <div className="flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
             <div className="flex items-center justify-between gap-4 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-zinc-950 dark:text-white">{previewFile.name}</p>
+                <p id="client-file-preview-title" className="truncate text-sm font-semibold text-zinc-950 dark:text-white">{previewFile.name}</p>
                 <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   {formatFileSize(previewFile.sizeBytes)} • {previewFile.extension.toUpperCase().replace('.', '')}
                 </p>
@@ -1924,7 +2068,12 @@ export function ClienteDetalhes() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPreviewFile(null)}
+                  onClick={() => {
+                    setPreviewFile(null);
+                    setPreviewObjectUrl('');
+                    setPreviewError('');
+                  }}
+                  aria-label="Fechar pré-visualização"
                   className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 transition-[background-color,border-color,color,box-shadow,transform] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
                   title="Fechar"
                 >
@@ -1933,16 +2082,24 @@ export function ClienteDetalhes() {
               </div>
             </div>
             <div className="min-h-0 flex-1 bg-zinc-100 dark:bg-zinc-900">
-              {previewFile.extension === '.pdf' ? (
+              {previewError ? (
+                <div className="flex h-full items-center justify-center p-6 text-center" role="alert">
+                  <p className="max-w-md text-sm font-semibold text-red-700 dark:text-red-300">{previewError} Feche esta janela e tente novamente.</p>
+                </div>
+              ) : !previewObjectUrl ? (
+                <div className="flex h-full items-center justify-center p-6" role="status" aria-live="polite">
+                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Carregando pré-visualização…</p>
+                </div>
+              ) : previewFile.extension === '.pdf' ? (
                 <iframe
                   title={previewFile.name}
-                  src={getPreviewUrl(previewFile.path)}
+                  src={previewObjectUrl}
                   className="h-full w-full bg-white"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center p-4">
                   <img
-                    src={getPreviewUrl(previewFile.path)}
+                    src={previewObjectUrl}
                     alt={previewFile.name}
                     className="max-h-full max-w-full rounded-2xl object-contain shadow-lg"
                   />

@@ -1,24 +1,55 @@
 const STORAGE_KEY = 'geogestor:navigation-metrics';
+const NAVIGATION_TIMEOUT_MS = 15_000;
 
 interface PendingNavigation {
   pathname: string;
   startedAt: number;
   urlChangedAt?: number;
+  renderStartedAt?: number;
+  contentMountedAt?: number;
 }
 
-interface NavigationMetric {
+export interface NavigationMetric {
   pathname: string;
+  status: 'usable' | 'failed';
   urlMs: number | null;
-  headingMs: number;
-  usableMs: number;
+  renderStartMs: number | null;
+  contentMountedMs: number | null;
+  usableMs: number | null;
   chunks: string[];
   longTasks: number[];
+  failureReason?: string;
   recordedAt: string;
 }
 
+type NavigationStateListener = () => void;
+
 let pending: PendingNavigation | null = null;
+let pendingPathname: string | null = null;
+let pendingTimeout: ReturnType<typeof setTimeout> | null = null;
 let longTasks: Array<{ startTime: number; duration: number }> = [];
 let observer: PerformanceObserver | null = null;
+const navigationStateListeners = new Set<NavigationStateListener>();
+
+function now() {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function notifyNavigationState() {
+  navigationStateListeners.forEach((listener) => listener());
+}
+
+function setPendingPathname(pathname: string | null) {
+  if (pendingPathname === pathname) return;
+  pendingPathname = pathname;
+  notifyNavigationState();
+}
+
+function clearPendingTimeout() {
+  if (pendingTimeout === null) return;
+  clearTimeout(pendingTimeout);
+  pendingTimeout = null;
+}
 
 function storeMetric(metric: NavigationMetric) {
   try {
@@ -27,6 +58,35 @@ function storeMetric(metric: NavigationMetric) {
   } catch {
     // A medição nunca pode interferir na navegação.
   }
+}
+
+function collectNavigationResources(startedAt: number) {
+  if (typeof performance === 'undefined') return [];
+  const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
+  return resources
+    .filter((entry) => entry.startTime >= startedAt && /\/assets\/.*\.js(?:\?|$)/.test(entry.name))
+    .map((entry) => entry.name.split('/').pop() || entry.name);
+}
+
+function collectNavigationLongTasks(startedAt: number) {
+  return longTasks
+    .filter((entry) => entry.startTime >= startedAt)
+    .map((entry) => entry.duration);
+}
+
+function finishPendingNavigation() {
+  clearPendingTimeout();
+  pending = null;
+  setPendingPathname(null);
+}
+
+export function subscribeNavigationState(listener: NavigationStateListener) {
+  navigationStateListeners.add(listener);
+  return () => navigationStateListeners.delete(listener);
+}
+
+export function getPendingNavigationPath() {
+  return pendingPathname;
 }
 
 export function initializeNavigationMetrics() {
@@ -46,35 +106,70 @@ export function initializeNavigationMetrics() {
 }
 
 export function markNavigationIntent(pathname?: string) {
-  if (!pathname || pathname === window.location.pathname) return;
-  pending = { pathname, startedAt: performance.now() };
+  if (!pathname) return false;
+  if (typeof window !== 'undefined' && pathname === window.location.pathname) return false;
+
+  clearPendingTimeout();
+  pending = { pathname, startedAt: now() };
+  setPendingPathname(pathname);
+  pendingTimeout = setTimeout(() => markNavigationFailed(pathname, 'timeout'), NAVIGATION_TIMEOUT_MS);
+  return true;
 }
 
 export function markNavigationUrlChanged(pathname: string) {
-  if (pending?.pathname === pathname) pending.urlChangedAt = performance.now();
+  if (pending?.pathname !== pathname || pending.urlChangedAt !== undefined) return false;
+  pending.urlChangedAt = now();
+  return true;
+}
+
+export function markNavigationRenderStarted(pathname: string) {
+  if (pending?.pathname !== pathname || pending.renderStartedAt !== undefined) return false;
+  pending.renderStartedAt = now();
+  return true;
+}
+
+export function markNavigationContentMounted(pathname: string) {
+  if (pending?.pathname !== pathname || pending.contentMountedAt !== undefined) return false;
+  pending.contentMountedAt = now();
+  return true;
 }
 
 export function markNavigationUsable(pathname: string) {
-  if (pending?.pathname !== pathname) return;
-  const finishedAt = performance.now();
-  const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
-  const chunks = resources
-    .filter((entry) => entry.startTime >= pending!.startedAt && /\/assets\/.*\.js(?:\?|$)/.test(entry.name))
-    .map((entry) => entry.name.split('/').pop() || entry.name);
-  const headingVisible = Boolean(document.querySelector('main h1'));
+  if (pending?.pathname !== pathname || pending.contentMountedAt === undefined) return false;
+
+  const finishedAt = now();
+  storeMetric({
+    pathname,
+    status: 'usable',
+    urlMs: pending.urlChangedAt === undefined ? null : pending.urlChangedAt - pending.startedAt,
+    renderStartMs: pending.renderStartedAt === undefined ? null : pending.renderStartedAt - pending.startedAt,
+    contentMountedMs: pending.contentMountedAt - pending.startedAt,
+    usableMs: finishedAt - pending.startedAt,
+    chunks: collectNavigationResources(pending.startedAt),
+    longTasks: collectNavigationLongTasks(pending.startedAt),
+    recordedAt: new Date().toISOString()
+  });
+  finishPendingNavigation();
+  return true;
+}
+
+export function markNavigationFailed(pathname: string, failureReason: string) {
+  if (pending?.pathname !== pathname) return false;
 
   storeMetric({
     pathname,
-    urlMs: pending.urlChangedAt ? pending.urlChangedAt - pending.startedAt : null,
-    headingMs: headingVisible ? finishedAt - pending.startedAt : Number.NaN,
-    usableMs: finishedAt - pending.startedAt,
-    chunks,
-    longTasks: longTasks
-      .filter((entry) => entry.startTime >= pending!.startedAt)
-      .map((entry) => entry.duration),
+    status: 'failed',
+    urlMs: pending.urlChangedAt === undefined ? null : pending.urlChangedAt - pending.startedAt,
+    renderStartMs: pending.renderStartedAt === undefined ? null : pending.renderStartedAt - pending.startedAt,
+    contentMountedMs: pending.contentMountedAt === undefined ? null : pending.contentMountedAt - pending.startedAt,
+    usableMs: null,
+    chunks: collectNavigationResources(pending.startedAt),
+    longTasks: collectNavigationLongTasks(pending.startedAt),
+    failureReason,
     recordedAt: new Date().toISOString()
   });
-  pending = null;
+  finishPendingNavigation();
+  return true;
 }
 
 export function recordGlobalFallback() {

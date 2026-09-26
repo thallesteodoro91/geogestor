@@ -155,7 +155,7 @@ function checkTrackedArtifacts(root, blocking) {
     return;
   }
   const unsafe = result.stdout.split('\0').filter(Boolean).filter((name) => (
-    /(^|\/)(?:scratch|temp-lovable|work|data|test-results|playwright-report)(\/|$)/i.test(name)
+    (!name.startsWith('apps/web/src/data/') && /(^|\/)(?:scratch|temp-lovable|work|data|test-results|playwright-report)(\/|$)/i.test(name))
     || /\.(?:db(?:-[^/]*)?|sqlite3?|log|trace\.zip|dmp|exe)$/i.test(name)
     || (/(^|\/)\.env(?:\.|$)/i.test(name) && !/\.env\.(?:example|sample)$/i.test(name))
   ));

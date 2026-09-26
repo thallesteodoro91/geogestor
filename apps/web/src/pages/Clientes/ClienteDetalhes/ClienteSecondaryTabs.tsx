@@ -20,6 +20,7 @@ import { geoGreenIconClass, geoGreenLabelClass, geoGreenSurfaceClass, geoGreenVa
 import { buildBudgetEditorPath } from '../../Orcamentos/budgetNavigation';
 import { getBudgetStatusLabel, isApprovedBudgetStatus } from '../../../utils/budgetStatus';
 import { ClienteDocumentosTab, type ClienteArquivoItem } from './ClienteDocumentosTab';
+import { SharedDataNotice } from '../../../components/SharedDataNotice';
 
 type ClienteDetalhesTab = 'visao-geral' | 'propriedades' | 'servicos' | 'ambiental' | 'orcamentos' | 'financeiro' | 'arquivos';
 
@@ -409,6 +410,9 @@ export function ClienteSecondaryTabs({
 
         {activeTab === 'financeiro' && (
           <div className="space-y-6">
+            <SharedDataNotice preferenceKey="client-finance-shared-data">
+              Este é o consolidado financeiro do cliente. Despesas e recebimentos vinculados aos projetos aparecem aqui automaticamente; editar um lançamento em qualquer contexto atualiza o mesmo registro.
+            </SharedDataNotice>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {

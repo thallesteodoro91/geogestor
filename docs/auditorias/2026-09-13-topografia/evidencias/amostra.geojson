@@ -1,0 +1,74 @@
+{
+  "type": "Feature",
+  "properties": {
+    "datum": "WGS 84",
+    "epsg": "EPSG:4326",
+    "sourceDatum": "SIRGAS 2000",
+    "sourceEpsg": "EPSG:31982",
+    "zone": 22,
+    "hemisphere": "S",
+    "unit": "grau",
+    "generatedAt": "2026-09-13T20:39:38.078Z",
+    "vertices": [
+      {
+        "index": 1,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      },
+      {
+        "index": 2,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      },
+      {
+        "index": 3,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      },
+      {
+        "index": 4,
+        "code": null,
+        "description": null,
+        "altitude": null,
+        "precision": null,
+        "notes": null
+      }
+    ]
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -48.548,
+          -27.595
+        ],
+        [
+          -48.547,
+          -27.595
+        ],
+        [
+          -48.547,
+          -27.594
+        ],
+        [
+          -48.548,
+          -27.594
+        ],
+        [
+          -48.548,
+          -27.595
+        ]
+      ]
+    ]
+  }
+}

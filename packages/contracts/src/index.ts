@@ -24,13 +24,36 @@ export {
 export type { AppRouteDefinition, AppRouteId } from './app-navigation';
 
 export const StatusProjetoSchema = z.enum([
+  'Planejamento',
+  'Em Análise',
   'Em Andamento',
+  'Aguardando Cliente',
   'Aguardando Documentação',
+  'Aguardando Órgão',
+  'Com Pendência',
+  'Suspenso',
+  'Finalizado',
+  // Estados legados ainda produzidos por integrações existentes.
   'Em Análise no Órgão',
   'Concluído',
-  'Cancelado'
+  'Cancelado',
+  'Arquivado',
+  'Atrasado'
 ]);
 export type StatusProjeto = z.infer<typeof StatusProjetoSchema>;
+
+export const TipoProjetoSchema = z.enum([
+  'Rural',
+  'Urbano',
+  'Comercial',
+  'Industrial',
+  'Ambiental',
+  'Licenciamento',
+  'Perícia',
+  'Institucional',
+  'Outro'
+]);
+export type TipoProjeto = z.infer<typeof TipoProjetoSchema>;
 
 export const StatusOrcamentoSchema = z.enum([
   'Pendente',
@@ -40,40 +63,88 @@ export const StatusOrcamentoSchema = z.enum([
 ]);
 export type StatusOrcamento = z.infer<typeof StatusOrcamentoSchema>;
 
-export const ProjetoPayloadSchema = z.object({
+const isRealDateKey = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+};
+
+const nullableProjectDate = z.string().trim()
+  .refine(isRealDateKey, 'Use uma data real no formato AAAA-MM-DD')
+  .nullable()
+  .optional();
+const nullableProjectText = (maximum: number) => z.string().trim().max(maximum).nullable().optional();
+
+const ProjetoPayloadBaseSchema = z.object({
   nome: z.string().trim().min(1, 'Nome do projeto é obrigatório').max(160, 'Use até 160 caracteres no nome do projeto'),
   clienteId: z.string().uuid('Selecione um cliente válido'),
-  descricao: z.string().nullable().optional(),
-  status: z.string().optional(),
-  dataInicio: z.string().nullable().optional(),
-  dataEntrega: z.string().nullable().optional(),
+  descricao: nullableProjectText(500),
+  status: StatusProjetoSchema.optional(),
+  dataInicio: nullableProjectDate,
+  dataEntrega: nullableProjectDate,
   areaHa: z.number().min(0, 'A área não pode ser negativa').nullable().optional(),
-  matricula: z.string().nullable().optional(),
-  car: z.string().nullable().optional(),
-  ccir: z.string().nullable().optional(),
-  itr: z.string().nullable().optional(),
-  cidade: z.string().nullable().optional(),
-  municipio: z.string().nullable().optional(),
-  situacaoImovel: z.string().nullable().optional(),
-  tipo: z.string().nullable().optional(),
-  averbacao: z.string().nullable().optional(),
+  matricula: nullableProjectText(200),
+  car: nullableProjectText(100),
+  ccir: nullableProjectText(100),
+  itr: nullableProjectText(100),
+  cidade: z.string().trim().regex(/^[A-Za-z]{2}$/, 'Informe a UF com duas letras').transform((value) => value.toUpperCase()).nullable().optional(),
+  municipio: nullableProjectText(200),
+  situacaoImovel: nullableProjectText(100),
+  tipo: TipoProjetoSchema.nullable().optional(),
+  averbacao: nullableProjectText(300),
   latitude: z.number().min(-90, 'Informe uma latitude entre -90 e 90').max(90, 'Informe uma latitude entre -90 e 90').nullable().optional(),
   longitude: z.number().min(-180, 'Informe uma longitude entre -180 e 180').max(180, 'Informe uma longitude entre -180 e 180').nullable().optional(),
-  possuiMemorialDescritivo: z.string().nullable().optional(),
-  observacoes: z.string().nullable().optional(),
+  possuiMemorialDescritivo: z.enum(['Não', 'Em Confecção', 'Sim']).nullable().optional(),
+  observacoes: nullableProjectText(1200),
   propriedadeId: z.string().uuid('Selecione um imóvel válido').nullable().optional(),
-  orgaoAmbiental: z.string().nullable().optional(),
-  tipoDemanda: z.string().nullable().optional(),
-  protocolo: z.string().nullable().optional(),
-  numeroProcesso: z.string().nullable().optional(),
-  numeroLicenca: z.string().nullable().optional(),
-  dataEmissao: z.string().nullable().optional(),
-  dataVencimentoLicenca: z.string().nullable().optional(),
-  tipoLicenca: z.string().nullable().optional(),
+  orgaoAmbiental: nullableProjectText(200),
+  tipoDemanda: nullableProjectText(200),
+  protocolo: nullableProjectText(200),
+  numeroProcesso: nullableProjectText(200),
+  numeroLicenca: nullableProjectText(200),
+  dataEmissao: nullableProjectDate,
+  dataVencimentoLicenca: nullableProjectDate,
+  tipoLicenca: z.enum(['LP', 'LI', 'LO', 'Renovação', 'Outros']).nullable().optional(),
   statusLicenca: LicenseStatusSchema.nullable().optional(),
   observacoesLicenca: z.string().max(2000).nullable().optional(),
-  tipoPericia: z.string().nullable().optional(),
-  dataVistoria: z.string().nullable().optional()
+  tipoPericia: z.enum(['Judicial', 'Extrajudicial', 'Assistência técnica', 'Avaliação técnica', 'Outro']).nullable().optional(),
+  dataVistoria: nullableProjectDate
+}).strict();
+
+const refineProjectPayload = (
+  data: z.infer<typeof ProjetoPayloadBaseSchema> | Partial<z.infer<typeof ProjetoPayloadBaseSchema>>,
+  context: z.RefinementCtx,
+  complete: boolean
+) => {
+  if (data.dataInicio && data.dataEntrega && data.dataEntrega < data.dataInicio) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['dataEntrega'], message: 'A entrega deve ser igual ou posterior ao início' });
+  }
+  if (complete && ((data.latitude == null) !== (data.longitude == null))) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: [data.latitude == null ? 'latitude' : 'longitude'], message: 'Informe latitude e longitude em conjunto' });
+  }
+  if (data.dataEmissao && data.dataVencimentoLicenca && data.dataVencimentoLicenca < data.dataEmissao) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['dataVencimentoLicenca'], message: 'O vencimento deve ser igual ou posterior à emissão' });
+  }
+  if (complete && data.tipo === 'Licenciamento') {
+    const required = [
+      ['tipoLicenca', data.tipoLicenca],
+      ['numeroLicenca', data.numeroLicenca],
+      ['orgaoAmbiental', data.orgaoAmbiental],
+      ['dataEmissao', data.dataEmissao],
+      ['dataVencimentoLicenca', data.dataVencimentoLicenca]
+    ] as const;
+    for (const [field, value] of required) {
+      if (!value) context.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: 'Campo obrigatório para projetos de licenciamento' });
+    }
+  }
+};
+
+export const ProjetoPayloadSchema = ProjetoPayloadBaseSchema.superRefine((data, context) => {
+  refineProjectPayload(data, context, true);
+});
+export const ProjetoPatchPayloadSchema = ProjetoPayloadBaseSchema.partial().superRefine((data, context) => {
+  refineProjectPayload(data, context, false);
 });
 export type ProjetoPayload = z.infer<typeof ProjetoPayloadSchema>;
 

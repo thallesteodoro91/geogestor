@@ -199,7 +199,8 @@ export async function completeImportRun(executor: Executor, runId: string, resul
     filesystem_pending = ${result.filesystemPending ? 1 : 0}, payload_json = NULL,
     completed_at = ${completedAt}, updated_at = ${completedAt}
     WHERE id = ${runId}`);
-  for (const item of rows) {
+  const persistedRows = Array.isArray(result.results) ? result.results as ImportRowResult[] : rows;
+  for (const item of persistedRows) {
     const rowNumber = item.row ?? item.index + 2;
     await executor.run(sql`INSERT OR REPLACE INTO import_rows (
       id, import_id, row_number, status, action, record_id, errors_json, warnings_json, association_method, created_at
@@ -273,8 +274,10 @@ export async function updateImportProgress(id: string, status: ImportRunStatus, 
 
 export async function failImportRun(id: string, error: unknown) {
   const completedAt = new Date().toISOString();
-  const message = error instanceof Error ? error.message : 'Falha desconhecida durante a importação.';
-  const safe = { message: message.replace(/[\r\n\t]+/g, ' ').slice(0, 500) };
+  const message = error instanceof ImportRunError
+    ? error.message
+    : 'A importação falhou. Revise o arquivo e tente novamente; se o erro persistir, consulte o diagnóstico operacional.';
+  const safe = { message };
   await db.run(sql`UPDATE import_runs SET status = 'failed', stage = 'Falha', progress = 100,
     error_json = ${JSON.stringify(safe)}, payload_json = NULL, completed_at = ${completedAt}, updated_at = ${completedAt}
     WHERE id = ${id}`);
@@ -325,7 +328,12 @@ export async function listImportRows(importId: string, onlyErrors = false) {
 }
 
 export function importErrorsCsv(rows: Array<{ row: number; status: unknown; errors: string[]; warnings: string[] }>) {
-  const cell = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""').replace(/[\r\n]+/g, ' ')}"`;
+  const cell = (value: unknown) => {
+    const normalized = String(value ?? '').replace(/[\r\n]+/g, ' ');
+    // Quoting a CSV field does not stop spreadsheet applications from evaluating formulas.
+    const safe = /^\s*[=+\-@]/u.test(normalized) ? `'${normalized}` : normalized;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
   const lines = [['Linha', 'Status', 'Erros', 'Avisos'], ...rows.map(row => [row.row, row.status, row.errors.join(' | '), row.warnings.join(' | ')])];
   return `\uFEFF${lines.map(line => line.map(cell).join(';')).join('\n')}`;
 }

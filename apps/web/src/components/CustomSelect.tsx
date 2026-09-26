@@ -13,10 +13,11 @@ interface CustomSelectProps {
   ariaLabel?: string;
   className?: string;
   buttonClassName?: string;
+  highlightActive?: boolean;
 }
 
-export function CustomSelect({ value, onChange, options, placeholder, id, name, ariaLabel, className, buttonClassName }: CustomSelectProps) {
-  const isActiveValue = Boolean(value && !['Todos', 'Todas', 'ALL', 'all'].includes(value));
+export function CustomSelect({ value, onChange, options, placeholder, id, name, ariaLabel, className, buttonClassName, highlightActive = true }: CustomSelectProps) {
+  const isActiveValue = highlightActive && Boolean(value && !['Todos', 'Todas', 'ALL', 'all'].includes(value));
   return (
     <SelectField
       id={id}

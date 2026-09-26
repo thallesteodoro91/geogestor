@@ -12,7 +12,7 @@ import { MaintenanceHistoryService } from './maintenance-history.service';
 import { BackupDeviceService, type BackupDeviceIdentity } from './backup-device.service';
 import { BackupRecoveryService, type BackupKeyEnvelope } from './backup-recovery.service';
 import { UNIFIED_ALERTS_MIGRATION } from './runtime-migrations/v8-unified-alerts';
-import { GEOSPATIAL_POLISH_MIGRATION } from './runtime-migrations/v13-geospatial-polish';
+import { MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION } from './runtime-migrations/v17-multiprocess-finance-integrity';
 import { cloneDatabaseEncryptedSync, cloneDatabaseWithKeysSync, databaseClientConfig, databaseKeyId, getDatabaseEncryptionKey, validateProtectedDatabaseIsolatedSync } from '@geogestor/database';
 
 const BACKUP_FORMAT_VERSION = 4;
@@ -262,8 +262,15 @@ async function listFiles(root: string, current = root): Promise<string[]> {
     assertInside(fullPath, root);
     if (entry.isDirectory()) files.push(...await listFiles(root, fullPath));
     else if (entry.isFile()) files.push(fullPath);
+    else throw new Error(`A pasta contém um link ou ponto de nova análise não suportado: ${path.relative(root, fullPath)}`);
   }
   return files;
+}
+
+async function directorySizeBytes(root: string) {
+  const files = await listFiles(root);
+  const stats = await Promise.all(files.map((file) => fs.stat(file)));
+  return stats.reduce((sum, current) => sum + current.size, 0);
 }
 
 async function writeJsonAtomic(target: string, value: unknown) {
@@ -599,12 +606,19 @@ export class BackupService {
     const available = await fs.statfs(backupDirectory).then((stats) => Number(stats.bavail) * Number(stats.bsize));
     const databaseBytes = await fs.stat(this.getDatabasePath()).then((stats) => stats.size);
     let sourceFiles: string[] = [];
-    if (input.type === 'complete' && input.filesRootDirectory) {
+    if (input.type === 'complete') {
+      if (!input.filesRootDirectory) throw new Error('A pasta de documentos não está disponível para o backup completo.');
+      let rootStats;
       try {
-        sourceFiles = await listFiles(path.resolve(input.filesRootDirectory));
+        rootStats = await fs.stat(input.filesRootDirectory);
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new Error('A pasta de documentos não existe ou não está disponível para o backup completo.', { cause: error });
+        }
+        throw error;
       }
+      if (!rootStats.isDirectory()) throw new Error('A raiz de documentos não é uma pasta.');
+      sourceFiles = await listFiles(path.resolve(input.filesRootDirectory));
     }
     const sourceStats = await Promise.all(sourceFiles.map((file) => fs.stat(file)));
     const sourceBytes = sourceStats.reduce((sum, stats) => sum + stats.size, 0);
@@ -676,9 +690,6 @@ export class BackupService {
       });
 
       if (input.type === 'complete' && input.filesRootDirectory) {
-        try {
-          const stats = await fs.stat(input.filesRootDirectory);
-          if (!stats.isDirectory()) throw new Error('A raiz de documentos não é uma pasta.');
           const sourceRoot = path.resolve(input.filesRootDirectory);
           for (const [sourceIndex, sourceFile] of sourceFiles.entries()) {
             await checkpoint(input.options, {
@@ -724,10 +735,7 @@ export class BackupService {
             }
             processedBytes += sourceStats[sourceIndex]?.size || 0;
           }
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-          if (!backupKey) await fs.mkdir(path.join(pendingPath, 'files'), { recursive: true });
-        }
+          if (sourceFiles.length === 0 && !backupKey) await fs.mkdir(path.join(pendingPath, 'files'), { recursive: true });
       }
 
       const now = new Date().toISOString();
@@ -863,61 +871,114 @@ export class BackupService {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    await fs.access(path.join(resolvedBundle, 'COMPLETE'));
-    const manifest = JSON.parse(await fs.readFile(path.join(resolvedBundle, 'manifest.json'), 'utf8')) as BackupManifest;
+    const completeMarker = await fs.readFile(path.join(resolvedBundle, 'COMPLETE'), 'utf8');
+    const manifestRaw = await fs.readFile(path.join(resolvedBundle, 'manifest.json'), 'utf8');
+    const manifest = JSON.parse(manifestRaw) as BackupManifest;
     if (!SUPPORTED_BACKUP_FORMATS.has(manifest.formatVersion) || manifest.application !== 'GeoGestor') {
       throw new Error('Formato de backup incompatível.');
+    }
+    if (!['database', 'complete'].includes(manifest.type)) throw new Error('Tipo de backup inválido no manifesto.');
+    if (manifest.formatVersion >= 3 && manifest.credentialsExcluded !== true) {
+      throw new Error('O manifesto não comprova a exclusão de credenciais sensíveis.');
+    }
+    if (manifest.formatVersion >= 4) {
+      const purposes = manifest.encryption?.keyEnvelopes?.map((item) => item.purpose) || [];
+      if (
+        manifest.encryption?.algorithm !== 'AES-256-GCM'
+        || manifest.encryption.dataKey !== 'random-per-backup'
+        || purposes.length !== 2
+        || new Set(purposes).size !== 2
+        || !purposes.includes('device')
+        || !purposes.includes('recovery')
+      ) {
+        throw new Error('O backup portátil não contém os dois envelopes criptográficos obrigatórios.');
+      }
     }
     const backupKey = resolveBackupDataKey(manifest, unlock);
     if (!Number.isInteger(manifest.schemaVersion) || manifest.schemaVersion < 0) {
       throw new Error('Versão de schema inválida no manifesto do backup.');
     }
-    if (manifest.schemaVersion > GEOSPATIAL_POLISH_MIGRATION.version) {
+    if (manifest.schemaVersion > MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.version) {
       throw new Error('Este backup foi criado por uma versão mais nova do GeoGestor. Atualize o aplicativo antes de restaurar.');
     }
     if (!Array.isArray(manifest.files) || !manifest.totals || !Number.isInteger(manifest.totals.files)) {
       throw new Error('Manifesto de backup inválido ou incompleto.');
     }
 
-    let totalBytes = 0;
-    let checksumFilesVerified = 0;
-    for (const entry of manifest.files) {
-      const filePath = path.join(resolvedBundle, entry.path);
-      assertInside(filePath, resolvedBundle);
-      const stats = await fs.stat(filePath);
-      if (!stats.isFile() || stats.size !== entry.sizeBytes) throw new Error(`Tamanho divergente no backup: ${entry.path}`);
-      if (entry.sha256) {
-        if (await sha256File(filePath) !== entry.sha256) throw new Error(`Checksum divergente no backup: ${entry.path}`);
-        checksumFilesVerified += 1;
-      } else if (manifest.formatVersion >= 2) {
-        throw new Error(`Checksum ausente no backup: ${entry.path}`);
+    try {
+      const databaseEntries = manifest.files.filter((entry) => (
+        entry.path === 'database.db'
+        && (entry.kind === 'database' || (manifest.formatVersion === 1 && entry.kind === undefined))
+      ));
+      if (databaseEntries.length !== 1) throw new Error('O manifesto deve declarar exatamente um banco database.db.');
+      if (manifest.type === 'database' && manifest.files.some((entry) => entry.kind === 'document' || entry.path.startsWith('files/'))) {
+        throw new Error('Um backup somente do banco não pode declarar documentos.');
       }
-      if (manifest.encryption && entry.kind === 'document') {
-        if (!backupKey || !entry.logicalPathEncrypted) throw new Error('Entrada protegida de documento está incompleta.');
-        safeLogicalPath(decryptLogicalPath(backupKey, entry.logicalPathEncrypted));
-        await verifyEncryptedFile(filePath, backupKey);
+      const expectedPhysicalPaths = new Set<string>();
+      const logicalDocumentPaths = new Set<string>();
+      let totalBytes = 0;
+      let checksumFilesVerified = 0;
+      for (const entry of manifest.files) {
+        if (!entry || typeof entry.path !== 'string' || !Number.isSafeInteger(entry.sizeBytes) || entry.sizeBytes < 0) {
+          throw new Error('Entrada inválida no manifesto de backup.');
+        }
+        const entryPath = safeLogicalPath(entry.path);
+        expectedPhysicalPaths.add(entryPath.toLocaleLowerCase('en-US'));
+        const filePath = path.join(resolvedBundle, entryPath);
+        assertInside(filePath, resolvedBundle);
+        const stats = await fs.stat(filePath);
+        if (!stats.isFile() || stats.size !== entry.sizeBytes) throw new Error(`Tamanho divergente no backup: ${entry.path}`);
+        if (entry.sha256) {
+          if (!/^[a-f0-9]{64}$/.test(entry.sha256) || await sha256File(filePath) !== entry.sha256) throw new Error(`Checksum divergente no backup: ${entry.path}`);
+          checksumFilesVerified += 1;
+        } else if (manifest.formatVersion >= 2) {
+          throw new Error(`Checksum ausente no backup: ${entry.path}`);
+        }
+        if (entry.kind === 'document') {
+          const logicalPath = manifest.encryption
+            ? (() => {
+                if (!backupKey || !entry.logicalPathEncrypted) throw new Error('Entrada protegida de documento está incompleta.');
+                return safeLogicalPath(decryptLogicalPath(backupKey, entry.logicalPathEncrypted));
+              })()
+            : safeLogicalPath(entryPath.replace(/^files\//, ''));
+          const collisionKey = logicalPath.toLocaleLowerCase('en-US');
+          if (logicalDocumentPaths.has(collisionKey)) throw new Error(`O backup contém caminhos de documento duplicados ou conflitantes: ${logicalPath}`);
+          logicalDocumentPaths.add(collisionKey);
+          if (manifest.encryption) await verifyEncryptedFile(filePath, backupKey!);
+        }
+        totalBytes += stats.size;
       }
-      totalBytes += stats.size;
+      const physicalFiles = await listFiles(resolvedBundle);
+      for (const physicalFile of physicalFiles) {
+        const relative = path.relative(resolvedBundle, physicalFile).replace(/\\/g, '/');
+        if (relative === 'manifest.json' || relative === 'COMPLETE') continue;
+        if (!expectedPhysicalPaths.has(relative.toLocaleLowerCase('en-US'))) {
+          throw new Error(`O backup contém arquivo não manifestado: ${relative}`);
+        }
+      }
+      if (manifest.totals.files !== manifest.files.length || manifest.totals.bytes !== totalBytes) {
+        throw new Error('Totais do manifesto de backup são inconsistentes.');
+      }
+      const backupDatabaseEncryptionKey = manifest.formatVersion >= 4 ? backupKey?.toString('base64') : getDatabaseEncryptionKey();
+      const inspection = backupDatabaseEncryptionKey || process.env.GEOGESTOR_DATABASE_WORKER
+        ? validateProtectedDatabaseIsolatedSync(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey)
+        : await inspectDatabase(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey);
+      if (manifest.credentialsExcluded && await countSensitiveCredentials(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey) !== 0) {
+        throw new Error('O backup contém credenciais que deveriam estar excluídas.');
+      }
+      if (inspection.schemaVersion !== manifest.schemaVersion) throw new Error('Versão do schema diverge do manifesto.');
+      const fingerprint = crypto.createHash('sha256').update(manifestRaw).update('\0').update(completeMarker).digest('hex');
+      return {
+        manifest,
+        fingerprint,
+        quickCheck: 'ok' as const,
+        foreignKeyViolations: 0 as const,
+        integrity: checksumFilesVerified === manifest.files.length ? 'verified' as const : 'legacy-unverified' as const,
+        checksumFilesVerified
+      };
+    } finally {
+      backupKey?.fill(0);
     }
-    if (manifest.totals.files !== manifest.files.length || manifest.totals.bytes !== totalBytes) {
-      throw new Error('Totais do manifesto de backup são inconsistentes.');
-    }
-    const backupDatabaseEncryptionKey = manifest.formatVersion >= 4 ? backupKey?.toString('base64') : getDatabaseEncryptionKey();
-    const inspection = backupDatabaseEncryptionKey || process.env.GEOGESTOR_DATABASE_WORKER
-      ? validateProtectedDatabaseIsolatedSync(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey)
-      : await inspectDatabase(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey);
-    if (manifest.credentialsExcluded && await countSensitiveCredentials(path.join(resolvedBundle, 'database.db'), backupDatabaseEncryptionKey) !== 0) {
-      throw new Error('O backup contém credenciais que deveriam estar excluídas.');
-    }
-    if (inspection.schemaVersion !== manifest.schemaVersion) throw new Error('Versão do schema diverge do manifesto.');
-    backupKey?.fill(0);
-    return {
-      manifest,
-      quickCheck: 'ok' as const,
-      foreignKeyViolations: 0 as const,
-      integrity: checksumFilesVerified === manifest.files.length ? 'verified' as const : 'legacy-unverified' as const,
-      checksumFilesVerified
-    };
   }
 
   static async restoreBackup(input: {
@@ -930,6 +991,7 @@ export class BackupService {
     recoveryCode?: string | null;
     recoverySecret?: string | null;
     skipHistory?: boolean;
+    expectedFingerprint?: string;
   }) {
     if (process.env.GEOGESTOR_BACKUP_RESTORE_WORKER_ACTIVE !== '1') {
       const isolated = runRestoreWorkerSync({
@@ -949,6 +1011,9 @@ export class BackupService {
     const startedAtMs = Date.now();
     const unlock = { recoveryCode: input.recoveryCode, recoverySecret: input.recoverySecret };
     const validation = await this.validateBackup(input.bundlePath, input.allowedBackupDirectory || this.getBackupDirectory(), unlock);
+    if (input.expectedFingerprint && validation.fingerprint !== input.expectedFingerprint) {
+      throw new Error('O backup mudou depois do teste isolado. Selecione e teste o backup novamente.');
+    }
     if (validation.manifest.type === 'complete' && !input.targetFilesRoot) {
       throw new Error('A restauração completa exige uma pasta de destino para os documentos.');
     }
@@ -1222,12 +1287,25 @@ export class BackupService {
       .reverse();
     const bundles = (await Promise.all(bundleNames.map(async (name) => {
       const target = path.join(backupDirectory, name);
+      const hasCompleteMarker = await fs.access(path.join(target, 'COMPLETE')).then(() => true).catch(() => false);
+      const hasPendingMarker = await fs.access(path.join(target, 'PENDING')).then(() => true).catch(() => false);
       const manifest = await fs.readFile(path.join(target, 'manifest.json'), 'utf8')
         .then((raw) => JSON.parse(raw) as BackupManifest)
         .catch(() => null);
+      if (
+        !hasCompleteMarker
+        || hasPendingMarker
+        || !manifest
+        || manifest.application !== 'GeoGestor'
+        || !SUPPORTED_BACKUP_FORMATS.has(manifest.formatVersion)
+        || !['database', 'complete'].includes(manifest.type)
+      ) return null;
       const completedAt = manifest?.completedAt || manifest?.createdAt || '';
-      return { name, target, manifest, completedAt, completedAtMs: Date.parse(completedAt), bytes: Number(manifest?.totals?.bytes || 0) };
-    }))).sort((left, right) => right.completedAt.localeCompare(left.completedAt));
+      const completedAtMs = Date.parse(completedAt);
+      if (!Number.isFinite(completedAtMs)) return null;
+      return { name, target, manifest, completedAt, completedAtMs, bytes: await directorySizeBytes(target) };
+    }))).filter((bundle): bundle is NonNullable<typeof bundle> => Boolean(bundle))
+      .sort((left, right) => right.completedAt.localeCompare(left.completedAt));
     if (bundles.length <= 1) return;
 
     const now = Date.now();

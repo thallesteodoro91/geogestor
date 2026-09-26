@@ -11,6 +11,14 @@ export const OPERATIONAL_SETTING_KEYS = [
 
 export type OperationalSettingKey = typeof OPERATIONAL_SETTING_KEYS[number];
 
+const SETTINGS_CACHE_MS = 30_000;
+let settingsInFlight: Promise<Record<string, unknown>> | null = null;
+let settingsCache: { values: Record<string, unknown>; expiresAt: number } | null = null;
+
+function invalidateSettingsRequestCache() {
+  settingsCache = null;
+}
+
 function persistCache(key: string, value: string) {
   try {
     localStorage.setItem(key, value);
@@ -32,11 +40,13 @@ export async function persistOperationalSetting(
   await apiClient.put('/api/dados-operacionais/configuracoes-operacionais', {
     values: { [key]: value },
   });
+  invalidateSettingsRequestCache();
   return { cachePersisted: persistCache(key, storageValue) };
 }
 
 export async function persistOperationalSettings(values: Partial<Record<OperationalSettingKey, unknown>>) {
   await apiClient.put('/api/dados-operacionais/configuracoes-operacionais', { values });
+  invalidateSettingsRequestCache();
   const cacheFailures: string[] = [];
   for (const [key, value] of Object.entries(values)) {
     if (!persistCache(key, JSON.stringify(value))) cacheFailures.push(key);
@@ -45,7 +55,17 @@ export async function persistOperationalSettings(values: Partial<Record<Operatio
 }
 
 export function getOperationalSettings() {
-  return apiClient.get<Record<string, unknown>>('/api/dados-operacionais/configuracoes-operacionais');
+  if (settingsCache && settingsCache.expiresAt > Date.now()) return Promise.resolve(settingsCache.values);
+  if (settingsInFlight) return settingsInFlight;
+  settingsInFlight = apiClient.get<Record<string, unknown>>('/api/dados-operacionais/configuracoes-operacionais')
+    .then((values) => {
+      settingsCache = { values, expiresAt: Date.now() + SETTINGS_CACHE_MS };
+      return values;
+    })
+    .finally(() => {
+      settingsInFlight = null;
+    });
+  return settingsInFlight;
 }
 
 export async function hydrateOperationalSettingsCache() {

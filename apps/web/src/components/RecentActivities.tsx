@@ -429,8 +429,9 @@ export function RecentActivities() {
 
   const { data: auditLogs = [], isLoading } = useQuery<AuditLog[]>({
     queryKey: ['recent-audit-logs'],
-    queryFn: () => apiClient.get<AuditLog[]>('/api/audit-logs'),
-    refetchInterval: POLLING_INTERVAL_MS,
+    queryFn: () => apiClient.get<AuditLog[]>('/api/audit-logs/recent?limit=20'),
+    refetchInterval: () => document.visibilityState === 'visible' ? POLLING_INTERVAL_MS : false,
+    refetchOnWindowFocus: true,
   });
 
   // Filter logs by selected entity category

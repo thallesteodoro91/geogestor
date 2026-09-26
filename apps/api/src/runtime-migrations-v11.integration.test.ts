@@ -14,29 +14,34 @@ async function cleanup() {
   await fs.rm(testRoot, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
 }
 
-test('v11 integra runtime 13, ledger, backup, rollback e fast path sem evoluÃ§Ã£o preguiÃ§osa paralela', async () => {
+test('v11 integra runtime 15, ledger, backup, rollback e fast path sem evoluÃ§Ã£o preguiÃ§osa paralela', async () => {
   await cleanup();
   await fs.mkdir(testRoot, { recursive: true });
   const { runRuntimeMigrations } = await import('./services/runtime-migrations.service');
 
   try {
     const initial = await runRuntimeMigrations();
-    assert.deepEqual(initial, { fastPath: false, schemaVersion: 13 });
+    assert.deepEqual(initial, { fastPath: false, schemaVersion: 17 });
 
     const client = createClient({ url: `file:${databasePath}` });
     try {
       assert.deepEqual(
         (await client.execute('SELECT version, status FROM schema_migrations ORDER BY version')).rows
           .map((row) => [Number(row.version), row.status]),
-        Array.from({ length: 13 }, (_, index) => [index + 1, 'success'])
+        Array.from({ length: 17 }, (_, index) => [index + 1, 'success'])
       );
-      assert.equal(Number((await client.execute('PRAGMA user_version')).rows[0]?.user_version), 13);
+      assert.equal(Number((await client.execute('PRAGMA user_version')).rows[0]?.user_version), 17);
+
+      const performanceIndexes = (await client.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_despesas_active_data_created', 'idx_orcamentos_active_created') ORDER BY name"
+      )).rows.map((row) => String(row.name));
+      assert.deepEqual(performanceIndexes, ['idx_despesas_active_data_created', 'idx_orcamentos_active_created']);
 
       // Reproduz o estado auditado: schema superior anunciado, mas v11 ausente.
       await client.execute('DROP TABLE import_rows');
       await client.execute('DROP TABLE import_runs');
       await client.execute('DELETE FROM schema_migrations WHERE version = 11');
-      await client.execute('PRAGMA user_version = 13');
+      await client.execute('PRAGMA user_version = 17');
 
       const reconciled = await runRuntimeMigrations();
       assert.equal(reconciled.fastPath, false);
@@ -71,7 +76,7 @@ test('v11 integra runtime 13, ledger, backup, rollback e fast path sem evoluÃ§
 
       await client.execute('DROP VIEW import_runs');
       const recovered = await runRuntimeMigrations();
-      assert.equal(recovered.schemaVersion, 13);
+      assert.equal(recovered.schemaVersion, 17);
       assert.equal((await client.execute('SELECT status FROM schema_migrations WHERE version = 11')).rows[0]?.status, 'success');
       assert.equal(Number((await client.execute('PRAGMA foreign_key_check')).rows.length), 0);
     } finally {

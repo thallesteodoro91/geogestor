@@ -35,6 +35,10 @@ import { buildBackupProtectionStatus } from './services/backup-status.service';
 import { z } from 'zod';
 import { configureProductionFrontend, startServer } from './server-lifecycle';
 import { registerConfigurationAndGoogleRoutes, registerLocalAuthRoutes } from './core-access.routes';
+import { invalidateFinanceOverviewCache } from './services/finance-overview-cache.service';
+import { invalidateProjectOverviewCache } from './services/project-overview.service';
+import { invalidateDeadlineAlertCache } from './services/deadline-alerts.service';
+import { invalidateManagerialReportCache } from './services/reports/report-query.service';
 
 const RESET_CONFIRMATION = 'APAGAR DADOS DO GEOGESTOR';
 const RESTORE_CONFIRMATION = 'RESTAURAR BACKUP DO GEOGESTOR';
@@ -230,6 +234,30 @@ function getRequestToken(request: FastifyRequest, name: string) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+server.register(cors, {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const port = String(Number(process.env.PORT) || 3001);
+    const allowedOrigins = process.env.NODE_ENV === 'production'
+      ? new Set([`http://127.0.0.1:${port}`])
+      : new Set([
+          'http://localhost:5173',
+          'http://127.0.0.1:5173',
+          'http://localhost:5174',
+          'http://127.0.0.1:5174',
+          `http://127.0.0.1:${port}`,
+          ...(process.env.GEOGESTOR_WEB_ORIGIN ? [process.env.GEOGESTOR_WEB_ORIGIN] : [])
+        ]);
+    callback(null, allowedOrigins.has(origin));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+});
+
 // Hook para segurança de acesso local à API
 server.addHook('onRequest', async (request, reply) => {
   const token = process.env.GEOGESTOR_API_TOKEN;
@@ -258,11 +286,13 @@ server.addHook('onRequest', async (request, reply) => {
     const queryTokenAllowed = request.method === 'GET'
       && (requestPath === '/api/arquivos/download' || requestPath === '/api/arquivos/preview'
         || /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath));
+    const query = request.query as Record<string, unknown> | undefined;
+    const queryToken = typeof query?.token === 'string' ? query.token : undefined;
     const requestToken = request.headers['x-api-token']
       || (request.headers['authorization']?.toString().startsWith('Bearer ')
         ? request.headers['authorization'].toString().slice(7)
         : undefined)
-      || (queryTokenAllowed ? (request.query as any)?.token : undefined);
+      || (queryTokenAllowed ? queryToken : undefined);
 
     if (!tokensMatch(requestToken, token)) {
       await OperationalLogService.writeRequired('security-access-denied', {
@@ -283,9 +313,12 @@ server.addHook('onRequest', async (request, reply) => {
   if (!localAuthenticationRequired) return;
   if (request.method === 'OPTIONS') return;
 
-  const tileQuerySessionAllowed = request.method === 'GET' && /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath);
+  const querySessionAllowed = request.method === 'GET'
+    && /^\/api\/arquivos\/geospatial\/basemaps\/[^/]+\/tiles\//.test(requestPath);
+  const query = request.query as Record<string, unknown> | undefined;
+  const querySession = typeof query?.session === 'string' ? query.session : undefined;
   const localSession = getRequestToken(request, 'x-local-session')
-    || (tileQuerySessionAllowed ? (request.query as any)?.session : undefined);
+    || (querySessionAllowed ? querySession : undefined);
   if (!LocalSessionService.validate(localSession)) {
     return reply.status(423).send({
       error: 'A sessão local está bloqueada ou expirou.',
@@ -295,22 +328,43 @@ server.addHook('onRequest', async (request, reply) => {
 });
 
 server.addHook('onResponse', async (request, reply) => {
+  const requestPath = request.url.split('?')[0];
+  const successfulMutation = !['GET', 'HEAD', 'OPTIONS'].includes(request.method) && reply.statusCode < 400;
+  if (successfulMutation && (requestPath.startsWith('/api/financeiro') || requestPath.startsWith('/api/orcamentos'))) {
+    invalidateFinanceOverviewCache();
+  }
+  if (successfulMutation) {
+    invalidateDeadlineAlertCache();
+    invalidateManagerialReportCache();
+    if (requestPath.startsWith('/api/projetos') || requestPath.startsWith('/api/financeiro') || requestPath.startsWith('/api/orcamentos')) {
+      invalidateProjectOverviewCache();
+    }
+  }
+
   const scope = backupMutationScope(request.method, request.url, reply.statusCode, String(request.headers['content-type'] || ''));
   if (scope) await BackupActivityService.markChanged(scope);
 });
 
 const httpErrorsLogged = new WeakSet<object>();
+const measuredResponseBytes = new WeakMap<object, number>();
+
+server.addHook('onSend', async (request, _reply, payload) => {
+  if (typeof payload === 'string') measuredResponseBytes.set(request, Buffer.byteLength(payload));
+  else if (Buffer.isBuffer(payload)) measuredResponseBytes.set(request, payload.byteLength);
+  else if (payload instanceof Uint8Array) measuredResponseBytes.set(request, payload.byteLength);
+  return payload;
+});
 
 server.addHook('onResponse', async (request, reply) => {
   const route = normalizeRegisteredRoute(request.routeOptions?.url);
   const responseLengthHeader = reply.getHeader('content-length');
-  const responseBytes = Number(responseLengthHeader);
+  const responseBytes = responseLengthHeader === undefined ? Number.NaN : Number(responseLengthHeader);
   const observation = {
     route,
     method: request.method,
     statusCode: reply.statusCode,
     durationMs: reply.elapsedTime,
-    responseBytes: Number.isFinite(responseBytes) ? responseBytes : undefined
+    responseBytes: Number.isFinite(responseBytes) ? responseBytes : measuredResponseBytes.get(request)
   };
   const slowObservation = PerformanceMetricsService.record(observation);
   if (slowObservation) void OperationalLogService.warn('http-route-slow', slowObservation);
@@ -355,7 +409,7 @@ async function writeRestoreResult(status: 'success' | 'failed', message: string)
   await fs.rename(temporary, target);
 }
 
-async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string; recoveryCode?: string | null; recoverySecret?: string | null }) {
+async function executeManagedRestore(input: { bundlePath: string; targetFilesRoot?: string; allowedBackupDirectory?: string; recoveryCode?: string | null; recoverySecret?: string | null; expectedFingerprint: string }) {
   let exitCode = 76;
   try {
     SchedulerService.stop();
@@ -368,6 +422,7 @@ async function executeManagedRestore(input: { bundlePath: string; targetFilesRoo
       allowedBackupDirectory: input.allowedBackupDirectory,
       recoveryCode: input.recoveryCode,
       recoverySecret: input.recoverySecret,
+      expectedFingerprint: input.expectedFingerprint,
       confirmation: 'RESTORE_GEOGESTOR'
     });
     await writeRestoreResult('success', 'Backup restaurado e validado com sucesso.');
@@ -465,28 +520,6 @@ server.register(multipart, {
   limits: {
     fileSize: 500 * 1024 * 1024 // 500MB max file size
   }
-});
-
-server.register(cors, {
-  origin: (origin, callback) => {
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-
-    const port = String(Number(process.env.PORT) || 3001);
-    const allowedOrigins = process.env.NODE_ENV === 'production'
-      ? new Set([`http://127.0.0.1:${port}`])
-      : new Set([
-          'http://localhost:5173',
-          'http://127.0.0.1:5173',
-          `http://127.0.0.1:${port}`,
-          ...(process.env.GEOGESTOR_WEB_ORIGIN ? [process.env.GEOGESTOR_WEB_ORIGIN] : [])
-        ]);
-    callback(null, allowedOrigins.has(origin));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 });
 
 registerApiRoutes(server);
@@ -1136,7 +1169,10 @@ server.post('/api/sistema/restaurar-backup/testar', async (request, reply) => {
       totalBytes: result.totals.bytes
     });
     operation.finish();
-    RestoreAuthorizationService.markTested({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
+    RestoreAuthorizationService.markTested(
+      { bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization },
+      validation.fingerprint
+    );
     return result;
   } catch (error) {
     operation?.fail(error);
@@ -1153,11 +1189,15 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
   if (!parsed.success) return reply.status(400).send(validationError(parsed.error));
 
   try {
-    const authorization = RestoreAuthorizationService.assertTested({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
+    const authorization = RestoreAuthorizationService.verify({ bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization });
     const recovery = BackupRecoverySessionService.resolve(parsed.data.recoverySession);
     const allowedBackupDirectory = authorization.bundlePath;
     const unlock = { recoveryCode: parsed.data.recoveryCode, recoverySecret: recovery?.recoverySecret };
     const validation = await BackupService.validateBackup(parsed.data.bundlePath, allowedBackupDirectory, unlock);
+    RestoreAuthorizationService.assertTested(
+      { bundlePath: parsed.data.bundlePath, authorization: parsed.data.bundleAuthorization },
+      validation.fingerprint
+    );
     const restoreDisk = await fs.statfs(getDataDirectory());
     let restoreAvailableBytes = Number(restoreDisk.bavail) * Number(restoreDisk.bsize);
     if (validation.manifest.type === 'complete') {
@@ -1181,7 +1221,8 @@ server.post('/api/sistema/restaurar-backup', async (request, reply) => {
         targetFilesRoot,
         allowedBackupDirectory,
         recoveryCode: parsed.data.recoveryCode,
-        recoverySecret: consumedRecovery?.recoverySecret || recovery?.recoverySecret
+        recoverySecret: consumedRecovery?.recoverySecret || recovery?.recoverySecret,
+        expectedFingerprint: validation.fingerprint
       });
     }, 150);
     return reply.status(202).send({

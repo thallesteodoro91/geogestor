@@ -23,6 +23,32 @@ export const CONDITION_STATUSES = [
 export const ConditionStatusSchema = z.enum(CONDITION_STATUSES);
 export type ConditionStatus = z.infer<typeof ConditionStatusSchema>;
 
+export const ENVIRONMENTAL_PHASES = [
+  'Levantamento inicial',
+  'Documentação',
+  'Protocolo',
+  'Em análise',
+  'Atendimento de exigência',
+  'Vistoria',
+  'Deferido',
+  'Indeferido',
+  'Concluído'
+] as const;
+
+export const EnvironmentalPhaseSchema = z.enum(ENVIRONMENTAL_PHASES);
+
+export function isRealEnvironmentalDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+const nullableDateKey = z.string().trim()
+  .refine(isRealEnvironmentalDateKey, 'Informe uma data válida no formato AAAA-MM-DD.')
+  .nullable()
+  .optional();
+
 export const LicensePayloadBaseSchema = z.object({
   projetoId: z.string().uuid('Selecione um projeto válido.'),
   clienteId: z.string().uuid().nullable().optional(),
@@ -30,11 +56,12 @@ export const LicensePayloadBaseSchema = z.object({
   protocolo: z.string().trim().max(160).nullable().optional(),
   orgao: z.string().trim().min(1, 'Informe o órgão ambiental.').max(160),
   tipoLicenca: z.string().trim().min(1, 'Selecione o tipo da licença.').max(120),
-  dataEmissao: z.string().nullable().optional(),
-  dataVencimento: z.string().min(1, 'Informe a data de vencimento.'),
+  dataEmissao: nullableDateKey,
+  dataVencimento: z.string().trim().min(1, 'Informe a data de vencimento.')
+    .refine(isRealEnvironmentalDateKey, 'Informe uma data válida no formato AAAA-MM-DD.'),
   status: LicenseStatusSchema.default('Em análise'),
   observacoes: z.string().trim().max(2000).nullable().optional()
-});
+}).strict();
 
 const validateLicenseDates = (
   data: { dataEmissao?: string | null; dataVencimento?: string | null },
@@ -57,14 +84,14 @@ export type LicensePayload = z.infer<typeof LicensePayloadSchema>;
 export const ConditionPayloadBaseSchema = z.object({
   titulo: z.string().trim().min(1, 'Informe o título da condicionante.').max(180),
   descricao: z.string().trim().max(2000).nullable().optional(),
-  dataLimite: z.string().nullable().optional(),
+  dataLimite: nullableDateKey,
   periodicidade: z.string().trim().max(120).nullable().optional(),
   responsavel: z.string().trim().max(160).nullable().optional(),
   status: ConditionStatusSchema.default('Pendente'),
-  dataCumprimento: z.string().nullable().optional(),
+  dataCumprimento: nullableDateKey,
   observacoes: z.string().trim().max(2000).nullable().optional(),
   comprovante: z.string().trim().max(1000).nullable().optional()
-});
+}).strict();
 
 const validateConditionCompletion = (
   data: { status?: ConditionStatus; dataCumprimento?: string | null },
@@ -147,6 +174,7 @@ export interface LicenseCondition {
 export interface LicenseListItem {
   id: string;
   projetoId: string;
+  trabalhoStatus: string;
   clienteId: string | null;
   clienteNome: string;
   projetoNome: string;
@@ -157,7 +185,8 @@ export interface LicenseListItem {
   dataEmissao: string | null;
   dataVencimento: string;
   status: LicenseStatus;
-  statusRegistrado: LicenseStatus;
+  statusRegistrado: string;
+  statusRegistradoReconhecido: boolean;
   observacoes: string | null;
   condicionantesPendentes: number;
   condicionantesVencidas: number;
@@ -190,6 +219,12 @@ export function normalizeLicenseStatus(status?: string | null): LicenseStatus {
   if (!status) return 'Em análise';
   const normalized = status.trim().toLocaleLowerCase('pt-BR');
   return STATUS_ALIASES[normalized] || 'Em análise';
+}
+
+export function isRecognizedLicenseStatus(status?: string | null) {
+  if (!status) return false;
+  const normalized = status.trim().toLocaleLowerCase('pt-BR');
+  return Object.prototype.hasOwnProperty.call(STATUS_ALIASES, normalized);
 }
 
 export function resolveEffectiveLicenseStatus(

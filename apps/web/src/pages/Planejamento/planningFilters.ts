@@ -35,7 +35,12 @@ function matchesDeadline(value: string, filter: string, today: string) {
     end.setUTCDate(end.getUTCDate() + 30);
     return value >= today && value <= end.toISOString().slice(0, 10);
   }
-  return value > today;
+  if (filter === 'futuro') {
+    const end = new Date(`${today}T12:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 30);
+    return value > end.toISOString().slice(0, 10);
+  }
+  return true;
 }
 
 const priorityWeight: Record<string, number> = { critica: 4, alta: 3, media: 2, baixa: 1 };
@@ -58,11 +63,11 @@ export function filterAndSortObjectives(
       && dataMatch;
   });
   return filtered.sort((a, b) => {
-    if (filters.ordem === 'prioridade') return (priorityWeight[b.prioridade] || 0) - (priorityWeight[a.prioridade] || 0);
-    if (filters.ordem === 'progresso') return (b.progresso ?? -1) - (a.progresso ?? -1);
-    if (filters.ordem === 'atualizacao') return b.updatedAt.localeCompare(a.updatedAt);
-    if (filters.ordem === 'prazo') return a.dataLimite.localeCompare(b.dataLimite);
-    return (a.ordem ?? 0) - (b.ordem ?? 0) || a.dataLimite.localeCompare(b.dataLimite);
+    if (filters.ordem === 'prioridade') return (priorityWeight[b.prioridade] || 0) - (priorityWeight[a.prioridade] || 0) || a.id.localeCompare(b.id);
+    if (filters.ordem === 'progresso') return (b.progresso ?? -1) - (a.progresso ?? -1) || a.id.localeCompare(b.id);
+    if (filters.ordem === 'atualizacao') return b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id);
+    if (filters.ordem === 'prazo') return a.dataLimite.localeCompare(b.dataLimite) || a.id.localeCompare(b.id);
+    return (a.ordem ?? 0) - (b.ordem ?? 0) || a.dataLimite.localeCompare(b.dataLimite) || a.id.localeCompare(b.id);
   });
 }
 
@@ -72,36 +77,33 @@ export function filterAndSortInitiatives(items: StrategicInitiative[], filters: 
     && (!filters.objetivo || item.objetivoId === filters.objetivo)
     && matchesDeadline(item.dataLimite, filters.prazo, today))
     .sort((a, b) => {
-      if (filters.ordem === 'progresso') return b.progresso - a.progresso;
-      if (filters.ordem === 'atualizacao') return b.updatedAt.localeCompare(a.updatedAt);
-      return a.dataLimite.localeCompare(b.dataLimite);
+      if (filters.ordem === 'progresso') return b.progresso - a.progresso || a.id.localeCompare(b.id);
+      if (filters.ordem === 'atualizacao') return b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id);
+      return a.dataLimite.localeCompare(b.dataLimite) || a.id.localeCompare(b.id);
     });
 }
 
 export function filterDecisions(items: StrategicDecision[], filters: PlanningFilters, today: string) {
-  if (filters.risco) return [];
   return items.filter((item) => matchesText(item.responsavel, filters.responsavel)
     && (!filters.status || item.status === filters.status)
     && (!filters.objetivo || item.objetivoId === filters.objetivo)
     && matchesDeadline(item.prazo, filters.prazo, today))
     .sort((a, b) => filters.ordem === 'atualizacao'
-      ? b.updatedAt.localeCompare(a.updatedAt)
-      : a.prazo.localeCompare(b.prazo));
+      ? b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)
+      : a.prazo.localeCompare(b.prazo) || a.id.localeCompare(b.id));
 }
 
 export function filterRisks(items: StrategicRisk[], filters: PlanningFilters) {
-  if (filters.prazo) return [];
   return items.filter((item) => matchesText(item.responsavel, filters.responsavel)
     && (!filters.status || item.status === filters.status)
     && (!filters.objetivo || item.objetivoId === filters.objetivo)
     && (!filters.risco || item.impacto === filters.risco))
     .sort((a, b) => filters.ordem === 'atualizacao'
-      ? b.updatedAt.localeCompare(a.updatedAt)
-      : (priorityWeight[b.impacto] || 0) - (priorityWeight[a.impacto] || 0));
+      ? b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)
+      : (priorityWeight[b.impacto] || 0) - (priorityWeight[a.impacto] || 0) || a.id.localeCompare(b.id));
 }
 
 export function filterCheckins(items: StrategicCheckin[], filters: PlanningFilters) {
-  if (filters.responsavel || filters.prazo || filters.risco) return [];
   return items.filter((item) => (!filters.status || item.status === filters.status)
     && (!filters.objetivo || item.objetivoId === filters.objetivo));
 }

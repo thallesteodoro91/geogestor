@@ -22,6 +22,7 @@ import {
 import { toast } from 'sonner';
 import { MapBaseNotice } from '../../../components/maps/MapBaseNotice';
 import { Modal } from '../../../components/Modal';
+import { FormSelect } from '../../../components/Form';
 import { createBaseTileLayer, createNeutralGridLayer } from '../../../utils/mapTiles';
 import { apiFetch, getAuthenticatedAssetUrl } from '../../../services/apiClient';
 import { loadPdfMake } from '../../../utils/loadPdfMake';
@@ -244,6 +245,36 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
       return (await response.json()).basemaps || [];
     }
   });
+  const basemapUploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await apiFetch('/api/arquivos/geospatial/basemaps', { method: 'POST', body: formData });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Não foi possível importar o mapa-base.');
+      return body.basemap as OfflineBasemapItem;
+    },
+    onSuccess: async (basemap) => {
+      await queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] });
+      setSelectedBaseMap(basemap.id);
+      toast.success('Mapa-base MBTiles importado e selecionado.');
+    },
+    onError: (error: Error) => toast.error(error.message)
+  });
+  const basemapDeleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiFetch(`/api/arquivos/geospatial/basemaps/${id}`, { method: 'DELETE' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Não foi possível remover o mapa-base.');
+      return id;
+    },
+    onSuccess: async (id) => {
+      if (selectedBaseMap === id) setSelectedBaseMap('online');
+      await queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] });
+      toast.success('Mapa-base removido. Levantamentos, documentos e projetos foram preservados.');
+    },
+    onError: (error: Error) => toast.error(error.message)
+  });
 
   const { data: crsCatalog = [] } = useQuery<CrsCatalogItem[]>({
     queryKey: ['geospatial-crs-catalog'],
@@ -303,23 +334,6 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
   useEffect(() => { localStorage.setItem('geogestor:crs-favorites', JSON.stringify(favoriteCrs)); }, [favoriteCrs]);
   useEffect(() => { localStorage.setItem('geogestor:crs-recents', JSON.stringify(recentCrs)); }, [recentCrs]);
   useEffect(() => { localStorage.setItem('geogestor:location-warning-m', String(locationWarningThresholdM)); }, [locationWarningThresholdM]);
-
-  const basemapUploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const form = new FormData();
-      form.append('file', file);
-      const response = await apiFetch('/api/arquivos/geospatial/basemaps', { method: 'POST', body: form });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Não foi possível importar o MBTiles.');
-      return body.basemap as OfflineBasemapItem;
-    },
-    onSuccess: (basemap) => {
-      queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] });
-      setSelectedBaseMap(basemap.id);
-      toast.success('Mapa-base MBTiles importado e ativado.');
-    },
-    onError: (error: Error) => toast.error(error.message)
-  });
 
   const reloadBaseMap = useCallback(() => {
     const map = mapInstanceRef.current;
@@ -749,44 +763,8 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
 
   return (
     <div className={`geo-card flex h-full w-full min-w-0 flex-col overflow-hidden ${className}`}>
-      <div className="border-b border-brand-border px-5 py-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-indigo-50 text-brand-indigo-700 dark:bg-brand-indigo-400/12 dark:text-brand-indigo-100">
-            <MapTrifold weight="duotone" className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="text-base font-semibold text-zinc-950 dark:text-white">Mapa do Cliente</h3>
-            <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Levantamentos vetoriais e fundo cartográfico são gerenciados separadamente.
-            </p>
-          </div>
-        </div>
-        <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
-          <section className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-3 dark:border-indigo-900 dark:bg-indigo-950/20" aria-labelledby="vector-survey-title">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="min-w-0"><h4 id="vector-survey-title" className="text-sm font-semibold text-zinc-950 dark:text-white">Levantamentos e camadas vetoriais</h4><p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">O GeoGestor importa KML, KMZ, GeoJSON, Shapefile e GeoPackage vetorial. Arquivos raster não são utilizados como levantamento.</p></div>
-              <span className="geo-badge-base geo-badge-primary px-3 py-1 text-xs uppercase tracking-wider" aria-live="polite">{isLoading ? 'Carregando…' : `${geoFiles.length} ${geoFiles.length === 1 ? 'camada vetorial' : 'camadas vetoriais'}`}</span>
-            </div>
-            <input type="file" ref={fileInputRef} className="hidden" accept={VECTOR_SURVEY_ACCEPT} multiple aria-label="Selecionar levantamento vetorial" onChange={(event) => { if (event.target.files?.length) void handleFiles(Array.from(event.target.files)); event.target.value = ''; }} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={isUploading} className={cn(primarySmallActionButtonClass, 'mt-3 min-h-10 px-3')}>
-              {isUploading ? <Spinner className="h-4 w-4 animate-spin" aria-hidden="true" /> : <UploadSimple className="h-4 w-4" aria-hidden="true" />}
-              {isUploading ? 'Importando levantamento…' : 'Adicionar levantamento vetorial'}
-            </button>
-          </section>
-          <details className="rounded-xl border border-sky-200 bg-sky-50/70 p-3 dark:border-sky-900 dark:bg-sky-950/20">
-            <summary className="cursor-pointer text-sm font-semibold text-zinc-950 focus-visible:ring-2 focus-visible:ring-sky-500 dark:text-white">Configurar mapa-base offline</summary>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">O MBTiles é utilizado somente como fundo cartográfico offline. Ele não altera coordenadas, geometrias, cálculos ou a localização do levantamento.</p>
-            {!offlineBasemaps.length && <p role="status" className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Nenhum mapa-base MBTiles importado. A grade local neutra permanece disponível.</p>}
-            <div className="mt-3 flex flex-wrap items-end gap-2">
-              <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Fundo cartográfico<select value={selectedBaseMap} onChange={(event) => setSelectedBaseMap(event.target.value)} className="mt-1 block min-h-9 rounded-lg border border-zinc-300 bg-white px-2 text-xs text-zinc-900 focus-visible:ring-2 focus-visible:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"><option value="online">OpenStreetMap · online</option><option value="neutral">Grade local · offline</option>{offlineBasemaps.map((item) => <option key={item.id} value={item.id}>{item.name} · MBTiles {item.active ? 'ativo' : 'desativado'}</option>)}</select></label>
-              <input ref={basemapInputRef} type="file" accept=".mbtiles" className="hidden" aria-label="Selecionar mapa-base MBTiles raster" onChange={(event) => { const file = event.target.files?.[0]; if (file) basemapUploadMutation.mutate(file); event.target.value = ''; }} />
-              <button type="button" className={secondarySmallActionButtonClass} disabled={basemapUploadMutation.isPending} onClick={() => basemapInputRef.current?.click()}>{basemapUploadMutation.isPending ? <Spinner className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <MapTrifold className="h-3.5 w-3.5" aria-hidden="true" />}{basemapUploadMutation.isPending ? 'Importando mapa-base…' : 'Importar mapa-base MBTiles'}</button>
-              {offlineBasemaps.some((item) => item.id === selectedBaseMap) && <button type="button" className={secondarySmallActionButtonClass} onClick={async () => { const current = offlineBasemaps.find((item) => item.id === selectedBaseMap)!; const response = await apiFetch(`/api/arquivos/geospatial/basemaps/${selectedBaseMap}/active`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !current.active }) }); if (!response.ok) { toast.error('Não foi possível alterar o mapa-base. Tente novamente.'); return; } if (current.active) setSelectedBaseMap('neutral'); queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] }); toast.success(current.active ? 'Mapa-base offline desativado.' : 'Mapa-base offline ativado.'); }}>{offlineBasemaps.find((item) => item.id === selectedBaseMap)?.active ? <EyeSlash className="h-3.5 w-3.5" aria-hidden="true" /> : <Eye className="h-3.5 w-3.5" aria-hidden="true" />}{offlineBasemaps.find((item) => item.id === selectedBaseMap)?.active ? 'Desativar' : 'Ativar'} mapa-base</button>}
-              {offlineBasemaps.some((item) => item.id === selectedBaseMap) && <button type="button" className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-2 text-xs font-semibold text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300" onClick={async () => { if (!window.confirm('Remover somente este mapa-base offline? Levantamentos, documentos e projetos serão preservados.')) return; const response = await apiFetch(`/api/arquivos/geospatial/basemaps/${selectedBaseMap}`, { method: 'DELETE' }); if (!response.ok) { toast.error('Não foi possível remover o mapa-base. Tente novamente.'); return; } setSelectedBaseMap('neutral'); queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] }); toast.success('Mapa-base offline removido; levantamentos preservados.'); }}><Trash className="h-3.5 w-3.5" aria-hidden="true" />Remover mapa-base</button>}
-            </div>
-          </details>
-        </div>
-      </div>
+      <input type="file" ref={fileInputRef} className="hidden" accept={VECTOR_SURVEY_ACCEPT} multiple aria-label="Selecionar levantamento vetorial" onChange={(event) => { if (event.target.files?.length) void handleFiles(Array.from(event.target.files)); event.target.value = ''; }} />
+      <input type="file" ref={basemapInputRef} className="hidden" accept=".mbtiles" aria-label="Selecionar mapa-base MBTiles" onChange={(event) => { const file = event.target.files?.[0]; if (file) basemapUploadMutation.mutate(file); event.target.value = ''; }} />
 
       <div 
         className="relative h-[340px] w-full min-w-0 flex-none bg-zinc-950 md:h-[420px] lg:h-[520px] xl:h-[560px]"
@@ -839,8 +817,8 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
           <div className="absolute inset-0 z-[900] flex items-center justify-center bg-zinc-950/70 px-6 text-center backdrop-blur-[2px]">
             <div className="geo-surface-raised max-w-sm rounded-lg p-8">
               <MapTrifold weight="duotone" className="mx-auto mb-4 h-12 w-12 text-zinc-400" aria-hidden="true" />
-              <p className="text-lg font-bold text-white">Nenhum levantamento vetorial cadastrado</p>
-              <p className="mx-auto mt-2 text-sm font-medium leading-relaxed text-zinc-400">
+              <p className="text-lg font-bold text-zinc-950 dark:text-white">Nenhum levantamento vetorial cadastrado</p>
+              <p className="mx-auto mt-2 text-sm font-medium leading-relaxed text-zinc-600 dark:text-zinc-300">
                 Importe KML, KMZ, GeoJSON, Shapefile ZIP ou GeoPackage vetorial. Raster não é aceito como levantamento.
               </p>
               <button
@@ -862,6 +840,11 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
             <p className="text-xs text-zinc-500 dark:text-zinc-400">O arquivo vetorial original é preservado; o mapa utiliza uma cópia normalizada em EPSG:4326.</p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" className={secondarySmallActionButtonClass} disabled={basemapUploadMutation.isPending} onClick={() => basemapInputRef.current?.click()}>
+              <UploadSimple className="h-4 w-4" aria-hidden="true" />
+              {basemapUploadMutation.isPending ? 'Importando mapa-base…' : 'Configurar mapa-base offline'}
+            </button>
+            <button type="button" className={secondarySmallActionButtonClass} onClick={() => fileInputRef.current?.click()}><UploadSimple className="h-4 w-4" aria-hidden="true" /> Adicionar levantamento vetorial</button>
             {cacheStatus && <button type="button" className={secondarySmallActionButtonClass} disabled={!cacheStatus.orphanFiles || cacheCleanMutation.isPending} onClick={() => {
               if (window.confirm(`Remover somente ${cacheStatus.orphanFiles} arquivo(s) órfão(s) do cache? Levantamentos e documentos originais não serão apagados.`)) cacheCleanMutation.mutate();
             }}><Trash className="h-4 w-4" aria-hidden="true" /> Cache: {formatFileSize(cacheStatus.activeBytes)}{cacheStatus.orphanFiles ? ` · ${cacheStatus.orphanFiles} órfão(s)` : ''}</button>}
@@ -882,6 +865,24 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
             </button>
           </div>
         </div>
+        <section aria-labelledby="offline-basemap-title" className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/60">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <label htmlFor="offline-basemap-select" className="min-w-0 flex-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200">
+              <span id="offline-basemap-title">Mapa-base exibido</span>
+              <FormSelect id="offline-basemap-select" name="offlineBasemap" value={selectedBaseMap} onChange={(event) => setSelectedBaseMap(event.target.value)} className="geo-field mt-1.5 w-full">
+                <option value="online">Mapa on-line padrão</option>
+                <option value="neutral">Grade neutra sem internet</option>
+                {offlineBasemaps.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatFileSize(item.sizeBytes)}</option>)}
+              </FormSelect>
+            </label>
+            {selectedBaseMap !== 'online' && selectedBaseMap !== 'neutral' && (
+              <button type="button" className="geo-button-base geo-focus-ring min-h-10 border border-red-200 px-3 text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-200" disabled={basemapDeleteMutation.isPending} onClick={() => {
+                if (window.confirm('Remover este mapa-base offline? Levantamentos, documentos e projetos serão preservados.')) basemapDeleteMutation.mutate(selectedBaseMap);
+              }}><Trash aria-hidden="true" /> Remover mapa-base</button>
+            )}
+          </div>
+          {offlineBasemaps.length === 0 && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Nenhum mapa-base MBTiles importado. O mapa on-line continua disponível e a grade neutra pode ser usada sem conexão.</p>}
+        </section>
         <div className="grid gap-3 lg:grid-cols-2">
           {geoFiles.map((layer) => {
             const needsCrs = layer.status === 'needs_crs';
@@ -967,7 +968,8 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                     <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
                       Sistema de Referência de Coordenadas
                       <span className="mt-1 flex gap-1">
-                        <select
+                        <FormSelect
+                          aria-label="Sistema de Referência de Coordenadas"
                           className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-2 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
                           value={selectedCrs}
                           onChange={(event) => {
@@ -977,13 +979,14 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                         >
                           {!filteredCrs.some((item) => item.code === selectedCrs) && <option value={selectedCrs}>{selectedCrs} · definição selecionada</option>}
                           {filteredCrs.map((item) => <option key={item.code} value={item.code}>{favoriteCrs.includes(item.code) ? '★ ' : recentCrs.includes(item.code) ? '◷ ' : ''}{item.code} · {item.name}</option>)}
-                        </select>
+                        </FormSelect>
                         <button type="button" className="w-10 rounded-lg border border-zinc-300 bg-white text-base text-amber-500 dark:border-zinc-700 dark:bg-zinc-900" aria-label={favoriteCrs.includes(selectedCrs) ? 'Remover SRC dos favoritos' : 'Adicionar SRC aos favoritos'} title={favoriteCrs.includes(selectedCrs) ? 'Remover dos favoritos' : 'Adicionar aos favoritos'} onClick={() => setFavoriteCrs((current) => current.includes(selectedCrs) ? current.filter((item) => item !== selectedCrs) : [selectedCrs, ...current])}>{favoriteCrs.includes(selectedCrs) ? '★' : '☆'}</button>
                       </span>
                     </label>
                     <label className="text-xs font-medium text-zinc-600 dark:text-zinc-300">
                       Ordem dos eixos
-                      <select
+                      <FormSelect
+                        aria-label="Ordem dos eixos"
                         className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-2 py-2 text-xs dark:border-zinc-700 dark:bg-zinc-900"
                         value={axisSelections[layer.documentId] || 'longitude-latitude'}
                         onChange={(event) => {
@@ -993,7 +996,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                       >
                         <option value="longitude-latitude">Longitude / latitude</option>
                         <option value="latitude-longitude">Latitude / longitude</option>
-                      </select>
+                      </FormSelect>
                     </label>
                     <details className="rounded-lg border border-zinc-200 bg-white p-2 text-xs dark:border-zinc-800 dark:bg-zinc-900 sm:col-span-2">
                       <summary className="cursor-pointer font-semibold text-zinc-700 dark:text-zinc-200">Definição técnica manual (EPSG, PROJ ou WKT)</summary>

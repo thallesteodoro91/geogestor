@@ -1,10 +1,12 @@
 import crypto from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { normalizePropertyIdentifier, normalizePropertyName } from '@geogestor/contracts/src/properties';
+import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 import { isValidCnpj, isValidCpf } from '@geogestor/contracts';
 import { schema } from '@geogestor/database';
 import { db } from '../db';
 import { AuditLogService } from './audit.service';
 import { FileSystemOutboxService } from './filesystem-outbox.service';
+import { ImportRunError, importContentDigest } from './import-run.service';
 import { OperationalLogService } from './operational-log.service';
 
 export type FullImportInput = {
@@ -14,6 +16,7 @@ export type FullImportInput = {
   rows: Array<Record<string, unknown>>;
   sheetName?: string;
   firstDataRow?: number;
+  sourceRowNumbers?: number[];
   mappingOverrides?: Record<string, string | null>;
   clientTimings?: { readingMs: number; hashingMs: number };
 };
@@ -449,7 +452,7 @@ async function prepare(input: FullImportInput, database: typeof db = db): Promis
   const totals: Record<string, number> = Object.fromEntries(HISTORICAL_TOTALS.map(([key]) => [key, 0]));
 
   for (const [index, raw] of input.rows.entries()) {
-    const line = index + (input.firstDataRow ?? 2);
+    const line = input.sourceRowNumbers?.[index] ?? index + (input.firstDataRow ?? 2);
     const name = textValue(cell(raw, headers.sourceByKey, 'cliente'));
     if (!name) {
       issues.push({ row: line, field: 'cliente', severity: 'blocking', message: 'Informe o nome ou a razão social do cliente.' });
@@ -691,10 +694,52 @@ function ledgerKey(fileHash: string) {
   return `full-spreadsheet-import:${fileHash}`;
 }
 
+function contentLedgerKey(input: FullImportInput) {
+  const fingerprint = importContentDigest({
+    headers: input.headers,
+    rows: input.rows
+  });
+  return `full-spreadsheet-import:content:${fingerprint}`;
+}
+
+async function assertLegacyFullImportsReviewed(database: Pick<typeof db, 'select'>) {
+  const ledgers = await database.select({
+    id: schema.configuracoesOperacionais.id,
+    chave: schema.configuracoesOperacionais.chave,
+    valorJson: schema.configuracoesOperacionais.valorJson
+  }).from(schema.configuracoesOperacionais)
+    .where(like(schema.configuracoesOperacionais.chave, 'full-spreadsheet-import:%'));
+  const completedContentImportIds = new Set<string>();
+  const completedSources: string[] = [];
+  for (const ledger of ledgers) {
+    let value: { status?: unknown; importId?: unknown } | null = null;
+    try {
+      value = JSON.parse(ledger.valorJson) as { status?: unknown; importId?: unknown };
+    } catch {
+      // An unreadable source ledger cannot be cleared by inference.
+    }
+    if (ledger.chave.startsWith('full-spreadsheet-import:content:')) {
+      if (value?.status === 'completed' && typeof value.importId === 'string') {
+        completedContentImportIds.add(value.importId);
+      }
+    } else {
+      if (!value || value.status === 'completed') completedSources.push(ledger.id);
+    }
+  }
+  if (completedSources.some(id => !completedContentImportIds.has(id))) {
+    throw new ImportRunError(
+      'Há uma migração completa anterior sem impressão digital verificável. Revise o registro legado antes de iniciar outra migração completa.',
+      409,
+      'LEGACY_FULL_IMPORT_REVIEW_REQUIRED'
+    );
+  }
+}
+
 export async function previewFullSpreadsheetImport(input: FullImportInput, database: typeof db = db) {
+  await assertLegacyFullImportsReviewed(database);
   const prepared = await prepare(input, database);
   const existing = await database.select({ id: schema.configuracoesOperacionais.id }).from(schema.configuracoesOperacionais)
-    .where(eq(schema.configuracoesOperacionais.chave, ledgerKey(input.fileHash))).limit(1);
+    .where(inArray(schema.configuracoesOperacionais.chave, [ledgerKey(input.fileHash), contentLedgerKey(input)])).limit(1);
   return previewFromPrepared(prepared, existing.length > 0);
 }
 
@@ -720,6 +765,7 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
   }
   const now = new Date().toISOString();
   const result = await database.transaction(async (tx) => {
+    await assertLegacyFullImportsReviewed(tx);
     const ledgerId = crypto.randomUUID();
     const reserved = await tx.insert(schema.configuracoesOperacionais).values({
       id: ledgerId,
@@ -730,6 +776,19 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
     }).onConflictDoNothing({ target: schema.configuracoesOperacionais.chave }).returning({ id: schema.configuracoesOperacionais.id });
     if (!reserved.length) {
       const duplicate = new Error('Este mesmo arquivo já foi importado. A operação foi interrompida para evitar duplicidade.') as Error & { statusCode?: number };
+      duplicate.statusCode = 409;
+      throw duplicate;
+    }
+    const contentLedgerId = crypto.randomUUID();
+    const contentReserved = await tx.insert(schema.configuracoesOperacionais).values({
+      id: contentLedgerId,
+      chave: contentLedgerKey(input),
+      valorJson: JSON.stringify({ status: 'processing', importId: ledgerId, startedAt: now }),
+      origem: 'migracao_completa',
+      migradoEm: now
+    }).onConflictDoNothing({ target: schema.configuracoesOperacionais.chave }).returning({ id: schema.configuracoesOperacionais.id });
+    if (!contentReserved.length) {
+      const duplicate = new Error('O conteúdo desta planilha já foi importado. A operação foi interrompida para evitar duplicidade.') as Error & { statusCode?: number };
       duplicate.statusCode = 409;
       throw duplicate;
     }
@@ -810,8 +869,12 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
       }
       const id = crypto.randomUUID();
       await tx.insert(schema.propriedades).values({
-        id, clienteId: clientId, nome: property.name, areaHa: property.areaHa, matricula: property.registration,
-        car: property.car, ccir: property.ccir, itr: property.itr, cidade: property.municipality,
+        id, clienteId: clientId, nome: property.name, nomeNormalizado: normalizePropertyName(property.name),
+        areaHa: property.areaHa, matricula: property.registration,
+        matriculaNormalizada: normalizePropertyIdentifier(property.registration) || null,
+        car: property.car, carNormalizado: normalizePropertyIdentifier(property.car) || null,
+        ccir: property.ccir, ccirNormalizado: normalizePropertyIdentifier(property.ccir) || null,
+        itr: property.itr, itrNormalizado: normalizePropertyIdentifier(property.itr) || null, cidade: property.municipality,
         municipio: property.municipality, situacaoImovel: property.situation, latitude: property.latitude,
         longitude: property.longitude, observacoes: `${property.notes}\nReferência: ${sourceRef(input.fileHash, row.line)}.`
       });
@@ -929,6 +992,10 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
     };
     await tx.update(schema.configuracoesOperacionais).set({ valorJson: JSON.stringify(ledger), updatedAt: now })
       .where(eq(schema.configuracoesOperacionais.id, ledgerId));
+    await tx.update(schema.configuracoesOperacionais).set({
+      valorJson: JSON.stringify({ status: 'completed', importId: ledgerId, fileHash: input.fileHash, completedAt: now }),
+      updatedAt: now
+    }).where(eq(schema.configuracoesOperacionais.id, contentLedgerId));
     await AuditLogService.log('INSERT', 'Migração completa de planilha', null, {
       importId: ledgerId, fileHash: input.fileHash, rows: input.rows.length, counts,
       reconciliation: finalReconciliation.map((item) => ({ key: item.key, difference: item.difference, status: item.status }))

@@ -28,6 +28,8 @@ test('métricas agregam rotas normalizadas com classificação e limiar configur
     durationMs: 80,
     responseBytes: 500
   });
+  PerformanceMetricsService.recordLegacyContract('GET /api/financeiro/despesas');
+  PerformanceMetricsService.recordLegacyContract('GET /api/financeiro/despesas');
 
   const snapshot = PerformanceMetricsService.snapshot();
   assert.equal(snapshot.slowRequestThresholdMs, 200);
@@ -38,5 +40,6 @@ test('métricas agregam rotas normalizadas com classificação e limiar configur
   assert.deepEqual(clientDetail?.classifications, { fast: 1, normal: 1, slow: 2 });
   assert.equal(clientDetail?.statusCodes['200'], 4);
   assert.equal(clientDetail?.responseBytes.max, 1_000);
+  assert.equal(snapshot.legacyContracts['GET/api/financeiro/despesas'], 2);
   assert.equal(JSON.stringify(snapshot).includes('clienteId'), false);
 });

@@ -1,0 +1,4 @@
+﻿Nome;Email;Observações
+
+QA-IMPORT-20260924-Contato BOM;qa.import.bom.multiline@example.test;"Primeira linha
+Segunda linha com ""aspas"""

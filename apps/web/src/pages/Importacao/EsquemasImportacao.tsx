@@ -1,17 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { FileCsv, Gear, ListDashes, MagnifyingGlass, Trash } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { persistOperationalSetting } from '../../services/operationalSettings';
-
-interface ImportSchema {
-  id: string;
-  name: string;
-  entity: string;
-  mapping: Record<string, string>;
-  date: string;
-}
+import { fetchStoredImportSchemas, readCachedImportSchemas, type ImportSchema } from '../../services/importSchemas';
+import { toast } from 'sonner';
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
   day: '2-digit',
@@ -25,11 +19,19 @@ const formatDate = (value: string) => {
 };
 
 export function EsquemasImportacao() {
-  const [schemas, setSchemas] = useState<ImportSchema[]>(() => {
-    return JSON.parse(localStorage.getItem('import_schemas') || '[]');
-  });
+  const [schemas, setSchemas] = useState<ImportSchema[]>(readCachedImportSchemas);
   const [search, setSearch] = useState('');
   const [schemaToDelete, setSchemaToDelete] = useState<ImportSchema | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void fetchStoredImportSchemas().then(stored => {
+      if (active) setSchemas(stored);
+    }).catch(() => {
+      if (active) toast.error('Não foi possível carregar os esquemas salvos. Tente atualizar a página.');
+    });
+    return () => { active = false; };
+  }, []);
 
   const filteredSchemas = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -45,9 +47,14 @@ export function EsquemasImportacao() {
     if (!schemaToDelete) return;
 
     const updated = schemas.filter(schema => schema.id !== schemaToDelete.id);
-    await persistOperationalSetting('import_schemas', updated);
-    setSchemas(updated);
-    setSchemaToDelete(null);
+    try {
+      await persistOperationalSetting('import_schemas', updated);
+      setSchemas(updated);
+      setSchemaToDelete(null);
+      toast.success('Esquema excluído com sucesso.');
+    } catch (error) {
+      toast.error(`${error instanceof Error ? error.message : 'Não foi possível excluir o esquema.'} Tente novamente.`);
+    }
   };
 
   return (

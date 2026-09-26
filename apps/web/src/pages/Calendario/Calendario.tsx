@@ -6,7 +6,8 @@ import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FormError, FormField, FormFooter, SwitchField } from '../../components/Form';
 import { CustomSelect } from '../../components/CustomSelect';
@@ -55,6 +56,13 @@ interface Compromisso {
   projetoId?: string | null;
   projetoNome?: string | null;
 }
+
+type CalendarQueryData = {
+  projetos: Projeto[];
+  tarefas: Tarefa[];
+  compromissos: Compromisso[];
+  error: string;
+};
 
 type EventTone = 'blue' | 'amber' | 'indigo' | 'emerald' | 'violet' | 'cyan' | 'rose' | 'zinc';
 
@@ -251,8 +259,8 @@ function getGoogleCalendarUrl(event: CalendarioEvento) {
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.titulo)}&details=${encodeURIComponent(details)}&dates=${datesParam}&ctz=America%2FSao_Paulo`;
 }
 
-async function fetchCollection<T>(url: string, label: string): Promise<T[]> {
-  const response = await apiFetch(url);
+async function fetchCollection<T>(url: string, label: string, signal?: AbortSignal): Promise<T[]> {
+  const response = await apiFetch(url, { signal });
   const payload: unknown = await response.json().catch(() => null);
 
   if (!response.ok) {
@@ -279,6 +287,7 @@ async function getResponseError(response: Response, fallback: string) {
 }
 
 export function Calendario() {
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedDate = parseDateKey(searchParams.get('data'));
   const requestedMonth = parseMonthKey(searchParams.get('mes'));
@@ -290,13 +299,8 @@ export function Calendario() {
 
   const [currentDate, setCurrentDate] = useState(initialMonth);
   const [selectedDate, setSelectedDate] = useState(initialSelectedDate);
-  const [projetos, setProjetos] = useState<Projeto[]>([]);
-  const [tarefas, setTarefas] = useState<Tarefa[]>([]);
-  const [compromissos, setCompromissos] = useState<Compromisso[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Compromisso | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState('');
@@ -312,47 +316,98 @@ export function Calendario() {
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') ?? 'Todos');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') ?? 'Todos');
   const dayButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const canonicalFallback = useRef({ month: initialMonth, date: initialSelectedDate });
 
-  const fetchDados = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
+  const calendarRange = useMemo(() => {
     const inicio = toDateKey(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
     const fim = toDateKey(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0));
-    const range = new URLSearchParams({ inicio, fim });
-
-    const results = await Promise.allSettled([
-      apiClient.get<Projeto[]>(`/api/projetos/calendar?${range}`),
-      apiClient.get<Tarefa[]>(`/api/tarefas/calendar?${range}`),
-      fetchCollection<Compromisso>(`/api/compromissos?${range}`, 'os compromissos')
-    ]);
-
-    const [projetosResult, tarefasResult, compromissosResult] = results;
-    setProjetos(projetosResult.status === 'fulfilled' ? projetosResult.value : []);
-    setTarefas(tarefasResult.status === 'fulfilled' ? tarefasResult.value : []);
-    setCompromissos(compromissosResult.status === 'fulfilled' ? compromissosResult.value : []);
-
-    const errors = results
-      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
-      .map((result) => result.reason instanceof Error ? result.reason.message : String(result.reason));
-    if (errors.length) setLoadError(errors.join(' '));
-    setLoading(false);
+    return new URLSearchParams({ inicio, fim }).toString();
   }, [currentDate]);
+  const calendarQueryKey = useMemo(() => ['calendar', calendarRange] as const, [calendarRange]);
 
-  useEffect(() => {
-    void Promise.resolve().then(fetchDados);
-  }, [fetchDados]);
+  const calendarQuery = useQuery<CalendarQueryData>({
+    queryKey: calendarQueryKey,
+    queryFn: async ({ signal }) => {
+      const loadPart = async <T,>(request: Promise<T[]>) => {
+        try {
+          return { items: await request, error: '' };
+        } catch (error) {
+          if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+          return { items: [] as T[], error: error instanceof Error ? error.message : String(error) };
+        }
+      };
+      const [projectResult, taskResult, appointmentResult] = await Promise.all([
+        loadPart(apiClient.get<Projeto[]>(`/api/projetos/calendar?${calendarRange}`, { signal })),
+        loadPart(apiClient.get<Tarefa[]>(`/api/tarefas/calendar?${calendarRange}`, { signal })),
+        loadPart(fetchCollection<Compromisso>(`/api/compromissos?${calendarRange}`, 'os compromissos', signal))
+      ]);
+      return {
+        projetos: projectResult.items,
+        tarefas: taskResult.items,
+        compromissos: appointmentResult.items,
+        error: [projectResult.error, taskResult.error, appointmentResult.error].filter(Boolean).join(' ')
+      };
+    },
+    staleTime: 30_000
+  });
+  const loading = calendarQuery.isFetching;
+  const fetchDados = useCallback(async () => { await calendarQuery.refetch(); }, [calendarQuery]);
+  const projetos = useMemo(() => calendarQuery.data?.projetos ?? [], [calendarQuery.data?.projetos]);
+  const tarefas = useMemo(() => calendarQuery.data?.tarefas ?? [], [calendarQuery.data?.tarefas]);
+  const compromissos = useMemo(() => calendarQuery.data?.compromissos ?? [], [calendarQuery.data?.compromissos]);
+  const loadError = calendarQuery.data?.error ?? '';
+
+  useLayoutEffect(() => {
+    const readBrowserHistory = () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlDate = parseDateKey(params.get('data'));
+      const urlMonth = parseMonthKey(params.get('mes'));
+      if (urlDate) {
+        setSelectedDate(urlDate);
+        setCurrentDate(new Date(urlDate.getFullYear(), urlDate.getMonth(), 1));
+      } else if (urlMonth) {
+        setCurrentDate(urlMonth);
+        setSelectedDate((current) => {
+          const lastDay = new Date(urlMonth.getFullYear(), urlMonth.getMonth() + 1, 0).getDate();
+          return new Date(urlMonth.getFullYear(), urlMonth.getMonth(), Math.min(current.getDate(), lastDay));
+        });
+      }
+      setBusca(params.get('busca') ?? '');
+      setFiltroTipo(params.get('tipo') ?? 'Todos');
+      setFiltroStatus(params.get('status') ?? 'Todos');
+    };
+    window.addEventListener('popstate', readBrowserHistory);
+    return () => window.removeEventListener('popstate', readBrowserHistory);
+  }, []);
+
+  const normalizedFiltroTipo = ['Todos', 'Projeto', 'Tarefa', ...compromissos.map((item) => item.tipo)].includes(filtroTipo)
+    ? filtroTipo
+    : 'Todos';
+  const normalizedFiltroStatus = ['Todos', 'Agendado', 'Início', 'Entrega', ...tarefas.map((item) => item.status)].includes(filtroStatus)
+    ? filtroStatus
+    : 'Todos';
 
   useEffect(() => {
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
-      next.set('mes', toMonthKey(currentDate));
-      next.set('data', toDateKey(selectedDate));
+      const urlDate = parseDateKey(next.get('data'));
+      const urlMonth = parseMonthKey(next.get('mes'));
+      if (urlDate) {
+        next.set('mes', toMonthKey(urlDate));
+      } else {
+        const canonicalMonth = urlMonth ?? canonicalFallback.current.month;
+        const canonicalDate = toMonthKey(canonicalFallback.current.date) === toMonthKey(canonicalMonth)
+          ? canonicalFallback.current.date
+          : new Date(canonicalMonth.getFullYear(), canonicalMonth.getMonth(), 1);
+        next.set('mes', toMonthKey(canonicalMonth));
+        next.set('data', toDateKey(canonicalDate));
+      }
       if (busca) next.set('busca', busca); else next.delete('busca');
-      if (filtroTipo !== 'Todos') next.set('tipo', filtroTipo); else next.delete('tipo');
-      if (filtroStatus !== 'Todos') next.set('status', filtroStatus); else next.delete('status');
-      return next;
+      if (normalizedFiltroTipo !== 'Todos') next.set('tipo', normalizedFiltroTipo); else next.delete('tipo');
+      if (normalizedFiltroStatus !== 'Todos') next.set('status', normalizedFiltroStatus); else next.delete('status');
+      return next.toString() === previous.toString() ? previous : next;
     }, { replace: true });
-  }, [busca, currentDate, filtroStatus, filtroTipo, selectedDate, setSearchParams]);
+  }, [busca, normalizedFiltroStatus, normalizedFiltroTipo, setSearchParams]);
 
   const allEvents = useMemo<CalendarioEvento[]>(() => {
     const events: CalendarioEvento[] = [];
@@ -414,7 +469,13 @@ export function Calendario() {
       });
     });
 
-    return events.sort((left, right) => `${left.data} ${left.hora ?? '99:99'}`.localeCompare(`${right.data} ${right.hora ?? '99:99'}`));
+    return events.sort((left, right) => {
+      const chronological = `${left.data} ${left.hora ?? '99:99'}`.localeCompare(`${right.data} ${right.hora ?? '99:99'}`);
+      if (chronological) return chronological;
+      return left.tipo.localeCompare(right.tipo, 'pt-BR')
+        || left.titulo.localeCompare(right.titulo, 'pt-BR')
+        || left.id.localeCompare(right.id);
+    });
   }, [compromissos, projetos, tarefas]);
 
   const eventDateKeys = useMemo(() => new Set(allEvents.map((event) => event.data)), [allEvents]);
@@ -424,9 +485,9 @@ export function Calendario() {
       .filter(Boolean)
       .join(' ');
     return matchesSearch(searchable, busca)
-      && (filtroTipo === 'Todos' || event.tipo === filtroTipo)
-      && (filtroStatus === 'Todos' || event.status === filtroStatus);
-  }), [allEvents, busca, filtroStatus, filtroTipo]);
+      && (normalizedFiltroTipo === 'Todos' || event.tipo === normalizedFiltroTipo)
+      && (normalizedFiltroStatus === 'Todos' || event.status === normalizedFiltroStatus);
+  }), [allEvents, busca, normalizedFiltroStatus, normalizedFiltroTipo]);
 
   const eventsByDate = useMemo(() => {
     const map = new Map<string, CalendarioEvento[]>();
@@ -458,7 +519,7 @@ export function Calendario() {
   const monthKey = toMonthKey(currentDate);
   const totalMonthEvents = allEvents.filter((event) => event.data.startsWith(monthKey)).length;
   const filteredMonthEvents = filteredEvents.filter((event) => event.data.startsWith(monthKey)).length;
-  const hasActiveFilters = Boolean(busca || filtroTipo !== 'Todos' || filtroStatus !== 'Todos');
+  const hasActiveFilters = Boolean(busca || normalizedFiltroTipo !== 'Todos' || normalizedFiltroStatus !== 'Todos');
   const addFormDirty = showAddModal && Boolean(
     novoTitulo
     || novaDescricao
@@ -498,12 +559,23 @@ export function Calendario() {
     setFiltroStatus('Todos');
   };
 
+  const publishTemporalUrl = (month: Date, date: Date) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('mes', toMonthKey(month));
+      next.set('data', toDateKey(date));
+      return next;
+    }, { replace: false });
+  };
+
   const selectDate = (date: Date, focus = false) => {
     const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const month = normalized.getMonth() !== currentDate.getMonth() || normalized.getFullYear() !== currentDate.getFullYear()
+      ? new Date(normalized.getFullYear(), normalized.getMonth(), 1)
+      : currentDate;
+    if (toDateKey(normalized) !== toDateKey(selectedDate)) publishTemporalUrl(month, normalized);
     setSelectedDate(normalized);
-    if (normalized.getMonth() !== currentDate.getMonth() || normalized.getFullYear() !== currentDate.getFullYear()) {
-      setCurrentDate(new Date(normalized.getFullYear(), normalized.getMonth(), 1));
-    }
+    if (month !== currentDate) setCurrentDate(month);
     if (focus) {
       window.requestAnimationFrame(() => dayButtonRefs.current.get(toDateKey(normalized))?.focus());
     }
@@ -511,13 +583,16 @@ export function Calendario() {
 
   const moveMonth = (amount: number) => {
     const next = addMonthsKeepingDay(selectedDate, currentDate, amount);
+    publishTemporalUrl(next.month, next.selected);
     setCurrentDate(next.month);
     setSelectedDate(next.selected);
   };
 
   const goToToday = () => {
     const today = new Date();
-    setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+    const month = new Date(today.getFullYear(), today.getMonth(), 1);
+    publishTemporalUrl(month, today);
+    setCurrentDate(month);
     setSelectedDate(today);
   };
 
@@ -525,8 +600,10 @@ export function Calendario() {
     const nextMonth = parseMonthKey(value);
     if (!nextMonth) return;
     const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
+    const nextSelected = new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selectedDate.getDate(), lastDay));
+    publishTemporalUrl(nextMonth, nextSelected);
     setCurrentDate(nextMonth);
-    setSelectedDate(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), Math.min(selectedDate.getDate(), lastDay)));
+    setSelectedDate(nextSelected);
   };
 
   const handleDayKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, date: Date) => {
@@ -648,7 +725,9 @@ export function Calendario() {
     if (!deleteTarget) return;
     const deleted = deleteTarget;
     setDeleting(true);
-    setCompromissos((current) => current.filter((item) => item.id !== deleted.id));
+    queryClient.setQueryData<CalendarQueryData>(calendarQueryKey, (current) => current
+      ? { ...current, compromissos: current.compromissos.filter((item) => item.id !== deleted.id) }
+      : current);
 
     try {
       const response = await apiFetch(`/api/compromissos/${deleted.id}`, { method: 'DELETE' });
@@ -662,7 +741,9 @@ export function Calendario() {
         }
       });
     } catch (error) {
-      setCompromissos((current) => [...current, deleted]);
+      queryClient.setQueryData<CalendarQueryData>(calendarQueryKey, (current) => current
+        ? { ...current, compromissos: [...current.compromissos, deleted] }
+        : current);
       toast.error(error instanceof Error ? error.message : 'Não foi possível excluir o compromisso.');
     } finally {
       setDeleting(false);
@@ -710,7 +791,7 @@ export function Calendario() {
             />
           </div>
           <CustomSelect
-            value={filtroTipo}
+            value={normalizedFiltroTipo}
             onChange={setFiltroTipo}
             placeholder="Todos os tipos"
             ariaLabel="Filtrar por tipo de evento"
@@ -718,7 +799,7 @@ export function Calendario() {
             options={typeOptions}
           />
           <CustomSelect
-            value={filtroStatus}
+            value={normalizedFiltroStatus}
             onChange={setFiltroStatus}
             placeholder="Todos os status"
             ariaLabel="Filtrar por status do evento"
@@ -747,8 +828,8 @@ export function Calendario() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-4">
-        <section aria-labelledby="calendar-month-heading" aria-busy={loading} className="flex flex-col rounded-[2rem] bg-gradient-to-br from-white via-white to-indigo-50/45 p-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-zinc-900/5 sm:p-6 lg:col-span-3 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/20 dark:ring-white/10">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-4">
+        <section aria-labelledby="calendar-month-heading" aria-busy={loading} className="flex flex-col rounded-[2rem] bg-gradient-to-br from-white via-white to-indigo-50/45 p-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-zinc-900/5 sm:p-6 xl:col-span-3 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/20 dark:ring-white/10">
           <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 id="calendar-month-heading" className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
               {monthLabel}
@@ -901,7 +982,11 @@ export function Calendario() {
 
                   return (
                     <article key={item.id} className={cn('flex items-start justify-between gap-3 rounded-xl border p-4 ring-1', eventToneClasses[item.tone].card)}>
-                      <Link to={linkPath} className="geo-focus-ring min-w-0 flex-1 rounded-lg transition-opacity hover:opacity-80">
+                      <Link
+                        to={linkPath}
+                        state={{ calendarReturnTo: `/calendario?${searchParams.toString()}` }}
+                        className="geo-focus-ring min-w-0 flex-1 rounded-lg transition-opacity hover:opacity-80"
+                      >
                         <div className="mb-2 flex items-center gap-2">
                           <span aria-hidden="true" className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm', eventToneClasses[item.tone].icon)}>
                             <EventTypeIcon type={item.tipo} className="h-4 w-4" />

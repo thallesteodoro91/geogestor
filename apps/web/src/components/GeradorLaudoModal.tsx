@@ -16,23 +16,37 @@ interface GeradorLaudoModalProps {
   projetoNome: string;
 }
 
+const localToday = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+}).format(new Date());
+
+const initialFormData = (projetoNome: string): Partial<LaudoOptions> => ({
+  projetoNome,
+  clienteNome: '',
+  tipoLaudo: 'vistoria',
+  dataVistoria: localToday(),
+  tecnicoResponsavel: '',
+  observacoes: '',
+});
+
 export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudoModalProps) {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [formData, setFormData] = useState<Partial<LaudoOptions>>({
-    projetoNome: projetoNome,
-    clienteNome: '',
-    tipoLaudo: 'vistoria',
-    dataVistoria: new Date().toISOString().split('T')[0],
-    tecnicoResponsavel: 'Eng. Thalles',
-    observacoes: '',
-  });
+  const [formData, setFormData] = useState<Partial<LaudoOptions>>(() => initialFormData(projetoNome));
+
+  const closeModal = () => {
+    setFormData(initialFormData(projetoNome));
+    onClose();
+  };
 
   const handleChange = (field: keyof LaudoOptions, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleGenerate = async () => {
-    if (!formData.clienteNome || !formData.tecnicoResponsavel) {
+    if (!formData.clienteNome?.trim() || !formData.tecnicoResponsavel?.trim()) {
       toast.error('Preencha os campos obrigatórios (Cliente e Técnico).');
       return;
     }
@@ -40,8 +54,9 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
     if (isGenerating) return;
     setIsGenerating(true);
     try {
-      await gerarLaudoTecnico(formData as LaudoOptions);
-      onClose();
+      await gerarLaudoTecnico({ ...formData, projetoNome } as LaudoOptions);
+      toast.success('PDF gerado com sucesso.');
+      closeModal();
     } catch {
       toast.error('Não foi possível gerar o PDF. Revise os dados e tente novamente.');
     } finally {
@@ -52,8 +67,10 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
   return (
     <Modal
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={closeModal}
       title="Gerar Laudo Técnico"
+      initialFocusId="laudo-tipo"
+      closeDisabled={isGenerating}
     >
       <div className="space-y-4 p-1">
         
@@ -61,12 +78,15 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
           Projeto: <strong className="text-zinc-700 dark:text-zinc-300">{projetoNome}</strong>
         </div>
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="laudo-tipo" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Tipo de Laudo
             </label>
             <FormSelect
+              id="laudo-tipo"
+              name="tipoLaudo"
+              autoComplete="off"
               value={formData.tipoLaudo}
               onChange={(e) => handleChange('tipoLaudo', e.target.value)}
               className={cn(geoFieldClass, 'w-full px-3 py-2 text-sm')}
@@ -78,10 +98,14 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
             </FormSelect>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="laudo-data" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Data da Vistoria
             </label>
             <DatePickerField
+              id="laudo-data"
+              name="dataVistoria"
+              autoComplete="off"
+              required
               value={formData.dataVistoria}
               onChange={(e) => handleChange('dataVistoria', e.target.value)}
               className={cn(geoFieldClass, 'w-full px-3 py-2 text-sm')}
@@ -89,13 +113,18 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="laudo-cliente" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Cliente <span className="text-red-500">*</span>
             </label>
             <input
+              id="laudo-cliente"
+              name="clienteNome"
               type="text"
+              autoComplete="organization"
+              required
+              maxLength={200}
               placeholder="Nome do cliente/empresa"
               value={formData.clienteNome}
               onChange={(e) => handleChange('clienteNome', e.target.value)}
@@ -103,11 +132,16 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="laudo-tecnico" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Técnico Responsável <span className="text-red-500">*</span>
             </label>
             <input
+              id="laudo-tecnico"
+              name="tecnicoResponsavel"
               type="text"
+              autoComplete="name"
+              required
+              maxLength={200}
               value={formData.tecnicoResponsavel}
               onChange={(e) => handleChange('tecnicoResponsavel', e.target.value)}
               className={cn(geoFieldClass, 'w-full px-3 py-2 text-sm')}
@@ -116,11 +150,14 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          <label htmlFor="laudo-observacoes" className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Parecer Técnico / Observações
           </label>
           <textarea
+            id="laudo-observacoes"
+            name="observacoes"
             rows={5}
+            maxLength={5000}
             placeholder="Descreva as constatações feitas em campo..."
             value={formData.observacoes}
             onChange={(e) => handleChange('observacoes', e.target.value)}
@@ -131,7 +168,7 @@ export function GeradorLaudoModal({ isOpen, onClose, projetoNome }: GeradorLaudo
         <div className="flex justify-end gap-3 pt-4">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeModal}
             disabled={isGenerating}
             className={secondarySmallActionButtonClass}
           >

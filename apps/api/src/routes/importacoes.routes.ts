@@ -24,13 +24,18 @@ const ScalarCellSchema = z.union([
   z.null()
 ]);
 
-const FullImportSchema = z.object({
-  fileName: z.string().trim().min(1).max(260),
+const unsafeObjectKeys = new Set(['__proto__', 'constructor', 'prototype']);
+const safeSourceKey = (key: string) => !unsafeObjectKeys.has(key);
+
+const FullImportBody = z.object({
+  fileName: z.string().trim().min(1).max(260)
+    .refine(name => !/[\\/:]/u.test(name) && /\.(?:csv|xlsx)$/iu.test(name), 'Informe somente o nome de um arquivo CSV ou XLSX, sem caminhos.'),
   fileHash: z.string().regex(/^[a-f0-9]{64}$/i),
   sheetName: z.string().trim().min(1).max(100).optional(),
   headers: z.array(z.string().trim().min(1).max(300)).min(1).max(300),
   rows: z.array(z.record(z.string().max(300), ScalarCellSchema).refine(row => Object.keys(row).length <= 300, 'A linha excede 300 colunas.')).min(1).max(20_000),
   firstDataRow: z.number().int().min(2).max(1_000_000).optional(),
+  sourceRowNumbers: z.array(z.number().int().min(2).max(1_000_000)).max(20_000).optional(),
   mappingOverrides: z.record(z.string().max(300), z.string().max(100).nullable()).optional(),
   clientTimings: z.object({
     readingMs: z.number().nonnegative().max(3_600_000),
@@ -38,9 +43,24 @@ const FullImportSchema = z.object({
   }).strict().optional()
 }).strict();
 
-const FullConfirmationSchema = FullImportSchema.extend({
+function validateSourceRows(input: z.infer<typeof FullImportBody>, context: z.RefinementCtx) {
+  if (input.headers.some(header => !safeSourceKey(header))
+    || input.rows.some(row => Object.keys(row).some(key => !safeSourceKey(key)))
+    || Object.keys(input.mappingOverrides ?? {}).some(key => !safeSourceKey(key))) {
+    context.addIssue({ code: 'custom', path: ['headers'], message: 'A planilha contém um nome de coluna reservado. Renomeie a coluna e tente novamente.' });
+  }
+  const numbers = input.sourceRowNumbers;
+  if (!numbers) return;
+  if (numbers.length !== input.rows.length || numbers.some((number, index) => index > 0 && number <= numbers[index - 1])) {
+    context.addIssue({ code: 'custom', path: ['sourceRowNumbers'], message: 'Informe uma linha de origem crescente para cada registro.' });
+  }
+}
+
+const FullImportSchema = FullImportBody.superRefine(validateSourceRows);
+
+const FullConfirmationSchema = FullImportBody.extend({
   previewId: z.string().uuid()
-}).strict();
+}).strict().superRefine(validateSourceRows);
 
 function validationMessage(error: z.ZodError) {
   return { error: 'Revise o arquivo enviado.', issues: error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message })) };
@@ -62,6 +82,7 @@ function contentForDigest(input: z.infer<typeof FullImportSchema>) {
     headers: input.headers,
     rows: input.rows,
     firstDataRow: input.firstDataRow ?? 2,
+    sourceRowNumbers: input.sourceRowNumbers ?? null,
     mappingOverrides: input.mappingOverrides ?? {}
   };
 }
@@ -95,7 +116,7 @@ export async function importacoesRoutes(server: FastifyInstance) {
         entity: 'complete',
         digest,
         sourceName: parsed.data.fileName,
-        sourceHash: digest,
+        sourceHash: parsed.data.fileHash,
         totalRows: parsed.data.rows.length,
         preview: preview as unknown as Record<string, unknown>
       });
@@ -122,7 +143,7 @@ export async function importacoesRoutes(server: FastifyInstance) {
         rows: parsed.data.rows.length, columns: parsed.data.headers.length,
         reason: error, previewMs: Math.round(performance.now() - startedAt)
       });
-      throw error;
+      return importErrorReply(reply, error);
     }
   });
 

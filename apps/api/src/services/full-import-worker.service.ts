@@ -42,7 +42,7 @@ export class FullImportWorkerService {
       await updateImportProgress(run.importId, 'validating', 'Validando registros', 25);
       await updateImportProgress(run.importId, 'processing', 'Resolvendo associações', 40);
       await updateImportProgress(run.importId, 'processing', 'Gravando dados', 55);
-      const result = await commitFullSpreadsheetImport({ ...payload, fileHash: run.requestDigest });
+      const result = await commitFullSpreadsheetImport(payload);
       await updateImportProgress(run.importId, 'processing', 'Criando operações de pastas', 90);
       await updateImportProgress(run.importId, 'processing', 'Finalizando auditoria', 95);
 

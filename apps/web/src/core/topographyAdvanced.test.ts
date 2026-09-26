@@ -6,7 +6,10 @@ import {
   calcularAzimutePlano,
   calcularDistanciaElipsoidal,
   calcularPoligonoGeodesicoKarney,
+  decimaisParaGMS,
+  formatarCoordenadas,
   parseCoordinateText,
+  parseTopographyNumber,
 } from './topography';
 
 test('interpreta graus decimais, GMS, hemisférios brasileiros e contradições', () => {
@@ -61,4 +64,24 @@ test('distância quase antipodal usa GeographicLib sem falha de convergência', 
   assert.ok(result);
   assert.equal(result.method, 'Karney/GeographicLib');
   assert.ok(result.distance > 19_900_000 && result.distance < 20_100_000);
+});
+
+test('normaliza o arredondamento de segundos sem produzir 60″', () => {
+  const result = decimaisParaGMS(12 + 59 / 60 + 59.999 / 3600);
+  assert.deepEqual(result, { graus: 13, minutos: 0, segundos: 0 });
+});
+
+test('rejeita sinal positivo explícito contraditório e GMS fracionário inválido', () => {
+  assert.match(parseCoordinateText('+27 S', 'latitude').error ?? '', /sinal positivo.*contradiz/);
+  assert.match(parseCoordinateText('27,5° 30\' S', 'latitude').error ?? '', /inteiros/);
+  assert.match(parseCoordinateText('27° 30,5\' S', 'latitude').error ?? '', /inteiros/);
+});
+
+test('parser numérico topográfico aceita decimal localizado sem aceitar sintaxes implícitas', () => {
+  assert.equal(parseTopographyNumber('-27,5945'), -27.5945);
+  assert.equal(parseTopographyNumber('+27.5'), 27.5);
+  assert.equal(parseTopographyNumber('1e2'), null);
+  assert.equal(parseTopographyNumber('0x10'), null);
+  assert.equal(Object.is(parseTopographyNumber('-0'), -0), true);
+  assert.match(formatarCoordenadas(-0, -0), /S.*W/);
 });

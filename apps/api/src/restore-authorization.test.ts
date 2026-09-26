@@ -10,11 +10,16 @@ test('autorização temporária aceita somente o bundle selecionado e é consumi
   const selected = path.resolve(process.cwd(), 'scratch', 'authorized-bundle');
   const authorization = RestoreAuthorizationService.issueForTests(selected, { nonce: 'nonce-autorizado' });
   assert.equal(RestoreAuthorizationService.verify({ bundlePath: selected, authorization }).bundlePath, selected);
-  assert.throws(() => RestoreAuthorizationService.assertTested({ bundlePath: selected, authorization }), /teste isolado/);
+  assert.throws(() => RestoreAuthorizationService.assertTested({ bundlePath: selected, authorization }, 'a'.repeat(64)), /teste isolado/);
   assert.throws(() => RestoreAuthorizationService.verify({ bundlePath: `${selected}-outro`, authorization }), /não corresponde/);
   assert.throws(() => RestoreAuthorizationService.verify({ bundlePath: path.join(selected, '..', 'fora-da-raiz'), authorization }), /não corresponde/);
-  RestoreAuthorizationService.markTested({ bundlePath: selected, authorization });
-  assert.equal(RestoreAuthorizationService.assertTested({ bundlePath: selected, authorization }).bundlePath, selected);
+  const testedFingerprint = 'a'.repeat(64);
+  RestoreAuthorizationService.markTested({ bundlePath: selected, authorization }, testedFingerprint);
+  assert.equal(RestoreAuthorizationService.assertTested({ bundlePath: selected, authorization }, testedFingerprint).bundlePath, selected);
+  assert.throws(
+    () => RestoreAuthorizationService.assertTested({ bundlePath: selected, authorization }, 'b'.repeat(64)),
+    /backup mudou.*teste isolado/i
+  );
   RestoreAuthorizationService.verify({ bundlePath: selected, authorization }, { consume: true });
   assert.throws(() => RestoreAuthorizationService.verify({ bundlePath: selected, authorization }), /já foi utilizada/);
 });

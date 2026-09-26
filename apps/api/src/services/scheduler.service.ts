@@ -78,6 +78,7 @@ export class SchedulerService {
 
   private static async runSync() {
     if (this.syncRunning) return;
+    if (!await GoogleCalendarService.isSyncEnabled()) return;
     this.syncRunning = true;
     try {
       console.log('[SchedulerService] Disparando Sincronização com Google Calendar...');
@@ -261,7 +262,7 @@ export class SchedulerService {
         await this.runSync();
       } catch (err) {
         const message = getErrorMessage(err);
-        if (message.includes('sem token') || message.includes('não autenticado')) {
+        if (message.includes('sem token') || message.includes('não autenticado') || message.includes('desativada')) {
           console.log('[SchedulerService] Sync Ignorado: Google Agenda não está configurado ou autenticado.');
         } else {
           console.error('[SchedulerService] Erro no Sync do Google Calendar:', message);

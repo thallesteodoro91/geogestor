@@ -1,0 +1,11 @@
+# Datum: SIRGAS 2000
+# SRC: EPSG:31982
+# SRC de origem: EPSG:31982
+# Fuso: 22
+# Hemisfério: S
+# Unidade: m
+# Gerado em: 2026-09-13T20:39:38.077Z
+Vertice;X_Este_m;Y_Norte_m;Codigo;Descricao;Altitude_m;Precisao;Observacoes
+V1;742000;6945000;M-01;Marco inicial;-2.5;0,02 m;QA sintético
+V2;742010;6945000;M-02;;0;;
+V3;742010;6945010;M-03;;12.345;;

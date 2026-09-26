@@ -10,7 +10,7 @@ interface PopoverSurfaceProps {
   minWidth?: number;
   maxWidth?: number;
   maxHeight?: number;
-  role?: 'dialog' | 'listbox';
+  role?: 'dialog' | 'listbox' | 'menu';
   id?: string;
   ariaLabel?: string;
 }

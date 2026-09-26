@@ -82,6 +82,7 @@ export function Propriedades() {
   const location = useLocation();
   const navigate = useNavigate();
   const handledRouteActionRef = useRef(false);
+  const routeState = location.state as { createForClienteId?: string; clientName?: string; editPropertyId?: string; clientFilterId?: string } | null;
   const [search, setSearch] = useState('');
   const [clientFilter, setClientFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -104,6 +105,12 @@ export function Propriedades() {
     queryKey: ['properties', page, search, clientFilter],
     queryFn: () => apiClient.get<PropertyResponse>('/api/dados-operacionais/propriedades?' + params.toString()),
     placeholderData: (previous) => previous
+  });
+  const requestedPropertyQuery = useQuery({
+    queryKey: ['property', routeState?.editPropertyId],
+    queryFn: () => apiClient.get<Property>(`/api/dados-operacionais/propriedades/${routeState?.editPropertyId}`),
+    enabled: Boolean(routeState?.editPropertyId),
+    retry: false
   });
   const firstClientQuery = useQuery<Client[]>({
     queryKey: ['property-client-first-use'],
@@ -130,6 +137,7 @@ export function Propriedades() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['properties'] }),
+        ...(editing ? [queryClient.invalidateQueries({ queryKey: ['property', editing.id] })] : []),
         queryClient.invalidateQueries({ queryKey: ['budget-options'] }),
         queryClient.invalidateQueries({ queryKey: ['remote-options'] })
       ]);
@@ -183,8 +191,7 @@ export function Propriedades() {
 
   useEffect(() => {
     if (handledRouteActionRef.current) return;
-    const routeState = location.state as { createForClienteId?: string; clientName?: string; editPropertyId?: string; clientFilterId?: string } | null;
-    if (!routeState || propertiesQuery.isLoading) return;
+    if (!routeState) return;
     if (routeState.createForClienteId) {
       handledRouteActionRef.current = true;
       const next = { ...emptyForm, clienteId: routeState.createForClienteId };
@@ -200,14 +207,16 @@ export function Propriedades() {
       return;
     }
     if (routeState.editPropertyId) {
-      if (routeState.clientFilterId && clientFilter !== routeState.clientFilterId) {
-        window.setTimeout(() => setClientFilter(routeState.clientFilterId || ''), 0);
+      if (requestedPropertyQuery.isLoading) return;
+      handledRouteActionRef.current = true;
+      if (requestedPropertyQuery.isError || !requestedPropertyQuery.data) {
+        toast.error('Não foi possível abrir a propriedade solicitada. Ela pode ter sido excluída.');
+        navigate(location.pathname, { replace: true, state: {} });
         return;
       }
-      const property = propertiesQuery.data?.items.find((item) => item.id === routeState.editPropertyId);
-      if (!property) return;
-      handledRouteActionRef.current = true;
+      const property = requestedPropertyQuery.data;
       window.setTimeout(() => {
+        if (routeState.clientFilterId) setClientFilter(routeState.clientFilterId);
         const next = propertyToForm(property);
         setEditing(property);
         setForm(next);
@@ -220,7 +229,7 @@ export function Propriedades() {
         navigate(location.pathname, { replace: true, state: {} });
       }, 0);
     }
-  }, [clientFilter, location.pathname, location.state, navigate, propertiesQuery.data?.items, propertiesQuery.isLoading]);
+  }, [location.pathname, navigate, requestedPropertyQuery.data, requestedPropertyQuery.isError, requestedPropertyQuery.isLoading, routeState]);
 
   const update = (field: keyof PropertyFormState, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -319,7 +328,7 @@ export function Propriedades() {
           <FormSection title="Localização e situação" description="Use município como localização principal; coordenadas devem ser informadas em conjunto." className="bg-white/70 dark:border-zinc-700/80 dark:bg-zinc-800/35">
             <div className="grid gap-4 sm:grid-cols-2">
               <FormField htmlFor="property-municipality" label="Município" required error={fieldErrors.municipio}><input id="property-municipality" name="municipio" required autoComplete="address-level2" value={form.municipio} onChange={(event) => update('municipio', event.target.value)} className={fieldClass} aria-invalid={Boolean(fieldErrors.municipio)} aria-describedby={fieldErrors.municipio ? 'property-municipality-error' : undefined} /></FormField>
-              <FormField htmlFor="property-state" label="UF" required error={fieldErrors.uf}><input id="property-state" name="uf" required maxLength={2} autoComplete="address-level1" value={form.uf} onChange={(event) => update('uf', event.target.value.toUpperCase())} className={fieldClass} aria-invalid={Boolean(fieldErrors.uf)} /></FormField>
+              <FormField htmlFor="property-state" label="UF" required error={fieldErrors.uf}><input id="property-state" name="uf" required minLength={2} maxLength={2} pattern="[A-Za-z]{2}" autoComplete="address-level1" value={form.uf} onChange={(event) => update('uf', event.target.value.toUpperCase())} className={fieldClass} aria-invalid={Boolean(fieldErrors.uf)} aria-describedby={fieldErrors.uf ? 'property-state-error' : undefined} /></FormField>
               <FormField htmlFor="property-city" label="Localidade ou distrito" error={fieldErrors.cidade}><input id="property-city" name="cidade" autoComplete="address-line2" value={form.cidade} onChange={(event) => update('cidade', event.target.value)} className={fieldClass} /></FormField>
               <FormField htmlFor="property-status" label="Situação do imóvel" error={fieldErrors.situacaoImovel}><FormSelect id="property-status" name="situacaoImovel" value={form.situacaoImovel} onChange={(event) => update('situacaoImovel', event.target.value)}><option value="">Não informada</option><option>Regular</option><option>Em regularização</option><option>Pendente de documentação</option><option>Em análise</option><option>Outro</option></FormSelect></FormField>
               <FormField htmlFor="property-area-ha" label="Área (ha)" error={fieldErrors.areaHa}><NumericInput id="property-area-ha" inputMode="decimal" min="0" step="any" name="areaHa" autoComplete="off" value={form.areaHa} onChange={(event) => update('areaHa', event.target.value)} className="tabular-nums" aria-invalid={Boolean(fieldErrors.areaHa)} aria-describedby={fieldErrors.areaHa ? 'property-area-ha-error' : undefined} /></FormField>

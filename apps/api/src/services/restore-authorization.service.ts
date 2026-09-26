@@ -23,7 +23,7 @@ function safeEqual(left: string, right: string) {
 
 export class RestoreAuthorizationService {
   private static consumedNonces = new Set<string>();
-  private static testedNonces = new Set<string>();
+  private static testedNonces = new Map<string, string>();
 
   static verify(input: { bundlePath: string; authorization: string }, options: { consume?: boolean; now?: number } = {}) {
     const [encoded, suppliedSignature, ...extra] = input.authorization.split('.');
@@ -65,17 +65,21 @@ export class RestoreAuthorizationService {
     return `${encoded}.${signature}`;
   }
 
-  static markTested(input: { bundlePath: string; authorization: string }) {
+  static markTested(input: { bundlePath: string; authorization: string }, fingerprint: string) {
     const verified = this.verify(input);
-    this.testedNonces.add(verified.nonce);
-    if (this.testedNonces.size > 1_000) this.testedNonces.delete(this.testedNonces.values().next().value!);
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('A identidade do backup testado é inválida.');
+    this.testedNonces.set(verified.nonce, fingerprint);
+    if (this.testedNonces.size > 1_000) this.testedNonces.delete(this.testedNonces.keys().next().value!);
     return verified;
   }
 
-  static assertTested(input: { bundlePath: string; authorization: string }) {
+  static assertTested(input: { bundlePath: string; authorization: string }, fingerprint: string) {
     const verified = this.verify(input);
     if (!this.testedNonces.has(verified.nonce)) {
       throw new Error('Execute e aprove o teste isolado antes de iniciar a restauração real.');
+    }
+    if (this.testedNonces.get(verified.nonce) !== fingerprint) {
+      throw new Error('O backup mudou depois do teste isolado. Selecione e teste o backup novamente.');
     }
     return verified;
   }

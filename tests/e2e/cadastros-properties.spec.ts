@@ -1,5 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eDataDirectory } from './support/runtime';
 
 const PASSWORD = 'GeoGestor-E2E-2026';
 const SERVICE_NAME = 'Serviço E2E integrado';
@@ -8,6 +12,8 @@ const EXPENSE_NAME = 'Categoria E2E integrada';
 const CLIENT_NAME = 'Cliente propriedade E2E';
 const PROPERTY_NAME = 'Fazenda Integração E2E';
 const UPDATED_PROPERTY_NAME = 'Fazenda Integração E2E atualizada';
+const requireFromApi = createRequire(path.resolve(process.cwd(), 'apps', 'api', 'package.json'));
+const { createClient } = requireFromApi('@libsql/client') as typeof import('@libsql/client');
 
 async function unlock(page: Page) {
   await page.goto('/');
@@ -17,7 +23,7 @@ async function unlock(page: Page) {
   await expect(setupHeading.or(unlockHeading).or(dashboardHeading)).toBeVisible();
   if (await setupHeading.isVisible()) {
     await page.getByLabel('Nome da empresa').fill('SkyGeo Cadastros E2E');
-    await page.getByLabel('Pasta de dados').fill('~/GeoGestor-Cadastros-E2E');
+    await page.getByLabel('Pasta de dados').fill(e2eDataDirectory());
     await page.getByLabel('Nome do administrador').fill('Thalles Cadastros E2E');
     await page.getByLabel('E-mail').fill('cadastros.e2e@example.test');
     await page.getByLabel('Senha local').fill(PASSWORD);
@@ -67,7 +73,50 @@ async function expectModalPortalRemoved(page: Page) {
   await expect(page.locator('[role="dialog"], [role="alertdialog"]')).toHaveCount(0);
 }
 
-test.describe.serial('cadastros auxiliares e propriedades', () => {
+async function ensureCatalogFixture(page: Page) {
+  await navigateInApp(page, '/cadastros?aba=servicos&status=ativos');
+  await expect(page.getByRole('heading', { name: 'Cadastros Auxiliares' })).toBeVisible();
+  if (!await page.getByRole('heading', { name: UPDATED_SERVICE_NAME }).isVisible()) {
+    await page.getByRole('button', { name: 'Novo tipo de serviço' }).click();
+    await page.getByLabel('Nome do serviço').fill(UPDATED_SERVICE_NAME);
+    await page.getByLabel('Valor sugerido (R$)').fill('1250.00');
+    await page.getByRole('button', { name: 'Criar cadastro' }).click();
+    await expect(page.getByRole('heading', { name: UPDATED_SERVICE_NAME })).toBeVisible();
+  }
+  await page.getByRole('tab', { name: /Categorias de despesa/ }).click();
+  await page.getByRole('button', { name: 'todos', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'todos', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  if (!await page.getByRole('heading', { name: EXPENSE_NAME }).isVisible()) {
+    await page.getByRole('button', { name: 'Nova categoria de despesa' }).click();
+    await page.getByLabel('Categoria da despesa').click();
+    await page.getByRole('option', { name: 'Outra categoria…' }).click();
+    await page.getByLabel('Nome da categoria').fill(EXPENSE_NAME);
+    await page.getByLabel('Descrição').fill('Categoria sintética para teste isolado.');
+    await page.getByRole('button', { name: 'Criar cadastro' }).click();
+    await expect(page.getByRole('heading', { name: EXPENSE_NAME })).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'ativos', exact: true }).click();
+}
+
+async function ensurePropertyFixture() {
+  const e2eRoot = process.env.GEOGESTOR_E2E_ROOT;
+  if (!e2eRoot) throw new Error('GEOGESTOR_E2E_ROOT ausente.');
+  const database = createClient({ url: `file:${path.join(e2eRoot, 'geogestor.db')}` });
+  try {
+    const existing = await database.execute({ sql: 'select id from propriedades where nome = ? and deleted_at is null limit 1', args: [UPDATED_PROPERTY_NAME] });
+    if (existing.rows.length > 0) return;
+    const client = await database.execute({ sql: 'select id from clientes where nome = ? and deleted_at is null limit 1', args: [CLIENT_NAME] });
+    const clientId = client.rows.length > 0 ? String(client.rows[0].id) : crypto.randomUUID();
+    if (client.rows.length === 0) {
+      await database.execute({ sql: `insert into clientes (id, nome, tipo_pessoa, cpf, documento, documento_normalizado, situacao) values (?, ?, 'PF', '93541134780', '93541134780', '93541134780', 'Ativo')`, args: [clientId, CLIENT_NAME] });
+    }
+    await database.execute({ sql: `insert into propriedades (id, cliente_id, nome, matricula, municipio, uf, area_ha) values (?, ?, ?, 'E2E-12345', 'Florianópolis', 'SC', 12.5)`, args: [crypto.randomUUID(), clientId, UPDATED_PROPERTY_NAME] });
+  } finally {
+    database.close();
+  }
+}
+
+test.describe('cadastros auxiliares e propriedades', () => {
   test.setTimeout(90_000);
   test.beforeEach(async ({ page }) => unlock(page));
 
@@ -156,11 +205,13 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     await expect(page).toHaveURL(/busca=integrado/);
     await page.reload();
     const unlockHeading = page.getByRole('heading', { name: 'Desbloquear GeoGestor' });
+    const serviceSearch = page.getByLabel('Buscar tipos de serviço');
+    await expect(unlockHeading.or(serviceSearch)).toBeVisible();
     if (await unlockHeading.isVisible()) {
       await page.getByLabel('Senha local').fill(PASSWORD);
       await page.getByRole('button', { name: 'Desbloquear' }).click();
     }
-    await expect(page.getByLabel('Buscar tipos de serviço')).toHaveValue('integrado');
+    await expect(serviceSearch).toHaveValue('integrado');
   });
 
   test('erro de persistência mantém o modal e o rascunho abertos', async ({ page }) => {
@@ -188,6 +239,7 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
   });
 
   test('falha ao inativar permanece no diálogo, preserva o registro e permite tentar novamente', async ({ page }) => {
+    await ensureCatalogFixture(page);
     let attempts = 0;
     await page.route('**/api/dados-operacionais/configuracoes-operacionais', async (route) => {
       if (route.request().method() !== 'PUT') return route.continue();
@@ -239,6 +291,7 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
       document.documentElement.classList.add('dark');
     });
     await expect(page.getByRole('heading', { name: 'Cadastros Auxiliares' })).toBeVisible();
+    await expect.poll(() => page.locator('#catalog-tab-services').evaluate((element) => getComputedStyle(element).color)).toBe('rgb(199, 210, 254)');
     await expectNoBlockingA11yViolations(page);
   });
 
@@ -272,6 +325,7 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
     await expect(propertyDialog.locator('#property-client')).toHaveValue(CLIENT_NAME);
     await page.getByLabel('Matrícula').fill('E2E-12345');
     await page.getByLabel('Município').fill('Florianópolis');
+    await page.getByLabel('UF').fill('SC');
     await page.getByLabel('Área (ha)').fill('12.5');
 
     await page.route('**/api/dados-operacionais/propriedades', async (route) => {
@@ -356,6 +410,8 @@ test.describe.serial('cadastros auxiliares e propriedades', () => {
   });
 
   test('axe cobre todos os estados de modal em temas claro e escuro e o foco retorna ao acionador', async ({ page }) => {
+    await ensureCatalogFixture(page);
+    await ensurePropertyFixture();
     await navigateInApp(page, '/cadastros?aba=servicos&status=ativos');
     const newServiceButton = page.getByRole('button', { name: 'Novo tipo de serviço' });
     await newServiceButton.click();

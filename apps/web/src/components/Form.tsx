@@ -232,6 +232,7 @@ interface SwitchFieldProps {
   id: string;
   name: string;
   label: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -246,6 +247,7 @@ export function SwitchField({
   id,
   name,
   label,
+  description,
   checked,
   onChange,
   disabled = false,
@@ -297,6 +299,7 @@ export function SwitchField({
       )}
       <span className="min-w-0 text-sm font-semibold leading-snug">
         {label}
+        {description && <span className="mt-1 block text-xs font-normal leading-5 text-zinc-500 dark:text-zinc-400">{description}</span>}
         {disabled && disabledHint && <span className="mt-0.5 block text-xs font-medium text-zinc-500 dark:text-zinc-400">{disabledHint}</span>}
       </span>
     </label>

@@ -50,6 +50,7 @@ import {
 } from '../utils/localNavigationStyles';
 import { filterNativeSelectClass } from '../utils/filterStyles';
 import { cn } from '../utils/cn';
+import { saoPauloDateKey } from '../utils/localDate';
 import {
   StrategicPlanningFormModal,
   type PlanningDialog,
@@ -94,6 +95,16 @@ const endpointByKind: Record<EntityKind, string> = {
   risk: 'riscos',
   decision: 'decisoes'
 };
+
+const validFilterValues: Partial<Record<PlanningFilterKey, Set<string>>> = {
+  status: new Set(['rascunho', 'ativo', 'em_revisao', 'encerrado', 'nao_iniciado', 'em_andamento', 'em_risco', 'concluido', 'cancelado', 'planejada', 'bloqueada', 'concluida', 'cancelada', 'no_rumo', 'atencao', 'critico', 'aberto', 'mitigando', 'resolvido', 'aceito', 'pendente']),
+  prioridade: new Set(['baixa', 'media', 'alta', 'critica']),
+  prazo: new Set(['vencido', 'proximos_30', 'futuro']),
+  risco: new Set(['baixo', 'medio', 'alto', 'critico']),
+  dados: new Set(['desatualizado', 'indisponivel']),
+  ordem: new Set(['manual', 'prazo', 'prioridade', 'progresso', 'atualizacao'])
+};
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const statusLabels: Record<string, string> = {
   rascunho: 'Rascunho',
@@ -321,6 +332,20 @@ export function Planejamento() {
   const [announcement, setAnnouncement] = useState('');
   const [actionError, setActionError] = useState('');
   const tabListRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    if ((requestedTab && requestedTab !== activeTab) || next.getAll('aba').length > 1) next.set('aba', activeTab);
+    planningFilterKeys.forEach((key) => {
+      const values = next.getAll(key);
+      const value = values[0]?.trim() || '';
+      const allowed = validFilterValues[key];
+      const invalid = key === 'objetivo' ? Boolean(value && !uuidPattern.test(value)) : Boolean(value && allowed && !allowed.has(value));
+      if (invalid || !value) next.delete(key);
+      else if (values.length > 1 || value !== values[0]) next.set(key, value);
+    });
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [activeTab, requestedTab, searchParams, setSearchParams]);
 
   const cyclesQuery = useQuery<StrategicCycle[]>({
     queryKey: ['strategic-cycles'],
@@ -565,7 +590,7 @@ export function Planejamento() {
           </section>
         ) : !cycles.length ? (
           <EmptyPlanning onCreate={() => setDialog({ kind: 'cycle' })} />
-        ) : snapshotQuery.isLoading || !snapshot ? (
+        ) : snapshotQuery.isLoading ? (
           <section aria-label="Carregando ciclo estratégico" className="space-y-4">
             <div className="h-32 animate-pulse rounded-lg bg-zinc-100 motion-reduce:animate-none dark:bg-zinc-800" />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -576,6 +601,12 @@ export function Planejamento() {
           <section className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100" role="alert">
             <h2 className="font-semibold">O ciclo não pôde ser carregado</h2>
             <p className="mt-2 text-sm">Os dados não foram substituídos por valores padrão.</p>
+            <button type="button" onClick={() => snapshotQuery.refetch()} className={cn(secondarySmallActionButtonClass, 'mt-4')}>Tentar novamente</button>
+          </section>
+        ) : !snapshot ? (
+          <section className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100" role="alert">
+            <h2 className="font-semibold">O ciclo não retornou dados válidos</h2>
+            <p className="mt-2 text-sm">Recarregue o ciclo sem criar valores substitutos.</p>
             <button type="button" onClick={() => snapshotQuery.refetch()} className={cn(secondarySmallActionButtonClass, 'mt-4')}>Tentar novamente</button>
           </section>
         ) : (
@@ -628,6 +659,7 @@ export function Planejamento() {
         cycleId={cycleId}
         snapshot={snapshot}
         options={optionsQuery.data}
+        optionsError={optionsQuery.isError}
         pending={saveMutation.isPending}
         onClose={() => setDialog(null)}
         onSubmit={(payload) => {
@@ -725,7 +757,7 @@ function OverviewPanel({
           title="Iniciativas atrasadas"
           value={String(snapshot.resumo.iniciativasAtrasadas)}
           description="Iniciativas abertas cujo prazo já terminou."
-          meta={`Fonte: iniciativas do ciclo · referência ${formatDate(new Date().toISOString())}`}
+          meta={`Fonte: iniciativas do ciclo · referência ${formatDate(saoPauloDateKey())}`}
           icon={CalendarCheck}
           tone={snapshot.resumo.iniciativasAtrasadas ? 'danger' : 'success'}
         />
@@ -876,7 +908,7 @@ function ObjectivesPanel({
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
-  const filteredObjectives = filterAndSortObjectives(snapshot.objetivos, snapshot.resultadosChave, filters, new Date().toISOString().slice(0, 10));
+  const filteredObjectives = filterAndSortObjectives(snapshot.objetivos, snapshot.resultadosChave, filters, saoPauloDateKey());
   const filtersActive = Object.values(filters).some(Boolean);
   const visiblePillars = filtersActive
     ? snapshot.pilares.filter((pillar) => filteredObjectives.some((objective) => objective.pilarId === pillar.id))
@@ -1103,7 +1135,7 @@ function InitiativesPanel({
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
   const objectiveName = (id: string) => snapshot.objetivos.find((objective) => objective.id === id)?.titulo || 'Objetivo não encontrado';
-  const filteredInitiatives = filterAndSortInitiatives(snapshot.iniciativas, filters, new Date().toISOString().slice(0, 10));
+  const filteredInitiatives = filterAndSortInitiatives(snapshot.iniciativas, filters, saoPauloDateKey());
   const filtersActive = Object.values(filters).some(Boolean);
   return (
     <section id="planning-panel-iniciativas" role="tabpanel" aria-labelledby="planning-tab-iniciativas" className="space-y-6">
@@ -1215,7 +1247,7 @@ function ReviewsPanel({
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = saoPauloDateKey();
   const decisions = filterDecisions(snapshot.decisoes, filters, today);
   const risks = filterRisks(snapshot.riscos, filters);
   const checkins = filterCheckins(snapshot.checkins, filters);

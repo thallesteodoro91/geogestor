@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { eq, sql, isNull, and } from 'drizzle-orm';
+import { eq, sql, isNull, and, desc, gte, like, lte, or, type SQL } from 'drizzle-orm';
 import crypto from 'crypto';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
@@ -9,11 +9,14 @@ import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { normalizeBudgetStatus } from '@geogestor/contracts';
 import { activeDocumentWhere } from '../services/document-integrity.service';
-import { isoDateSchema } from './financeiro.schemas';
+import { centsSchema, entityIdSchema, isoDateSchema } from './financeiro.schemas';
 import { normalizeExpenseCategoryCode } from '../services/managerial-finance-domain.service';
 import { registerFinanceiroOrcamentoRoutes } from './financeiro-orcamentos.routes';
 import { registerFinanceiroRecebimentoRoutes } from './financeiro-recebimentos.routes';
 import { registerFinanceiroOperacionalRoutes } from './financeiro-operacional.routes';
+import { loadFinanceOverviewFromSql } from '../services/finance-overview-query.service';
+import { cachedFinanceOverview } from '../services/finance-overview-cache.service';
+import { PerformanceMetricsService } from '../services/performance-metrics.service';
 
 const formatCurrency = (valueInCents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((valueInCents || 0) / 100);
@@ -29,9 +32,107 @@ export async function financeiroRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
   await registerFinanceiroOrcamentoRoutes(server);
   await registerFinanceiroRecebimentoRoutes(server);
+
+  const overviewQuerySchema = z.object({
+    inicio: isoDateSchema.optional(),
+    fim: isoDateSchema.optional(),
+    clienteId: entityIdSchema.optional(),
+    categoria: z.string().max(120).optional(),
+    tipoCusto: z.string().max(120).optional(),
+    centroCusto: z.string().max(120).optional()
+  }).strict().refine((value) => !value.inicio || !value.fim || value.inicio <= value.fim, {
+    message: 'A data inicial não pode ser posterior à data final.',
+    path: ['fim']
+  });
+
+  zServer.get('/overview', { schema: { querystring: overviewQuerySchema } }, async (request) => {
+    return cachedFinanceOverview(JSON.stringify(request.query), () => loadFinanceOverviewFromSql({
+      dataInicio: request.query.inicio,
+      dataFim: request.query.fim,
+      clienteId: request.query.clienteId,
+      categoria: request.query.categoria,
+      tipoCusto: request.query.tipoCusto,
+      centroCusto: request.query.centroCusto
+    }));
+  });
   
-  server.get('/despesas', async (request, reply) => {
-    const data = await db
+  const expenseListSchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(25),
+    mode: z.enum(['legacy', 'page']).default('legacy'),
+    selectedId: entityIdSchema.optional(),
+    projetoId: entityIdSchema.optional(),
+    q: z.string().trim().max(160).optional(),
+    categoria: z.string().max(120).optional(),
+    subcategoria: z.string().max(120).optional(),
+    status: z.string().max(80).optional(),
+    tipoCusto: z.string().max(120).optional(),
+    centroCusto: z.string().max(120).optional(),
+    reembolsavel: z.enum(['sim', 'nao']).optional(),
+    dataInicio: isoDateSchema.optional(),
+    dataFim: isoDateSchema.optional()
+  }).strict().refine((value) => !value.dataInicio || !value.dataFim || value.dataInicio <= value.dataFim, {
+    message: 'A data inicial não pode ser posterior à data final.',
+    path: ['dataFim']
+  });
+
+  zServer.get('/despesas', { schema: { querystring: expenseListSchema } }, async (request, reply) => {
+    const query = request.query;
+    if (query.mode === 'legacy') {
+      reply.header('deprecation', 'true');
+      PerformanceMetricsService.recordLegacyContract('GET /api/financeiro/despesas');
+    }
+    const conditions: SQL[] = [isNull(schema.despesas.deletedAt)];
+    if (query.selectedId) {
+      conditions.push(eq(schema.despesas.id, query.selectedId));
+    } else if (query.q) {
+      const term = `%${query.q}%`;
+      const searchCondition = or(
+        like(schema.despesas.descricao, term),
+        like(schema.despesas.fornecedor, term),
+        like(schema.despesas.numeroDocumento, term),
+        like(schema.despesas.subcategoria, term),
+        like(schema.despesas.observacoes, term),
+        like(schema.projetos.nome, term),
+        like(schema.clientes.nome, term)
+      );
+      if (searchCondition) conditions.push(searchCondition);
+    }
+    if (!query.selectedId) {
+      if (query.projetoId) conditions.push(eq(schema.despesas.projetoId, query.projetoId));
+      if (query.categoria) conditions.push(eq(schema.despesas.categoria, query.categoria));
+      if (query.subcategoria) conditions.push(eq(schema.despesas.subcategoria, query.subcategoria));
+      if (query.status === 'Pago') {
+        conditions.push(and(
+          eq(schema.despesas.status, 'Pago'),
+          isNull(schema.despesas.canceladaEm),
+          isNull(schema.despesas.estornadaEm)
+        )!);
+      } else if (query.status === 'Atrasado') {
+        conditions.push(and(
+          sql`coalesce(${schema.despesas.status}, 'Pendente') <> 'Pago'`,
+          isNull(schema.despesas.canceladaEm),
+          isNull(schema.despesas.estornadaEm),
+          sql`${schema.despesas.data} < date('now', 'localtime')`
+        )!);
+      } else if (query.status === 'Pendente') {
+        conditions.push(and(
+          sql`coalesce(${schema.despesas.status}, 'Pendente') <> 'Pago'`,
+          isNull(schema.despesas.canceladaEm),
+          isNull(schema.despesas.estornadaEm),
+          sql`${schema.despesas.data} >= date('now', 'localtime')`
+        )!);
+      } else if (query.status) {
+        conditions.push(eq(schema.despesas.status, query.status));
+      }
+      if (query.tipoCusto) conditions.push(eq(schema.despesas.tipoCusto, query.tipoCusto));
+      if (query.centroCusto) conditions.push(eq(schema.despesas.centroCusto, query.centroCusto));
+      if (query.reembolsavel) conditions.push(eq(schema.despesas.reembolsavel, query.reembolsavel === 'sim'));
+      if (query.dataInicio) conditions.push(gte(schema.despesas.data, query.dataInicio));
+      if (query.dataFim) conditions.push(lte(schema.despesas.data, query.dataFim));
+    }
+
+    const baseQuery = () => db
       .select({
         id: schema.despesas.id,
         clienteId: sql<string | null>`coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId})`,
@@ -47,13 +148,20 @@ export async function financeiroRoutes(server: FastifyInstance) {
         dataCompetencia: schema.despesas.dataCompetencia,
         dataPagamento: schema.despesas.dataPagamento,
         categoria: schema.despesas.categoria,
+        subcategoria: schema.despesas.subcategoria,
         categoriaCodigo: schema.despesas.categoriaCodigo,
         tipoCusto: schema.despesas.tipoCusto,
         centroCusto: schema.despesas.centroCusto,
         reembolsavel: schema.despesas.reembolsavel,
         comprovanteDocumentoId: schema.despesas.comprovanteDocumentoId,
         observacoes: schema.despesas.observacoes,
-        status: schema.despesas.status,
+        status: sql<string>`case
+          when ${schema.despesas.canceladaEm} is not null then 'Cancelado'
+          when ${schema.despesas.estornadaEm} is not null then 'Estornado'
+          when lower(coalesce(${schema.despesas.status}, 'Pendente')) = 'pago' then 'Pago'
+          when ${schema.despesas.data} < date('now', 'localtime') then 'Atrasado'
+          else 'Pendente'
+        end`,
         formaPagamento: schema.despesas.formaPagamento,
         canceladaEm: schema.despesas.canceladaEm,
         motivoCancelamento: schema.despesas.motivoCancelamento,
@@ -65,32 +173,67 @@ export async function financeiroRoutes(server: FastifyInstance) {
       .from(schema.despesas)
       .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
       .leftJoin(schema.clientes, sql`${schema.clientes.id} = coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId})`)
-      .where(isNull(schema.despesas.deletedAt));
-    return data;
+      .where(and(...conditions));
+
+    if (query.mode === 'legacy') return baseQuery().orderBy(desc(schema.despesas.data), desc(schema.despesas.createdAt));
+
+    const offset = (query.page - 1) * query.limit;
+    const [items, totals] = await Promise.all([
+      baseQuery().orderBy(desc(schema.despesas.data), desc(schema.despesas.createdAt)).limit(query.limit).offset(offset),
+      db.select({
+        total: sql<number>`count(*)`,
+        totalPrevisto: sql<number>`coalesce(sum(case when ${schema.despesas.canceladaEm} is null and ${schema.despesas.estornadaEm} is null then ${schema.despesas.valor} else 0 end), 0)`,
+        totalPago: sql<number>`coalesce(sum(case when ${schema.despesas.canceladaEm} is null and ${schema.despesas.estornadaEm} is null and ${schema.despesas.status} = 'Pago' then ${schema.despesas.valor} else 0 end), 0)`,
+        totalPendente: sql<number>`coalesce(sum(case when ${schema.despesas.canceladaEm} is null and ${schema.despesas.estornadaEm} is null and ${schema.despesas.status} <> 'Pago' and ${schema.despesas.data} >= date('now', 'localtime') then ${schema.despesas.valor} else 0 end), 0)`,
+        totalAtrasado: sql<number>`coalesce(sum(case when ${schema.despesas.canceladaEm} is null and ${schema.despesas.estornadaEm} is null and ${schema.despesas.status} <> 'Pago' and ${schema.despesas.data} < date('now', 'localtime') then ${schema.despesas.valor} else 0 end), 0)`
+      }).from(schema.despesas)
+        .leftJoin(schema.projetos, eq(schema.despesas.projetoId, schema.projetos.id))
+        .leftJoin(schema.clientes, sql`${schema.clientes.id} = coalesce(${schema.despesas.clienteId}, ${schema.projetos.clienteId})`)
+        .where(and(...conditions))
+    ]);
+    const summary = totals[0] || { total: 0, totalPrevisto: 0, totalPago: 0, totalPendente: 0, totalAtrasado: 0 };
+    const total = Number(summary.total || 0);
+    return {
+      items,
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / query.limit)),
+      summary: {
+        totalPrevisto: Number(summary.totalPrevisto || 0),
+        totalPago: Number(summary.totalPago || 0),
+        totalPendente: Number(summary.totalPendente || 0),
+        totalAtrasado: Number(summary.totalAtrasado || 0)
+      }
+    };
   });
 
   server.post('/despesas', async (request, reply) => {
     const bodySchema = z.object({
-      clienteId: z.string().nullable().optional(),
-      projetoId: z.string().nullable().optional(),
-      viagemId: z.string().uuid().nullable().optional(),
-      descricao: z.string().min(1, 'Descrição é obrigatória'),
-      fornecedor: z.string().nullable().optional(),
-      numeroDocumento: z.string().nullable().optional(),
-      valor: z.number({ required_error: 'Valor é obrigatório' }).min(1, 'Valor deve ser maior que zero'),
-      data: z.string().min(1, 'Data é obrigatória'),
-      dataCompetencia: z.string().nullable().optional(),
-      dataPagamento: z.string().nullable().optional(),
-      categoria: z.string().min(1, 'Categoria é obrigatória'),
+      clienteId: entityIdSchema.nullable().optional(),
+      projetoId: entityIdSchema.nullable().optional(),
+      viagemId: entityIdSchema.nullable().optional(),
+      descricao: z.string().trim().min(1, 'Descrição é obrigatória').max(500),
+      fornecedor: z.string().trim().max(300).nullable().optional(),
+      numeroDocumento: z.string().trim().max(200).nullable().optional(),
+      valor: centsSchema.refine((value) => value > 0, 'Valor deve ser maior que zero'),
+      data: isoDateSchema,
+      dataCompetencia: isoDateSchema.nullable().optional(),
+      dataPagamento: isoDateSchema.nullable().optional(),
+      categoria: z.string().trim().min(1, 'Categoria é obrigatória').max(120),
+      subcategoria: z.string().trim().max(120).nullable().optional(),
       categoriaCodigo: z.string().trim().max(80).nullable().optional(),
-      tipoCusto: z.string().nullable().optional(),
-      centroCusto: z.string().nullable().optional(),
+      tipoCusto: z.string().trim().max(120).nullable().optional(),
+      centroCusto: z.string().trim().max(120).nullable().optional(),
       reembolsavel: z.boolean().optional(),
-      comprovanteDocumentoId: z.string().nullable().optional(),
-      documentoIds: z.array(z.string().uuid()).max(20).optional(),
-      observacoes: z.string().nullable().optional(),
-      status: z.string().optional(),
-      formaPagamento: z.string().nullable().optional()
+      comprovanteDocumentoId: entityIdSchema.nullable().optional(),
+      documentoIds: z.array(entityIdSchema).max(20).optional(),
+      observacoes: z.string().trim().max(3000).nullable().optional(),
+      status: z.enum(['Pendente', 'Pago', 'Atrasado']).optional(),
+      formaPagamento: z.string().trim().max(120).nullable().optional()
+    }).strict().refine((value) => !value.dataPagamento || value.status === 'Pago', {
+      message: 'A data de pagamento exige status Pago.',
+      path: ['dataPagamento']
     });
 
     const parseResult = bodySchema.safeParse(request.body);
@@ -102,8 +245,19 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const projetoId = data.projetoId || null;
     let clienteId = data.clienteId || null;
 
+    if (clienteId) {
+      const [cliente] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(
+        eq(schema.clientes.id, clienteId),
+        isNull(schema.clientes.deletedAt)
+      )).limit(1);
+      if (!cliente) return reply.status(400).send({ error: 'Cliente vinculado não encontrado.' });
+    }
+
     if (projetoId) {
-      const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, projetoId)).limit(1);
+      const projeto = await db.select().from(schema.projetos).where(and(
+        eq(schema.projetos.id, projetoId),
+        isNull(schema.projetos.deletedAt)
+      )).limit(1);
       if (!projeto.length) {
         return reply.status(400).send({ error: 'Projeto vinculado nao encontrado' });
       }
@@ -162,6 +316,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
         dataCompetencia: data.dataCompetencia || null,
         dataPagamento: data.dataPagamento || (data.status === 'Pago' ? todayKey() : null),
         categoria: data.categoria,
+        subcategoria: data.subcategoria || null,
         categoriaCodigo: data.categoriaCodigo || normalizeExpenseCategoryCode(data.categoria),
         tipoCusto: data.tipoCusto || null,
         centroCusto: data.centroCusto || null,
@@ -206,25 +361,28 @@ export async function financeiroRoutes(server: FastifyInstance) {
     const { id } = request.params as IdParams;
     
     const bodySchema = z.object({
-      clienteId: z.string().nullable().optional(),
-      projetoId: z.string().nullable().optional(),
-      viagemId: z.string().uuid().nullable().optional(),
-      descricao: z.string().min(1, 'Descrição não pode ser vazia').optional(),
-      fornecedor: z.string().nullable().optional(),
-      numeroDocumento: z.string().nullable().optional(),
-      valor: z.number().min(1, 'Valor deve ser maior que zero').optional(),
-      data: z.string().min(1, 'Data não pode ser vazia').optional(),
-      dataCompetencia: z.string().nullable().optional(),
-      dataPagamento: z.string().nullable().optional(),
-      categoria: z.string().min(1, 'Categoria não pode ser vazia').optional(),
+      clienteId: entityIdSchema.nullable().optional(),
+      projetoId: entityIdSchema.nullable().optional(),
+      viagemId: entityIdSchema.nullable().optional(),
+      descricao: z.string().trim().min(1, 'Descrição não pode ser vazia').max(500).optional(),
+      fornecedor: z.string().trim().max(300).nullable().optional(),
+      numeroDocumento: z.string().trim().max(200).nullable().optional(),
+      valor: centsSchema.refine((value) => value > 0, 'Valor deve ser maior que zero').optional(),
+      data: isoDateSchema.optional(),
+      dataCompetencia: isoDateSchema.nullable().optional(),
+      dataPagamento: isoDateSchema.nullable().optional(),
+      categoria: z.string().trim().min(1, 'Categoria não pode ser vazia').max(120).optional(),
+      subcategoria: z.string().trim().max(120).nullable().optional(),
       categoriaCodigo: z.string().trim().max(80).nullable().optional(),
-      tipoCusto: z.string().nullable().optional(),
-      centroCusto: z.string().nullable().optional(),
+      tipoCusto: z.string().trim().max(120).nullable().optional(),
+      centroCusto: z.string().trim().max(120).nullable().optional(),
       reembolsavel: z.boolean().optional(),
-      comprovanteDocumentoId: z.string().nullable().optional(),
-      observacoes: z.string().nullable().optional(),
-      status: z.string().optional(),
-      formaPagamento: z.string().nullable().optional()
+      comprovanteDocumentoId: entityIdSchema.nullable().optional(),
+      observacoes: z.string().trim().max(3000).nullable().optional(),
+      status: z.enum(['Pendente', 'Pago', 'Atrasado']).optional(),
+      formaPagamento: z.string().trim().max(120).nullable().optional()
+    }).strict().refine((value) => Object.keys(value).length > 0, {
+      message: 'Informe ao menos um campo para atualizar.'
     });
 
     const parseResult = bodySchema.safeParse(request.body);
@@ -251,11 +409,28 @@ export async function financeiroRoutes(server: FastifyInstance) {
         });
       }
 
+      const nextStatus = data.status ?? oldDespesa[0].status ?? 'Pendente';
+      const nextPaymentDate = data.dataPagamento !== undefined ? data.dataPagamento : oldDespesa[0].dataPagamento;
+      if (nextPaymentDate && nextStatus !== 'Pago') {
+        return reply.status(400).send({ error: 'A data de pagamento exige status Pago.' });
+      }
+
       const nextProjetoId = data.projetoId !== undefined ? (data.projetoId || null) : oldDespesa[0].projetoId;
       let nextClienteId = data.clienteId !== undefined ? (data.clienteId || null) : oldDespesa[0].clienteId;
 
+      if (nextClienteId) {
+        const [cliente] = await db.select({ id: schema.clientes.id }).from(schema.clientes).where(and(
+          eq(schema.clientes.id, nextClienteId),
+          isNull(schema.clientes.deletedAt)
+        )).limit(1);
+        if (!cliente) return reply.status(400).send({ error: 'Cliente vinculado não encontrado.' });
+      }
+
       if (nextProjetoId) {
-        const projeto = await db.select().from(schema.projetos).where(eq(schema.projetos.id, nextProjetoId)).limit(1);
+        const projeto = await db.select().from(schema.projetos).where(and(
+          eq(schema.projetos.id, nextProjetoId),
+          isNull(schema.projetos.deletedAt)
+        )).limit(1);
         if (!projeto.length) {
           return reply.status(400).send({ error: 'Projeto vinculado nao encontrado' });
         }
@@ -287,6 +462,9 @@ export async function financeiroRoutes(server: FastifyInstance) {
         if (nextClienteId && document.clienteId !== nextClienteId) {
           return reply.status(400).send({ error: 'O comprovante não pertence ao cliente da despesa.' });
         }
+        if (nextProjetoId && document.projetoId && document.projetoId !== nextProjetoId) {
+          return reply.status(400).send({ error: 'O comprovante pertence a outro projeto.' });
+        }
       }
 
       const despesaAtualizada = await db.transaction(async (tx) => {
@@ -308,6 +486,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
               ? null
               : undefined,
         categoria: data.categoria !== undefined ? data.categoria : undefined,
+        subcategoria: data.subcategoria !== undefined ? (data.subcategoria || null) : undefined,
         categoriaCodigo: data.categoriaCodigo !== undefined
           ? (data.categoriaCodigo || normalizeExpenseCategoryCode(data.categoria || oldDespesa[0].categoria))
           : data.categoria !== undefined
@@ -390,7 +569,7 @@ export async function financeiroRoutes(server: FastifyInstance) {
   server.post('/despesas/:id/documentos', async (request, reply) => {
     const { id } = request.params as IdParams;
     const parsed = z.object({
-      documentoId: z.string().uuid(),
+      documentoId: entityIdSchema,
       tipo: z.string().trim().max(80).optional().default('comprovante')
     }).safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: 'Dados inválidos', details: parsed.error.format() });

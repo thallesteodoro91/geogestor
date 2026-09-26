@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { cn } from '../utils/cn';
+import { SpotlightCard } from './SpotlightCard';
 import {
   geoGreenAccentClass,
   geoGreenIconClass,
@@ -102,6 +103,9 @@ interface MetricCardProps {
   surfaceTone?: MetricSurfaceTone;
   layout?: MetricCardLayout;
   delay?: number;
+  animateOnMount?: boolean;
+  spotlight?: boolean;
+  spotlightColor?: `rgba(${number}, ${number}, ${number}, ${number})`;
   className?: string;
 }
 
@@ -114,6 +118,9 @@ export function MetricCard({
   surfaceTone = 'semantic',
   layout = 'default',
   delay = 0,
+  animateOnMount = true,
+  spotlight = false,
+  spotlightColor = 'rgba(255, 255, 255, 0.25)',
   className
 }: MetricCardProps) {
   const reduceMotion = useReducedMotion();
@@ -125,27 +132,26 @@ export function MetricCard({
   const valueClass = isOrangeSurface ? geoOrangeValueClass : isGreenSurface ? geoGreenValueClass : styles.value;
   const iconClass = isOrangeSurface ? geoOrangeIconClass : isGreenSurface ? geoGreenIconClass : styles.icon;
 
-  return (
-    <motion.article
-      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, delay, ease: 'easeOut' }}
-      className={cn(
-        'geo-card-interactive group relative flex min-h-[140px] min-w-0 flex-col justify-between overflow-hidden',
-        layout === 'total' ? 'p-5' : 'p-6',
-        surfaceStyles.card,
-        className
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'absolute inset-x-0 top-0 h-1',
-          surfaceStyles.accent === geoPurpleAccentClass || surfaceStyles.accent === geoOrangeAccentClass || surfaceStyles.accent === geoGreenAccentClass
-            ? surfaceStyles.accent
-            : cn('bg-gradient-to-r', surfaceStyles.accent)
-        )}
-      />
+  const cardClassName = cn(
+    'group relative flex min-h-[140px] min-w-0 flex-col justify-between overflow-hidden',
+    spotlight ? 'dashboard-spotlight-card' : 'geo-card-interactive',
+    !spotlight && (layout === 'total' ? 'p-5' : 'p-6'),
+    !spotlight && surfaceStyles.card,
+    className
+  );
+  const cardContent = (
+    <>
+      {!spotlight ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-x-0 top-0 h-1',
+            surfaceStyles.accent === geoPurpleAccentClass || surfaceStyles.accent === geoOrangeAccentClass || surfaceStyles.accent === geoGreenAccentClass
+              ? surfaceStyles.accent
+              : cn('bg-gradient-to-r', surfaceStyles.accent)
+          )}
+        />
+      ) : null}
       {layout === 'total' ? (
         <>
           <span className={cn('block min-w-0 break-words text-[10px] font-semibold uppercase leading-4 tracking-wider sm:text-[11px]', labelClass)}>
@@ -162,7 +168,12 @@ export function MetricCard({
                 </div>
               ) : null}
             </div>
-            <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ring-1', iconClass)}>
+            <span
+              className={cn(
+                'flex shrink-0 items-center justify-center',
+                spotlight ? 'h-[1.95rem] w-[1.95rem]' : cn('h-9 w-9 rounded-lg ring-1', iconClass)
+              )}
+            >
               {icon}
             </span>
           </div>
@@ -173,7 +184,12 @@ export function MetricCard({
             <span className={cn('block min-w-0 break-words text-[10px] font-semibold uppercase tracking-wider sm:text-[11px]', labelClass)}>
               {label}
             </span>
-            <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ring-1 sm:h-10 sm:w-10', iconClass)}>
+            <span
+              className={cn(
+                'flex shrink-0 items-center justify-center',
+                spotlight ? 'h-[1.95rem] w-[1.95rem]' : cn('h-8 w-8 rounded-lg ring-1 sm:h-10 sm:w-10', iconClass)
+              )}
+            >
               {icon}
             </span>
           </div>
@@ -189,6 +205,29 @@ export function MetricCard({
           </div>
         </>
       )}
+    </>
+  );
+
+  if (spotlight) {
+    return (
+      <SpotlightCard className={cardClassName} spotlightColor={spotlightColor}>
+        {cardContent}
+      </SpotlightCard>
+    );
+  }
+
+  if (!animateOnMount) {
+    return <article className={cardClassName}>{cardContent}</article>;
+  }
+
+  return (
+    <motion.article
+      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, delay, ease: 'easeOut' }}
+      className={cardClassName}
+    >
+      {cardContent}
     </motion.article>
   );
 }

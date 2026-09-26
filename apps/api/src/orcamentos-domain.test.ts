@@ -188,3 +188,30 @@ test('divide parcelas preservando a soma exata e corrige o residual na última',
   assert.deepEqual(percentages.map((entry) => entry.valueCents), [5_001, 5_000]);
   assert.equal(percentages.reduce((sum, entry) => sum + entry.valueCents, 0), 10_001);
 });
+
+test('limita condições de pagamento a 60 parcelas', () => {
+  assert.throws(
+    () => splitInstallments(10_000, 61, '2026-07-13'),
+    /Quantidade de parcelas inválida/
+  );
+});
+
+test('recusa parcela sem valor ou percentual inclusive na última posição', () => {
+  assert.throws(
+    () => calculateInstallments(10_000, [
+      { percentage: '50', daysAfterApproval: 0, label: 'Entrada' },
+      { daysAfterApproval: 30, label: 'Saldo sem definição' }
+    ], '2026-07-13'),
+    /Informe o valor ou percentual da parcela 2/
+  );
+});
+
+test('recusa valores explícitos cuja soma não corresponde ao total financiável', () => {
+  assert.throws(
+    () => calculateInstallments(10_000, [
+      { valueCents: 4_000, daysAfterApproval: 0, label: 'Entrada' },
+      { valueCents: 5_999, daysAfterApproval: 30, label: 'Saldo' }
+    ], '2026-07-13'),
+    /soma das parcelas deve corresponder ao total financiável/i
+  );
+});

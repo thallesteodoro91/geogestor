@@ -1,0 +1,76 @@
+RELATÓRIO OPERACIONAL DE PROJETOS
+Período: 18/09/2026 a 18/09/2026
+(48) 3333-4444 · qa@geogestor.test
+Florianópolis/SC
+Regime de caixa: data do recebimento ou do pagamento legado.
+Indicadores operacionais
+Indicador Resultado
+Projetos no recorte 18
+Projetos ativos 16
+Projetos concluídos 1
+Projetos cancelados 1
+Prazos vencidos 13
+Área ativa conhecida 27,5 ha
+Distribuição por status
+Status Projetos
+Em Andamento 13
+Aguardando Cliente 1
+Cancelado 1
+Concluído 1
+Planejamento 1
+Suspenso 1
+Agenda crítica de entregas
+Projeto Entrega Status
+QA-AUDIT-S11-20260917-Projeto crítico 01 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 02 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 03 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 04 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 05 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 06 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 1 de 2
+
+--- PAGE BREAK ---
+
+Projeto Entrega Status
+QA-AUDIT-S11-20260917-Projeto crítico 07 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 08 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 09 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 10 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 11 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Projeto crítico 12 com nome longo para documento 
+multipágina
+16/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-<img src=x onerror=alert(1)> 17/09/2026 Em Andamento
+QA-AUDIT-S11-20260917-Vence hoje 18/09/2026 Planejamento
+QA-AUDIT-S11-20260917-Vence +30 18/10/2026 Aguardando Cliente
+Pontos de atenção
+Projetos com prazo vencido: 13 projetos ativos ultrapassaram a previsão de entrega.
+Área não informada em projetos ativos: Complete a área de 1 projeto para melhorar a leitura da carteira territorial.
+Critérios e metodologia
+Coorte por data de início; na ausência, data de criação.
+Soma apenas áreas conhecidas de projetos ativos pertencentes ao período.
+Empresa QA GeoGestor Relatório gerencial
+Gerado em 18/09/2026 Página 2 de 2

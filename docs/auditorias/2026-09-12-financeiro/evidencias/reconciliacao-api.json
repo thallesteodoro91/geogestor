@@ -1,0 +1,315 @@
+{
+  "analytics": {
+    "monthly": [
+      {
+        "mes": "2025-10",
+        "label": "Out",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2025-11",
+        "label": "Nov",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2025-12",
+        "label": "Dez",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-01",
+        "label": "Jan",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-02",
+        "label": "Fev",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-03",
+        "label": "Mar",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-04",
+        "label": "Abr",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-05",
+        "label": "Mai",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-06",
+        "label": "Jun",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-07",
+        "label": "Jul",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-08",
+        "label": "Ago",
+        "receitaContratada": 0,
+        "receitaRecebida": 0,
+        "despesasLancadas": 0,
+        "despesasPagas": 0,
+        "resultadoCaixa": 0,
+        "resultadoCompetencia": 0
+      },
+      {
+        "mes": "2026-09",
+        "label": "Set",
+        "receitaContratada": 800000,
+        "receitaRecebida": 642000,
+        "despesasLancadas": 110000,
+        "despesasPagas": 70000,
+        "resultadoCaixa": 572000,
+        "resultadoCompetencia": 690000
+      }
+    ],
+    "categorias": [
+      {
+        "categoria": "Alimentação",
+        "total": 10000,
+        "pago": 0,
+        "aberto": 10000,
+        "count": 1,
+        "percentual": 9.090909090909092
+      },
+      {
+        "categoria": "Combustível",
+        "total": 30000,
+        "pago": 0,
+        "aberto": 30000,
+        "count": 1,
+        "percentual": 27.27272727272727
+      },
+      {
+        "categoria": "Software",
+        "total": 50000,
+        "pago": 50000,
+        "aberto": 0,
+        "count": 1,
+        "percentual": 45.45454545454545
+      },
+      {
+        "categoria": "Taxas",
+        "total": 20000,
+        "pago": 20000,
+        "aberto": 0,
+        "count": 1,
+        "percentual": 18.181818181818183
+      }
+    ],
+    "clientes": [
+      {
+        "clienteId": "b759dd79-e48b-42f4-b476-ad55a4edc72e",
+        "cliente": "QA-AUDIT-S07-20260912-Cliente",
+        "receitaContratada": 800000,
+        "receitaRecebida": 642000,
+        "despesas": 70000,
+        "resultado": 572000,
+        "margem": 89.09657320872275
+      }
+    ],
+    "kpis": {
+      "receitaContratada": 800000,
+      "receitaRecebida": 642000,
+      "receitaPendente": 60000,
+      "receitaAtrasada": 100000,
+      "receitaPipeline": 700000,
+      "impostosEstimados": 0,
+      "receitaLiquidaEstimada": 800000,
+      "despesasLancadas": 110000,
+      "despesasPagas": 70000,
+      "despesasAbertas": 40000,
+      "despesasAtrasadas": 30000,
+      "custosFixos": 50000,
+      "custosVariaveis": 60000,
+      "custosReembolsaveis": 0,
+      "custosCartorioTaxas": 20000,
+      "custosTributarios": 0,
+      "resultadoCaixa": 572000,
+      "resultadoCompetencia": 690000,
+      "margemCaixa": 89.09657320872275,
+      "margemCompetencia": 86.25,
+      "margemContribuicao": 92.5,
+      "pontoEquilibrio": 54054.05405405405,
+      "ticketMedioContratado": 400000,
+      "taxaConversao": 50,
+      "contasReceberCount": 2,
+      "contasPagarCount": 2,
+      "orcamentosSemParcelas": 1,
+      "despesasSemCliente": 0
+    },
+    "alertas": [
+      {
+        "tipo": "critico",
+        "titulo": "Recebimentos atrasados",
+        "descricao": "R$ 1.000,00 em parcelas vencidas e ainda não recebidas."
+      },
+      {
+        "tipo": "critico",
+        "titulo": "Contas vencidas",
+        "descricao": "R$ 300,00 em despesas vencidas ou sem baixa."
+      },
+      {
+        "tipo": "atencao",
+        "titulo": "Orçamentos aprovados sem parcelas",
+        "descricao": "1 orçamento(s) aprovado(s) não possuem cronograma de recebimento."
+      }
+    ]
+  },
+  "recentEntries": [
+    {
+      "id": "receita-ba97daf1-7d0e-4fbe-b929-b40c4913e30a",
+      "type": "receita",
+      "title": "QA-AUDIT-S07-20260912-Contrato parcelado",
+      "context": "QA-AUDIT-S07-20260912-Cliente",
+      "date": "2026-09-29",
+      "status": "Parcialmente pago",
+      "amount": 100000,
+      "tab": "faturas"
+    },
+    {
+      "id": "despesa-1695ac79-ad9a-4117-b6df-746645803e8f",
+      "type": "despesa",
+      "title": "QA-AUDIT-S07-20260912-Futura",
+      "context": "QA-AUDIT-S07-20260912-Cliente · QA-AUDIT-S07-20260912-Projeto",
+      "date": "2026-09-29",
+      "status": "Pendente",
+      "amount": 10000,
+      "tab": "pagar"
+    },
+    {
+      "id": "receita-57f6ebbf-f565-4216-a1ee-bbaddc73ca89",
+      "type": "receita",
+      "title": "QA-AUDIT-S07-20260912-Contrato parcelado",
+      "context": "QA-AUDIT-S07-20260912-Cliente",
+      "date": "2026-09-19",
+      "status": "Pago",
+      "amount": 100000,
+      "tab": "faturas"
+    },
+    {
+      "id": "despesa-fbf503f7-0b2a-4135-be59-bc61e6e9f043",
+      "type": "despesa",
+      "title": "QA-AUDIT-S07-20260912-Taxa",
+      "context": "QA-AUDIT-S07-20260912-Cliente",
+      "date": "2026-09-19",
+      "status": "Pago",
+      "amount": 20000,
+      "tab": "pagar"
+    },
+    {
+      "id": "despesa-6526fbb5-6bc1-4d6f-a7ff-199582619021",
+      "type": "despesa",
+      "title": "QA-AUDIT-S07-20260912-Software",
+      "context": "QA-AUDIT-S07-20260912-Cliente · QA-AUDIT-S07-20260912-Projeto",
+      "date": "2026-09-19",
+      "status": "Pago",
+      "amount": 50000,
+      "tab": "pagar"
+    },
+    {
+      "id": "receita-69178772-82fa-4aa7-a709-55fa1e950ac3",
+      "type": "receita",
+      "title": "QA-AUDIT-S07-20260912-Contrato parcelado",
+      "context": "QA-AUDIT-S07-20260912-Cliente",
+      "date": "2026-09-18",
+      "status": "Atrasado",
+      "amount": 100000,
+      "tab": "faturas"
+    }
+  ],
+  "meta": {
+    "launchCount": 7,
+    "expenseCount": 4,
+    "hasSourceData": true,
+    "hasFilteredData": true,
+    "nextDueDate": "2026-09-29",
+    "openAccountCount": 4
+  },
+  "options": {
+    "clientes": [
+      {
+        "id": "b759dd79-e48b-42f4-b476-ad55a4edc72e",
+        "nome": "QA-AUDIT-S07-20260912-Cliente"
+      },
+      {
+        "id": "d7976767-7543-410e-aa0a-90667f7a655e",
+        "nome": "QA-AUDIT-S03-Cliente Sintético"
+      }
+    ],
+    "categorias": [
+      "Alimentação",
+      "Combustível",
+      "Software",
+      "Taxas"
+    ],
+    "tiposCusto": [
+      "Cartório e taxas",
+      "Fixo",
+      "Variável de campo"
+    ],
+    "centrosCusto": [
+      "Administrativo",
+      "Campo"
+    ]
+  }
+}

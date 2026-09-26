@@ -1,5 +1,5 @@
 import { ArrowCounterClockwise, CurrencyDollar, FolderSimple, MagnifyingGlass, PencilSimple, Plus, Receipt, Tag, Trash, XCircle } from '@phosphor-icons/react';
-import { matchesSearch } from '../../utils/searchHelpers';
+import { appLinks } from '@geogestor/contracts';
 import { cn } from '../../utils/cn';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { CustomSelect } from '../../components/CustomSelect';
@@ -12,8 +12,9 @@ import { Modal } from '../../components/Modal';
 import { PageHeader } from '../../components/PageHeader';
 import { motion } from 'framer-motion';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
-import { apiFetch, apiClient } from '../../services/apiClient';
+import { apiFetch, apiClient, type PaginatedResponse } from '../../services/apiClient';
 import { notifications } from '../../services/notifications';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { useAuxiliaryCatalogs } from '../../hooks/useAuxiliaryCatalogs';
@@ -35,12 +36,15 @@ import {
   geoPurpleSurfaceClass,
   geoPurpleValueClass
 } from '../../utils/geoTheme';
+import { formatDateKey, localDateKey } from '../../utils/localDate';
 
 const TIPOS_CUSTO = ['Fixo', 'Variável de campo', 'Cartório e taxas', 'Tributário', 'Operacional', 'Reembolsável'];
 const CENTROS_CUSTO = ['Administrativo', 'Campo', 'Cartório', 'Tributos', 'Software', 'Equipamentos', 'Serviços'];
 
 export interface DespesaItem {
   id: string;
+  clienteId?: string | null;
+  clienteNome?: string | null;
   projetoId?: string | null;
   projetoNome?: string;
   viagemId?: string | null;
@@ -52,10 +56,12 @@ export interface DespesaItem {
   dataCompetencia?: string | null;
   dataPagamento?: string | null;
   categoria: string;
+  subcategoria?: string | null;
   tipoCusto?: string | null;
   centroCusto?: string | null;
   reembolsavel?: boolean | number | null;
   observacoes?: string | null;
+  comprovanteDocumentoId?: string | null;
   status: string;
   formaPagamento: string;
   canceladaEm?: string | null;
@@ -64,10 +70,18 @@ export interface DespesaItem {
   motivoEstorno?: string | null;
 }
 
+interface ExpensePage extends PaginatedResponse<DespesaItem> {
+  summary: { totalPrevisto: number; totalPago: number; totalPendente: number; totalAtrasado: number };
+}
+
 export interface ProjetoMin {
   id: string;
   nome: string;
+  clienteId?: string | null;
+  clienteNome?: string | null;
 }
+
+interface ClienteMin { id: string; nome: string }
 
 interface ViagemMin {
   id: string;
@@ -77,23 +91,32 @@ interface ViagemMin {
   status: string;
 }
 
+interface DocumentoMin {
+  id: string;
+  nome: string;
+  projetoId?: string | null;
+}
+
 function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
   return embedded ? <>{children}</> : <Layout>{children}</Layout>;
 }
 
-function newExpenseFingerprint() {
-  const today = new Date().toISOString().split('T')[0];
+function newExpenseFingerprint(initialProjectId = '') {
+  const today = localDateKey();
   return JSON.stringify({
-    projetoId: '',
+    projetoId: initialProjectId,
+    clienteId: '',
     viagemId: '',
     descricao: '',
     fornecedor: '',
     numeroDocumento: '',
+    comprovanteDocumentoId: '',
     valor: '',
     data: today,
     dataCompetencia: today,
     dataPagamento: '',
     categoria: 'Combustível',
+    subcategoria: '',
     tipoCusto: 'Variável de campo',
     centroCusto: 'Campo',
     reembolsavel: false,
@@ -106,11 +129,13 @@ function newExpenseFingerprint() {
 export function Despesas({
   embedded = false,
   openCreateOnMount = false,
+  initialProjectId = '',
   focusDespesaId,
   onFocusHandled
 }: {
   embedded?: boolean;
   openCreateOnMount?: boolean;
+  initialProjectId?: string;
   focusDespesaId?: string;
   onFocusHandled?: () => void;
 }) {
@@ -118,24 +143,28 @@ export function Despesas({
   const catalogsQuery = useAuxiliaryCatalogs();
   const [showModal, setShowModal] = useState(openCreateOnMount);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
-  const [initialFormFingerprint, setInitialFormFingerprint] = useState(() => openCreateOnMount ? newExpenseFingerprint() : '');
+  const [initialFormFingerprint, setInitialFormFingerprint] = useState(() => openCreateOnMount ? newExpenseFingerprint(initialProjectId) : '');
   const [selectedDespesa, setSelectedDespesa] = useState<DespesaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DespesaItem | null>(null);
   const [financialAction, setFinancialAction] = useState<{ type: 'cancelamento' | 'estorno'; item: DespesaItem } | null>(null);
   const [financialActionReason, setFinancialActionReason] = useState('');
-  const [financialActionDate, setFinancialActionDate] = useState(new Date().toISOString().slice(0, 10));
+  const [financialActionDate, setFinancialActionDate] = useState(localDateKey());
 
   // Form states
-  const [projetoId, setProjetoId] = useState('');
+  const [projetoId, setProjetoId] = useState(initialProjectId);
+  const [clienteId, setClienteId] = useState('');
+  const [clienteNome, setClienteNome] = useState('');
   const [viagemId, setViagemId] = useState('');
   const [descricao, setDescricao] = useState('');
   const [fornecedor, setFornecedor] = useState('');
   const [numeroDocumento, setNumeroDocumento] = useState('');
+  const [comprovanteDocumentoId, setComprovanteDocumentoId] = useState('');
   const [valor, setValor] = useState('');
-  const [data, setData] = useState(new Date().toISOString().split('T')[0]);
-  const [dataCompetencia, setDataCompetencia] = useState(new Date().toISOString().split('T')[0]);
+  const [data, setData] = useState(localDateKey());
+  const [dataCompetencia, setDataCompetencia] = useState(localDateKey());
   const [dataPagamento, setDataPagamento] = useState('');
   const [categoria, setCategoria] = useState('Combustível');
+  const [subcategoria, setSubcategoria] = useState('');
   const [tipoCusto, setTipoCusto] = useState('Variável de campo');
   const [centroCusto, setCentroCusto] = useState('Campo');
   const [reembolsavel, setReembolsavel] = useState(false);
@@ -144,22 +173,63 @@ export function Despesas({
   const [formaPagamento, setFormaPagamento] = useState('Pix');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoriaFilter, setCategoriaFilter] = useState('Todos');
+  const [subcategoriaFilter, setSubcategoriaFilter] = useState('Todos');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [tipoCustoFilter, setTipoCustoFilter] = useState('Todos');
   const [centroCustoFilter, setCentroCustoFilter] = useState('Todos');
   const [reembolsavelFilter, setReembolsavelFilter] = useState('Todos');
   const [dataInicioFilter, setDataInicioFilter] = useState('');
   const [dataFimFilter, setDataFimFilter] = useState('');
+  const expenseFilterKey = [searchTerm, categoriaFilter, subcategoriaFilter, statusFilter, tipoCustoFilter, centroCustoFilter, reembolsavelFilter, dataInicioFilter, dataFimFilter].join('\u001f');
+  const [expensePagination, setExpensePagination] = useState({ filterKey: '', page: 1 });
+  const page = expensePagination.filterKey === expenseFilterKey ? expensePagination.page : 1;
 
   // Queries
-  const { data: despesas = [], isLoading: despesasLoading } = useQuery<DespesaItem[]>({
-    queryKey: ['despesas'],
-    queryFn: () => apiClient.get<DespesaItem[]>('/api/financeiro/despesas')
+  const expenseQueryString = useMemo(() => {
+    const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '25' });
+    if (focusDespesaId) {
+      params.set('selectedId', focusDespesaId);
+    } else {
+      if (searchTerm.trim()) params.set('q', searchTerm.trim());
+      if (categoriaFilter !== 'Todos') params.set('categoria', categoriaFilter);
+      if (subcategoriaFilter !== 'Todos') params.set('subcategoria', subcategoriaFilter);
+      if (statusFilter !== 'Todos') params.set('status', statusFilter);
+      if (tipoCustoFilter !== 'Todos') params.set('tipoCusto', tipoCustoFilter);
+      if (centroCustoFilter !== 'Todos') params.set('centroCusto', centroCustoFilter);
+      if (reembolsavelFilter !== 'Todos') params.set('reembolsavel', reembolsavelFilter === 'Sim' ? 'sim' : 'nao');
+      if (dataInicioFilter) params.set('dataInicio', dataInicioFilter);
+      if (dataFimFilter) params.set('dataFim', dataFimFilter);
+    }
+    return params.toString();
+  }, [categoriaFilter, centroCustoFilter, dataFimFilter, dataInicioFilter, focusDespesaId, page, reembolsavelFilter, searchTerm, statusFilter, subcategoriaFilter, tipoCustoFilter]);
+  const { data: expensePage, isLoading: despesasLoading, isError: despesasFailed, refetch: refetchDespesas } = useQuery<ExpensePage>({
+    queryKey: ['despesas', expenseQueryString],
+    queryFn: () => apiClient.get<ExpensePage>(`/api/financeiro/despesas?${expenseQueryString}`),
+    placeholderData: (previous) => previous
   });
+  const despesas = useMemo(() => expensePage?.items ?? [], [expensePage?.items]);
 
   const { data: viagens = [], isLoading: viagensLoading } = useQuery<ViagemMin[]>({
     queryKey: ['viagens'],
     queryFn: () => apiClient.get<ViagemMin[]>('/api/financeiro/viagens')
+  });
+  const { data: selectedProjectOptions = [] } = useQuery<ProjetoMin[]>({
+    queryKey: ['expense-project-context', projetoId],
+    queryFn: () => apiClient.get<ProjetoMin[]>(`/api/projetos/options?selectedId=${encodeURIComponent(projetoId)}&limit=1`),
+    enabled: showModal && Boolean(projetoId)
+  });
+
+  const selectedProjectContext = selectedProjectOptions.find((item) => item.id === projetoId);
+  const effectiveExpenseClientId = selectedProjectContext?.clienteId || clienteId;
+  const effectiveExpenseClientName = selectedProjectContext?.clienteNome || clienteNome;
+  const { data: comprovantes = [] } = useQuery<DocumentoMin[]>({
+    queryKey: ['financeiro-comprovantes-despesa', effectiveExpenseClientId, projetoId],
+    queryFn: () => {
+      const params = new URLSearchParams({ clienteId: effectiveExpenseClientId });
+      if (projetoId) params.set('projetoId', projetoId);
+      return apiClient.get<DocumentoMin[]>(`/api/financeiro/comprovantes?${params.toString()}`);
+    },
+    enabled: showModal && Boolean(effectiveExpenseClientId)
   });
 
   const configuredExpenseCategories = useMemo(
@@ -174,19 +244,37 @@ export function Despesas({
     () => mergeCatalogAndHistoricalValues(configuredExpenseCategories, despesas.map((item) => item.categoria)),
     [configuredExpenseCategories, despesas]
   );
+  const configuredSubcategories = useMemo(
+    () => catalogsQuery.data?.expenses.find((item) => item.categoria === categoria)?.subcategorias ?? [],
+    [catalogsQuery.data?.expenses, categoria]
+  );
+  const formExpenseSubcategories = useMemo(
+    () => mergeCatalogAndHistoricalValues(configuredSubcategories, [subcategoria]),
+    [configuredSubcategories, subcategoria]
+  );
+  const filterExpenseSubcategories = useMemo(
+    () => mergeCatalogAndHistoricalValues(
+      catalogsQuery.data?.expenses.flatMap((item) => item.subcategorias) ?? [],
+      despesas.map((item) => item.subcategoria || '')
+    ),
+    [catalogsQuery.data?.expenses, despesas]
+  );
 
   const loading = despesasLoading || viagensLoading;
   const formFingerprint = JSON.stringify({
     projetoId,
+    clienteId: projetoId ? '' : clienteId,
     viagemId,
     descricao,
     fornecedor,
     numeroDocumento,
+    comprovanteDocumentoId,
     valor,
     data,
     dataCompetencia,
     dataPagamento,
     categoria,
+    subcategoria,
     tipoCusto,
     centroCusto,
     reembolsavel,
@@ -206,37 +294,11 @@ export function Despesas({
     return () => window.removeEventListener('beforeunload', protectDraft);
   }, [hasUnsavedExpense]);
 
-  const filteredDespesas = despesas.filter((desp) => {
-    const searchable = [
-      desp.descricao,
-      desp.fornecedor,
-      desp.numeroDocumento,
-      desp.categoria,
-      desp.tipoCusto,
-      desp.centroCusto,
-      desp.status,
-      desp.formaPagamento,
-      desp.observacoes,
-      desp.projetoNome,
-      desp.projetoNome
-    ].filter(Boolean).join(' ');
-    const matchesSearchTerm = matchesSearch(searchable, searchTerm);
-    const matchesCategoria = categoriaFilter === 'Todos' || desp.categoria === categoriaFilter;
-    const matchesStatus = statusFilter === 'Todos' || desp.status === statusFilter;
-    const matchesTipoCusto = tipoCustoFilter === 'Todos' || desp.tipoCusto === tipoCustoFilter;
-    const matchesCentroCusto = centroCustoFilter === 'Todos' || desp.centroCusto === centroCustoFilter;
-    const isReembolsavel = Boolean(desp.reembolsavel);
-    const matchesReembolsavel =
-      reembolsavelFilter === 'Todos' ||
-      (reembolsavelFilter === 'Sim' && isReembolsavel) ||
-      (reembolsavelFilter === 'Nao' && !isReembolsavel);
-    const matchesStart = !dataInicioFilter || (desp.data && desp.data >= dataInicioFilter);
-    const matchesEnd = !dataFimFilter || (desp.data && desp.data <= dataFimFilter);
-    return matchesSearchTerm && matchesCategoria && matchesStatus && matchesTipoCusto && matchesCentroCusto && matchesReembolsavel && matchesStart && matchesEnd;
-  });
+  const filteredDespesas = despesas;
   const hasExpenseFilters = Boolean(
     searchTerm ||
     categoriaFilter !== 'Todos' ||
+    subcategoriaFilter !== 'Todos' ||
     statusFilter !== 'Todos' ||
     tipoCustoFilter !== 'Todos' ||
     centroCustoFilter !== 'Todos' ||
@@ -246,26 +308,7 @@ export function Despesas({
   );
 
   // Stats calculation
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const despesasValidas = filteredDespesas.filter((despesa) => !despesa.canceladaEm && !despesa.estornadaEm);
-  const totalPrevisto = despesasValidas.reduce((acc, despesa) => acc + despesa.valor, 0);
-  const totalPago = despesasValidas
-    .filter((despesa) => despesa.status === 'Pago')
-    .reduce((acc, despesa) => acc + despesa.valor, 0);
-  const despesasEmAberto = despesasValidas.filter((despesa) => despesa.status !== 'Pago');
-  const totalPendente = despesasEmAberto
-    .filter((despesa) => {
-      const dataDespesa = new Date(`${despesa.data.slice(0, 10)}T00:00:00`);
-      return Number.isNaN(dataDespesa.getTime()) || dataDespesa >= hoje;
-    })
-    .reduce((acc, despesa) => acc + despesa.valor, 0);
-  const totalAtrasado = despesasEmAberto
-    .filter((despesa) => {
-      const dataDespesa = new Date(`${despesa.data.slice(0, 10)}T00:00:00`);
-      return !Number.isNaN(dataDespesa.getTime()) && dataDespesa < hoje;
-    })
-    .reduce((acc, despesa) => acc + despesa.valor, 0);
+  const { totalPrevisto = 0, totalPago = 0, totalPendente = 0, totalAtrasado = 0 } = expensePage?.summary ?? {};
 
   // Mutations
   const deleteMutation = useMutation({
@@ -334,20 +377,23 @@ export function Despesas({
   // Actions
   const handledExpenseIdRef = useRef<string | null>(null);
 
-  const openCreateModal = () => {
-    const today = new Date().toISOString().split('T')[0];
+  const openCreateModal = (preferredProjectId = initialProjectId) => {
+    const today = localDateKey();
     const initialValues = {
-      projetoId: '',
+      projetoId: preferredProjectId,
+      clienteId: '',
       viagemId: '',
       descricao: '',
       fornecedor: '',
       numeroDocumento: '',
+      comprovanteDocumentoId: '',
       valor: '',
       data: today,
       dataCompetencia: today,
       dataPagamento: '',
-      categoria: 'CombustÃ­vel',
-      tipoCusto: 'VariÃ¡vel de campo',
+      categoria: 'Combustível',
+      subcategoria: '',
+      tipoCusto: 'Variável de campo',
       centroCusto: 'Campo',
       reembolsavel: false,
       observacoes: '',
@@ -355,16 +401,20 @@ export function Despesas({
       formaPagamento: 'Pix'
     };
     setSelectedDespesa(null);
-    setProjetoId('');
+    setProjetoId(preferredProjectId);
+    setClienteId('');
+    setClienteNome('');
     setViagemId('');
     setDescricao('');
     setFornecedor('');
     setNumeroDocumento('');
+    setComprovanteDocumentoId('');
     setValor('');
     setData(today);
     setDataCompetencia(today);
     setDataPagamento('');
     setCategoria('Combustível');
+    setSubcategoria('');
     setTipoCusto('Variável de campo');
     setCentroCusto('Campo');
     setReembolsavel(false);
@@ -378,15 +428,18 @@ export function Despesas({
   const openEditModal = useCallback((desp: DespesaItem) => {
     const initialValues = {
       projetoId: desp.projetoId || '',
+      clienteId: desp.projetoId ? '' : desp.clienteId || '',
       viagemId: desp.viagemId || '',
       descricao: desp.descricao || '',
       fornecedor: desp.fornecedor || '',
       numeroDocumento: desp.numeroDocumento || '',
+      comprovanteDocumentoId: desp.comprovanteDocumentoId || '',
       valor: (desp.valor / 100).toString(),
       data: desp.data || '',
       dataCompetencia: desp.dataCompetencia || desp.data || '',
       dataPagamento: desp.dataPagamento || '',
-      categoria: desp.categoria || 'CombustÃ­vel',
+      categoria: desp.categoria || 'Combustível',
+      subcategoria: desp.subcategoria || '',
       tipoCusto: desp.tipoCusto || 'Operacional',
       centroCusto: desp.centroCusto || 'Administrativo',
       reembolsavel: Boolean(desp.reembolsavel),
@@ -396,15 +449,19 @@ export function Despesas({
     };
     setSelectedDespesa(desp);
     setProjetoId(desp.projetoId || '');
+    setClienteId(desp.clienteId || '');
+    setClienteNome(desp.clienteNome || '');
     setViagemId(desp.viagemId || '');
     setDescricao(desp.descricao || '');
     setFornecedor(desp.fornecedor || '');
     setNumeroDocumento(desp.numeroDocumento || '');
+    setComprovanteDocumentoId(desp.comprovanteDocumentoId || '');
     setValor((desp.valor / 100).toString());
     setData(desp.data || '');
     setDataCompetencia(desp.dataCompetencia || desp.data || '');
     setDataPagamento(desp.dataPagamento || '');
     setCategoria(desp.categoria || 'Combustível');
+    setSubcategoria(desp.subcategoria || '');
     setTipoCusto(desp.tipoCusto || 'Operacional');
     setCentroCusto(desp.centroCusto || 'Administrativo');
     setReembolsavel(Boolean(desp.reembolsavel));
@@ -452,16 +509,19 @@ export function Despesas({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const payload = {
+      clienteId: effectiveExpenseClientId || null,
       projetoId: projetoId || null,
       viagemId: viagemId || null,
       descricao,
       fornecedor: fornecedor || null,
       numeroDocumento: numeroDocumento || null,
+      comprovanteDocumentoId: comprovanteDocumentoId || null,
       valor: Math.round((parseFloat(valor || "0") || 0) * 100),
       data,
       dataCompetencia: dataCompetencia || data,
       dataPagamento: dataPagamento || null,
       categoria,
+      subcategoria: subcategoria || null,
       tipoCusto,
       centroCusto,
       reembolsavel,
@@ -503,7 +563,7 @@ export function Despesas({
         description="Controle de despesas, custos operacionais e reembolsos vinculados."
         className={embedded ? 'mb-8' : 'mb-12'}
         action={(
-          <button type="button" onClick={openCreateModal} className={cn(primarySubmitButtonClass, 'w-full sm:w-auto')}>
+          <button type="button" onClick={() => openCreateModal()} className={cn(primarySubmitButtonClass, 'w-full sm:w-auto')}>
             <Plus aria-hidden="true" className="h-4 w-4" weight="bold" />
             Nova despesa
           </button>
@@ -531,11 +591,12 @@ export function Despesas({
       </div>
 
       <div className={cn('mb-6', filterBarClass)}>
-        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(280px,1.4fr)_repeat(7,minmax(126px,0.7fr))_auto] items-center">
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 xl:grid-cols-[minmax(260px,1.3fr)_repeat(8,minmax(120px,0.7fr))_auto] items-center">
           <div className="relative">
             <MagnifyingGlass className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
+              aria-label="Buscar contas a pagar"
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
               placeholder="Buscar por descrição, fornecedor, documento, projeto ou forma..."
@@ -548,6 +609,13 @@ export function Despesas({
             placeholder="Todas as categorias"
             className="min-w-0"
             options={[{ label: 'Todas as categorias', value: 'Todos' }, ...filterExpenseCategories.map((value) => ({ label: value, value }))]}
+          />
+          <CustomSelect
+            value={subcategoriaFilter}
+            onChange={setSubcategoriaFilter}
+            placeholder="Todas as subcategorias"
+            className="min-w-0"
+            options={[{ label: 'Todas as subcategorias', value: 'Todos' }, ...filterExpenseSubcategories.map((value) => ({ label: value, value }))]}
           />
           <CustomSelect
             value={statusFilter}
@@ -599,6 +667,7 @@ export function Despesas({
               onClick={() => {
                 setSearchTerm('');
                 setCategoriaFilter('Todos');
+                setSubcategoriaFilter('Todos');
                 setStatusFilter('Todos');
                 setTipoCustoFilter('Todos');
                 setCentroCustoFilter('Todos');
@@ -613,7 +682,7 @@ export function Despesas({
           )}
         </div>
         <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {filteredDespesas.length} de {despesas.length} despesa(s) exibidas
+          {filteredDespesas.length} de {expensePage?.total ?? 0} despesa(s) exibidas
         </p>
       </div>
 
@@ -621,6 +690,12 @@ export function Despesas({
         {loading ? (
           <div className="py-24 flex justify-center">
             <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-8 h-8 rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 animate-spin" />
+          </div>
+        ) : despesasFailed ? (
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-900 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-100">
+            <p className="font-semibold">Não foi possível carregar as contas a pagar.</p>
+            <p className="mt-1 text-xs">Verifique a conexão e tente novamente.</p>
+            <button type="button" onClick={() => void refetchDespesas()} className="mt-3 min-h-10 rounded-xl border border-rose-300 px-3 font-semibold hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:border-rose-500/40 dark:hover:bg-rose-500/20">Tentar novamente</button>
           </div>
         ) : despesas.length === 0 ? (
           <div className="bg-transparent border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-[2rem] p-20 flex flex-col items-center justify-center text-center">
@@ -651,25 +726,30 @@ export function Despesas({
                   return (
                     <tr key={desp.id} className="hover:bg-zinc-50/40 transition-colors">
                       <td className="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                        {new Date(desp.data).toLocaleDateString('pt-BR')}
+                        {formatDateKey(desp.data)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="font-medium text-zinc-900 dark:text-zinc-100">{desp.descricao}</div>
                         {desp.observacoes && <div className="text-xs text-zinc-400 truncate max-w-[200px]" title={desp.observacoes}>{desp.observacoes}</div>}
+                        {desp.clienteId && (
+                          <Link to={appLinks.clientSection(desp.clienteId, 'financeiro')} className="geo-focus-ring mt-1 inline-flex rounded text-xs font-semibold text-indigo-700 underline underline-offset-2 dark:text-indigo-300">
+                            Cliente: {desp.clienteNome || 'ver consolidado'}
+                          </Link>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400">
                         <span className="flex items-center gap-1.5">
                           <Tag weight="bold" className="w-3.5 h-3.5 text-zinc-400" />
-                          {desp.categoria}
+                          {desp.categoria}{desp.subcategoria ? ` · ${desp.subcategoria}` : ''}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                        {desp.projetoNome ? (
-                          <span className="flex items-center gap-1.5 text-zinc-700">
-                            <FolderSimple weight="bold" className="w-4 h-4 text-zinc-400" />
+                        {desp.projetoNome && desp.projetoId ? (
+                          <Link to={appLinks.projectSection(desp.projetoId, 'financeiro')} className="geo-focus-ring flex items-center gap-1.5 rounded text-zinc-700 underline decoration-zinc-300 underline-offset-2 hover:text-indigo-700 dark:text-zinc-200 dark:hover:text-indigo-300">
+                            <FolderSimple aria-hidden="true" weight="bold" className="w-4 h-4 text-zinc-400" />
                             {desp.projetoNome}
-                          </span>
-                        ) : '-'}
+                          </Link>
+                        ) : desp.projetoNome ?? '-'}
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold tracking-wider uppercase ${getStatusColor(desp.status)}`}>
@@ -697,7 +777,7 @@ export function Despesas({
                                   onClick={() => {
                                     setFinancialAction({ type: 'estorno', item: desp });
                                     setFinancialActionReason('');
-                                    setFinancialActionDate(new Date().toISOString().slice(0, 10));
+                                    setFinancialActionDate(localDateKey());
                                   }}
                                   className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200/80 bg-amber-50 text-amber-700 shadow-sm transition-[background-color,color,border-color,transform] hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
                                   aria-label={`Estornar despesa ${desp.descricao}`}
@@ -712,7 +792,7 @@ export function Despesas({
                                     onClick={() => {
                                       setFinancialAction({ type: 'cancelamento', item: desp });
                                       setFinancialActionReason('');
-                                      setFinancialActionDate(new Date().toISOString().slice(0, 10));
+                                      setFinancialActionDate(localDateKey());
                                     }}
                                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-amber-200/80 bg-amber-50 text-amber-700 shadow-sm transition-[background-color,color,border-color,transform] hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200"
                                     aria-label={`Cancelar despesa ${desp.descricao}`}
@@ -739,6 +819,13 @@ export function Despesas({
                 })}
               </tbody>
             </table>
+            {(expensePage?.totalPages ?? 1) > 1 && (
+              <nav aria-label="Paginação de despesas" className="flex items-center justify-between border-t border-zinc-100 px-6 py-4 text-xs dark:border-zinc-800">
+                <button type="button" disabled={page <= 1} onClick={() => setExpensePagination({ filterKey: expenseFilterKey, page: Math.max(1, page - 1) })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+                <span className="font-mono tabular-nums">Página {page} de {expensePage?.totalPages}</span>
+                <button type="button" disabled={page >= (expensePage?.totalPages ?? 1)} onClick={() => setExpensePagination({ filterKey: expenseFilterKey, page: page + 1 })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima</button>
+              </nav>
+            )}
           </div>
         )}
       </div>
@@ -765,6 +852,25 @@ export function Despesas({
               <div>
                 <label htmlFor="despesa-numero-documento" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Documento / comprovante</label>
                 <input id="despesa-numero-documento" name="numeroDocumento" type="text" autoComplete="off" spellCheck={false} value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} placeholder="NF, recibo, guia ou protocolo" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="despesa-comprovante-vinculado" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Arquivo de comprovante vinculado</label>
+                <FormSelect
+                  id="despesa-comprovante-vinculado"
+                  name="comprovanteDocumentoId"
+                  value={comprovanteDocumentoId}
+                  onChange={(event) => setComprovanteDocumentoId(event.target.value)}
+                  disabled={!projetoId}
+                  className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                >
+                  <option value="">{projetoId ? 'Nenhum arquivo vinculado' : 'Selecione primeiro um projeto'}</option>
+                  {comprovantes.map((documento) => (
+                    <option key={documento.id} value={documento.id}>
+                      {documento.projetoId ? 'Projeto' : 'Cliente'} — {documento.nome}
+                    </option>
+                  ))}
+                </FormSelect>
+                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">O arquivo permanece em sua pasta original e apenas o vínculo é registrado.</p>
               </div>
             </div>
           </FormSection>
@@ -794,11 +900,32 @@ export function Despesas({
             <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
               <div>
                 <label htmlFor="despesa-categoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Categoria</label>
-                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => setCategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{formExpenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => { setCategoria(e.target.value); setSubcategoria(''); }} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{formExpenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-subcategoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Subcategoria</label>
+                <FormSelect id="despesa-subcategoria" name="subcategoria" value={subcategoria} onChange={e => setSubcategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                  <option value="">Sem subcategoria</option>
+                  {formExpenseSubcategories.map((value) => <option key={value} value={value}>{value}</option>)}
+                </FormSelect>
+              </div>
+              <div>
+                <label htmlFor="despesa-cliente" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Cliente vinculado</label>
+                <RemoteCombobox<ClienteMin> id="despesa-cliente" name="clienteId" endpoint="/api/clientes/options" value={effectiveExpenseClientId || ''} selectedLabel={effectiveExpenseClientName || ''} disabled={Boolean(projetoId)} onChange={(nextClientId, option) => { setClienteId(nextClientId); setClienteNome(option?.nome || ''); }} emptyLabel="Administrativo / sem cliente" placeholder="Pesquisar cliente…" />
+                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{projetoId ? 'Definido automaticamente pelo projeto selecionado.' : 'Opcional para despesas administrativas ou gerais.'}</p>
               </div>
               <div>
                 <label htmlFor="despesa-projeto" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Projeto vinculado</label>
-                <RemoteCombobox<ProjetoMin> id="despesa-projeto" name="projetoId" endpoint="/api/projetos/options" value={projetoId} onChange={setProjetoId} emptyLabel="Nenhum" placeholder="Pesquisar projeto…" />
+                <RemoteCombobox<ProjetoMin> id="despesa-projeto" name="projetoId" endpoint="/api/projetos/options" value={projetoId} onChange={(nextProjectId, option) => {
+                  if (comprovanteDocumentoId) notifications.info('O comprovante foi desvinculado porque o projeto mudou. Selecione um arquivo compatível.');
+                  setProjetoId(nextProjectId);
+                  setComprovanteDocumentoId('');
+                  setViagemId('');
+                  if (option?.clienteId) {
+                    setClienteId(option.clienteId);
+                    setClienteNome(option.clienteNome || '');
+                  }
+                }} emptyLabel="Nenhum" placeholder="Pesquisar projeto…" />
               </div>
               <div>
                 <label htmlFor="despesa-viagem" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Viagem / prestação de contas</label>

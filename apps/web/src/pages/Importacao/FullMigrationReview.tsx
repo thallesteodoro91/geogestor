@@ -1,5 +1,7 @@
-import { ArrowsClockwise, CheckCircle, Info, WarningCircle, XCircle } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretDown, CaretUp, CheckCircle, Info, WarningCircle, XCircle } from '@phosphor-icons/react';
+import { useState } from 'react';
 import type { FullMigrationPreview, FullMigrationResult, ReconciliationItem } from './fullMigration';
+import { FormSelect } from '../../components/Form';
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
@@ -51,6 +53,7 @@ type FullMigrationReviewProps = {
 };
 
 export function FullMigrationReview({ preview, onMappingChange, isRefreshing = false }: FullMigrationReviewProps) {
+  const [columnsExpanded, setColumnsExpanded] = useState(true);
   const metrics = [
     ['Linhas lidas', preview.counts.rowsRead],
     ['Clientes novos', preview.counts.clientsCreated],
@@ -102,17 +105,40 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
         </section>
       )}
 
-      <section aria-labelledby="recognized-columns-title">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 id="recognized-columns-title" className="text-sm font-bold text-zinc-950 dark:text-zinc-100">Reconhecimento das colunas</h3>
-          <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
-            {preview.columns.recognized.length} de {preview.columns.sourceTotal} colunas interpretadas
-          </span>
+      <section aria-labelledby="recognized-columns-title" className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950/30">
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 id="recognized-columns-title" className="text-sm font-bold text-zinc-950 dark:text-zinc-100">Reconhecimento das colunas</h3>
+              <span className="rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                {preview.columns.recognized.length} de {preview.columns.sourceTotal} interpretadas
+              </span>
+              {preview.columns.unrecognized.length > 0 && (
+                <span className="rounded-md bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                  {preview.columns.unrecognized.length} sem associação
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              {columnsExpanded ? 'Confira ou altere as associações sugeridas.' : 'A lista de associações está recolhida.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setColumnsExpanded(current => !current)}
+            aria-expanded={columnsExpanded}
+            aria-controls="recognized-columns-content"
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm font-semibold text-zinc-700 transition-colors hover:border-zinc-300 hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-emerald-500/45 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            {columnsExpanded ? <CaretUp size={16} weight="bold" aria-hidden="true" /> : <CaretDown size={16} weight="bold" aria-hidden="true" />}
+            {columnsExpanded ? 'Recolher colunas' : 'Mostrar colunas'}
+          </button>
         </div>
-        <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-          O GeoGestor sugere o destino pelo significado do cabeçalho. Confirme ou altere qualquer associação antes de importar.
-        </p>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+        <div id="recognized-columns-content" hidden={!columnsExpanded} className="border-t border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            O GeoGestor sugere o destino pelo significado do cabeçalho. Confirme ou altere qualquer associação antes de importar.
+          </p>
+          <div className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-semibold uppercase text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
               <tr>
@@ -143,7 +169,7 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
                     <th scope="row" className="px-3 py-2.5 font-semibold text-zinc-900 dark:text-zinc-100">{source}</th>
                     <td className="px-3 py-2.5">
                       <label htmlFor={fieldId} className="sr-only">Destino da coluna {source}</label>
-                      <select
+                      <FormSelect
                         id={fieldId}
                         name={fieldId}
                         value={preview.columns.selectedMapping[source] ?? recognition?.field ?? ''}
@@ -155,7 +181,7 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
                         {preview.columns.availableFields.map(field => (
                           <option key={field.key} value={field.key}>{field.label}</option>
                         ))}
-                      </select>
+                      </FormSelect>
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex flex-wrap items-center gap-2">
@@ -179,23 +205,24 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
               })}
             </tbody>
           </table>
+          </div>
+          {isRefreshing && (
+            <p role="status" className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+              <ArrowsClockwise size={15} className="motion-safe:animate-spin motion-reduce:animate-none" aria-hidden="true" />
+              Recalculando a prévia…
+            </p>
+          )}
+          {preview.columns.unrecognized.length > 0 && (
+            <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              As colunas ainda não associadas serão preservadas no histórico da importação: {preview.columns.unrecognized.join(', ')}.
+            </p>
+          )}
+          {ignoredDocumentColumn && (
+            <p className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
+              CPF/CNPJ não será importado. Os clientes serão identificados principalmente pelo nome e ficarão marcados para revisão cadastral.
+            </p>
+          )}
         </div>
-        {isRefreshing && (
-          <p role="status" className="mt-2 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-            <ArrowsClockwise size={15} className="motion-safe:animate-spin motion-reduce:animate-none" aria-hidden="true" />
-            Recalculando a prévia…
-          </p>
-        )}
-        {preview.columns.unrecognized.length > 0 && (
-          <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-            As colunas ainda não associadas serão preservadas no histórico da importação: {preview.columns.unrecognized.join(', ')}.
-          </p>
-        )}
-        {ignoredDocumentColumn && (
-          <p className="mt-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
-            CPF/CNPJ não será importado. Os clientes serão identificados principalmente pelo nome e ficarão marcados para revisão cadastral.
-          </p>
-        )}
       </section>
 
       {generalIssues.length > 0 && (

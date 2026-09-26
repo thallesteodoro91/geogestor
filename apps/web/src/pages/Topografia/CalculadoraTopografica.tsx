@@ -30,6 +30,7 @@ import { PageHeader } from '../../components/PageHeader';
 import { CalculationHistory, type SavedCalculation } from '../../components/CalculationHistory';
 import { MapBaseNotice } from '../../components/maps/MapBaseNotice';
 import { createBaseTileLayer } from '../../utils/mapTiles';
+import { normalizeSearch } from '../../utils/searchHelpers';
 import {
   calcularAreaGeodesicaElipsoidal,
   calcularAreaPoligono,
@@ -41,6 +42,7 @@ import {
   gmsParaDecimais,
   metrosQuadradosParaHectares,
   parseCoordinateText,
+  parseTopographyNumber,
   validarCoordenadas,
 } from '../../core/topography';
 import {
@@ -67,6 +69,7 @@ import {
 } from '../../core/topographySpatial';
 import {
   exportPolygon,
+  parseSavedPolygonVertices,
   validatePolygonVertices,
   type ExportFormat,
 } from '../../core/topographyExchange';
@@ -203,9 +206,7 @@ const compactPanelClass = cn(
 );
 
 function parseNumericInput(value: string): number | null {
-  if (!value.trim()) return null;
-  const parsed = Number(value.trim().replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseTopographyNumber(value);
 }
 
 function coordinateError(value: string, kind: CoordinateKind): string | null {
@@ -441,11 +442,12 @@ export function CalculadoraTopografica() {
   }, [spatialReference.code]);
 
   const filteredSpatialReferences = useMemo(() => {
-    const normalized = spatialSearch.trim().toLocaleLowerCase('pt-BR');
-    if (!normalized) return BRAZIL_SPATIAL_REFERENCES;
-    return BRAZIL_SPATIAL_REFERENCES.filter((reference) =>
-      `${reference.name} ${reference.code} ${reference.datum} ${reference.zone ?? ''}${reference.hemisphere ?? ''}`
-        .toLocaleLowerCase('pt-BR').includes(normalized));
+    const tokens = normalizeSearch(spatialSearch).split(/\s+/).filter(Boolean);
+    if (!tokens.length) return BRAZIL_SPATIAL_REFERENCES;
+    return BRAZIL_SPATIAL_REFERENCES.filter((reference) => {
+      const searchable = normalizeSearch(`${reference.name} ${reference.code} ${reference.datum} ${reference.zone ?? ''}${reference.hemisphere ?? ''}`);
+      return tokens.every((token) => searchable.includes(token));
+    });
   }, [spatialSearch]);
 
   function toggleFavoriteSpatialReference() {
@@ -539,10 +541,10 @@ export function CalculadoraTopografica() {
   const decimalHemisphere =
     decimal !== null
       ? coordinateKind === 'latitude'
-        ? decimal < 0
+        ? decimal < 0 || Object.is(decimal, -0)
           ? 'S'
           : 'N'
-        : decimal < 0
+        : decimal < 0 || Object.is(decimal, -0)
           ? 'W'
           : 'E'
       : null;
@@ -579,6 +581,7 @@ export function CalculadoraTopografica() {
     }
   })();
   const suggestedPairZone = parsedGeographicPair ? suggestUtmZone(parsedGeographicPair.lng) : null;
+  const gmsClipboardValue = Object.is(gmsDecimalResult, -0) ? '-0' : String(gmsDecimalResult);
   const converterResultAvailable = converterMode === 'gms-decimal'
     ? gmsDecimalResult !== null
     : converterMode === 'decimal-gms'
@@ -621,13 +624,25 @@ export function CalculadoraTopografica() {
     p2x: finiteNumberError(projectedPoint2.x, 'a coordenada X do destino'),
     p2y: finiteNumberError(projectedPoint2.y, 'a coordenada Y do destino'),
   }).every((error) => !error);
-  const planarDistance = projectedPointsAreValid
+  const projectedDistanceSpatialIssues = projectedPointsAreValid && spatialReference.mode === 'projetada'
+    ? validateProjectedPositions([
+        { x: parsedProjectedPoint1.x ?? 0, y: parsedProjectedPoint1.y ?? 0 },
+        { x: parsedProjectedPoint2.x ?? 0, y: parsedProjectedPoint2.y ?? 0 },
+      ], spatialReference)
+    : [];
+  const projectedDistanceBlockingIssue = spatialReference.mode !== 'projetada'
+    ? 'X/Y exige um SRC projetado UTM.'
+    : projectedDistanceSpatialIssues.find((issue) => issue.severity === 'error')?.message ?? null;
+  const projectedPointsAreEqual = projectedPointsAreValid
+    && parsedProjectedPoint1.x === parsedProjectedPoint2.x
+    && parsedProjectedPoint1.y === parsedProjectedPoint2.y;
+  const planarDistance = projectedPointsAreValid && !projectedDistanceBlockingIssue
     ? Math.hypot(
         (parsedProjectedPoint2.x ?? 0) - (parsedProjectedPoint1.x ?? 0),
         (parsedProjectedPoint2.y ?? 0) - (parsedProjectedPoint1.y ?? 0),
       )
     : null;
-  const gridBearing = projectedPointsAreValid
+  const gridBearing = projectedPointsAreValid && !projectedDistanceBlockingIssue && !projectedPointsAreEqual
     ? calcularAzimutePlano(
         parsedProjectedPoint1.x ?? 0,
         parsedProjectedPoint1.y ?? 0,
@@ -636,7 +651,7 @@ export function CalculadoraTopografica() {
       )
     : null;
   const projectedOriginGeographic = (() => {
-    if (!projectedPointsAreValid || spatialReference.mode !== 'projetada') return null;
+    if (!projectedPointsAreValid || projectedDistanceBlockingIssue) return null;
     try {
       return projectedToGeographic(
         { x: parsedProjectedPoint1.x ?? 0, y: parsedProjectedPoint1.y ?? 0 },
@@ -647,7 +662,7 @@ export function CalculadoraTopografica() {
     }
   })();
   const projectedDestinationGeographic = (() => {
-    if (!projectedPointsAreValid || spatialReference.mode !== 'projetada') return null;
+    if (!projectedPointsAreValid || projectedDistanceBlockingIssue) return null;
     try {
       return projectedToGeographic(
         { x: parsedProjectedPoint2.x ?? 0, y: parsedProjectedPoint2.y ?? 0 },
@@ -716,11 +731,17 @@ export function CalculadoraTopografica() {
   const mapVertices = useMemo(() => {
     if (polygonMode === 'geografica') {
       const sourceCode = spatialReference.datum === 'SIRGAS 2000' ? 'EPSG:4674' : 'EPSG:4326';
-      return geographicVertices.map((vertex) => transformGeographicDatum(vertex, sourceCode, 'EPSG:4326'));
+      return geographicVertices.map((vertex) => ({
+        ...vertex,
+        ...transformGeographicDatum(vertex, sourceCode, 'EPSG:4326'),
+      }));
     }
     if (spatialReference.mode !== 'projetada') return [];
     try {
-      return projectedVertices.map((vertex) => projectedToGeographic(vertex, spatialReference.code));
+      return projectedVertices.map((vertex) => ({
+        ...vertex,
+        ...projectedToGeographic(vertex, spatialReference.code),
+      }));
     } catch {
       return [];
     }
@@ -937,7 +958,7 @@ export function CalculadoraTopografica() {
     if (latLngs.length === 1) {
       map.setView(latLngs[0], 17);
     } else {
-      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 18 });
+      map.fitBounds(L.latLngBounds(latLngs), { padding: [24, 24], maxZoom: 20 });
     }
   }, [activeTab, mapVertices, polygonMode, selectedVertexIndex, setGeographicVertices, setProjectedVertices, spatialReference.code, spatialReference.datum]);
 
@@ -1283,7 +1304,7 @@ export function CalculadoraTopografica() {
         setActiveTab('distancia');
         setPoint1({ lat: first.lat, lng: first.lng });
         setPoint2({ lat: second.lat, lng: second.lng });
-        if (saved.distanceMode === 'projetada') setDistanceMode('projetada');
+        if (saved.distanceMode === 'geografica' || saved.distanceMode === 'projetada') setDistanceMode(saved.distanceMode);
         if (saved.projectedPoint1 && saved.projectedPoint2) {
           const projectedFirst = saved.projectedPoint1 as { x?: unknown; y?: unknown };
           const projectedSecond = saved.projectedPoint2 as { x?: unknown; y?: unknown };
@@ -1296,10 +1317,15 @@ export function CalculadoraTopografica() {
       return;
     }
     if ((saved.polygonMode === 'geografica' || saved.polygonMode === 'projetada') && Array.isArray(saved.vertices)) {
+      const restoredVertices = parseSavedPolygonVertices(saved.vertices, saved.polygonMode);
+      if (!restoredVertices) {
+        setTechnicalStatus('Dados legados inválidos: o cálculo não foi reaberto.');
+        return;
+      }
       setActiveTab('poligono');
       setPolygonMode(saved.polygonMode);
-      if (saved.polygonMode === 'geografica') setGeographicVertices(saved.vertices as GeographicVertex[]);
-      else setProjectedVertices(saved.vertices as ProjectedVertex[]);
+      if (saved.polygonMode === 'geografica') setGeographicVertices(restoredVertices as GeographicVertex[]);
+      else setProjectedVertices(restoredVertices as ProjectedVertex[]);
     }
   }
 
@@ -1352,6 +1378,23 @@ export function CalculadoraTopografica() {
                 </button>
               ))}
             </div>
+            <section
+              className="flex h-[52px] shrink-0 items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              aria-labelledby="spatial-reference-title"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <MapPin className="h-4 w-4 shrink-0 text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
+                <div className="min-w-0">
+                  <h2 id="spatial-reference-title" className="sr-only">Referência espacial compartilhada</h2>
+                  <p className="max-w-64 truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100" translate="no">
+                    {spatialReference.datum} · {spatialReference.zone ? `UTM ${spatialReference.zone}${spatialReference.hemisphere}` : 'Geográfico'} · {spatialReference.code}
+                  </p>
+                </div>
+              </div>
+              {spatialIssues.length > 0 && <span className={cn('inline-flex min-h-7 items-center gap-1 rounded-full px-2 text-[10px] font-bold uppercase', blockingSpatialIssue ? 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200')}><WarningCircle className="h-3.5 w-3.5" aria-hidden="true" />{blockingSpatialIssue ? 'Incompatível' : 'Conferir SRC'}</span>}
+              <button type="button" aria-haspopup="dialog" aria-expanded={spatialPanelExpanded} onClick={() => setSpatialPanelExpanded(true)} className="min-h-9 rounded-full border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-cyan-500/40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Configurar</button>
+              <p className="sr-only" role="status" aria-live="polite">{technicalStatus}</p>
+            </section>
             <div className="ml-auto shrink-0">
               <CalculationHistory
                 type="topografico"
@@ -1383,21 +1426,6 @@ export function CalculadoraTopografica() {
           </div>
         }
       />
-
-      <section className="mb-4 flex w-full min-w-0 flex-wrap items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 shadow-sm sm:w-fit sm:max-w-full dark:border-zinc-800 dark:bg-zinc-900" aria-labelledby="spatial-reference-title">
-        <div className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-          <MapPin className="h-4 w-4 shrink-0 text-cyan-700 dark:text-cyan-300" aria-hidden="true" />
-          <div className="min-w-0">
-            <h2 id="spatial-reference-title" className="sr-only">Referência espacial compartilhada</h2>
-            <p className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-100" translate="no">
-              {spatialReference.datum} · {spatialReference.zone ? `UTM ${spatialReference.zone}${spatialReference.hemisphere}` : 'Geográfico'} · {spatialReference.code}
-            </p>
-          </div>
-        </div>
-        {spatialIssues.length > 0 && <span className={cn('inline-flex min-h-7 items-center gap-1 rounded-full px-2 text-[10px] font-bold uppercase', blockingSpatialIssue ? 'bg-red-100 text-red-800 dark:bg-red-500/15 dark:text-red-200' : 'bg-amber-100 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200')}><WarningCircle className="h-3.5 w-3.5" aria-hidden="true" />{blockingSpatialIssue ? 'Incompatível' : 'Conferir SRC'}</span>}
-        <button type="button" aria-haspopup="dialog" aria-expanded={spatialPanelExpanded} onClick={() => setSpatialPanelExpanded(true)} className="min-h-9 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-cyan-500/40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Configurar</button>
-        <p className="sr-only" role="status" aria-live="polite">{technicalStatus}</p>
-      </section>
       {technicalStatus && <p className="mb-3 text-xs font-medium text-emerald-700 dark:text-emerald-300" aria-hidden="true">{technicalStatus}</p>}
 
       {activeTab === 'conversor' && (
@@ -1416,7 +1444,7 @@ export function CalculadoraTopografica() {
           </div>
 
           <div id="converter-workspace" role="tabpanel" aria-labelledby={`converter-mode-${converterMode}`} aria-live="polite" className="mt-5 min-w-0">
-            {converterMode === 'gms-decimal' && <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,.6fr)]"><div><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="gms-coordinate-kind" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo de coordenada</label><FormSelect id="gms-coordinate-kind" name="gms-coordinate-kind" value={coordinateKind} autoComplete="off" onChange={(event) => changeCoordinateKind(event.target.value as CoordinateKind)} className={cn(geoFieldClass, 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700')}><option value="latitude">Latitude</option><option value="longitude">Longitude</option></FormSelect></div><div><label htmlFor="gms-hemisphere" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Hemisfério</label><FormSelect id="gms-hemisphere" name="gms-hemisphere" value={hemisphere} autoComplete="off" onChange={(event) => setHemisphere(event.target.value as Hemisphere)} className={cn(geoFieldClass, 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700')}><option value={coordinateKind === 'latitude' ? 'N' : 'E'}>{coordinateKind === 'latitude' ? 'Norte (N)' : 'Leste (E)'}</option><option value={coordinateKind === 'latitude' ? 'S' : 'W'}>{coordinateKind === 'latitude' ? 'Sul (S)' : 'Oeste (W)'}</option></FormSelect></div></div><div className="mt-4 grid gap-4 sm:grid-cols-3"><NumberField id="gms-degrees" name="gms-degrees" label={`Graus · ° (0–${maxDegrees})`} value={degreesInput} onChange={setDegreesInput} error={degreesError} /><NumberField id="gms-minutes" name="gms-minutes" label="Minutos · ′ (0–59)" value={minutesInput} onChange={setMinutesInput} error={minutesError} /><NumberField id="gms-seconds" name="gms-seconds" label="Segundos · ″ (0–<60)" value={secondsInput} onChange={setSecondsInput} error={secondsError} /></div></div><div><ResultCard label="Coordenada decimal" value={gmsDecimalResult === null ? '—' : `${coordinateFormatter.format(gmsDecimalResult)}°`} detail={gmsDecimalResult === null ? 'Corrija os campos para calcular.' : `Hemisfério ${hemisphere}.`} tone="violet" />{gmsDecimalResult !== null && <button type="button" onClick={() => copyText(String(gmsDecimalResult), 'Coordenada decimal')} className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold dark:border-zinc-700"><Copy className="h-4 w-4" aria-hidden="true" />Copiar resultado</button>}</div></div>}
+            {converterMode === 'gms-decimal' && <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,.6fr)]"><div><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="gms-coordinate-kind" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo de coordenada</label><FormSelect id="gms-coordinate-kind" name="gms-coordinate-kind" value={coordinateKind} autoComplete="off" onChange={(event) => changeCoordinateKind(event.target.value as CoordinateKind)} className={cn(geoFieldClass, 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700')}><option value="latitude">Latitude</option><option value="longitude">Longitude</option></FormSelect></div><div><label htmlFor="gms-hemisphere" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Hemisfério</label><FormSelect id="gms-hemisphere" name="gms-hemisphere" value={hemisphere} autoComplete="off" onChange={(event) => setHemisphere(event.target.value as Hemisphere)} className={cn(geoFieldClass, 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700')}><option value={coordinateKind === 'latitude' ? 'N' : 'E'}>{coordinateKind === 'latitude' ? 'Norte (N)' : 'Leste (E)'}</option><option value={coordinateKind === 'latitude' ? 'S' : 'W'}>{coordinateKind === 'latitude' ? 'Sul (S)' : 'Oeste (W)'}</option></FormSelect></div></div><div className="mt-4 grid gap-4 sm:grid-cols-3"><NumberField id="gms-degrees" name="gms-degrees" label={`Graus · ° (0–${maxDegrees})`} value={degreesInput} onChange={setDegreesInput} error={degreesError} /><NumberField id="gms-minutes" name="gms-minutes" label="Minutos · ′ (0–59)" value={minutesInput} onChange={setMinutesInput} error={minutesError} /><NumberField id="gms-seconds" name="gms-seconds" label="Segundos · ″ (0–<60)" value={secondsInput} onChange={setSecondsInput} error={secondsError} /></div></div><div><ResultCard label="Coordenada decimal" value={gmsDecimalResult === null ? '—' : `${coordinateFormatter.format(gmsDecimalResult)}°`} detail={gmsDecimalResult === null ? 'Corrija os campos para calcular.' : `Hemisfério ${hemisphere}.`} tone="violet" />{gmsDecimalResult !== null && <button type="button" onClick={() => copyText(gmsClipboardValue, 'Coordenada decimal')} className="mt-2 inline-flex min-h-9 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold dark:border-zinc-700"><Copy className="h-4 w-4" aria-hidden="true" />Copiar resultado</button>}</div></div>}
 
             {converterMode === 'decimal-gms' && <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.7fr)]"><div className="grid gap-4 sm:grid-cols-2"><div><label htmlFor="decimal-coordinate-kind" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Tipo de coordenada</label><FormSelect id="decimal-coordinate-kind" name="decimal-coordinate-kind" value={coordinateKind} autoComplete="off" onChange={(event) => changeCoordinateKind(event.target.value as CoordinateKind)} className={cn(geoFieldClass, 'w-full rounded-lg border border-zinc-200 px-3 py-2.5 text-sm dark:border-zinc-700')}><option value="latitude">Latitude</option><option value="longitude">Longitude</option></FormSelect></div><NumberField id="decimal-coordinate" name="decimal-coordinate" label={coordinateKind === 'latitude' ? 'Latitude decimal (−90 a 90)' : 'Longitude decimal (−180 a 180)'} value={decimalInput} onChange={setDecimalInput} error={decimalError} placeholder={coordinateKind === 'latitude' ? '-27,5945' : '-48,5477'} /></div><div><ResultCard label="Coordenada em GMS" value={decimalGmsResult && decimalHemisphere ? `${numberFormatter.format(decimalGmsResult.graus)}° ${numberFormatter.format(decimalGmsResult.minutos)}′ ${numberFormatter.format(decimalGmsResult.segundos)}″ ${decimalHemisphere}` : '—'} detail={decimalGmsResult ? 'Conversão angular; não altera datum ou SRC.' : 'Corrija o valor decimal para converter.'} tone="cyan" /></div></div>}
 
@@ -1498,6 +1526,15 @@ export function CalculadoraTopografica() {
           {distanceMode === 'geografica' && pointsAreEqual && (
             <div role="status" className="mt-4 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />Os pontos são coincidentes. A distância é zero e o azimute não pode ser determinado.</div>
           )}
+          {distanceMode === 'projetada' && projectedPointsAreEqual && !projectedDistanceBlockingIssue && (
+            <div role="status" className="mt-4 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"><WarningCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />Os pontos X/Y são coincidentes. A distância é zero e o azimute de quadrícula não pode ser determinado.</div>
+          )}
+          {distanceMode === 'projetada' && (projectedDistanceBlockingIssue || projectedDistanceSpatialIssues.length > 0) && (
+            <ul aria-live="assertive" className={cn('mt-4 space-y-1 rounded-lg border p-3 text-sm', projectedDistanceBlockingIssue ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200' : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200')}>
+              {projectedDistanceBlockingIssue && spatialReference.mode !== 'projetada' && <li>{projectedDistanceBlockingIssue} Selecione um EPSG UTM antes de calcular.</li>}
+              {projectedDistanceSpatialIssues.map((issue) => <li key={`${issue.code}-${issue.message}`}><strong>{issue.message}</strong> {issue.fix}</li>)}
+            </ul>
+          )}
 
           <div className="mt-5 grid gap-4 border-t border-zinc-200 pt-5 dark:border-zinc-800 md:grid-cols-2">
             {distanceMode === 'geografica' ? (
@@ -1507,8 +1544,8 @@ export function CalculadoraTopografica() {
               </>
             ) : (
               <>
-                <ResultCard label="Distância de quadrícula" value={planarDistance !== null ? `${meterFormatter.format(planarDistance)} m` : '—'} detail={`${spatialReference.code} · cálculo plano por Pitágoras`} accent />
-                <ResultCard label="Azimute de quadrícula" value={gridBearing !== null && Number.isFinite(gridBearing) ? `${degreeFormatter.format(gridBearing)}°` : '—'} detail="Referenciado ao norte da quadrícula." />
+                <ResultCard label="Distância de quadrícula" value={planarDistance !== null ? `${meterFormatter.format(planarDistance)} m` : '—'} detail={projectedDistanceBlockingIssue ?? `${spatialReference.code} · cálculo plano por Pitágoras`} accent />
+                <ResultCard label="Azimute de quadrícula" value={gridBearing !== null && Number.isFinite(gridBearing) ? `${degreeFormatter.format(gridBearing)}°` : '—'} detail={projectedPointsAreEqual ? 'Indeterminado para pontos coincidentes.' : projectedDistanceBlockingIssue ?? 'Referenciado ao norte da quadrícula.'} />
               </>
             )}
           </div>
@@ -1695,7 +1732,7 @@ export function CalculadoraTopografica() {
                     <button type="button" onClick={() => importBulkVertices()} className="inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-xs font-semibold text-white hover:bg-cyan-800 focus-visible:ring-2 focus-visible:ring-cyan-500/40"><ClipboardText className="h-4 w-4" aria-hidden="true" /> Importar texto</button>
                     <label className="inline-flex min-h-9 cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold hover:bg-zinc-50 focus-within:ring-2 focus-within:ring-cyan-500/40 dark:border-zinc-700 dark:hover:bg-zinc-800"><UploadSimple className="h-4 w-4" aria-hidden="true" /> Selecionar CSV/TXT<input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={handleVertexFile} className="sr-only" /></label>
                   </div>
-                  {bulkImportErrors.length > 0 && <ul role="alert" className="mt-2 space-y-1 text-xs text-red-600 dark:text-red-400">{bulkImportErrors.slice(0, 5).map((error) => <li key={error}>{error}</li>)}</ul>}
+                  {bulkImportErrors.length > 0 && <ul aria-live="assertive" className="mt-2 space-y-1 text-xs text-red-600 dark:text-red-400">{bulkImportErrors.slice(0, 5).map((error) => <li key={error}>{error}</li>)}</ul>}
                 </details>
 
                 {activeVertexCount < 3 && (
@@ -1704,7 +1741,7 @@ export function CalculadoraTopografica() {
                     Adicione {3 - activeVertexCount} {3 - activeVertexCount === 1 ? 'vértice' : 'vértices'} para fechar o polígono e calcular área e perímetro.
                   </div>
                 )}
-                {(polygonValidation.messages.length > 0 || spatialIssues.length > 0) && <details className="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-cyan-500/40">Advertências técnicas ({polygonValidation.messages.length + spatialIssues.length})</summary><div className="border-t border-zinc-200 p-2 dark:border-zinc-800">{polygonValidation.messages.length > 0 && <ul role="alert" className="space-y-1 rounded-lg bg-red-50 p-2.5 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">{polygonValidation.messages.map((message) => <li key={message}>{message}</li>)}</ul>}{spatialIssues.length > 0 && <ul role="alert" className={cn('space-y-2 rounded-lg p-2.5 text-xs', polygonValidation.messages.length > 0 && 'mt-2', blockingSpatialIssue ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200')}>{spatialIssues.map((issue) => <li key={`${issue.code}-${issue.message}`}><strong>{issue.message}</strong> {issue.fix}</li>)}</ul>}</div></details>}
+                {(polygonValidation.messages.length > 0 || spatialIssues.length > 0) && <details className="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-800"><summary className="cursor-pointer px-3 py-2 text-xs font-semibold focus-visible:ring-2 focus-visible:ring-cyan-500/40">Advertências técnicas ({polygonValidation.messages.length + spatialIssues.length})</summary><div className="border-t border-zinc-200 p-2 dark:border-zinc-800">{polygonValidation.messages.length > 0 && <ul aria-live="assertive" className="space-y-1 rounded-lg bg-red-50 p-2.5 text-xs text-red-700 dark:bg-red-950/40 dark:text-red-300">{polygonValidation.messages.map((message) => <li key={message}>{message}</li>)}</ul>}{spatialIssues.length > 0 && <ul aria-live="assertive" className={cn('space-y-2 rounded-lg p-2.5 text-xs', polygonValidation.messages.length > 0 && 'mt-2', blockingSpatialIssue ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300' : 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200')}>{spatialIssues.map((issue) => <li key={`${issue.code}-${issue.message}`}><strong>{issue.message}</strong> {issue.fix}</li>)}</ul>}</div></details>}
               </div>
 
               <div className={cn(compactPanelClass, 'order-1 border-l-4 border-l-emerald-500 dark:border-l-emerald-400')} aria-live="polite">
@@ -1752,10 +1789,10 @@ export function CalculadoraTopografica() {
           </div>
           <div>
             <label htmlFor="topography-spatial-reference" className="mb-1.5 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Sistema de referência (SRC)</label>
-            <select id="topography-spatial-reference" name="topography_spatial_reference" value={spatialReference.code} onChange={(event) => requestSpatialReferenceChange(event.target.value)} className={cn(geoFieldClass, 'min-h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-cyan-500/30 dark:border-zinc-700 dark:text-white')}>
+            <FormSelect id="topography-spatial-reference" name="topography_spatial_reference" value={spatialReference.code} onChange={(event) => requestSpatialReferenceChange(event.target.value)} className={cn(geoFieldClass, 'min-h-10 w-full rounded-lg border border-zinc-200 px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-cyan-500/30 dark:border-zinc-700 dark:text-white')}>
               {!filteredSpatialReferences.some((reference) => reference.code === spatialReference.code) && <option value={spatialReference.code}>{spatialReference.name} — {spatialReference.code}</option>}
               {filteredSpatialReferences.map((reference) => <option key={reference.code} value={reference.code}>{reference.name} — {reference.code}</option>)}
-            </select>
+            </FormSelect>
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             {[['Datum', spatialReference.datum], ['Tipo', spatialReference.mode === 'projetada' ? 'Projetado X/Y' : 'Geográfico'], ['Fuso / hemisfério', spatialReference.zone ? `${spatialReference.zone}${spatialReference.hemisphere}` : 'Não aplicável']].map(([label, value]) => <div key={label} className="rounded-lg bg-zinc-100 px-3 py-2 dark:bg-zinc-800"><p className="text-[10px] font-bold uppercase text-zinc-500">{label}</p><p className="mt-1 text-xs font-semibold">{value}</p></div>)}
@@ -1792,12 +1829,12 @@ export function CalculadoraTopografica() {
           <div className="grid gap-3 sm:grid-cols-2">
             <NumberField id="vertex-editor-first" name="vertex_editor_first" label={polygonMode === 'geografica' ? 'Latitude' : 'X / Este (m)'} value={vertexEditor.first} onChange={(first) => setVertexEditor((current) => current ? { ...current, first } : current)} />
             <NumberField id="vertex-editor-second" name="vertex_editor_second" label={polygonMode === 'geografica' ? 'Longitude' : 'Y / Norte (m)'} value={vertexEditor.second} onChange={(second) => setVertexEditor((current) => current ? { ...current, second } : current)} />
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Código<input type="text" name="vertex_code" autoComplete="off" value={vertexEditor.code} onChange={(event) => setVertexEditor((current) => current ? { ...current, code: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Descrição<input type="text" name="vertex_description" autoComplete="off" value={vertexEditor.description} onChange={(event) => setVertexEditor((current) => current ? { ...current, description: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Código<input type="text" name="vertex_code" autoComplete="off" maxLength={80} value={vertexEditor.code} onChange={(event) => setVertexEditor((current) => current ? { ...current, code: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Descrição<input type="text" name="vertex_description" autoComplete="off" maxLength={500} value={vertexEditor.description} onChange={(event) => setVertexEditor((current) => current ? { ...current, description: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
             <NumberField id="vertex-editor-altitude" name="vertex_altitude" label="Altitude (m, opcional)" value={vertexEditor.altitude} onChange={(altitude) => setVertexEditor((current) => current ? { ...current, altitude } : current)} />
-            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Precisão<input type="text" name="vertex_precision" autoComplete="off" value={vertexEditor.precision} onChange={(event) => setVertexEditor((current) => current ? { ...current, precision: event.target.value } : current)} placeholder="Ex.: 0,02 m" className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
+            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">Precisão<input type="text" name="vertex_precision" autoComplete="off" maxLength={80} value={vertexEditor.precision} onChange={(event) => setVertexEditor((current) => current ? { ...current, precision: event.target.value } : current)} placeholder="Ex.: 0,02 m" className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>
           </div>
-          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Observações<textarea name="vertex_notes" rows={3} value={vertexEditor.notes} onChange={(event) => setVertexEditor((current) => current ? { ...current, notes: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700')} /></label>
+          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">Observações<textarea name="vertex_notes" rows={3} maxLength={2000} value={vertexEditor.notes} onChange={(event) => setVertexEditor((current) => current ? { ...current, notes: event.target.value } : current)} className={cn(geoFieldClass, 'mt-1.5 w-full rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700')} /></label>
           <div className="flex justify-end gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800"><button type="button" onClick={() => setVertexEditor(null)} className="min-h-10 rounded-lg border border-zinc-200 px-4 text-sm font-semibold dark:border-zinc-700">Cancelar</button><button type="button" onClick={saveVertexEditor} className="min-h-10 rounded-lg bg-cyan-700 px-4 text-sm font-semibold text-white hover:bg-cyan-800 focus-visible:ring-2 focus-visible:ring-cyan-500/40">Salvar vértice</button></div>
         </div>}
       </Modal>
@@ -1806,7 +1843,7 @@ export function CalculadoraTopografica() {
         <div className="space-y-3">
           {(['title', 'client', 'project', 'responsible'] as const).map((field) => {
             const labels = { title: 'Título', client: 'Cliente', project: 'Projeto', responsible: 'Responsável técnico' };
-            return <label key={field} className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">{labels[field]}<input type="text" name={`report_${field}`} autoComplete="off" value={reportFields[field]} onChange={(event) => setReportFields((current) => ({ ...current, [field]: event.target.value }))} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>;
+            return <label key={field} className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">{labels[field]}<input type="text" name={`report_${field}`} autoComplete="off" maxLength={200} value={reportFields[field]} onChange={(event) => setReportFields((current) => ({ ...current, [field]: event.target.value }))} className={cn(geoFieldClass, 'mt-1.5 min-h-10 w-full rounded-lg border border-zinc-200 px-3 dark:border-zinc-700')} /></label>;
           })}
           <p className="rounded-lg bg-zinc-100 p-3 text-xs leading-5 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">O PDF incluirá SRC, método, coordenadas, área, perímetro, advertências automáticas e campo de assinatura.</p>
           <div className="flex justify-end gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800"><button type="button" onClick={() => setReportOpen(false)} className="min-h-10 rounded-lg border border-zinc-200 px-4 text-sm font-semibold dark:border-zinc-700">Cancelar</button><button type="button" onClick={generateTechnicalReport} className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-cyan-700 px-4 text-sm font-semibold text-white hover:bg-cyan-800 focus-visible:ring-2 focus-visible:ring-cyan-500/40"><FilePdf className="h-4 w-4" aria-hidden="true" />Baixar PDF</button></div>

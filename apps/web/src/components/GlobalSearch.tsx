@@ -119,15 +119,16 @@ export function GlobalSearch() {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
+        aria-label="Buscar no GeoGestor"
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className="geo-focus-ring hidden h-10 w-[280px] items-center justify-between rounded-full border border-brand-border bg-brand-surface/80 px-3.5 text-sm font-semibold text-zinc-600 shadow-brand backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-brand-primary-300/55 hover:bg-brand-surface hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white md:flex"
+        className="geo-focus-ring flex h-10 w-10 touch-manipulation items-center justify-center rounded-full border border-brand-border bg-brand-surface/80 px-0 text-sm font-semibold text-zinc-600 shadow-brand backdrop-blur-md transition-[background-color,border-color,color,box-shadow] duration-200 hover:border-brand-primary-300/55 hover:bg-brand-surface hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white md:w-[280px] md:justify-between md:px-3.5"
       >
         <span className="flex items-center gap-2">
           <MagnifyingGlass aria-hidden="true" className="h-4 w-4 text-brand-primary-500 dark:text-brand-primary-200" />
-          Buscar no GeoGestor
+          <span className="hidden md:inline">Buscar no GeoGestor</span>
         </span>
-        <kbd className="rounded-full border border-brand-border bg-brand-surface-subtle px-2 py-0.5 text-xs font-bold text-zinc-700 dark:bg-brand-surface-muted dark:text-zinc-200">
+        <kbd className="hidden rounded-full border border-brand-border bg-brand-surface-subtle px-2 py-0.5 text-xs font-bold text-zinc-700 dark:bg-brand-surface-muted dark:text-zinc-200 md:inline">
           Ctrl K
         </kbd>
       </button>

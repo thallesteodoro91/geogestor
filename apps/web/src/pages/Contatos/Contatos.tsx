@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -65,6 +65,8 @@ interface ContatosProps {
   toolbarLeading?: ReactNode;
 }
 
+type LeadFormErrors = Partial<Record<'nome' | 'email' | 'telefone' | 'dataCadastro', string>>;
+
 export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Contatos({ embedded = false, toolbarLeading }, ref) {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -78,6 +80,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
   const [editingContato, setEditingContato] = useState<Contato | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contato | null>(null);
   const [formError, setFormError] = useState('');
+  const [formErrors, setFormErrors] = useState<LeadFormErrors>({});
 
   // Form states
   const [nome, setNome] = useState('');
@@ -88,6 +91,20 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
   const [origem, setOrigem] = useState('');
   const [dataCadastro, setDataCadastro] = useState(new Date().toISOString().split('T')[0]);
   const [observacoes, setObservacoes] = useState('');
+  const initialFormSnapshot = useMemo(() => editingContato ? {
+    nome: editingContato.nome || '',
+    email: editingContato.email || '',
+    telefone: formatPhoneBR(editingContato.telefone || ''),
+    empresa: editingContato.empresa || '',
+    cidade: editingContato.cidade || '',
+    origem: editingContato.origem || '',
+    dataCadastro: editingContato.dataCadastro || editingContato.createdAt?.split('T')[0] || '',
+    observacoes: editingContato.observacoes || '',
+  } : {
+    nome: '', email: '', telefone: '', empresa: '', cidade: '', origem: '',
+    dataCadastro: new Date().toISOString().split('T')[0], observacoes: '',
+  }, [editingContato]);
+  const isFormDirty = showModal && JSON.stringify({ nome, email, telefone, empresa, cidade, origem, dataCadastro, observacoes }) !== JSON.stringify(initialFormSnapshot);
 
   const { data, isLoading, isError, error, refetch } = useQuery<PaginatedContatos>({
     queryKey: ['contatos', { page, pageSize, q: searchTerm, status: statusFilter }],
@@ -135,7 +152,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
       setDeleteTarget(null);
       queryClient.invalidateQueries({ queryKey: ['contatos'] });
       queryClient.invalidateQueries({ queryKey: ['lead-analytics'] });
-      handleCloseModal();
+      handleCloseModal(true);
       toast.success(editingContato ? 'Lead atualizado.' : 'Lead cadastrado.');
     },
     onError: (err: unknown) => {
@@ -172,6 +189,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
 
   const handleOpenModal = (contato?: Contato) => {
     setFormError('');
+    setFormErrors({});
     if (contato) {
       setEditingContato(contato);
       setNome(contato.nome || '');
@@ -200,10 +218,12 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
     openCreate: () => handleOpenModal()
   }));
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (force = false) => {
+    if (!force && isFormDirty && !window.confirm('Descartar as alterações não salvas deste lead?')) return;
     setShowModal(false);
     setEditingContato(null);
     setFormError('');
+    setFormErrors({});
   };
 
   const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -213,19 +233,29 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
-    if (!nome.trim()) {
-      setFormError('Informe o nome ou referência do contato.');
+    const errors: LeadFormErrors = {};
+    const phoneDigits = telefone.replace(/\D/g, '').replace(/^55(?=\d{10,11}$)/, '');
+    if (!nome.trim()) errors.nome = 'Informe o nome ou referência do contato.';
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errors.email = 'Informe um e-mail válido.';
+    if (telefone.trim() && phoneDigits.length !== 10 && phoneDigits.length !== 11) errors.telefone = 'Informe um telefone com DDD e 10 ou 11 dígitos.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataCadastro)) errors.dataCadastro = 'Informe uma data de cadastro válida.';
+    setFormErrors(errors);
+    if (Object.keys(errors).length) {
+      setFormError('Revise os campos destacados antes de salvar.');
+      const first = (['nome', 'email', 'telefone', 'dataCadastro'] as const).find((field) => errors[field]);
+      const ids: Record<keyof LeadFormErrors, string> = { nome: 'lead-name', email: 'lead-email', telefone: 'lead-phone', dataCadastro: 'lead-created-at' };
+      window.requestAnimationFrame(() => document.getElementById(ids[first!])?.focus());
       return;
     }
     saveMutation.mutate({
-      nome,
-      email,
-      telefone,
-      empresa,
-      cidade,
-      origem,
+      nome: nome.trim(),
+      email: email.trim(),
+      telefone: phoneDigits,
+      empresa: empresa.trim(),
+      cidade: cidade.trim(),
+      origem: origem.trim(),
       dataCadastro,
-      observacoes
+      observacoes: observacoes.trim()
     });
   };
 
@@ -310,7 +340,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                 className={`shrink-0 whitespace-nowrap rounded-lg px-4 py-1.5 text-xs font-medium capitalize transition-[background-color,color,box-shadow] ${
                   statusFilter === st
                     ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-sm'
-                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200'
+                    : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100'
                 }`}
               >
                 {st === 'ativo' ? 'Leads Ativos' : st === 'convertido' ? 'Já Convertidos' : 'Todos'}
@@ -332,7 +362,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
           <div className="bg-white dark:bg-zinc-900/60 border border-dashed border-zinc-300 dark:border-zinc-800 rounded-2xl p-16 text-center space-y-3">
             <AddressBook className="w-12 h-12 text-zinc-300 dark:text-zinc-700 mx-auto" />
             <p className="text-zinc-600 dark:text-zinc-400 font-medium">Nenhum lead encontrado.</p>
-            <p className="text-xs text-zinc-400">Ajuste os filtros ou cadastre um novo lead.</p>
+            <p className="text-xs text-zinc-600 dark:text-zinc-300">Ajuste os filtros ou cadastre um novo lead.</p>
           </div>
         ) : (
           <>
@@ -496,9 +526,9 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
 
         {/* Modal Amplo */}
         {showModal && (
-          <Modal isOpen={showModal} onClose={handleCloseModal} title={editingContato ? "Editar lead" : "Novo lead"} maxWidth="max-w-2xl">
+          <Modal isOpen={showModal} onClose={() => handleCloseModal()} title={editingContato ? "Editar lead" : "Novo lead"} maxWidth="max-w-2xl" initialFocusId="lead-name">
             <div className="space-y-4 pt-1">
-              <form onSubmit={handleSave} className="space-y-5">
+              <form onSubmit={handleSave} className="space-y-5" noValidate>
                 <FormError message={formError} />
                 <FormSection title="Dados do contato" description="Capture o essencial agora e complemente o relacionamento depois.">
                 <div>
@@ -510,12 +540,16 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                     name="nome"
                     type="text"
                     required
+                    maxLength={200}
                     autoComplete="name"
                     placeholder="Ex: Arquiteto Roberto ou Proprietário Sítio Azul"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
+                    aria-invalid={Boolean(formErrors.nome)}
+                    aria-describedby={formErrors.nome ? 'lead-name-error' : undefined}
                     className="w-full min-w-0 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                   />
+                  {formErrors.nome && <p id="lead-name-error" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300" role="alert">{formErrors.nome}</p>}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -529,11 +563,15 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel"
+                      maxLength={30}
                       placeholder="(48) 99618-7505"
                       value={telefone}
                       onChange={handlePhoneChange}
+                      aria-invalid={Boolean(formErrors.telefone)}
+                      aria-describedby={formErrors.telefone ? 'lead-phone-error' : undefined}
                       className="w-full min-w-0 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                     />
+                    {formErrors.telefone && <p id="lead-phone-error" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300" role="alert">{formErrors.telefone}</p>}
                   </div>
                   <div>
                     <label htmlFor="lead-email" className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
@@ -545,11 +583,15 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       type="email"
                       autoComplete="email"
                       spellCheck={false}
+                      maxLength={320}
                       placeholder="email@exemplo.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      aria-invalid={Boolean(formErrors.email)}
+                      aria-describedby={formErrors.email ? 'lead-email-error' : undefined}
                       className="w-full min-w-0 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                     />
+                    {formErrors.email && <p id="lead-email-error" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300" role="alert">{formErrors.email}</p>}
                   </div>
                 </div>
 
@@ -565,7 +607,8 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       id="lead-company"
                       name="empresa"
                       type="text"
-                      autoComplete="organization"
+                    autoComplete="organization"
+                    maxLength={200}
                       placeholder="Ex: Construtora Alfa"
                       value={empresa}
                       onChange={(e) => setEmpresa(e.target.value)}
@@ -580,7 +623,8 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       id="lead-city"
                       name="cidade"
                       type="text"
-                      autoComplete="address-level2"
+                    autoComplete="address-level2"
+                    maxLength={200}
                       placeholder="Ex: Florianópolis - SC"
                       value={cidade}
                       onChange={(e) => setCidade(e.target.value)}
@@ -630,6 +674,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                         aria-label="Origem personalizada"
                         type="text"
                         autoComplete="off"
+                        maxLength={100}
                         placeholder="Ou digite origem personalizada..."
                         value={origem}
                         onChange={(e) => setOrigem(e.target.value)}
@@ -646,10 +691,13 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       id="lead-created-at"
                       name="dataCadastro"
                       required
+                      aria-invalid={Boolean(formErrors.dataCadastro)}
+                      aria-describedby={formErrors.dataCadastro ? 'lead-created-at-error' : undefined}
                       value={dataCadastro}
                       onChange={(e) => setDataCadastro(e.target.value)}
                       className="w-full min-w-0 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                     />
+                    {formErrors.dataCadastro && <p id="lead-created-at-error" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300" role="alert">{formErrors.dataCadastro}</p>}
                     <span className="text-xs text-zinc-400 mt-1 block">
                       Puxado automaticamente da data do seu computador
                     </span>
@@ -664,6 +712,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                     id="lead-notes"
                     name="observacoes"
                     rows={3}
+                    maxLength={5000}
                     placeholder="Ex: Quer orçar georreferenciamento de 40ha para o mês que vem."
                     value={observacoes}
                     onChange={(e) => setObservacoes(e.target.value)}
@@ -675,7 +724,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                 <FormFooter>
                   <button
                     type="button"
-                    onClick={handleCloseModal}
+                    onClick={() => handleCloseModal()}
                     className="px-5 py-2.5 rounded-full text-xs font-bold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border border-zinc-200/80 dark:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-[background-color,border-color,color,box-shadow,transform] shadow-sm"
                   >
                     Cancelar

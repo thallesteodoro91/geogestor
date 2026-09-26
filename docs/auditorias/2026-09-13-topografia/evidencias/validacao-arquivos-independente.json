@@ -1,0 +1,142 @@
+{
+  "validator": {
+    "python": "3.12",
+    "pypdf": "6.0.0",
+    "pypdfium2": "4.30.0",
+    "shapely": "2.1.2"
+  },
+  "summary": {
+    "total": 10,
+    "approved": 10,
+    "failed": 0
+  },
+  "checks": [
+    {
+      "check": "CSV legível e quatro vértices",
+      "status": "APROVADO",
+      "detail": {
+        "rows": 5,
+        "columns": 8
+      }
+    },
+    {
+      "check": "CSV preserva metadados e neutraliza fórmula",
+      "status": "APROVADO",
+      "detail": [
+        "'=QA-V1",
+        "Marco sintético Açores <b>inerte</b>",
+        "-1.25",
+        "0,02 m",
+        "Somente dados QA"
+      ]
+    },
+    {
+      "check": "GeoJSON válido, polígono fechado e não vazio",
+      "status": "APROVADO",
+      "detail": {
+        "valid": true,
+        "positions": 5,
+        "area_degrees2": 9.134846915687635e-09
+      }
+    },
+    {
+      "check": "GeoJSON preserva metadados",
+      "status": "APROVADO",
+      "detail": {
+        "index": 1,
+        "code": "=QA-V1",
+        "description": "Marco sintético Açores <b>inerte</b>",
+        "altitude": -1.25,
+        "precision": "0,02 m",
+        "notes": "Somente dados QA"
+      }
+    },
+    {
+      "check": "KML XML válido e anel fechado",
+      "status": "APROVADO",
+      "detail": {
+        "positions": 5
+      }
+    },
+    {
+      "check": "KML preserva SRC e metadados escapados",
+      "status": "APROVADO",
+      "detail": {
+        "epsg": "EPSG:4326",
+        "sourceEpsg": "EPSG:31982",
+        "vertex": {
+          "index": 1,
+          "code": "=QA-V1",
+          "description": "Marco sintético Açores <b>inerte</b>",
+          "altitude": -1.25,
+          "precision": "0,02 m",
+          "notes": "Somente dados QA"
+        }
+      }
+    },
+    {
+      "check": "DXF ASCII tem quatro VERTEX e flag fechada",
+      "status": "APROVADO",
+      "detail": {
+        "vertices": 4,
+        "closedFlag": true
+      }
+    },
+    {
+      "check": "DXF preserva SRC, código, descrição e altitude",
+      "status": "APROVADO",
+      "detail": {
+        "sha256": "7B295D0FFE3D0FF1193E99507F1C41464D9948576D75FA7EE8C2C3A98D7A9C69"
+      }
+    },
+    {
+      "check": "PDF abre e contém os dados técnicos",
+      "status": "APROVADO",
+      "detail": {
+        "pages": 2,
+        "missingTerms": [],
+        "textCharacters": 1271
+      }
+    },
+    {
+      "check": "PDF renderiza todas as páginas",
+      "status": "APROVADO",
+      "detail": [
+        {
+          "page": 1,
+          "file": "pdf-pagina-1.png",
+          "bytes": 172010,
+          "sha256": "B4340C6B39F5CCD4E810BF896605B0818B12D3E398092DFB5C0A54ED25065B9D"
+        },
+        {
+          "page": 2,
+          "file": "pdf-pagina-2.png",
+          "bytes": 47332,
+          "sha256": "EA66F4F5AE5D44233AEB082B089D1A7F07FF8DF0DA1721436122C6FA8F6D4553"
+        }
+      ]
+    }
+  ],
+  "files": {
+    "ui-amostra.csv": {
+      "bytes": 396,
+      "sha256": "C63AADAB0B93B6C410DBCDB2962BF359F72480F19A3DE0D5F4D53958F17C2B19"
+    },
+    "ui-amostra.dxf": {
+      "bytes": 473,
+      "sha256": "7B295D0FFE3D0FF1193E99507F1C41464D9948576D75FA7EE8C2C3A98D7A9C69"
+    },
+    "ui-amostra.geojson": {
+      "bytes": 1491,
+      "sha256": "D6B9F04770D174D23D13C9FA06F08DA256108E0914C3F17A929D6F9A0C6BF8B9"
+    },
+    "ui-amostra.kml": {
+      "bytes": 1149,
+      "sha256": "DBCAC07E4F45A77B029707FA462A2AA896F4260E46D9A7197F650AF877819159"
+    },
+    "relatorio-topografia.pdf": {
+      "bytes": 27694,
+      "sha256": "C190C60333A3F596C3C197F9AD36B9F98E054B698D1AF3BDD58C8E99E20F5186"
+    }
+  }
+}

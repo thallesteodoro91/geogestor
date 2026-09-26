@@ -51,6 +51,7 @@ export function normalizeRegisteredRoute(route: string | undefined) {
 
 export class PerformanceMetricsService {
   private static routes = new Map<string, RouteMetric>();
+  private static legacyContracts = new Map<string, number>();
   private static startedAt = new Date().toISOString();
 
   static get slowRequestMs() {
@@ -122,30 +123,43 @@ export class PerformanceMetricsService {
   }
 
   static snapshot() {
+    const routes = [...this.routes.values()]
+      .map((metric) => ({
+        route: metric.route,
+        method: metric.method,
+        count: metric.count,
+        errors: [...metric.statusCodes.entries()].reduce((sum, [status, count]) => sum + (status >= 400 ? count : 0), 0),
+        statusCodes: Object.fromEntries([...metric.statusCodes.entries()].sort(([left], [right]) => left - right)),
+        durationsMs: {
+          average: Math.round((metric.totalDurationMs / metric.count) * 100) / 100,
+          p50: Math.round(percentile(metric.samples, 0.5) * 100) / 100,
+          median: Math.round(percentile(metric.samples, 0.5) * 100) / 100,
+          p95: Math.round(percentile(metric.samples, 0.95) * 100) / 100,
+          max: Math.round(metric.maxDurationMs * 100) / 100
+        },
+        classifications: { ...metric.classifications },
+        responseBytes: {
+          average: Math.round(metric.totalResponseBytes / metric.count),
+          max: metric.maxResponseBytes
+        }
+      }))
+      .sort((left, right) => right.durationsMs.p95 - left.durationsMs.p95);
     return {
       startedAt: this.startedAt,
       collectedAt: new Date().toISOString(),
       slowRequestThresholdMs: this.slowRequestMs,
-      routes: [...this.routes.values()]
-        .map((metric) => ({
-          route: metric.route,
-          method: metric.method,
-          count: metric.count,
-          statusCodes: Object.fromEntries([...metric.statusCodes.entries()].sort(([left], [right]) => left - right)),
-          durationsMs: {
-            average: Math.round((metric.totalDurationMs / metric.count) * 100) / 100,
-            median: Math.round(percentile(metric.samples, 0.5) * 100) / 100,
-            p95: Math.round(percentile(metric.samples, 0.95) * 100) / 100,
-            max: Math.round(metric.maxDurationMs * 100) / 100
-          },
-          classifications: { ...metric.classifications },
-          responseBytes: {
-            average: Math.round(metric.totalResponseBytes / metric.count),
-            max: metric.maxResponseBytes
-          }
-        }))
-        .sort((left, right) => right.durationsMs.p95 - left.durationsMs.p95)
+      totals: {
+        calls: routes.reduce((sum, route) => sum + route.count, 0),
+        errors: routes.reduce((sum, route) => sum + route.errors, 0)
+      },
+      legacyContracts: Object.fromEntries([...this.legacyContracts.entries()].sort(([left], [right]) => left.localeCompare(right))),
+      routes
     };
+  }
+
+  static recordLegacyContract(contract: string) {
+    const safeContract = contract.replace(/[^a-z0-9/_-]/gi, '').slice(0, 120);
+    this.legacyContracts.set(safeContract, (this.legacyContracts.get(safeContract) || 0) + 1);
   }
 
   static resetForTests() {
@@ -153,6 +167,7 @@ export class PerformanceMetricsService {
       throw new Error('Métricas só podem ser reiniciadas em ambiente de teste.');
     }
     this.routes.clear();
+    this.legacyContracts.clear();
     this.startedAt = new Date().toISOString();
   }
 

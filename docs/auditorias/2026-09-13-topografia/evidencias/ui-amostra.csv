@@ -1,0 +1,12 @@
+# Datum: SIRGAS 2000
+# SRC: EPSG:31982
+# SRC de origem: EPSG:31982
+# Fuso: 22
+# Hemisfério: S
+# Unidade: m
+# Gerado em: 2026-09-19T18:46:04.753Z
+Vertice;X_Este_m;Y_Norte_m;Codigo;Descricao;Altitude_m;Precisao;Observacoes
+V1;742000;6945000;'=QA-V1;Marco sintético Açores <b>inerte</b>;-1.25;0,02 m;Somente dados QA
+V2;742010;6945000;;;;;
+V3;742010;6945010;;;;;
+V4;742000;6945010;;;;;

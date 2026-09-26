@@ -41,6 +41,7 @@ export function DatePickerField({
   required,
   min,
   max,
+  placeholder,
   allowClear = !required,
   'aria-label': ariaLabel,
   'aria-describedby': ariaDescribedBy,
@@ -144,7 +145,7 @@ export function DatePickerField({
     setOpen((current) => !current);
   };
 
-  const valueLabel = selectedDate ? new Intl.DateTimeFormat('pt-BR').format(selectedDate) : 'Selecionar data';
+  const valueLabel = selectedDate ? new Intl.DateTimeFormat('pt-BR').format(selectedDate) : placeholder || 'Selecionar data';
   const monthLabel = capitalize(new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(viewMonth));
 
   return (
@@ -160,7 +161,6 @@ export function DatePickerField({
         aria-expanded={open}
         aria-controls={popoverId}
         aria-haspopup="dialog"
-        aria-required={required || undefined}
         aria-readonly={readOnly || undefined}
         disabled={disabled}
         onClick={openPicker}

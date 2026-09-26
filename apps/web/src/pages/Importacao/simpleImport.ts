@@ -38,12 +38,12 @@ export function simpleImportOutcome(imported: number, failed: number): SimpleImp
   return failed > 0 ? 'partial' : 'completed';
 }
 
-export function validateSimpleClientPayload(rows: Array<Record<string, string>>) {
+export function validateSimpleClientPayload(rows: Array<Record<string, string>>, sourceRowNumbers?: number[]) {
   return rows.flatMap((row, index) => {
     const result = ClientePayloadSchema.safeParse(row);
     if (result.success) return [];
     return [{
-      row: index + 2,
+      row: sourceRowNumbers?.[index] ?? index + 2,
       errors: [...new Set(result.error.issues.map(issue => issue.message))]
     }];
   });

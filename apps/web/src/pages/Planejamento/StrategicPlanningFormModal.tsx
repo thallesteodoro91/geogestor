@@ -27,6 +27,7 @@ import { DatePickerField, FormSelect, NumericInput } from '../../components/Form
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { cn } from '../../utils/cn';
+import { saoPauloDateKey } from '../../utils/localDate';
 import { validatePlanningForm, type PlanningFormErrors } from './planningFormValidation';
 
 export type StrategicOptions = {
@@ -50,17 +51,18 @@ type Props = {
   cycleId: string | null;
   snapshot?: StrategicPlanningSnapshot;
   options?: StrategicOptions;
+  optionsError?: boolean;
   pending: boolean;
   onClose: () => void;
   onSubmit: (payload: Record<string, unknown>) => void;
 };
 
-const today = new Date().toISOString().slice(0, 10);
+const today = saoPauloDateKey();
 
 function defaultEndDate() {
   const date = new Date();
   date.setFullYear(date.getFullYear() + 1);
-  return date.toISOString().slice(0, 10);
+  return saoPauloDateKey(date);
 }
 
 const FormErrorsContext = createContext<PlanningFormErrors>({});
@@ -252,6 +254,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const editing = Boolean(dialog.initial?.id);
   const dirty = JSON.stringify(state) !== initialFingerprint;
+  const optionsBlockSave = editing && !options && (dialog.kind === 'keyResult' || dialog.kind === 'initiative');
   const selectedSource = useMemo(() => {
     if (state.sourceKey === 'manual') return null;
     return options?.fontes.find((item) => `${item.tipo}:${item.codigo}` === state.sourceKey) || null;
@@ -425,6 +428,13 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
     >
       <FormErrorsContext.Provider value={errors}>
       <form onSubmit={submit} noValidate className="space-y-5" aria-busy={pending}>
+        {!options && (dialog.kind === 'keyResult' || dialog.kind === 'initiative') ? (
+          <section role={props.optionsError ? 'alert' : 'status'} aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
+            {props.optionsError
+              ? 'Não foi possível carregar fontes e vínculos. Recarregue as opções antes de editar este registro.'
+              : 'Carregando fontes e vínculos disponíveis…'}
+          </section>
+        ) : null}
         {dialog.kind === 'cycle' ? (
           <>
             <Field label="Nome do ciclo" htmlFor="planning-cycle-first">
@@ -815,7 +825,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
           <button type="button" onClick={requestClose} disabled={pending} className={secondarySmallActionButtonClass}>
             Cancelar
           </button>
-          <button type="submit" disabled={pending} className={primarySubmitButtonClass}>
+           <button type="submit" disabled={pending || optionsBlockSave} className={primarySubmitButtonClass}>
             {pending ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar'}
           </button>
         </div>

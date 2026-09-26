@@ -11,7 +11,7 @@ import { OperationalLogService } from './operational-log.service';
 import { PerformanceMetricsService } from './performance-metrics.service';
 import { MaintenanceHistoryService } from './maintenance-history.service';
 
-type HealthFileSystem = Pick<typeof fs, 'stat' | 'access' | 'writeFile' | 'rm'>;
+type HealthFileSystem = Pick<typeof fs, 'stat' | 'access' | 'writeFile' | 'rename' | 'rm'>;
 
 export type FilesDirectoryDiagnosticCode =
   | 'ok'
@@ -28,6 +28,7 @@ type FilesDirectoryDiagnostic = {
   status: 'ok' | 'not_configured' | 'failed';
   code: FilesDirectoryDiagnosticCode;
   guidance: string;
+  operation: 'configuration' | 'drive' | 'directory' | 'access' | 'write' | 'rename' | 'cleanup' | 'complete';
 };
 
 const GUIDANCE: Record<FilesDirectoryDiagnosticCode, string> = {
@@ -50,11 +51,12 @@ function firstValue(row: Record<string, unknown> | undefined) {
   return row ? Object.values(row)[0] : undefined;
 }
 
-function result(code: FilesDirectoryDiagnosticCode): FilesDirectoryDiagnostic {
+function result(code: FilesDirectoryDiagnosticCode, operation: FilesDirectoryDiagnostic['operation'] = 'configuration'): FilesDirectoryDiagnostic {
   return {
     status: code === 'ok' ? 'ok' : code === 'not_configured' ? 'not_configured' : 'failed',
     code,
-    guidance: GUIDANCE[code]
+    guidance: GUIDANCE[code],
+    operation
   };
 }
 
@@ -323,20 +325,30 @@ export class SystemHealthService {
       await this.fileSystem.stat(root);
     } catch (error) {
       const code = classifyFileSystemError(error);
-      return result(code === 'directory_missing' ? 'drive_unavailable' : code);
+      return result(code === 'directory_missing' ? 'drive_unavailable' : code, 'drive');
     }
 
-    const probe = path.join(directory, `.health-${crypto.randomUUID()}.tmp`);
+    const probeId = crypto.randomUUID();
+    const probe = path.join(directory, `.geogestor-health-${probeId}.pending`);
+    const renamedProbe = path.join(directory, `.geogestor-health-${probeId}.verified`);
+    let operation: FilesDirectoryDiagnostic['operation'] = 'directory';
     try {
       const stats = await this.fileSystem.stat(directory);
-      if (!stats.isDirectory()) return result('invalid_path');
+      if (!stats.isDirectory()) return result('invalid_path', operation);
+      operation = 'access';
       await this.fileSystem.access(directory, constants.W_OK);
+      operation = 'write';
       await this.fileSystem.writeFile(probe, 'ok', { encoding: 'utf8', flag: 'wx' });
-      return result('ok');
+      operation = 'rename';
+      await this.fileSystem.rename(probe, renamedProbe);
+      operation = 'cleanup';
+      await this.fileSystem.rm(renamedProbe);
+      return result('ok', 'complete');
     } catch (error) {
-      return result(classifyFileSystemError(error));
+      return result(classifyFileSystemError(error), operation);
     } finally {
       await this.fileSystem.rm(probe, { force: true }).catch(() => undefined);
+      await this.fileSystem.rm(renamedProbe, { force: true }).catch(() => undefined);
     }
   }
 }

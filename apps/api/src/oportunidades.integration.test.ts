@@ -126,7 +126,7 @@ test('funil mantém estágios, histórico, métricas, orçamento e projeto consi
       url: '/api/contatos',
       payload: { nome: 'Lead do Funil', email: 'lead.funil@example.com', telefone: '(48) 99999-1234', origem: 'Site' }
     });
-    assert.equal(leadCreate.statusCode, 200, leadCreate.body);
+    assert.equal(leadCreate.statusCode, 201, leadCreate.body);
     const lead = leadCreate.json<{ id: string }>();
 
     const leadOpportunityCreate = await request({

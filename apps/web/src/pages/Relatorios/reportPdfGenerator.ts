@@ -5,6 +5,7 @@ import {
   executiveSummary,
   formatCurrency,
   formatDate,
+  formatGeneratedAt,
   formatPeriod,
   reportFileName,
   reportTitle,
@@ -12,6 +13,7 @@ import {
 } from './reportPresentation';
 import { buildReportDocumentModel } from './reportDocumentModel';
 import { getCachedCompanyTemplate, type CompanyTemplate } from '../../services/companyTemplate';
+import { reportAlertCopy } from './reportAlertCopy';
 
 
 function metricRows(rows: Array<[string, string]>): TableCell[][] {
@@ -35,11 +37,26 @@ function financialContent(report: ManagerialReport): Content[] {
       { text: String(item.count), alignment: 'right' }
     ])
   ];
+  const monthlyBody: TableCell[][] = [
+    [
+      { text: 'Mês', bold: true },
+      { text: 'Recebido', bold: true, alignment: 'right' },
+      { text: 'Pago', bold: true, alignment: 'right' },
+      { text: 'Resultado', bold: true, alignment: 'right' }
+    ],
+    ...report.financial.monthly.map((item): TableCell[] => [
+      item.month,
+      { text: formatCurrency(item.receivedRevenue), alignment: 'right' },
+      { text: formatCurrency(item.paidExpenses), alignment: 'right' },
+      { text: formatCurrency(item.cashResult), alignment: 'right' }
+    ])
+  ];
   return [
     { text: 'Indicadores financeiros', style: 'section' },
     {
       table: {
         headerRows: 1,
+        dontBreakRows: true,
         widths: ['*', 125],
         body: [
           [{ text: 'Indicador', bold: true }, { text: 'Resultado', bold: true, alignment: 'right' }],
@@ -48,10 +65,15 @@ function financialContent(report: ManagerialReport): Content[] {
       },
       layout: 'lightHorizontalLines'
     },
+    ...(report.financial.monthly.length ? [{ text: 'Evolução do caixa', style: 'section' } as Content, {
+      table: { headerRows: 1, dontBreakRows: true, widths: ['*', 85, 85, 85], body: monthlyBody },
+      layout: 'lightHorizontalLines'
+    } as Content] : []),
     { text: 'Despesas pagas por categoria', style: 'section' },
     {
       table: {
         headerRows: 1,
+        dontBreakRows: true,
         widths: ['*', 110, 55],
         body: categoryBody
       },
@@ -69,11 +91,20 @@ function operationalContent(report: ManagerialReport): Content[] {
       { text: String(item.count), alignment: 'right' }
     ])
   ];
+  const deadlineBody: TableCell[][] = [
+    [
+      { text: 'Projeto', bold: true },
+      { text: 'Entrega', bold: true },
+      { text: 'Status', bold: true }
+    ],
+    ...report.operational.deadlines.map((item): TableCell[] => [item.name, formatDate(item.dueDate), item.status])
+  ];
   return [
     { text: 'Indicadores operacionais', style: 'section' },
     {
       table: {
         headerRows: 1,
+        dontBreakRows: true,
         widths: ['*', 125],
         body: [
           [{ text: 'Indicador', bold: true }, { text: 'Resultado', bold: true, alignment: 'right' }],
@@ -86,12 +117,37 @@ function operationalContent(report: ManagerialReport): Content[] {
     {
       table: {
         headerRows: 1,
+        dontBreakRows: true,
         widths: ['*', 80],
         body: statusBody
       },
       layout: 'lightHorizontalLines'
-    }
+    },
+    ...(report.operational.deadlines.length ? [{ text: 'Agenda crítica de entregas', style: 'section' } as Content, {
+      table: { headerRows: 1, dontBreakRows: true, widths: ['*', 75, 90], body: deadlineBody },
+      layout: 'lightHorizontalLines'
+    } as Content] : [])
   ];
+}
+
+function alertsContent(report: ManagerialReport, type: ReportType): Content[] {
+  const alerts = type === 'financeiro'
+    ? report.financial.alerts
+    : type === 'projetos'
+      ? report.operational.alerts
+      : [...report.financial.alerts, ...report.operational.alerts];
+  if (!alerts.length) return [];
+  return [
+    { text: 'Pontos de atenção', style: 'section' },
+    { ul: alerts.map((alert) => {
+      const copy = reportAlertCopy(alert);
+      return `${copy.title}: ${copy.description}`;
+    }) } as Content
+  ];
+}
+
+function safeLogo(logo: string) {
+  return /^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/i.test(logo) && logo.length >= 100 ? logo : '';
 }
 
 export function createManagerialReportPdfDefinition(
@@ -100,11 +156,13 @@ export function createManagerialReportPdfDefinition(
   template: CompanyTemplate = getCachedCompanyTemplate()
 ): TDocumentDefinitions {
   const primary = /^#[0-9a-f]{6}$/i.test(template.cor || '') ? template.cor! : '#4338ca';
+  const logo = safeLogo(template.logo || '');
   const identity = [
     template.cnpj ? `CNPJ ${template.cnpj}` : '',
     template.telefone || '',
     template.email || ''
   ].filter(Boolean).join(' · ');
+  const documentModel = buildReportDocumentModel(report, type);
   const typeContent: Content[] = type === 'financeiro'
     ? financialContent(report)
     : type === 'projetos'
@@ -118,20 +176,27 @@ export function createManagerialReportPdfDefinition(
 
   return {
     pageSize: 'A4',
-    pageMargins: [42, 62, 42, 52],
+    pageMargins: [42, 86, 42, 52],
     header: {
       margin: [42, 18, 42, 0],
       columns: [
-        template.logo
-          ? { image: template.logo, width: 70 }
+        logo
+          ? {
+              width: '*',
+              columnGap: 7,
+              columns: [
+                { image: logo, width: 42 },
+                { text: template.razao || 'GeoGestor', bold: true, color: primary, fontSize: 10, margin: [0, 13, 0, 0] }
+              ]
+            }
           : { text: template.razao || 'GeoGestor', bold: true, color: primary, fontSize: 12 },
-        { text: 'Relatório gerencial', alignment: 'right', color: '#71717a', fontSize: 9 }
+        { text: 'Relatório gerencial', width: 'auto', alignment: 'right', color: '#71717a', fontSize: 9, margin: [0, 13, 0, 0] }
       ]
     },
     footer: (currentPage, pageCount) => ({
       margin: [42, 14, 42, 0],
       columns: [
-        { text: `Gerado em ${formatDate(report.generatedAt)}`, color: '#71717a', fontSize: 8 },
+        { text: `Gerado em ${formatGeneratedAt(report.generatedAt)}`, color: '#71717a', fontSize: 8 },
         { text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', color: '#71717a', fontSize: 8 }
       ]
     }),
@@ -141,7 +206,10 @@ export function createManagerialReportPdfDefinition(
       ...(identity ? [{ text: identity, color: '#71717a', fontSize: 8, margin: [0, 3, 0, 0] } as Content] : []),
       ...(template.endereco ? [{ text: template.endereco, color: '#71717a', fontSize: 8 } as Content] : []),
       { text: report.period.rules.receivedRevenue, color: '#71717a', fontSize: 8, margin: [0, 8, 0, 8] },
-      ...typeContent
+      ...typeContent,
+      ...alertsContent(report, type),
+      { text: 'Critérios e metodologia', style: 'section' },
+      { ul: documentModel.criteria } as Content
     ],
     styles: {
       title: { fontSize: 18, bold: true, color: '#18181b' },
@@ -158,5 +226,13 @@ export async function createManagerialReportPdf(
 ) {
   const definition = createManagerialReportPdfDefinition(report, type, template);
   const make = await loadPdfMake();
-  make.createPdf(definition).download(reportFileName(type, report));
+  await downloadManagerialReportPdf(make, definition, reportFileName(type, report));
+}
+
+export async function downloadManagerialReportPdf(
+  make: { createPdf: (definition: TDocumentDefinitions) => { download: (fileName?: string) => void | Promise<void> } },
+  definition: TDocumentDefinitions,
+  fileName: string
+) {
+  await make.createPdf(definition).download(fileName);
 }

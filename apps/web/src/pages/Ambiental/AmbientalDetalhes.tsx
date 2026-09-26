@@ -18,7 +18,7 @@ import {
   Scales,
   WarningCircle
 } from '@phosphor-icons/react';
-import type { EnvironmentalDemandDetail } from '@geogestor/contracts';
+import { ENVIRONMENTAL_PHASES, type EnvironmentalDemandDetail } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -45,18 +45,6 @@ const todayKey = () => new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit'
 }).format(new Date());
-
-const environmentalPhases = [
-  'Levantamento inicial',
-  'Documentação',
-  'Protocolo',
-  'Em análise',
-  'Atendimento de exigência',
-  'Vistoria',
-  'Deferido',
-  'Indeferido',
-  'Concluído'
-];
 
 interface ProgressPayload {
   titulo: string;
@@ -200,7 +188,7 @@ export function AmbientalDetalhes() {
             <PencilSimple aria-hidden="true" className="h-4 w-4" />Editar demanda
           </Link>
           {canChangePhase && (
-            <button type="button" onClick={() => { setPhase(demand.statusFase || environmentalPhases[0]); setShowPhase(true); }} className={secondarySmallActionButtonClass}>
+            <button type="button" onClick={() => { setPhase(demand.statusFase || ENVIRONMENTAL_PHASES[0]); setShowPhase(true); }} className={secondarySmallActionButtonClass}>
               <Scales aria-hidden="true" className="h-4 w-4" />Alterar fase
             </button>
           )}
@@ -268,7 +256,7 @@ export function AmbientalDetalhes() {
                       </span>
                     </div>
                     <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{item.descricao}</p>
-                    <time dateTime={item.data} className="mt-2 flex items-center gap-1 text-[11px] text-zinc-400">
+                    <time dateTime={item.data} className="mt-2 flex items-center gap-1 text-[11px] text-zinc-600 dark:text-zinc-400">
                       <CalendarBlank aria-hidden="true" className="h-3.5 w-3.5" />{formatDate(item.data)}
                     </time>
                   </li>
@@ -314,7 +302,7 @@ export function AmbientalDetalhes() {
           <div>
             <label htmlFor="environmental-phase" className="mb-1.5 block text-sm font-medium text-zinc-800 dark:text-zinc-200">Nova fase</label>
             <FormSelect id="environmental-phase" name="statusFase" value={phase} onChange={(event) => setPhase(event.target.value)} className="geo-focus-ring min-h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white">
-              {environmentalPhases.map((item) => <option key={item} value={item}>{item}</option>)}
+              {ENVIRONMENTAL_PHASES.map((item) => <option key={item} value={item}>{item}</option>)}
             </FormSelect>
           </div>
           <div className="flex justify-end gap-2">

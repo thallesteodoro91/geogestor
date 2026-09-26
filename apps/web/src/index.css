@@ -4,6 +4,25 @@
 @tailwind components;
 @tailwind utilities;
 
+:root [data-sonner-toast][data-type='success'][data-rich-colors='true'] [data-title] {
+  color: #004d1b !important;
+}
+
+[aria-label='Busca e filtros'] .geo-select-trigger {
+  height: 2.5rem !important;
+  min-height: 2.5rem !important;
+}
+
+.dark [data-sonner-toast][data-type='success'][data-rich-colors='true'] {
+  border-color: #166534 !important;
+  background: #052e16 !important;
+  color: #bbf7d0 !important;
+}
+
+.dark [data-sonner-toast][data-type='success'][data-rich-colors='true'] [data-title] {
+  color: #bbf7d0 !important;
+}
+
 @layer base {
   :root {
     /* Genesis Design System - Light Mode */
@@ -184,9 +203,9 @@
     /* Semantic Chart Tokens - Refined Palette */
     --chart-primary: 239 84% 67%;      /* Indigo-500 */
     --chart-secondary: 189 94% 43%;    /* Cyan */
-    --chart-positive: 160 84% 39%;     /* Emerald-500 */
+    --chart-positive: 160 84% 27%;     /* Emerald, escurecido para texto AA no tema claro */
     --chart-negative: 350 89% 60%;     /* Rose-500 */
-    --chart-warning: 38 92% 50%;       /* Amber */
+    --chart-warning: 23 83% 31%;       /* Amber-800, contraste AA sobre superfícies claras */
     --chart-neutral: 215 16% 47%;      /* Slate-ish */
 
     /* Colorblind-safe palette (Okabe-Ito) */
@@ -654,7 +673,7 @@
 
   .geo-badge-success {
     background-color: hsl(var(--brand-green-50) / 0.82);
-    color: hsl(var(--brand-green-700));
+    color: hsl(var(--brand-green-800));
     border-color: hsl(var(--brand-green-200) / 0.72);
   }
 
@@ -695,6 +714,43 @@
     min-height: 2.75rem;
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+  }
+
+  /* React adaptation of the Zard dropdown treatment. Selects keep listbox
+     semantics because they choose values rather than invoke menu actions. */
+  .geo-dropdown-trigger[role="combobox"] {
+    height: 2rem;
+    min-height: 2rem;
+    border-radius: 0.375rem;
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  button.geo-dropdown-trigger[role="combobox"] {
+    padding-block: 0;
+    padding-inline: 0.625rem;
+  }
+
+  input.geo-dropdown-trigger[role="combobox"] {
+    padding-block: 0;
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+
+  .geo-dropdown-trigger:hover:not(:disabled) {
+    background-color: hsl(var(--brand-surface-subtle) / 0.92);
+    color: hsl(var(--text-primary));
+  }
+
+  .geo-dropdown-trigger[data-state="open"] {
+    border-color: hsl(var(--brand-border-strong) / 0.72);
+    box-shadow: 0 0 0 3px hsl(var(--brand-primary-400) / 0.12);
+  }
+
+  .geo-dropdown-content {
+    border-radius: 0.375rem;
+    box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.22);
   }
 
   .geo-option-list {
@@ -738,6 +794,38 @@
   .geo-option-row:disabled {
     cursor: not-allowed;
     opacity: 0.48;
+  }
+
+  .geo-dropdown-item {
+    min-height: 2rem;
+    gap: 0.5rem;
+    border-radius: 0.25rem;
+    padding: 0.375rem 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+  }
+
+  .geo-dropdown-item-multiline {
+    min-height: 2.75rem;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .geo-dropdown-item-multiline > span {
+    width: 100%;
+    text-align: left;
+  }
+
+  .geo-dropdown-item:hover,
+  .geo-dropdown-item.geo-option-row-active {
+    background-color: hsl(var(--brand-surface-muted));
+    color: hsl(var(--text-primary));
+  }
+
+  .geo-dropdown-item.geo-option-row-selected {
+    background-color: hsl(var(--brand-surface-subtle));
+    color: hsl(var(--text-primary));
   }
 
   .geo-popover-icon-button {

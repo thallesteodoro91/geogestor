@@ -19,6 +19,15 @@ const percentageFormatter = new Intl.NumberFormat('pt-BR', {
 });
 const countFormatter = new Intl.NumberFormat('pt-BR');
 
+const categoryCellForegrounds = [
+  '#ffffff',
+  '#321b0d',
+  '#ffffff',
+  '#2c2504',
+  '#102a33',
+  '#ffffff'
+] as const;
+
 function formatCurrencyFromCents(value: number) {
   return currencyFormatter.format(value / 100);
 }
@@ -36,6 +45,7 @@ type CategoryTreemapCellProps = {
   name?: string;
   value?: number;
   percentage?: number;
+  count?: number;
 };
 
 function CategoryTreemapCell({
@@ -46,33 +56,116 @@ function CategoryTreemapCell({
   index = 0,
   name = '',
   value = 0,
-  percentage = 0
+  percentage = 0,
+  count = 0
 }: CategoryTreemapCellProps) {
-  const compact = width < 126 || height < 74;
-  const showValue = width >= 96 && height >= 52;
-  const label = name.length > (compact ? 16 : 28) ? `${name.slice(0, compact ? 15 : 27)}…` : name;
+  const inset = 3;
+  const cellWidth = Math.max(0, width - inset * 2);
+  const cellHeight = Math.max(0, height - inset * 2);
+  const cellX = x + inset;
+  const cellY = y + inset;
+  const compact = cellWidth < 154 || cellHeight < 92;
+  const showValue = cellWidth >= 104 && cellHeight >= 58;
+  const showCount = cellWidth >= 132 && cellHeight >= 92;
+  const showPercentageBadge = cellWidth >= 176 && cellHeight >= 64;
+  const availableTitleWidth = cellWidth - (showPercentageBadge ? 92 : 28);
+  const maxLabelLength = compact
+    ? Math.max(8, Math.floor(availableTitleWidth / 6.2))
+    : Math.max(10, Math.floor(availableTitleWidth / 7));
+  const label = name.length > maxLabelLength ? `${name.slice(0, Math.max(1, maxLabelLength - 1))}…` : name;
+  const foreground = categoryCellForegrounds[index % categoryCellForegrounds.length];
+  const mutedForeground = foreground === '#ffffff' ? 'rgba(255,255,255,0.78)' : 'rgba(24,24,27,0.72)';
+  const detailForeground = foreground === '#ffffff' ? 'rgba(255,255,255,0.92)' : 'rgba(24,24,27,0.88)';
+  const badgeFill = foreground === '#ffffff' ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.46)';
+  const badgeWidth = 58;
+  const contentX = cellX + (compact ? 10 : 14);
+  const titleY = cellY + (compact ? 20 : 25);
 
   return (
-    <g>
+    <g className="group/category-cell">
       <rect
-        className="transition-[filter,opacity] duration-200 hover:brightness-110 motion-reduce:transition-none"
-        x={x}
-        y={y}
-        width={Math.max(0, width - 3)}
-        height={Math.max(0, height - 3)}
-        rx={8}
+        className="opacity-[0.94] transition-opacity duration-300 group-hover/category-cell:opacity-100 motion-reduce:transition-none"
+        x={cellX}
+        y={cellY}
+        width={cellWidth}
+        height={cellHeight}
+        rx={12}
         fill={colorblindSafeColors[index % colorblindSafeColors.length]}
-        stroke="hsl(var(--brand-surface))"
-        strokeWidth={2}
+        stroke="hsl(var(--brand-surface) / 0.72)"
+        strokeWidth={1}
+        style={{ filter: 'drop-shadow(0 7px 10px rgba(9, 9, 11, 0.14))' }}
       />
-      {width >= 62 && height >= 34 ? (
+      <rect
+        aria-hidden="true"
+        x={cellX + 1}
+        y={cellY + 1}
+        width={Math.max(0, cellWidth - 2)}
+        height={Math.max(0, Math.min(42, cellHeight * 0.36))}
+        rx={11}
+        fill="rgba(255,255,255,0.08)"
+        pointerEvents="none"
+      />
+      {cellWidth >= 62 && cellHeight >= 34 ? (
         <>
-          <text x={x + 10} y={y + 20} fill="white" fontSize={compact ? 10 : 12} fontWeight={700}>
+          <text
+            x={contentX}
+            y={titleY}
+            fill={foreground}
+            fontSize={compact ? 10 : 12}
+            fontWeight={700}
+            letterSpacing="-0.01em"
+            pointerEvents="none"
+          >
             {label}
           </text>
+          {showPercentageBadge ? (
+            <>
+              <rect
+                aria-hidden="true"
+                x={cellX + cellWidth - badgeWidth - 12}
+                y={cellY + 12}
+                width={badgeWidth}
+                height={24}
+                rx={12}
+                fill={badgeFill}
+                pointerEvents="none"
+              />
+              <text
+                x={cellX + cellWidth - badgeWidth / 2 - 12}
+                y={cellY + 28.5}
+                fill={foreground}
+                fontSize={10}
+                fontWeight={700}
+                textAnchor="middle"
+                pointerEvents="none"
+              >
+                {percentageFormatter.format(percentage)}%
+              </text>
+            </>
+          ) : null}
           {showValue ? (
-            <text x={x + 10} y={y + 39} fill="rgba(255,255,255,0.9)" fontSize={10} fontWeight={600}>
-              {formatCurrencyFromCents(value)} · {percentageFormatter.format(percentage)}%
+            <text
+              x={contentX}
+              y={titleY + (compact ? 18 : 24)}
+              fill={detailForeground}
+              fontSize={compact ? 10 : 14}
+              fontWeight={700}
+              letterSpacing="-0.015em"
+              pointerEvents="none"
+            >
+              {formatCurrencyFromCents(value)}
+            </text>
+          ) : null}
+          {showCount ? (
+            <text
+              x={contentX}
+              y={cellY + cellHeight - 16}
+              fill={mutedForeground}
+              fontSize={10}
+              fontWeight={600}
+              pointerEvents="none"
+            >
+              {countLabel(count)}
             </text>
           ) : null}
         </>
@@ -152,7 +245,14 @@ export function ExpenseCategoryChart({
       <div
         role="img"
         aria-label={mode === 'treemap' ? 'Gráfico em árvore das despesas por categoria' : 'Gráfico de barras das despesas por categoria'}
-        className={cn(mode === 'treemap' ? (compact ? 'h-64 w-full' : 'h-72 w-full') : 'space-y-4')}
+        className={cn(
+          mode === 'treemap'
+            ? cn(
+                compact ? 'h-64' : 'h-72',
+                'w-full rounded-2xl border border-zinc-200/80 bg-zinc-50/80 p-1 shadow-inner dark:border-zinc-800/90 dark:bg-zinc-950/50'
+              )
+            : 'space-y-4'
+        )}
       >
         {mode === 'treemap' ? (
           <ResponsiveContainer {...responsiveChartProps}>
@@ -208,10 +308,10 @@ export function ExpenseCategoryChart({
           <caption className="sr-only">Valores exatos das despesas por categoria</caption>
           <thead>
             <tr className="text-left text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-              <th className="pb-3">Categoria</th>
-              <th className="pb-3 text-right">Lançamentos</th>
-              <th className="pb-3 text-right">Participação</th>
-              <th className="pb-3 text-right">Valor</th>
+              <th scope="col" className="pb-3">Categoria</th>
+              <th scope="col" className="pb-3 text-right">Lançamentos pagos</th>
+              <th scope="col" className="pb-3 text-right">Participação</th>
+              <th scope="col" className="pb-3 text-right">Valor pago</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">

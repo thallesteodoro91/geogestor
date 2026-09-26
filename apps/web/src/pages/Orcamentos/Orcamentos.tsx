@@ -24,7 +24,7 @@ import { PageFilterBar } from '../../components/PageFilterBar';
 import { PageHeader } from '../../components/PageHeader';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Skeleton } from '../../components/Skeleton';
-import { apiClient } from '../../services/apiClient';
+import { apiClient, type PaginatedResponse } from '../../services/apiClient';
 import { cn } from '../../utils/cn';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
@@ -60,6 +60,8 @@ const emptyOptions: BudgetOptions = {
   clients: [], projects: [], properties: [], taxProfiles: [], templates: [], pricingParameters: []
 };
 
+const BUDGET_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 const statusTone: Record<BudgetStatus, string> = {
   rascunho: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200',
   emitido: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-200',
@@ -76,6 +78,17 @@ function budgetQuery(searchParams: URLSearchParams) {
   const params = new URLSearchParams(searchParams);
   params.delete('budgetId');
   params.delete('highlightId');
+  params.delete('page');
+  return params.toString();
+}
+
+function budgetListQuery(searchParams: URLSearchParams) {
+  const params = new URLSearchParams(searchParams);
+  params.delete('budgetId');
+  params.delete('highlightId');
+  params.set('mode', 'page');
+  params.set('limit', '25');
+  if (!params.has('page')) params.set('page', '1');
   return params.toString();
 }
 
@@ -84,6 +97,7 @@ function budgetStatusQuery(searchParams: URLSearchParams) {
   params.delete('budgetId');
   params.delete('highlightId');
   params.delete('status');
+  params.delete('page');
   return params.toString();
 }
 
@@ -129,10 +143,13 @@ export function Orcamentos() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryString = budgetQuery(searchParams);
+  const listQueryString = budgetListQuery(searchParams);
   const statusQueryString = budgetStatusQuery(searchParams);
-  const selectedId = searchParams.get('budgetId');
+  const selectedIdParam = searchParams.get('budgetId');
+  const selectedId = isSafeEntityId(selectedIdParam) && BUDGET_ID_PATTERN.test(selectedIdParam) ? selectedIdParam : null;
   const highlightIdParam = searchParams.get('highlightId');
   const highlightId = isSafeEntityId(highlightIdParam) ? highlightIdParam : null;
+  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1);
   const [deleteTarget, setDeleteTarget] = useState<BudgetListItem | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -141,31 +158,40 @@ export function Orcamentos() {
   const budgetRowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const returnTo = useMemo(() => getBudgetListPath(searchParams), [searchParams]);
 
-  const { data: budgets = [], isLoading: budgetsLoading } = useQuery<BudgetListItem[]>({
-    queryKey: ['budgets', queryString],
-    queryFn: () => apiClient.get(`/api/orcamentos${queryString ? `?${queryString}` : ''}`)
+  const { data: budgetPage, isLoading: budgetsLoading, isError: budgetsError, error: budgetsErrorDetail, refetch: refetchBudgets } = useQuery<PaginatedResponse<BudgetListItem>>({
+    queryKey: ['budgets', listQueryString],
+    queryFn: () => apiClient.get(`/api/orcamentos?${listQueryString}`),
+    placeholderData: (previous) => previous
   });
+  const budgets = useMemo(() => budgetPage?.items ?? [], [budgetPage?.items]);
   const serviceTypeOptions = useMemo(() => mergeCatalogAndHistoricalValues(
     catalogsQuery.data?.services.filter((item) => item.ativo).map((item) => item.nome) ?? [],
     [...budgets.map((budget) => budget.serviceType), searchParams.get('serviceType')]
   ), [budgets, catalogsQuery.data?.services, searchParams]);
-  const { data: kpis = emptyKpis, isLoading: kpisLoading } = useQuery<BudgetKpis>({
+  const { data: kpis = emptyKpis, isLoading: kpisLoading, isError: kpisError, error: kpisErrorDetail, refetch: refetchKpis } = useQuery<BudgetKpis>({
     queryKey: ['budget-kpis', queryString],
     queryFn: () => apiClient.get(`/api/orcamentos/kpis${queryString ? `?${queryString}` : ''}`)
   });
   const { data: statusKpis = emptyKpis } = useQuery<BudgetKpis>({
-    queryKey: ['budget-status-kpis', statusQueryString],
+    // A mesma chave evita duas chamadas quando os filtros geral e por status coincidem.
+    queryKey: ['budget-kpis', statusQueryString],
     queryFn: () => apiClient.get(`/api/orcamentos/kpis${statusQueryString ? `?${statusQueryString}` : ''}`)
   });
-  const { data: options = emptyOptions } = useQuery<BudgetOptions>({
-    queryKey: ['budget-options'],
-    queryFn: () => apiClient.get('/api/orcamentos/options')
+  const { data: filterOptions } = useQuery<Pick<BudgetOptions, 'clients' | 'projects'>>({
+    queryKey: ['budget-filter-options'],
+    queryFn: () => apiClient.get('/api/orcamentos/filter-options')
   });
-  const { data: selectedDetail = null } = useQuery<BudgetDetail | null>({
+  const options = useMemo<BudgetOptions>(() => ({
+    ...emptyOptions,
+    clients: filterOptions?.clients ?? [],
+    projects: filterOptions?.projects ?? []
+  }), [filterOptions?.clients, filterOptions?.projects]);
+  const selectedDetailQuery = useQuery<BudgetDetail | null>({
     queryKey: ['budget-detail', selectedId],
     queryFn: () => selectedId ? apiClient.get(`/api/orcamentos/${selectedId}`) : Promise.resolve(null),
     enabled: Boolean(selectedId)
   });
+  const selectedDetail = selectedDetailQuery.data ?? null;
   const highlightInFilteredList = Boolean(highlightId && budgets.some((budget) => budget.id === highlightId));
   const { data: highlightedDetail = null } = useQuery<BudgetDetail | null>({
     queryKey: ['budget-detail', highlightId],
@@ -183,10 +209,19 @@ export function Orcamentos() {
       const next = new URLSearchParams(current);
       if (value) next.set(key, value);
       else next.delete(key);
+      next.delete('page');
       next.delete('budgetId');
       return next;
     }, { replace: true });
   };
+
+  const updatePage = (page: number) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    if (page <= 1) next.delete('page');
+    else next.set('page', String(page));
+    next.delete('budgetId');
+    return next;
+  }, { replace: true });
 
   const clearFilters = () => setSearchParams(new URLSearchParams(), { replace: true });
   const openDetail = (budget: { id: string }) => setSearchParams((current) => {
@@ -283,7 +318,7 @@ export function Orcamentos() {
     }
   };
 
-  const hasFilters = useMemo(() => Array.from(searchParams.keys()).some((key) => key !== 'budgetId' && key !== 'highlightId'), [searchParams]);
+  const hasFilters = useMemo(() => Array.from(searchParams.keys()).some((key) => !['budgetId', 'highlightId', 'page'].includes(key)), [searchParams]);
   const activeFilters = useMemo(() => {
     const labels: Record<string, string> = {
       query: 'Busca',
@@ -410,6 +445,19 @@ export function Orcamentos() {
           )}
         />
 
+        {selectedIdParam && (!selectedId || selectedDetailQuery.isError) ? (
+          <section role="alert" className="geo-card flex flex-col gap-3 border-brand-red-300 bg-brand-red-50 p-4 text-sm text-brand-red-900 dark:border-brand-red-500/30 dark:bg-brand-red-500/10 dark:text-brand-red-100 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold">Não foi possível abrir o orçamento solicitado.</p>
+              <p className="mt-1 text-xs">{!selectedId ? 'O identificador informado é inválido.' : selectedDetailQuery.error instanceof Error ? selectedDetailQuery.error.message : 'O orçamento não existe ou não está acessível.'}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {selectedId && <button type="button" onClick={() => void selectedDetailQuery.refetch()} className="geo-button-base geo-button-secondary geo-focus-ring min-h-10 px-4 text-xs">Tentar novamente</button>}
+              <button type="button" onClick={closeDetail} className="geo-button-base geo-button-primary geo-focus-ring min-h-10 px-4 text-xs">Remover referência</button>
+            </div>
+          </section>
+        ) : null}
+
         <PageFilterBar
           filtersOpen={showAdvancedFilters}
           onFiltersToggle={() => setShowAdvancedFilters((value) => !value)}
@@ -454,7 +502,12 @@ export function Orcamentos() {
                 {showAnalysis ? 'Ocultar an\u00e1lise' : 'Abrir an\u00e1lise comercial'}
               </button>
             </div>
-            {kpisLoading ? <Skeleton className="mx-4 mb-4 h-20 sm:mx-5" /> : (
+            {kpisLoading ? <Skeleton className="mx-4 mb-4 h-20 sm:mx-5" /> : kpisError ? (
+              <div role="alert" className="mx-4 mb-4 flex flex-col gap-3 border-y border-brand-red-300 bg-brand-red-50 px-4 py-4 text-sm text-brand-red-900 dark:border-brand-red-500/30 dark:bg-brand-red-500/10 dark:text-brand-red-100 sm:mx-5 sm:flex-row sm:items-center sm:justify-between">
+                <span>{kpisErrorDetail instanceof Error ? kpisErrorDetail.message : 'Não foi possível calcular os indicadores.'}</span>
+                <button type="button" onClick={() => void refetchKpis()} className="geo-button-base geo-button-secondary geo-focus-ring min-h-10 px-4 text-xs">Tentar novamente</button>
+              </div>
+            ) : (
               <div className="overflow-x-auto overscroll-x-contain">
                 <dl className="grid min-w-[720px] grid-cols-4 divide-x divide-brand-border border-t border-brand-border">
                   {primaryIndicators.map((indicator) => (
@@ -507,7 +560,7 @@ export function Orcamentos() {
               <p className="mt-1 text-sm text-text-muted">Localize, compare e conduza cada proposta.</p>
             </div>
             <span className="inline-flex min-h-8 items-center rounded-full border border-brand-border bg-brand-surface-subtle px-3 font-mono text-xs font-semibold tabular-nums text-text-secondary" aria-live="polite">
-              {displayedBudgets.length} {displayedBudgets.length === 1 ? 'or\u00e7amento exibido' : 'or\u00e7amentos exibidos'}
+              {displayedBudgets.length} de {budgetPage?.total ?? 0} {budgetPage?.total === 1 ? 'or\u00e7amento' : 'or\u00e7amentos'}
             </span>
           </div>
 
@@ -522,7 +575,14 @@ export function Orcamentos() {
           </nav>
 
           <div className="mt-4">
-            {budgetsLoading ? <div className="space-y-2">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div> : displayedBudgets.length === 0 ? (
+            {budgetsLoading ? <div className="space-y-2">{Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div> : budgetsError ? (
+              <div role="alert" className="geo-card flex flex-col items-center px-6 py-12 text-center">
+                <FileText aria-hidden="true" size={44} className="text-brand-red-600 dark:text-brand-red-200" weight="duotone" />
+                <h3 className="mt-4 text-lg font-semibold text-text-primary">Não foi possível carregar os orçamentos</h3>
+                <p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">{budgetsErrorDetail instanceof Error ? budgetsErrorDetail.message : 'Verifique a conexão e tente novamente.'}</p>
+                <button type="button" onClick={() => void refetchBudgets()} className="mt-5 geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5">Tentar novamente</button>
+              </div>
+            ) : displayedBudgets.length === 0 ? (
               <div className="geo-card flex flex-col items-center px-6 py-16 text-center"><FileText aria-hidden="true" size={44} className="text-text-muted" weight="duotone" /><h3 className="mt-4 text-lg font-semibold text-text-primary">Nenhum or&ccedil;amento encontrado</h3><p className="mt-2 max-w-md text-sm leading-6 text-text-secondary">{hasFilters ? 'Ajuste ou limpe os filtros para ampliar a busca.' : 'Crie o primeiro or\u00e7amento para iniciar seu fluxo comercial.'}</p>{!hasFilters && <button type="button" onClick={() => openBudgetEditor()} className="mt-5 geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5"><Plus aria-hidden="true" size={17} /> Novo or&ccedil;amento</button>}</div>
             ) : (
               <div className="geo-card max-w-full overflow-hidden">
@@ -580,6 +640,13 @@ export function Orcamentos() {
                   </table>
                 </div>
               </div>
+            )}
+            {(budgetPage?.totalPages ?? 1) > 1 && (
+              <nav aria-label="Paginação de orçamentos" className="mt-4 flex items-center justify-between text-xs text-text-secondary">
+                <button type="button" disabled={currentPage <= 1} onClick={() => updatePage(currentPage - 1)} className="geo-focus-ring rounded-lg border border-brand-border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+                <span className="font-mono tabular-nums">Página {currentPage} de {budgetPage?.totalPages}</span>
+                <button type="button" disabled={currentPage >= (budgetPage?.totalPages ?? 1)} onClick={() => updatePage(currentPage + 1)} className="geo-focus-ring rounded-lg border border-brand-border px-3 py-2 font-semibold disabled:opacity-40">Próxima</button>
+              </nav>
             )}
           </div>
         </section>

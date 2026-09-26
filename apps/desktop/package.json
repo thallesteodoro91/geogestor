@@ -1,6 +1,6 @@
 {
   "name": "geogestor-desktop",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "description": "GeoGestor - Gestao para Topografia (Desktop)",
   "main": "main.js",
   "author": "GeoGestor",
@@ -14,7 +14,7 @@
   "build": {
     "appId": "com.geogestor.desktop",
     "productName": "GeoGestor",
-    "artifactName": "${productName} Setup 1.0.${ext}",
+    "artifactName": "${productName} Setup ${version}.${ext}",
     "directories": {
       "output": "dist"
     },

@@ -160,7 +160,7 @@ export function transformGeographicDatum(
 }
 
 export function suggestUtmZone(longitude: number): number | null {
-  if (!Number.isFinite(longitude) || longitude < -78 || longitude > -30) return null;
+  if (!Number.isFinite(longitude) || longitude < -78 || longitude >= -30) return null;
   return Math.max(18, Math.min(25, Math.floor((longitude + 180) / 6) + 1));
 }
 
@@ -169,6 +169,7 @@ export function suggestSpatialReference(
   latitude: number,
   datum: Datum = 'SIRGAS 2000',
 ): SpatialReference | null {
+  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
   const zone = suggestUtmZone(longitude);
   if (!zone) return null;
   const hemisphere: Hemisphere = latitude >= 0 ? 'N' : 'S';
@@ -320,16 +321,14 @@ export function calculateUtmMetadata(position: GeographicPosition, reference: Sp
     ? 0.00669438002290
     : 0.00669437999014;
   const secondEccentricitySquared = eccentricitySquared / (1 - eccentricitySquared);
-  const a = 6378137;
-  const n = a / Math.sqrt(1 - eccentricitySquared * Math.sin(phi) ** 2);
   const t = Math.tan(phi) ** 2;
   const c = secondEccentricitySquared * Math.cos(phi) ** 2;
-  const projected = geographicToProjected(position, reference.code);
-  const normalizedEasting = (projected.x - 500000) / (n * 0.9996);
+  const angularDistance = Math.cos(phi) * deltaLambda;
   const scaleFactor = 0.9996 * (
-    1 + ((1 + c) * normalizedEasting ** 2) / 2
+    1 + ((1 + c) * angularDistance ** 2) / 2
       + ((5 - 4 * t + 42 * c + 13 * c ** 2 - 28 * secondEccentricitySquared)
-        * normalizedEasting ** 4) / 24
+        * angularDistance ** 4) / 24
+      + ((61 - 148 * t + 16 * t ** 2) * angularDistance ** 6) / 720
   );
   return { convergenceDegrees, scaleFactor };
 }

@@ -1,0 +1,27 @@
+{
+  "isolation": "database-per-spec-file",
+  "referenceDate": "2026-09-23",
+  "totals": {
+    "expected": 1,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0,
+    "files": 1
+  },
+  "results": [
+    {
+      "specFile": "session01-dashboard-tasks.spec.ts",
+      "specRoot": "specs\\run-01-session01-dashboard-tasks",
+      "exitCode": 0,
+      "stats": {
+        "startTime": "2026-09-23T23:21:04.489Z",
+        "duration": 41240.12,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "errors": []
+    }
+  ]
+}

@@ -1,21 +1,36 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Checks, Trash, WarningCircle } from '@phosphor-icons/react';
+import { ArrowUpRight, Checks, Funnel, Trash, WarningCircle } from '@phosphor-icons/react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ALERT_CATEGORY_LABELS,
   type AlertCategory,
-  type DeadlineAlert,
-  type DeadlineAlertResponse
+  type AlertSettings,
+  type DeadlineAlert
 } from '@geogestor/contracts';
 import { apiClient } from '../services/apiClient';
 import bellIcon from '../assets/magnific-icons/bell_10953632.svg';
 import { cn } from '../utils/cn';
 import { Modal } from './Modal';
+import { FormSelect } from './Form';
 
 type AlertStatusFilter = 'all' | 'unread' | 'read';
 type AlertPeriodFilter = 'all' | 'overdue' | 'today' | '7' | '30';
+type AlertSummaryResponse = {
+  summary: { activeTotal: number; unreadTotal: number };
+  preview: DeadlineAlert[];
+  settings: AlertSettings;
+  generatedAt: string;
+};
+type AlertPageResponse = {
+  items: DeadlineAlert[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  unreadTotal: number;
+};
 
 function formatDate(date: string) {
   const [year, month, day] = date.split('-').map(Number);
@@ -23,31 +38,24 @@ function formatDate(date: string) {
 }
 
 function selectClassName() {
-  return 'geo-focus-ring min-h-9 min-w-0 rounded-lg border border-zinc-200 bg-white px-2 text-[11px] font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200';
-}
-
-function matchesPeriod(alert: DeadlineAlert, period: AlertPeriodFilter) {
-  if (period === 'all') return true;
-  if (period === 'overdue') return alert.daysUntilDue < 0;
-  if (period === 'today') return alert.daysUntilDue === 0;
-  return alert.daysUntilDue >= 0 && alert.daysUntilDue <= Number(period);
+  return 'geo-focus-ring min-h-10 w-full min-w-0 rounded-xl border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100';
 }
 
 function alertTone(alert: DeadlineAlert) {
   if (alert.severity === 'critical') return {
-    border: 'border-red-200 bg-red-50/80 dark:border-red-500/20 dark:bg-red-500/10',
-    title: 'text-red-700 dark:text-red-300',
-    dot: 'bg-red-500'
+    badge: 'bg-red-50 text-red-800 dark:bg-red-500/15 dark:text-red-200',
+    dot: 'bg-red-500',
+    label: 'Vencido'
   };
   if (alert.severity === 'warning') return {
-    border: 'border-amber-200 bg-amber-50/80 dark:border-amber-500/20 dark:bg-amber-500/10',
-    title: 'text-amber-800 dark:text-amber-200',
-    dot: 'bg-amber-500'
+    badge: 'bg-amber-50 text-amber-900 dark:bg-amber-500/15 dark:text-amber-200',
+    dot: 'bg-amber-500',
+    label: 'Hoje'
   };
   return {
-    border: 'border-sky-200 bg-sky-50/70 dark:border-sky-500/20 dark:bg-sky-500/10',
-    title: 'text-sky-800 dark:text-sky-200',
-    dot: 'bg-sky-500'
+    badge: 'bg-sky-50 text-sky-900 dark:bg-sky-500/15 dark:text-sky-200',
+    dot: 'bg-sky-500',
+    label: 'Em breve'
   };
 }
 
@@ -58,32 +66,50 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
   const [category, setCategory] = useState<AlertCategory | 'all'>('all');
   const [status, setStatus] = useState<AlertStatusFilter>('all');
   const [period, setPeriod] = useState<AlertPeriodFilter>('all');
+  const [page, setPage] = useState(1);
   const [undoIds, setUndoIds] = useState<string[]>([]);
+  const [isUpdating, setIsUpdating] = useState(false);
   const categoryFilterId = useId();
   const nativePending = useRef(new Set<string>());
 
-  const alertsQuery = useQuery<DeadlineAlertResponse>({
-    queryKey: ['alertas'],
-    queryFn: () => apiClient.get<DeadlineAlertResponse>('/api/alertas'),
+  const summaryQuery = useQuery<AlertSummaryResponse>({
+    queryKey: ['alertas', 'resumo'],
+    queryFn: () => apiClient.get<AlertSummaryResponse>('/api/alertas/resumo?previewLimit=5'),
     staleTime: 15_000,
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true
   });
 
+  const alertParams = useMemo(() => new URLSearchParams({
+    page: String(page),
+    limit: '20',
+    status,
+    period,
+    ...(category === 'all' ? {} : { category })
+  }).toString(), [category, page, period, status]);
+  const alertsQuery = useQuery<AlertPageResponse>({
+    queryKey: ['alertas', 'pagina', alertParams],
+    queryFn: () => apiClient.get<AlertPageResponse>(`/api/alertas?${alertParams}`),
+    enabled: open,
+    staleTime: 15_000
+  });
+
   const items = useMemo(() => alertsQuery.data?.items ?? [], [alertsQuery.data]);
-  const unreadCount = useMemo(() => items.filter((item) => !item.readAt).length, [items]);
-  const filtered = useMemo(() => items.filter((item) => (
-    (category === 'all' || item.category === category)
-    && (status === 'all' || (status === 'unread' ? !item.readAt : Boolean(item.readAt)))
-    && matchesPeriod(item, period)
-  )), [category, items, period, status]);
+  const unreadCount = summaryQuery.data?.summary.unreadTotal ?? alertsQuery.data?.unreadTotal ?? 0;
+  const activeTotal = summaryQuery.data?.summary.activeTotal ?? alertsQuery.data?.total ?? 0;
+  const filtered = items;
 
   const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey: ['alertas'] }), [queryClient]);
   const updateIds = async (endpoint: string, ids: string[]) => {
-    if (!ids.length) return;
-    await apiClient.post(endpoint, { ids });
-    await refresh();
+    if (!ids.length || isUpdating) return;
+    setIsUpdating(true);
+    try {
+      await apiClient.post(endpoint, { ids });
+      await refresh();
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   useEffect(() => {
@@ -110,8 +136,8 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
   }), [navigate]);
 
   useEffect(() => {
-    if (mobile || !alertsQuery.data?.settings.nativeEnabled || !window.electronAPI?.showDeadlineNotification) return;
-    const pending = items.filter((item) => !item.nativeNotifiedAt && !nativePending.current.has(item.id));
+    if (mobile || !summaryQuery.data?.settings.nativeEnabled || !window.electronAPI?.showDeadlineNotification) return;
+    const pending = (summaryQuery.data?.preview ?? []).filter((item) => !item.nativeNotifiedAt && !nativePending.current.has(item.id));
     if (!pending.length) return;
     pending.forEach((item) => nativePending.current.add(item.id));
     void (async () => {
@@ -139,7 +165,7 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
         }
       }
     })();
-  }, [alertsQuery.data?.settings.nativeEnabled, alertsQuery.dataUpdatedAt, items, mobile]);
+  }, [mobile, summaryQuery.data?.preview, summaryQuery.data?.settings.nativeEnabled, summaryQuery.dataUpdatedAt]);
 
   const openAlert = async (alert: DeadlineAlert) => {
     setOpen(false);
@@ -195,7 +221,7 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
         <img src={bellIcon} alt="" aria-hidden="true" width={24} height={24} className="h-6 w-6 object-contain drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]" />
         {unreadCount > 0 ? (
           <span aria-hidden="true" className={cn(
-            'absolute flex items-center justify-center rounded-full border border-white bg-red-500 px-1 text-[11px] font-bold leading-none text-white dark:border-zinc-900',
+            'absolute flex items-center justify-center rounded-full border border-white bg-red-700 px-1 text-[11px] font-bold leading-none text-white dark:border-zinc-900 dark:bg-red-700',
             mobile ? 'right-0.5 top-0.5 h-4 min-w-4' : '-right-1 -top-1 h-5 min-w-5 border-2 dark:border-zinc-950'
           )}>{unreadCount > 9 ? '9+' : unreadCount}</span>
         ) : null}
@@ -205,79 +231,96 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
         isOpen={open}
         onClose={() => setOpen(false)}
         title="Alertas e prazos"
-        maxWidth={mobile ? 'max-w-sm' : 'max-w-lg'}
+        maxWidth="max-w-2xl"
         initialFocusId={categoryFilterId}
         ariaDescribedBy={`${categoryFilterId}-summary`}
+        contentScrollable={false}
+        density="compact"
       >
-            <header className="border-b border-zinc-100 p-4 dark:border-zinc-800">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p id={`${categoryFilterId}-summary`} aria-live="polite" className="mt-0.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
-                    {unreadCount ? `${unreadCount} não lida${unreadCount === 1 ? '' : 's'}` : 'Tudo lido'} · {items.length} ativa{items.length === 1 ? '' : 's'}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1">
-                  {filtered.some((item) => !item.readAt) ? (
-                    <button type="button" onClick={() => void markRead(filtered.filter((item) => !item.readAt).map((item) => item.id))} className="geo-focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] font-bold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10" aria-label="Marcar alertas filtrados como lidos">
-                      <Checks size={14} aria-hidden="true" />Ler
-                    </button>
-                  ) : null}
-                  {filtered.length ? (
-                    <button type="button" onClick={() => void dismiss(filtered.map((item) => item.id))} className="geo-focus-ring inline-flex min-h-8 items-center gap-1 rounded-lg px-2 text-[10px] font-bold text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" aria-label="Apagar alertas filtrados">
-                      <Trash size={14} aria-hidden="true" />Apagar
-                    </button>
-                  ) : null}
-                </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <header className="shrink-0 border-b border-zinc-200 pb-4 dark:border-zinc-800">
+            <p id={`${categoryFilterId}-summary`} aria-live="polite" className="text-sm text-zinc-600 dark:text-zinc-300">
+              <span className="font-bold tabular-nums text-zinc-950 dark:text-white">{unreadCount}</span> não lida{unreadCount === 1 ? '' : 's'}
+              <span aria-hidden="true" className="mx-2 text-zinc-400">·</span>
+              <span className="tabular-nums">{activeTotal}</span> alerta{activeTotal === 1 ? '' : 's'} ativo{activeTotal === 1 ? '' : 's'}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex max-w-full rounded-xl bg-zinc-100 p-1 dark:bg-zinc-900" role="group" aria-label="Status de leitura">
+                {([['all', 'Todos'], ['unread', 'Não lidos'], ['read', 'Lidos']] as const).map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => { setStatus(value); setPage(1); }} aria-pressed={status === value} className={cn('geo-focus-ring min-h-9 rounded-lg px-3 text-xs font-semibold transition-[background-color,color,box-shadow] hover:text-zinc-950 dark:hover:text-white', status === value ? 'bg-white text-zinc-950 shadow-sm dark:bg-zinc-700 dark:text-white' : 'text-zinc-600 dark:text-zinc-300')}>{label}</button>
+                ))}
               </div>
-              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Filtros dos alertas">
-                <select id={categoryFilterId} value={category} onChange={(event) => setCategory(event.target.value as AlertCategory | 'all')} className={selectClassName()} aria-label="Filtrar alertas por categoria">
-                  <option value="all">Todas</option>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {filtered.some((item) => !item.readAt) ? (
+                  <button type="button" disabled={isUpdating} onClick={() => void markRead(filtered.filter((item) => !item.readAt).map((item) => item.id))} className="geo-focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10" aria-label="Marcar os alertas desta página como lidos">
+                    <Checks size={16} aria-hidden="true" /> Marcar página como lida
+                  </button>
+                ) : null}
+                {filtered.length ? (
+                  <button type="button" disabled={isUpdating} onClick={() => void dismiss(filtered.map((item) => item.id))} className="geo-focus-ring inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold text-zinc-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-50 dark:text-zinc-300 dark:hover:bg-red-500/10 dark:hover:text-red-200" aria-label="Ocultar os alertas desta página">
+                    <Trash size={15} aria-hidden="true" /> Ocultar página
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3" aria-label="Filtros dos alertas">
+              <div className="min-w-0">
+                <label htmlFor={categoryFilterId} className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300"><Funnel size={14} aria-hidden="true" /> Categoria</label>
+                <FormSelect id={categoryFilterId} value={category} onChange={(event) => { setCategory(event.target.value as AlertCategory | 'all'); setPage(1); }} className={selectClassName()} wrapperClassName="w-full" aria-label="Filtrar alertas por categoria">
+                  <option value="all">Todas as categorias</option>
                   {(Object.entries(ALERT_CATEGORY_LABELS) as Array<[AlertCategory, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                </select>
-                <select value={status} onChange={(event) => setStatus(event.target.value as AlertStatusFilter)} className={selectClassName()} aria-label="Filtrar alertas por leitura">
-                  <option value="all">Todas</option><option value="unread">Não lidas</option><option value="read">Lidas</option>
-                </select>
-                <select value={period} onChange={(event) => setPeriod(event.target.value as AlertPeriodFilter)} className={selectClassName()} aria-label="Filtrar alertas por período">
-                  <option value="all">Todo período</option><option value="overdue">Vencidos</option><option value="today">Hoje</option><option value="7">Próximos 7 dias</option><option value="30">Próximos 30 dias</option>
-                </select>
+                </FormSelect>
               </div>
-            </header>
+              <div className="min-w-0">
+                <label htmlFor={`${categoryFilterId}-period`} className="mb-1.5 block text-xs font-semibold text-zinc-600 dark:text-zinc-300">Prazo</label>
+                <FormSelect id={`${categoryFilterId}-period`} value={period} onChange={(event) => { setPeriod(event.target.value as AlertPeriodFilter); setPage(1); }} className={selectClassName()} wrapperClassName="w-full" aria-label="Filtrar alertas por período">
+                  <option value="all">Todos os prazos</option><option value="overdue">Vencidos</option><option value="today">Vencem hoje</option><option value="7">Próximos 7 dias</option><option value="30">Próximos 30 dias</option>
+                </FormSelect>
+              </div>
+            </div>
+          </header>
 
-            <div className="max-h-[26rem] space-y-2 overflow-y-auto overscroll-contain p-3" aria-busy={alertsQuery.isLoading || alertsQuery.isFetching}>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain py-4 pr-1" aria-busy={alertsQuery.isLoading || alertsQuery.isFetching}>
               {undoIds.length ? (
-                <div role="status" className="flex items-center justify-between rounded-xl bg-zinc-100 px-3 py-2 text-[11px] font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                  <span>{undoIds.length === 1 ? 'Alerta apagado' : `${undoIds.length} alertas apagados`}</span>
-                  <button type="button" onClick={() => void restore()} className="geo-focus-ring min-h-8 rounded-lg px-2 font-bold text-indigo-700 hover:bg-white dark:text-indigo-200 dark:hover:bg-zinc-900">Desfazer</button>
+                <div role="status" className="flex items-center justify-between gap-3 rounded-xl bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                  <span>{undoIds.length === 1 ? 'Alerta ocultado' : `${undoIds.length} alertas ocultados`}</span>
+                  <button type="button" disabled={isUpdating} onClick={() => void restore()} className="geo-focus-ring min-h-9 rounded-lg px-2 font-bold text-indigo-700 hover:bg-white disabled:opacity-50 dark:text-indigo-200 dark:hover:bg-zinc-900">Desfazer</button>
                 </div>
               ) : null}
-              {alertsQuery.isLoading ? <p role="status" aria-live="polite" className="py-10 text-center text-xs font-medium text-zinc-600 dark:text-zinc-300">Carregando alertas…</p> : null}
+              {alertsQuery.isLoading ? <p role="status" aria-live="polite" className="py-10 text-center text-sm font-medium text-zinc-600 dark:text-zinc-300">Carregando alertas…</p> : null}
               {!alertsQuery.isLoading && !alertsQuery.isError && !filtered.length ? (
                 <div className="py-10 text-center">
                   <Checks size={30} aria-hidden="true" className="mx-auto text-emerald-500" />
                   <p className="mt-2 text-sm font-semibold text-zinc-900 dark:text-white">Nenhum alerta neste filtro</p>
-                  <p className="mt-1 text-xs text-zinc-500">Os prazos aparecerão aqui conforme suas configurações.</p>
+                  <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">Ajuste os filtros para ver outros prazos.</p>
+                  <button type="button" onClick={() => { setCategory('all'); setStatus('all'); setPeriod('all'); setPage(1); }} className="geo-focus-ring mt-4 min-h-9 rounded-lg px-3 text-xs font-bold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10">Limpar filtros</button>
                 </div>
               ) : null}
-              {filtered.map((alert) => {
+              {filtered.map((alert, index) => {
                 const tone = alertTone(alert);
+                const previous = filtered[index - 1];
                 return (
-                  <article key={alert.id} className={cn('group flex items-start gap-1 rounded-xl border', tone.border, alert.readAt && 'opacity-75')}>
-                    <button type="button" onClick={() => void openAlert(alert)} className="geo-focus-ring flex min-w-0 flex-1 items-start gap-2 rounded-xl p-3 text-left hover:bg-white/60 dark:hover:bg-zinc-950/30" aria-label={`${alert.categoryLabel}: ${alert.title}. ${alert.timingLabel}`}>
-                      <span aria-hidden="true" className={cn('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', alert.readAt ? 'bg-zinc-300 dark:bg-zinc-600' : tone.dot)} />
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-1.5">
-                          <span className={cn('text-[10px] font-bold uppercase tracking-wide', tone.title)}>{alert.categoryLabel}</span>
-                          <span className="rounded-md bg-white/70 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-zinc-700 dark:bg-zinc-950/40 dark:text-zinc-200">{alert.timingLabel}</span>
+                  <div key={alert.id}>
+                    {!previous || previous.severity !== alert.severity ? <h3 className="mb-2 mt-4 first:mt-0 text-xs font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">{alert.severity === 'critical' ? 'Vencidos' : alert.severity === 'warning' ? 'Vencem hoje' : 'Próximos prazos'}</h3> : null}
+                    <article className={cn('flex min-w-0 items-start gap-1 rounded-xl border border-zinc-200 bg-white transition-[border-color,background-color] hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700', alert.readAt && 'opacity-70')}>
+                      <button type="button" onClick={() => void openAlert(alert)} className="geo-focus-ring flex min-w-0 flex-1 items-start gap-3 rounded-xl p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/40" aria-label={`Abrir ${alert.categoryLabel}: ${alert.title}. ${alert.timingLabel}`}>
+                        <span aria-hidden="true" className={cn('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', alert.readAt ? 'bg-zinc-300 dark:bg-zinc-600' : tone.dot)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">{alert.categoryLabel}</span>
+                            <span className={cn('rounded-md px-2 py-0.5 text-[10px] font-bold', tone.badge)}>{tone.label}</span>
+                          </span>
+                          <span className="mt-1 block break-words text-sm font-semibold text-zinc-950 dark:text-white">{alert.title}</span>
+                          <span className="mt-0.5 block break-words text-xs leading-relaxed text-zinc-600 dark:text-zinc-300">{alert.description}</span>
+                          <span className="mt-2 block text-[11px] font-medium tabular-nums text-zinc-600 dark:text-zinc-300">Vencimento: {formatDate(alert.dueDate)} <span aria-hidden="true">·</span> {alert.timingLabel}</span>
                         </span>
-                        <span className="mt-1 block break-words text-xs font-bold text-zinc-950 dark:text-white">{alert.title}</span>
-                        <span className="mt-0.5 block break-words text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">{alert.description}</span>
-                        <span className="mt-1 block text-[10px] font-semibold tabular-nums text-zinc-500">Vencimento: {formatDate(alert.dueDate)}</span>
-                      </span>
-                    </button>
-                    <button type="button" onClick={() => void dismiss([alert.id])} className="geo-focus-ring mr-1 mt-1 flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-500/20 dark:hover:text-red-200" aria-label={`Apagar alerta: ${alert.title}`} title="Apagar alerta">
-                      <Trash size={15} aria-hidden="true" />
-                    </button>
-                  </article>
+                        <ArrowUpRight size={17} aria-hidden="true" className="mt-1 shrink-0 text-zinc-500" />
+                      </button>
+                      <button type="button" disabled={isUpdating} onClick={() => void dismiss([alert.id])} className="geo-focus-ring mr-1 mt-1 flex min-h-9 min-w-9 shrink-0 items-center justify-center rounded-lg text-zinc-500 hover:bg-red-50 hover:text-red-800 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-red-500/10 dark:hover:text-red-200" aria-label={`Ocultar alerta: ${alert.title}`} title="Ocultar alerta">
+                        <Trash size={16} aria-hidden="true" />
+                      </button>
+                    </article>
+                  </div>
                 );
               })}
               {alertsQuery.isError ? (
@@ -295,7 +338,15 @@ export function UnifiedNotificationCenter({ mobile = false }: { mobile?: boolean
                   </div>
                 </div>
               ) : null}
-            </div>
+          </div>
+          {alertsQuery.data && alertsQuery.data.totalPages > 1 ? (
+            <nav className="flex shrink-0 items-center justify-between gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" aria-label="Paginação dos alertas">
+              <button type="button" disabled={page <= 1 || alertsQuery.isFetching} onClick={() => setPage((current) => Math.max(1, current - 1))} className="geo-focus-ring min-h-9 rounded-lg px-3 text-xs font-bold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800">Anterior</button>
+              <span className="text-center text-xs font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">Página {alertsQuery.data.page} de {alertsQuery.data.totalPages}</span>
+              <button type="button" disabled={page >= alertsQuery.data.totalPages || alertsQuery.isFetching} onClick={() => setPage((current) => Math.min(alertsQuery.data?.totalPages ?? current, current + 1))} className="geo-focus-ring min-h-9 rounded-lg px-3 text-xs font-bold text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:text-zinc-200 dark:hover:bg-zinc-800">Próxima</button>
+            </nav>
+          ) : null}
+        </div>
       </Modal>
     </>
   );

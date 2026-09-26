@@ -16,7 +16,7 @@ type ProjectFinancialDecision =
   | 'registrar_credito';
 
 interface ProjectCancellationDecisionModalProps {
-  project: { id: string; nome: string };
+  project: { id: string; nome: string; status?: 'Cancelado' | 'Suspenso' };
   onCompleted: () => void;
   onDeferred: () => void;
 }
@@ -87,7 +87,7 @@ export function ProjectCancellationDecisionModal({
         queryClient.invalidateQueries({ queryKey: ['projetos'] }),
         invalidateFinancialQueries(queryClient)
       ]);
-      toast.success('Decisão financeira do cancelamento registrada.');
+      toast.success('Decisão financeira da interrupção registrada.');
       onCompleted();
     },
     onError: (error: unknown) => {
@@ -127,12 +127,12 @@ export function ProjectCancellationDecisionModal({
       onClose={() => !mutation.isPending && onDeferred()}
       closeDisabled={mutation.isPending}
       initialFocusId="project-cancellation-decision"
-      title="Definir tratamento financeiro do cancelamento"
+      title={`Definir tratamento financeiro ${project.status === 'Suspenso' ? 'da suspensão' : 'do cancelamento'}`}
       maxWidth="max-w-3xl"
     >
       <form onSubmit={submit} className="space-y-5" noValidate>
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
-          <p className="font-semibold">{project.nome} foi cancelado.</p>
+          <p className="font-semibold">{project.nome} foi {project.status === 'Suspenso' ? 'suspenso' : 'cancelado'}.</p>
           <p className="mt-1 leading-6">
             Registre como cobranças e valores já movimentados devem ser tratados. Fechar esta etapa manterá o projeto marcado com decisão financeira pendente.
           </p>

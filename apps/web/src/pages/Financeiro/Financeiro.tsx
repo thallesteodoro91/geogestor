@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useReducedMotion } from 'framer-motion';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   ArrowRight,
   CalendarBlank,
@@ -33,16 +33,9 @@ import { apiClient } from '../../services/apiClient';
 import {
   buildFinancialAnalytics,
   formatCurrencyFromCents,
-  getDespesaStatusFiscal,
-  getParcelaStatusFiscal,
-  type ClienteFinanceiro,
-  type DespesaFinanceira,
-  type FinancialFilters,
-  type OrcamentoFinanceiro,
-  type ParcelaFinanceira,
-  type ProjetoFinanceiro
+  type FinancialAnalytics
 } from '../../utils/financialAnalytics';
-import { chartActiveBar, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartActiveDot, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
 import { filterControlClass } from '../../utils/filterStyles';
@@ -62,12 +55,12 @@ import receivablesTabIcon from '../../assets/magnific-icons/crisis_6283991.png';
 import payablesTabIcon from '../../assets/magnific-icons/dollar_9510014.png';
 import travelAndInvoicesTabIcon from '../../assets/magnific-icons/travel_5595118.png';
 import { APP_QUERY_KEYS } from '@geogestor/contracts';
-import { listBudgetSummaries } from '../../services/budgets';
 
 type FinanceTab = 'visao' | 'faturas' | 'pagar' | 'auxiliares';
+const financeTabIds: FinanceTab[] = ['visao', 'faturas', 'pagar', 'auxiliares'];
 type PeriodKey = 'month' | '3m' | '6m' | '12m' | 'year' | 'custom';
 type EmbeddedFinanceAction = {
-  type: 'despesa' | 'viagem' | 'fiscal';
+  type: 'despesa' | 'parcela' | 'viagem' | 'fiscal';
   requestId: number;
 };
 type RecentFinancialEntry = {
@@ -88,6 +81,24 @@ type DraftFilters = {
   tipoCusto: string;
   centroCusto: string;
 };
+type FinancialOverviewData = {
+  analytics: Omit<FinancialAnalytics, 'orcamentos' | 'despesas' | 'parcelas'>;
+  recentEntries: RecentFinancialEntry[];
+  meta: {
+    launchCount: number;
+    expenseCount: number;
+    hasSourceData: boolean;
+    hasFilteredData: boolean;
+    nextDueDate: string;
+    openAccountCount: number;
+  };
+  options: {
+    clientes: Array<{ id: string; nome: string }>;
+    categorias: string[];
+    tiposCusto: string[];
+    centrosCusto: string[];
+  };
+};
 
 const periodOptions: Array<{ label: string; value: PeriodKey }> = [
   { label: 'Este mês', value: 'month' },
@@ -101,6 +112,56 @@ const percentageFormatter = new Intl.NumberFormat('pt-BR', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1
 });
+const compactAxisNumberFormatter = new Intl.NumberFormat('pt-BR', {
+  maximumFractionDigits: 1
+});
+
+function formatCompactCurrencyAxisValue(value: number) {
+  const normalizedValue = Number(value) || 0;
+  const absoluteValue = Math.abs(normalizedValue);
+  if (absoluteValue < 0.5) return '0';
+  if (absoluteValue >= 1_000_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000_000)} mi`;
+  if (absoluteValue >= 1_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000)} mil`;
+  return compactAxisNumberFormatter.format(normalizedValue);
+}
+
+function buildCashFlowAxisScale(points: Array<{ Recebido: number; Despesas: number; 'Resultado mensal': number }>) {
+  const values = points.flatMap((item) => [item.Recebido, item.Despesas, item['Resultado mensal']]);
+  const minimum = Math.min(0, ...values);
+  const maximum = Math.max(0, ...values);
+  const targetStep = Math.max(1, maximum - minimum) / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(targetStep));
+  const normalizedStep = targetStep / magnitude;
+  const niceMultiplier = [1, 1.5, 2, 2.5, 5, 10].find((candidate) => normalizedStep <= candidate) ?? 10;
+  const step = niceMultiplier * magnitude;
+  const domainMinimum = Math.floor(minimum / step) * step;
+  const domainMaximum = Math.max(step, Math.ceil(maximum / step) * step);
+  const tickCount = Math.round((domainMaximum - domainMinimum) / step) + 1;
+
+  return {
+    domain: [domainMinimum, domainMaximum] as [number, number],
+    ticks: Array.from({ length: tickCount }, (_, index) => Number((domainMinimum + (index * step)).toPrecision(12)))
+  };
+}
+
+function CashFlowLegend() {
+  return (
+    <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartColors.positive }} />
+        Recebido
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartColors.negative }} />
+        Despesas
+      </li>
+      <li className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="h-0.5 w-4 rounded-full" style={{ backgroundColor: chartColors.primary }} />
+        Resultado mensal
+      </li>
+    </ul>
+  );
+}
 
 const metricToneClasses = {
   positive: {
@@ -227,11 +288,17 @@ export function Financeiro() {
   const activeTab = resolveTab(searchParams.get('tab'));
   const focusedReceivableId = searchParams.get(APP_QUERY_KEYS.receivable) || undefined;
   const focusedPayableId = searchParams.get(APP_QUERY_KEYS.payable) || undefined;
+  const initialExpenseProjectId = searchParams.get('projeto') || '';
+  const initialFinanceClientId = searchParams.get('cliente') || '';
   const overviewEnabled = activeTab === 'visao';
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [embeddedAction, setEmbeddedAction] = useState<EmbeddedFinanceAction | null>(null);
+  const [embeddedAction, setEmbeddedAction] = useState<EmbeddedFinanceAction | null>(() => (
+    searchParams.get('acao') === 'despesa' || searchParams.get('acao') === 'parcela'
+      ? { type: searchParams.get('acao') as 'despesa' | 'parcela', requestId: Date.now() }
+      : null
+  ));
   const [showAllAttention, setShowAllAttention] = useState(false);
 
   const dataInicio = searchParams.get('inicio') || '';
@@ -260,6 +327,21 @@ export function Financeiro() {
     setSearchParams(next);
   };
 
+  const handleFinanceTabKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>, tab: FinanceTab) => {
+    const currentIndex = financeTabIds.indexOf(tab);
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % financeTabIds.length;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + financeTabIds.length) % financeTabIds.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = financeTabIds.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = financeTabIds[nextIndex];
+    setEmbeddedAction(null);
+    setActiveTab(nextTab);
+    requestAnimationFrame(() => document.getElementById(`finance-tab-${nextTab}`)?.focus());
+  };
+
   const clearFocusedRecord = (key: typeof APP_QUERY_KEYS.receivable | typeof APP_QUERY_KEYS.payable) => {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
@@ -268,8 +350,17 @@ export function Financeiro() {
 
   const openEmbeddedAction = (type: EmbeddedFinanceAction['type']) => {
     setEmbeddedAction({ type, requestId: Date.now() });
-    setActiveTab(type === 'despesa' ? 'pagar' : 'auxiliares');
+    setActiveTab(type === 'despesa' ? 'pagar' : type === 'parcela' ? 'faturas' : 'auxiliares');
   };
+
+  useEffect(() => {
+    const action = searchParams.get('acao');
+    if (action !== 'despesa' && action !== 'parcela') return;
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', action === 'despesa' ? 'pagar' : 'faturas');
+    next.delete('acao');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!actionMenuOpen) return undefined;
@@ -296,93 +387,33 @@ export function Financeiro() {
     return () => document.removeEventListener('keydown', escape);
   }, [filtersOpen]);
 
-  const orcamentosQuery = useQuery<OrcamentoFinanceiro[]>({
-    queryKey: ['orcamentos-financeiro'],
-    queryFn: async () => (await listBudgetSummaries()).map((budget) => ({
-      id: budget.id,
-      clienteId: budget.clientId,
-      clienteNome: budget.clientName,
-      projetoId: budget.projectId,
-      projetoNome: budget.projectName,
-      status: budget.status,
-      valorTotal: budget.totalCents,
-      dataOrcamento: budget.issueDate,
-      dataCompetencia: budget.issueDate,
-      createdAt: budget.createdAt,
-      impostosPrevistos: budget.estimatedTaxesCents,
-      descricao: budget.description,
-      codigoOrcamento: budget.number
-    })),
+  const overviewQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (effectiveDataInicio) params.set('inicio', effectiveDataInicio);
+    if (effectiveDataFim) params.set('fim', effectiveDataFim);
+    if (clienteId !== 'Todos') params.set('clienteId', clienteId);
+    if (categoria !== 'Todas') params.set('categoria', categoria);
+    if (tipoCusto !== 'Todos') params.set('tipoCusto', tipoCusto);
+    if (centroCusto !== 'Todos') params.set('centroCusto', centroCusto);
+    return params.toString();
+  }, [categoria, centroCusto, clienteId, effectiveDataFim, effectiveDataInicio, tipoCusto]);
+  const overviewQuery = useQuery<FinancialOverviewData>({
+    queryKey: ['financeiro-overview', overviewQueryString],
+    queryFn: () => apiClient.get(`/api/financeiro/overview${overviewQueryString ? `?${overviewQueryString}` : ''}`),
     enabled: overviewEnabled
   });
-  const despesasQuery = useQuery<DespesaFinanceira[]>({
-    queryKey: ['despesas-financeiro'],
-    queryFn: () => apiClient.get('/api/financeiro/despesas'),
-    enabled: overviewEnabled
-  });
-  const parcelasQuery = useQuery<ParcelaFinanceira[]>({
-    queryKey: ['parcelas-financeiro'],
-    queryFn: () => apiClient.get('/api/financeiro/parcelas'),
-    enabled: overviewEnabled
-  });
-  const orcamentos = useMemo(() => orcamentosQuery.data ?? [], [orcamentosQuery.data]);
-  const despesas = useMemo(() => despesasQuery.data ?? [], [despesasQuery.data]);
-  const parcelas = useMemo(() => parcelasQuery.data ?? [], [parcelasQuery.data]);
-  const clientes = useMemo<ClienteFinanceiro[]>(() => {
-    const byId = new Map<string, ClienteFinanceiro>();
-    const add = (id?: string | null, nome?: string | null) => {
-      if (id && nome) byId.set(id, { id, nome });
-    };
-    orcamentos.forEach((item) => add(item.clienteId, item.clienteNome));
-    parcelas.forEach((item) => add(item.clienteId, item.clienteNome));
-    despesas.forEach((item) => add(item.clienteId, item.clienteNome));
-    return Array.from(byId.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
-  }, [despesas, orcamentos, parcelas]);
-  const projetos = useMemo<ProjetoFinanceiro[]>(() => {
-    const byId = new Map<string, ProjetoFinanceiro>();
-    const add = (id?: string | null, nome?: string | null, clienteId?: string | null) => {
-      if (id && nome) byId.set(id, { id, nome, clienteId });
-    };
-    orcamentos.forEach((item) => add(item.projetoId, item.projetoNome, item.clienteId));
-    despesas.forEach((item) => add(item.projetoId, item.projetoNome, item.clienteId));
-    return Array.from(byId.values());
-  }, [despesas, orcamentos]);
+  const emptyAnalytics = useMemo(() => buildFinancialAnalytics({ orcamentos: [], despesas: [], parcelas: [] }), []);
+  const analytics: FinancialAnalytics = overviewQuery.data?.analytics
+    ? { ...overviewQuery.data.analytics, orcamentos: [], despesas: [], parcelas: [] }
+    : emptyAnalytics;
+  const clientes = overviewQuery.data?.options.clientes ?? [];
 
-  const filters = useMemo<FinancialFilters>(() => ({
-    dataInicio: effectiveDataInicio || undefined,
-    dataFim: effectiveDataFim || undefined,
-    clienteId: clienteId === 'Todos' ? undefined : clienteId,
-    categoria: categoria === 'Todas' ? undefined : categoria,
-    tipoCusto: tipoCusto === 'Todos' ? undefined : tipoCusto,
-    centroCusto: centroCusto === 'Todos' ? undefined : centroCusto
-  }), [categoria, centroCusto, clienteId, effectiveDataFim, effectiveDataInicio, tipoCusto]);
+  const loading = overviewEnabled && overviewQuery.isLoading;
+  const failed = overviewEnabled && overviewQuery.isError;
 
-  const analytics = useMemo(() => buildFinancialAnalytics({
-    orcamentos,
-    despesas,
-    parcelas,
-    clientes,
-    projetos,
-    filters
-  }), [clientes, despesas, filters, orcamentos, parcelas, projetos]);
-
-  const loading = overviewEnabled && [
-    orcamentosQuery,
-    despesasQuery,
-    parcelasQuery
-  ].some((query) => query.isLoading);
-  const failed = overviewEnabled && [
-    orcamentosQuery,
-    despesasQuery,
-    parcelasQuery
-  ].some((query) => query.isError);
-
-  const categories = Array.from(new Set(despesas.map((item) => item.categoria).filter((value): value is string => Boolean(value)))).sort();
-  const costTypes = Array.from(new Set(despesas.map((item) => item.tipoCusto).filter((value): value is string => Boolean(value)))).sort();
-  const costCenters = Array.from(new Set([
-    ...despesas.map((item) => item.centroCusto),
-    ...orcamentos.map((item) => item.centroCusto)
-  ].filter((value): value is string => Boolean(value)))).sort();
+  const categories = overviewQuery.data?.options.categorias ?? [];
+  const costTypes = overviewQuery.data?.options.tiposCusto ?? [];
+  const costCenters = overviewQuery.data?.options.centrosCusto ?? [];
 
   const periodLabel = periodOptions.find((option) => option.value === selectedPeriod)?.label || 'Últimos 12 meses';
   const hasAdvancedFilters = Boolean(
@@ -478,48 +509,17 @@ export function Financeiro() {
       name: item.label,
       Recebido: item.receitaRecebida / 100,
       Despesas: item.despesasPagas / 100,
-      Resultado: item.resultadoCaixa / 100
+      'Resultado mensal': item.resultadoCaixa / 100
     }));
+  const cashFlowAxisScale = buildCashFlowAxisScale(monthlyData);
   const hasChartData = monthlyData.some((item) => item.Recebido !== 0 || item.Despesas !== 0);
-  const launchCount = analytics.parcelas.length + analytics.despesas.length;
-  const hasSourceData = orcamentos.length > 0 || despesas.length > 0 || parcelas.length > 0;
-  const hasFilteredData = launchCount > 0;
-  const recentEntries = useMemo<RecentFinancialEntry[]>(() => {
-    const revenueEntries = analytics.parcelas.map((parcela): RecentFinancialEntry => ({
-      id: `receita-${parcela.id}`,
-      type: 'receita',
-      title: parcela.orcamentoDescricao || 'Parcela a receber',
-      context: [parcela.clienteNome].filter(Boolean).join(' · ') || 'Cliente não informado',
-      date: (parcela.dataPagamento || parcela.dataVencimento || '').slice(0, 10),
-      status: getParcelaStatusFiscal(parcela),
-      amount: Number(parcela.valor) || 0,
-      tab: 'faturas'
-    }));
-    const expenseEntries = analytics.despesas.map((despesa): RecentFinancialEntry => ({
-      id: `despesa-${despesa.id}`,
-      type: 'despesa',
-      title: despesa.descricao || despesa.categoria || 'Despesa',
-      context: [despesa.clienteNome, despesa.projetoNome || despesa.fornecedor].filter(Boolean).join(' · ') || 'Administrativo / geral',
-      date: (despesa.dataPagamento || despesa.dataCompetencia || despesa.data || '').slice(0, 10),
-      status: getDespesaStatusFiscal(despesa),
-      amount: Number(despesa.valor) || 0,
-      tab: 'pagar'
-    }));
-
-    return [...revenueEntries, ...expenseEntries]
-      .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
-      .slice(0, 6);
-  }, [analytics.despesas, analytics.parcelas]);
-  const nextDueDate = useMemo(() => {
-    const todayKey = toDateKey(new Date());
-    return parcelas
-      .filter((parcela) => (!filters.clienteId || parcela.clienteId === filters.clienteId)
-        && getParcelaStatusFiscal(parcela) !== 'Pago'
-        && parcela.dataVencimento?.slice(0, 10) >= todayKey)
-      .sort((a, b) => a.dataVencimento.localeCompare(b.dataVencimento))[0]?.dataVencimento?.slice(0, 10) || '';
-  }, [filters.clienteId, parcelas]);
-  const openAccountCount = parcelas.filter((parcela) => getParcelaStatusFiscal(parcela) !== 'Pago').length
-    + despesas.filter((despesa) => !despesa.canceladaEm && !despesa.estornadaEm && getDespesaStatusFiscal(despesa) !== 'Pago').length;
+  const launchCount = overviewQuery.data?.meta.launchCount ?? 0;
+  const expenseCount = overviewQuery.data?.meta.expenseCount ?? 0;
+  const hasSourceData = overviewQuery.data?.meta.hasSourceData ?? false;
+  const hasFilteredData = overviewQuery.data?.meta.hasFilteredData ?? false;
+  const recentEntries = overviewQuery.data?.recentEntries ?? [];
+  const nextDueDate = overviewQuery.data?.meta.nextDueDate ?? '';
+  const openAccountCount = overviewQuery.data?.meta.openAccountCount ?? 0;
 
   const exportOverview = () => {
     const header = ['Período', 'Recebido', 'Despesas', 'Resultado'];
@@ -527,7 +527,7 @@ export function Financeiro() {
       item.name,
       item.Recebido.toFixed(2).replace('.', ','),
       item.Despesas.toFixed(2).replace('.', ','),
-      item.Resultado.toFixed(2).replace('.', ',')
+      item['Resultado mensal'].toFixed(2).replace('.', ',')
     ]);
     const csv = `\uFEFF${[header, ...rows].map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(';')).join('\r\n')}`;
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -663,9 +663,13 @@ export function Financeiro() {
           ] as const).map(([id, label, icon, tone]) => (
             <button
               key={id}
+              id={`finance-tab-${id}`}
               type="button"
               role="tab"
               aria-selected={activeTab === id}
+              aria-controls={`finance-panel-${id}`}
+              tabIndex={activeTab === id ? 0 : -1}
+              onKeyDown={(event) => handleFinanceTabKeyDown(event, id)}
               onClick={() => {
                 setEmbeddedAction(null);
                 setActiveTab(id);
@@ -685,7 +689,7 @@ export function Financeiro() {
       </nav>
 
       {activeTab === 'visao' && (
-        <>
+        <section id="finance-panel-visao" role="tabpanel" aria-labelledby={`finance-tab-${activeTab}`} tabIndex={0}>
           {(loading || failed || hasSourceData) && (
             <section aria-label="Período e filtros financeiros" className="relative mb-6">
             <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
@@ -761,7 +765,7 @@ export function Financeiro() {
             )}
 
             <p aria-live="polite" className="mt-3 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              Exibindo {countLabel(launchCount, 'lançamento', 'lançamentos')} e {countLabel(analytics.despesas.length, 'despesa', 'despesas')} no período selecionado.
+              Exibindo {countLabel(launchCount, 'lançamento', 'lançamentos')} e {countLabel(expenseCount, 'despesa', 'despesas')} no período selecionado.
             </p>
 
             {filtersOpen && (
@@ -892,7 +896,7 @@ export function Financeiro() {
                 <FinancialMetric
                   label="Despesas pagas"
                   value={formatCurrencyFromCents(analytics.kpis.despesasPagas)}
-                  detail={countLabel(analytics.despesas.length, 'despesa no período', 'despesas no período')}
+                  detail={countLabel(expenseCount, 'despesa no período', 'despesas no período')}
                   tone={analytics.kpis.despesasPagas > 0 ? 'danger' : 'neutral'}
                   icon={<TrendDown aria-hidden="true" className="h-5 w-5" />}
                 />
@@ -907,28 +911,76 @@ export function Financeiro() {
               </section>
 
               <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-                <section aria-labelledby="cash-flow-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
+                <section aria-labelledby="cash-flow-title" aria-describedby="cash-flow-description" className={cn(dashboardCardClass, 'xl:col-span-8')}>
                   <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
                     <div>
                       <h2 id="cash-flow-title" className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white">Evolução do fluxo de caixa</h2>
-                      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Receitas recebidas e despesas pagas no período.</p>
+                      <p id="cash-flow-description" className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Compare recebimentos e despesas pagas; a linha indica o resultado mensal.</p>
                     </div>
                     <span className="w-fit rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{periodLabel}</span>
                   </div>
                   {hasChartData ? (
-                    <div className="h-72 w-full">
-                      <ResponsiveContainer {...responsiveChartProps}>
-                        <BarChart data={monthlyData}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} minTickGap={18} />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} tickFormatter={(value) => `R$ ${Number(value).toLocaleString('pt-BR')}`} />
-                          <Tooltip cursor={chartCursor} content={<RichTooltip showDifference differenceLabel="Resultado" format="currency" />} />
-                          <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
-                          <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                          <Bar dataKey="Despesas" fill={chartColors.negative} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <>
+                      <div className="flex h-72 w-full min-w-0 flex-col" aria-hidden="true">
+                        <p className="h-5 shrink-0 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valores em <span translate="no">R$</span></p>
+                        <div className="min-h-0 min-w-0 flex-1">
+                          <ResponsiveContainer {...responsiveChartProps}>
+                            <ComposedChart accessibilityLayer={false} data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
+                              <ReferenceLine y={0} stroke={chartTextColor} strokeOpacity={0.45} />
+                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} minTickGap={18} />
+                              <YAxis
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fill: chartTextColor, fontSize: 12 }}
+                                tickFormatter={formatCompactCurrencyAxisValue}
+                                width={58}
+                                domain={cashFlowAxisScale.domain}
+                                ticks={cashFlowAxisScale.ticks}
+                              />
+                              <Tooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
+                              <Legend
+                                wrapperStyle={chartLegendStyle}
+                                content={<CashFlowLegend />}
+                              />
+                              <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                              <Bar dataKey="Despesas" fill={chartColors.negative} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                              <Line
+                                type="linear"
+                                dataKey="Resultado mensal"
+                                stroke={chartColors.primary}
+                                strokeWidth={2}
+                                dot={{ r: 2.5, fill: chartColors.primary, strokeWidth: 0 }}
+                                activeDot={chartActiveDot(chartColors.primary)}
+                                isAnimationActive={!reduceMotion}
+                                animationDuration={chartAnimationDuration}
+                              />
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                      <table className="sr-only">
+                        <caption>Fluxo de caixa mensal em reais para o período {periodLabel}.</caption>
+                        <thead>
+                          <tr>
+                            <th scope="col">Mês</th>
+                            <th scope="col">Recebido</th>
+                            <th scope="col">Despesas</th>
+                            <th scope="col">Resultado mensal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {monthlyData.map((item) => (
+                            <tr key={item.name}>
+                              <th scope="row">{item.name}</th>
+                              <td>{formatCurrencyFromCents(Math.round(item.Recebido * 100))}</td>
+                              <td>{formatCurrencyFromCents(Math.round(item.Despesas * 100))}</td>
+                              <td>{formatCurrencyFromCents(Math.round(item['Resultado mensal'] * 100))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </>
                   ) : (
                     <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 px-6 text-center dark:border-zinc-700">
                       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300"><Receipt aria-hidden="true" size={24} /></span>
@@ -1060,7 +1112,7 @@ export function Financeiro() {
                             {analytics.clientes.slice(0, 5).map((item) => (
                               <tr key={item.clienteId}>
                                 <th scope="row" className="max-w-72 break-words py-3 pr-3 text-left font-semibold">{item.cliente}</th>
-                                <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-600' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
+                                <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
                                 <td className="py-3 text-right font-mono tabular-nums">{percentageFormatter.format(item.margem)}%</td>
                               </tr>
                             ))}
@@ -1104,32 +1156,43 @@ export function Financeiro() {
               </div>
             </div>
           )}
-        </>
+        </section>
       )}
 
       {activeTab === 'faturas' && (
-        <Faturas
-          embedded
-          focusParcelaId={focusedReceivableId}
-          onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.receivable)}
-        />
+        <section id="finance-panel-faturas" role="tabpanel" aria-labelledby={`finance-tab-${activeTab}`} tabIndex={0}>
+          <Faturas
+            key={embeddedAction?.type === 'parcela' ? embeddedAction.requestId : 'financial-receivables'}
+            embedded
+            openCreateOnMount={embeddedAction?.type === 'parcela'}
+            initialProjectId={initialExpenseProjectId}
+            initialClientId={initialFinanceClientId}
+            focusParcelaId={focusedReceivableId}
+            onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.receivable)}
+          />
+        </section>
       )}
       {activeTab === 'pagar' && (
-        <Despesas
-          key={embeddedAction?.type === 'despesa' ? embeddedAction.requestId : 'financial-expenses'}
-          embedded
-          openCreateOnMount={embeddedAction?.type === 'despesa'}
-          focusDespesaId={focusedPayableId}
-          onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.payable)}
-        />
+        <section id="finance-panel-pagar" role="tabpanel" aria-labelledby={`finance-tab-${activeTab}`} tabIndex={0}>
+          <Despesas
+            key={embeddedAction?.type === 'despesa' ? embeddedAction.requestId : 'financial-expenses'}
+            embedded
+            openCreateOnMount={embeddedAction?.type === 'despesa'}
+            initialProjectId={initialExpenseProjectId}
+            focusDespesaId={focusedPayableId}
+            onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.payable)}
+          />
+        </section>
       )}
       {activeTab === 'auxiliares' && (
-        <GestaoFinanceira
-          key={embeddedAction && embeddedAction.type !== 'despesa' ? embeddedAction.requestId : 'financial-auxiliary'}
-          embedded
-          initialTab={embeddedAction?.type === 'fiscal' ? 'fiscal' : 'viagens'}
-          openCreateOnMount={embeddedAction?.type === 'viagem' || embeddedAction?.type === 'fiscal'}
-        />
+        <section id="finance-panel-auxiliares" role="tabpanel" aria-labelledby={`finance-tab-${activeTab}`} tabIndex={0}>
+          <GestaoFinanceira
+            key={embeddedAction && embeddedAction.type !== 'despesa' ? embeddedAction.requestId : 'financial-auxiliary'}
+            embedded
+            initialTab={embeddedAction?.type === 'fiscal' ? 'fiscal' : 'viagens'}
+            openCreateOnMount={embeddedAction?.type === 'viagem' || embeddedAction?.type === 'fiscal'}
+          />
+        </section>
       )}
     </Layout>
   );

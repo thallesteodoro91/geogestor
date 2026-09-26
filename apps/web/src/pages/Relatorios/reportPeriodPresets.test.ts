@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   activeReportPeriodPreset,
+  reportPeriodError,
   reportPeriodGuidance,
   reportPeriodPresetRange
 } from './reportPeriodPresets';
@@ -34,5 +35,11 @@ describe('reportPeriodPresetRange', () => {
     assert.match(reportPeriodGuidance('2026-01-01', '') || '', /a partir/);
     assert.match(reportPeriodGuidance('', '2026-01-31') || '', /até/);
     assert.equal(reportPeriodGuidance('2026-01-01', '2026-01-31'), null);
+  });
+
+  it('rejeita datas civis impossíveis e intervalos invertidos antes da consulta', () => {
+    assert.match(reportPeriodError('2026-02-30', '') || '', /datas reais/);
+    assert.match(reportPeriodError('2026-09-02', '2026-09-01') || '', /anterior ou igual/);
+    assert.equal(reportPeriodError('2024-02-29', '2024-02-29'), null);
   });
 });

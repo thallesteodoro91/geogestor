@@ -23,6 +23,7 @@ function adapterWithStatFailure(targetToFail: string, code: string) {
     }) as typeof fs.stat,
     access: fs.access,
     writeFile: fs.writeFile,
+    rename: fs.rename,
     rm: fs.rm
   };
 }
@@ -82,6 +83,19 @@ test('diagnóstico da pasta distingue estados sem criar ou expor o caminho confi
   assert.equal(health.checks.filesDirectory.code, 'ok');
   assert.equal(health.checks.filesDirectoryWritable, true);
   assert.equal(health.status, 'ok');
+
+  SystemHealthService.configureFileSystemForTests({
+    stat: fs.stat,
+    access: fs.access,
+    writeFile: fs.writeFile,
+    rename: async () => { throw fileSystemError('EPERM'); },
+    rm: fs.rm
+  });
+  health = await SystemHealthService.inspect();
+  assert.equal(health.checks.filesDirectory.code, 'operation_not_permitted');
+  assert.equal(health.checks.filesDirectory.operation, 'rename');
+  assert.deepEqual((await fs.readdir(filesRoot)).filter((entry) => entry.startsWith('.geogestor-health-')), []);
+  SystemHealthService.configureFileSystemForTests(null);
 
   await db.update(schema.configuracoes).set({ dadosPasta: '' }).where(eq(schema.configuracoes.id, 'health-config'));
   health = await SystemHealthService.inspect();

@@ -12,12 +12,11 @@ const evidenceRoot = e2eEvidenceRoot();
 const requireFromApi = createRequire(path.resolve(process.cwd(), 'apps', 'api', 'package.json'));
 const { createClient } = requireFromApi('@libsql/client') as typeof import('@libsql/client');
 
-const ids = {
-  client: crypto.randomUUID(), project: crypto.randomUUID(), paidBudget: crypto.randomUUID(), scheduledBudget: crypto.randomUUID(),
-  overdueInstallment: crypto.randomUUID(), partialInstallment: crypto.randomUUID(), paidInstallment: crypto.randomUUID(),
-  partialReceipt: crypto.randomUUID(), paidReceipt: crypto.randomUUID(), paidExpense: crypto.randomUUID(),
-  directPaidExpense: crypto.randomUUID(), overdueExpense: crypto.randomUUID(), futureExpense: crypto.randomUUID(), travel: crypto.randomUUID()
-};
+const fixtureKeys = [
+  'client', 'project', 'paidBudget', 'scheduledBudget', 'overdueInstallment', 'partialInstallment', 'paidInstallment',
+  'partialReceipt', 'paidReceipt', 'paidExpense', 'directPaidExpense', 'overdueExpense', 'futureExpense', 'travel'
+] as const;
+const ids = Object.fromEntries(fixtureKeys.map((key, index) => [key, `07000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`])) as Record<typeof fixtureKeys[number], string>;
 
 type Auth = { origin: string; headers: Record<string, string> };
 
@@ -135,10 +134,14 @@ test.describe('Sessão 07 — Financeiro', () => {
     await page.goto('/financeiro?periodo=12m');
     await unlockCurrent(page);
     await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
+    await page.getByText('Indicadores complementares', { exact: true }).click();
     for (const [label, value] of [['Recebido', 'R$ 6.420,00'], ['A receber', 'R$ 600,00'], ['Despesas pagas', 'R$ 700,00'], ['Resultado de caixa', 'R$ 5.720,00']] as const) {
-      await expect(page.getByText(label, { exact: true }).locator('..').getByText(value, { exact: true })).toBeVisible();
+      const card = page.getByRole('article', { name: label, exact: true });
+      await expect(card).toBeVisible();
+      await expect(card.getByText(value, { exact: true })).toBeVisible();
     }
-    await expect(page.getByText('Recebimentos atrasados', { exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Pendências', exact: true }).getByText('Recebimentos atrasados', { exact: true })).toBeVisible();
+    await page.getByText('Ver todas as pendências', { exact: true }).click();
     await expect(page.getByText('Contas vencidas', { exact: true })).toBeVisible();
     await expectNoAxeViolations(page);
     await page.screenshot({ path: path.join(evidenceRoot, '01-visao-geral-reconciliada.png'), fullPage: true });
@@ -187,7 +190,7 @@ test.describe('Sessão 07 — Financeiro', () => {
     await expect(page.getByRole('alert').getByText('Não foi possível carregar as contas a pagar.')).toBeVisible();
     await page.unroute('**/api/financeiro/despesas?*');
     await page.getByRole('button', { name: 'Tentar novamente' }).click();
-    await expect(page.getByText(`${PREFIX}Software`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Editar despesa ${PREFIX}Software`, exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(evidenceRoot, '02-contas-e-recuperacao.png'), fullPage: true });
   });
 
@@ -195,7 +198,7 @@ test.describe('Sessão 07 — Financeiro', () => {
     await ensureFinancialJourneyFixture();
     const auth = await unlock(page, '/financeiro?tab=auxiliares');
     if (!auth) throw new Error('Credenciais isoladas da suíte ausentes.');
-    await expect(page.getByText(`${PREFIX}Levantamento`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('tabpanel', { name: 'Viagens e prestação' }).getByText(`${PREFIX}Levantamento`, { exact: true })).toBeVisible();
     const travelTab = page.getByRole('tab', { name: 'Viagens e prestação' });
     await travelTab.focus();
     await travelTab.press('ArrowRight');

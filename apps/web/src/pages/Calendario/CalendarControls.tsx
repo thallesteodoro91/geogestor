@@ -429,7 +429,7 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
   const selectTime = (time: string) => {
     onChange(time);
     setTyped(false);
-    inputRef.current?.focus({preventScroll:true});
+    document.getElementById(id)?.focus({ preventScroll: true });
     setOpen(false);
   };
 

@@ -240,9 +240,8 @@ export function Faturas({
     queryFn: () => apiClient.get<InstallmentPage>(`/api/financeiro/parcelas?${installmentQueryString}`),
     placeholderData: (previous) => previous
   });
-  const listNavigation = useListPageNavigation({ page, resolvedPage: installmentPage?.page, ready: !fetchingInstallments && !placeholderInstallments, failed, scope: installmentFilterKey });
-  const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
-  const { adjustPage } = listNavigation;
+  const { preparePage, adjustPage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: installmentPage?.page, ready: !fetchingInstallments && !placeholderInstallments, failed, scope: installmentFilterKey });
+  const changePage = (next: number) => { preparePage(next); setPage(next); };
   useEffect(() => {
     if (!installmentPage || fetchingInstallments || placeholderInstallments || failed || page <= installmentPage.totalPages) return;
     const nextPage = installmentPage.totalPages;
@@ -557,7 +556,7 @@ export function Faturas({
               </button>
             )}
           </div>
-          <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
               {filteredParcelas.length} de {installmentPage?.total ?? 0} parcela(s) exibidas · Página {installmentPage?.page ?? page} de {installmentPage?.totalPages ?? 1} · Intervalo {filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + filteredParcelas.length : 0}
           </p>
         </div>

@@ -243,9 +243,9 @@ export function Despesas({
     queryFn: () => apiClient.get<ExpensePage>(`/api/financeiro/despesas?${expenseQueryString}`),
     placeholderData: (previous) => previous
   });
-  const listNavigation = useListPageNavigation({ page, resolvedPage: expensePage?.page, ready: !fetchingExpenses && !placeholderExpenses, failed: despesasFailed, scope: expenseFilterKey });
-  const changePage = (next: number) => { listNavigation.preparePage(next); listUrl.update({ pagarPagina: next <= 1 ? null : String(next) }); };
-  useEffect(() => { if (!expensePage || fetchingExpenses || placeholderExpenses || despesasFailed || page <= expensePage.totalPages) return; listNavigation.adjustPage(expensePage.totalPages); listUrl.update({ pagarPagina: expensePage.totalPages <= 1 ? null : String(expensePage.totalPages) }); }, [expensePage, fetchingExpenses, placeholderExpenses, despesasFailed, page, listUrl.update]);
+  const { preparePage, adjustPage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: expensePage?.page, ready: !fetchingExpenses && !placeholderExpenses, failed: despesasFailed, scope: expenseFilterKey });
+  const changePage = (next: number) => { preparePage(next); listUrl.update({ pagarPagina: next <= 1 ? null : String(next) }); };
+  useEffect(() => { if (!expensePage || fetchingExpenses || placeholderExpenses || despesasFailed || page <= expensePage.totalPages) return; adjustPage(expensePage.totalPages); listUrl.update({ pagarPagina: expensePage.totalPages <= 1 ? null : String(expensePage.totalPages) }); }, [expensePage, fetchingExpenses, placeholderExpenses, despesasFailed, page, listUrl.update]);
   const despesas = useMemo(() => expensePage?.items ?? [], [expensePage?.items]);
 
   const { data: viagens = [], isLoading: viagensLoading } = useQuery<ViagemMin[]>({
@@ -798,7 +798,7 @@ export function Despesas({
             </button>
           )}
         </div>
-        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+        <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
           {filteredDespesas.length} de {expensePage?.total ?? 0} despesa(s) exibidas · Página {expensePage?.page ?? page} de {expensePage?.totalPages ?? 1} · Intervalo {filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + filteredDespesas.length : 0}
         </p>
       </div>

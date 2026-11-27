@@ -145,8 +145,8 @@ export function ListagemAmbiental() {
     queryFn: () => apiClient.get<EnvironmentalDemandListResponse>(`/api/ambiental?${queryString}`),
     enabled: activeTab === 'ambiental'
   });
-  const listNavigation = useListPageNavigation({ page, resolvedPage: demandsQuery.data?.page ?? page, ready: !demandsQuery.isFetching, failed: demandsQuery.isError, scope: [searchTerm, status, tipo, inicio, fim, activeTab].join('|') });
-  const changePage = (next: number) => { listNavigation.preparePage(next); updateParam('page', String(next)); };
+  const { preparePage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: demandsQuery.data?.page ?? page, ready: !demandsQuery.isFetching, failed: demandsQuery.isError, scope: [searchTerm, status, tipo, inicio, fim, activeTab].join('|') });
+  const changePage = (next: number) => { preparePage(next); updateParam('page', String(next)); };
   const hasFilters = Boolean(searchParams.get('q') || status || tipo || inicio || fim);
   const activeFilterCount = [searchTerm, status, tipo, inicio, fim].filter(Boolean).length;
   const totalPages = Math.max(1, Math.ceil((demandsQuery.data?.total || 0) / 24));
@@ -347,7 +347,7 @@ export function ListagemAmbiental() {
         </PageFilterBar>
 
         <div aria-live="polite" className="sr-only">{demandsQuery.isLoading ? 'Carregando demandas…' : `${demandsQuery.data?.total || 0} demandas encontradas.`}</div>
-        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{demandsQuery.data?.total ?? 0} demandas encontradas · Página {demandsQuery.data?.page ?? page} de {totalPages} · Intervalo {demandsQuery.data?.items.length ? (page - 1) * 24 + 1 : 0}–{demandsQuery.data?.items.length ? (page - 1) * 24 + demandsQuery.data.items.length : 0}</p>
+        <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{demandsQuery.data?.total ?? 0} demandas encontradas · Página {demandsQuery.data?.page ?? page} de {totalPages} · Intervalo {demandsQuery.data?.items.length ? (page - 1) * 24 + 1 : 0}–{demandsQuery.data?.items.length ? (page - 1) * 24 + demandsQuery.data.items.length : 0}</p>
         {demandsQuery.isLoading ? (
           <div role="status" className="rounded-2xl border border-zinc-200 bg-white py-14 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">Carregando demandas…</div>
         ) : demandsQuery.isError ? (

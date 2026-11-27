@@ -78,7 +78,8 @@ test('limite de retenção usa o tamanho real em disco, não totais manipulávei
   await fs.rm(root, { recursive: true, force: true });
 });
 
-test('retenção classifica 25 versões controladas e preserva bundles incompletos ou corrompidos para inspeção', async () => {
+test('retenção classifica 25 versões controladas e preserva bundles incompletos ou corrompidos para inspeção', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-18T12:00:00.000Z') });
   await fs.rm(root, { recursive: true, force: true });
   const backupDirectory = path.join(root, 'backups');
   for (let index = 0; index < 25; index += 1) {

@@ -153,7 +153,7 @@ export function Licenciamento({
     queryKey: ['licencas', 'summary'],
     queryFn: ({ signal }) => apiClient.get<{ total: number; valid: number; expired: number; near: number; renewal: number; pending: number; overdue: number }>('/api/licencas/summary', { signal })
   });
-  const listNavigation = useListPageNavigation({ page: licensePage, resolvedPage: licensesQuery.data?.page, ready: !licensesQuery.isFetching, failed: licensesQuery.isError, scope: [searchTerm, statusFilter, tipoFilter, vencimentoFilter].join('|') });
+  const { resultsAnchor, preparePage } = useListPageNavigation({ page: licensePage, resolvedPage: licensesQuery.data?.page, ready: !licensesQuery.isFetching, failed: licensesQuery.isError, scope: [searchTerm, statusFilter, tipoFilter, vencimentoFilter].join('|') });
   const totalPages = Math.max(1, licensesQuery.data?.totalPages || 1);
   useEffect(() => {
     if (!licensesQuery.isSuccess || licensesQuery.isPlaceholderData || licensePage <= totalPages) return;
@@ -260,7 +260,7 @@ export function Licenciamento({
       </div>
 
       <p role="status" aria-live="polite" className="license-secondary min-h-5 text-sm">{licensesQuery.isError ? 'Não foi possível atualizar as licenças.' : licensesQuery.isFetching ? 'Atualizando licenças…' : `${numberFormatter.format(licensesQuery.data?.total || 0)} ${licensesQuery.data?.total === 1 ? 'licença encontrada' : 'licenças encontradas'}.`}</p>
-      <p ref={listNavigation.resultsAnchor} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm text-text-secondary" role="status" aria-live="polite" aria-atomic="true">Página {licensesQuery.data?.page ?? licensePage} de {totalPages} · Intervalo {licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + 1) : 0}–{licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + licensesQuery.data.items.length) : 0}</p>
+      <p ref={resultsAnchor} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm text-text-secondary" role="status" aria-live="polite" aria-atomic="true">Página {licensesQuery.data?.page ?? licensePage} de {totalPages} · Intervalo {licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + 1) : 0}–{licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + licensesQuery.data.items.length) : 0}</p>
       {licensesQuery.isLoading ? (
         <div role="status" className="rounded-xl border border-zinc-200 bg-white py-14 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">Carregando licenças…</div>
       ) : licensesQuery.isError ? (
@@ -291,8 +291,8 @@ export function Licenciamento({
 
       <nav aria-label="Paginação das licenças" className="flex flex-wrap items-center gap-3">
         <p aria-live="polite" className="text-sm tabular-nums">Página {numberFormatter.format(licensePage)} de {numberFormatter.format(totalPages)} · {numberFormatter.format(licensesQuery.data?.total || 0)} {licensesQuery.data?.total === 1 ? 'resultado' : 'resultados'}. Esta lista mostra até 25 licenças por página.</p>
-        <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" disabled={licensePage <= 1 || licensesQuery.isFetching} onClick={() => { listNavigation.preparePage(licensePage - 1); const next = new URLSearchParams(searchParams); next.set('lic_page', String(licensePage - 1)); setSearchParams(next); }}>Anterior</button>
-        <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" disabled={licensePage >= totalPages || licensesQuery.isFetching} onClick={() => { listNavigation.preparePage(licensePage + 1); const next = new URLSearchParams(searchParams); next.set('lic_page', String(licensePage + 1)); setSearchParams(next); }}>Próxima</button>
+        <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" disabled={licensePage <= 1 || licensesQuery.isFetching} onClick={() => { preparePage(licensePage - 1); const next = new URLSearchParams(searchParams); next.set('lic_page', String(licensePage - 1)); setSearchParams(next); }}>Anterior</button>
+        <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" disabled={licensePage >= totalPages || licensesQuery.isFetching} onClick={() => { preparePage(licensePage + 1); const next = new URLSearchParams(searchParams); next.set('lic_page', String(licensePage + 1)); setSearchParams(next); }}>Próxima</button>
       </nav>
       <LicenseFormModal isOpen={showForm} onClose={() => !createMutation.isPending && setShowForm(false)} loading={createMutation.isPending} onSubmit={(payload) => createMutation.mutateAsync(payload).then(() => undefined)} />
     </div>

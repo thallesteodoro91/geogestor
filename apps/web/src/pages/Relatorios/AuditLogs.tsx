@@ -46,8 +46,8 @@ export function AuditLogs() {
     ),
     placeholderData: (previous) => previous
   });
-  const listNavigation = useListPageNavigation({ page, resolvedPage: auditQuery.data?.page, ready: !auditQuery.isFetching, failed: auditQuery.isError, scope: [actionFilter, entityFilter].join('|') });
-  const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
+  const { preparePage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: auditQuery.data?.page, ready: !auditQuery.isFetching, failed: auditQuery.isError, scope: [actionFilter, entityFilter].join('|') });
+  const changePage = (next: number) => { preparePage(next); setPage(next); };
   const logs = auditQuery.data?.items ?? [];
   const loading = auditQuery.isLoading;
   const loadError = auditQuery.error instanceof Error ? auditQuery.error.message : auditQuery.isError ? 'Não foi possível consultar os logs de auditoria.' : '';
@@ -295,7 +295,7 @@ export function AuditLogs() {
       </PageFilterBar>
 
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
-        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{auditQuery.data?.total ?? 0} registros encontrados · Página {auditQuery.data?.page ?? page} de {auditQuery.data?.totalPages ?? 1} · Intervalo {logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + 1 : 0}–{logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + logs.length : 0}</p>
+        <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{auditQuery.data?.total ?? 0} registros encontrados · Página {auditQuery.data?.page ?? page} de {auditQuery.data?.totalPages ?? 1} · Intervalo {logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + 1 : 0}–{logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + logs.length : 0}</p>
         {loading ? (
           <div aria-live="polite" className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria…</div>
         ) : loadError ? (

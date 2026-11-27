@@ -16,7 +16,7 @@ process.env.GEOGESTOR_SECRET_KEY = Buffer.alloc(32, 9).toString('base64');
 process.env.GEOGESTOR_BACKUP_RECOVERY_KEY = Buffer.alloc(32, 10).toString('base64');
 process.env.GEOGESTOR_ATTEMPT_LOCKOUT_MS = '20';
 
-test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', async () => {
+test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', async (t) => {
   await fs.rm(testRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
   await fs.mkdir(testRoot, { recursive: true });
   const [{ server }, { dbReady, closeDb }, { runRuntimeMigrations }] = await Promise.all([
@@ -74,6 +74,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(operational.statusCode, 200, operational.body);
     assert.deepEqual(operational.json(), []);
 
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
     const recoveryHeaders = {
       ...baseHeaders,
       'x-local-session': sessionToken,
@@ -113,7 +114,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(blockedCorrectPassword.statusCode, 429, blockedCorrectPassword.body);
     assert.equal(blockedCorrectPassword.json<{ error: string }>().error, uniformError);
 
-    await new Promise((resolve) => setTimeout(resolve, 30));
+    t.mock.timers.tick(30);
     const revealed = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/sistema/backups/recuperacao/codigo',
@@ -155,7 +156,8 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
       payload: { password: 'senha-segura-123' }
     });
     const expiringToken = shortSession.json<{ token: string }>().token;
-    await new Promise((resolve) => setTimeout(resolve, 15));
+    assert.equal(shortSession.statusCode, 200, shortSession.body);
+    t.mock.timers.tick(15);
     const expired = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/clientes',

@@ -5,7 +5,7 @@ import { useSearchParams } from 'react-router-dom';
 export function useListUrlState() {
   const [params, setParams] = useSearchParams();
   const latest = useRef(params);
-  latest.current = params;
+  useLayoutEffect(() => { latest.current = params; }, [params]);
   const update = useCallback((changes: Record<string, string | null>, replace = true) => {
     const next = new URLSearchParams(latest.current);
     Object.entries(changes).forEach(([key, value]) => { if (value == null || value === '') next.delete(key); else next.set(key, value); });
@@ -29,5 +29,8 @@ export function useListPageNavigation({ page, resolvedPage, ready, failed, scope
     resultsRef.current?.focus({ preventScroll: true });
     resultsRef.current?.scrollIntoView({ block: 'start', behavior: 'instant' });
   }, [page, resolvedPage, ready, failed, scope]);
-  return { resultsRef, preparePage: (next: number) => { pending.current = { page: next, scope }; }, adjustPage: (next: number) => { if (pending.current) pending.current.page = next; } };
+  const resultsAnchor = useCallback((node: HTMLParagraphElement | null) => { resultsRef.current = node; }, []);
+  const preparePage = useCallback((next: number) => { pending.current = { page: next, scope }; }, [scope]);
+  const adjustPage = useCallback((next: number) => { if (pending.current) pending.current.page = next; }, []);
+  return { resultsAnchor, preparePage, adjustPage };
 }

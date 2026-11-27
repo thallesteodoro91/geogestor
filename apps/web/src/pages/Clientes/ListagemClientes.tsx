@@ -1050,7 +1050,7 @@ export function ListagemClientes() {
       </div>
 
       <div className="mb-3 flex min-h-6 items-center justify-between gap-3 text-xs font-medium text-zinc-600 dark:text-zinc-300" role="status" aria-live="polite" aria-atomic="true">
-        <p ref={listNavigation.resultsRef} tabIndex={-1} className="geo-focus-ring scroll-mt-28 m-0">{totalClients} {totalClients === 1 ? 'resultado encontrado' : 'resultados encontrados'} · Página {clientPage?.page ?? page} de {totalPages} · Intervalo {clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + 1) : 0}–{clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + clientPage.items.length) : 0}</p>
+        <p ref={listNavigation.resultsAnchor} tabIndex={-1} className="geo-focus-ring scroll-mt-28 m-0">{totalClients} {totalClients === 1 ? 'resultado encontrado' : 'resultados encontrados'} · Página {clientPage?.page ?? page} de {totalPages} · Intervalo {clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + 1) : 0}–{clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + clientPage.items.length) : 0}</p>
         {isFetching && !loading && <span>Atualizando…</span>}
       </div>
 

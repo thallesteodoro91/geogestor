@@ -917,13 +917,13 @@ export function BudgetEditor({ isOpen = true, onClose, options, initial, initial
             <FormField htmlFor="budget-valid-until" label="Validade até" error={fieldError('budget-valid-until')}>
               <DatePickerField id="budget-valid-until" name="validUntil" value={form.validUntil} onChange={(event) => setForm({ ...form, validUntil: event.target.value })} className={fieldClass} {...fieldA11y('budget-valid-until')} />
             </FormField>
-            
+
             <FormField htmlFor="budget-source" label="Origem">
               <input id="budget-source" name="source" autoComplete="off" value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value })} className={fieldClass} />
             </FormField>
-            
-            
-            
+
+
+
           </div>
         <FormSection headingLevel={4} title="Cliente e vínculos">
           <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
@@ -1127,7 +1127,7 @@ export function BudgetEditor({ isOpen = true, onClose, options, initial, initial
                       <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">{item.description.trim() || 'Descrição ainda não informada'}</p>
                     </div>
                     <div className="flex flex-wrap items-center justify-end gap-2">
-                      
+
                       <button type="button" className={iconButtonClass} onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`Mover item ${index + 1} para cima`}><ArrowUp aria-hidden="true" size={15} /></button>
                       <button type="button" className={iconButtonClass} onClick={() => moveItem(index, 1)} disabled={index === form.items.length - 1} aria-label={`Mover item ${index + 1} para baixo`}><ArrowDown aria-hidden="true" size={15} /></button>
                       <button type="button" className={iconButtonClass} onClick={() => setForm({ ...form, items: [...form.items.slice(0, index + 1), { ...item, id: crypto.randomUUID() }, ...form.items.slice(index + 1)] })} aria-label={`Duplicar item ${index + 1}`}><Copy aria-hidden="true" size={16} /></button>
@@ -1235,9 +1235,9 @@ export function BudgetEditor({ isOpen = true, onClose, options, initial, initial
               <FormField htmlFor="global-addition" label="Acréscimo global" error={fieldError('global-addition')} className="w-fit"><AdjustmentInput id="global-addition" type={form.globalAdditionType} value={form.globalAdditionValue} typeAriaLabel="Tipo do acréscimo global" valueAriaLabel="Valor do acréscimo global" onTypeChange={(globalAdditionType) => setForm({ ...form, globalAdditionType })} onValueChange={(globalAdditionValue) => setForm({ ...form, globalAdditionValue })} invalid={Boolean(fieldError('global-addition'))} errorId={fieldError('global-addition') ? 'global-addition-error' : undefined} /></FormField>
             </div>
             <p className="text-xs font-medium leading-5 text-text-muted">Os ajustes globais são aplicados sobre o subtotal faturável — serviços, despesas e taxas repassadas — antes dos impostos.</p>
-            
+
             {(preview?.globalDiscountCents || 0) > 0 && (preview?.globalAdditionCents || 0) > 0 && <p className="flex items-start gap-2 rounded-lg border border-brand-rajah-300 bg-brand-rajah-50 p-3 text-sm font-medium text-brand-rajah-900 dark:border-brand-rajah-300/25 dark:bg-brand-rajah-500/10 dark:text-brand-rajah-100" role="status"><WarningCircle aria-hidden="true" className="mt-0.5 shrink-0" size={17} />Desconto e acréscimo estão ativos. Confira o ajuste líquido antes de emitir.</p>}
-            
+
           </BudgetSubgroup></EditorSection>
 <EditorSection id="payment" number="5" title="Pagamento" description="Confira a forma, as parcelas e os vencimentos da proposta." summary={sectionSummaries.payment} isOpen={openSections.has('payment') || groupHasErrors('payment')} isActive={activeSection === 'payment'} isHighlighted={highlightedSection === 'payment'} status={sectionStatus('payment')} onToggle={() => toggleSection('payment')} onActivate={() => setActiveSection('payment')} setRef={node => { sectionRefs.current.payment = node; }}>
             <div className="grid gap-3 md:grid-cols-2">

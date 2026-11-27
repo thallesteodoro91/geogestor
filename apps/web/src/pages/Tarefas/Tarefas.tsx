@@ -111,7 +111,7 @@ export function Tarefas() {
   );
   const [editingDirectClient, setEditingDirectClient] = useState(false);
 
-  const { resultsRef: taskResultsRef, preparePage, adjustPage } = useListPageNavigation({ page, resolvedPage, ready: !loadingTasks, failed: Boolean(tasksError), scope: [searchTerm, selectedProjeto, prioridadeFilter, dataInicioFilter, dataFimFilter].join('\u001f') });
+  const { resultsAnchor: taskResultsRef, preparePage, adjustPage } = useListPageNavigation({ page, resolvedPage, ready: !loadingTasks, failed: Boolean(tasksError), scope: [searchTerm, selectedProjeto, prioridadeFilter, dataInicioFilter, dataFimFilter].join('\u001f') });
   const changePage = (next: number) => { preparePage(next); setPage(next); };
   const fetchDados = useCallback(() => {
     const requestVersion = taskListRequestRef.current + 1;

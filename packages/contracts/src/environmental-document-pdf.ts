@@ -144,7 +144,7 @@ export const createLaudoPdfDefinition = (options: LaudoOptions, emittedAt = new 
     defaultStyle: { font: 'Roboto', fontSize: 11.5, color: '#18181b' },
     // Prevent a section heading from being stranded at the bottom of a page.
     pageBreakBefore: (node, container) => Boolean(node.style === 'sectionHeader' && container.getFollowingNodesOnPage().length === 0),
-    
+
     header: function() {
       return {
         text: `GEOGESTOR - Inteligência Territorial`,
@@ -198,4 +198,3 @@ export const createLaudoPdfDefinition = (options: LaudoOptions, emittedAt = new 
   };
 
 };
-

@@ -798,7 +798,7 @@ export function Despesas({
             </button>
           )}
         </div>
-        <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
           {filteredDespesas.length} de {expensePage?.total ?? 0} despesa(s) exibidas · Página {expensePage?.page ?? page} de {expensePage?.totalPages ?? 1} · Intervalo {filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + filteredDespesas.length : 0}
         </p>
       </div>

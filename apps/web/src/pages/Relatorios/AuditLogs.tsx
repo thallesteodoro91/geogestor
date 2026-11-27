@@ -295,7 +295,7 @@ export function AuditLogs() {
       </PageFilterBar>
 
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
-        <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{auditQuery.data?.total ?? 0} registros encontrados · Página {auditQuery.data?.page ?? page} de {auditQuery.data?.totalPages ?? 1} · Intervalo {logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + 1 : 0}–{logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + logs.length : 0}</p>
+        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{auditQuery.data?.total ?? 0} registros encontrados · Página {auditQuery.data?.page ?? page} de {auditQuery.data?.totalPages ?? 1} · Intervalo {logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + 1 : 0}–{logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + logs.length : 0}</p>
         {loading ? (
           <div aria-live="polite" className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria…</div>
         ) : loadError ? (

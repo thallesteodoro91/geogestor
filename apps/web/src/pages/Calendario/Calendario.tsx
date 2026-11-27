@@ -342,7 +342,6 @@ export function Calendario() {
   const [busca, setBusca] = useState(searchParams.get('busca') ?? '');
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') ?? 'Todos');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') ?? 'Todos');
-  useEffect(() => {setCreatedNotice('');},[busca,filtroTipo,filtroStatus]);
   const [view, setView] = useState<'mes' | 'lista'>(() => searchParams.get('visao') === 'lista' ? 'lista'
     : searchParams.get('visao') === 'mes' ? 'mes' : window.matchMedia('(max-width: 767px)').matches ? 'lista' : 'mes');
   const dayButtonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -403,6 +402,7 @@ export function Calendario() {
           return new Date(urlMonth.getFullYear(), urlMonth.getMonth(), Math.min(current.getDate(), lastDay));
         });
       }
+      setCreatedNotice('');
       setBusca(params.get('busca') ?? '');
       setFiltroTipo(params.get('tipo') ?? 'Todos');
       setFiltroStatus(params.get('status') ?? 'Todos');
@@ -585,6 +585,7 @@ export function Calendario() {
   }, [addFormDirty]);
 
   const clearFilters = () => {
+    setCreatedNotice('');
     setBusca('');
     setFiltroTipo('Todos');
     setFiltroStatus('Todos');
@@ -880,14 +881,14 @@ export function Calendario() {
               type="search"
               autoComplete="off"
               value={busca}
-              onChange={(event) => setBusca(event.target.value)}
+              onChange={(event) => { setCreatedNotice(''); setBusca(event.target.value); }}
               placeholder="Ex.: reunião, cliente ou projeto…" aria-describedby="calendar-search-hint"
               className={filterSearchInputClass}
             />
           </div>
           <CustomSelect
             value={normalizedFiltroTipo}
-            onChange={setFiltroTipo}
+            onChange={(value) => { setCreatedNotice(''); setFiltroTipo(value); }}
             placeholder="Todos os tipos"
             ariaLabel="Filtrar por tipo de evento"
             className="min-w-0"
@@ -895,7 +896,7 @@ export function Calendario() {
           />
           <CustomSelect
             value={normalizedFiltroStatus}
-            onChange={setFiltroStatus}
+            onChange={(value) => { setCreatedNotice(''); setFiltroStatus(value); }}
             placeholder="Todos os status"
             ariaLabel="Filtrar por status do evento"
             className="min-w-0"

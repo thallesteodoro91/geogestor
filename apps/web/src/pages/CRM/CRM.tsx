@@ -10,7 +10,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ACTIVE_OPPORTUNITY_STAGES, APP_QUERY_KEYS, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
+import { ACTIVE_OPPORTUNITY_STAGES, APP_PATHS, APP_QUERY_KEYS, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
@@ -217,7 +217,7 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
           return (
             <Link
               key={section.id}
-              to={`/crm?${nextSearchParams.toString()}`}
+              to={`${APP_PATHS.crm}?${nextSearchParams.toString()}`}
               aria-current={active ? 'page' : undefined}
               className={localNavigationButtonClass(
                 active,
@@ -297,7 +297,7 @@ export function CRM() {
   const [formErrors, setFormErrors] = useState<OpportunityFormErrors>({});
   const [subjectSearch, setSubjectSearch] = useState('');
   const opportunityLock = useRef(false);
-  const initialOpportunityDraft = useRef('');
+  const [initialOpportunityDraft, setInitialOpportunityDraft] = useState('');
   const debouncedSubjectSearch = useDebounce(subjectSearch, 250);
   const [deleteTarget, setDeleteTarget] = useState<OpportunityListItem | null>(null);
   const [pendingOutcome, setPendingOutcome] = useState<{ opportunity: OpportunityListItem; stage: 'Ganho' | 'Perdido' } | null>(null);
@@ -414,7 +414,7 @@ export function CRM() {
     onSettled: () => { opportunityLock.current = false; }
   });
 
-  const opportunityDraft = useFormDraftGuard({ open: showModal, dirty: JSON.stringify({ form, subjectSearch }) !== initialOpportunityDraft.current,
+  const opportunityDraft = useFormDraftGuard({ open: showModal, dirty: JSON.stringify({ form, subjectSearch }) !== initialOpportunityDraft,
     saving: saveMutation.isPending, lock: opportunityLock, onDiscard: () => setShowModal(false) });
 
   const transitionMutation = useMutation({
@@ -450,7 +450,7 @@ export function CRM() {
   });
 
   const openCreate = () => {
-    initialOpportunityDraft.current = JSON.stringify({ form: emptyForm(), subjectSearch: '' });
+    setInitialOpportunityDraft(JSON.stringify({ form: emptyForm(), subjectSearch: '' }));
     setSelectedOpportunity(null);
     setForm(emptyForm());
     setSubjectSearch('');
@@ -467,7 +467,7 @@ export function CRM() {
     ));
     const subjectLabel = subject?.label || `${opportunity.vinculoTipo === 'lead' ? 'Lead' : 'Cliente'} · ${opportunity.clienteNome}`;
     setSubjectSearch(subjectLabel);
-    initialOpportunityDraft.current = JSON.stringify({ form: opportunityToForm(opportunity), subjectSearch: subjectLabel });
+    setInitialOpportunityDraft(JSON.stringify({ form: opportunityToForm(opportunity), subjectSearch: subjectLabel }));
     setFormError('');
     setFormErrors({});
     setShowModal(true);
@@ -715,7 +715,7 @@ export function CRM() {
                     currency
                     detail={`${analytics.activeCount} ${analytics.activeCount === 1 ? 'oportunidade ativa' : 'oportunidades ativas'}`}
                     icon={<CurrencyDollar size={17} />}
-                    action={<Link to={`/crm?${funnelSearchParams}`} className="geo-focus-ring aura-balance-summary__action">Abrir funil <ArrowRight aria-hidden="true" size={14} /></Link>}
+                    action={<Link to={`${APP_PATHS.crm}?${funnelSearchParams}`} className="geo-focus-ring aura-balance-summary__action">Abrir funil <ArrowRight aria-hidden="true" size={14} /></Link>}
                   />
                   <AuraProgressWidget as="article" className="crm-aura--conversion" label="Conversão de leads"
                     value={leadAnalytics.total > 0 ? formatPercentage(leadAnalytics.conversionBasisPoints) : 'Sem leads'}
@@ -725,7 +725,7 @@ export function CRM() {
                   <AuraAttentionWidget compact className="crm-aura--overdue" label="Ações atrasadas"
                     value={<AuraNumericValue value={analytics.overdueNextActions} />}
                     context={analytics.overdueNextActions > 0 ? 'Prazo ultrapassado' : 'Nenhuma ação vencida'}
-                    action={analytics.overdueNextActions > 0 && <Link to={`/crm?${overdueSearchParams}`} className="geo-focus-ring aura-attention__action">Ver atrasadas <ArrowRight aria-hidden="true" size={14} /></Link>}
+                    action={analytics.overdueNextActions > 0 && <Link to={`${APP_PATHS.crm}?${overdueSearchParams}`} className="geo-focus-ring aura-attention__action">Ver atrasadas <ArrowRight aria-hidden="true" size={14} /></Link>}
                   />
                 </div>
                 <div className="mt-4">
@@ -747,7 +747,7 @@ export function CRM() {
                     <AuraAttentionWidget compact className="crm-aura--stale" label="Oportunidades paradas"
                       value={<AuraNumericValue value={analytics.staleOpportunities} />}
                       context="Mais de 14 dias na etapa"
-                      action={analytics.staleOpportunities > 0 && <Link to={`/crm?${staleSearchParams}`} className="geo-focus-ring aura-attention__action">Ver paradas <ArrowRight aria-hidden="true" size={14} /></Link>}
+                      action={analytics.staleOpportunities > 0 && <Link to={`${APP_PATHS.crm}?${staleSearchParams}`} className="geo-focus-ring aura-attention__action">Ver paradas <ArrowRight aria-hidden="true" size={14} /></Link>}
                     />
                   </section>
                 )}
@@ -766,7 +766,7 @@ export function CRM() {
                     <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-primary-50 text-brand-primary-700 ring-1 ring-inset ring-brand-primary-200/70 dark:bg-brand-primary-400/10 dark:text-brand-primary-200 dark:ring-brand-primary-300/15"><Funnel aria-hidden="true" size={24} weight="duotone" /></span>
                     <p className="mt-4 font-semibold text-text-primary">Nenhuma oportunidade registrada</p>
                     <p className="mt-1 max-w-md text-sm leading-6 text-text-secondary">Crie ou acompanhe oportunidades no funil para visualizar quantidades e valores por etapa.</p>
-                    <Link to={`/crm?${funnelSearchParams.toString()}`} className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4">Ir para o funil</Link>
+                    <Link to={`${APP_PATHS.crm}?${funnelSearchParams.toString()}`} className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4">Ir para o funil</Link>
                   </div>
                 )}
               </section>

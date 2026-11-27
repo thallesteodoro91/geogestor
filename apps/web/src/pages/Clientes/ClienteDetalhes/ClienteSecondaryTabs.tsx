@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import type { LicenseListItem } from '@geogestor/contracts';
+import { appLinks, type LicenseListItem } from '@geogestor/contracts';
 import { ClientLoadState } from '../ClientLoadState';
 import { clientDeadline, clientOpenBalance, formatClientDate } from '../clientWorkspace';
 import type { ReactNode } from 'react';
@@ -300,7 +300,7 @@ export function ClienteSecondaryTabs({
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{license.orgao} · {license.status}</p>
             <p className="mt-1 text-sm font-semibold text-zinc-800 dark:text-zinc-200">Vencimento: {formatClientDate(license.dataVencimento)}</p>
             <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Trabalho: {license.projetoNome}</p>
-            <Link to={`/ambiental/licencas/${license.id}`} className={secondarySmallActionButtonClass + ' mt-3 min-h-11'}>Consultar licença</Link>
+            <Link to={appLinks.license(license.id)} className={secondarySmallActionButtonClass + ' mt-3 min-h-11'}>Consultar licença</Link>
           </article>)}
         </section>}
         {activeTab === 'servicos' && (

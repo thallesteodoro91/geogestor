@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { APP_PATHS, appLinks } from '@geogestor/contracts';
+import { APP_PATHS, APP_ROUTES, appLinks } from '@geogestor/contracts';
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { PopoverSurface } from '../../components/form-controls/PopoverSurface';
 import { useEffect, useRef, useState, useMemo } from 'react';
@@ -1124,7 +1124,7 @@ export function ClienteDetalhes() {
     {
       label: 'Propriedade',
       icon: <Plus className="h-6 w-6 text-emerald-600 dark:text-emerald-300" />,
-      onClick: () => navigate('/propriedades', { state: { createForClienteId: id, clientName: cliente.nome } }),
+      onClick: () => navigate(APP_ROUTES.properties.path, { state: { createForClienteId: id, clientName: cliente.nome } }),
       className: 'border-emerald-200/70 bg-emerald-50/80 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-100/80 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/15'
     },
     {
@@ -1217,8 +1217,8 @@ export function ClienteDetalhes() {
       focusedDocumentId={focusedDocumentId}
       initialDocumentSearch={initialDocumentSearch}
       onPreviewFile={handlePreviewFile}
-      onCreateProperty={() => navigate('/propriedades', { state: { createForClienteId: id, clientName: cliente.nome } })}
-      onOpenProperty={(propertyId) => navigate('/propriedades', { state: { editPropertyId: propertyId, clientFilterId: id } })}
+      onCreateProperty={() => navigate(APP_ROUTES.properties.path, { state: { createForClienteId: id, clientName: cliente.nome } })}
+      onOpenProperty={(propertyId) => navigate(APP_ROUTES.properties.path, { state: { editPropertyId: propertyId, clientFilterId: id } })}
       onCreateEnvironmentalProject={() => navigate('/projetos', { state: { createForClienteId: id, openCreateModal: true, contexto: 'ambiental' } })}
       onCreateService={() => navigate('/projetos', { state: { createForClienteId: id, modalTab: 'projeto' } })}
       renderEnvironmentalProjectLink={(project) => (
@@ -1371,7 +1371,7 @@ export function ClienteDetalhes() {
         >
           <section aria-labelledby="client-followup-title" className="mb-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
             <h2 id="client-followup-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Acompanhamento do cliente</h2>
-            {loadingProjects || projectsError ? <ClientLoadState label="os prazos dos trabalhos" error={projectsError} onRetry={() => void reloadProjects()} /> : nextDeliveryProject ? <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200"><strong>{nextDeliveryProject.dataEntrega!.slice(0,10) < clientToday() ? 'Prazo vencido' : 'Próximo prazo registrado'}: {formatClientDate(nextDeliveryProject.dataEntrega)}</strong><br /><Link className="geo-focus-ring inline-flex min-h-11 items-center rounded text-sky-800 underline dark:text-sky-300" to={`/projetos/${nextDeliveryProject.id}`}>{nextDeliveryProject.nome}</Link></p> : <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Não há prazo registrado para os trabalhos em aberto.</p>}
+            {loadingProjects || projectsError ? <ClientLoadState label="os prazos dos trabalhos" error={projectsError} onRetry={() => void reloadProjects()} /> : nextDeliveryProject ? <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200"><strong>{nextDeliveryProject.dataEntrega!.slice(0,10) < clientToday() ? 'Prazo vencido' : 'Próximo prazo registrado'}: {formatClientDate(nextDeliveryProject.dataEntrega)}</strong><br /><Link className="geo-focus-ring inline-flex min-h-11 items-center rounded text-sky-800 underline dark:text-sky-300" to={appLinks.project(nextDeliveryProject.id)}>{nextDeliveryProject.nome}</Link></p> : <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Não há prazo registrado para os trabalhos em aberto.</p>}
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">As tarefas e a agenda abaixo apresentam os encaminhamentos efetivamente registrados.</p>
           </section>
           <ClienteCentralControle

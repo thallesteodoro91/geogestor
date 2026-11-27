@@ -1,3 +1,4 @@
+import { APP_PATHS } from '@geogestor/contracts';
 import { ArrowRight } from '@phosphor-icons/react';
 import { Link } from 'react-router-dom';
 import { AuraAttentionWidget, AuraProgressWidget, AuraWidget } from '../components/AuraWidget';
@@ -44,7 +45,7 @@ export function DashboardProjectDistributionWidget({ items, total }: {
     <AuraWidget as="article" aria-labelledby="dashboard-project-distribution-summary" tone="blue" className="dashboard-aura dashboard-aura--distribution">
       <header className="dashboard-aura__distribution-header">
         <h3 id="dashboard-project-distribution-summary">Distribuição de projetos</h3>
-        <Link to="/projetos" className="geo-focus-ring dashboard-aura__distribution-link">Ver projetos <ArrowRight size={12} aria-hidden="true" /></Link>
+        <Link to={APP_PATHS.projects} className="geo-focus-ring dashboard-aura__distribution-link">Ver projetos <ArrowRight size={12} aria-hidden="true" /></Link>
       </header>
       <ul className="dashboard-aura__distribution-list">
         {items.map(({ name, value }) => {

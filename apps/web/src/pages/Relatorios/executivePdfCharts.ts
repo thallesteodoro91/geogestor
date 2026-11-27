@@ -19,7 +19,7 @@ const categoryGradients = [
 ];
 
 function escapeXml(value: string) {
-  return value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
+  return Array.from(value).filter((character) => character >= ' ' || character === '\t' || character === '\r' || character === '\n').join('')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 

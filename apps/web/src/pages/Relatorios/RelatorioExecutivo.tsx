@@ -1,4 +1,4 @@
-import type { ManagerialReport } from '@geogestor/contracts';
+import { APP_PATHS, type ManagerialReport } from '@geogestor/contracts';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -107,7 +107,7 @@ export function RelatorioExecutivo({ report }: RelatorioExecutivoProps) {
             value={operational.kpis.activeProjects}
             detail={`${formatNumber(operational.kpis.completedProjects)} ${operational.kpis.completedProjects === 1 ? 'projeto concluído' : 'projetos concluídos'} no recorte.`}
             icon={<Briefcase size={17} />}
-            action={<Link className="geo-focus-ring aura-balance-summary__action" to="/projetos">Ver projetos</Link>}
+            action={<Link className="geo-focus-ring aura-balance-summary__action" to={APP_PATHS.projects}>Ver projetos</Link>}
           />
           <ExecutiveDeadline
             id="executive-overdue-projects"

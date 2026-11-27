@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import {
   CalendarBlank,
   CaretDown,
@@ -171,6 +171,11 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
   const pendingDateFocus = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const [datePortalContainer, setDatePortalContainer] = useState<HTMLElement | null>(null);
+  const attachDateTrigger = useCallback((node: HTMLButtonElement | null) => {
+    triggerRef.current = node;
+    setDatePortalContainer(node?.closest<HTMLElement>('[role="dialog"]') ?? null);
+  }, []);
   const selectedDayRef = useRef<HTMLButtonElement>(null);
   const dateGridRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -243,7 +248,7 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
     }}>
       <input type="hidden" name={name} value={value} />
       <button
-        ref={triggerRef}
+        ref={attachDateTrigger}
         id={id}
         type="button"
         aria-expanded={open}
@@ -268,7 +273,7 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
         <CaretDown aria-hidden="true" weight="bold" className={cn('h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
       </button>
 
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} portalContainer={triggerRef.current?.closest<HTMLElement>('[role="dialog"]')} id={popoverId} role="dialog" ariaLabel="Selecionar data do compromisso" minWidth={304} maxWidth={336} maxHeight={520} minimumHeight={400} className="calendar-control-popover flex flex-col p-3">
+      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} portalContainer={datePortalContainer} id={popoverId} role="dialog" ariaLabel="Selecionar data do compromisso" minWidth={304} maxWidth={336} maxHeight={520} minimumHeight={400} className="calendar-control-popover flex flex-col p-3">
           <div className="flex shrink-0 items-center justify-between gap-2">
             <button type="button" onClick={() => setViewMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} aria-label="Mês anterior" className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-brand-surface-subtle hover:text-indigo-700 dark:text-zinc-300 dark:hover:text-indigo-200">
               <CaretLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
@@ -382,6 +387,11 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
   const [activeIndex, setActiveIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [timePortalContainer, setTimePortalContainer] = useState<HTMLElement | null>(null);
+  const attachTimeInput = useCallback((node: HTMLInputElement | null) => {
+    inputRef.current = node;
+    setTimePortalContainer(node?.closest<HTMLElement>('[role="dialog"]') ?? null);
+  }, []);
   const popoverRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
   usePopoverDismiss(open, setOpen, containerRef, inputRef, popoverRef);
@@ -450,7 +460,7 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
   return (
     <div ref={containerRef} className="relative min-w-0">
       <input
-        ref={inputRef}
+        ref={attachTimeInput}
         id={id}
         name={name}
         type="text"
@@ -486,7 +496,7 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
       />
       <CaretDown aria-hidden="true" weight="bold" className={cn('pointer-events-none absolute right-4 top-[1.05rem] h-3.5 w-3.5 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
 
-      <PopoverSurface ref={popoverRef} open={open && !disabled} anchorRef={inputRef} portalContainer={inputRef.current?.closest<HTMLElement>('[role="dialog"]')} minWidth={280} maxWidth={352} maxHeight={360} className="calendar-control-popover p-2">
+      <PopoverSurface ref={popoverRef} open={open && !disabled} anchorRef={inputRef} portalContainer={timePortalContainer} minWidth={280} maxWidth={352} maxHeight={360} className="calendar-control-popover p-2">
           <div className="flex flex-wrap gap-1.5 border-b border-brand-border pb-2">
             {presets.map((preset) => (
               <button key={preset.label} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => selectTime(preset.value)} className="geo-focus-ring min-h-9 rounded-lg border border-brand-border bg-brand-surface px-2.5 text-[11px] font-semibold text-zinc-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800 dark:text-zinc-300 dark:hover:border-cyan-300/30 dark:hover:bg-cyan-400/10 dark:hover:text-cyan-100">

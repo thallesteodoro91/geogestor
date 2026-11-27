@@ -1197,7 +1197,7 @@ export function ListagemProjetos() {
                 <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-brand-border pt-2 sm:flex-row sm:items-center sm:justify-between">
                   {hasProjectFilters ? <div aria-label="Filtros ativos" className="flex min-w-0 flex-wrap items-center gap-2">{renderActiveFilterChips()}</div> : <span />}
                   <div role="status" aria-live="polite" aria-atomic="true" className="flex min-h-8 shrink-0 items-center justify-end gap-3 text-right">
-                    <p ref={listNavigation.resultsRef} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">{filteredProjectsLabel} · Página {projectPage?.page ?? page} de {totalPages}</p>
+                    <p ref={listNavigation.resultsAnchor} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">{filteredProjectsLabel} · Página {projectPage?.page ?? page} de {totalPages}</p>
                     {projectsRefreshing && <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-primary-700 dark:text-brand-primary-200"><span aria-hidden="true" className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-primary-200 border-t-brand-primary-600 motion-reduce:animate-none" />Atualizando…</span>}
                   </div>
                 </div>

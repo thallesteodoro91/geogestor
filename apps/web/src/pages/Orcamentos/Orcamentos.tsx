@@ -17,7 +17,7 @@ import {
   Trash,
   X
 } from '@phosphor-icons/react';
-import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, type BudgetStatus } from '@geogestor/contracts';
+import { BUDGET_STATUSES, BUDGET_STATUS_LABELS, appLinks, type BudgetStatus } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageFilterBar } from '../../components/PageFilterBar';
@@ -656,7 +656,7 @@ export function Orcamentos() {
                   <p className="break-words text-sm text-text-secondary">{budget.clientName}</p>
                   <p className="break-words text-sm text-text-muted">{budget.propertyName || 'Imóvel não informado'} · {budget.municipality || 'Município não informado'}</p>
                   <p className="break-words text-sm text-text-secondary">{budget.serviceType || 'Serviço não informado'}</p>
-                  {budget.projectId && <Link to={`/projetos/${budget.projectId}`} className="geo-focus-ring block break-words rounded text-sm font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.projectName || 'Abrir projeto'}</Link>}
+                  {budget.projectId && <Link to={appLinks.project(budget.projectId)} className="geo-focus-ring block break-words rounded text-sm font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.projectName || 'Abrir projeto'}</Link>}
                   <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums"><div><dt className="text-text-muted">Emissão</dt><dd>{formatDate(budget.issueDate)}</dd></div><div><dt className="text-text-muted">Validade</dt><dd>{formatDate(budget.validUntil)}</dd></div><div><dt className="text-text-muted">Valor</dt><dd className="break-words font-mono font-bold">{formatCurrency(budget.totalCents)}</dd></div><div><dt className="text-text-muted">Margem estimada</dt><dd>{formatBasisPoints(budget.marginBasisPoints)}</dd></div></dl>
                   {highlightId === budget.id && !highlightInFilteredList && <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-200">Fora dos filtros atuais</p>}
                   {renderBudgetActions(budget)}
@@ -697,7 +697,7 @@ export function Orcamentos() {
                             {highlightId === budget.id && !highlightInFilteredList && <span className="mt-1.5 inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-100">Fora dos filtros atuais</span>}
                           </td>
                           <td className="px-4 py-3"><p title={budget.clientName} className="max-w-52 truncate text-sm font-semibold text-text-primary">{budget.clientName}</p><p className="mt-1 max-w-52 truncate text-xs text-text-muted">{budget.propertyName || 'Im\u00f3vel n\u00e3o informado'} &bull; {budget.municipality || 'Munic\u00edpio n\u00e3o informado'}</p></td>
-                          <td className="px-4 py-3"><p className="max-w-64 truncate text-sm text-text-secondary">{budget.serviceType || 'N\u00e3o informado'}</p>{budget.projectId && <Link to={`/projetos/${budget.projectId}`} className="mt-1 block max-w-64 truncate text-xs font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.projectName || 'Abrir projeto'}</Link>}</td>
+                          <td className="px-4 py-3"><p className="max-w-64 truncate text-sm text-text-secondary">{budget.serviceType || 'N\u00e3o informado'}</p>{budget.projectId && <Link to={appLinks.project(budget.projectId)} className="mt-1 block max-w-64 truncate text-xs font-semibold text-brand-primary-700 hover:underline dark:text-brand-primary-200">{budget.projectName || 'Abrir projeto'}</Link>}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm text-text-secondary"><p>{formatDate(budget.issueDate)}</p><p className="mt-1 text-xs text-text-muted">at&eacute; {formatDate(budget.validUntil)}</p></td>
                           <td className="px-4 py-3"><span className={cn('inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold', statusTone[budget.status])}>{BUDGET_STATUS_LABELS[budget.status]}</span>{budget.viewedAt && <p className="mt-1 text-xs text-text-muted">Visualizado</p>}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-bold tabular-nums text-text-primary">{formatCurrency(budget.totalCents)}</td>

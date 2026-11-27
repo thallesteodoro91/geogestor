@@ -38,7 +38,6 @@ import licensingIcon from '../../assets/magnific-icons/certification_5192312.png
 import carAnalysisIcon from '../../assets/magnific-icons/calculator_9264106.svg';
 import { EnvironmentalDemandCard } from './EnvironmentalDemandCard';
 
-const numberFormatter = new Intl.NumberFormat('pt-BR');
 const environmentalTabs = ['ambiental', 'licenciamento', 'car'] as const;
 type EnvironmentalTab = typeof environmentalTabs[number];
 const parsePage = (value: string | null) => {
@@ -348,7 +347,7 @@ export function ListagemAmbiental() {
         </PageFilterBar>
 
         <div aria-live="polite" className="sr-only">{demandsQuery.isLoading ? 'Carregando demandas…' : `${demandsQuery.data?.total || 0} demandas encontradas.`}</div>
-        <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{demandsQuery.data?.total ?? 0} demandas encontradas · Página {demandsQuery.data?.page ?? page} de {totalPages} · Intervalo {demandsQuery.data?.items.length ? (page - 1) * 24 + 1 : 0}–{demandsQuery.data?.items.length ? (page - 1) * 24 + demandsQuery.data.items.length : 0}</p>
+        <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{demandsQuery.data?.total ?? 0} demandas encontradas · Página {demandsQuery.data?.page ?? page} de {totalPages} · Intervalo {demandsQuery.data?.items.length ? (page - 1) * 24 + 1 : 0}–{demandsQuery.data?.items.length ? (page - 1) * 24 + demandsQuery.data.items.length : 0}</p>
         {demandsQuery.isLoading ? (
           <div role="status" className="rounded-2xl border border-zinc-200 bg-white py-14 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">Carregando demandas…</div>
         ) : demandsQuery.isError ? (

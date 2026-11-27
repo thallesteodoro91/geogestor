@@ -180,7 +180,10 @@ export function Faturas({
   const [installmentPagination, setInstallmentPagination] = useState({ filterKey: '', page: 1 });
   const urlPage = Number(searchParams.get('receberPagina') || 1);
   const page = persistListState ? Number.isSafeInteger(urlPage) && urlPage > 0 ? urlPage : 1 : installmentPagination.filterKey === installmentFilterKey ? installmentPagination.page : 1;
-  const setPage = (nextPage: number) => persistListState ? updateListState({ receberPagina: String(nextPage) }) : setInstallmentPagination({ filterKey: installmentFilterKey, page: nextPage });
+  const setPage = useCallback((nextPage: number) => {
+    if (persistListState) updateListState({ receberPagina: String(nextPage) });
+    else setInstallmentPagination({ filterKey: installmentFilterKey, page: nextPage });
+  }, [installmentFilterKey, persistListState, updateListState]);
   const handledReceivableIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -239,7 +242,16 @@ export function Faturas({
   });
   const listNavigation = useListPageNavigation({ page, resolvedPage: installmentPage?.page, ready: !fetchingInstallments && !placeholderInstallments, failed, scope: installmentFilterKey });
   const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
-  useEffect(() => { if (!installmentPage || fetchingInstallments || placeholderInstallments || failed || page <= installmentPage.totalPages) return; listNavigation.adjustPage(installmentPage.totalPages); setPage(installmentPage.totalPages); }, [installmentPage, fetchingInstallments, placeholderInstallments, failed, page]);
+  const { adjustPage } = listNavigation;
+  useEffect(() => {
+    if (!installmentPage || fetchingInstallments || placeholderInstallments || failed || page <= installmentPage.totalPages) return;
+    const nextPage = installmentPage.totalPages;
+    const frame = window.requestAnimationFrame(() => {
+      adjustPage(nextPage);
+      setPage(nextPage);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [adjustPage, failed, fetchingInstallments, installmentPage, page, placeholderInstallments, setPage]);
   const parcelas = useMemo(() => installmentPage?.items ?? [], [installmentPage?.items]);
   const { data: projectContextOptions = [] } = useQuery<ProjectContextOption[]>({
     queryKey: ['receivable-project-context', initialProjectId],
@@ -545,7 +557,7 @@ export function Faturas({
               </button>
             )}
           </div>
-          <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          <p ref={listNavigation.resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
               {filteredParcelas.length} de {installmentPage?.total ?? 0} parcela(s) exibidas · Página {installmentPage?.page ?? page} de {installmentPage?.totalPages ?? 1} · Intervalo {filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + filteredParcelas.length : 0}
           </p>
         </div>

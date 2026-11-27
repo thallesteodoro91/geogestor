@@ -260,7 +260,7 @@ export function Licenciamento({
       </div>
 
       <p role="status" aria-live="polite" className="license-secondary min-h-5 text-sm">{licensesQuery.isError ? 'Não foi possível atualizar as licenças.' : licensesQuery.isFetching ? 'Atualizando licenças…' : `${numberFormatter.format(licensesQuery.data?.total || 0)} ${licensesQuery.data?.total === 1 ? 'licença encontrada' : 'licenças encontradas'}.`}</p>
-      <p ref={listNavigation.resultsRef} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm text-text-secondary" role="status" aria-live="polite" aria-atomic="true">Página {licensesQuery.data?.page ?? licensePage} de {totalPages} · Intervalo {licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + 1) : 0}–{licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + licensesQuery.data.items.length) : 0}</p>
+      <p ref={listNavigation.resultsAnchor} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm text-text-secondary" role="status" aria-live="polite" aria-atomic="true">Página {licensesQuery.data?.page ?? licensePage} de {totalPages} · Intervalo {licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + 1) : 0}–{licensesQuery.data?.items.length ? ((licensesQuery.data.page - 1) * 25 + licensesQuery.data.items.length) : 0}</p>
       {licensesQuery.isLoading ? (
         <div role="status" className="rounded-xl border border-zinc-200 bg-white py-14 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">Carregando licenças…</div>
       ) : licensesQuery.isError ? (

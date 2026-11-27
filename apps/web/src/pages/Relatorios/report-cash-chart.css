@@ -1,0 +1,37 @@
+.report-cash-chart,
+.report-cash-legend {
+  --report-cash-result: #4934a5;
+  --report-cash-outline: #fff;
+  --report-cash-grid: #aaa3b9;
+  --report-cash-axis: #676078;
+}
+
+.dark :is(.report-cash-chart, .report-cash-legend) {
+  --report-cash-result: #c9baff;
+  --report-cash-outline: #18181b;
+  --report-cash-grid: #585366;
+  --report-cash-axis: #a7a0b6;
+}
+
+.report-cash-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 12px;
+  margin: 6px 0 12px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.report-cash-legend > li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.report-cash-legend > li > span {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+}

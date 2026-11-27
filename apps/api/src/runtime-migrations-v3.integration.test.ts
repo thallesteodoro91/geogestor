@@ -67,14 +67,14 @@ test('estado instalado v3 avança até v8 sem perder entidades operacionais', as
     await db.$client.execute("UPDATE schema_migrations SET status = 'failed' WHERE version BETWEEN 4 AND 13");
     const migrated = await runRuntimeMigrations();
 
-    assert.equal(migrated.schemaVersion, 17);
+    assert.equal(migrated.schemaVersion, 19);
     assert.deepEqual({
       clientes: await count('clientes'),
       projetos: await count('projetos'),
       orcamentos: await count('orcamentos'),
       documentos: await count('documentos'),
     }, before);
-    assert.equal(Number((await db.$client.execute('PRAGMA user_version')).rows[0]?.user_version), 17);
+    assert.equal(Number((await db.$client.execute('PRAGMA user_version')).rows[0]?.user_version), 19);
     assert.equal((await db.$client.execute('PRAGMA quick_check')).rows[0]?.quick_check, 'ok');
     assert.equal((await db.$client.execute('PRAGMA foreign_key_check')).rows.length, 0);
     const migratedProperty = (await db.$client.execute({
@@ -94,7 +94,7 @@ test('estado instalado v3 avança até v8 sem perder entidades operacionais', as
     assert.deepEqual(
       (await db.$client.execute('SELECT version, status FROM schema_migrations ORDER BY version')).rows
         .map((row) => [Number(row.version), row.status]),
-      Array.from({ length: 17 }, (_, index) => [index + 1, 'success']),
+      Array.from({ length: 19 }, (_, index) => [index + 1, 'success']),
     );
   } finally {
     await closeDb();

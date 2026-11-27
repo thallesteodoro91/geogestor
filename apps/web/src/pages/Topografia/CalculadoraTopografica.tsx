@@ -1718,7 +1718,7 @@ export function CalculadoraTopografica() {
                       <NumberField compact id="new-vertex-y" name="new-vertex-y" label="Coordenada Y / Norte (m)" value={newProjectedVertex.y} onChange={(y) => setNewProjectedVertex((vertex) => ({ ...vertex, y }))} error={vertexValidationVisible ? projectedInputErrors.y : null} placeholder="6940000,000" />
                     </div>
                   )}
-                  <button type="button" onClick={addVertex} className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white transition-[background-color,box-shadow,transform] hover:bg-cyan-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-500/30 sm:min-h-9 dark:bg-cyan-600 dark:hover:bg-cyan-500">
+                  <button type="button" onClick={addVertex} className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-cyan-700 px-4 py-1.5 text-sm font-semibold text-white transition-[background-color,box-shadow,transform] hover:bg-cyan-800 active:translate-y-px focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-500/30 sm:min-h-9 dark:bg-cyan-700 dark:hover:bg-cyan-800">
                     <Plus className="h-4 w-4" aria-hidden="true" />
                     Adicionar vértice
                   </button>

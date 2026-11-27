@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getApiToken: () => apiToken,
   getApiPort: () => apiPort,
   setLocalSessionToken: (token) => ipcRenderer.send('set-local-session-token', token),
+  setLicenseDraftState: (id, state) => ipcRenderer.send('set-license-draft-state', { id, ...state }),
   selectBackupBundle: () => ipcRenderer.invoke('select-backup-bundle'),
   selectBackupRecoveryKit: () => ipcRenderer.invoke('select-backup-recovery-kit'),
   selectDataDirectory: () => ipcRenderer.invoke('select-data-directory'),
@@ -16,6 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getBackupRecoveryStatus: () => ipcRenderer.invoke('get-backup-recovery-status'),
   confirmBackupRecovery: (expectedKeyId) => ipcRenderer.invoke('confirm-backup-recovery', expectedKeyId),
   saveBackupRecoveryKit: (kit) => ipcRenderer.invoke('save-backup-recovery-kit', kit),
+  saveBudgetPdf: (payload) => ipcRenderer.invoke('save-budget-pdf', payload),
+  openBudgetPdf: (destination) => ipcRenderer.invoke('open-budget-pdf', destination),
   onShutdownBackupStatus: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on('shutdown-backup-status', listener);

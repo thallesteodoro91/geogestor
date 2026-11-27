@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import { budgetGroup } from './support/budget-editor-groups';
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -144,8 +145,10 @@ async function ensureBudgetFixture() {
   await fs.mkdir(path.join(evidenceRoot, 'pdfs'), { recursive: true });
   const database = createClient({ url: `file:${path.join(e2eRoot, 'geogestor.db')}` });
   try {
-    const existing = await database.execute({ sql: 'select id from clientes where id = ? limit 1', args: [ids.client] });
-    if (existing.rows.length > 0) return;
+    const existing = await database.execute({ sql: 'select id from clientes where documento_normalizado = ? limit 1', args: ['52998224725'] });
+    if (existing.rows.length > 0) { ids.client = String(existing.rows[0].id); const other = await database.execute({ sql: 'select id from clientes where documento_normalizado = ? limit 1', args: ['11222333000181'] }); if (other.rows.length) ids.otherClient = String(other.rows[0].id);
+      for (const [key,table,name] of [['ruralProperty','propriedades',PREFIX+'Fazenda Açores'],['urbanProperty','propriedades',PREFIX+'Lote Urbano'],['project','projetos',PREFIX+'Projeto Existente'],['otherProject','projetos',PREFIX+'Projeto Outro Cliente']] as const) { const found=await database.execute({sql:'select id from '+table+' where nome = ? limit 1',args:[name]});if(found.rows.length)ids[key]=String(found.rows[0].id); }
+      return; }
     const now = relativeInstant();
     await database.batch([
       { sql: `insert into clientes (id, nome, tipo_pessoa, documento, cpf, documento_normalizado, email, telefone, municipio, uf, situacao, created_at, updated_at) values (?, ?, 'PF', ?, ?, ?, ?, ?, 'Florianópolis', 'SC', 'Ativo', ?, ?)`, args: [ids.client, `${PREFIX}Cliente Principal`, '52998224725', '52998224725', '52998224725', 'principal.s04@example.invalid', '48999990001', now, now] },
@@ -270,7 +273,8 @@ test.describe('Sessão 04 — Comercial — Orçamentos', () => {
     await expectNoAxeViolations(page);
     await page.screenshot({ path: path.join(evidenceRoot, '04-detalhes-rascunho.png'), fullPage: true });
 
-    await dialog.getByRole('button', { name: 'Gerar PDF', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Mais ações', exact: true }).click();
+    await dialog.getByRole('menuitem', { name: 'Gerar PDF', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Exportar orçamento em rascunho' })).toBeVisible();
     const draftDownloadPromise = page.waitForEvent('download', { timeout: 45_000 });
     await page.getByRole('button', { name: 'Exportar com marca-d’água' }).click();
@@ -281,10 +285,9 @@ test.describe('Sessão 04 — Comercial — Orçamentos', () => {
     await page.goto(`/orcamentos/${budgetId}/editar?retorno=${encodeURIComponent('/orcamentos?status=rascunho&page=2')}`);
     await unlockCurrent(page);
     await expect(page.getByRole('heading', { name: 'Editar orçamento' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Cliente e imóvel/ }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Pagamento/ }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /Documento final/ }).first()).toBeVisible();
+    await budgetGroup(page, 'fees');
     await expect(page.locator('#global-discount')).toHaveValue('8,52');
+    await budgetGroup(page, 'header');
     await page.locator('#budget-description').fill(`  ${PREFIX}Proposta editada e persistida  `);
     await page.getByRole('button', { name: 'Atualizar orçamento' }).click();
     await expect(page).toHaveURL(/\/orcamentos\?status=rascunho&page=2&highlightId=/);
@@ -308,15 +311,17 @@ test.describe('Sessão 04 — Comercial — Orçamentos', () => {
     }
     const auth = await unlock(page, `/orcamentos?budgetId=${budgetId}`);
     const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'Emitir' }).click();
+    await dialog.getByRole('button', { name: 'Emitir orçamento', exact: true }).click();
     await expect(dialog.locator('header').first().getByText('Emitido', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Marcar como enviado' }).click();
     await expect(dialog.locator('header').first().getByText('Enviado', { exact: true })).toBeVisible();
-    await dialog.getByRole('button', { name: 'Registrar visualização' }).click();
-    await expect(dialog.getByRole('button', { name: 'Registrar visualização' })).toHaveCount(0);
+    await dialog.getByRole('button', { name: 'Mais ações comerciais', exact: true }).click();
+    await dialog.getByRole('menuitem', { name: 'Registrar visualização', exact: true }).click();
+    await expect(dialog.getByRole('menuitem', { name: 'Registrar visualização', exact: true })).toHaveCount(0);
     const viewedResponse = await page.request.get(`${auth.origin}/api/orcamentos/${budgetId}`, { headers: auth.headers });
     expect((await viewedResponse.json() as { visualizadoEm: string | null }).visualizadoEm).toBeTruthy();
-    await dialog.getByRole('button', { name: 'Em negociação' }).click();
+    await dialog.getByRole('button', { name: 'Mais ações comerciais', exact: true }).click();
+    await dialog.getByRole('menuitem', { name: 'Em negociação', exact: true }).click();
     await expect(dialog.locator('header').first().getByText('Em negociação', { exact: true })).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Aprovar' }).click();
@@ -360,7 +365,8 @@ test.describe('Sessão 04 — Comercial — Orçamentos', () => {
     await emittedDownload.saveAs(path.join(evidenceRoot, 'pdfs', `emitido-${emittedDownload.suggestedFilename()}`));
     await page.screenshot({ path: path.join(evidenceRoot, '05-aprovacao-parcelas.png'), fullPage: true });
 
-    await dialog.getByRole('button', { name: 'Criar revisão' }).click();
+    await dialog.getByRole('button', { name: 'Mais ações', exact: true }).click();
+    await dialog.getByRole('menuitem', { name: 'Criar revisão', exact: true }).click();
     const revisionDialog = page.getByRole('dialog', { name: 'Criar revisão formal' });
     await revisionDialog.getByLabel('Motivo').fill('Ampliação do escopo solicitada pelo cliente');
     await revisionDialog.getByRole('button', { name: 'Confirmar' }).click();

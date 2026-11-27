@@ -39,6 +39,7 @@ import { invalidateFinanceOverviewCache } from './services/finance-overview-cach
 import { invalidateProjectOverviewCache } from './services/project-overview.service';
 import { invalidateDeadlineAlertCache } from './services/deadline-alerts.service';
 import { invalidateManagerialReportCache } from './services/reports/report-query.service';
+import { installRecordConcurrency } from './services/record-concurrency.service';
 
 const RESET_CONFIRMATION = 'APAGAR DADOS DO GEOGESTOR';
 const RESTORE_CONFIRMATION = 'RESTAURAR BACKUP DO GEOGESTOR';
@@ -522,6 +523,7 @@ server.register(multipart, {
   }
 });
 
+installRecordConcurrency(server);
 registerApiRoutes(server);
 
 // Health check

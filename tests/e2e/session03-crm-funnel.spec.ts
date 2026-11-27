@@ -23,7 +23,7 @@ function dateLabel(offsetDays: number) {
 
 async function selectDate(page: Page, trigger: Locator, offsetDays: number) {
   await trigger.click();
-  const target = page.getByRole('gridcell', { name: dateLabel(offsetDays) });
+  const target = page.getByRole('gridcell', { name: dateLabel(offsetDays), exact: true });
   for (let attempts = 0; attempts < 14 && !await target.isVisible(); attempts += 1) {
     const direction = dateKey(offsetDays).localeCompare(dateKey(0));
     await page.getByRole('button', { name: direction >= 0 ? /próximo mês/i : /mês anterior/i }).click();

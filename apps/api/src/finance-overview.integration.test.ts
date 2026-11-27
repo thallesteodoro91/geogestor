@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -114,7 +115,7 @@ test('resumo financeiro SQL preserva regras, filtros, centavos e invalidação d
     ]);
 
     const periodUrl = '/api/financeiro/overview?inicio=2025-12-01&fim=2026-02-28';
-    const fullResponse = await server.inject({ method: 'GET', url: periodUrl, headers });
+    const fullResponse = await injectWithRecordVersion(server, { method: 'GET', url: periodUrl, headers });
     assert.equal(fullResponse.statusCode, 200, fullResponse.body);
     const full = fullResponse.json<Overview>();
     assert.equal(full.analytics.kpis.receitaContratada, 30_003);
@@ -138,14 +139,14 @@ test('resumo financeiro SQL preserva regras, filtros, centavos e invalidação d
     assert.deepEqual(january && { contracted: january.receitaContratada, received: january.receitaRecebida, expenses: january.despesasLancadas }, { contracted: 20_002, received: 5_001, expenses: 2_002 });
     assert.deepEqual(february && { received: february.receitaRecebida, expenses: february.despesasLancadas }, { received: 10_001, expenses: 503 });
 
-    const januaryOnlyResponse = await server.inject({ method: 'GET', url: `/api/financeiro/overview?inicio=2026-01-01&fim=2026-01-31&clienteId=${clientA}&categoria=Software&tipoCusto=Fixo&centroCusto=Operação`, headers });
+    const januaryOnlyResponse = await injectWithRecordVersion(server, { method: 'GET', url: `/api/financeiro/overview?inicio=2026-01-01&fim=2026-01-31&clienteId=${clientA}&categoria=Software&tipoCusto=Fixo&centroCusto=Operação`, headers });
     assert.equal(januaryOnlyResponse.statusCode, 200, januaryOnlyResponse.body);
     const januaryOnly = januaryOnlyResponse.json<Overview>();
     assert.equal(januaryOnly.analytics.kpis.receitaRecebida, 5_001);
     assert.equal(januaryOnly.analytics.kpis.despesasLancadas, 2_002);
     assert.deepEqual(januaryOnly.analytics.categorias.map((item) => item.categoria), ['Software']);
 
-    const emptyResponse = await server.inject({ method: 'GET', url: '/api/financeiro/overview?inicio=2035-01-01&fim=2035-01-31', headers });
+    const emptyResponse = await injectWithRecordVersion(server, { method: 'GET', url: '/api/financeiro/overview?inicio=2035-01-01&fim=2035-01-31', headers });
     assert.equal(emptyResponse.statusCode, 200);
     const empty = emptyResponse.json<Overview>();
     assert.equal(empty.meta.hasSourceData, false);
@@ -153,7 +154,7 @@ test('resumo financeiro SQL preserva regras, filtros, centavos e invalidação d
     assert.equal(empty.analytics.kpis.receitaContratada, 0);
     assert.equal(empty.analytics.kpis.despesasLancadas, 0);
 
-    const createExpenseResponse = await server.inject({
+    const createExpenseResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/financeiro/despesas',
       headers: { ...headers, 'content-type': 'application/json' },
@@ -171,11 +172,11 @@ test('resumo financeiro SQL preserva regras, filtros, centavos e invalidação d
       }
     });
     assert.equal(createExpenseResponse.statusCode, 200, createExpenseResponse.body);
-    const refreshedResponse = await server.inject({ method: 'GET', url: periodUrl, headers });
+    const refreshedResponse = await injectWithRecordVersion(server, { method: 'GET', url: periodUrl, headers });
     assert.equal(refreshedResponse.statusCode, 200, refreshedResponse.body);
     assert.equal(refreshedResponse.json<Overview>().analytics.kpis.despesasLancadas, 4_213);
 
-    const legacyResponse = await server.inject({ method: 'GET', url: '/api/financeiro/despesas?mode=legacy', headers });
+    const legacyResponse = await injectWithRecordVersion(server, { method: 'GET', url: '/api/financeiro/despesas?mode=legacy', headers });
     assert.equal(legacyResponse.statusCode, 200);
     assert.equal(legacyResponse.headers.deprecation, 'true');
   } finally {

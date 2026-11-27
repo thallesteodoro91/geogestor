@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -23,7 +24,7 @@ test('cliente e projeto apresentam os mesmos registros sem duplicar tarefas ou d
     import('./services/runtime-migrations.service'),
     import('@geogestor/database')
   ]);
-  const request = (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: Record<string, unknown>) => server.inject({
+  const request = (method: 'GET' | 'POST' | 'PATCH', url: string, payload?: Record<string, unknown>) => injectWithRecordVersion(server, {
     method,
     url,
     headers: payload === undefined ? { 'x-api-token': 'test-token' } : headers,

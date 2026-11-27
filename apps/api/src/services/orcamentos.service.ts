@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { BudgetListSort } from '@geogestor/contracts/src/budget-list';
 import {
   and,
   asc,
@@ -87,6 +88,7 @@ export interface BudgetApprovalInput {
 }
 
 export interface BudgetFilters {
+  sort?: BudgetListSort;
   query?: string;
   clientId?: string;
   projectId?: string;
@@ -380,17 +382,23 @@ export async function getBudgetAggregate(budgetId: string, database: DbOrTx = db
   ]);
 
   const row = result[0];
+  const clientSnapshot = json<Record<string, unknown> | null>(row.budget.clienteSnapshotJson, null);
+  // Issued versions retain the parties captured at emission, including empty
+  // contact fields. Drafts and legacy records without a snapshot use live data.
+  const clientField = (key: string, live: string | null) => clientSnapshot && key in clientSnapshot
+    ? (typeof clientSnapshot[key] === 'string' ? clientSnapshot[key] as string : null)
+    : live;
   return {
     ...row.budget,
     status: normalizeBudgetStatus(row.budget.status),
-    clientName: row.clientName,
-    clientDocument: row.clientDocument,
-    clientEmail: row.clientEmail,
-    clientPhone: row.clientPhone,
+    clientName: clientField('nome', row.clientName) || row.clientName,
+    clientDocument: clientField('documento', row.clientDocument),
+    clientEmail: clientField('email', row.clientEmail),
+    clientPhone: clientField('telefone', row.clientPhone),
     projectName: row.projectName,
     propertyRecordName: row.propertyRecordName,
     characterization: json<Record<string, unknown> | null>(row.budget.caracterizacaoJson, null),
-    clientSnapshot: json<Record<string, unknown> | null>(row.budget.clienteSnapshotJson, null),
+    clientSnapshot,
     propertySnapshot: json<Record<string, unknown> | null>(row.budget.imovelSnapshotJson, null),
     items: items.map((item: typeof items[number]) => ({
       id: item.id,
@@ -491,6 +499,8 @@ export async function updateBudget(budgetId: string, payload: BudgetPayload, use
   return getBudgetAggregate(budgetId);
 }
 
+const budgetClientName = sql<string>`case when json_valid(${schema.orcamentos.clienteSnapshotJson}) then coalesce(json_extract(${schema.orcamentos.clienteSnapshotJson}, '$.nome'), ${schema.clientes.nome}) else ${schema.clientes.nome} end`;
+
 function filterConditions(filters: BudgetFilters) {
   const conditions: SQL[] = [isNull(schema.orcamentos.deletedAt)];
   if (filters.query) {
@@ -498,7 +508,7 @@ function filterConditions(filters: BudgetFilters) {
     const queryCondition = or(
       like(schema.orcamentos.codigoOrcamento, term),
       like(schema.orcamentos.descricao, term),
-      like(schema.clientes.nome, term),
+      like(budgetClientName, term),
       like(schema.orcamentos.imovelNome, term),
       like(schema.orcamentos.municipio, term)
     );
@@ -545,7 +555,7 @@ export function listBudgets(filters: BudgetFilters = {}) {
     estimatedProfitCents: schema.orcamentos.lucroEstimado,
     marginBasisPoints: schema.orcamentos.margemPontosBase,
     clientId: schema.orcamentos.clienteId,
-    clientName: schema.clientes.nome,
+    clientName: budgetClientName,
     projectId: schema.orcamentos.projetoId,
     projectName: schema.projetos.nome,
     viewedAt: schema.orcamentos.visualizadoEm,
@@ -556,7 +566,18 @@ export function listBudgets(filters: BudgetFilters = {}) {
     .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
     .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
     .where(and(...filterConditions(filters)))
-    .orderBy(desc(schema.orcamentos.createdAt));
+    .orderBy(...budgetListOrdering(filters.sort));
+}
+
+function budgetListOrdering(sort?: BudgetListSort) {
+  switch (sort) {
+    case 'emissao': return [asc(sql`${schema.orcamentos.dataEmissao} is null`), asc(schema.orcamentos.dataEmissao), asc(schema.orcamentos.id)];
+    case 'validade': return [asc(sql`${schema.orcamentos.validadeAte} is null`), asc(schema.orcamentos.validadeAte), asc(schema.orcamentos.id)];
+    case 'cliente': return [asc(sql`${budgetClientName} collate nocase`), asc(schema.orcamentos.id)];
+    case 'valor_asc': return [asc(schema.orcamentos.valorTotal), asc(schema.orcamentos.id)];
+    case 'valor_desc': return [desc(schema.orcamentos.valorTotal), asc(schema.orcamentos.id)];
+    default: return [desc(schema.orcamentos.createdAt), asc(schema.orcamentos.id)];
+  }
 }
 
 export async function listBudgetsPage(filters: BudgetFilters, page: number, limit: number) {

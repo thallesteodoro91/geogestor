@@ -15,13 +15,13 @@ test('exige resultado ao concluir uma decisão', () => {
   assert.equal(errors['decision-completion-note'], 'Registre o resultado antes de concluir a decisão.');
 });
 
-test('valida datas do ciclo e da próxima revisão', () => {
+test('valida horizonte do ciclo e preserva previsões históricas das revisões', () => {
   assert.equal(validatePlanningForm('cycle', {
     nome: '2026', dataInicio: '2026-12-01', dataFim: '2026-01-01', visao: 'Crescer'
   })['cycle-end'], 'A data final deve ser igual ou posterior à data inicial.');
-  assert.ok(validatePlanningForm('checkin', {
+  assert.deepEqual(validatePlanningForm('checkin', {
     data: '2026-08-10', narrativa: 'Revisão', proximaRevisao: '2026-08-01'
-  })['checkin-next-review']);
+  }), {});
 });
 
 test('aceita resultado-chave automático sem valor atual manual', () => {

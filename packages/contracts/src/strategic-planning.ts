@@ -247,6 +247,15 @@ export type StrategicTimelineItem = {
   status: string;
 };
 
+// A risk can belong to an objective directly or through its initiative.
+// Resolve this relationship consistently without rewriting historical records.
+export function strategicRiskObjectiveId(
+  risk: { objetivoId?: string | null; iniciativaId?: string | null },
+  initiatives: ReadonlyArray<{ id: string; objetivoId: string }>
+): string | null {
+  return risk.objetivoId || initiatives.find(item => item.id === risk.iniciativaId)?.objetivoId || null;
+}
+
 export type StrategicTrendSummary = {
   disponivel: boolean;
   motivo: string | null;

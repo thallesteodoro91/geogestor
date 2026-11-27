@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -36,7 +37,7 @@ test('painel de qualidade é somente leitura, filtrável e exportável; polític
       projects: (await db.select().from(schema.projetos)).length,
       budgets: (await db.select().from(schema.orcamentos)).length
     };
-    const report = await server.inject({ method: 'GET', url: '/api/sistema/qualidade-dados', headers });
+    const report = await injectWithRecordVersion(server, { method: 'GET', url: '/api/sistema/qualidade-dados', headers });
     assert.equal(report.statusCode, 200, report.body);
     const payload = report.json<{ summary: { critical: number; warnings: number }; issues: Array<{ code: string; module: string; severity: string; title: string }> }>();
     assert.ok(payload.summary.critical >= 1);
@@ -48,16 +49,16 @@ test('painel de qualidade é somente leitura, filtrável e exportável; polític
       budgets: (await db.select().from(schema.orcamentos)).length
     }, beforeCounts);
 
-    const filtered = await server.inject({ method: 'GET', url: '/api/sistema/qualidade-dados?module=Projetos&severity=warning', headers });
+    const filtered = await injectWithRecordVersion(server, { method: 'GET', url: '/api/sistema/qualidade-dados?module=Projetos&severity=warning', headers });
     assert.equal(filtered.statusCode, 200, filtered.body);
     assert.ok(filtered.json<{ issues: Array<{ module: string; severity: string }> }>().issues.every((issue) => issue.module === 'Projetos' && issue.severity === 'warning'));
-    const csv = await server.inject({ method: 'GET', url: '/api/sistema/qualidade-dados.csv', headers });
+    const csv = await injectWithRecordVersion(server, { method: 'GET', url: '/api/sistema/qualidade-dados.csv', headers });
     assert.equal(csv.statusCode, 200, csv.body);
     assert.match(csv.headers['content-type'] || '', /text\/csv/);
     assert.match(csv.body, /Problema/);
     const csvIssue = payload.issues[0];
     assert.ok(csvIssue);
-    const filteredCsv = await server.inject({ method: 'GET', url: `/api/sistema/qualidade-dados.csv?module=${encodeURIComponent(csvIssue.module)}&severity=${encodeURIComponent(csvIssue.severity)}`, headers });
+    const filteredCsv = await injectWithRecordVersion(server, { method: 'GET', url: `/api/sistema/qualidade-dados.csv?module=${encodeURIComponent(csvIssue.module)}&severity=${encodeURIComponent(csvIssue.severity)}`, headers });
     assert.equal(filteredCsv.statusCode, 200, filteredCsv.body);
     assert.match(filteredCsv.body, new RegExp(csvIssue.module));
     assert.match(filteredCsv.body, new RegExp(csvIssue.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -67,9 +68,9 @@ test('painel de qualidade é somente leitura, filtrável e exportável; polític
       destinationDirectory: path.join(testRoot, 'custom-backups'), maxStorageBytes: 5 * 1024 ** 3,
       overdueGraceHours: 4, runOnStartup: true, runOnShutdown: false
     };
-    const saved = await server.inject({ method: 'PUT', url: '/api/sistema/backups/politica', headers: { ...headers, 'content-type': 'application/json' }, payload: policy });
+    const saved = await injectWithRecordVersion(server, { method: 'PUT', url: '/api/sistema/backups/politica', headers: { ...headers, 'content-type': 'application/json' }, payload: policy });
     assert.equal(saved.statusCode, 200, saved.body);
-    const status = await server.inject({ method: 'GET', url: '/api/sistema/backups/status', headers });
+    const status = await injectWithRecordVersion(server, { method: 'GET', url: '/api/sistema/backups/status', headers });
     assert.equal(status.statusCode, 200, status.body);
     assert.equal(status.json<{ policy: { retention: number; databaseIntervalHours: number } }>().policy.retention, 6);
     assert.equal(status.json<{ policy: { retention: number; databaseIntervalHours: number } }>().policy.databaseIntervalHours, 12);

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -74,7 +75,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
       }
     ]);
 
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/financeiro/resumo-mensal',
       headers: { 'x-api-token': 'test-token' }
@@ -85,7 +86,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
       .find((item) => item.mes === month);
     assert.equal(currentMonth?.receitas, 10_000);
 
-    const createBudgetResponse = await server.inject({
+    const createBudgetResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/financeiro/orcamentos',
       headers: {
@@ -117,7 +118,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     assert.equal(createBudgetResponse.statusCode, 200);
     const createdBudget = createBudgetResponse.json<{ id: string }>();
 
-    const budgetsResponse = await server.inject({
+    const budgetsResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/financeiro/orcamentos',
       headers: { 'x-api-token': 'test-token' }
@@ -136,7 +137,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     assert.equal(normalizedBudget?.despesas?.length, 1);
     assert.equal(normalizedBudget?.despesas?.[0]?.valor, 150);
 
-    const setupResponse = await server.inject({
+    const setupResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/configuracoes',
       headers: {
@@ -153,7 +154,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     });
     assert.equal(setupResponse.statusCode, 200);
 
-    const updateConfigResponse = await server.inject({
+    const updateConfigResponse = await injectWithRecordVersion(server, {
       method: 'PATCH',
       url: '/api/configuracoes',
       headers: {
@@ -164,7 +165,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     });
     assert.equal(updateConfigResponse.statusCode, 200);
 
-    const configResponse = await server.inject({
+    const configResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/configuracoes',
       headers: { 'x-api-token': 'test-token' }
@@ -182,7 +183,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
       situacao: 'Ativo'
     });
 
-    const updateClientResponse = await server.inject({
+    const updateClientResponse = await injectWithRecordVersion(server, {
       method: 'PATCH',
       url: `/api/clientes/${categoryClientId}`,
       headers: {
@@ -196,7 +197,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     assert.equal(updatedClient.categoria, 'Indústria');
     assert.equal(updatedClient.situacao, 'Ativo');
 
-    const projectBatchResponse = await server.inject({
+    const projectBatchResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/projetos/lote',
       headers: {
@@ -214,7 +215,7 @@ test('fluxo de caixa mensal ignora orçamentos e parcelas excluídos', async () 
     assert.equal(projectBatchResponse.statusCode, 201);
     assert.equal(projectBatchResponse.json<{ importedCount: number }>().importedCount, 1);
 
-    const projectResponse = await server.inject({
+    const projectResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/projetos?clienteId=${categoryClientId}`,
       headers: { 'x-api-token': 'test-token' }

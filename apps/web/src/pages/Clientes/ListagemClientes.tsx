@@ -1,22 +1,25 @@
 import { DatePickerField, FormSelect } from '../../components/Form';
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation } from '../../hooks/useListPageNavigation';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageFilterBar } from '../../components/PageFilterBar';
 import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { FileUploadModal } from '../../components/FileUploadModal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { apiClient } from '../../services/apiClient';
+import { apiClient, ApiError } from '../../services/apiClient';
 import { motion } from 'framer-motion';
 import { Plus, EnvelopeSimple, Phone, Trash, Note, Info, Users, ClockCounterClockwise, WhatsappLogo, Envelope, UsersThree, ChatText, FolderSimple, DownloadSimple, FilePdf, FileDoc, FileText, FileDashed, Files, MagnifyingGlass, DotsThree, PencilSimple, ArrowSquareOut, X, ArrowsDownUp, WarningCircle, Funnel } from '@phosphor-icons/react';
 import {
   CLIENT_CATEGORY_OPTIONS,
   CLIENT_ORIGIN_OPTIONS,
-  getClientCategoryTagClass
+  getClientCategoryTagClass,
+  normalizeClientCategoryTag,
+  resolveClientClassification
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
 import { cn } from '../../utils/cn';
@@ -38,6 +41,7 @@ import {
 import { filterSearchInputClass } from '../../utils/filterStyles';
 import { geoFieldClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import { commercialContentClass } from '../../utils/commercialLayout';
+import './client-registration.css';
 
 export interface Cliente {
   id: string;
@@ -87,12 +91,6 @@ interface ClientPage {
 const EMPTY_CLIENTS: Cliente[] = [];
 
 type ClientModalTab = 'basico' | 'notas' | 'historico' | 'arquivos';
-
-const splitClientTags = (value?: string | null) =>
-  (value || '')
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
 
 const clienteFieldClass = cn(geoFieldClass, 'w-full px-4 py-2.5 text-sm font-medium');
 const clienteTextareaClass = cn(geoFieldClass, 'w-full resize-none px-4 py-3 font-medium leading-relaxed');
@@ -177,9 +175,9 @@ const formatPropertyCountLabel = (value: number) =>
   `${clientCountFormatter.format(value)} ${value === 1 ? 'propriedade vinculada' : 'propriedades vinculadas'}`;
 
 const formatLastInteraction = (value?: string | null) => {
-  if (!value) return { relative: 'Sem interações' };
+  if (!value) return { relative: 'Sem registro manual' };
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { relative: 'Sem interações' };
+  if (Number.isNaN(date.getTime())) return { relative: 'Sem registro manual' };
 
   const differenceInSeconds = (date.getTime() - Date.now()) / 1000;
   const absoluteSeconds = Math.abs(differenceInSeconds);
@@ -211,9 +209,6 @@ const formatLastInteraction = (value?: string | null) => {
     full: dateTimeFormatter.format(date)
   };
 };
-
-const getClientCategory = (cliente: Cliente) =>
-  cliente.categoria || (cliente.documento && cliente.documento.length > 14 ? 'Empresa' : 'Produtor Rural');
 
 const splitClientName = (value: string) => {
   const match = value.trim().match(/^(Srta?\.|Sra\.|Dra?\.|Profa?\.)\s+(.+)$/i);
@@ -268,6 +263,7 @@ function ClientActionsMenu({ cliente, returnTo, onEdit, onDelete }: ClientAction
         type="button"
         onClick={() => setIsOpen((current) => !current)}
         aria-label={`Ações de ${cliente.nome}`}
+        data-client-actions={cliente.id}
         aria-expanded={isOpen}
         aria-haspopup="menu"
         className="geo-focus-ring flex h-[30px] w-[30px] items-center justify-center rounded-md text-zinc-600 transition-[background-color,color] duration-150 hover:bg-brand-surface-subtle hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-white"
@@ -293,6 +289,7 @@ function ClientActionsMenu({ cliente, returnTo, onEdit, onDelete }: ClientAction
             type="button"
             role="menuitem"
             onClick={() => {
+              menuRef.current?.querySelector<HTMLElement>('[data-client-actions]')?.focus({ preventScroll: true });
               setIsOpen(false);
               onEdit(cliente);
             }}
@@ -343,7 +340,8 @@ export function ListagemClientes() {
   const [activeTab, setActiveTab] = useState<ClientModalTab>('basico');
   const [searchTerm, setSearchTerm] = useState(() => readInitialListValue(location.search, 'q', ''));
   const [situacaoFilter, setSituacaoFilter] = useState(() => readInitialListValue(location.search, 'status', 'Todos'));
-  const [categoriaFilter, setCategoriaFilter] = useState(() => readInitialListValue(location.search, 'categoria', 'Todos'));
+  const [tipoPessoaFilter, setTipoPessoaFilter] = useState(() => readInitialListValue(location.search, 'tipoPessoa', 'Todos'));
+  const [categoriaFilter, setCategoriaFilter] = useState(() => normalizeClientCategoryTag(readInitialListValue(location.search, 'categoria', 'Todos')));
   const [origemFilter, setOrigemFilter] = useState(() => readInitialListValue(location.search, 'origem', 'Todos'));
   const [sortOrder, setSortOrder] = useState(() => readInitialListValue(location.search, 'ordenar', 'recentes'));
   const [showFilters, setShowFilters] = useState(false);
@@ -351,7 +349,7 @@ export function ListagemClientes() {
     const value = Number(readInitialListValue(location.search, 'pagina', '1'));
     return Number.isSafeInteger(value) && value > 0 ? value : 1;
   });
-  const resetPageAfterFirstCriteriaChangeRef = useRef(false);
+  const initialCriteriaKeyRef = useRef([searchTerm, situacaoFilter, tipoPessoaFilter, categoriaFilter, origemFilter, sortOrder].join('\u001f'));
 
   // Client files states
   const [uploading, setUploading] = useState(false);
@@ -374,6 +372,13 @@ export function ListagemClientes() {
   const [clientFormDirty, setClientFormDirty] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const initialClientFormRef = useRef(clientFormFingerprint(createEmptyClientForm()));
+  const clientSubmitLock = useRef(false);
+  const allowClientNavigation = useRef(false);
+  const [clientSubmitError, setClientSubmitError] = useState('');
+  const [showClientDiscard, setShowClientDiscard] = useState(false);
+  const clientBlocker = useBlocker(({ currentLocation, nextLocation }) => showModal &&
+    (clientFormDirty || clientSubmitLock.current) && !allowClientNavigation.current &&
+    `${currentLocation.pathname}${currentLocation.search}` !== `${nextLocation.pathname}${nextLocation.search}`);
 
   // Historico CRM form states
   const [histTipo, setHistTipo] = useState('Whatsapp');
@@ -382,7 +387,7 @@ export function ListagemClientes() {
 
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const { data: clientPage, isLoading: loading, isError: hasLoadError, isFetching, refetch } = useQuery<ClientPage>({
-    queryKey: ['clientes', 'directory', page, deferredSearchTerm, situacaoFilter, categoriaFilter, origemFilter, sortOrder],
+    queryKey: ['clientes', 'directory', page, deferredSearchTerm, situacaoFilter, tipoPessoaFilter, categoriaFilter, origemFilter, sortOrder],
     queryFn: () => {
       const params = new URLSearchParams({
         mode: 'page',
@@ -392,12 +397,15 @@ export function ListagemClientes() {
       });
       if (deferredSearchTerm.trim()) params.set('q', deferredSearchTerm.trim());
       if (situacaoFilter !== 'Todos') params.set('status', situacaoFilter);
+      if (tipoPessoaFilter !== 'Todos') params.set('tipoPessoa', tipoPessoaFilter);
       if (categoriaFilter !== 'Todos') params.set('categoria', categoriaFilter);
       if (origemFilter !== 'Todos') params.set('origem', origemFilter);
       return apiClient.get<ClientPage>(`/api/clientes?${params}`);
     },
     placeholderData: (previous) => previous
   });
+  const listNavigation = useListPageNavigation({ page, resolvedPage: clientPage?.page, ready: !isFetching, failed: hasLoadError, scope: [searchTerm, categoriaFilter, situacaoFilter, tipoPessoaFilter, origemFilter, sortOrder].join('|') });
+  const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
   const clientes = clientPage?.items || EMPTY_CLIENTS;
   const totalClients = clientPage?.total || 0;
   const totalPages = clientPage?.totalPages || 1;
@@ -446,24 +454,28 @@ export function ListagemClientes() {
   const hasClientFiltering = Boolean(
     searchTerm.trim()
     || situacaoFilter !== 'Todos'
+    || tipoPessoaFilter !== 'Todos'
     || categoriaFilter !== 'Todos'
     || origemFilter !== 'Todos'
   );
   const activeClientCriteriaCount = [
     searchTerm,
     situacaoFilter !== 'Todos',
+    tipoPessoaFilter !== 'Todos',
     categoriaFilter !== 'Todos',
     origemFilter !== 'Todos',
     sortOrder !== 'recentes'
   ].filter(Boolean).length;
   const activeFilterChips = [
     situacaoFilter !== 'Todos' ? { key: 'status', label: `Status: ${situacaoFilter}`, clear: () => setSituacaoFilter('Todos') } : null,
+    tipoPessoaFilter !== 'Todos' ? { key: 'tipoPessoa', label: `Tipo: ${tipoPessoaFilter === 'PF' ? 'Pessoa Física' : tipoPessoaFilter === 'PJ' ? 'Pessoa Jurídica' : 'Não informado'}`, clear: () => setTipoPessoaFilter('Todos') } : null,
     categoriaFilter !== 'Todos' ? { key: 'categoria', label: `Categoria: ${categoriaFilter}`, clear: () => setCategoriaFilter('Todos') } : null,
     origemFilter !== 'Todos' ? { key: 'origem', label: `Origem: ${origemFilter}`, clear: () => setOrigemFilter('Todos') } : null
   ].filter((chip): chip is { key: string; label: string; clear: () => void } => Boolean(chip));
   const clearClientFilters = () => {
     setSearchTerm('');
     setSituacaoFilter('Todos');
+    setTipoPessoaFilter('Todos');
     setCategoriaFilter('Todos');
     setOrigemFilter('Todos');
     setSortOrder('recentes');
@@ -486,6 +498,7 @@ export function ListagemClientes() {
   });
 
   const submitClientMutation = useMutation({
+    retry: false,
     mutationFn: async (payload: ReturnType<typeof clientFormToPayload>) => {
       if (selectedCliente) {
         return await apiClient.patch(`/api/clientes/${selectedCliente.id}`, payload);
@@ -494,6 +507,7 @@ export function ListagemClientes() {
     },
     onSuccess: () => {
       const feedbackMessage = selectedCliente ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.';
+      allowClientNavigation.current = true;
       setSuccessMessage(feedbackMessage);
       setClientFormDirty(false);
       setShowModal(false);
@@ -510,9 +524,11 @@ export function ListagemClientes() {
       }
     },
     onError: (err: unknown) => {
-      const msg = err instanceof Error ? err.message : (selectedCliente ? 'Erro ao atualizar cliente' : 'Erro ao criar cliente');
-      toast.error(msg);
-    }
+      setClientSubmitError(err instanceof ApiError && err.status > 0
+        ? `${[400, 409].includes(err.status) ? `${err.message} ` : ''}Não foi possível salvar o cliente. Revise os dados e tente novamente.`
+        : 'Não foi possível confirmar o salvamento. O preenchimento foi mantido. Confira a lista de clientes antes de reenviar para evitar duplicidade.');
+    },
+    onSettled: () => { clientSubmitLock.current = false; }
   });
 
   const addHistoricoMutation = useMutation({
@@ -590,6 +606,10 @@ export function ListagemClientes() {
   };
 
   const openCreateModal = (prefill?: Record<string, string>) => {
+    if (clientSubmitLock.current) return;
+    allowClientNavigation.current = false;
+    setClientSubmitError('');
+    setShowClientDiscard(false);
     const nextForm = applyClientPrefill(createEmptyClientForm(), prefill);
     setSelectedCliente(null);
     setClientForm(nextForm);
@@ -602,6 +622,10 @@ export function ListagemClientes() {
   };
 
   const openEditModal = (cliente: Cliente) => {
+    if (clientSubmitLock.current) return;
+    allowClientNavigation.current = false;
+    setClientSubmitError('');
+    setShowClientDiscard(false);
     const nextForm = clientRecordToForm(cliente);
     setSelectedCliente(cliente);
     setClientForm(nextForm);
@@ -613,13 +637,20 @@ export function ListagemClientes() {
   };
 
   const closeClientModal = () => {
-    if (clientFormDirty && !submitClientMutation.isPending && !window.confirm('Descartar as alterações não salvas deste cliente?')) return;
+    if (clientSubmitLock.current) return;
+    if (clientFormFingerprint(clientForm) !== initialClientFormRef.current) { setShowClientDiscard(true); return; }
     editReturnClienteIdRef.current = null;
     setShowModal(false);
   };
+  const holdClientSubmitFocus = (event: React.KeyboardEvent) => {
+    if (clientSubmitLock.current && event.key === 'Tab') {
+      event.preventDefault();
+      document.getElementById('client-save-status')?.focus({ preventScroll: true });
+    }
+  };
 
   useEffect(() => {
-    const routeState = location.state as { 
+    const routeState = location.state as {
       editClienteId?: string;
       returnToClienteId?: string;
       openNewClientModal?: boolean;
@@ -669,22 +700,32 @@ export function ListagemClientes() {
   }, [clientForm, showModal]);
 
   useEffect(() => {
-    if (!clientFormDirty) return;
+    if (!showModal || (!clientFormDirty && !submitClientMutation.isPending)) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = '';
     };
     window.addEventListener('beforeunload', warnBeforeUnload);
     return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [clientFormDirty]);
+  }, [clientFormDirty, showModal, submitClientMutation.isPending]);
 
   useEffect(() => {
-    if (!resetPageAfterFirstCriteriaChangeRef.current) {
-      resetPageAfterFirstCriteriaChangeRef.current = true;
-      return;
-    }
+    window.electronAPI?.setLicenseDraftState?.('client-registration', {
+      dirty: showModal && clientFormDirty, saving: showModal && submitClientMutation.isPending
+    });
+    return () => window.electronAPI?.setLicenseDraftState?.('client-registration', { dirty: false, saving: false });
+  }, [clientFormDirty, showModal, submitClientMutation.isPending]);
+
+  useEffect(() => {
+    if (!showModal && clientBlocker.state === 'blocked') clientBlocker.reset();
+  }, [showModal, clientBlocker]);
+
+  useEffect(() => {
+    const nextCriteriaKey = [deferredSearchTerm, situacaoFilter, tipoPessoaFilter, categoriaFilter, origemFilter, sortOrder].join('\u001f');
+    if (initialCriteriaKeyRef.current === nextCriteriaKey) return;
+    initialCriteriaKeyRef.current = nextCriteriaKey;
     setPage(1);
-  }, [categoriaFilter, deferredSearchTerm, origemFilter, situacaoFilter, sortOrder]);
+  }, [categoriaFilter, deferredSearchTerm, origemFilter, situacaoFilter, tipoPessoaFilter, sortOrder]);
 
   useEffect(() => {
     if (!clientPage || page <= clientPage.totalPages) return;
@@ -701,6 +742,7 @@ export function ListagemClientes() {
 
     setOrDelete('q', searchTerm);
     setOrDelete('status', situacaoFilter, 'Todos');
+    setOrDelete('tipoPessoa', tipoPessoaFilter, 'Todos');
     setOrDelete('categoria', categoriaFilter, 'Todos');
     setOrDelete('origem', origemFilter, 'Todos');
     setOrDelete('ordenar', sortOrder, 'recentes');
@@ -715,12 +757,13 @@ export function ListagemClientes() {
     window.sessionStorage.setItem('geogestor:clientes:list-state', JSON.stringify({
       q: searchTerm,
       status: situacaoFilter,
+      tipoPessoa: tipoPessoaFilter,
       categoria: categoriaFilter,
       origem: origemFilter,
       ordenar: sortOrder,
       pagina: String(page)
     }));
-  }, [categoriaFilter, location.pathname, location.search, navigate, origemFilter, page, searchTerm, situacaoFilter, sortOrder]);
+  }, [categoriaFilter, location.pathname, location.search, navigate, origemFilter, page, searchTerm, situacaoFilter, tipoPessoaFilter, sortOrder]);
 
   const handleDelete = (id: string, name: string) => {
     setConfirmData({
@@ -742,6 +785,7 @@ export function ListagemClientes() {
   };
 
   const activateClientTab = (tab: ClientModalTab, moveFocus = false) => {
+    if (clientSubmitLock.current) return;
     setActiveTab(tab);
     window.setTimeout(() => {
       const scrollRegion = document.getElementById('client-form-scroll-region');
@@ -767,16 +811,29 @@ export function ListagemClientes() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (clientSubmitLock.current) return;
+    setClientSubmitError('');
     const validation = validateClientForm(clientForm, selectedCliente);
     setClientFormErrors(validation.errors);
     if (!validation.valid) {
       activateClientTab('basico');
       const firstField = Object.keys(validation.errors)[0] as keyof ClientFormState | undefined;
       const fieldId = firstField === 'tipoPessoa' ? 'client-tipo-pf' : firstField ? `client-${firstField}` : 'client-nome';
-      window.setTimeout(() => document.getElementById(fieldId)?.focus(), 0);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const field = document.getElementById(fieldId);
+        const region = document.getElementById('client-form-scroll-region');
+        if (field && region) {
+          field.focus({ preventScroll: true });
+          region.scrollTop += field.getBoundingClientRect().top - region.getBoundingClientRect().top - (region.querySelector('nav')?.getBoundingClientRect().height || 0) - 12;
+        }
+      }));
       return;
     }
+    clientSubmitLock.current = true;
     submitClientMutation.mutate(validation.payload);
+    window.requestAnimationFrame(() => {
+      if (clientSubmitLock.current) document.getElementById('client-save-status')?.focus({ preventScroll: true });
+    });
   };
 
   const handleAddHistorico = (e: React.FormEvent) => {
@@ -822,7 +879,7 @@ export function ListagemClientes() {
             onClick={() => openCreateModal()}
             className={cn(headerPrimaryActionButtonClass, 'w-full shadow-sm hover:shadow-md sm:w-auto')}
           >
-            <span>Novo cliente</span>
+            <span id="client-create-label">Novo cliente</span>
             <span aria-hidden="true" className={headerPrimaryActionIconClass}>
               <Plus weight="bold" className="h-3.5 w-3.5" />
             </span>
@@ -883,6 +940,7 @@ export function ListagemClientes() {
         showFilterToggle={false}
         showControls={false}
         className="-mt-2 mb-4"
+        panelClassName="xl:grid-cols-5"
       >
         <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
           <span>Status</span>
@@ -900,6 +958,23 @@ export function ListagemClientes() {
                 { label: 'Prospectado', value: 'Prospectado' }
               ]}
             />
+        </label>
+        <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+          <span>Tipo de pessoa</span>
+          <CustomSelect
+            id="client-person-type-filter"
+            ariaLabel="Filtrar por tipo de pessoa"
+            value={tipoPessoaFilter}
+            onChange={setTipoPessoaFilter}
+            placeholder="Tipo de pessoa"
+            className="min-w-0"
+            options={[
+              { label: 'Todos os tipos', value: 'Todos' },
+              { label: 'Pessoa Física', value: 'PF' },
+              { label: 'Pessoa Jurídica', value: 'PJ' },
+              { label: 'Não informado', value: 'NaoInformado' }
+            ]}
+          />
         </label>
         <label className="space-y-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
           <span>Categoria</span>
@@ -975,7 +1050,7 @@ export function ListagemClientes() {
       </div>
 
       <div className="mb-3 flex min-h-6 items-center justify-between gap-3 text-xs font-medium text-zinc-600 dark:text-zinc-300" role="status" aria-live="polite" aria-atomic="true">
-        <span>{totalClients} {totalClients === 1 ? 'resultado encontrado' : 'resultados encontrados'}</span>
+        <p ref={listNavigation.resultsRef} tabIndex={-1} className="geo-focus-ring scroll-mt-28 m-0">{totalClients} {totalClients === 1 ? 'resultado encontrado' : 'resultados encontrados'} · Página {clientPage?.page ?? page} de {totalPages} · Intervalo {clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + 1) : 0}–{clientPage?.items.length ? ((clientPage.page - 1) * clientPage.limit + clientPage.items.length) : 0}</p>
         {isFetching && !loading && <span>Atualizando…</span>}
       </div>
 
@@ -1040,15 +1115,15 @@ export function ListagemClientes() {
                     <th scope="col" className="w-[35%] px-4 py-2.5">Cliente</th>
                     <th scope="col" className="w-[27%] px-4 py-2.5">Contato</th>
                     <th scope="col" className="w-[13%] px-4 py-2.5 text-center">Propriedades</th>
-                    <th scope="col" className="w-[18%] px-4 py-2.5">Última interação</th>
+                    <th scope="col" className="w-[18%] px-4 py-2.5" title="Última interação registrada manualmente">Última interação</th>
                     <th scope="col" className="w-[7%] px-3 py-2.5 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedClientes.map((cliente) => {
                     const clientName = splitClientName(cliente.nome);
-                    const category = getClientCategory(cliente);
-                    const categories = splitClientTags(category);
+                    const classification = resolveClientClassification(cliente.categoria, cliente.perfis);
+                    const category = classification.primary;
                     const status = cliente.situacao || 'Ativo';
                     const phone = formatBrazilianPhone(cliente.celular || cliente.telefone);
                     const interaction = formatLastInteraction(cliente.ultimaInteracao);
@@ -1079,14 +1154,14 @@ export function ListagemClientes() {
                                   {clientName.name}
                                 </Link>
                               </div>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5" title={categories.join(', ')}>
-                                {categories.length > 0 ? categories.map((item) => (
-                                  <span key={item} className={cn(clientListTagClass, getClientCategoryTagClass(item))}>
-                                    {item}
-                                  </span>
-                                )) : (
-                                  <span className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>Sem categoria</span>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5" title={classification.needsReview ? `Classificação anterior: ${cliente.categoria}` : category || undefined}>
+                                {category ? (
+                                  <span className={cn(clientListTagClass, getClientCategoryTagClass(category))}>{category}</span>
+                                ) : (
+                                  <span className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>{classification.needsReview ? 'Categoria a revisar' : 'Sem categoria'}</span>
                                 )}
+                                {classification.profiles.map((profile) => <span key={profile} className={cn(clientListTagClass, 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200')}>{profile}</span>)}
+                                {!cliente.tipoPessoa && <span className={cn(clientListTagClass, 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200')}>Tipo a revisar</span>}
                                 <span className={getClientListStatusClass(status)}>{status}</span>
                               </div>
                             </div>
@@ -1144,8 +1219,8 @@ export function ListagemClientes() {
             <div className="space-y-2 lg:hidden">
               {paginatedClientes.map((cliente) => {
                 const clientName = splitClientName(cliente.nome);
-                const category = getClientCategory(cliente);
-                const categories = splitClientTags(category);
+                const classification = resolveClientClassification(cliente.categoria, cliente.perfis);
+                const category = classification.primary;
                 const status = cliente.situacao || 'Ativo';
                 const phone = formatBrazilianPhone(cliente.celular || cliente.telefone);
                 const interaction = formatLastInteraction(cliente.ultimaInteracao);
@@ -1173,13 +1248,13 @@ export function ListagemClientes() {
                           {clientName.name}
                         </Link>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {categories.length > 0 ? categories.map((item) => (
-                            <span key={item} className={cn(clientListTagClass, getClientCategoryTagClass(item))}>
-                              {item}
-                            </span>
-                          )) : (
-                            <span className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>Sem categoria</span>
+                          {category ? (
+                            <span className={cn(clientListTagClass, getClientCategoryTagClass(category))}>{category}</span>
+                          ) : (
+                            <span title={classification.needsReview ? `Classificação anterior: ${cliente.categoria}` : undefined} className={cn(clientListTagClass, 'border-brand-border bg-brand-surface-muted text-zinc-700 dark:text-zinc-200')}>{classification.needsReview ? 'Categoria a revisar' : 'Sem categoria'}</span>
                           )}
+                          {classification.profiles.map((profile) => <span key={profile} className={cn(clientListTagClass, 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200')}>{profile}</span>)}
+                          {!cliente.tipoPessoa && <span className={cn(clientListTagClass, 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200')}>Tipo a revisar</span>}
                           <span className={getClientListStatusClass(status)}>{status}</span>
                         </div>
                       </div>
@@ -1210,7 +1285,7 @@ export function ListagemClientes() {
                         </dd>
                       </div>
                       <div>
-                        <dt className="font-semibold text-zinc-600 dark:text-zinc-300">Última interação</dt>
+                        <dt className="font-semibold text-zinc-600 dark:text-zinc-300" title="Última interação registrada manualmente">Última interação</dt>
                         <dd className="mt-1 font-medium text-zinc-700 dark:text-zinc-200" title={interaction.full}>{interaction.relative}</dd>
                       </div>
                     </dl>
@@ -1221,11 +1296,11 @@ export function ListagemClientes() {
 
             {totalPages > 1 && (
               <nav className="flex flex-wrap items-center justify-center gap-3 pt-5" aria-label="Paginação de clientes">
-                <button type="button" onClick={() => setPage((value) => Math.max(1, value - 1))} disabled={page <= 1 || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
+                <button type="button" onClick={() => changePage(Math.max(1, page - 1))} disabled={page <= 1 || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
                   Página anterior
                 </button>
                 <span className="min-w-28 text-center text-xs font-medium tabular-nums text-zinc-600 dark:text-zinc-300">Página {page} de {totalPages}</span>
-                <button type="button" onClick={() => setPage((value) => Math.min(totalPages, value + 1))} disabled={page >= totalPages || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
+                <button type="button" onClick={() => changePage(Math.min(totalPages, page + 1))} disabled={page >= totalPages || isFetching} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>
                   Próxima página
                 </button>
               </nav>
@@ -1249,34 +1324,53 @@ export function ListagemClientes() {
           </span>
         )}
         maxWidth="max-w-[960px]"
+        panelClassName="geo-client-registration max-h-[94dvh]"
         contentScrollable={false}
+        density="compact"
         initialFocusId="client-nome"
+        initialFocusPreventScroll
+        closeDisabled={submitClientMutation.isPending}
+        returnFocusSelector={selectedCliente ? `[data-client-actions="${CSS.escape(selectedCliente.id)}"], button:has(#client-create-label)` : 'button:has(#client-create-label)'}
+        footer={activeTab === 'basico' || activeTab === 'notas' ? <div className="space-y-2" onKeyDownCapture={holdClientSubmitFocus}>
+          {clientSubmitError && <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-400/50 dark:bg-red-950/40 dark:text-red-100">{clientSubmitError}</p>}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <p id="client-save-status" tabIndex={submitClientMutation.isPending ? 0 : -1} className="geo-focus-ring mr-auto w-full rounded text-xs font-medium text-zinc-600 dark:text-zinc-300 sm:w-auto" role="status" aria-live="polite">
+              {submitClientMutation.isPending ? 'Salvando cliente…' : `${clientForm.perfis.length} ${clientForm.perfis.length === 1 ? 'perfil' : 'perfis'} · ${clientForm.servicos.length} ${clientForm.servicos.length === 1 ? 'serviço' : 'serviços'}`}
+            </p>
+            <button type="button" onClick={closeClientModal} disabled={submitClientMutation.isPending} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-wait disabled:opacity-60')}>Cancelar</button>
+            <button type="submit" form="client-registration-form" disabled={submitClientMutation.isPending} aria-busy={submitClientMutation.isPending} className={cn(primarySubmitButtonClass, 'min-w-40 px-4 py-3 disabled:cursor-wait disabled:opacity-70')}>
+              {submitClientMutation.isPending ? 'Salvando…' : selectedCliente ? 'Salvar alterações' : 'Cadastrar cliente'}
+            </button>
+          </div>
+        </div> : undefined}
       >
-        <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col" onKeyDownCapture={holdClientSubmitFocus}>
         {/* Tabs Navigation */}
-        <div className="relative mb-4 shrink-0">
+        <div className="relative mb-2 shrink-0">
         <div className="overflow-x-auto pb-1">
         <div role="tablist" aria-label="Navegação de abas do cliente" className={cn(geoTabListClass, 'flex w-max min-w-full gap-1.5 sm:min-w-0')}>
-          <button 
+          <button
             id="client-tab-basico"
             type="button"
             role="tab"
             aria-selected={activeTab === 'basico'}
             aria-controls="client-panel-basico"
             tabIndex={activeTab === 'basico' ? 0 : -1}
+            disabled={submitClientMutation.isPending}
             onClick={() => activateClientTab('basico')}
             onKeyDown={(event) => handleClientTabKeyDown(event, 'basico')}
             className={geoTabButtonClass(activeTab === 'basico', 'system', 'px-4 py-2')}
           >
             <span aria-hidden="true" className={geoTabIconClass(activeTab === 'basico', 'system')}><Info weight={activeTab === 'basico' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Cadastro
           </button>
-          <button 
+          <button
             id="client-tab-notas"
             type="button"
             role="tab"
             aria-selected={activeTab === 'notas'}
             aria-controls="client-panel-notas"
             tabIndex={activeTab === 'notas' ? 0 : -1}
+            disabled={submitClientMutation.isPending}
             onClick={() => activateClientTab('notas')}
             onKeyDown={(event) => handleClientTabKeyDown(event, 'notas')}
             className={geoTabButtonClass(activeTab === 'notas', 'system', 'px-4 py-2')}
@@ -1284,13 +1378,14 @@ export function ListagemClientes() {
             <span aria-hidden="true" className={geoTabIconClass(activeTab === 'notas', 'system')}><Note weight={activeTab === 'notas' ? 'fill' : 'regular'} className="h-4 w-4" /></span> Anotações fixas
           </button>
           {selectedCliente && (
-            <button 
+            <button
               id="client-tab-historico"
               type="button"
               role="tab"
               aria-selected={activeTab === 'historico'}
               aria-controls="client-panel-historico"
               tabIndex={activeTab === 'historico' ? 0 : -1}
+              disabled={submitClientMutation.isPending}
               onClick={() => activateClientTab('historico')}
               onKeyDown={(event) => handleClientTabKeyDown(event, 'historico')}
               className={geoTabButtonClass(activeTab === 'historico', 'field', 'px-4 py-2')}
@@ -1299,13 +1394,14 @@ export function ListagemClientes() {
             </button>
           )}
           {selectedCliente && (
-            <button 
+            <button
               id="client-tab-arquivos"
               type="button"
               role="tab"
               aria-selected={activeTab === 'arquivos'}
               aria-controls="client-panel-arquivos"
               tabIndex={activeTab === 'arquivos' ? 0 : -1}
+              disabled={submitClientMutation.isPending}
               onClick={() => activateClientTab('arquivos')}
               onKeyDown={(event) => handleClientTabKeyDown(event, 'arquivos')}
               className={geoTabButtonClass(activeTab === 'arquivos', 'success', 'px-4 py-2')}
@@ -1359,7 +1455,7 @@ export function ListagemClientes() {
                   if (file.extension === '.dwg') { FileIcon = Files; iconColor = "text-amber-500"; bgColor = "bg-amber-50"; }
 
                   return (
-                    <motion.div 
+                    <motion.div
                       key={file.name}
                       initial={{ opacity: 0, x: -10 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1411,8 +1507,8 @@ export function ListagemClientes() {
               </h4>
               <div className="flex flex-col md:flex-row gap-4 mb-4">
                 <FormSelect
-                  value={histTipo} 
-                  onChange={e => setHistTipo(e.target.value)} 
+                  value={histTipo}
+                  onChange={e => setHistTipo(e.target.value)}
                   aria-label="Tipo de Interação"
                   className={cn(clienteFieldClass, 'md:w-auto')}
                 >
@@ -1423,21 +1519,21 @@ export function ListagemClientes() {
                   <option value="Observação">Anotação Interna</option>
                 </FormSelect>
                 <DatePickerField
-                  required 
-                  value={histData} 
-                  onChange={e => setHistData(e.target.value)} 
+                  required
+                  value={histData}
+                  onChange={e => setHistData(e.target.value)}
                   aria-label="Data da Interação"
-                  className={cn(clienteFieldClass, 'md:w-auto')} 
+                  className={cn(clienteFieldClass, 'md:w-auto')}
                 />
               </div>
-              <textarea 
-                required 
-                value={histDescricao} 
-                onChange={e => setHistDescricao(e.target.value)} 
+              <textarea
+                required
+                value={histDescricao}
+                onChange={e => setHistDescricao(e.target.value)}
                 placeholder="Descreva os detalhes da interação (ex.: cliente aprovou o orçamento verbalmente, pediu desconto etc.)"
-                rows={3} 
+                rows={3}
                 aria-label="Descrição da Interação"
-                className={cn(clienteTextareaClass, 'mb-3 text-sm')} 
+                className={cn(clienteTextareaClass, 'mb-3 text-sm')}
               />
               <div className="flex justify-end">
                 <button type="submit" className={primarySmallActionButtonClass}>Registrar no Histórico</button>
@@ -1457,7 +1553,7 @@ export function ListagemClientes() {
                     <div className={`absolute -left-[50px] top-2.5 w-9 h-9 rounded-xl flex items-center justify-center ring-4 ring-white dark:ring-zinc-950 shadow-md ${getInteractionColor(item.tipo)} transition-transform group-hover:scale-110 z-10`}>
                       {getInteractionIcon(item.tipo)}
                     </div>
-                    
+
                     {/* Card */}
                     <div className="geo-card-interactive p-4">
                       <div className="flex justify-between items-center gap-2 mb-2">
@@ -1478,13 +1574,17 @@ export function ListagemClientes() {
         ) : (
           // TABS COMUNS: Formulario Basico/Contato/Notas
           <form
-            id={`client-panel-${activeTab}`}
-            role="tabpanel"
-            aria-labelledby={`client-tab-${activeTab}`}
+            id="client-registration-form"
+            aria-label={selectedCliente ? 'Editar cadastro do cliente' : 'Cadastrar cliente'}
+            aria-busy={submitClientMutation.isPending}
             onSubmit={handleSubmit}
+            noValidate
             className="flex min-h-0 min-w-0 flex-1 flex-col"
           >
-            <div id="client-form-scroll-region" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-5 pr-1">
+            <div id={`client-panel-${activeTab}`} role="tabpanel" aria-labelledby={`client-tab-${activeTab}`} className="flex min-h-0 flex-1 flex-col">
+            <div id="client-form-scroll-region" className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-3 pr-1">
+              <fieldset disabled={submitClientMutation.isPending} className="m-0 min-w-0 border-0 p-0">
+              <legend className="sr-only">Informações do cliente</legend>
               <ClienteFormFields
                 form={clientForm}
                 setForm={setClientForm}
@@ -1493,20 +1593,8 @@ export function ListagemClientes() {
                 editing={Boolean(selectedCliente)}
                 onClearErrors={clearClientFormErrors}
               />
+              </fieldset>
             </div>
-
-            <div className="-mx-1 flex flex-shrink-0 flex-wrap items-center justify-end gap-3 border-t border-brand-border bg-brand-surface/95 px-1 pb-1 pt-4 backdrop-blur supports-[backdrop-filter]:bg-brand-surface/85 sm:flex-nowrap">
-              <p className="mr-auto w-full text-xs font-semibold text-zinc-500 dark:text-zinc-400 sm:w-auto" role="status" aria-live="polite">
-                {clientForm.perfis.length === 0 && clientForm.servicos.length === 0
-                  ? 'Nenhum perfil ou serviço selecionado'
-                  : `${clientForm.perfis.length} ${clientForm.perfis.length === 1 ? 'perfil' : 'perfis'} · ${clientForm.servicos.length} ${clientForm.servicos.length === 1 ? 'serviço' : 'serviços'}`}
-              </p>
-              <button type="button" onClick={closeClientModal} className={secondarySmallActionButtonClass}>
-                Cancelar
-              </button>
-              <button type="submit" disabled={submitClientMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}>
-                {submitClientMutation.isPending ? 'Salvando…' : 'Salvar cliente'}
-              </button>
             </div>
           </form>
         )}
@@ -1523,6 +1611,22 @@ export function ListagemClientes() {
           ))}
         </div>
       </Modal>
+
+      <ConfirmDialog isOpen={showClientDiscard || clientBlocker.state === 'blocked'}
+        title="Descartar alterações do cliente?" description="As informações preenchidas ainda não foram salvas. Continue editando para preservá-las ou descarte as alterações para sair."
+        variant="warning" cancelText="Continuar editando" confirmText="Descartar alterações" loading={submitClientMutation.isPending} loadingText="Aguarde o salvamento…"
+        returnFocusSelector={selectedCliente ? `[data-client-actions="${CSS.escape(selectedCliente.id)}"], button:has(#client-create-label)` : 'button:has(#client-create-label)'}
+        onClose={() => { setShowClientDiscard(false); if (clientBlocker.state === 'blocked') clientBlocker.reset(); }}
+        onConfirm={() => {
+          if (clientSubmitLock.current) return;
+          setShowClientDiscard(false);
+          allowClientNavigation.current = true;
+          window.requestAnimationFrame(() => {
+            editReturnClienteIdRef.current = null;
+            setShowModal(false); setClientFormDirty(false);
+            if (clientBlocker.state === 'blocked') clientBlocker.proceed();
+          });
+        }} />
 
       <ConfirmDialog
         isOpen={confirmData.isOpen}

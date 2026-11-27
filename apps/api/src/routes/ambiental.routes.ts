@@ -5,6 +5,9 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import {
   EnvironmentalPhaseSchema,
+  EnvironmentalProgressPayloadSchema,
+  isEnvironmentalWorkCompleted,
+  environmentalRecordedAtTime,
   StatusProjetoSchema,
   isRealEnvironmentalDateKey,
   type EnvironmentalDemandDetail,
@@ -14,6 +17,9 @@ import {
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { AuditLogService } from '../services/audit.service';
+import { JornadaService } from '../services/jornada.service';
+import { CompletedWorkError } from '../services/environmental-work.service';
+import { nextEditTime } from '../services/edit-concurrency.service';
 
 const ListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -37,12 +43,10 @@ const PhasePayloadSchema = z.object({
   statusFase: EnvironmentalPhaseSchema,
   status: StatusProjetoSchema.optional()
 }).strict();
-const ProgressPayloadSchema = z.object({
-  titulo: z.string().trim().min(1).max(180),
-  descricao: z.string().trim().min(1).max(3000),
-  data: z.string().trim().refine(isRealEnvironmentalDateKey, 'Informe uma data válida.'),
-  categoria: z.string().trim().min(1, 'Informe a categoria.').max(120).default('Andamento ambiental')
-}).strict();
+const ProgressPayloadSchema = EnvironmentalProgressPayloadSchema;
+const taskIsPending = (status: string) => !['concluido', 'concluida', 'finalizada', 'cancelado', 'cancelada'].includes(
+  status.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+);
 
 function buildFilters(query: z.infer<typeof ListQuerySchema>) {
   const filters: SQL[] = [
@@ -121,7 +125,7 @@ export async function ambientalRoutes(server: FastifyInstance) {
         : [];
       const nextTaskByProject = new Map<string, typeof taskRows[number]>();
       taskRows.forEach((task) => {
-        if (!task.projetoId || ['Concluído', 'Concluída', 'Finalizada'].includes(task.status)) return;
+        if (!task.projetoId || !taskIsPending(task.status)) return;
         if (!nextTaskByProject.has(task.projetoId)) nextTaskByProject.set(task.projetoId, task);
       });
 
@@ -192,6 +196,17 @@ export async function ambientalRoutes(server: FastifyInstance) {
           isNull(schema.interacoes_cliente.deletedAt)
         )).orderBy(desc(schema.interacoes_cliente.data));
       const isAssessment = row.project.tipo === 'Perícia';
+      const tasks = await db.select().from(schema.tarefas).where(and(
+        eq(schema.tarefas.projetoId, request.params.id), isNull(schema.tarefas.deletedAt)
+      )).orderBy(sql`case when ${schema.tarefas.dataLimite} is null then 1 else 0 end`, asc(schema.tarefas.dataLimite), asc(schema.tarefas.createdAt));
+      const pendingTasks = tasks.filter(task => taskIsPending(task.status));
+      // Event dates may be historical or future dates. Use recording timestamps
+      // for the update label, without rewriting imported work dates.
+      const updatedAt = [row.project.updatedAt, row.environmental?.updatedAt, row.assessment?.updatedAt, ...history.flatMap(item => [item.createdAt, item.updatedAt])]
+        .filter((value): value is string => Boolean(value) && Number.isFinite(environmentalRecordedAtTime(value!)))
+        .sort((a, b) => environmentalRecordedAtTime(b) - environmentalRecordedAtTime(a))[0] || row.project.updatedAt;
+      const closure = history.filter(item => !item.manual && item.categoria === 'Encerramento do trabalho')
+        .sort((a, b) => environmentalRecordedAtTime(b.createdAt) - environmentalRecordedAtTime(a.createdAt))[0];
       const detail: EnvironmentalDemandDetail = {
         id: row.project.id,
         clienteId: row.project.clienteId,
@@ -206,12 +221,14 @@ export async function ambientalRoutes(server: FastifyInstance) {
         descricao: row.project.descricao,
         dataInicio: row.project.dataInicio,
         dataEntrega: row.project.dataEntrega,
-        proximaAcao: null,
-        proximaAcaoEm: null,
+        proximaAcao: pendingTasks[0]?.titulo || null,
+        proximaAcaoEm: pendingTasks[0]?.dataLimite || null,
+        pendingTaskCount: pendingTasks.length,
+        encerramento: isEnvironmentalWorkCompleted(row.project.status) && closure ? { data: closure.data, descricao: closure.descricao } : null,
         propriedadeId: isAssessment ? row.assessment?.propriedadeId || null : row.environmental?.propriedadeId || null,
         propriedadeNome: row.propertyName,
         createdAt: row.project.createdAt,
-        updatedAt: row.project.updatedAt,
+        updatedAt,
         history: history.map((item) => ({
           id: item.id,
           tipo: item.tipo,
@@ -244,16 +261,20 @@ export async function ambientalRoutes(server: FastifyInstance) {
         .where(eq(schema.ambiental.projetoId, request.params.id)).limit(1);
       if (!current.length) return reply.status(404).send({ error: 'Dados ambientais não encontrados.' });
 
-      const updatedAt = new Date().toISOString();
       const updated = await db.transaction(async (tx) => {
+        const [live] = await tx.select().from(schema.projetos).where(eq(schema.projetos.id, request.params.id));
+        if (isEnvironmentalWorkCompleted(live.status)) throw new CompletedWorkError();
+        const updatedAt = nextEditTime(live.updatedAt);
         const environmental = await tx.update(schema.ambiental).set({
           statusFase: request.body.statusFase,
           updatedAt
         }).where(eq(schema.ambiental.id, current[0].id)).returning();
-        if (request.body.status) {
-          await tx.update(schema.projetos).set({ status: request.body.status, updatedAt })
-            .where(eq(schema.projetos.id, request.params.id));
-        }
+        await tx.update(schema.projetos).set({ ...(request.body.status ? { status: request.body.status } : {}), updatedAt })
+          .where(eq(schema.projetos.id, request.params.id));
+        if (isEnvironmentalWorkCompleted(request.body.status)) await JornadaService.logClienteEvento({
+          clienteId: live.clienteId, projetoId: live.id, tipo: 'Ambiental', categoria: 'Encerramento do trabalho',
+          titulo: 'Trabalho concluído', descricao: 'O status do trabalho foi alterado para Concluído. Histórico e documentos preservados.', data: updatedAt
+        }, tx);
         await tx.insert(schema.interacoes_cliente).values({
           id: crypto.randomUUID(),
           clienteId: project[0].clienteId,
@@ -270,6 +291,7 @@ export async function ambientalRoutes(server: FastifyInstance) {
       });
       return updated;
     } catch (error) {
+      if (error instanceof CompletedWorkError) return reply.status(409).send({ error: error.message });
       server.log.error(error);
       return reply.status(500).send({ error: 'Não foi possível atualizar a fase da demanda.' });
     }
@@ -287,6 +309,8 @@ export async function ambientalRoutes(server: FastifyInstance) {
         )).limit(1);
       if (!project.length) return reply.status(404).send({ error: 'Demanda ambiental não encontrada.' });
       const created = await db.transaction(async (tx) => {
+        const [live] = await tx.select().from(schema.projetos).where(eq(schema.projetos.id, request.params.id));
+        if (isEnvironmentalWorkCompleted(live.status)) throw new CompletedWorkError();
         const progress = await tx.insert(schema.interacoes_cliente).values({
           id: crypto.randomUUID(),
           clienteId: project[0].clienteId,
@@ -298,13 +322,50 @@ export async function ambientalRoutes(server: FastifyInstance) {
           data: request.body.data,
           descricao: request.body.descricao
         }).returning();
+        await tx.update(schema.projetos).set({ updatedAt: nextEditTime(live.updatedAt) }).where(eq(schema.projetos.id, live.id));
         await AuditLogService.log('INSERT', 'Andamento Ambiental', null, progress[0], tx);
         return progress;
       });
       return reply.status(201).send(created[0]);
     } catch (error) {
+      if (error instanceof CompletedWorkError) return reply.status(409).send({ error: error.message });
       server.log.error(error);
       return reply.status(500).send({ error: 'Não foi possível registrar o andamento.' });
     }
   });
+
+  for (const action of ['concluir', 'reabrir'] as const) {
+    zServer.post(`/:id/${action}`, { schema: { params: IdParamsSchema } }, async (request, reply) => {
+      try {
+        const result = await db.transaction(async tx => {
+          const [project] = await tx.select().from(schema.projetos).where(and(
+            eq(schema.projetos.id, request.params.id), isNull(schema.projetos.deletedAt), inArray(schema.projetos.tipo, ['Ambiental', 'Perícia'])
+          )).limit(1);
+          if (!project) return null;
+          const completed = isEnvironmentalWorkCompleted(project.status);
+          if ((action === 'reabrir') !== completed) return { conflict: true };
+          const updatedAt = nextEditTime(project.updatedAt);
+          const [updated] = await tx.update(schema.projetos).set({ status: action === 'reabrir' ? 'Em Andamento' : 'Concluído', updatedAt })
+            .where(eq(schema.projetos.id, project.id)).returning();
+          await JornadaService.logClienteEvento({
+            clienteId: project.clienteId, projetoId: project.id, tipo: 'Ambiental',
+            titulo: action === 'reabrir' ? 'Trabalho reaberto' : 'Trabalho concluído',
+            categoria: action === 'reabrir' ? 'Reabertura do trabalho' : 'Encerramento do trabalho',
+            descricao: action === 'reabrir'
+              ? 'O trabalho voltou ao status Em Andamento. Fase, histórico e documentos foram preservados; alterações de fase e novos andamentos estão disponíveis.'
+              : 'O status do trabalho foi alterado para Concluído. Histórico e documentos preservados. Alterações de fase e novos andamentos exigem reabertura.',
+            data: updatedAt
+          }, tx);
+          await AuditLogService.log('UPDATE', 'Demanda Ambiental', project, updated, tx);
+          return updated;
+        });
+        if (!result) return reply.status(404).send({ error: 'Demanda ambiental não encontrada.' });
+        if ('conflict' in result) return reply.status(409).send({ error: action === 'reabrir' ? 'Este trabalho já está ativo. Atualize os detalhes.' : 'Este trabalho já está concluído. Atualize os detalhes.' });
+        return result;
+      } catch (error) {
+        server.log.error(error);
+        return reply.status(500).send({ error: action === 'reabrir' ? 'Não foi possível reabrir o trabalho. Tente novamente.' : 'Não foi possível concluir o trabalho. Tente novamente.' });
+      }
+    });
+  }
 }

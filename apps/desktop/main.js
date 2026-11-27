@@ -6,6 +6,7 @@ const fs = require('fs');
 const net = require('net');
 const { performance } = require('perf_hooks');
 const { issueRestoreAuthorization } = require('./restore-authorization.cjs');
+const { createBudgetPdfService } = require('./budget-pdf.cjs');
 
 app.commandLine.appendSwitch('enable-gpu-rasterization');
 app.commandLine.appendSwitch('enable-zero-copy');
@@ -37,6 +38,53 @@ const restoreAuthorizationSecret = process.env.GEOGESTOR_RESTORE_AUTH_SECRET
   || (isDev ? 'geogestor-development-restore-authorization-secret' : crypto.randomBytes(32).toString('base64url'));
 
 let mainWindow = null;
+const licenseDraftStates = new Map();
+let licenseDraftDiscardApproved = false;
+ipcMain.on('set-license-draft-state', (event, payload) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== event.sender.mainFrame) return;
+  if (!payload || typeof payload.id !== 'string' || payload.id.length > 100
+    || typeof payload.dirty !== 'boolean' || typeof payload.saving !== 'boolean') return;
+  licenseDraftDiscardApproved = false;
+  if (payload.dirty || payload.saving) licenseDraftStates.set(payload.id, { dirty: payload.dirty, saving: payload.saving });
+  else licenseDraftStates.delete(payload.id);
+});
+
+// Decide before starting the shutdown backup; cancelling keeps the API available.
+function canCloseLicenseDrafts() {
+  if (licenseDraftDiscardApproved) return true;
+  const states = [...licenseDraftStates.values()];
+  if (states.some((state) => state.saving)) {
+    dialog.showMessageBoxSync(mainWindow, {
+      type: 'info', title: 'Salvamento em andamento',
+      message: 'Aguarde o salvamento antes de fechar o GeoGestor.',
+      buttons: ['Continuar no GeoGestor'], defaultId: 0, cancelId: 0, noLink: true
+    });
+    return false;
+  }
+  if (!states.some((state) => state.dirty)) return true;
+  const decision = dialog.showMessageBoxSync(mainWindow, {
+    type: 'warning', title: 'Descartar alterações não salvas?',
+    message: 'Há alterações que ainda não foram salvas.',
+    detail: 'Continue editando para preservar o preenchimento ou descarte as alterações para fechar.',
+    buttons: ['Continuar editando', 'Descartar alterações e fechar'],
+    defaultId: 0, cancelId: 0, noLink: true
+  });
+  licenseDraftDiscardApproved = decision === 1;
+  return licenseDraftDiscardApproved;
+}
+const budgetPdfService = createBudgetPdfService({
+  chooseDestination: async (fileName) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: 'Salvar orçamento em PDF',
+      defaultPath: path.join(app.getPath('documents'), fileName),
+      filters: [{ name: 'Orçamento em PDF', extensions: ['pdf'] }]
+    });
+    return result.canceled ? null : result.filePath || null;
+  },
+  openPath: (destination) => shell.openPath(destination)
+});
+ipcMain.handle('save-budget-pdf', (_event, payload) => budgetPdfService.save(payload));
+ipcMain.handle('open-budget-pdf', (_event, destination) => budgetPdfService.open(destination));
 let apiProcess = null;
 let securityHeadersInstalled = false;
 let isQuitting = false;
@@ -857,10 +905,21 @@ function createWindow(port) {
   });
 
   mainWindow.on('closed', () => {
+    licenseDraftStates.clear();
+    licenseDraftDiscardApproved = false;
     mainWindow = null;
   });
 
+  mainWindow.webContents.on('will-prevent-unload', (event) => {
+    // Electron keeps the document by default. Only a confirmed shutdown may bypass it.
+    if ((shutdownCompleted || process.platform === 'darwin') && licenseDraftDiscardApproved) event.preventDefault();
+  });
+
   mainWindow.on('close', (event) => {
+    if (process.platform === 'darwin' && !canCloseLicenseDrafts()) {
+      event.preventDefault();
+      return;
+    }
     if (process.platform !== 'darwin' && !shutdownCompleted) {
       event.preventDefault();
       app.quit();
@@ -900,6 +959,7 @@ app.on('before-quit', (event) => {
   if (shutdownCompleted) return;
   event.preventDefault();
   if (shutdownPromise) return;
+  if (!canCloseLicenseDrafts()) return;
   isQuitting = true;
   if (apiRestartTimer) clearTimeout(apiRestartTimer);
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -928,6 +988,7 @@ app.on('before-quit', (event) => {
       const port = await startApiServer();
       if (mainWindow && !mainWindow.isDestroyed()) await mainWindow.loadURL(isDev ? 'http://localhost:5173' : `http://127.0.0.1:${port}`);
       if (decision.response === 1) {
+        licenseDraftDiscardApproved = false;
         isQuitting = false;
         mainWindow?.webContents.send('shutdown-backup-status', { running: false, message: '' });
         return false;

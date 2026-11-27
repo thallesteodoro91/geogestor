@@ -311,11 +311,11 @@ export async function listImportRuns(limit = 50) {
   return rows.map(row => publicRun(row));
 }
 
-export async function listImportRows(importId: string, onlyErrors = false) {
+export async function listImportRows(importId: string, onlyErrors = false, pagination?: { page: number; limit: number }) {
   await ensureImportInfrastructure();
-  const rows = await db.all<Record<string, unknown>>(onlyErrors
-    ? sql`SELECT row_number, status, action, record_id, errors_json, warnings_json, association_method FROM import_rows WHERE import_id = ${importId} AND status = 'failed' ORDER BY row_number`
-    : sql`SELECT row_number, status, action, record_id, errors_json, warnings_json, association_method FROM import_rows WHERE import_id = ${importId} ORDER BY row_number`);
+  const filter = sql`import_id = ${importId} ${onlyErrors ? sql`AND status = 'failed'` : sql``}`;
+  const rows = await db.all<Record<string, unknown>>(sql`SELECT row_number, status, action, record_id, errors_json, warnings_json, association_method FROM import_rows WHERE ${filter} ORDER BY row_number, id
+    ${pagination ? sql`LIMIT ${pagination.limit} OFFSET ${(pagination.page - 1) * pagination.limit}` : sql``}`);
   return rows.map(row => ({
     row: Number(row.row_number),
     status: row.status,
@@ -325,6 +325,26 @@ export async function listImportRows(importId: string, onlyErrors = false) {
     warnings: parseJson<string[]>(String(row.warnings_json || '')) ?? [],
     associationMethod: row.association_method
   }));
+}
+
+export async function importRowsPage(importId: string, onlyErrors: boolean, page: number, limit: number) {
+  const [row] = await db.all<{ total: number }>(sql`SELECT count(*) AS total FROM import_rows WHERE import_id=${importId} ${onlyErrors ? sql`AND status='failed'` : sql``}`);
+  const total = Number(row.total);
+  return { items: await listImportRows(importId, onlyErrors, { page, limit }), total, page, totalPages: Math.max(1, Math.ceil(total / limit)) };
+}
+
+export async function previewIssuesPage(importId: string, kind: 'blocking' | 'general' | 'row', page: number, limit: number) {
+  const severity = sql`json_extract(issue.value, '$.severity')`;
+  const rowNumber = sql`json_extract(issue.value, '$.row')`;
+  const filter = kind === 'blocking' ? sql`${severity}='blocking'` : kind === 'general'
+    ? sql`${rowNumber} IS NULL AND ${severity} IN ('warning','ambiguous')`
+    : sql`${rowNumber} IS NOT NULL AND ${severity} NOT IN ('info','blocking')`;
+  const source = sql`import_runs, json_each(coalesce(import_runs.result_json,'{}'), '$.issues') AS issue`;
+  const [countRow] = await db.all<{ total: number }>(sql`SELECT count(*) AS total FROM ${source} WHERE import_runs.id=${importId} AND ${filter}`);
+  const rows = await db.all<{ value: string }>(sql`SELECT issue.value FROM ${source} WHERE import_runs.id=${importId} AND ${filter}
+    ORDER BY coalesce(${rowNumber},0), CAST(issue.key AS INTEGER) LIMIT ${limit} OFFSET ${(page - 1) * limit}`);
+  const total = Number(countRow.total);
+  return { items: rows.map((row) => JSON.parse(row.value)), total, page, totalPages: Math.max(1, Math.ceil(total / limit)) };
 }
 
 export function importErrorsCsv(rows: Array<{ row: number; status: unknown; errors: string[]; warnings: string[] }>) {

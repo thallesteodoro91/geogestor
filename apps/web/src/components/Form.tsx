@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { Check, Minus, WarningCircle } from '@phosphor-icons/react';
+import { CaretDown, Check, Minus, WarningCircle } from '@phosphor-icons/react';
 import { cn } from '../utils/cn';
 
 export { ComboboxField, FormSelect, SelectField } from './form-controls/SelectField';
@@ -12,6 +12,7 @@ export type FormSectionTone = 'indigo' | 'cyan' | 'amber' | 'emerald' | 'slate';
 
 interface FormSectionProps {
   title?: string;
+  headingLevel?: 2 | 3 | 4;
   description?: string;
   children: ReactNode;
   className?: string;
@@ -19,6 +20,7 @@ interface FormSectionProps {
   icon?: ReactNode;
   tone?: FormSectionTone;
   optional?: boolean;
+  disclosure?: { expanded: boolean; onToggle: () => void; summary: string };
 }
 
 const sectionToneClasses: Record<FormSectionTone, {
@@ -55,15 +57,18 @@ const sectionToneClasses: Record<FormSectionTone, {
 
 export function FormSection({
   title,
+  headingLevel = 4,
   description,
   children,
   className,
   sectionId,
   icon,
   tone = 'slate',
-  optional = false
+  optional = false,
+  disclosure
 }: FormSectionProps) {
   const toneClasses = sectionToneClasses[tone];
+  const Heading = `h${headingLevel}` as const;
 
   if (icon) {
     const headingId = sectionId ? `${sectionId}-title` : undefined;
@@ -80,7 +85,11 @@ export function FormSection({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              {title && <h4 id={headingId} className={cn('text-base font-bold tracking-tight', toneClasses.title)}>{title}</h4>}
+              {title && <Heading id={headingId} className={cn('text-base font-bold tracking-tight', toneClasses.title)}>
+                {disclosure ? <button type="button" aria-expanded={disclosure.expanded} aria-controls={`${sectionId}-body`} onClick={disclosure.onToggle} className="geo-focus-ring flex min-h-11 items-center gap-2 rounded-md text-left hover:underline">
+                  {title}<CaretDown aria-hidden="true" className={cn('h-4 w-4 shrink-0', disclosure.expanded && 'rotate-180')} />
+                </button> : title}
+              </Heading>}
               {optional && (
                 <span className="rounded-full border border-brand-border bg-brand-surface px-2 py-0.5 text-[11px] font-semibold text-zinc-500 dark:text-zinc-300">
                   Opcional
@@ -88,9 +97,10 @@ export function FormSection({
               )}
             </div>
             {description && <p className="mt-0.5 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">{description}</p>}
+            {disclosure && <p className="mt-1 break-words text-xs font-medium text-zinc-600 dark:text-zinc-300">{disclosure.summary}</p>}
           </div>
         </header>
-        <div className="space-y-4 p-4 pl-5 sm:p-5 sm:pl-6">{children}</div>
+        <div id={disclosure ? `${sectionId}-body` : undefined} hidden={disclosure ? !disclosure.expanded : undefined} className="space-y-4 p-4 pl-5 sm:p-5 sm:pl-6">{(!disclosure || disclosure.expanded) && children}</div>
       </section>
     );
   }
@@ -100,9 +110,9 @@ export function FormSection({
       {(title || description) && (
         <div className="mb-4">
           {title && (
-            <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-700 text-wrap dark:text-zinc-200">
+            <Heading className="text-xs font-bold uppercase tracking-wider text-zinc-700 text-wrap dark:text-zinc-200">
               {title}
-            </h4>
+            </Heading>
           )}
           {description && (
             <p className="mt-1 text-xs font-medium leading-relaxed text-zinc-500 text-pretty dark:text-zinc-400">

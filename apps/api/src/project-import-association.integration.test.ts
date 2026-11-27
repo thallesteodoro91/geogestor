@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -43,17 +44,17 @@ test('prévia e confirmação associam projetos somente a clientes ativos e conf
       { id: deletedId, nome: 'Cliente Excluído', situacao: 'Ativo', deletedAt: new Date().toISOString() }
     ]);
 
-    const optionsResponse = await server.inject({ method: 'GET', url: '/api/projetos/lote/clientes?q=Cliente', headers });
+    const optionsResponse = await injectWithRecordVersion(server, { method: 'GET', url: '/api/projetos/lote/clientes?q=Cliente', headers });
     assert.equal(optionsResponse.statusCode, 200, optionsResponse.body);
     const options = optionsResponse.json<Array<{ id: string; documentoMascarado: string | null }>>();
     assert.ok(options.some(option => option.id === exactNameClientId));
     assert.ok(!options.some(option => option.id === inactiveId || option.id === deletedId));
-    const documentOptionsResponse = await server.inject({ method: 'GET', url: '/api/projetos/lote/clientes?q=45.723.174', headers });
+    const documentOptionsResponse = await injectWithRecordVersion(server, { method: 'GET', url: '/api/projetos/lote/clientes?q=45.723.174', headers });
     const documentOption = documentOptionsResponse.json<Array<{ id: string; documentoMascarado: string | null }>>()[0];
     assert.equal(documentOption.documentoMascarado, 'CNPJ **.***.***/****-10');
     assert.ok(!documentOptionsResponse.body.includes('45723174000110'));
 
-    const previewResponse = await server.inject({
+    const previewResponse = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/projetos/lote/preview', headers,
       payload: [
         { nome: 'Por documento', clienteReferencia: '45.723.174/0001-10' },
@@ -79,7 +80,7 @@ test('prévia e confirmação associam projetos somente a clientes ativos e conf
     assert.equal(preview.rows[5].reason, 'missing');
     assert.equal(preview.rows[6].reason, 'manual_pending');
 
-    const partialResponse = await server.inject({
+    const partialResponse = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/projetos/lote', headers,
       payload: [
         { nome: 'Projeto válido por documento', clienteReferencia: '45.723.174/0001-10' },
@@ -94,7 +95,7 @@ test('prévia e confirmação associam projetos somente a clientes ativos e conf
     assert.equal(partial.results[0].association?.method, 'document');
     assert.equal((await db.select().from(schema.projetos).where(eq(schema.projetos.nome, 'Projeto sem cliente'))).length, 0);
 
-    const manualResponse = await server.inject({
+    const manualResponse = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/projetos/lote', headers,
       payload: [{ nome: 'Projeto associado manualmente', clienteReferencia: 'Cliente Duplicado', clienteId: exactNameClientId, associacaoManual: true }]
     });
@@ -106,7 +107,7 @@ test('prévia e confirmação associam projetos somente a clientes ativos e conf
     assert.equal(manualProject.clienteId, exactNameClientId);
 
     AuditLogService.setFailureInjectorForTests(() => { throw new Error('falha de auditoria da importação de projetos'); });
-    const rollbackResponse = await server.inject({
+    const rollbackResponse = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/projetos/lote', headers,
       payload: [{ nome: 'Projeto que deve ser revertido', clienteId: exactNameClientId, associacaoManual: true }]
     });

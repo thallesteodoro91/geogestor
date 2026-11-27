@@ -43,15 +43,20 @@ export function verifyArtifactHashes(distDirectory, expected = {}) {
       errors.push(`Instalador ausente no manifesto de hashes: ${installer}`);
       continue;
     }
-    const actual = describeArtifact(path.join(distDirectory, installer));
-    if (Number(expected.bytes) !== actual.bytes) errors.push(`Tamanho divergente do manifesto: ${installer}`);
-    if (String(expected.sha256).toLowerCase() !== actual.sha256) errors.push(`SHA-256 divergente do manifesto: ${installer}`);
   }
 
+  const seen = new Set();
   for (const entry of manifest.artifacts) {
-    if (!entry?.name || !installers.includes(entry.name)) {
+    if (!entry?.name || /[\\/]/.test(entry.name) || entry.name === '.' || entry.name === '..'
+      || seen.has(entry.name) || !fs.existsSync(path.join(distDirectory, entry.name))
+      || !fs.statSync(path.join(distDirectory, entry.name)).isFile()) {
       errors.push(`Artefato obsoleto ou ausente registrado no manifesto: ${entry?.name || '<sem nome>'}`);
+      continue;
     }
+    seen.add(entry.name);
+    const actual = describeArtifact(path.join(distDirectory, entry.name));
+    if (Number(entry.bytes) !== actual.bytes) errors.push(`Tamanho divergente do manifesto: ${entry.name}`);
+    if (String(entry.sha256).toLowerCase() !== actual.sha256) errors.push(`SHA-256 divergente do manifesto: ${entry.name}`);
   }
   return errors;
 }

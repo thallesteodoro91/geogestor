@@ -20,3 +20,14 @@ test('cores usadas como texto sobre branco são escurecidas quando necessário',
     assert.ok(documentContrastRatio(accessibleAccent, '#ffffff') >= 4.5, `${option.name} não alcançou contraste AA sobre branco.`);
   }
 });
+
+test('cores personalizadas intermediárias também garantem contraste AA nos cabeçalhos', () => {
+  for (let r = 0; r <= 255; r += 17) {
+    for (let g = 0; g <= 255; g += 17) {
+      for (let b = 0; b <= 255; b += 17) {
+        const background = `#${[r, g, b].map(value => value.toString(16).padStart(2, '0')).join('')}`;
+        assert.ok(documentContrastRatio(documentTextColorForBackground(background), background) >= 4.5, background);
+      }
+    }
+  }
+});

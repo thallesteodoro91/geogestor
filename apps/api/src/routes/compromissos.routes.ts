@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { JornadaService } from '../services/jornada.service';
 import { AuditLogService } from '../services/audit.service';
 import { RelationshipIntegrityError, resolveClientProjectLink } from '../services/relationship-integrity.service';
+import { nextEditTime, unchangedRow } from '../services/edit-concurrency.service';
 
 const APPOINTMENT_TYPES = [
   'Visita de Campo', 'Reunião', 'Ligação', 'Administrativo', 'Serviço', 'Entrega', 'Outro'
@@ -208,7 +209,7 @@ export async function compromissosRoutes(server: FastifyInstance) {
 
   zServer.delete('/:id', { schema: { params: z.object({ id: z.string().uuid() }).strict() } }, async (request, reply) => {
     const removed = await db.transaction(async (tx) => {
-      const [source] = await tx.delete(schema.compromissos)
+      const [source] = await tx.update(schema.compromissos).set({ deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
         .where(and(eq(schema.compromissos.id, request.params.id), isNull(schema.compromissos.deletedAt))).returning();
       if (!source) return null;
       await AuditLogService.log('DELETE', 'Compromisso', source, null, tx);
@@ -226,5 +227,20 @@ export async function compromissosRoutes(server: FastifyInstance) {
     });
     if (!removed) return reply.status(404).send({ error: 'Compromisso não encontrado.' });
     return { success: true };
+  });
+
+  zServer.post('/:id/restaurar', { schema: { params: z.object({ id: z.string().uuid() }).strict() } }, async (request, reply) => {
+    return db.transaction(async (tx) => {
+    const [before] = await tx.select().from(schema.compromissos).where(eq(schema.compromissos.id, request.params.id)).limit(1);
+    if (!before) return reply.status(404).send({ error: 'Compromisso não encontrado.' });
+    try { await resolveClientProjectLink({ clienteId: before.clienteId, projetoId: before.projetoId }); }
+    catch (error) { return relationshipError(reply, error); }
+    if (!before.deletedAt) return before;
+    const [restored] = await tx.update(schema.compromissos).set({ deletedAt: null, updatedAt: nextEditTime(before.updatedAt) })
+      .where(and(eq(schema.compromissos.id, before.id), unchangedRow(schema.compromissos, before))).returning();
+    if (!restored) return reply.status(409).send({ error: 'O compromisso mudou. Atualize o calendário antes de restaurar.' });
+    await AuditLogService.log('UPDATE', 'Compromisso', before, restored, tx);
+    return restored;
+    });
   });
 }

@@ -24,7 +24,7 @@ import { MapBaseNotice } from '../../../components/maps/MapBaseNotice';
 import { Modal } from '../../../components/Modal';
 import { FormSelect } from '../../../components/Form';
 import { createBaseTileLayer, createNeutralGridLayer } from '../../../utils/mapTiles';
-import { apiFetch, getAuthenticatedAssetUrl } from '../../../services/apiClient';
+import { apiFetch } from '../../../services/apiClient';
 import { loadPdfMake } from '../../../utils/loadPdfMake';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../../utils/actionStyles';
 import { cn } from '../../../utils/cn';
@@ -100,18 +100,6 @@ interface ClienteGeoFileItem {
   opacity?: number;
 }
 
-interface OfflineBasemapItem {
-  kind: 'offline-basemap';
-  id: string;
-  name: string;
-  format: string;
-  minZoom?: number | null;
-  maxZoom?: number | null;
-  attribution?: string | null;
-  sizeBytes: number;
-  active: boolean;
-}
-
 interface CrsCatalogItem {
   code: string;
   name: string;
@@ -183,14 +171,6 @@ interface TechnicalReportData {
   history?: TechnicalHistoryEvent[];
 }
 
-interface GeospatialCacheStatus {
-  activeFiles: number;
-  activeBytes: number;
-  orphanFiles: number;
-  orphanBytes: number;
-  removedFiles?: number;
-}
-
 export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { clienteId: string; clienteNome: string; className?: string }) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -199,11 +179,11 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
   const baseTileLayerRef = useRef<L.TileLayer | null>(null);
   const neutralGridLayerRef = useRef<L.GridLayer | null>(null);
   const queryClient = useQueryClient();
-  
+
   const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [baseMapUnavailable, setBaseMapUnavailable] = useState(() => !navigator.onLine);
-  const [selectedBaseMap, setSelectedBaseMap] = useState('online');
+  const [hasFittableGeometry, setHasFittableGeometry] = useState(false);
   const [displayDataByLayer, setDisplayDataByLayer] = useState<Record<string, object | null>>({});
   const [crsSelections, setCrsSelections] = useState<Record<string, string>>({});
   const [crsSearches, setCrsSearches] = useState<Record<string, string>>({});
@@ -235,46 +215,6 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
   });
   const [technicalReport, setTechnicalReport] = useState<{ layer: ClienteGeoFileItem; report: TechnicalReportData } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const basemapInputRef = useRef<HTMLInputElement>(null);
-
-  const { data: offlineBasemaps = [] } = useQuery<OfflineBasemapItem[]>({
-    queryKey: ['offline-basemaps'],
-    queryFn: async () => {
-      const response = await apiFetch('/api/arquivos/geospatial/basemaps');
-      if (!response.ok) return [];
-      return (await response.json()).basemaps || [];
-    }
-  });
-  const basemapUploadMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      const response = await apiFetch('/api/arquivos/geospatial/basemaps', { method: 'POST', body: formData });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Não foi possível importar o mapa-base.');
-      return body.basemap as OfflineBasemapItem;
-    },
-    onSuccess: async (basemap) => {
-      await queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] });
-      setSelectedBaseMap(basemap.id);
-      toast.success('Mapa-base MBTiles importado e selecionado.');
-    },
-    onError: (error: Error) => toast.error(error.message)
-  });
-  const basemapDeleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await apiFetch(`/api/arquivos/geospatial/basemaps/${id}`, { method: 'DELETE' });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Não foi possível remover o mapa-base.');
-      return id;
-    },
-    onSuccess: async (id) => {
-      if (selectedBaseMap === id) setSelectedBaseMap('online');
-      await queryClient.invalidateQueries({ queryKey: ['offline-basemaps'] });
-      toast.success('Mapa-base removido. Levantamentos, documentos e projetos foram preservados.');
-    },
-    onError: (error: Error) => toast.error(error.message)
-  });
 
   const { data: crsCatalog = [] } = useQuery<CrsCatalogItem[]>({
     queryKey: ['geospatial-crs-catalog'],
@@ -284,29 +224,6 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
       return (await response.json()).items || [];
     },
     staleTime: Infinity
-  });
-
-  const { data: cacheStatus } = useQuery<GeospatialCacheStatus>({
-    queryKey: ['geospatial-cache-status'],
-    queryFn: async () => {
-      const response = await apiFetch('/api/arquivos/geospatial/cache/maintenance');
-      if (!response.ok) throw new Error('Não foi possível consultar o cache.');
-      return response.json();
-    }
-  });
-
-  const cacheCleanMutation = useMutation({
-    mutationFn: async () => {
-      const response = await apiFetch('/api/arquivos/geospatial/cache/orphans', { method: 'DELETE' });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error || 'Não foi possível limpar o cache.');
-      return body as GeospatialCacheStatus;
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['geospatial-cache-status'] });
-      toast.success(`${result.removedFiles || 0} arquivo(s) órfão(s) removido(s); documentos originais preservados.`);
-    },
-    onError: (error: Error) => toast.error(error.message)
   });
 
   const crsPreviewMutation = useMutation({
@@ -342,27 +259,6 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
     if (neutralGridLayerRef.current) map.removeLayer(neutralGridLayerRef.current);
     baseTileLayerRef.current = null;
     neutralGridLayerRef.current = null;
-    if (selectedBaseMap === 'neutral') {
-      neutralGridLayerRef.current = createNeutralGridLayer(map);
-      setBaseMapUnavailable(true);
-      return;
-    }
-    const offline = offlineBasemaps.find((item) => item.id === selectedBaseMap);
-    if (offline?.active) {
-      baseTileLayerRef.current = createBaseTileLayer(map, () => setBaseMapUnavailable(true), () => setBaseMapUnavailable(false), {
-        url: getAuthenticatedAssetUrl(`/api/arquivos/geospatial/basemaps/${offline.id}/tiles/{z}/{x}/{y}`),
-        attribution: offline.attribution || `${offline.name} · MBTiles local`,
-        minZoom: offline.minZoom ?? 0,
-        maxZoom: offline.maxZoom ?? 22
-      });
-      setBaseMapUnavailable(false);
-      return;
-    }
-    if (offline && !offline.active) {
-      neutralGridLayerRef.current = createNeutralGridLayer(map);
-      setBaseMapUnavailable(true);
-      return;
-    }
     setBaseMapUnavailable(!navigator.onLine);
     baseTileLayerRef.current = createBaseTileLayer(map, () => {
       setBaseMapUnavailable(true);
@@ -371,7 +267,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
       setBaseMapUnavailable(false);
       if (neutralGridLayerRef.current) { map.removeLayer(neutralGridLayerRef.current); neutralGridLayerRef.current = null; }
     });
-  }, [offlineBasemaps, selectedBaseMap]);
+  }, []);
 
   useEffect(() => {
     const offline = () => setBaseMapUnavailable(true);
@@ -752,6 +648,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
       }
     });
 
+    setHasFittableGeometry(bounds.isValid());
     if (hasData && bounds.isValid()) {
       mapInstanceRef.current.fitBounds(bounds, { padding: [42, 42] });
     } else {
@@ -761,24 +658,42 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
     setTimeout(() => mapInstanceRef.current?.invalidateSize(), 0);
   }, [displayDataByLayer, geoFiles]);
 
-  return (
-    <div className={`geo-card flex h-full w-full min-w-0 flex-col overflow-hidden ${className}`}>
-      <input type="file" ref={fileInputRef} className="hidden" accept={VECTOR_SURVEY_ACCEPT} multiple aria-label="Selecionar levantamento vetorial" onChange={(event) => { if (event.target.files?.length) void handleFiles(Array.from(event.target.files)); event.target.value = ''; }} />
-      <input type="file" ref={basemapInputRef} className="hidden" accept=".mbtiles" aria-label="Selecionar mapa-base MBTiles" onChange={(event) => { const file = event.target.files?.[0]; if (file) basemapUploadMutation.mutate(file); event.target.value = ''; }} />
+  const fitSurvey = () => {
+    const bounds = L.latLngBounds([]);
+    geojsonLayersRef.current.forEach((layer) => {
+      const current = layer.getBounds();
+      if (current.isValid()) bounds.extend(current);
+    });
+    if (bounds.isValid()) mapInstanceRef.current?.fitBounds(bounds, { padding: [42, 42], maxZoom: 18 });
+  };
 
-      <div 
-        className="relative h-[340px] w-full min-w-0 flex-none bg-zinc-950 md:h-[420px] lg:h-[520px] xl:h-[560px]"
+  return (
+    <div className={`geo-card flex w-full min-w-0 flex-col self-start overflow-hidden ${className}`}>
+      <input type="file" ref={fileInputRef} className="hidden" accept={VECTOR_SURVEY_ACCEPT} multiple aria-label="Selecionar levantamento vetorial" onChange={(event) => { if (event.target.files?.length) void handleFiles(Array.from(event.target.files)); event.target.value = ''; }} />
+
+      <div
+        className={cn('relative w-full min-w-0 flex-none bg-zinc-950', geoFiles.length ? 'h-[520px] xl:h-[560px]' : 'h-[250px]')}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <MapBaseNotice unavailable={baseMapUnavailable} onRetry={reloadBaseMap} mode={selectedBaseMap === 'neutral' || offlineBasemaps.some((item) => item.id === selectedBaseMap && !item.active) ? 'neutral' : offlineBasemaps.some((item) => item.id === selectedBaseMap && item.active) ? 'offline' : 'online'} />
+        <MapBaseNotice unavailable={baseMapUnavailable} onRetry={reloadBaseMap} mode="online" />
         <div ref={mapContainerRef} role="region" aria-label={`Mapa das propriedades de ${clienteNome}${mappedAreaM2 > 0 ? `, com ${formatAreaValue(mappedAreaM2, 'ha')} hectares mapeados` : ''}`} className="h-full w-full min-w-0" />
-        
+        <div className="absolute left-3 top-[84px] z-[950] flex flex-col gap-2" title={hasFittableGeometry ? 'Enquadrar levantamento' : 'Nenhuma geometria disponível para enquadrar'}>
+          <button type="button" onClick={fitSurvey} disabled={!hasFittableGeometry} aria-label="Enquadrar levantamento" className="geo-focus-ring flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-800 shadow-sm hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800">
+            <Crosshair aria-hidden="true" size={18} />
+          </button>
+        </div>
+        {geoFiles.length > 0 && !isDragging && !isUploading && (
+          <button type="button" onClick={() => fileInputRef.current?.click()} className={cn(primarySmallActionButtonClass, 'absolute right-3 top-3 z-[800] shadow-lg')}>
+            <UploadSimple aria-hidden="true" size={16} /> Importar levantamento
+          </button>
+        )}
+
         {/* Drag & Drop Overlay */}
         <AnimatePresence>
           {isDragging && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -796,7 +711,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
         {/* Uploading State Overlay */}
         <AnimatePresence>
           {isUploading && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -815,16 +730,16 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
         {/* Empty State */}
         {!isLoading && geoFiles.length === 0 && !isDragging && !isUploading && (
           <div className="absolute inset-0 z-[900] flex items-center justify-center bg-zinc-950/70 px-6 text-center backdrop-blur-[2px]">
-            <div className="geo-surface-raised max-w-sm rounded-lg p-8">
-              <MapTrifold weight="duotone" className="mx-auto mb-4 h-12 w-12 text-zinc-400" aria-hidden="true" />
-              <p className="text-lg font-bold text-zinc-950 dark:text-white">Nenhum levantamento vetorial cadastrado</p>
-              <p className="mx-auto mt-2 text-sm font-medium leading-relaxed text-zinc-600 dark:text-zinc-300">
-                Importe KML, KMZ, GeoJSON, Shapefile ZIP ou GeoPackage vetorial. Raster não é aceito como levantamento.
+            <div className="geo-surface-raised max-w-md rounded-xl px-6 py-5">
+              <MapTrifold weight="duotone" className="mx-auto mb-2 h-8 w-8 text-zinc-400" aria-hidden="true" />
+              <p className="text-base font-bold text-zinc-950 dark:text-white">Nenhum levantamento cadastrado</p>
+              <p className="mx-auto mt-1 text-xs font-medium leading-relaxed text-zinc-600 dark:text-zinc-300">
+                Importe KML, KMZ, GeoJSON, Shapefile ZIP ou GeoPackage vetorial.
               </p>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className={cn(primarySmallActionButtonClass, 'mt-6 w-full')}
+                className={cn(primarySmallActionButtonClass, 'mt-3 w-full')}
               >
                 <UploadSimple className="h-4 w-4" weight="bold" aria-hidden="true" />
                 Selecionar levantamento vetorial
@@ -833,56 +748,11 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
           </div>
         )}
       </div>
-      <div className="border-t border-brand-border bg-white/90 p-4 dark:bg-zinc-900/80">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h4 className="text-sm font-semibold text-zinc-950 dark:text-white">Camadas técnicas vetoriais processadas</h4>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">O arquivo vetorial original é preservado; o mapa utiliza uma cópia normalizada em EPSG:4326.</p>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" className={secondarySmallActionButtonClass} disabled={basemapUploadMutation.isPending} onClick={() => basemapInputRef.current?.click()}>
-              <UploadSimple className="h-4 w-4" aria-hidden="true" />
-              {basemapUploadMutation.isPending ? 'Importando mapa-base…' : 'Configurar mapa-base offline'}
-            </button>
-            <button type="button" className={secondarySmallActionButtonClass} onClick={() => fileInputRef.current?.click()}><UploadSimple className="h-4 w-4" aria-hidden="true" /> Adicionar levantamento vetorial</button>
-            {cacheStatus && <button type="button" className={secondarySmallActionButtonClass} disabled={!cacheStatus.orphanFiles || cacheCleanMutation.isPending} onClick={() => {
-              if (window.confirm(`Remover somente ${cacheStatus.orphanFiles} arquivo(s) órfão(s) do cache? Levantamentos e documentos originais não serão apagados.`)) cacheCleanMutation.mutate();
-            }}><Trash className="h-4 w-4" aria-hidden="true" /> Cache: {formatFileSize(cacheStatus.activeBytes)}{cacheStatus.orphanFiles ? ` · ${cacheStatus.orphanFiles} órfão(s)` : ''}</button>}
-            <button
-              type="button"
-              className={secondarySmallActionButtonClass}
-              onClick={() => {
-                const bounds = L.latLngBounds([]);
-                geojsonLayersRef.current.forEach((layer) => {
-                  const current = layer.getBounds();
-                  if (current.isValid()) bounds.extend(current);
-                });
-                if (bounds.isValid()) mapInstanceRef.current?.fitBounds(bounds, { padding: [42, 42], maxZoom: 18 });
-              }}
-            >
-              <Crosshair className="h-4 w-4" />
-              Enquadrar levantamento
-            </button>
-          </div>
+      {geoFiles.length > 0 && <section aria-labelledby="client-map-layers-title" className="border-t border-brand-border bg-white/90 p-4 dark:bg-zinc-900/80">
+        <div className="mb-3">
+          <h2 id="client-map-layers-title" className="text-sm font-semibold text-zinc-950 dark:text-white">Camadas técnicas vetoriais processadas</h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Originais preservados; visualização normalizada em EPSG:4326.</p>
         </div>
-        <section aria-labelledby="offline-basemap-title" className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-950/60">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <label htmlFor="offline-basemap-select" className="min-w-0 flex-1 text-xs font-semibold text-zinc-700 dark:text-zinc-200">
-              <span id="offline-basemap-title">Mapa-base exibido</span>
-              <FormSelect id="offline-basemap-select" name="offlineBasemap" value={selectedBaseMap} onChange={(event) => setSelectedBaseMap(event.target.value)} className="geo-field mt-1.5 w-full">
-                <option value="online">Mapa on-line padrão</option>
-                <option value="neutral">Grade neutra sem internet</option>
-                {offlineBasemaps.filter((item) => item.active).map((item) => <option key={item.id} value={item.id}>{item.name} · {formatFileSize(item.sizeBytes)}</option>)}
-              </FormSelect>
-            </label>
-            {selectedBaseMap !== 'online' && selectedBaseMap !== 'neutral' && (
-              <button type="button" className="geo-button-base geo-focus-ring min-h-10 border border-red-200 px-3 text-xs font-bold text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:text-red-200" disabled={basemapDeleteMutation.isPending} onClick={() => {
-                if (window.confirm('Remover este mapa-base offline? Levantamentos, documentos e projetos serão preservados.')) basemapDeleteMutation.mutate(selectedBaseMap);
-              }}><Trash aria-hidden="true" /> Remover mapa-base</button>
-            )}
-          </div>
-          {offlineBasemaps.length === 0 && <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Nenhum mapa-base MBTiles importado. O mapa on-line continua disponível e a grade neutra pode ser usada sem conexão.</p>}
-        </section>
         <div className="grid gap-3 lg:grid-cols-2">
           {geoFiles.map((layer) => {
             const needsCrs = layer.status === 'needs_crs';
@@ -909,7 +779,6 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                       {(layer.format || layer.type).toUpperCase()} · {layer.sourceEpsg ? `EPSG:${layer.sourceEpsg}` : layer.sourceCrs || 'SRC não informado'} · {layer.featureCount || 0} feição(ões) · {layer.vertexCount || 0} vértices
                     </p>
                     <p className="mt-1 text-[11px] text-zinc-500">SRC: {layer.sourceDetection || 'origem não informada'} · confiança {layer.crsConfidence === 'high' ? 'alta' : layer.crsConfidence === 'medium' ? 'média' : 'baixa'}{layer.simplifiedForDisplay ? ' · visualização simplificada' : ''}</p>
-                    <p className="mt-1 text-[11px] text-zinc-500">Cache de precisão: {formatFileSize(layer.precisionCacheBytes || 0)} · visualização: {formatFileSize(layer.displayCacheBytes || 0)}</p>
                   </div>
                   <span className={cn('geo-badge-base shrink-0', layer.status === 'error' ? 'geo-badge-danger' : needsCrs || needsReview ? 'geo-badge-warning' : 'geo-badge-success')}>
                     {statusLabel}
@@ -1057,7 +926,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                     <input type="range" min="0.1" max="1" step="0.05" value={layer.opacity ?? 0.75} onChange={(event) => layerActionMutation.mutate({ layer, action: 'style', opacity: Number(event.target.value) })} className="w-20" />
                     <span className="w-8 text-right">{Math.round((layer.opacity ?? 0.75) * 100)}%</span>
                   </label>
-                  {!needsCrs && <button type="button" className={secondarySmallActionButtonClass} disabled={layerActionMutation.isPending} onClick={() => layerActionMutation.mutate({ layer, action: 'process' })}><Spinner className={cn('h-4 w-4', layerActionMutation.isPending && 'animate-spin')} /> Reconstruir cache</button>}
+                  {!needsCrs && <button type="button" className={secondarySmallActionButtonClass} disabled={layerActionMutation.isPending} onClick={() => layerActionMutation.mutate({ layer, action: 'process' })}><Spinner className={cn('h-4 w-4', layerActionMutation.isPending && 'animate-spin')} /> Reprocessar camada</button>}
                   {layer.projectId && layer.representativePoint && (
                     <button type="button" className={secondarySmallActionButtonClass} onClick={() => void openLocationPreview(layer)}>
                       <MapPin className="h-4 w-4" /> Usar localização no projeto
@@ -1082,7 +951,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
             );
           })}
         </div>
-      </div>
+      </section>}
       <Modal isOpen={Boolean(technicalReport)} onClose={() => setTechnicalReport(null)} title="Relatório técnico da importação" maxWidth="max-w-4xl">
         {technicalReport && (
           <div className="space-y-4 text-sm">
@@ -1098,7 +967,7 @@ export function ClienteMapaCard({ clienteId, clienteNome, className = '' }: { cl
                 ['Ordem dos eixos', technicalReport.report.axisOrder], ['Feições', Number(technicalReport.report.featureCount || 0).toLocaleString('pt-BR')], ['Vértices', Number(technicalReport.report.vertexCount || 0).toLocaleString('pt-BR')],
                 ['Tipos geométricos', (technicalReport.report.geometryTypes || []).join(', ')], ['Bounding box', JSON.stringify(technicalReport.report.bbox)], ['Ponto representativo', JSON.stringify(technicalReport.report.representativePoint)],
                 ['Área aproximada', technicalReport.report.areaM2 ? `${Number(technicalReport.report.areaM2).toLocaleString('pt-BR')} m²` : '—'], ['Perímetro aproximado', technicalReport.report.perimeterM ? `${Number(technicalReport.report.perimeterM).toLocaleString('pt-BR')} m` : '—'], ['Distância ao projeto', technicalReport.report.distanceToProjectM == null ? '—' : `${Number(technicalReport.report.distanceToProjectM).toLocaleString('pt-BR')} m`],
-                ['Arquivo original', formatFileSize(Number(technicalReport.report.originalSizeBytes || 0))], ['Cache de precisão', formatFileSize(Number(technicalReport.report.cache?.precisionBytes || 0))], ['Cache visual', formatFileSize(Number(technicalReport.report.cache?.displayBytes || 0))]
+                ['Arquivo original', formatFileSize(Number(technicalReport.report.originalSizeBytes || 0))]
               ].map(([label, value]) => <div key={String(label)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><dt className="text-xs font-semibold uppercase tracking-wide text-zinc-500">{label}</dt><dd className="mt-1 break-words text-zinc-900 dark:text-zinc-100">{String(value || '—')}</dd></div>)}
             </dl>
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100"><strong>Método métrico:</strong> {technicalReport.report.metricMethod || 'Não informado.'} Os valores aproximados não substituem cálculo topográfico no SRC projetado adequado.</div>

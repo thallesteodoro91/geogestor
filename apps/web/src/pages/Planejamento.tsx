@@ -1,4 +1,6 @@
+import { PlanningCycleGoalsWidget, PlanningGoalWidget, PlanningObjectiveWidget } from './Planejamento/PlanningAuraWidgets';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import './Planejamento/planning.css';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -10,7 +12,6 @@ import {
   Database,
   Flag,
   FunnelSimple,
-  Gauge,
   Lightbulb,
   ListChecks,
   PencilSimple,
@@ -31,9 +32,11 @@ import type {
   StrategicPlanningSnapshot,
   StrategicRisk
 } from '@geogestor/contracts';
-import { apiClient } from '../services/apiClient';
+import { appLinks } from '@geogestor/contracts';
+import { apiClient, acceptReviewedRecordVersion } from '../services/apiClient';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
+import { WidgetSection } from '../components/WidgetSection';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormSelect } from '../components/Form';
 import {
@@ -57,14 +60,24 @@ import {
   type StrategicOptions
 } from './Planejamento/StrategicPlanningFormModal';
 import { PlanningFilterBar } from './Planejamento/PlanningFilterBar';
+import { PlanningCollection } from './Planejamento/PlanningCollection';
+import { formatPlanningDate as formatDate, formatPlanningMeasure, planningEntities, planningLabels as statusLabels } from './Planejamento/planningMetadata';
+import { planningAlertGroups, planningTimelineDescription, latestPlanningUpdate, planningDeletionDescription } from './Planejamento/planningPresentation';
 import {
   filterAndSortInitiatives,
   filterAndSortObjectives,
   filterCheckins,
   filterDecisions,
   filterRisks,
-  planningFilterKeys,
+  clearPlanningScope,
+  changeGovernanceView,
+  governanceView,
+  governanceViewForRecord,
   planningFiltersFromParams,
+  normalizePlanningParams,
+  changePlanningTab,
+  changePlanningCycle,
+  hasPlanningFilters,
   type PlanningFilterKey,
   type PlanningFilters
 } from './Planejamento/planningFilters';
@@ -85,54 +98,6 @@ const TAB_ITEMS: Array<{
   { id: 'revisoes', label: 'Revisões e riscos', icon: ShieldWarning, tone: 'warning' }
 ];
 
-const endpointByKind: Record<EntityKind, string> = {
-  cycle: 'ciclos',
-  pillar: 'pilares',
-  objective: 'objetivos',
-  keyResult: 'resultados-chave',
-  initiative: 'iniciativas',
-  checkin: 'checkins',
-  risk: 'riscos',
-  decision: 'decisoes'
-};
-
-const validFilterValues: Partial<Record<PlanningFilterKey, Set<string>>> = {
-  status: new Set(['rascunho', 'ativo', 'em_revisao', 'encerrado', 'nao_iniciado', 'em_andamento', 'em_risco', 'concluido', 'cancelado', 'planejada', 'bloqueada', 'concluida', 'cancelada', 'no_rumo', 'atencao', 'critico', 'aberto', 'mitigando', 'resolvido', 'aceito', 'pendente']),
-  prioridade: new Set(['baixa', 'media', 'alta', 'critica']),
-  prazo: new Set(['vencido', 'proximos_30', 'futuro']),
-  risco: new Set(['baixo', 'medio', 'alto', 'critico']),
-  dados: new Set(['desatualizado', 'indisponivel']),
-  ordem: new Set(['manual', 'prazo', 'prioridade', 'progresso', 'atualizacao'])
-};
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const statusLabels: Record<string, string> = {
-  rascunho: 'Rascunho',
-  ativo: 'Ativo',
-  em_revisao: 'Em revisão',
-  encerrado: 'Encerrado',
-  nao_iniciado: 'Não iniciado',
-  em_andamento: 'Em andamento',
-  em_risco: 'Em risco',
-  concluido: 'Concluído',
-  cancelado: 'Cancelado',
-  planejada: 'Planejada',
-  bloqueada: 'Bloqueada',
-  concluida: 'Concluída',
-  cancelada: 'Cancelada',
-  no_rumo: 'No rumo',
-  atencao: 'Atenção',
-  critico: 'Crítico',
-  aberto: 'Aberto',
-  mitigando: 'Em mitigação',
-  resolvido: 'Resolvido',
-  aceito: 'Aceito',
-  baixa: 'Baixa',
-  media: 'Média',
-  alta: 'Alta',
-  pendente: 'Pendente'
-};
-
 const statusTone: Record<string, string> = {
   ativo: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200',
   concluido: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200',
@@ -144,16 +109,9 @@ const statusTone: Record<string, string> = {
   critico: 'border-red-200 bg-red-50 text-red-700 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-200'
 };
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 const numberFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 1 });
 const currencyFormatter = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
-
-function formatDate(value?: string | null) {
-  if (!value) return 'Não definida';
-  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
-  return Number.isNaN(date.getTime()) ? value : dateFormatter.format(date);
-}
 
 function formatDateTime(value?: string | null) {
   if (!value) return 'Sem atualização';
@@ -262,7 +220,7 @@ function SummaryCard({
         </span>
       </div>
       <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{description}</p>
-      <p className="mt-3 border-t border-zinc-100 pt-3 text-xs leading-5 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">{meta}</p>
+      <details className="mt-3 text-xs leading-5 text-zinc-500 dark:text-zinc-400"><summary className="geo-focus-ring w-fit cursor-pointer rounded font-semibold">Fonte e referência</summary><p className="mt-2">{meta}</p></details>
     </article>
   );
 }
@@ -311,7 +269,8 @@ function FilteredEmptyState({ onClear }: { onClear: () => void }) {
   );
 }
 
-function narrativeFor(snapshot: StrategicPlanningSnapshot) {
+function narrativeFor(snapshot: StrategicPlanningSnapshot, alerts: number) {
+  if (alerts) return `${alerts} ${alerts === 1 ? 'contexto exige' : 'contextos exigem'} atenção antes da próxima revisão.`;
   if (!snapshot.objetivos.length) return 'O ciclo foi criado, mas ainda precisa de objetivos para se tornar mensurável.';
   if (snapshot.resumo.progressoGeral === null) return 'Os objetivos estão definidos, mas ainda não há resultados-chave suficientes para avaliar o progresso.';
   const attention = snapshot.resumo.objetivosEmRisco + snapshot.resumo.iniciativasAtrasadas + snapshot.resumo.decisoesPendentes;
@@ -326,26 +285,18 @@ export function Planejamento() {
   const requestedTab = searchParams.get('aba') as TabKey | null;
   const activeTab: TabKey = TAB_ITEMS.some((item) => item.id === requestedTab) ? requestedTab! : 'visao';
   const requestedCycleId = searchParams.get('ciclo');
-  const filters = useMemo(() => planningFiltersFromParams(searchParams), [searchParams]);
+  const normalizedParams = useMemo(() => normalizePlanningParams(searchParams, activeTab), [searchParams, activeTab]);
+  const filters = useMemo(() => planningFiltersFromParams(normalizedParams, activeTab), [normalizedParams, activeTab]);
   const [dialog, setDialog] = useState<PlanningDialog | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [announcement, setAnnouncement] = useState('');
   const [actionError, setActionError] = useState('');
   const tabListRef = useRef<HTMLDivElement | null>(null);
+  const lastRecordFocus = useRef('');
 
   useEffect(() => {
-    const next = new URLSearchParams(searchParams);
-    if ((requestedTab && requestedTab !== activeTab) || next.getAll('aba').length > 1) next.set('aba', activeTab);
-    planningFilterKeys.forEach((key) => {
-      const values = next.getAll(key);
-      const value = values[0]?.trim() || '';
-      const allowed = validFilterValues[key];
-      const invalid = key === 'objetivo' ? Boolean(value && !uuidPattern.test(value)) : Boolean(value && allowed && !allowed.has(value));
-      if (invalid || !value) next.delete(key);
-      else if (values.length > 1 || value !== values[0]) next.set(key, value);
-    });
-    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
-  }, [activeTab, requestedTab, searchParams, setSearchParams]);
+    if (normalizedParams.toString() !== searchParams.toString()) setSearchParams(normalizedParams, { replace: true });
+  }, [normalizedParams, searchParams, setSearchParams]);
 
   const cyclesQuery = useQuery<StrategicCycle[]>({
     queryKey: ['strategic-cycles'],
@@ -360,7 +311,7 @@ export function Planejamento() {
 
   useEffect(() => {
     if (!cycleId || requestedCycleId === cycleId) return;
-    const next = new URLSearchParams(searchParams);
+    const next = requestedCycleId ? changePlanningCycle(searchParams, cycleId) : new URLSearchParams(searchParams);
     next.set('ciclo', cycleId);
     next.set('aba', activeTab);
     setSearchParams(next, { replace: true });
@@ -377,6 +328,28 @@ export function Planejamento() {
     enabled: Boolean(cycleId)
   });
 
+  // The snapshot contains several entity types; its GET cannot establish per-resource baselines.
+  // Capture exactly the version shown when the editor/confirmation opens, never during refetch.
+  const openDialog = (next: PlanningDialog) => {
+    lastRecordFocus.current = '';
+    if (next.initial) acceptReviewedRecordVersion(`/api/planejamento/${planningEntities[next.kind].endpoint}/${next.initial.id}`, next.initial.updatedAt);
+    setActionError('');
+    setDialog(next);
+  };
+  const requestDelete = (target: Exclude<DeleteTarget, null>) => {
+    const data = snapshotQuery.data;
+    if (!data) return;
+    const records = {
+      cycle: [data.ciclo], pillar: data.pilares, objective: data.objetivos, keyResult: data.resultadosChave,
+      initiative: data.iniciativas, checkin: data.checkins, risk: data.riscos, decision: data.decisoes
+    };
+    const current = records[target.kind].find(item => item.id === target.id);
+    if (!current) return;
+    acceptReviewedRecordVersion(`/api/planejamento/${planningEntities[target.kind].endpoint}/${current.id}`, current.updatedAt);
+    setActionError('');
+    setDeleteTarget(target);
+  };
+
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['strategic-cycles'] }),
@@ -386,16 +359,30 @@ export function Planejamento() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: async ({ currentDialog, payload }: { currentDialog: PlanningDialog; payload: Record<string, unknown> }) => {
-      const endpoint = endpointByKind[currentDialog.kind];
+    mutationFn: async ({ currentDialog, payload }: { currentDialog: PlanningDialog; payload: Record<string, unknown>; followWithDecision?: boolean }) => {
+      const endpoint = planningEntities[currentDialog.kind].endpoint;
       if (currentDialog.initial?.id) {
         return apiClient.patch(`/api/planejamento/${endpoint}/${currentDialog.initial.id}`, payload);
       }
       return apiClient.post(`/api/planejamento/${endpoint}`, payload);
     },
-    onSuccess: async () => {
-      const message = dialog?.initial?.id ? 'Alterações salvas.' : 'Registro estratégico criado.';
-      setDialog(null);
+    onSuccess: async (saved, { currentDialog, followWithDecision }) => {
+      const message = currentDialog.initial?.id ? 'Alterações salvas.' : 'Registro estratégico criado.';
+      if (currentDialog.kind === 'cycle' && !currentDialog.initial?.id && saved && typeof saved === 'object' && 'id' in saved && typeof saved.id === 'string') {
+        queryClient.setQueryData<StrategicCycle[]>(['strategic-cycles'], current => [...(current || []), saved as StrategicCycle]);
+        const next = changePlanningCycle(searchParams, saved.id);
+        next.set('aba', 'visao');
+        setSearchParams(next);
+      } else if (currentDialog.kind !== 'cycle' && saved && typeof saved === 'object' && 'id' in saved && typeof saved.id === 'string') {
+        const tab = ['pillar', 'objective', 'keyResult'].includes(currentDialog.kind) ? 'objetivos' : currentDialog.kind === 'initiative' ? 'iniciativas' : 'revisoes';
+        const next = clearPlanningScope(changePlanningTab(searchParams, activeTab, tab), tab);
+        if (tab === 'revisoes') next.set('revisoes.lista', governanceViewForRecord(`${currentDialog.kind}-${saved.id}`));
+        next.set('foco', `${currentDialog.kind}-${saved.id}`);
+        setSearchParams(next, { replace: true });
+      }
+      if (currentDialog.kind === 'checkin' && followWithDecision && saved && typeof saved === 'object' && 'id' in saved && typeof saved.id === 'string') {
+        openDialog({ kind: 'decision', checkinId: saved.id, parentId: 'objetivoId' in saved && typeof saved.objetivoId === 'string' ? saved.objetivoId : undefined });
+      } else setDialog(null);
       setAnnouncement(message);
       setActionError('');
       toast.success(message);
@@ -409,7 +396,7 @@ export function Planejamento() {
 
   const deleteMutation = useMutation({
     mutationFn: async (target: Exclude<DeleteTarget, null>) => {
-      await apiClient.delete(`/api/planejamento/${endpointByKind[target.kind]}/${target.id}`);
+      await apiClient.delete(`/api/planejamento/${planningEntities[target.kind].endpoint}/${target.id}`);
     },
     onSuccess: async () => {
       setDeleteTarget(null);
@@ -425,28 +412,24 @@ export function Planejamento() {
   });
 
   const setTab = (tab: TabKey) => {
-    const next = new URLSearchParams(searchParams);
-    next.set('aba', tab);
+    const next = changePlanningTab(searchParams, activeTab, tab);
     if (cycleId) next.set('ciclo', cycleId);
     setSearchParams(next);
   };
 
   const setFilter = (key: PlanningFilterKey, value: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (value) next.set(key, value);
-    else next.delete(key);
+    const next = clearPlanningScope(normalizedParams, activeTab, false);
+    if (value) next.set(`${activeTab}.${key}`, value);
+    else next.delete(`${activeTab}.${key}`);
     setSearchParams(next, { replace: true });
   };
 
-  const clearFilters = () => {
-    const next = new URLSearchParams(searchParams);
-    planningFilterKeys.forEach((key) => next.delete(key));
-    setSearchParams(next, { replace: true });
-  };
+  const clearFilters = () => setSearchParams(clearPlanningScope(normalizedParams, activeTab), { replace: true });
 
   const handleTabKeys = (event: KeyboardEvent<HTMLDivElement>) => {
-    const currentIndex = TAB_ITEMS.findIndex((item) => item.id === activeTab);
-    let nextIndex = currentIndex;
+    const focusedId = (event.target as HTMLElement).closest('[role="tab"]')?.id;
+    const currentIndex = TAB_ITEMS.findIndex((item) => focusedId ? `planning-tab-${item.id}` === focusedId : item.id === activeTab);
+    let nextIndex: number;
     if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % TAB_ITEMS.length;
     else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + TAB_ITEMS.length) % TAB_ITEMS.length;
     else if (event.key === 'Home') nextIndex = 0;
@@ -454,57 +437,99 @@ export function Planejamento() {
     else return;
     event.preventDefault();
     setTab(TAB_ITEMS[nextIndex].id);
-    requestAnimationFrame(() => {
-      tabListRef.current?.querySelector<HTMLButtonElement>(`#planning-tab-${TAB_ITEMS[nextIndex].id}`)?.focus();
-    });
+    // Tabs stay mounted; immediate focus also makes rapid key sequences independent of router rendering.
+    tabListRef.current?.querySelector<HTMLButtonElement>(`#planning-tab-${TAB_ITEMS[nextIndex].id}`)?.focus();
   };
 
   const openPrimaryAction = () => {
     if (!selectedCycle) {
-      setDialog({ kind: 'cycle' });
+      openDialog({ kind: 'cycle' });
       return;
     }
-    if (selectedCycle.status === 'rascunho' && !snapshotQuery.data?.pilares.length) {
+    if (activeTab === 'revisoes') {
+      openDialog({ kind: governanceView(normalizedParams) === 'decisoes' ? 'decision' : governanceView(normalizedParams) === 'riscos' ? 'risk' : 'checkin' });
+      return;
+    }
+    if (!snapshotQuery.data?.pilares.length) {
       setTab('objetivos');
-      setDialog({ kind: 'pillar' });
+      openDialog({ kind: 'pillar' });
       return;
     }
-    if (activeTab === 'revisoes') setDialog({ kind: 'checkin' });
+    if (activeTab === 'iniciativas' && snapshotQuery.data?.objetivos.length) openDialog({ kind: 'initiative' });
     else {
       setTab('objetivos');
-      setDialog({ kind: 'objective' });
+      openDialog({ kind: 'objective' });
     }
   };
 
-  const primaryLabel = !selectedCycle
-    ? 'Criar planejamento'
-    : selectedCycle.status === 'rascunho' && !snapshotQuery.data?.pilares.length
-      ? 'Continuar planejamento'
-      : activeTab === 'revisoes'
-        ? 'Registrar revisão'
-        : 'Novo objetivo';
+  const primaryLabel = !selectedCycle ? 'Criar planejamento'
+    : activeTab === 'revisoes' ? governanceView(normalizedParams) === 'decisoes' ? 'Nova decisão' : governanceView(normalizedParams) === 'riscos' ? 'Novo risco' : 'Registrar revisão'
+    : !snapshotQuery.data?.pilares.length ? 'Novo pilar'
+    : activeTab === 'iniciativas' && snapshotQuery.data?.objetivos.length ? 'Nova iniciativa' : 'Novo objetivo';
 
   const snapshot = snapshotQuery.data;
+  const focusedRecord = searchParams.get('foco');
+  useEffect(() => {
+    if (!focusedRecord) { lastRecordFocus.current = ''; return; }
+    if (!snapshot || !focusedRecord || dialog || deleteTarget) return;
+    const signature = `${cycleId}:${activeTab}:${focusedRecord}`;
+    if (lastRecordFocus.current === signature) return;
+    let frame: number;
+    const deadline = performance.now() + 1000;
+    const focus = () => {
+      if (document.getElementById('root')?.hasAttribute('inert')) {
+        if (performance.now() < deadline) frame = requestAnimationFrame(focus);
+        return;
+      }
+      const target = document.getElementById(`planning-record-${focusedRecord}`);
+      if (!target) return;
+      let disclosure = target.closest('details');
+      while (disclosure) { disclosure.open = true; disclosure = disclosure.parentElement?.closest('details') || null; }
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'center', behavior: 'instant' });
+      lastRecordFocus.current = signature;
+    };
+    frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, [snapshot, focusedRecord, activeTab, cycleId, dialog, deleteTarget]);
+
+  const recordParams = (tab: TabKey, recordId: string) => {
+    const next = clearPlanningScope(changePlanningTab(searchParams, activeTab, tab), tab);
+    if (tab === 'revisoes') next.set('revisoes.lista', governanceViewForRecord(recordId));
+    next.set('foco', recordId);
+    return next;
+  };
+  const openRecord = (tab: TabKey, recordId: string) => setSearchParams(recordParams(tab, recordId));
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const next = new URLSearchParams(normalizedParams);
+    for (const tab of ['iniciativas', 'revisoes']) {
+      const id = next.get(`${tab}.objetivo`);
+      if (id && !snapshot.objetivos.some(item => item.id === id)) next.delete(`${tab}.objetivo`);
+    }
+    if (next.toString() !== normalizedParams.toString()) setSearchParams(next, { replace: true });
+  }, [snapshot, normalizedParams, setSearchParams]);
 
   return (
     <Layout>
-      <div className="space-y-7">
+      <div className="planning-workspace space-y-7">
         <PageHeader
           eyebrow="Estratégia e execução"
           title="Planejamento estratégico"
           description="Conecte direção, objetivos, iniciativas, riscos e decisões em um ciclo mensurável."
           className="mb-0"
-          action={(
-            <button type="button" onClick={openPrimaryAction} className={headerPrimaryActionButtonClass}>
+          action={selectedCycle ? (
+            <button type="button" onClick={openPrimaryAction} disabled={cyclesQuery.isLoading || Boolean(cycleId && !snapshot)} className={headerPrimaryActionButtonClass}>
               <Plus aria-hidden="true" className="h-4 w-4" />
               {primaryLabel}
               <span aria-hidden="true" className={headerPrimaryActionIconClass}><Flag className="h-3.5 w-3.5" /></span>
             </button>
-          )}
+          ) : null}
         />
 
         <p className="sr-only" aria-live="polite">{announcement}</p>
-        {actionError ? (
+        {actionError && !dialog && !deleteTarget ? (
           <section role="alert" aria-live="assertive" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100">
             <p className="font-semibold">A operação não foi concluída</p>
             <p className="mt-1 leading-6">{actionError}</p>
@@ -523,8 +548,7 @@ export function Planejamento() {
                   id="strategic-cycle-select"
                   value={cycleId || ''}
                   onChange={(event) => {
-                    const next = new URLSearchParams(searchParams);
-                    next.set('ciclo', event.target.value);
+                    const next = changePlanningCycle(searchParams, event.target.value);
                     next.set('aba', activeTab);
                     setSearchParams(next);
                   }}
@@ -542,10 +566,15 @@ export function Planejamento() {
               ) : null}
             </div>
             {selectedCycle ? (
-              <button type="button" onClick={() => setDialog({ kind: 'cycle', initial: selectedCycle })} className={secondarySmallActionButtonClass}>
+              <div className="flex shrink-0 flex-wrap gap-2">
+              <button type="button" onClick={() => openDialog({ kind: 'cycle', initial: selectedCycle })} className={secondarySmallActionButtonClass}>
                 <PencilSimple aria-hidden="true" className="h-4 w-4" />
                 Editar ciclo
               </button>
+              <button type="button" onClick={() => openDialog({ kind: 'cycle' })} className={secondarySmallActionButtonClass}>
+                <Plus aria-hidden="true" className="h-4 w-4" /> Novo ciclo
+              </button>
+              </div>
             ) : null}
           </section>
         ) : null}
@@ -589,7 +618,7 @@ export function Planejamento() {
             <button type="button" onClick={() => cyclesQuery.refetch()} className={cn(secondarySmallActionButtonClass, 'mt-4')}>Tentar novamente</button>
           </section>
         ) : !cycles.length ? (
-          <EmptyPlanning onCreate={() => setDialog({ kind: 'cycle' })} />
+          <EmptyPlanning onCreate={() => openDialog({ kind: 'cycle' })} />
         ) : snapshotQuery.isLoading ? (
           <section aria-label="Carregando ciclo estratégico" className="space-y-4">
             <div className="h-32 animate-pulse rounded-lg bg-zinc-100 motion-reduce:animate-none dark:bg-zinc-800" />
@@ -615,9 +644,11 @@ export function Planejamento() {
               <OverviewPanel
                 snapshot={snapshot}
                 onNavigate={setTab}
-                onCreateObjective={() => setDialog({ kind: 'objective' })}
-                onCreateCheckin={() => setDialog({ kind: 'checkin' })}
-                onCreateDecision={() => setDialog({ kind: 'decision' })}
+                onOpenRecord={openRecord}
+                goalsHref={`?${clearPlanningScope(changePlanningTab(searchParams, activeTab, 'objetivos'), 'objetivos')}`}
+                getGoalHref={(id) => `?${recordParams('objetivos', `keyResult-${id}`)}`}
+                onCreateCheckin={() => openDialog({ kind: 'checkin' })}
+                onCreateDecision={() => openDialog({ kind: 'decision' })}
               />
             ) : null}
             {activeTab === 'objetivos' ? (
@@ -626,28 +657,30 @@ export function Planejamento() {
                 filters={filters}
                 onFilterChange={setFilter}
                 onClearFilters={clearFilters}
-                onDialog={setDialog}
-                onDelete={setDeleteTarget}
+                onDialog={openDialog}
+                onDelete={requestDelete}
               />
             ) : null}
             {activeTab === 'iniciativas' ? (
               <InitiativesPanel
                 snapshot={snapshot}
+                options={optionsQuery.data}
                 filters={filters}
                 onFilterChange={setFilter}
                 onClearFilters={clearFilters}
-                onDialog={setDialog}
-                onDelete={setDeleteTarget}
+                onDialog={openDialog}
+                onDelete={requestDelete}
               />
             ) : null}
             {activeTab === 'revisoes' ? (
               <ReviewsPanel
                 snapshot={snapshot}
+                onOpenRecord={openRecord}
                 filters={filters}
                 onFilterChange={setFilter}
                 onClearFilters={clearFilters}
-                onDialog={setDialog}
-                onDelete={setDeleteTarget}
+                onDialog={openDialog}
+                onDelete={requestDelete}
               />
             ) : null}
           </>
@@ -661,9 +694,11 @@ export function Planejamento() {
         options={optionsQuery.data}
         optionsError={optionsQuery.isError}
         pending={saveMutation.isPending}
-        onClose={() => setDialog(null)}
-        onSubmit={(payload) => {
-          if (dialog) saveMutation.mutate({ currentDialog: dialog, payload });
+        submitError={actionError}
+        onClose={() => { setDialog(null); setActionError(''); }}
+        onSubmit={(payload, followWithDecision) => {
+          setActionError('');
+          if (dialog) saveMutation.mutate({ currentDialog: dialog, payload, followWithDecision });
         }}
       />
       <ConfirmDialog
@@ -673,9 +708,10 @@ export function Planejamento() {
           if (deleteTarget) deleteMutation.mutate(deleteTarget);
         }}
         title={`Excluir ${deleteTarget?.title || 'registro estratégico'}`}
-        description="Esta ação remove o registro da visão ativa e será registrada no histórico de auditoria. Os dados não relacionados serão preservados."
+        description={deleteTarget ? planningDeletionDescription(deleteTarget.kind, deleteTarget.id, snapshot) : ''}
         confirmText={deleteMutation.isPending ? 'Excluindo…' : 'Excluir registro'}
         loading={deleteMutation.isPending}
+        error={actionError}
       />
     </Layout>
   );
@@ -684,46 +720,31 @@ export function Planejamento() {
 function OverviewPanel({
   snapshot,
   onNavigate,
-  onCreateObjective,
+  onOpenRecord,
+  goalsHref,
+  getGoalHref,
   onCreateCheckin,
   onCreateDecision
 }: {
   snapshot: StrategicPlanningSnapshot;
   onNavigate: (tab: TabKey) => void;
-  onCreateObjective: () => void;
+  onOpenRecord: (tab: TabKey, recordId: string) => void;
+  goalsHref: string;
+  getGoalHref: (id: string) => string;
   onCreateCheckin: () => void;
   onCreateDecision: () => void;
 }) {
-  const exceptions = useMemo(() => {
-    const items: Array<{ title: string; description: string; tab: TabKey; tone: 'warning' | 'danger' }> = [];
-    snapshot.resultadosChave.filter((result) => result.desatualizado).slice(0, 3).forEach((result) => items.push({
-      title: `Atualizar: ${result.titulo}`,
-      description: `${result.fonteNome} · última atualização ${formatDateTime(result.ultimaAtualizacao)}`,
-      tab: 'objetivos',
-      tone: 'warning'
-    }));
-    snapshot.iniciativas.filter((initiative) => initiative.atrasada).slice(0, 3).forEach((initiative) => items.push({
-      title: `Iniciativa atrasada: ${initiative.titulo}`,
-      description: `Responsável: ${initiative.responsavel} · prazo ${formatDate(initiative.dataLimite)}`,
-      tab: 'iniciativas',
-      tone: 'danger'
-    }));
-    snapshot.riscos.filter((risk) => ['alto', 'critico'].includes(risk.impacto) && !['resolvido', 'aceito'].includes(risk.status)).slice(0, 3).forEach((risk) => items.push({
-      title: `Risco ${label(risk.impacto).toLowerCase()}`,
-      description: risk.descricao,
-      tab: 'revisoes',
-      tone: 'danger'
-    }));
-    return items.slice(0, 6);
-  }, [snapshot]);
+  const exceptions = useMemo(() => planningAlertGroups(snapshot), [snapshot]);
+  const [showAllExceptions, setShowAllExceptions] = useState(false);
+  const [showFullTimeline, setShowFullTimeline] = useState(false);
   const pendingDecisions = snapshot.decisoes.filter((decision) => ['pendente', 'em_andamento'].includes(decision.status));
 
   return (
-    <section id="planning-panel-visao" role="tabpanel" aria-labelledby="planning-tab-visao" className="space-y-6">
+    <section id="planning-panel-visao" role="tabpanel" aria-labelledby="planning-tab-visao" className="grid gap-8 sm:gap-10">
       <article className="relative overflow-hidden rounded-lg border border-brand-primary-200/80 bg-gradient-to-br from-brand-primary-50 via-white to-brand-turquoise-50 p-6 dark:border-brand-primary-400/20 dark:from-brand-primary-400/10 dark:via-zinc-900 dark:to-brand-turquoise-400/10">
         <div className="relative z-10 max-w-4xl">
           <span className="text-xs font-bold uppercase tracking-wider text-brand-primary-700 dark:text-brand-primary-200">Leitura executiva</span>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">{narrativeFor(snapshot)}</h2>
+          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">{narrativeFor(snapshot, exceptions.length)}</h2>
           <p className="mt-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">{snapshot.ciclo.visao}</p>
           <div className="mt-5 flex flex-wrap gap-3 text-xs text-zinc-600 dark:text-zinc-300">
             <span className="rounded-full border border-zinc-200 bg-white/80 px-3 py-1.5 dark:border-zinc-700 dark:bg-zinc-900/70">
@@ -736,54 +757,55 @@ function OverviewPanel({
         </div>
       </article>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          title="Progresso geral"
-          value={snapshot.resumo.progressoGeral === null ? '—' : `${numberFormatter.format(snapshot.resumo.progressoGeral)}%`}
-          description={snapshot.resumo.progressoGeral === null ? 'Cadastre resultados-chave com linha de base, meta e valor atual.' : 'Média dos resultados-chave com dados válidos.'}
-          meta={`Fonte: objetivos do ciclo · ${formatDate(snapshot.ciclo.dataInicio)} a ${formatDate(snapshot.ciclo.dataFim)}`}
-          icon={Gauge}
-          tone={snapshot.resumo.progressoGeral !== null && snapshot.resumo.progressoGeral >= 70 ? 'success' : 'system'}
+      <WidgetSection id="planning-cycle-indicators-title" title="Metas e alertas do ciclo" contentClassName="grid items-start gap-6 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
+        <PlanningCycleGoalsWidget
+          results={snapshot.resultadosChave}
+          progress={snapshot.resumo.progressoGeral}
+          goalsHref={goalsHref}
+          getGoalHref={getGoalHref}
         />
-        <SummaryCard
-          title="Objetivos em risco"
-          value={String(snapshot.resumo.objetivosEmRisco)}
-          description="Objetivos sinalizados ou vinculados a riscos elevados."
-          meta={`Fonte: objetivos e riscos · atualizado ${formatDateTime(snapshot.ciclo.updatedAt)}`}
-          icon={WarningCircle}
-          tone={snapshot.resumo.objetivosEmRisco ? 'warning' : 'success'}
-        />
-        <SummaryCard
-          title="Iniciativas atrasadas"
-          value={String(snapshot.resumo.iniciativasAtrasadas)}
-          description="Iniciativas abertas cujo prazo já terminou."
-          meta={`Fonte: iniciativas do ciclo · referência ${formatDate(saoPauloDateKey())}`}
-          icon={CalendarCheck}
-          tone={snapshot.resumo.iniciativasAtrasadas ? 'danger' : 'success'}
-        />
-        <SummaryCard
-          title="Decisões pendentes"
-          value={String(snapshot.resumo.decisoesPendentes)}
-          description="Decisões registradas em revisões que ainda exigem encaminhamento."
-          meta={`Fonte: check-ins estratégicos · última revisão ${formatDate(snapshot.resumo.ultimaRevisao)}`}
-          icon={Lightbulb}
-          tone={snapshot.resumo.decisoesPendentes ? 'warning' : 'success'}
-        />
-      </div>
+        <div className="grid gap-5 sm:grid-cols-3 md:grid-cols-1">
+          <SummaryCard
+            title="Objetivos em risco"
+            value={String(snapshot.resumo.objetivosEmRisco)}
+            description="Objetivos sinalizados ou vinculados a riscos elevados."
+            meta={`Fonte: objetivos, iniciativas e riscos · atualizado ${formatDateTime(latestPlanningUpdate([...snapshot.objetivos, ...snapshot.iniciativas, ...snapshot.riscos]))}`}
+            icon={WarningCircle}
+            tone={snapshot.resumo.objetivosEmRisco ? 'warning' : 'success'}
+          />
+          <SummaryCard
+            title="Iniciativas atrasadas"
+            value={String(snapshot.resumo.iniciativasAtrasadas)}
+            description="Iniciativas abertas cujo prazo já terminou."
+            meta={`Fonte: iniciativas do ciclo · referência ${formatDate(saoPauloDateKey())}`}
+            icon={CalendarCheck}
+            tone={snapshot.resumo.iniciativasAtrasadas ? 'danger' : 'success'}
+          />
+          <SummaryCard
+            title="Decisões pendentes"
+            value={String(snapshot.resumo.decisoesPendentes)}
+            description="Decisões do ciclo que ainda exigem encaminhamento."
+            meta={`Fonte: decisões do ciclo · atualizado ${formatDateTime(latestPlanningUpdate(snapshot.decisoes))}`}
+            icon={Lightbulb}
+            tone={snapshot.resumo.decisoesPendentes ? 'warning' : 'success'}
+          />
+        </div>
+      </WidgetSection>
 
-      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <WidgetSection id="planning-cycle-followup-title" title="Riscos e decisões" contentClassName="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <section className="geo-surface rounded-lg p-5" aria-labelledby="exceptions-title">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">O que está desviando?</span>
-              <h2 id="exceptions-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Gestão por exceção</h2>
+              <h3 id="exceptions-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Gestão por exceção</h3>
             </div>
             <button type="button" onClick={() => onNavigate('objetivos')} className={secondarySmallActionButtonClass}>Ver objetivos</button>
           </div>
+          <p role="status" className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">{exceptions.length} {exceptions.length === 1 ? 'contexto com alertas' : 'contextos com alertas'} · riscos críticos e altos primeiro; depois bloqueios, atrasos e qualidade dos dados.</p>
           {exceptions.length ? (
             <ul className="mt-5 space-y-3">
-              {exceptions.map((item, index) => (
-                <li key={`${item.title}-${index}`} className={cn(
+              {(showAllExceptions ? exceptions : exceptions.slice(0, 6)).map((item) => (
+                <li key={item.id} className={cn(
                   'rounded-lg border p-4',
                   item.tone === 'danger'
                     ? 'border-red-200 bg-red-50/70 dark:border-red-400/20 dark:bg-red-400/10'
@@ -794,10 +816,17 @@ function OverviewPanel({
                       <h3 className="font-semibold text-zinc-950 dark:text-white">{item.title}</h3>
                       <p className="mt-1 break-words text-sm leading-6 text-zinc-600 dark:text-zinc-300">{item.description}</p>
                     </div>
-                    <button type="button" onClick={() => onNavigate(item.tab)} className="geo-focus-ring shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-brand-primary-700 hover:bg-white dark:text-brand-primary-200 dark:hover:bg-zinc-900">
-                      Tratar
+                    <button type="button" onClick={() => onOpenRecord(item.tab, item.recordId)} className="geo-focus-ring shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-brand-primary-700 hover:bg-white dark:text-brand-primary-200 dark:hover:bg-zinc-900">
+                      {item.action}
                     </button>
                   </div>
+                  {item.causes.length > 1 ? <details className="mt-3 text-xs">
+                    <summary className="geo-focus-ring w-fit cursor-pointer rounded font-semibold text-zinc-700 dark:text-zinc-200">Ver {item.causes.length} causas relacionadas</summary>
+                    <ul className="mt-2 space-y-2">{item.causes.map(cause => <li key={cause.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="min-w-0 break-words text-zinc-600 dark:text-zinc-300">{cause.title}: {cause.description}</span>
+                      {cause.id !== item.id ? <button type="button" onClick={() => onOpenRecord(cause.tab, cause.recordId)} className={secondarySmallActionButtonClass}>{cause.action}</button> : null}
+                    </li>)}</ul>
+                  </details> : null}
                 </li>
               ))}
             </ul>
@@ -808,11 +837,14 @@ function OverviewPanel({
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">A leitura depende dos indicadores e revisões cadastrados.</p>
             </div>
           )}
+          {exceptions.length > 6 ? <button type="button" onClick={() => setShowAllExceptions(value => !value)} aria-expanded={showAllExceptions} className={cn(secondarySmallActionButtonClass, 'mt-4')}>
+            {showAllExceptions ? 'Mostrar seis contextos' : `Ver todos os ${exceptions.length} contextos`}
+          </button> : null}
         </section>
 
         <section className="geo-surface rounded-lg p-5" aria-labelledby="decisions-title">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">O que decidir agora?</span>
-          <h2 id="decisions-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Próximas decisões</h2>
+          <h3 id="decisions-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Próximas decisões</h3>
           {pendingDecisions.length ? (
             <ul className="mt-5 space-y-3">
               {pendingDecisions.slice(0, 4).map((decision) => (
@@ -835,19 +867,15 @@ function OverviewPanel({
               Nova decisão
             </button>
             <button type="button" onClick={onCreateCheckin} className={secondarySmallActionButtonClass}>Registrar revisão</button>
-            {!snapshot.objetivos.length ? (
-              <button type="button" onClick={onCreateObjective} className={secondarySmallActionButtonClass}>
-                Criar objetivo
-              </button>
-            ) : null}
+
           </div>
         </section>
-      </div>
+      </WidgetSection>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <WidgetSection id="planning-cycle-history-title" title="Evolução do ciclo" contentClassName="grid items-start gap-6 lg:grid-cols-2">
         <section className="geo-surface rounded-lg p-5" aria-labelledby="trend-title">
           <span className="text-xs font-bold uppercase tracking-wider text-brand-primary-700 dark:text-brand-primary-200">O que mudou?</span>
-          <h2 id="trend-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Evolução entre revisões</h2>
+          <h3 id="trend-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Evolução entre revisões</h3>
           {!snapshot.tendencias.disponivel ? (
             <div className="mt-5 rounded-lg border border-dashed border-zinc-300 p-5 dark:border-zinc-700">
               <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">{snapshot.tendencias.motivo}</p>
@@ -874,21 +902,23 @@ function OverviewPanel({
         </section>
         <section className="geo-surface rounded-lg p-5" aria-labelledby="timeline-title">
           <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Histórico do ciclo</span>
-          <h2 id="timeline-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Linha do tempo estratégica</h2>
+          <h3 id="timeline-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Linha do tempo estratégica</h3>
           {snapshot.linhaDoTempo.length ? (
             <ol className="mt-5 space-y-4 border-l border-zinc-200 pl-5 dark:border-zinc-700">
-              {snapshot.linhaDoTempo.slice(0, 8).map((item) => (
+              {(showFullTimeline ? snapshot.linhaDoTempo : snapshot.linhaDoTempo.slice(0, 8)).map((item) => (
                 <li key={item.id} className="relative">
                   <span aria-hidden="true" className="absolute -left-[1.55rem] top-1.5 h-2.5 w-2.5 rounded-full bg-brand-primary-500 ring-4 ring-white dark:ring-zinc-900" />
                   <div className="flex flex-wrap items-center gap-2"><StatusBadge value={item.status} /><time className="text-xs text-zinc-500 dark:text-zinc-400" dateTime={item.data}>{formatDate(item.data)}</time></div>
                   <p className="mt-2 break-words text-sm font-semibold text-zinc-950 dark:text-white">{item.titulo}</p>
-                  <p className="mt-1 break-words text-xs leading-5 text-zinc-600 dark:text-zinc-400">{item.descricao}</p>
+                  <p className="mt-1 break-words text-xs leading-5 text-zinc-600 dark:text-zinc-400">{planningTimelineDescription(item, snapshot)}</p>
                 </li>
               ))}
             </ol>
           ) : <p className="mt-5 rounded-lg border border-dashed border-zinc-300 p-5 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">A linha do tempo será formada por revisões, decisões, riscos e mudanças de execução reais.</p>}
+          {snapshot.linhaDoTempo.length > 8 ? <button type="button" className={cn(secondarySmallActionButtonClass, 'mt-4')} aria-expanded={showFullTimeline} onClick={() => setShowFullTimeline(value => !value)}>{showFullTimeline ? 'Resumir histórico' : 'Ver mais eventos do histórico'}</button> : null}
+          <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Até 30 eventos recentes. Consulte Auditoria em Relatórios para o registro de alterações.</p>
         </section>
-      </div>
+      </WidgetSection>
     </section>
   );
 }
@@ -908,26 +938,25 @@ function ObjectivesPanel({
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
+  const [params] = useSearchParams();
+  const focus = params.get('foco');
+  const focusObjectiveId = snapshot.resultadosChave.find(item => `keyResult-${item.id}` === focus)?.objetivoId;
   const filteredObjectives = filterAndSortObjectives(snapshot.objetivos, snapshot.resultadosChave, filters, saoPauloDateKey());
-  const filtersActive = Object.values(filters).some(Boolean);
+  const filtersActive = hasPlanningFilters(filters);
   const visiblePillars = filtersActive
     ? snapshot.pilares.filter((pillar) => filteredObjectives.some((objective) => objective.pilarId === pillar.id))
     : snapshot.pilares;
   return (
-    <section id="planning-panel-objetivos" role="tabpanel" aria-labelledby="planning-tab-objetivos" className="space-y-6">
+    <section id="planning-panel-objetivos" role="tabpanel" aria-labelledby="planning-tab-objetivos" className="grid gap-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Onde queremos chegar?</span>
           <h2 className="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white">Objetivos e resultados-chave</h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Metas são sempre explícitas e mantêm a origem do valor atual.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => onDialog({ kind: 'pillar' })} className={secondarySmallActionButtonClass}>
+          {snapshot.pilares.length ? <button type="button" onClick={() => onDialog({ kind: 'pillar' })} className={secondarySmallActionButtonClass}>
             <Plus aria-hidden="true" className="h-4 w-4" /> Novo pilar
-          </button>
-          <button type="button" onClick={() => onDialog({ kind: 'objective' })} disabled={!snapshot.pilares.length} className={primarySmallActionButtonClass}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Novo objetivo
-          </button>
+          </button> : null}
         </div>
       </div>
 
@@ -946,18 +975,15 @@ function ObjectivesPanel({
           <Flag aria-hidden="true" className="mx-auto h-8 w-8 text-brand-primary-600 dark:text-brand-primary-200" weight="duotone" />
           <h3 className="mt-4 text-xl font-semibold text-zinc-950 dark:text-white">Defina o primeiro pilar do ciclo</h3>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-600 dark:text-zinc-400">Pilares organizam objetivos relacionados, como sustentabilidade financeira, crescimento comercial ou excelência operacional.</p>
-          <button type="button" onClick={() => onDialog({ kind: 'pillar' })} className={cn(primarySmallActionButtonClass, 'mx-auto mt-5')}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Criar primeiro pilar
-          </button>
         </div>
       ) : filtersActive && !filteredObjectives.length ? (
         <FilteredEmptyState onClear={onClearFilters} />
       ) : (
-        <div className="space-y-6">
+        <div className="grid gap-8">
           {visiblePillars.map((pillar) => {
             const objectives = filteredObjectives.filter((objective) => objective.pilarId === pillar.id);
             return (
-              <article key={pillar.id} className="geo-surface overflow-hidden rounded-lg">
+              <article key={pillar.id} id={`planning-record-pillar-${pillar.id}`} tabIndex={-1} className="geo-focus-ring geo-surface overflow-hidden rounded-lg">
                 <header className="flex flex-col gap-4 border-b border-zinc-200 bg-zinc-50/70 p-5 sm:flex-row sm:items-start sm:justify-between dark:border-zinc-800 dark:bg-zinc-800/40">
                   <div className="min-w-0">
                     <span className="text-xs font-bold uppercase tracking-wider text-brand-primary-700 dark:text-brand-primary-200">Pilar estratégico</span>
@@ -977,10 +1003,10 @@ function ObjectivesPanel({
                   </div>
                 </header>
                 {objectives.length ? (
-                  <div className="grid gap-4 p-5 xl:grid-cols-2">
-                    {objectives.map((objective) => (
-                      <ObjectiveCard key={objective.id} objective={objective} snapshot={snapshot} onDialog={onDialog} onDelete={onDelete} />
-                    ))}
+                  <div className="px-3 py-5 sm:px-5">
+                    <PlanningCollection items={objectives} name={`objetivos.pagina.${pillar.id}`} label={`Objetivos de ${pillar.nome}`} kind="objective" focusItemId={focusObjectiveId} className="grid gap-6 xl:grid-cols-2">
+                      {(objective) => <ObjectiveCard key={objective.id} objective={objective} snapshot={snapshot} onDialog={onDialog} onDelete={onDelete} />}
+                    </PlanningCollection>
                   </div>
                 ) : (
                   <div className="p-6 text-center">
@@ -1009,12 +1035,12 @@ function ObjectiveCard({
 }) {
   const results = snapshot.resultadosChave.filter((result) => result.objetivoId === objective.id);
   return (
-    <article className="min-w-0 rounded-lg border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+    <article id={`planning-record-objective-${objective.id}`} tabIndex={-1} className="geo-focus-ring min-w-0 rounded-lg border border-zinc-200 bg-white px-3 py-5 sm:px-5 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge value={objective.status} />
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Prioridade {label(objective.prioridade).toLowerCase()}</span>
+            <span className="text-xs font-semibold text-text-secondary">Prioridade {label(objective.prioridade).toLowerCase()}</span>
           </div>
           <h4 className="mt-3 break-words text-lg font-semibold leading-7 text-zinc-950 dark:text-white">{objective.titulo}</h4>
           {objective.descricao ? <p className="mt-2 break-words text-sm leading-6 text-zinc-600 dark:text-zinc-400">{objective.descricao}</p> : null}
@@ -1026,12 +1052,16 @@ function ObjectiveCard({
           deleteLabel={`Excluir objetivo ${objective.titulo}`}
         />
       </div>
-      <div className="mt-4 flex flex-wrap gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-text-secondary">
         <span>Responsável: <strong className="text-zinc-700 dark:text-zinc-200">{objective.responsavel}</strong></span>
         <span>Prazo: <strong className="text-zinc-700 dark:text-zinc-200">{formatDate(objective.dataLimite)}</strong></span>
       </div>
       <div className="mt-5">
-        <ProgressBar value={objective.progresso} labelText="Progresso do objetivo" />
+        <PlanningObjectiveWidget
+          progress={objective.progresso}
+          measured={results.filter(result => result.progresso != null).length}
+          total={results.length}
+        />
       </div>
       <div className="mt-5 border-t border-zinc-200 pt-5 dark:border-zinc-800">
         <div className="flex items-center justify-between gap-3">
@@ -1041,9 +1071,12 @@ function ObjectiveCard({
           </button>
         </div>
         {results.length ? (
-          <ul className="mt-3 space-y-3">
-            {results.map((result) => <KeyResultRow key={result.id} result={result} onDialog={onDialog} onDelete={onDelete} />)}
-          </ul>
+          <details className="mt-3">
+            <summary className="geo-focus-ring cursor-pointer rounded py-2 text-sm font-semibold text-brand-primary-700 dark:text-brand-primary-200">Ver {results.length} resultados-chave</summary>
+            <PlanningCollection items={results} name={`objetivos.pagina.resultados-${objective.id}`} label={`Resultados de ${objective.titulo}`} kind="keyResult" as="ul" className="mt-3 space-y-5">
+              {(result) => <KeyResultRow key={result.id} result={result} dueDate={objective.dataLimite} onDialog={onDialog} onDelete={onDelete} />}
+            </PlanningCollection>
+          </details>
         ) : (
           <p className="mt-3 rounded-lg bg-zinc-50 p-4 text-sm text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-400">Sem resultados-chave. O progresso não será estimado.</p>
         )}
@@ -1054,49 +1087,53 @@ function ObjectiveCard({
 
 function KeyResultRow({
   result,
+  dueDate,
   onDialog,
   onDelete
 }: {
   result: StrategicKeyResult;
+  dueDate: string;
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
-  const formattedValue = result.valorAtual === null
-    ? '—'
-    : result.unidade === 'BRL'
-      ? currencyFormatter.format(result.valorAtual)
-      : `${numberFormatter.format(result.valorAtual)}${result.unidade === '%' ? '%' : ` ${result.unidade}`}`;
-  const formattedTarget = result.unidade === 'BRL'
-    ? currencyFormatter.format(result.meta)
-    : `${numberFormatter.format(result.meta)}${result.unidade === '%' ? '%' : ` ${result.unidade}`}`;
+  const formattedValue = result.valorAtual === null ? '—' : formatPlanningMeasure(result.valorAtual, result.unidade);
+  const formattedTarget = formatPlanningMeasure(result.meta, result.unidade);
   return (
-    <li className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="break-words text-sm font-semibold text-zinc-950 dark:text-white">{result.titulo}</p>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Atual {formattedValue} · meta {formattedTarget}</p>
-        </div>
-        <EntityActions
-          onEdit={() => onDialog({ kind: 'keyResult', initial: result })}
-          onDelete={() => onDelete({ kind: 'keyResult', id: result.id, title: `resultado-chave “${result.titulo}”` })}
-          editLabel={`Editar resultado-chave ${result.titulo}`}
-          deleteLabel={`Excluir resultado-chave ${result.titulo}`}
-        />
-      </div>
-      <div className="mt-3"><ProgressBar value={result.progresso} labelText="Trajetória até a meta" /></div>
+    <li id={`planning-record-keyResult-${result.id}`} tabIndex={-1} className="geo-focus-ring rounded-lg border border-zinc-200 px-2 py-3 sm:p-4 dark:border-zinc-800">
+      <PlanningGoalWidget
+        title={result.titulo}
+        target={formattedTarget}
+        current={result.valorAtual == null ? null : formattedValue}
+        progress={result.progresso}
+        deadline={dueDate}
+        onEdit={() => onDialog({ kind: 'keyResult', initial: result })}
+      />
       <div className="mt-3 flex flex-col gap-2 rounded-lg bg-zinc-50 p-3 text-xs leading-5 text-zinc-600 dark:bg-zinc-800/50 dark:text-zinc-300">
-        <span className={cn(
-          'w-fit rounded-full border px-2.5 py-1 font-semibold',
-          result.estadoDado === 'disponivel'
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200'
-            : result.estadoDado === 'desatualizado'
-              ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200'
-              : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
-        )}>
-          {result.estadoDado === 'disponivel' ? 'Dado disponível' : result.estadoDado === 'desatualizado' ? 'Dado desatualizado' : 'Dado indisponível'}
-        </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className={cn(
+            'w-fit rounded-full border px-2.5 py-1 font-semibold',
+            result.estadoDado === 'disponivel'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200'
+              : result.estadoDado === 'desatualizado'
+                ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-200'
+                : 'border-zinc-300 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+          )}>
+            {result.estadoDado === 'disponivel' ? 'Dado disponível' : result.estadoDado === 'desatualizado' ? 'Dado desatualizado' : 'Dado indisponível'}
+          </span>
+          <button
+            type="button"
+            onClick={() => onDelete({ kind: 'keyResult', id: result.id, title: `resultado-chave “${result.titulo}”` })}
+            aria-label={`Excluir resultado-chave ${result.titulo}`}
+            className="geo-focus-ring inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-rose-700 hover:bg-rose-100 dark:text-rose-200 dark:hover:bg-rose-400/10"
+          >
+            <Trash aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
         <span><Database aria-hidden="true" className="mr-1 inline h-3.5 w-3.5" /> Fonte: {result.fonteNome}</span>
-        <span>Regra: {result.fonteRegra || 'Não informada'}</span>
+        <details className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+        <summary className="geo-focus-ring cursor-pointer rounded font-semibold text-brand-primary-700 dark:text-brand-primary-200">Origem e cálculo do indicador</summary>
+        <div className="mt-3 space-y-2">
+        <p>Regra: {result.fonteRegra || 'Não informada'}</p>
         <span>Período: {result.fontePeriodo || 'Não informado'} · atualização {formatDateTime(result.ultimaAtualizacao)}</span>
         {result.estadoDado === 'desatualizado' ? <span className="font-semibold text-amber-800 dark:text-amber-200">Atualize a fonte antes da próxima decisão.</span> : null}
         {result.estadoDado === 'indisponivel' ? <span className="font-semibold text-zinc-700 dark:text-zinc-200">Nenhum registro válido foi encontrado; o sistema não substituiu a ausência por zero.</span> : null}
@@ -1114,6 +1151,7 @@ function KeyResultRow({
             Abrir fonte <ArrowSquareOut aria-hidden="true" className="h-3.5 w-3.5" />
           </Link>
         ) : null}
+        </div></details>
       </div>
     </li>
   );
@@ -1121,6 +1159,7 @@ function KeyResultRow({
 
 function InitiativesPanel({
   snapshot,
+  options,
   filters,
   onFilterChange,
   onClearFilters,
@@ -1128,6 +1167,7 @@ function InitiativesPanel({
   onDelete
 }: {
   snapshot: StrategicPlanningSnapshot;
+  options?: StrategicOptions;
   filters: PlanningFilters;
   onFilterChange: (key: PlanningFilterKey, value: string) => void;
   onClearFilters: () => void;
@@ -1136,18 +1176,14 @@ function InitiativesPanel({
 }) {
   const objectiveName = (id: string) => snapshot.objetivos.find((objective) => objective.id === id)?.titulo || 'Objetivo não encontrado';
   const filteredInitiatives = filterAndSortInitiatives(snapshot.iniciativas, filters, saoPauloDateKey());
-  const filtersActive = Object.values(filters).some(Boolean);
+  const filtersActive = hasPlanningFilters(filters);
   return (
     <section id="planning-panel-iniciativas" role="tabpanel" aria-labelledby="planning-tab-iniciativas" className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Como chegaremos lá?</span>
           <h2 className="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white">Iniciativas e execução</h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Responsáveis, prazos, dependências e vínculos com Projetos e Tarefas.</p>
         </div>
-        <button type="button" onClick={() => onDialog({ kind: 'initiative' })} disabled={!snapshot.objetivos.length} className={primarySmallActionButtonClass}>
-          <Plus aria-hidden="true" className="h-4 w-4" /> Nova iniciativa
-        </button>
       </div>
       <PlanningFilterBar
         filters={filters}
@@ -1167,19 +1203,14 @@ function InitiativesPanel({
       ) : filtersActive && !filteredInitiatives.length ? (
         <FilteredEmptyState onClear={onClearFilters} />
       ) : filteredInitiatives.length ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {filteredInitiatives.map((initiative) => (
-            <InitiativeCard key={initiative.id} initiative={initiative} objectiveName={objectiveName(initiative.objetivoId)} onDialog={onDialog} onDelete={onDelete} />
-          ))}
-        </div>
+        <PlanningCollection items={filteredInitiatives} name="iniciativas.pagina" label="Iniciativas" kind="initiative" className="grid gap-4 lg:grid-cols-2">
+          {(initiative) => <InitiativeCard key={initiative.id} initiative={initiative} objectiveName={objectiveName(initiative.objetivoId)} options={options} onDialog={onDialog} onDelete={onDelete} />}
+        </PlanningCollection>
       ) : (
         <div className="geo-surface rounded-lg border-dashed p-8 text-center">
           <RocketLaunch aria-hidden="true" className="mx-auto h-8 w-8 text-brand-primary-600 dark:text-brand-primary-200" weight="duotone" />
           <h3 className="mt-4 text-xl font-semibold text-zinc-950 dark:text-white">Transforme objetivos em execução</h3>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Cadastre a primeira iniciativa com responsável, prazo e próximo marco.</p>
-          <button type="button" onClick={() => onDialog({ kind: 'initiative' })} className={cn(primarySmallActionButtonClass, 'mx-auto mt-5')}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Criar primeira iniciativa
-          </button>
         </div>
       )}
     </section>
@@ -1189,16 +1220,25 @@ function InitiativesPanel({
 function InitiativeCard({
   initiative,
   objectiveName,
+  options,
   onDialog,
   onDelete
 }: {
   initiative: StrategicInitiative;
   objectiveName: string;
+  options?: StrategicOptions;
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
+  const [params] = useSearchParams();
+  const returnParams = new URLSearchParams(params);
+  returnParams.set('foco', `initiative-${initiative.id}`);
+  const returnTo = `/planejamento?${returnParams.toString()}`;
+  const project = options?.projetos.find(item => item.id === initiative.projetoId);
+  const task = options?.tarefas.find(item => item.id === initiative.tarefaId);
+  const withReturn = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${new URLSearchParams({ retorno: returnTo })}`;
   return (
-    <article className={cn('geo-surface rounded-lg p-5', initiative.atrasada && 'border-red-200 dark:border-red-400/20')}>
+    <article id={`planning-record-initiative-${initiative.id}`} tabIndex={-1} className={cn('geo-focus-ring geo-surface rounded-lg p-5', initiative.atrasada && 'border-red-200 dark:border-red-400/20')}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -1224,9 +1264,14 @@ function InitiativeCard({
         <div><dt className="text-xs text-zinc-500 dark:text-zinc-400">Orçamento</dt><dd className="mt-1 font-semibold tabular-nums text-zinc-900 dark:text-white">{initiative.orcamentoCentavos == null ? 'Não informado' : currencyFormatter.format(initiative.orcamentoCentavos / 100)}</dd></div>
       </dl>
       {initiative.dependencias ? <p className="mt-4 break-words text-xs leading-5 text-zinc-500 dark:text-zinc-400"><strong>Dependências:</strong> {initiative.dependencias}</p> : null}
+      {initiative.projetoId || initiative.tarefaId ? <p className="mt-4 break-words text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+        {project ? `Projeto: ${project.nome} · ${project.status}. ` : initiative.projetoId ? 'Projeto vinculado. ' : ''}
+        {task ? `Tarefa: ${task.titulo} · ${task.status}.` : initiative.tarefaId ? 'Tarefa vinculada.' : ''}
+        {' '}O vínculo não altera o progresso informado.
+      </p> : null}
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
-        {initiative.projetoId ? <Link to={`/projetos/${initiative.projetoId}`} className="geo-focus-ring inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-200">Abrir projeto <ArrowSquareOut aria-hidden="true" className="h-3.5 w-3.5" /></Link> : null}
-        {initiative.tarefaId ? <Link to="/tarefas" className="geo-focus-ring inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">Abrir tarefa <ArrowSquareOut aria-hidden="true" className="h-3.5 w-3.5" /></Link> : null}
+        {initiative.projetoId ? <Link to={withReturn(appLinks.project(initiative.projetoId))} className="geo-focus-ring inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 font-semibold text-sky-700 dark:border-sky-400/20 dark:bg-sky-400/10 dark:text-sky-200">Abrir projeto <ArrowSquareOut aria-hidden="true" className="h-3.5 w-3.5" /></Link> : null}
+        {initiative.tarefaId ? <Link to={withReturn(appLinks.task(initiative.tarefaId))} className="geo-focus-ring inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 font-semibold text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-400/10 dark:text-emerald-200">Abrir tarefa <ArrowSquareOut aria-hidden="true" className="h-3.5 w-3.5" /></Link> : null}
       </div>
     </article>
   );
@@ -1238,7 +1283,8 @@ function ReviewsPanel({
   onFilterChange,
   onClearFilters,
   onDialog,
-  onDelete
+  onDelete,
+  onOpenRecord
 }: {
   snapshot: StrategicPlanningSnapshot;
   filters: PlanningFilters;
@@ -1246,53 +1292,51 @@ function ReviewsPanel({
   onClearFilters: () => void;
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
+  onOpenRecord: (tab: TabKey, recordId: string) => void;
 }) {
+  const [params] = useSearchParams();
+  const view = governanceView(params);
   const today = saoPauloDateKey();
   const decisions = filterDecisions(snapshot.decisoes, filters, today);
-  const risks = filterRisks(snapshot.riscos, filters);
+  const risks = filterRisks(snapshot.riscos, filters, snapshot.iniciativas);
   const checkins = filterCheckins(snapshot.checkins, filters);
-  const total = snapshot.decisoes.length + snapshot.riscos.length + snapshot.checkins.length;
-  const resultCount = decisions.length + risks.length + checkins.length;
+  const total = view === 'revisoes' ? snapshot.checkins.length : view === 'decisoes' ? snapshot.decisoes.length : view === 'riscos' ? snapshot.riscos.length : snapshot.decisoes.length + snapshot.riscos.length + snapshot.checkins.length;
+  const resultCount = view === 'revisoes' ? checkins.length : view === 'decisoes' ? decisions.length : view === 'riscos' ? risks.length : decisions.length + risks.length + checkins.length;
   return (
     <section id="planning-panel-revisoes" role="tabpanel" aria-labelledby="planning-tab-revisoes" className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">O que exige decisão?</span>
           <h2 className="mt-1 text-2xl font-semibold text-zinc-950 dark:text-white">Revisões, decisões e riscos</h2>
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Registre a leitura do ciclo e mantenha mitigação e responsabilidade explícitas.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" onClick={() => onDialog({ kind: 'decision' })} className={secondarySmallActionButtonClass}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Nova decisão
-          </button>
-          <button type="button" onClick={() => onDialog({ kind: 'risk' })} className={secondarySmallActionButtonClass}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Novo risco
-          </button>
-          <button type="button" onClick={() => onDialog({ kind: 'checkin' })} className={primarySmallActionButtonClass}>
-            <Plus aria-hidden="true" className="h-4 w-4" /> Registrar revisão
-          </button>
-        </div>
       </div>
+      <nav aria-label="Listas de governança" className="flex flex-wrap gap-2">
+        {([['revisoes', 'Revisões', snapshot.checkins.length], ['decisoes', 'Decisões', snapshot.decisoes.length], ['riscos', 'Riscos', snapshot.riscos.length], ['todas', 'Visão conjunta', total]] as const).map(([id, title, count]) => (
+          <Link key={id} to={`?${changeGovernanceView(params, id)}`} aria-current={view === id ? 'page' : undefined} className={cn(secondarySmallActionButtonClass, view === id && 'border-brand-primary-300 bg-brand-primary-50 text-brand-primary-800 dark:bg-brand-primary-400/10 dark:text-brand-primary-200')}>{title}{id !== 'todas' ? ` (${count})` : ''}</Link>
+        ))}
+      </nav>
       <PlanningFilterBar
         filters={filters}
         snapshot={snapshot}
         resultCount={resultCount}
         totalCount={total}
         mode="reviews"
+        view={view}
         onChange={onFilterChange}
         onClear={onClearFilters}
       />
-      {Object.values(filters).some(Boolean) && resultCount === 0 ? <FilteredEmptyState onClear={onClearFilters} /> : null}
-      <div className="grid items-start gap-6 xl:grid-cols-3">
-        <section className="geo-surface rounded-lg p-5" aria-labelledby="decisions-list-title">
+      {view === 'todas' ? <p role="status" aria-live="polite" className="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{decisions.length} de {snapshot.decisoes.length} decisões · {checkins.length} de {snapshot.checkins.length} revisões · {risks.length} de {snapshot.riscos.length} riscos</p> : null}
+      {hasPlanningFilters(filters) && resultCount === 0 ? <FilteredEmptyState onClear={onClearFilters} /> : null}
+      <div className={cn('grid items-start gap-6', view === 'todas' && 'xl:grid-cols-3')}>
+        {(view === 'decisoes' || view === 'todas') ? <section className="geo-surface rounded-lg p-5" aria-labelledby="decisions-list-title">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-200">Governança</span>
             <h3 id="decisions-list-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Decisões estratégicas</h3>
           </div>
           {decisions.length ? (
-            <ul className="mt-5 space-y-4">
-              {decisions.map((decision) => <DecisionCard key={decision.id} decision={decision} onDialog={onDialog} onDelete={onDelete} />)}
-            </ul>
+            <PlanningCollection items={decisions} name="revisoes.pagina.decisions" label="Decisões" kind="decision" as="ul" className="mt-5 space-y-4">
+              {(decision) => <DecisionCard key={decision.id} decision={decision} onDialog={onDialog} onDelete={onDelete} />}
+            </PlanningCollection>
           ) : (
             <div className="mt-5 rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
               <Lightbulb aria-hidden="true" className="mx-auto h-7 w-7 text-zinc-500" weight="duotone" />
@@ -1300,33 +1344,33 @@ function ReviewsPanel({
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Registre responsável, prazo e situação para acompanhar o encaminhamento.</p>
             </div>
           )}
-        </section>
-        <section className="geo-surface rounded-lg p-5" aria-labelledby="checkins-title">
+        </section> : null}
+        {(view === 'revisoes' || view === 'todas') ? <section className="geo-surface rounded-lg p-5" aria-labelledby="checkins-title">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-brand-primary-700 dark:text-brand-primary-200">Histórico de decisão</span>
             <h3 id="checkins-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Revisões estratégicas</h3>
           </div>
           {checkins.length ? (
-            <ol className="mt-5 space-y-4">
-              {checkins.map((checkin) => <CheckinCard key={checkin.id} checkin={checkin} onDialog={onDialog} onDelete={onDelete} />)}
-            </ol>
+            <PlanningCollection items={checkins} name="revisoes.pagina.checkins" label="Revisões" kind="checkin" as="ol" className="mt-5 space-y-4">
+              {(checkin) => <CheckinCard key={checkin.id} checkin={checkin} decisions={snapshot.decisoes.filter(item => item.checkinId === checkin.id)} onOpenRecord={onOpenRecord} onDialog={onDialog} onDelete={onDelete} />}
+            </PlanningCollection>
           ) : (
             <div className="mt-5 rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
               <CalendarCheck aria-hidden="true" className="mx-auto h-7 w-7 text-zinc-500" weight="duotone" />
               <p className="mt-3 font-semibold text-zinc-950 dark:text-white">Nenhuma revisão registrada</p>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Registre situação, bloqueios, decisões e próximos passos.</p>
+              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Registre a leitura do ciclo e vincule decisões com responsável e prazo.</p>
             </div>
           )}
-        </section>
-        <section className="geo-surface rounded-lg p-5" aria-labelledby="risks-title">
+        </section> : null}
+        {(view === 'riscos' || view === 'todas') ? <section className="geo-surface rounded-lg p-5" aria-labelledby="risks-title">
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-200">Gestão preventiva</span>
             <h3 id="risks-title" className="mt-1 text-xl font-semibold text-zinc-950 dark:text-white">Riscos estratégicos</h3>
           </div>
           {risks.length ? (
-            <ul className="mt-5 space-y-4">
-              {risks.map((risk) => <RiskCard key={risk.id} risk={risk} onDialog={onDialog} onDelete={onDelete} />)}
-            </ul>
+            <PlanningCollection items={risks} name="revisoes.pagina.risks" label="Riscos" kind="risk" as="ul" className="mt-5 space-y-4">
+              {(risk) => <RiskCard key={risk.id} risk={risk} onDialog={onDialog} onDelete={onDelete} />}
+            </PlanningCollection>
           ) : (
             <div className="mt-5 rounded-lg border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
               <ShieldWarning aria-hidden="true" className="mx-auto h-7 w-7 text-zinc-500" weight="duotone" />
@@ -1334,7 +1378,7 @@ function ReviewsPanel({
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">A ausência de registros não significa ausência de risco. Revise o ciclo periodicamente.</p>
             </div>
           )}
-        </section>
+        </section> : null}
       </div>
     </section>
   );
@@ -1342,15 +1386,21 @@ function ReviewsPanel({
 
 function CheckinCard({
   checkin,
+  decisions,
+  onOpenRecord,
   onDialog,
   onDelete
 }: {
   checkin: StrategicCheckin;
+  decisions: StrategicDecision[];
+  onOpenRecord: (tab: TabKey, recordId: string) => void;
   onDialog: (dialog: PlanningDialog) => void;
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
+  const [showAllDecisions, setShowAllDecisions] = useState(false);
+  const visibleDecisions = showAllDecisions ? decisions : decisions.slice(0, 3);
   return (
-    <li className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+    <li id={`planning-record-checkin-${checkin.id}`} tabIndex={-1} className="geo-focus-ring rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2"><StatusBadge value={checkin.status} /><span className="text-xs text-zinc-500 dark:text-zinc-400">{formatDate(checkin.data)}</span></div>
@@ -1363,12 +1413,26 @@ function CheckinCard({
           deleteLabel={`Excluir revisão de ${formatDate(checkin.data)}`}
         />
       </div>
-      <dl className="mt-4 space-y-3 text-xs leading-5">
-        {checkin.bloqueios ? <div><dt className="font-semibold text-zinc-700 dark:text-zinc-200">Bloqueios</dt><dd className="break-words text-zinc-600 dark:text-zinc-400">{checkin.bloqueios}</dd></div> : null}
+      {checkin.bloqueios ? <p className="mt-3 break-words text-xs leading-5 text-zinc-600 dark:text-zinc-400"><strong>Bloqueios:</strong> {checkin.bloqueios}</p> : null}
+      {checkin.decisoes || checkin.decisoesPendentes || checkin.proximosPassos ? <details className="mt-3 text-xs leading-5">
+        <summary className="geo-focus-ring w-fit cursor-pointer rounded font-semibold text-zinc-700 dark:text-zinc-200">Anotações anteriores</summary>
+        <dl className="mt-3 space-y-3">
         {checkin.decisoes ? <div><dt className="font-semibold text-zinc-700 dark:text-zinc-200">Decisões tomadas</dt><dd className="break-words text-zinc-600 dark:text-zinc-400">{checkin.decisoes}</dd></div> : null}
         {checkin.decisoesPendentes ? <div className="rounded-lg bg-amber-50 p-3 dark:bg-amber-400/10"><dt className="font-semibold text-amber-900 dark:text-amber-100">Decisões pendentes</dt><dd className="break-words text-amber-800 dark:text-amber-200">{checkin.decisoesPendentes}</dd></div> : null}
         {checkin.proximosPassos ? <div><dt className="font-semibold text-zinc-700 dark:text-zinc-200">Próximos passos</dt><dd className="break-words text-zinc-600 dark:text-zinc-400">{checkin.proximosPassos}</dd></div> : null}
-      </dl>
+        </dl>
+      </details> : null}
+      {checkin.proximaRevisao ? <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">Próxima revisão prevista na época: {formatDate(checkin.proximaRevisao)}</p> : null}
+      <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Decisões vinculadas ({decisions.length})</h4>
+        {decisions.length ? <ul id={`checkin-decisions-${checkin.id}`} className="mt-2 space-y-2">{visibleDecisions.map(decision => <li key={decision.id}>
+          <button type="button" onClick={() => onOpenRecord('revisoes', `decision-${decision.id}`)} className="geo-focus-ring w-full rounded px-2 py-2 text-left text-sm text-brand-primary-700 hover:bg-brand-primary-50 dark:text-brand-primary-200 dark:hover:bg-brand-primary-400/10"><span className="break-words">{decision.descricao}</span><span className="mt-1 block text-xs">{label(decision.status)} · {decision.responsavel} · {formatDate(decision.prazo)}</span></button>
+        </li>)}</ul> : null}
+        {decisions.length > 3 ? <button type="button" aria-expanded={showAllDecisions} aria-controls={`checkin-decisions-${checkin.id}`} onClick={() => setShowAllDecisions(value => !value)} className={cn(secondarySmallActionButtonClass, 'mt-3 mr-2')}>
+          {showAllDecisions ? 'Mostrar menos decisões' : `Ver todas as ${decisions.length} decisões`}
+        </button> : null}
+        <button type="button" onClick={() => onDialog({ kind: 'decision', checkinId: checkin.id, parentId: checkin.objetivoId || undefined })} className={cn(secondarySmallActionButtonClass, 'mt-3')}><Plus aria-hidden="true" className="h-4 w-4" /> Adicionar decisão a esta revisão</button>
+      </div>
     </li>
   );
 }
@@ -1383,8 +1447,8 @@ function DecisionCard({
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
   return (
-    <li className={cn(
-      'rounded-lg border p-4',
+    <li id={`planning-record-decision-${decision.id}`} tabIndex={-1} className={cn(
+      'geo-focus-ring rounded-lg border p-4',
       decision.atrasada
         ? 'border-red-200 bg-red-50/60 dark:border-red-400/20 dark:bg-red-400/5'
         : 'border-zinc-200 dark:border-zinc-800'
@@ -1427,12 +1491,12 @@ function RiskCard({
   onDelete: (target: Exclude<DeleteTarget, null>) => void;
 }) {
   return (
-    <li className={cn('rounded-lg border p-4', ['alto', 'critico'].includes(risk.impacto) ? 'border-red-200 dark:border-red-400/20' : 'border-zinc-200 dark:border-zinc-800')}>
+    <li id={`planning-record-risk-${risk.id}`} tabIndex={-1} className={cn('geo-focus-ring rounded-lg border p-4', ['alto', 'critico'].includes(risk.impacto) ? 'border-red-200 dark:border-red-400/20' : 'border-zinc-200 dark:border-zinc-800')}>
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge value={risk.status} />
-            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Impacto {label(risk.impacto).toLowerCase()} · probabilidade {label(risk.probabilidade).toLowerCase()}</span>
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Impacto {label(risk.impacto).toLowerCase()} · probabilidade {label(risk.probabilidade).toLowerCase().replace(/o$/, 'a')}</span>
           </div>
           <p className="mt-3 break-words text-sm font-semibold leading-6 text-zinc-950 dark:text-white">{risk.descricao}</p>
         </div>

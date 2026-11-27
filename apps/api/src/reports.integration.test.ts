@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -243,7 +244,7 @@ test('relatório gerencial respeita período e semântica financeira canônica',
     }
 
     const reportStartedAt = performance.now();
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?inicio=2026-01-01&fim=2026-01-31',
       headers: { 'x-api-token': 'test-token' }
@@ -276,7 +277,7 @@ test('relatório gerencial respeita período e semântica financeira canônica',
     assert.equal(report.operational.kpis.activeAreaHa, 12.5);
     assert.equal(report.financeiro?.resultadoCaixa, 22_000);
 
-    const invalid = await server.inject({
+    const invalid = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?inicio=2026-02-01&fim=2026-01-01',
       headers: { 'x-api-token': 'test-token' }
@@ -284,7 +285,7 @@ test('relatório gerencial respeita período e semântica financeira canônica',
     assert.equal(invalid.statusCode, 400);
     assert.match(invalid.json<{ error: string }>().error, /data inicial/i);
 
-    const partial = await server.inject({
+    const partial = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?fim=2025-12-31',
       headers: { 'x-api-token': 'test-token' }

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -34,7 +35,7 @@ test('Sessão 05 protege contratos, vínculos, interrupção financeira e exclus
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     url: string,
     payload?: unknown
-  ): Promise<any> => await server.inject({
+  ): Promise<any> => await injectWithRecordVersion(server, {
     method,
     url,
     headers: payload === undefined ? authHeaders : { ...authHeaders, 'content-type': 'application/json' },

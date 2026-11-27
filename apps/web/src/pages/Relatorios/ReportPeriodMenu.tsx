@@ -82,7 +82,7 @@ export function ReportPeriodMenu({
         aria-controls={popoverId}
         aria-haspopup="dialog"
         onClick={() => setOpen((current) => !current)}
-        className="geo-focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 transition-[background-color,border-color,color] hover:border-indigo-400/50 hover:bg-zinc-800 hover:text-white"
+        className="geo-field-surface geo-focus-ring inline-flex min-h-11 items-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 px-3 text-sm font-semibold text-zinc-100 transition-[background-color,border-color,color] hover:border-indigo-400/50 hover:bg-zinc-800 hover:text-white"
       >
         <CalendarBlank aria-hidden="true" className="h-4 w-4 shrink-0 text-indigo-300" weight="duotone" />
         <span className="whitespace-nowrap">Período: {activeLabel}</span>

@@ -1,0 +1,28 @@
+.budget-aura-grid,
+.budget-aura-analysis-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+}
+.budget-aura-grid { padding: 0 16px 16px; }
+.budget-aura-analysis-grid { margin-top: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+
+html:not(.dark) .budget-aura-grid .aura-widget.budget-aura--receipts {
+  --aura-start: #efd0df;
+  --aura-end: #e1d8f3;
+  --aura-shade: radial-gradient(ellipse 90% 100% at 75% 80%, rgb(255 246 252 / 52%), transparent 100%);
+}
+
+.dark .budget-aura-grid .aura-widget.budget-aura--receipts {
+  --aura-start: #8f456e;
+  --aura-end: #716294;
+  --aura-shade: radial-gradient(ellipse 92% 108% at 75% 82%, rgb(45 30 57 / 62%), transparent 100%);
+}
+
+.budget-aura-grid .aura-widget.aura-small-balance.budget-aura--receivables {
+  --aura-start: #783e3a;
+  --aura-end: #a55746;
+  --aura-shade: radial-gradient(ellipse 92% 95% at 86% 15%, rgb(70 32 36 / 48%), transparent 100%);
+  --aura-muted: #fff;
+  --aura-balance-reading-ink: #fff;
+}

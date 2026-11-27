@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -28,7 +29,7 @@ test('Clientes, Contatos e Projetos reconciliam linhas válidas, duplicadas e in
     const payload = { rows, sourceRowNumbers: rows.map((_, index) => index + 2) };
     const bytes = Buffer.from(JSON.stringify(payload));
     fixtures.push({ key, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length });
-    return server.inject({
+    return injectWithRecordVersion(server, {
       method: 'POST', url, headers: { ...headers, 'idempotency-key': `simple-recon-${key}` }, payload
     });
   };
@@ -93,7 +94,7 @@ test('Clientes, Contatos e Projetos reconciliam linhas válidas, duplicadas e in
       assert.equal(rows.length, result.rowsRead);
       assert.deepEqual(rows.map(row => [row.rowNumber, row.status]), result.results.map(row => [row.row, row.status]));
       assert.deepEqual(rows.map(row => row.recordId ?? null), result.results.map(row => row.id ?? null));
-      const history = await server.inject({ method: 'GET', url: `/api/importacoes/${result.importId}/linhas`, headers });
+      const history = await injectWithRecordVersion(server, { method: 'GET', url: `/api/importacoes/${result.importId}/linhas`, headers });
       assert.equal(history.statusCode, 200, history.body);
       assert.equal(history.json<{ items: unknown[] }>().items.length, result.rowsRead);
     }

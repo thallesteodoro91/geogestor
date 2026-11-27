@@ -3,6 +3,7 @@ import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interface
 import { loadPdfMake } from '../../utils/loadPdfMake';
 import {
   executiveSummary,
+  executiveAlerts,
   formatCurrency,
   formatDate,
   formatGeneratedAt,
@@ -12,6 +13,7 @@ import {
   type ReportType
 } from './reportPresentation';
 import { buildReportDocumentModel } from './reportDocumentModel';
+import { executivePdfCharts } from './executivePdfCharts';
 import { getCachedCompanyTemplate, type CompanyTemplate } from '../../services/companyTemplate';
 import { reportAlertCopy } from './reportAlertCopy';
 
@@ -135,7 +137,7 @@ function alertsContent(report: ManagerialReport, type: ReportType): Content[] {
     ? report.financial.alerts
     : type === 'projetos'
       ? report.operational.alerts
-      : [...report.financial.alerts, ...report.operational.alerts];
+      : executiveAlerts(report);
   if (!alerts.length) return [];
   return [
     { text: 'Pontos de atenção', style: 'section' },
@@ -176,6 +178,7 @@ export function createManagerialReportPdfDefinition(
 
   return {
     pageSize: 'A4',
+    info: { title: reportTitle(type), author: template.razao || 'GeoGestor' },
     pageMargins: [42, 86, 42, 52],
     header: {
       margin: [42, 18, 42, 0],
@@ -209,7 +212,8 @@ export function createManagerialReportPdfDefinition(
       ...typeContent,
       ...alertsContent(report, type),
       { text: 'Critérios e metodologia', style: 'section' },
-      { ul: documentModel.criteria } as Content
+      { ul: documentModel.criteria } as Content,
+      ...(type === 'executivo' ? executivePdfCharts(report) : [])
     ],
     styles: {
       title: { fontSize: 18, bold: true, color: '#18181b' },

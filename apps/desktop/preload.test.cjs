@@ -55,6 +55,16 @@ test('preload lê porta e token uma única vez durante a inicialização', () =>
   assert.deepEqual(syncCalls, ['get-api-token', 'get-api-port']);
 });
 
+test('preload comunica alterações e salvamento dos editores de licenciamento', () => {
+  const { api, sentMessages } = loadPreload();
+  api.setLicenseDraftState('license', { dirty: true, saving: false });
+  api.setLicenseDraftState('license', { dirty: false, saving: false });
+  assert.deepEqual(JSON.parse(JSON.stringify(sentMessages)), [
+    ['set-license-draft-state', { id: 'license', dirty: true, saving: false }],
+    ['set-license-draft-state', { id: 'license', dirty: false, saving: false }]
+  ]);
+});
+
 test('preload envia somente milestones de startup permitidos', () => {
   const { api, sentMessages } = loadPreload();
 
@@ -86,6 +96,14 @@ test('preload expõe a abertura segura da pasta de diagnósticos somente via IPC
   const { api } = loadPreload();
   assert.equal(typeof api.openDiagnosticsFolder, 'function');
   assert.equal(await api.openDiagnosticsFolder(), null);
+});
+
+test('preload disponibiliza somente operações específicas para salvar e abrir orçamento PDF', async () => {
+  const { api } = loadPreload();
+  assert.equal(typeof api.saveBudgetPdf, 'function');
+  assert.equal(typeof api.openBudgetPdf, 'function');
+  assert.equal(await api.saveBudgetPdf({ fileName: 'proposta.pdf', bytes: new Uint8Array() }), null);
+  assert.equal(await api.openBudgetPdf('proposta.pdf'), null);
 });
 
 test('preload entrega e remove o estado de backup durante o encerramento', () => {

@@ -21,16 +21,16 @@ test('v11 integra runtime 15, ledger, backup, rollback e fast path sem evoluÃ§
 
   try {
     const initial = await runRuntimeMigrations();
-    assert.deepEqual(initial, { fastPath: false, schemaVersion: 17 });
+    assert.deepEqual(initial, { fastPath: false, schemaVersion: 19 });
 
     const client = createClient({ url: `file:${databasePath}` });
     try {
       assert.deepEqual(
         (await client.execute('SELECT version, status FROM schema_migrations ORDER BY version')).rows
           .map((row) => [Number(row.version), row.status]),
-        Array.from({ length: 17 }, (_, index) => [index + 1, 'success'])
+        Array.from({ length: 19 }, (_, index) => [index + 1, 'success'])
       );
-      assert.equal(Number((await client.execute('PRAGMA user_version')).rows[0]?.user_version), 17);
+      assert.equal(Number((await client.execute('PRAGMA user_version')).rows[0]?.user_version), 19);
 
       const performanceIndexes = (await client.execute(
         "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN ('idx_despesas_active_data_created', 'idx_orcamentos_active_created') ORDER BY name"
@@ -41,7 +41,7 @@ test('v11 integra runtime 15, ledger, backup, rollback e fast path sem evoluÃ§
       await client.execute('DROP TABLE import_rows');
       await client.execute('DROP TABLE import_runs');
       await client.execute('DELETE FROM schema_migrations WHERE version = 11');
-      await client.execute('PRAGMA user_version = 17');
+      await client.execute('PRAGMA user_version = 19');
 
       const reconciled = await runRuntimeMigrations();
       assert.equal(reconciled.fastPath, false);
@@ -76,7 +76,7 @@ test('v11 integra runtime 15, ledger, backup, rollback e fast path sem evoluÃ§
 
       await client.execute('DROP VIEW import_runs');
       const recovered = await runRuntimeMigrations();
-      assert.equal(recovered.schemaVersion, 17);
+      assert.equal(recovered.schemaVersion, 19);
       assert.equal((await client.execute('SELECT status FROM schema_migrations WHERE version = 11')).rows[0]?.status, 'success');
       assert.equal(Number((await client.execute('PRAGMA foreign_key_check')).rows.length), 0);
     } finally {

@@ -36,7 +36,10 @@ test('selects e comboboxes usam o tratamento de dropdown inspirado no Zard', () 
   assert.match(select, /geo-dropdown-content/);
   assert.match(select, /geo-dropdown-item/);
   assert.match(select, /geo-dropdown-trigger flex w-48 max-w-full/);
-  assert.match(select, /minWidth=\{192\} maxWidth=\{192\}/);
+  assert.match(select, /popoverMaxWidth = 420/);
+  assert.match(select, /matchTriggerWidth = false/);
+  assert.match(select, /minWidth=\{matchTriggerWidth \? 0 : optionWidth\} maxWidth=\{popoverMaxWidth\}/);
+  assert.match(select, /min-w-0 flex-1 break-words/);
   assert.match(remote, /geo-dropdown-trigger/);
   assert.match(remote, /geo-dropdown-content/);
   assert.match(remote, /geo-dropdown-item/);

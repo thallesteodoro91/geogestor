@@ -71,7 +71,7 @@ export async function loadAuxiliaryCatalogs(): Promise<AuxiliaryCatalogs> {
     const repairs: Record<string, unknown> = {};
     if (!hasCanonicalServices) repairs[SERVICE_CATALOG_KEY] = services;
     if (!hasCanonicalExpenses) repairs[EXPENSE_CATALOG_KEY] = expenses;
-    if (Object.keys(repairs).length) await persistOperationalSettings(repairs);
+    if (Object.keys(repairs).length) await persistOperationalSettings(repairs, Object.fromEntries(Object.keys(repairs).map((key) => [key, settings[key] ?? null])));
     writeCache(services, expenses);
     return { services, expenses, source: 'database', degraded: false };
   } catch {
@@ -86,14 +86,14 @@ export async function loadAuxiliaryCatalogs(): Promise<AuxiliaryCatalogs> {
   }
 }
 
-export async function saveServiceCatalog(services: ServiceCatalogItem[]) {
+export async function saveServiceCatalog(services: ServiceCatalogItem[], expected?: ServiceCatalogItem[]) {
   const parsed = ServiceCatalogSchema.parse(services);
-  await persistOperationalSettings({ [SERVICE_CATALOG_KEY]: parsed });
+  await persistOperationalSettings({ [SERVICE_CATALOG_KEY]: parsed }, expected ? { [SERVICE_CATALOG_KEY]: expected } : undefined);
   return parsed;
 }
 
-export async function saveExpenseCatalog(expenses: ExpenseCatalogItem[]) {
+export async function saveExpenseCatalog(expenses: ExpenseCatalogItem[], expected?: ExpenseCatalogItem[]) {
   const parsed = ExpenseCatalogSchema.parse(expenses);
-  await persistOperationalSettings({ [EXPENSE_CATALOG_KEY]: parsed });
+  await persistOperationalSettings({ [EXPENSE_CATALOG_KEY]: parsed }, expected ? { [EXPENSE_CATALOG_KEY]: expected } : undefined);
   return parsed;
 }

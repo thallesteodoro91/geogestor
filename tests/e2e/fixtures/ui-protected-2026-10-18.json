@@ -1,0 +1,183 @@
+{
+  "version": "2026-10-18",
+  "reason": "Referência anterior à implementação atual. Incorpora a correção min-w-0 do painel lateral e os campos grafite já autorizados, sem sobrescrever referências históricas.",
+  "view": [
+    {
+      "selector": "#main-content h1",
+      "className": "text-3xl font-semibold tracking-tighter text-zinc-950 dark:text-white md:text-[2.25rem]",
+      "width": 664,
+      "font": "36px",
+      "color": "rgb(9, 9, 11)",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": []
+    },
+    {
+      "selector": ".client-contact-card",
+      "className": "client-contact-card min-w-0 rounded-3xl border border-zinc-200/70 bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.03] dark:border-zinc-800 dark:bg-zinc-900/90 dark:ring-white/[0.04]",
+      "width": 736,
+      "font": "16px",
+      "color": "rgb(24, 24, 27)",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "DIV",
+          "classes": "mb-4 flex items-start justify-between gap-3"
+        },
+        {
+          "tag": "DIV",
+          "classes": "client-contact-grid grid grid-cols-1 gap-2.5 text-xs text-zinc-600"
+        },
+        {
+          "tag": "DIV",
+          "classes": "mt-4 border-t border-zinc-100 pt-4 dark:border-zinc-800"
+        }
+      ]
+    },
+    {
+      "selector": "[aria-labelledby=\"client-summary-title\"]",
+      "className": "relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-stone-950 via-stone-900 to-slate-800 p-6 text-white shadow-[0_24px_50px_-24px_rgba(15,23,42,0.75)]",
+      "width": 736,
+      "font": "16px",
+      "color": "rgb(255, 255, 255)",
+      "background": "rgba(0, 0, 0, 0) linear-gradient(to right bottom, rgb(12, 10, 9), rgb(28, 25, 23), rgb(30, 41, 59)) repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "DIV",
+          "classes": "pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl"
+        },
+        {
+          "tag": "DIV",
+          "classes": "pointer-events-none absolute -bottom-20 left-1/3 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl"
+        },
+        {
+          "tag": "DIV",
+          "classes": "relative"
+        },
+        {
+          "tag": "DIV",
+          "classes": "relative pt-4 mt-4 border-t border-stone-700 flex justify-between items-center text-xs text-stone-400 font-medium"
+        }
+      ]
+    },
+    {
+      "selector": "[aria-label^=\"Mapa das propriedades\"]",
+      "className": "h-full w-full min-w-0 leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom",
+      "width": 734,
+      "font": "12px",
+      "color": "rgb(24, 24, 27)",
+      "background": "rgb(221, 221, 221) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "DIV",
+          "classes": "leaflet-pane leaflet-map-pane"
+        },
+        {
+          "tag": "DIV",
+          "classes": "leaflet-control-container"
+        }
+      ]
+    },
+    {
+      "selector": "[role=tablist]",
+      "className": "flex w-full items-stretch gap-1 overflow-x-auto pb-1",
+      "width": 722,
+      "font": "16px",
+      "color": "rgb(24, 24, 27)",
+      "background": "rgba(0, 0, 0, 0) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 shadow-sm bg-gradient-to-r from-brand-green-50 via-brand-turquoise-50 to-brand-green-100 text-brand-green-700 ring-brand-green-200/70 dark:from-brand-green-400/15 dark:via-brand-turquoise-400/10 dark:to-brand-green-300/15 dark:text-brand-green-100 dark:ring-brand-green-300/15 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        },
+        {
+          "tag": "BUTTON",
+          "classes": "geo-focus-ring inline-flex min-h-11 items-center whitespace-nowrap rounded-lg py-2.5 font-semibold outline-none ring-1 ring-transparent text-zinc-600 hover:bg-brand-surface hover:text-zinc-950 hover:shadow-brand dark:text-zinc-300 dark:hover:bg-brand-surface-muted dark:hover:text-zinc-100 h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]"
+        }
+      ]
+    },
+    {
+      "selector": "aside",
+      "className": "fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-shrink-0 select-none flex-col bg-white shadow-[6px_0_24px_-20px_rgba(15,23,42,0.45)] ring-1 ring-zinc-200/80 transition-transform duration-300 ease-out dark:bg-zinc-900 dark:ring-zinc-800/90 md:sticky md:inset-y-auto md:top-0 md:translate-x-0 -translate-x-full",
+      "width": 288,
+      "font": "16px",
+      "color": "rgb(24, 24, 27)",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "DIV",
+          "classes": "flex items-center justify-between gap-3 border-b border-zinc-100 px-5 py-5 dark:border-zinc-800"
+        },
+        {
+          "tag": "NAV",
+          "classes": "flex-1 space-y-6 overflow-y-auto px-4 py-5"
+        },
+        {
+          "tag": "DIV",
+          "classes": "border-t border-zinc-100 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4 dark:border-zinc-800"
+        }
+      ]
+    },
+    {
+      "selector": "header",
+      "className": "flex md:hidden print:hidden items-center justify-between px-4 py-3 bg-white dark:bg-zinc-900 border-b border-zinc-200/85 dark:border-zinc-800/80 sticky top-0 z-30 flex-shrink-0",
+      "width": 0,
+      "font": "16px",
+      "color": "rgb(24, 24, 27)",
+      "background": "rgb(255, 255, 255) none repeat scroll 0% 0% / auto padding-box border-box",
+      "children": [
+        {
+          "tag": "DIV",
+          "classes": "flex items-center gap-3"
+        },
+        {
+          "tag": "DIV",
+          "classes": "flex items-center gap-1"
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "apps/web/src/pages/Clientes/ClienteDetalhes.tsx": "1d49e085090100c92f0f13341e07b42890f4bd9281cc2e25d41267db656880f6",
+    "apps/web/src/pages/Clientes/ClienteDetalhes/ClienteMapaCard.tsx": "a1c75a4b0aba9677fae7a79f519c6b191deef5a764e8746ecaf4ecb7a8390a56",
+    "apps/web/src/pages/Clientes/ClienteCentralControle.tsx": "0c5dd72c86e6da5ced6b5afdc95a2630e90b92992822206e5d0a106e15c49518",
+    "apps/web/src/index.css": "7b38927b1c0ccf63559ca288d83b8462f371854a29c6de8fa383face31766430",
+    "apps/web/src/main.tsx": "f4688cc964333897383b49f145c65c6fe26b53866b598e8ae8f9b4d702d8c675",
+    "apps/desktop/main.js": "f07bc30a27e500fd5db44cb38609e5a9f232859495652a244f7a1b13f176e2d3",
+    "apps/desktop/preload.js": "2c8a02782b03aaf5398f9fba2b65d6a9d4b3b9cd14bcdd1b2916d7b067b70053",
+    "apps/web/src/components/Layout.tsx": "2a99078f8fa6bd07bcb33f076693e3b557cf9ba710f1975299c12a417be139b5",
+    "apps/web/src/components/Modal.tsx": "8d67310951b109a51d89c818eeef1903e415438bf23e54c86d230ba42dccb8ff",
+    "apps/web/src/components/form-controls/DatePickerField.tsx": "5417801b08ae6767325379e2a6da39c8891bd59f74a0bbe1e0ccf42e4bf68c01",
+    "apps/web/src/components/form-controls/SelectField.tsx": "63595a4063d42bf2c6b68caaa55eebe12d9931f505be8bc656e2d0cc7e8820d5",
+    "apps/web/src/utils/geoTheme.ts": "f9fcc45e24e2be161d2e25c23c9f3bf29f4e38b40f875b88e89d39eda73d46a6",
+    "apps/web/src/utils/actionStyles.ts": "b16d073c5d1ea42182d9274318119415f8782ab219ad15d5031f5946d8f17aa5",
+    "apps/api/src/routes/clientes.routes.ts": "1070d88591a0659ac05603e4d27094936499c50cbec6c1736452d839b180c582"
+  },
+  "normalizations": [
+    {
+      "path": "apps/web/src/pages/Clientes/ClienteDetalhes.tsx",
+      "from": "underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-100 transition-colors",
+      "to": "hover:text-zinc-900 dark:text-zinc-100 transition-colors",
+      "reason": "Somente sublinhado do link no breadcrumb para distingui-lo sem depender de cor; sem mudança de posição, dados ou estrutura."
+    }
+  ]
+}

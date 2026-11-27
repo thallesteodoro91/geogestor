@@ -1,6 +1,8 @@
 import type { ManagerialReport } from '@geogestor/contracts';
 import {
   executiveSummary,
+  executiveAlerts,
+  executiveCriteria,
   formatCurrency,
   formatDate,
   formatGeneratedAt,
@@ -83,7 +85,7 @@ export function buildReportDocumentModel(report: ManagerialReport, type: ReportT
     ? report.financial.alerts
     : type === 'projetos'
       ? report.operational.alerts
-      : [...report.financial.alerts, ...report.operational.alerts])
+      : executiveAlerts(report))
     .map(reportAlertCopy);
   const criteria = type === 'financeiro'
     ? [
@@ -94,7 +96,7 @@ export function buildReportDocumentModel(report: ManagerialReport, type: ReportT
       ]
     : type === 'projetos'
       ? [report.period.rules.projects, report.period.rules.activeArea]
-      : [report.period.rules.receivedRevenue, report.period.rules.paidExpenses, report.period.rules.projects, report.period.rules.activeArea];
+      : executiveCriteria(report);
 
   return {
     title: reportTitle(type),

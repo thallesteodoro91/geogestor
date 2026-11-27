@@ -1,0 +1,10 @@
+/* Preserve the brand gradient while keeping white text/icons readable at every stop. */
+.planning-workspace .geo-button-primary,
+.planning-editor-submit {
+  background-image: linear-gradient(115deg, hsl(var(--brand-turquoise-800)), hsl(var(--brand-primary-500)) 52%, hsl(var(--brand-indigo-500)));
+}
+
+.planning-workspace .geo-button-primary:hover,
+.planning-editor-submit:hover {
+  background-image: linear-gradient(115deg, hsl(var(--brand-turquoise-800)), hsl(var(--brand-primary-400)) 52%, hsl(var(--brand-indigo-500)));
+}

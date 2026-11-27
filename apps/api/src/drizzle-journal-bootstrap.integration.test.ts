@@ -43,7 +43,8 @@ test('journal oficial 0000-0014 inicializa schema completo e permanece contido n
       '0011_strategic_governance',
       '0012_unified_deadline_alerts',
       '0013_client_workspace_integrity',
-      '0014_import_runs'
+      '0014_import_runs',
+      '0015_calendar_sync'
     ].map((tag, idx) => [idx, tag])
   );
 
@@ -51,7 +52,7 @@ test('journal oficial 0000-0014 inicializa schema completo e permanece contido n
   const runtimeClient = createClient({ url: `file:${runtimePath}` });
   try {
     const migrations = readMigrationFiles({ migrationsFolder });
-    assert.equal(migrations.length, 15);
+    assert.equal(migrations.length, 16);
     for (const [migrationIndex, migration] of migrations.entries()) {
       await drizzleClient.execute('BEGIN IMMEDIATE');
       try {
@@ -82,7 +83,7 @@ test('journal oficial 0000-0014 inicializa schema completo e permanece contido n
       [],
       'O bootstrap Drizzle nÃ£o pode criar tabelas desconhecidas pelo runtime desktop.'
     );
-    assert.equal(Number((await runtimeClient.execute('PRAGMA user_version')).rows[0]?.user_version), 17);
+    assert.equal(Number((await runtimeClient.execute('PRAGMA user_version')).rows[0]?.user_version), 19);
   } finally {
     await drizzleClient.close();
     await runtimeClient.close();

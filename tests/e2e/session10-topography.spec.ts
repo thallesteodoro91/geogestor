@@ -134,6 +134,7 @@ test.describe('Sessão 10 — Topografia', () => {
     await destination.getByLabel('Y / Norte (m)').fill('11000000');
     await expect(page.getByText(/O Norte 11000000.*fora do intervalo UTM/i).first()).toBeVisible();
     await expect(page.getByText('—', { exact: true }).first()).toBeVisible();
+    await page.getByRole('button', { name: 'Latitude/longitude', exact: true }).click();
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
     await expect(page.getByText('Mapa-base indisponível', { exact: true })).toBeVisible();
     await expectNoAxeViolations(page);

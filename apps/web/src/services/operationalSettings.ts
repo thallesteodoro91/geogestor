@@ -44,8 +44,8 @@ export async function persistOperationalSetting(
   return { cachePersisted: persistCache(key, storageValue) };
 }
 
-export async function persistOperationalSettings(values: Partial<Record<OperationalSettingKey, unknown>>) {
-  await apiClient.put('/api/dados-operacionais/configuracoes-operacionais', { values });
+export async function persistOperationalSettings(values: Partial<Record<OperationalSettingKey, unknown>>, expectedValues?: Record<string, unknown>) {
+  await apiClient.put('/api/dados-operacionais/configuracoes-operacionais', { values, ...(expectedValues ? { expectedValues } : {}) });
   invalidateSettingsRequestCache();
   const cacheFailures: string[] = [];
   for (const [key, value] of Object.entries(values)) {
@@ -54,7 +54,8 @@ export async function persistOperationalSettings(values: Partial<Record<Operatio
   return { cacheFailures };
 }
 
-export function getOperationalSettings() {
+export function getOperationalSettings(force = false) {
+  if (force) invalidateSettingsRequestCache();
   if (settingsCache && settingsCache.expiresAt > Date.now()) return Promise.resolve(settingsCache.values);
   if (settingsInFlight) return settingsInFlight;
   settingsInFlight = apiClient.get<Record<string, unknown>>('/api/dados-operacionais/configuracoes-operacionais')

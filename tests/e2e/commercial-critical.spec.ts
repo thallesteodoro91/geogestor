@@ -93,7 +93,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
     await page.locator('#client-cpf').fill('52998224725');
     await page.locator('#client-celular').fill('48999998888');
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
     await page.getByRole('searchbox', { name: 'Buscar clientes' }).fill(CLIENT_NAME);
@@ -107,7 +107,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('button', { name: `Ações de ${CLIENT_NAME}` }).click();
     await page.getByRole('menuitem', { name: 'Editar' }).click();
     await page.getByLabel('Nome completo').fill(UPDATED_CLIENT_NAME);
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
     await expect(page.getByRole('dialog', { name: /Editar cliente/ })).toHaveCount(0);
     const clientSearch = page.getByRole('searchbox', { name: 'Buscar clientes' });
     await clientSearch.fill(UPDATED_CLIENT_NAME);
@@ -128,7 +128,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
     await page.locator('#client-cpf').fill('11144477735');
     await page.locator('#client-celular').fill('48999997777');
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByRole('dialog', { name: /Novo cliente/ })).toHaveCount(0);
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
@@ -291,10 +291,25 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(administrationLabel).toBeVisible();
     await expect(page.getByRole('button', { name: 'GESTÃO E SISTEMA' })).toHaveCount(0);
 
-    const navigationStartedAt = await page.evaluate(() => performance.now());
+    // Measure inside the browser, excluding automation round trips and polling.
+    await page.evaluate(() => {
+      const state = { startedAt: 0, elapsedMs: null as number | null };
+      (window as typeof window & { __sidebarTiming?: typeof state }).__sidebarTiming = state;
+      const observer = new MutationObserver(() => {
+        if (state.startedAt && document.querySelector('h1')?.textContent?.includes('Relatórios')) {
+          observer.disconnect();
+          requestAnimationFrame(() => { state.elapsedMs = performance.now() - state.startedAt; });
+        }
+      });
+      document.querySelector('a[href="/relatorios"]')?.addEventListener('click', () => {
+        state.startedAt = performance.now();
+        observer.observe(document.querySelector('main')!, { childList: true, subtree: true });
+      }, { once: true });
+    });
     await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible();
-    expect(await page.evaluate((startedAt) => performance.now() - startedAt, navigationStartedAt)).toBeLessThan(250);
+    await page.waitForFunction(() => (window as typeof window & { __sidebarTiming?: { elapsedMs: number | null } }).__sidebarTiming?.elapsedMs != null);
+    expect(await page.evaluate(() => (window as typeof window & { __sidebarTiming?: { elapsedMs: number } }).__sidebarTiming!.elapsedMs)).toBeLessThan(250);
     expect(await page.evaluate(() => (
       (window as typeof window & { __geogestorSidebar?: Element | null }).__geogestorSidebar === document.querySelector('aside')
     ))).toBe(true);
@@ -384,11 +399,11 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /1 não lida/);
     await notificationTrigger.click();
-    await panel.getByRole('button', { name: 'Marcar alertas filtrados como lidos' }).click();
+    await panel.getByRole('button', { name: 'Marcar os alertas desta página como lidos' }).click();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /0 não lida/);
-    await expect(panel).toContainText('Tudo lido');
+    await expect(panel).toContainText('0 não lidas');
 
-    await panel.getByRole('button', { name: 'Apagar alertas filtrados' }).click();
+    await panel.getByRole('button', { name: 'Ocultar os alertas desta página' }).click();
     await expect(panel.locator('article')).toHaveCount(0);
     expect(hiddenIds.size).toBe(2);
     await panel.getByRole('button', { name: 'Desfazer' }).click();
@@ -451,7 +466,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
         && [...expected.searchParams].every(([key, value]) => url.searchParams.get(key) === value)
       ));
       await page.getByRole('button', {
-        name: `${destination.categoryLabel}: ${destination.title}. Vence hoje`,
+        name: `Abrir ${destination.categoryLabel}: ${destination.title}. Vence hoje`,
         exact: true
       }).click();
       await navigated;

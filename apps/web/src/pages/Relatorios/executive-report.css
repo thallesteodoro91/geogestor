@@ -1,0 +1,97 @@
+.executive-report { container-type: inline-size; min-width: 0; }
+.executive-summary-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.executive-metrics-grid { grid-template-columns: minmax(0, 1fr); }
+@container (min-width: 36rem) { .executive-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (min-width: 60rem) { .executive-metrics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.executive-aura {
+  container-type: inline-size;
+  display: grid;
+  align-content: space-between;
+  gap: 12px;
+  min-height: 218px;
+  font-family: 'Rethink Sans', 'Geist Sans', sans-serif;
+}
+
+.executive-aura h3 { font-size: 1rem; font-weight: 550; line-height: 1.25; }
+.executive-aura .aura-widget__value { font-size: clamp(1.5rem, 15cqi, 2.5rem); font-weight: 500; }
+.executive-aura__line {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.executive-aura__line { justify-content: space-between; }
+
+.dark .aura-widget.executive-aura--area {
+  --aura-end: #2e90fa;
+  /* Small 14 (10002:2978), measured against the frame bounds. */
+  --aura-shade: radial-gradient(ellipse 112.529% 118.598% at 50% 50%, #000 28.718%, transparent 100%);
+}
+html:not(.dark) .aura-widget.executive-aura--area {
+  --aura-start: #b9d7fb;
+  --aura-end: #cbe5fc;
+  --aura-shade: radial-gradient(ellipse 112.529% 118.598% at 50% 50%, #fff 28.718%, transparent);
+}
+.executive-aura--area { container-name: executive-area; place-content: center stretch; justify-items: center; text-align: center; min-height: 164px; }
+.executive-aura__area-dial {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  width: min(100%, 132px);
+  aspect-ratio: 1;
+}
+.executive-aura__area-reading {
+  grid-area: 1 / 1;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
+  padding: 14px min(14%, 18px);
+  overflow-wrap: anywhere;
+}
+.executive-aura__area-dial h3 { font-size: 0.75rem; color: var(--aura-muted); }
+.executive-aura__area-dial .aura-widget__value { font-size: clamp(1rem, 14cqi, 1.375rem); }
+.executive-aura__area-coverage { color: var(--aura-muted); font-size: 0.6875rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.executive-aura__area-ring {
+  --area-ring-start: #163d99;
+  --area-ring-end: #2563b0;
+  grid-area: 1 / 1;
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ccd9ea;
+  mask: radial-gradient(farthest-side, transparent calc(100% - 14px), black calc(100% - 13px));
+  pointer-events: none;
+}
+
+.dark .executive-aura__area-ring {
+  --area-ring-start: #2e90fa;
+  --area-ring-end: #fff;
+  background: rgb(255 255 255 / 20%);
+}
+
+.executive-aura__area-ring::after {
+  position: absolute;
+  inset: 0;
+  /* Map the Small 14 fill across the full ring and expose the measured arc. */
+  background: linear-gradient(224.782deg, var(--area-ring-start) 48.113%, var(--area-ring-end) 73.018%);
+  mask: conic-gradient(#000 0 var(--area-coverage), transparent var(--area-coverage) 100%);
+  content: '';
+}
+
+.executive-aura__area-dial[data-expanded] {
+  aspect-ratio: auto;
+  width: 100%;
+  gap: 12px;
+}
+.executive-aura__area-dial[data-expanded] :is(.executive-aura__area-ring, .executive-aura__area-reading) { grid-area: auto; }
+.executive-aura__area-dial[data-expanded] .executive-aura__area-ring { width: min(100%, 132px); }
+.executive-aura__area-dial[data-expanded] .executive-aura__area-reading { padding: 0; gap: 5px; }
+.executive-aura__area-dial[data-expanded] .aura-widget__value { font-size: clamp(0.875rem, 7cqi, 1.375rem); }
+.executive-aura__area-number { font-variant-numeric: tabular-nums; }
+
+@container executive-area (width >= 300px) {
+  .executive-aura__area-dial[data-expanded] { grid-template-columns: 132px minmax(0, 1fr); gap: 16px; text-align: start; }
+}

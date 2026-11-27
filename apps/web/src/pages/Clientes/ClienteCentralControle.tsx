@@ -3,7 +3,6 @@ import { DatePickerField, FormSelect, TimePickerField } from '../../components/F
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
 import {
   Calendar,
   Check,
@@ -25,6 +24,9 @@ import { cn } from '../../utils/cn';
 import { primarySmallActionButtonClass, primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { apiFetch } from '../../services/apiClient';
+import { normalizeClientCategoryTag } from '../../utils/clientTags';
+import { clientToday, formatClientDate, CLIENT_TIMELINE_LIMIT } from './clientWorkspace';
+import { ClientLoadState } from './ClientLoadState';
 
 type Projeto = {
   id: string;
@@ -112,6 +114,8 @@ interface ClienteCentralControleProps {
   orcamentos: Orcamento[];
   historico: Historico[];
   loadingHistorico?: boolean;
+  historyError?: boolean;
+  onRetryHistory?: () => void;
   onlyTimeline?: boolean;
 }
 
@@ -121,23 +125,7 @@ function isDone(status?: string | null) {
   return status === 'Concluído' || status === 'Concluido';
 }
 
-function formatDate(value?: string | null, withTime = false) {
-  if (!value) return 'Sem data';
-  const date = new Date(value.includes('T') ? value : `${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return date.toLocaleDateString('pt-BR', withTime ? {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  } : {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric'
-  });
-}
+function formatDate(value?: string | null, withTime = false) { return value ? formatClientDate(value, withTime) : 'Sem data'; }
 
 function formatCurrency(cents?: number | null) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((cents || 0) / 100);
@@ -179,6 +167,8 @@ export function ClienteCentralControle({
   orcamentos,
   historico,
   loadingHistorico = false,
+  historyError = false,
+  onRetryHistory,
   onlyTimeline = false
 }: ClienteCentralControleProps) {
   const queryClient = useQueryClient();
@@ -187,7 +177,7 @@ export function ClienteCentralControle({
   const [showEventForm, setShowEventForm] = useState(false);
   const [isNotaModalOpen, setIsNotaModalOpen] = useState(false);
   const [eventTipo, setEventTipo] = useState('Observação');
-  const [eventDate, setEventDate] = useState(new Date().toISOString().split('T')[0]);
+  const [eventDate, setEventDate] = useState(clientToday());
   const [eventTitle, setEventTitle] = useState('');
   const [eventDescription, setEventDescription] = useState('');
   const [eventProjetoId, setEventProjetoId] = useState('');
@@ -207,7 +197,7 @@ export function ClienteCentralControle({
   const [agendaProjetoId, setAgendaProjetoId] = useState('');
   const [agendaTitulo, setAgendaTitulo] = useState('');
   const [agendaDescricao, setAgendaDescricao] = useState('');
-  const [agendaData, setAgendaData] = useState(new Date().toISOString().split('T')[0]);
+  const [agendaData, setAgendaData] = useState(clientToday());
   const [agendaHora, setAgendaHora] = useState('');
   const [agendaTipo, setAgendaTipo] = useState('Visita de Campo');
   const [editingAgendaId, setEditingAgendaId] = useState('');
@@ -217,20 +207,20 @@ export function ClienteCentralControle({
     | null
   >(null);
 
-  const { data: tarefas = [], isLoading: loadingTarefas } = useQuery({
+  const { data: tarefas = [], isLoading: loadingTarefas, isError: tasksError, refetch: reloadTasks } = useQuery({
     queryKey: ['cliente-central-tarefas', clienteId],
     queryFn: async () => {
       const res = await apiFetch(`${API_BASE}/tarefas?clienteId=${clienteId}`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar as tarefas.');
       return res.json();
     }
   });
 
-  const { data: compromissos = [], isLoading: loadingCompromissos } = useQuery({
+  const { data: compromissos = [], isLoading: loadingCompromissos, isError: agendaError, refetch: reloadAgenda } = useQuery({
     queryKey: ['cliente-central-compromissos', clienteId],
     queryFn: async () => {
       const res = await apiFetch(`${API_BASE}/compromissos?clienteId=${clienteId}`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar a agenda.');
       return res.json();
     }
   });
@@ -278,7 +268,7 @@ export function ClienteCentralControle({
 
   const resetEventForm = () => {
     setEventTipo('Observação');
-    setEventDate(new Date().toISOString().split('T')[0]);
+    setEventDate(clientToday());
     setEventTitle('');
     setEventDescription('');
     setEventProjetoId('');
@@ -487,6 +477,8 @@ export function ClienteCentralControle({
       const safeDesc = item.descricao || '';
       const parsed = splitHistoricDescription(safeDesc, item.tipo || 'Evento');
       const projetoNome = item.projetoId ? projetos.find(projeto => projeto.id === item.projetoId)?.nome : null;
+      const eventCategory = item.categoria || item.tipo || 'Geral';
+      const displayCategory = item.tipo === 'Cliente' ? normalizeClientCategoryTag(eventCategory) : eventCategory;
       return {
         id: `historico-${item.id}`,
         source: 'historico',
@@ -501,7 +493,7 @@ export function ClienteCentralControle({
         date: item.data || new Date().toISOString(),
         title: item.titulo || parsed.title || 'Registro',
         body: `${item.titulo ? safeDesc : parsed.body}${projetoNome ? `\nPropriedade: ${projetoNome}` : ''}`,
-        tag: item.categoria || item.tipo || 'Geral',
+        tag: displayCategory,
         tone: item.tipo === 'Servico' ? 'indigo' : item.tipo === 'Financeiro' ? 'emerald' : item.tipo === 'Nota' ? 'amber' : item.tipo === 'Tarefa' ? 'teal' : (item.tipo === 'Agenda' || item.tipo === 'Compromisso') ? 'violet' : 'zinc',
         sortDate: item.data ? new Date(item.data).getTime() : 0
       };
@@ -587,7 +579,7 @@ export function ClienteCentralControle({
       return true;
     });
   }, [timelineFilter, timelineItems]);
-  const visibleTimelineItems = showFullHistory ? filteredTimelineItems : filteredTimelineItems.slice(0, 2);
+  const visibleTimelineItems = showFullHistory ? filteredTimelineItems : filteredTimelineItems.slice(0, CLIENT_TIMELINE_LIMIT);
 
   const nextCompromissos = useMemo(() => {
     const today = new Date();
@@ -629,7 +621,7 @@ export function ClienteCentralControle({
     if (!item.editable || item.source !== 'historico') return;
     setEditingEventId(item.sourceId ?? null);
     setEventTipo(item.tipo || item.tag || 'Observação');
-    setEventDate(item.date ? item.date.slice(0, 10) : new Date().toISOString().split('T')[0]);
+    setEventDate(item.date ? item.date.slice(0, 10) : clientToday());
     setEventTitle(item.titulo || item.title || '');
     setEventDescription(item.descricao || item.body || '');
     setEventProjetoId(item.projetoId || '');
@@ -718,7 +710,7 @@ export function ClienteCentralControle({
               </div>
               <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                 <span className="geo-badge-base geo-badge-neutral px-2 py-1 text-xs">
-                  {projeto.areaHa ? `${projeto.areaHa} ha` : 'Área pendente'}
+                  {projeto.areaHa != null ? `${new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(projeto.areaHa)} ha` : 'Área pendente'}
                 </span>
                 <span className="geo-badge-base geo-badge-neutral px-2 py-1 text-xs">
                   {projeto.latitude && projeto.longitude ? 'Mapa vinculado' : 'Sem coordenadas'}
@@ -739,15 +731,15 @@ export function ClienteCentralControle({
         <section className={cn("geo-card p-6", onlyTimeline && "col-span-full flex h-full min-h-0 flex-col")}>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2">
+              <h2 className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white flex items-center gap-2">
                 Jornada do cliente
-                <span className="group relative inline-flex">
+                <button type="button" aria-label="Como funciona a jornada do cliente" className="geo-focus-ring group relative inline-flex min-h-11 min-w-11 items-center justify-center rounded">
                   <Info className="h-4 w-4 text-zinc-400 transition-colors hover:text-brand-primary-600 dark:hover:text-brand-primary-200" />
-                  <span className="geo-surface-raised pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden w-72 -translate-x-1/2 rounded-lg p-3 text-xs font-medium leading-relaxed text-zinc-600 shadow-brand-lg dark:text-zinc-300 group-hover:block">
+                  <span className="geo-surface-raised pointer-events-none absolute left-0 top-full z-20 mt-2 hidden w-64 max-w-[70vw] rounded-lg p-3 text-xs font-medium leading-relaxed text-zinc-600 shadow-brand-lg dark:text-zinc-300 group-hover:block group-focus-visible:block">
                     Registre anotações, conversas, documentos e decisões do cliente. Orçamentos, agenda e tarefas concluídas aparecem aqui automaticamente para contextualizar o relacionamento.
                   </span>
-                </span>
-              </h3>
+                </button>
+              </h2>
               <p className="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">
                 Histórico consolidado de anotações, orçamentos, agenda e checklist.
               </p>
@@ -852,14 +844,13 @@ export function ClienteCentralControle({
           </div>
 
           <div className={cn('relative ml-4 min-h-[260px] space-y-5 border-l border-brand-border pl-7', onlyTimeline && 'flex-1')}>
-            {loadingHistorico || loadingCompromissos ? (
-              <div className="py-12 flex justify-center">
-                <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="h-7 w-7 animate-spin rounded-full border-2 border-brand-border border-t-brand-primary-600" />
-              </div>
+            {historyError || agendaError || tasksError ? <ClientLoadState label="a jornada do cliente" error onRetry={() => { onRetryHistory?.(); void reloadTasks(); void reloadAgenda(); }} /> : loadingHistorico || loadingCompromissos || loadingTarefas ? (
+              <ClientLoadState label="a jornada do cliente" />
             ) : visibleTimelineItems.length === 0 ? (
               <div className="geo-empty-state flex-1 py-14 text-center">
                 <Note className="mx-auto mb-3 h-10 w-10 text-zinc-300" />
-                <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Nenhum evento registrado para este cliente.</p>
+                <p className="text-sm font-medium text-zinc-600 dark:text-zinc-300">{timelineFilter === 'Todos' ? 'Nenhum evento registrado para este cliente.' : `Nenhum evento de ${timelineFilter} neste filtro.`}</p>
+                {timelineFilter !== 'Todos' && <button type="button" onClick={() => setTimelineFilter('Todos')} className={secondarySmallActionButtonClass + ' mt-3 min-h-11'}>Mostrar todos os eventos</button>}
               </div>
             ) : (
               visibleTimelineItems.map(item => {
@@ -883,10 +874,16 @@ export function ClienteCentralControle({
                     {item.tone === 'indigo' ? <FileText className="w-4 h-4" /> : item.tone === 'violet' ? <Calendar className="w-4 h-4" /> : item.tone === 'emerald' ? <CurrencyDollar className="w-4 h-4" /> : item.tone === 'teal' ? <Check className="w-4 h-4" /> : <Note className="w-4 h-4" />}
                   </span>
                   <article className={articleStyle}>
+                    <div className="mb-3">
+                      <time dateTime={item.date || undefined} className="inline-flex max-w-full items-center gap-2 rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-base font-semibold leading-relaxed tabular-nums text-indigo-800 dark:border-indigo-400/30 dark:bg-indigo-400/10 dark:text-indigo-100">
+                        <Calendar aria-hidden="true" className="h-4 w-4 shrink-0" />
+                        <span className="min-w-0 break-words">{formatDate(item.date, item.date.includes('T'))}</span>
+                      </time>
+                    </div>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-base font-semibold text-zinc-950 dark:text-white">{item.title}</h4>
+                          <h3 className="text-base font-semibold text-zinc-950 dark:text-white">{item.title}</h3>
                           <span className={cn('px-2 py-0.5 text-xs font-bold', statusTone(item.tag))}>
                             {item.tag}
                           </span>
@@ -929,13 +926,12 @@ export function ClienteCentralControle({
                         </p>
                       )
                     )}
-                    <p className="mt-3 text-xs font-semibold text-zinc-500 dark:text-zinc-400">{formatDate(item.date, item.date.includes('T'))}</p>
                   </article>
                 </div>
               )})
             )}
           </div>
-          {filteredTimelineItems.length > 12 && (
+          {filteredTimelineItems.length > CLIENT_TIMELINE_LIMIT && !historyError && !agendaError && !tasksError && (
             <button type="button" onClick={() => setShowFullHistory((value) => !value)} className={cn(secondarySmallActionButtonClass, 'mt-5 self-start')}>
               {showFullHistory ? 'Mostrar somente recentes' : 'Ver histórico completo'}
             </button>
@@ -947,10 +943,10 @@ export function ClienteCentralControle({
             <section className={cn(centralPanelClass, 'flex-1')}>
               <div className="flex items-center justify-between gap-3 mb-5">
                 <div>
-                  <h3 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
                     <ListChecks className="w-5 h-5 text-zinc-500 dark:text-zinc-400" />
                     Checklist
-                  </h3>
+                  </h2>
                   <p className="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">Progresso</p>
                 </div>
                 <span className="text-sm font-bold text-zinc-950 dark:text-white">{tarefasConcluidas}/{clienteTarefas.length} ({taskProgress}%)</span>
@@ -1085,10 +1081,10 @@ export function ClienteCentralControle({
 
             <section className={cn(centralPanelClass, 'flex-1')}>
               <div className="flex items-center justify-between gap-3 mb-4">
-                <h3 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
                   <Calendar className="w-5 h-5 text-zinc-500 dark:text-zinc-400" />
                   Agenda
-                </h3>
+                </h2>
                 <button
                   type="button"
                   onClick={() => setShowAgendaForm(value => !value)}

@@ -214,6 +214,7 @@ export async function tarefasRoutes(server: FastifyInstance) {
       prioridade: schema.tarefas.prioridade,
       categoria: schema.tarefas.categoria,
       contextoTipo: schema.tarefas.contextoTipo,
+      updatedAt: schema.tarefas.updatedAt,
       dataLimite: schema.tarefas.dataLimite,
       projetoNome: schema.projetos.nome,
       clienteNome: schema.clientes.nome
@@ -307,6 +308,7 @@ export async function tarefasRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const [task] = await db.select({
       id: schema.tarefas.id,
+      updatedAt: schema.tarefas.updatedAt,
       titulo: schema.tarefas.titulo,
       descricao: schema.tarefas.descricao,
       status: schema.tarefas.status,
@@ -542,7 +544,7 @@ export async function tarefasRoutes(server: FastifyInstance) {
   }, async (request, reply) => {
     const { id } = request.params;
     const body = request.body;
-    
+
     const tarefaAnterior = await db.select()
       .from(schema.tarefas)
       .where(and(eq(schema.tarefas.id, id), isNull(schema.tarefas.deletedAt)))

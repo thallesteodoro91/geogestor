@@ -74,13 +74,14 @@ export function GlobalSearch() {
     }
 
     let active = true;
+    const controller = new AbortController();
 
     const id = window.setTimeout(async () => {
       setLoading(true);
       setError(false);
 
       try {
-        const data = await apiClient.get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(query.trim())}`);
+        const data = await apiClient.get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(query.trim())}`, { signal: controller.signal, notifyUnavailable: false });
         if (active) {
           setResults(Array.isArray(data.results) ? data.results : []);
         }
@@ -98,6 +99,7 @@ export function GlobalSearch() {
 
     return () => {
       active = false;
+      controller.abort();
       window.clearTimeout(id);
     };
   }, [isOpen, query, retryNonce]);

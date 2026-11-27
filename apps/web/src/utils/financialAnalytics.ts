@@ -173,6 +173,12 @@ const normalizeText = (value?: string | null) =>
 export const formatCurrencyFromCents = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(cents) || 0) / 100);
 
+export function cashBalancePresentation(cents: number) {
+  if (cents > 0) return { label: 'Positivo', tone: 'positive', detail: 'Recebimentos acima das despesas' } as const;
+  if (cents < 0) return { label: 'Negativo', tone: 'negative', detail: 'Despesas acima dos recebimentos' } as const;
+  return { label: 'Zerado', tone: 'neutral', detail: 'Recebimentos e despesas no mesmo valor' } as const;
+}
+
 export const formatPercent = (value: number, digits = 1) => `${(Number.isFinite(value) ? value : 0).toFixed(digits)}%`;
 
 export const toLocalDateKey = (date: Date) => {

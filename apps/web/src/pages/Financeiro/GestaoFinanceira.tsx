@@ -1,11 +1,15 @@
-import { type KeyboardEvent, type ReactNode, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, FileText, SuitcaseRolling, WarningCircle } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
 import { Modal } from '../../components/Modal';
 import { RemoteCombobox } from '../../components/RemoteCombobox';
-import { DatePickerField } from '../../components/Form';
+import { DatePickerField, FormError, FormField } from '../../components/Form';
+import { useFormDraftGuard } from '../../hooks/useFormDraftGuard';
+import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { geoFieldClass } from '../../utils/geoTheme';
+import { formatDateKey } from '../../utils/localDate';
 import { apiClient } from '../../services/apiClient';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 
@@ -58,8 +62,11 @@ const money = (cents: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format((Number(cents) || 0) / 100);
 
 const toCents = (value: string) => Math.round((Number(value.replace(',', '.')) || 0) * 100);
-const fieldClass = 'w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100';
-const labelClass = 'mb-1.5 block text-xs font-semibold text-zinc-600 dark:text-zinc-300';
+const fieldClass = geoFieldClass + ' min-h-11 w-full min-w-0 px-3 text-sm';
+const initialTravel = { clienteId: '', projetoId: '', finalidade: '', destino: '', dataInicio: '', dataFim: '', responsavel: '', adiantamento: '', quilometragem: '', valorReembolsavel: '' };
+const initialFiscal = { clienteId: '', projetoId: '', numero: '', codigoVerificacao: '', dataEmissao: '', valor: '', municipio: '', link: '' };
+const failureMessage = (action: string) => 'Não foi possível ' + action + '. Seus dados foram preservados. Tente novamente.';
+function focusInvalid(errors: Record<string, string>) { requestAnimationFrame(() => { const target = document.getElementById(Object.keys(errors)[0]); target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: 'center', behavior: 'instant' }); }); }
 
 function PageFrame({ embedded, children }: { embedded: boolean; children: ReactNode }) {
   return embedded ? <>{children}</> : <Layout>{children}</Layout>;
@@ -81,74 +88,86 @@ export function GestaoFinanceira({
   const [activeTab, setActiveTab] = useState<AuxiliaryTab>(initialTab);
   const [travelModal, setTravelModal] = useState(openCreateOnMount && initialTab === 'viagens');
   const [fiscalModal, setFiscalModal] = useState(openCreateOnMount && initialTab === 'fiscal');
-  const [travelForm, setTravelForm] = useState({
-    clienteId: '', projetoId: '', finalidade: '', destino: '', dataInicio: '',
-    dataFim: '', responsavel: '', adiantamento: '', quilometragem: '', valorReembolsavel: ''
-  });
-  const [fiscalForm, setFiscalForm] = useState({
-    clienteId: '', projetoId: '', numero: '', codigoVerificacao: '', dataEmissao: '',
-    valor: '', municipio: '', link: ''
-  });
-
-  const { data: viagens = [], isLoading: loadingTravels } = useQuery<Travel[]>({
-    queryKey: ['viagens'],
-    queryFn: () => apiClient.get('/api/financeiro/viagens')
-  });
-  const { data: notes = [], isLoading: loadingNotes } = useQuery<FiscalNoteRow[]>({
-    queryKey: ['notas-fiscais'],
-    queryFn: () => apiClient.get('/api/financeiro/notas-fiscais')
-  });
-  const { data: diagnostic, refetch: refetchDiagnostic, isFetching: loadingDiagnostic } = useQuery<LinkDiagnostic>({
-    queryKey: ['financeiro-diagnostico-vinculos'],
-    queryFn: () => apiClient.get('/api/financeiro/diagnostico-vinculos'),
-    enabled: activeTab === 'diagnostico'
-  });
+  const [travelForm, setTravelForm] = useState(initialTravel);
+  const [fiscalForm, setFiscalForm] = useState(initialFiscal);
+  const [travelError, setTravelError] = useState('');
+  const [fiscalError, setFiscalError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const travelLock = useRef(false), fiscalLock = useRef(false);
+  const closingIds = useRef(new Set<string>());
+  const [closing, setClosing] = useState<Set<string>>(new Set());
+  const [closeErrors, setCloseErrors] = useState<Record<string, string>>({});
+  const travelsQuery = useQuery<Travel[]>({ queryKey: ['viagens'], queryFn: () => apiClient.get('/api/financeiro/viagens') });
+  const notesQuery = useQuery<FiscalNoteRow[]>({ queryKey: ['notas-fiscais'], queryFn: () => apiClient.get('/api/financeiro/notas-fiscais') });
+  const diagnosticQuery = useQuery<LinkDiagnostic>({ queryKey: ['financeiro-diagnostico-vinculos'], queryFn: () => apiClient.get('/api/financeiro/diagnostico-vinculos'), enabled: activeTab === 'diagnostico' });
+  const viagens = travelsQuery.data ?? [], notes = notesQuery.data ?? [], diagnostic = diagnosticQuery.data;
   const createTravel = useMutation({
-    mutationFn: () => apiClient.post('/api/financeiro/viagens', {
-      ...travelForm,
-      clienteId: travelForm.clienteId || null,
-      projetoId: travelForm.projetoId || null,
-      dataFim: travelForm.dataFim || null,
-      responsavel: travelForm.responsavel || null,
-      adiantamento: toCents(travelForm.adiantamento),
-      quilometragem: Number(travelForm.quilometragem.replace(',', '.')) || 0,
-      valorReembolsavel: toCents(travelForm.valorReembolsavel)
-    }),
-    onSuccess: async () => {
-      setTravelModal(false);
-      setTravelForm({ clienteId: '', projetoId: '', finalidade: '', destino: '', dataInicio: '', dataFim: '', responsavel: '', adiantamento: '', quilometragem: '', valorReembolsavel: '' });
-      await invalidateFinancialQueries(queryClient);
-      toast.success('Viagem registrada.');
+    mutationFn: async (draft: typeof initialTravel) => {
+      const result = await apiClient.post<{ id: string }>('/api/financeiro/viagens', {
+        ...draft, clienteId: draft.clienteId || null, projetoId: draft.projetoId || null, dataFim: draft.dataFim || null,
+        responsavel: draft.responsavel || null, adiantamento: toCents(draft.adiantamento),
+        quilometragem: Number(draft.quilometragem.replace(',', '.')) || 0, valorReembolsavel: toCents(draft.valorReembolsavel)
+      });
+      if (!result?.id) throw new Error('Resposta incompleta do serviço local.');
+      return result;
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Não foi possível registrar a viagem.')
+    onSuccess: () => { setTravelModal(false); setTravelForm(initialTravel); setTravelError(''); void invalidateFinancialQueries(queryClient); toast.success('Viagem registrada.'); },
+    onError: () => setTravelError(failureMessage('registrar a viagem')),
+    onSettled: () => { travelLock.current = false; }
   });
-
   const createFiscalNote = useMutation({
-    mutationFn: () => apiClient.post('/api/financeiro/notas-fiscais', {
-      ...fiscalForm,
-      clienteId: fiscalForm.clienteId,
-      projetoId: fiscalForm.projetoId || null,
-      codigoVerificacao: fiscalForm.codigoVerificacao || null,
-      valor: toCents(fiscalForm.valor),
-      municipio: fiscalForm.municipio || null,
-      link: fiscalForm.link || null
-    }),
-    onSuccess: async () => {
-      setFiscalModal(false);
-      setFiscalForm({ clienteId: '', projetoId: '', numero: '', codigoVerificacao: '', dataEmissao: '', valor: '', municipio: '', link: '' });
-      await invalidateFinancialQueries(queryClient);
-      toast.success('Documento fiscal informado.');
+    mutationFn: async (draft: typeof initialFiscal) => {
+      const result = await apiClient.post<{ id: string }>('/api/financeiro/notas-fiscais', {
+        ...draft, projetoId: draft.projetoId || null, codigoVerificacao: draft.codigoVerificacao || null,
+        valor: toCents(draft.valor), municipio: draft.municipio || null, link: draft.link || null
+      });
+      if (!result?.id) throw new Error('Resposta incompleta do serviço local.');
+      return result;
     },
-    onError: (error) => toast.error(error instanceof Error ? error.message : 'Não foi possível registrar o documento fiscal.')
+    onSuccess: () => { setFiscalModal(false); setFiscalForm(initialFiscal); setFiscalError(''); void invalidateFinancialQueries(queryClient); toast.success('Documento fiscal informado.'); },
+    onError: () => setFiscalError(failureMessage('registrar o documento fiscal')),
+    onSettled: () => { fiscalLock.current = false; }
   });
-
-  const closeTravel = useMutation({
-    mutationFn: (id: string) => apiClient.patch(`/api/financeiro/viagens/${id}`, { status: 'encerrada' }),
-    onSuccess: async () => {
-      await invalidateFinancialQueries(queryClient);
-      toast.success('Prestação de contas encerrada.');
-    }
+  const closeTravel = async (id: string) => {
+    if (closingIds.current.has(id)) return;
+    closingIds.current.add(id); setClosing(new Set(closingIds.current));
+    setCloseErrors(current => ({ ...current, [id]: '' }));
+    try {
+      const result = await apiClient.patch<{ id: string; status: string }>('/api/financeiro/viagens/' + id, { status: 'encerrada' });
+      if (result?.id !== id || result.status !== 'encerrada') throw new Error('Resposta incompleta do serviço local.');
+      void invalidateFinancialQueries(queryClient); toast.success('Prestação de contas encerrada.');
+    } catch { setCloseErrors(current => ({ ...current, [id]: 'Não foi possível encerrar a prestação. O registro foi preservado. Tente novamente.' })); }
+    finally { closingIds.current.delete(id); setClosing(new Set(closingIds.current)); }
+  };
+  const draftGuard = useFormDraftGuard({
+    open: travelModal || fiscalModal,
+    dirty: travelModal ? JSON.stringify(travelForm) !== JSON.stringify(initialTravel) : JSON.stringify(fiscalForm) !== JSON.stringify(initialFiscal),
+    saving: createTravel.isPending || createFiscalNote.isPending, lock: travelModal ? travelLock : fiscalLock,
+    onDiscard: () => { setTravelModal(false); setFiscalModal(false); setTravelForm(initialTravel); setFiscalForm(initialFiscal); setTravelError(''); setFiscalError(''); setFieldErrors({}); }
   });
+  const submitTravel = () => {
+    if (travelLock.current) return;
+    const errors: Record<string, string> = {};
+    if (!travelForm.finalidade.trim()) errors['travel-purpose'] = 'Informe a finalidade da viagem.';
+    if (!travelForm.destino.trim()) errors['travel-destination'] = 'Informe o destino da viagem.';
+    if (!travelForm.dataInicio) errors['travel-start-date'] = 'Selecione a data de início.';
+    if (travelForm.dataFim && travelForm.dataInicio && travelForm.dataFim < travelForm.dataInicio) errors['travel-end-date'] = 'O término não pode ser anterior ao início.';
+    setFieldErrors(errors); if (Object.keys(errors).length) { setTravelError('Revise os campos destacados antes de salvar.'); focusInvalid(errors); return; }
+    travelLock.current = true; setTravelError(''); createTravel.mutate({ ...travelForm });
+  };
+  const submitFiscal = () => {
+    if (fiscalLock.current) return;
+    const errors: Record<string, string> = {};
+    if (!fiscalForm.clienteId) errors['fiscal-client'] = 'Selecione um cliente.';
+    if (!fiscalForm.numero.trim()) errors['fiscal-number'] = 'Informe o número do documento.';
+    if (!fiscalForm.dataEmissao) errors['fiscal-issue-date'] = 'Selecione a data de emissão.';
+    if (!fiscalForm.valor.trim() || toCents(fiscalForm.valor) <= 0) errors['fiscal-value'] = 'Informe um valor maior que zero.';
+    if (fiscalForm.link && !/^https?:\/\//i.test(fiscalForm.link)) errors['fiscal-link'] = 'Informe um endereço iniciado por http:// ou https://.';
+    setFieldErrors(errors); if (Object.keys(errors).length) { setFiscalError('Revise os campos destacados antes de salvar.'); focusInvalid(errors); return; }
+    fiscalLock.current = true; setFiscalError(''); createFiscalNote.mutate({ ...fiscalForm });
+  };
+  const errorProps = (id: string) => ({ 'aria-invalid': Boolean(fieldErrors[id]), 'aria-describedby': fieldErrors[id] ? id + '-error' : undefined });
+  const loadError = (message: string, refetch: () => unknown, busy: boolean) => <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200"><span>{message}</span><button type="button" disabled={busy} onClick={() => void refetch()} className={secondarySmallActionButtonClass}>{busy ? 'Tentando novamente…' : 'Tentar novamente'}</button></div>;
 
   const handleAuxiliaryTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, current: AuxiliaryTab) => {
     let nextIndex: number | null = null;
@@ -202,7 +221,8 @@ export function GestaoFinanceira({
       {activeTab === 'viagens' && (
         <section id="auxiliary-panel-viagens" role="tabpanel" aria-labelledby="auxiliary-tab-viagens" tabIndex={0}>
           <h2 id="travel-heading" className="sr-only">Viagens e prestação de contas</h2>
-          {loadingTravels ? <p className="text-sm text-zinc-500">Carregando viagens…</p> : viagens.length === 0 ? (
+          {travelsQuery.isError && loadError(viagens.length ? 'Não foi possível atualizar as viagens. Os dados anteriores foram preservados.' : 'Não foi possível carregar as viagens.', travelsQuery.refetch, travelsQuery.isFetching)}
+          {travelsQuery.isLoading ? <p className="text-sm text-zinc-500">Carregando viagens…</p> : !travelsQuery.isError && viagens.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
               <SuitcaseRolling className="mx-auto mb-3 h-9 w-9 text-zinc-400" aria-hidden="true" />
               <p className="font-semibold text-zinc-800 dark:text-zinc-100">Nenhuma viagem registrada</p>
@@ -215,7 +235,7 @@ export function GestaoFinanceira({
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <p className="truncate text-lg font-semibold text-zinc-950 dark:text-white">{travel.finalidade}</p>
-                      <p className="mt-1 text-sm text-zinc-500">{travel.destino} · {travel.dataInicio}{travel.dataFim ? ` a ${travel.dataFim}` : ''}</p>
+                      <p className="mt-1 text-sm text-zinc-500">{travel.destino} · {formatDateKey(travel.dataInicio)}{travel.dataFim ? ` a ${formatDateKey(travel.dataFim)}` : ''}</p>
                     </div>
                     <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{travel.status.replaceAll('_', ' ')}</span>
                   </div>
@@ -226,10 +246,11 @@ export function GestaoFinanceira({
                     <div><dt className="text-zinc-500">Saldo da prestação</dt><dd className={`mt-1 font-semibold ${travel.saldoPrestacao < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{money(travel.saldoPrestacao)}</dd></div>
                   </dl>
                   {travel.status !== 'encerrada' && (
-                    <button type="button" onClick={() => closeTravel.mutate(travel.id)} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                      <CheckCircle aria-hidden="true" /> Encerrar prestação
+                    <button type="button" disabled={closing.has(travel.id)} aria-busy={closing.has(travel.id)} onClick={() => void closeTravel(travel.id)} className="mt-5 inline-flex min-h-10 items-center gap-2 rounded-xl border border-zinc-200 px-3 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                      <CheckCircle aria-hidden="true" /> <span className="inline-grid"><span aria-hidden="true" className="invisible col-start-1 row-start-1">Encerrando prestação…</span><span className="col-start-1 row-start-1">{closing.has(travel.id) ? 'Encerrando prestação…' : 'Encerrar prestação'}</span></span>
                     </button>
                   )}
+                  {closeErrors[travel.id] && <FormError message={closeErrors[travel.id]} className="mt-3" />}
                 </article>
               ))}
             </div>
@@ -243,7 +264,8 @@ export function GestaoFinanceira({
           <div className="mb-5 rounded-2xl bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-100 dark:ring-amber-500/20">
             O GeoGestor apenas registra os dados informados. Ele não emite NFS-e e não calcula tributos.
           </div>
-          {loadingNotes ? <p className="text-sm text-zinc-500">Carregando documentos…</p> : notes.length === 0 ? (
+          {notesQuery.isError && loadError(notes.length ? 'Não foi possível atualizar os documentos fiscais. Os dados anteriores foram preservados.' : 'Não foi possível carregar os documentos fiscais.', notesQuery.refetch, notesQuery.isFetching)}
+          {notesQuery.isLoading ? <p className="text-sm text-zinc-500">Carregando documentos…</p> : !notesQuery.isError && notes.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
               <FileText className="mx-auto mb-3 h-9 w-9 text-zinc-400" aria-hidden="true" />
               <p className="font-semibold text-zinc-800 dark:text-zinc-100">Nenhum documento fiscal informado</p>
@@ -259,7 +281,7 @@ export function GestaoFinanceira({
                     <tr key={nota.id} className="border-b border-zinc-100 last:border-0 dark:border-zinc-800/70">
                       <td className="px-5 py-4 font-semibold text-zinc-900 dark:text-zinc-100">{nota.numero}</td>
                       <td className="px-5 py-4 text-zinc-600 dark:text-zinc-300">{clienteNome}</td>
-                      <td className="px-5 py-4 text-zinc-600 dark:text-zinc-300">{nota.dataEmissao}</td>
+                      <td className="px-5 py-4 text-zinc-600 dark:text-zinc-300">{formatDateKey(nota.dataEmissao)}</td>
                       <td className="px-5 py-4 font-medium tabular-nums text-zinc-900 dark:text-zinc-100">{money(nota.valor)}</td>
                       <td className="px-5 py-4 text-zinc-600 dark:text-zinc-300">{nota.status}</td>
                     </tr>
@@ -275,9 +297,10 @@ export function GestaoFinanceira({
         <section id="auxiliary-panel-diagnostico" role="tabpanel" aria-labelledby="auxiliary-tab-diagnostico" tabIndex={0}>
           <div className="mb-5 flex items-center justify-between gap-4">
             <div><h2 id="diagnostic-heading" className="text-xl font-semibold text-zinc-950 dark:text-white">Integridade dos vínculos</h2><p className="mt-1 text-sm text-zinc-500">O diagnóstico não altera os registros.</p></div>
-            <button type="button" onClick={() => refetchDiagnostic()} className="min-h-10 rounded-xl border border-zinc-200 px-3 text-xs font-semibold hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:hover:bg-zinc-800">Executar novamente</button>
+            <button type="button" disabled={diagnosticQuery.isFetching} onClick={() => void diagnosticQuery.refetch()} className="min-h-10 rounded-xl border border-zinc-200 px-3 text-xs font-semibold hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-emerald-500/30 dark:border-zinc-700 dark:hover:bg-zinc-800">Executar novamente</button>
           </div>
-          {loadingDiagnostic ? <p className="text-sm text-zinc-500">Verificando vínculos…</p> : diagnostic && (
+          {diagnosticQuery.isError && loadError(diagnostic ? 'Não foi possível atualizar o diagnóstico. Os dados anteriores foram preservados.' : 'Não foi possível consultar os vínculos.', diagnosticQuery.refetch, diagnosticQuery.isFetching)}
+          {diagnosticQuery.isLoading ? <p className="text-sm text-zinc-500">Verificando vínculos…</p> : diagnostic && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {Object.entries(diagnostic.totais).map(([key, value]) => (
                 <article key={key} className="rounded-2xl bg-white p-5 ring-1 ring-zinc-200/70 dark:bg-zinc-900 dark:ring-zinc-800">
@@ -294,35 +317,41 @@ export function GestaoFinanceira({
         </section>
       )}
 
-      <Modal isOpen={travelModal} onClose={() => setTravelModal(false)} title="Nova viagem" maxWidth="max-w-2xl">
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); createTravel.mutate(); }}>
-          <label><span className={labelClass}>Cliente</span><RemoteCombobox<ClientOption> id="travel-client" name="clienteId" endpoint="/api/clientes/options" value={travelForm.clienteId} emptyLabel="Administrativo/geral" onChange={(clienteId) => setTravelForm((current) => ({ ...current, clienteId, projetoId: '' }))} /></label>
-          <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="travel-project" name="projetoId" endpoint={`/api/projetos/options${travelForm.clienteId ? `?clienteId=${encodeURIComponent(travelForm.clienteId)}` : ''}`} value={travelForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setTravelForm((current) => ({ ...current, projetoId }))} /></label>
-          <label className="sm:col-span-2"><span className={labelClass}>Finalidade</span><input required className={fieldClass} value={travelForm.finalidade} onChange={(event) => setTravelForm({ ...travelForm, finalidade: event.target.value })} /></label>
-          <label className="sm:col-span-2"><span className={labelClass}>Destino</span><input required className={fieldClass} value={travelForm.destino} onChange={(event) => setTravelForm({ ...travelForm, destino: event.target.value })} /></label>
-          <div><label htmlFor="travel-start-date" className={labelClass}>Início</label><DatePickerField id="travel-start-date" name="dataInicio" required autoComplete="off" value={travelForm.dataInicio} onChange={(event) => setTravelForm({ ...travelForm, dataInicio: event.target.value })} className={fieldClass} /></div>
-          <div><label htmlFor="travel-end-date" className={labelClass}>Término</label><DatePickerField id="travel-end-date" name="dataFim" autoComplete="off" value={travelForm.dataFim} onChange={(event) => setTravelForm({ ...travelForm, dataFim: event.target.value })} className={fieldClass} /></div>
-          <label><span className={labelClass}>Responsável</span><input className={fieldClass} value={travelForm.responsavel} onChange={(event) => setTravelForm({ ...travelForm, responsavel: event.target.value })} /></label>
-          <label><span className={labelClass}>Adiantamento (R$)</span><input inputMode="decimal" className={fieldClass} value={travelForm.adiantamento} onChange={(event) => setTravelForm({ ...travelForm, adiantamento: event.target.value })} /></label>
-          <label><span className={labelClass}>Quilometragem</span><input inputMode="decimal" className={fieldClass} value={travelForm.quilometragem} onChange={(event) => setTravelForm({ ...travelForm, quilometragem: event.target.value })} /></label>
-          <label><span className={labelClass}>Valor reembolsável (R$)</span><input inputMode="decimal" className={fieldClass} value={travelForm.valorReembolsavel} onChange={(event) => setTravelForm({ ...travelForm, valorReembolsavel: event.target.value })} /></label>
-          <div className="sm:col-span-2 flex justify-end gap-2 pt-3"><button type="button" onClick={() => setTravelModal(false)} className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold dark:border-zinc-700">Cancelar</button><button disabled={createTravel.isPending} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-60">{createTravel.isPending ? 'Salvando…' : 'Salvar viagem'}</button></div>
+      <Modal isOpen={travelModal} onClose={draftGuard.requestClose} title="Nova viagem" maxWidth="max-w-2xl" initialFocusId="travel-purpose" closeDisabled={createTravel.isPending}
+        footer={<div className="space-y-3"><FormError message={travelError} /><div className="grid grid-cols-2 gap-3"><button type="button" disabled={createTravel.isPending} onClick={draftGuard.requestClose} className={secondarySmallActionButtonClass}>Cancelar</button><button type="submit" form="travel-form" disabled={createTravel.isPending} aria-busy={createTravel.isPending} className={primarySubmitButtonClass}><span className="inline-grid"><span aria-hidden="true" className="invisible col-start-1 row-start-1">Salvar viagem</span><span className="col-start-1 row-start-1">{createTravel.isPending ? 'Salvando…' : 'Salvar viagem'}</span></span></button></div></div>}>
+        <p className="mb-5 text-xs text-text-secondary">Campos com * são obrigatórios. Os demais são opcionais.</p>
+        <form id="travel-form" noValidate onSubmit={event => { event.preventDefault(); submitTravel(); }}>
+          <fieldset disabled={createTravel.isPending} className="m-0 grid min-w-0 grid-cols-1 gap-4 border-0 p-0 sm:grid-cols-2">
+            <FormField htmlFor="travel-client" label="Cliente — opcional"><RemoteCombobox<ClientOption> id="travel-client" name="clienteId" endpoint="/api/clientes/options" value={travelForm.clienteId} emptyLabel="Administrativo/geral" fill density="form" inModal disabled={createTravel.isPending} onChange={clienteId => setTravelForm(current => ({ ...current, clienteId, projetoId: '' }))} /></FormField>
+            <FormField htmlFor="travel-project" label="Projeto — opcional"><RemoteCombobox<ProjectOption> id="travel-project" name="projetoId" endpoint={'/api/projetos/options' + (travelForm.clienteId ? '?clienteId=' + encodeURIComponent(travelForm.clienteId) : '')} value={travelForm.projetoId} emptyLabel="Sem projeto" fill density="form" inModal disabled={createTravel.isPending} onChange={projetoId => setTravelForm(current => ({ ...current, projetoId }))} /></FormField>
+            <FormField htmlFor="travel-purpose" label="Finalidade" required error={fieldErrors['travel-purpose']} className="sm:col-span-2"><input id="travel-purpose" name="finalidade" required maxLength={300} autoComplete="off" className={fieldClass} value={travelForm.finalidade} onChange={event => setTravelForm({ ...travelForm, finalidade: event.target.value })} {...errorProps('travel-purpose')} /></FormField>
+            <FormField htmlFor="travel-destination" label="Destino" required error={fieldErrors['travel-destination']} className="sm:col-span-2"><input id="travel-destination" name="destino" required maxLength={300} autoComplete="off" className={fieldClass} value={travelForm.destino} onChange={event => setTravelForm({ ...travelForm, destino: event.target.value })} {...errorProps('travel-destination')} /></FormField>
+            <FormField htmlFor="travel-start-date" label="Início" required error={fieldErrors['travel-start-date']}><DatePickerField id="travel-start-date" name="dataInicio" required disabled={createTravel.isPending} autoComplete="off" value={travelForm.dataInicio} onChange={event => setTravelForm({ ...travelForm, dataInicio: event.target.value })} className={fieldClass} {...errorProps('travel-start-date')} /></FormField>
+            <FormField htmlFor="travel-end-date" label="Término — opcional" error={fieldErrors['travel-end-date']}><DatePickerField id="travel-end-date" name="dataFim" disabled={createTravel.isPending} autoComplete="off" value={travelForm.dataFim} onChange={event => setTravelForm({ ...travelForm, dataFim: event.target.value })} className={fieldClass} {...errorProps('travel-end-date')} /></FormField>
+            <FormField htmlFor="travel-owner" label="Responsável — opcional"><input id="travel-owner" name="responsavel" maxLength={200} autoComplete="off" className={fieldClass} value={travelForm.responsavel} onChange={event => setTravelForm({ ...travelForm, responsavel: event.target.value })} /></FormField>
+            <FormField htmlFor="travel-advance" label="Adiantamento (R$) — opcional"><input id="travel-advance" name="adiantamento" inputMode="decimal" autoComplete="off" className={fieldClass + ' max-w-[16rem] tabular-nums'} value={travelForm.adiantamento} onChange={event => setTravelForm({ ...travelForm, adiantamento: event.target.value })} /></FormField>
+            <FormField htmlFor="travel-distance" label="Quilometragem — opcional"><input id="travel-distance" name="quilometragem" inputMode="decimal" autoComplete="off" className={fieldClass + ' max-w-[12rem] tabular-nums'} value={travelForm.quilometragem} onChange={event => setTravelForm({ ...travelForm, quilometragem: event.target.value })} /></FormField>
+            <FormField htmlFor="travel-refundable" label="Valor reembolsável (R$) — opcional"><input id="travel-refundable" name="valorReembolsavel" inputMode="decimal" autoComplete="off" className={fieldClass + ' max-w-[16rem] tabular-nums'} value={travelForm.valorReembolsavel} onChange={event => setTravelForm({ ...travelForm, valorReembolsavel: event.target.value })} /></FormField>
+          </fieldset>
         </form>
       </Modal>
-
-      <Modal isOpen={fiscalModal} onClose={() => setFiscalModal(false)} title="Informar documento fiscal" maxWidth="max-w-2xl">
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); createFiscalNote.mutate(); }}>
-          <label><span className={labelClass}>Cliente</span><RemoteCombobox<ClientOption> id="fiscal-client" name="clienteId" endpoint="/api/clientes/options" value={fiscalForm.clienteId} required onChange={(clienteId) => setFiscalForm((current) => ({ ...current, clienteId, projetoId: '' }))} /></label>
-          <label><span className={labelClass}>Projeto</span><RemoteCombobox<ProjectOption> id="fiscal-project" name="projetoId" endpoint={`/api/projetos/options${fiscalForm.clienteId ? `?clienteId=${encodeURIComponent(fiscalForm.clienteId)}` : ''}`} value={fiscalForm.projetoId} emptyLabel="Sem projeto" onChange={(projetoId) => setFiscalForm((current) => ({ ...current, projetoId }))} /></label>
-          <label><span className={labelClass}>Número</span><input required className={fieldClass} value={fiscalForm.numero} onChange={(event) => setFiscalForm({ ...fiscalForm, numero: event.target.value })} /></label>
-          <label><span className={labelClass}>Código de verificação</span><input className={fieldClass} value={fiscalForm.codigoVerificacao} onChange={(event) => setFiscalForm({ ...fiscalForm, codigoVerificacao: event.target.value })} /></label>
-          <div><label htmlFor="fiscal-issue-date" className={labelClass}>Data de emissão</label><DatePickerField id="fiscal-issue-date" name="dataEmissao" required autoComplete="off" value={fiscalForm.dataEmissao} onChange={(event) => setFiscalForm({ ...fiscalForm, dataEmissao: event.target.value })} className={fieldClass} /></div>
-          <label><span className={labelClass}>Valor (R$)</span><input required inputMode="decimal" className={fieldClass} value={fiscalForm.valor} onChange={(event) => setFiscalForm({ ...fiscalForm, valor: event.target.value })} /></label>
-          <label><span className={labelClass}>Município</span><input className={fieldClass} value={fiscalForm.municipio} onChange={(event) => setFiscalForm({ ...fiscalForm, municipio: event.target.value })} /></label>
-          <label><span className={labelClass}>Link de consulta</span><input type="url" className={fieldClass} value={fiscalForm.link} onChange={(event) => setFiscalForm({ ...fiscalForm, link: event.target.value })} /></label>
-          <div className="sm:col-span-2 flex justify-end gap-2 pt-3"><button type="button" onClick={() => setFiscalModal(false)} className="min-h-11 rounded-xl border border-zinc-200 px-4 text-sm font-semibold dark:border-zinc-700">Cancelar</button><button disabled={createFiscalNote.isPending} className="min-h-11 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white disabled:opacity-60">{createFiscalNote.isPending ? 'Salvando…' : 'Salvar documento'}</button></div>
+      <Modal isOpen={fiscalModal} onClose={draftGuard.requestClose} title="Informar documento fiscal" maxWidth="max-w-2xl" initialFocusId="fiscal-client" closeDisabled={createFiscalNote.isPending}
+        footer={<div className="space-y-3"><FormError message={fiscalError} /><div className="grid grid-cols-2 gap-3"><button type="button" disabled={createFiscalNote.isPending} onClick={draftGuard.requestClose} className={secondarySmallActionButtonClass}>Cancelar</button><button type="submit" form="fiscal-form" disabled={createFiscalNote.isPending} aria-busy={createFiscalNote.isPending} className={primarySubmitButtonClass}><span className="inline-grid"><span aria-hidden="true" className="invisible col-start-1 row-start-1">Salvar documento</span><span className="col-start-1 row-start-1">{createFiscalNote.isPending ? 'Salvando…' : 'Salvar documento'}</span></span></button></div></div>}>
+        <p className="mb-5 text-xs text-text-secondary">Campos com * são obrigatórios. Os demais são opcionais.</p>
+        <form id="fiscal-form" noValidate onSubmit={event => { event.preventDefault(); submitFiscal(); }}>
+          <fieldset disabled={createFiscalNote.isPending} className="m-0 grid min-w-0 grid-cols-1 gap-4 border-0 p-0 sm:grid-cols-2">
+            <FormField htmlFor="fiscal-client" label="Cliente" required error={fieldErrors['fiscal-client']}><RemoteCombobox<ClientOption> id="fiscal-client" name="clienteId" endpoint="/api/clientes/options" value={fiscalForm.clienteId} required fill density="form" inModal disabled={createFiscalNote.isPending} onChange={clienteId => setFiscalForm(current => ({ ...current, clienteId, projetoId: '' }))} {...errorProps('fiscal-client')} /></FormField>
+            <FormField htmlFor="fiscal-project" label="Projeto — opcional"><RemoteCombobox<ProjectOption> id="fiscal-project" name="projetoId" endpoint={'/api/projetos/options' + (fiscalForm.clienteId ? '?clienteId=' + encodeURIComponent(fiscalForm.clienteId) : '')} value={fiscalForm.projetoId} emptyLabel="Sem projeto" fill density="form" inModal disabled={createFiscalNote.isPending} onChange={projetoId => setFiscalForm(current => ({ ...current, projetoId }))} /></FormField>
+            <FormField htmlFor="fiscal-number" label="Número do documento" required error={fieldErrors['fiscal-number']}><input id="fiscal-number" name="numero" required maxLength={100} autoComplete="off" className={fieldClass} value={fiscalForm.numero} onChange={event => setFiscalForm({ ...fiscalForm, numero: event.target.value })} {...errorProps('fiscal-number')} /></FormField>
+            <FormField htmlFor="fiscal-code" label="Código de verificação — opcional"><input id="fiscal-code" name="codigoVerificacao" maxLength={200} autoComplete="off" spellCheck={false} className={fieldClass} value={fiscalForm.codigoVerificacao} onChange={event => setFiscalForm({ ...fiscalForm, codigoVerificacao: event.target.value })} /></FormField>
+            <FormField htmlFor="fiscal-issue-date" label="Data de emissão" required error={fieldErrors['fiscal-issue-date']}><DatePickerField id="fiscal-issue-date" name="dataEmissao" required disabled={createFiscalNote.isPending} autoComplete="off" value={fiscalForm.dataEmissao} onChange={event => setFiscalForm({ ...fiscalForm, dataEmissao: event.target.value })} className={fieldClass} {...errorProps('fiscal-issue-date')} /></FormField>
+            <FormField htmlFor="fiscal-value" label="Valor (R$)" required error={fieldErrors['fiscal-value']}><input id="fiscal-value" name="valor" required inputMode="decimal" autoComplete="off" className={fieldClass + ' max-w-[16rem] tabular-nums'} value={fiscalForm.valor} onChange={event => setFiscalForm({ ...fiscalForm, valor: event.target.value })} {...errorProps('fiscal-value')} /></FormField>
+            <FormField htmlFor="fiscal-city" label="Município — opcional"><input id="fiscal-city" name="municipio" maxLength={200} autoComplete="off" className={fieldClass} value={fiscalForm.municipio} onChange={event => setFiscalForm({ ...fiscalForm, municipio: event.target.value })} /></FormField>
+            <FormField htmlFor="fiscal-link" label="Link de consulta — opcional" error={fieldErrors['fiscal-link']}><input id="fiscal-link" name="link" type="url" autoComplete="off" className={fieldClass} value={fiscalForm.link} onChange={event => setFiscalForm({ ...fiscalForm, link: event.target.value })} {...errorProps('fiscal-link')} /></FormField>
+          </fieldset>
         </form>
       </Modal>
+      {draftGuard.confirmation}
     </PageFrame>
   );
 }

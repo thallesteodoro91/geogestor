@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { alertasRoutes } from './alertas.routes';
 import { ambientalRoutes } from './ambiental.routes';
+import { environmentalDocumentsRoutes } from './environmental-documents.routes';
 import { arquivosRoutes } from './arquivos.routes';
 import { auditRoutes } from './audit.routes';
 import { clientesRoutes } from './clientes.routes';
@@ -34,6 +35,7 @@ const API_ROUTE_MODULES = [
   ['/api/contatos', contatosRoutes],
   ['/api/licencas', licencasRoutes],
   ['/api/ambiental', ambientalRoutes],
+  ['/api/ambiental', environmentalDocumentsRoutes],
   ['/api/orcamentos', orcamentosRoutes],
   ['/api/planejamento', strategicPlanningRoutes],
   ['/api/dados-operacionais', operationalDataRoutes],

@@ -1,8 +1,10 @@
 import { toast } from 'sonner';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { planningReturnPath } from '../Planejamento/planningPresentation';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation, useListUrlState } from '../../hooks/useListPageNavigation';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
@@ -55,8 +57,10 @@ function loadTaskPage(endpoint: string) {
 
 export function Tarefas() {
   const location = useLocation();
+  const planningBack = planningReturnPath(new URLSearchParams(location.search).get('retorno'));
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const listUrl = useListUrlState();
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [tasksError, setTasksError] = useState('');
@@ -64,11 +68,16 @@ export function Tarefas() {
   const [highlightedTaskId, setHighlightedTaskId] = useState<string | null>(null);
   const handledTaskIdRef = useRef<string | null>(null);
   const focusClearTimer = useRef<number | null>(null);
-  const [selectedProjeto, setSelectedProjeto] = useState<string>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [prioridadeFilter, setPrioridadeFilter] = useState('Todas');
-  const [dataInicioFilter, setDataInicioFilter] = useState('');
-  const [dataFimFilter, setDataFimFilter] = useState('');
+  const selectedProjeto = listUrl.params.get('tarefasProjeto') || 'all';
+  const setSelectedProjeto = (value: string) => listUrl.update({ tarefasProjeto: value === 'all' ? null : value, tarefasPagina: null });
+  const searchTerm = listUrl.params.get('tarefasBusca') || '';
+  const setSearchTerm = (value: string) => listUrl.update({ tarefasBusca: value === '' ? null : value, tarefasPagina: null });
+  const prioridadeFilter = listUrl.params.get('tarefasPrioridade') || 'Todas';
+  const setPrioridadeFilter = (value: string) => listUrl.update({ tarefasPrioridade: value === 'Todas' ? null : value, tarefasPagina: null });
+  const dataInicioFilter = listUrl.params.get('tarefasInicio') || '';
+  const setDataInicioFilter = (value: string) => listUrl.update({ tarefasInicio: value === '' ? null : value, tarefasPagina: null });
+  const dataFimFilter = listUrl.params.get('tarefasFim') || '';
+  const setDataFimFilter = (value: string) => listUrl.update({ tarefasFim: value === '' ? null : value, tarefasPagina: null });
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
 
   // Form states
@@ -83,7 +92,13 @@ export function Tarefas() {
   const [submitting, setSubmitting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Tarefa | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const [page, setPage] = useState(1);
+  const requestedPage = Number(listUrl.params.get('tarefasPagina') || 1);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const setPage = useCallback((value: number | ((current: number) => number)) => {
+    const next = typeof value === 'function' ? value(page) : value;
+    listUrl.update({ tarefasPagina: next <= 1 ? null : String(next) });
+  }, [page, listUrl.update]);
+  const [resolvedPage, setResolvedPage] = useState<number>();
   const [totalTasks, setTotalTasks] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [statusTotals, setStatusTotals] = useState<TaskPage['statusTotals']>({ 'A Fazer': 0, 'Em Progresso': 0, 'Concluído': 0, outros: 0 });
@@ -96,6 +111,8 @@ export function Tarefas() {
   );
   const [editingDirectClient, setEditingDirectClient] = useState(false);
 
+  const { resultsRef: taskResultsRef, preparePage, adjustPage } = useListPageNavigation({ page, resolvedPage, ready: !loadingTasks, failed: Boolean(tasksError), scope: [searchTerm, selectedProjeto, prioridadeFilter, dataInicioFilter, dataFimFilter].join('\u001f') });
+  const changePage = (next: number) => { preparePage(next); setPage(next); };
   const fetchDados = useCallback(() => {
     const requestVersion = taskListRequestRef.current + 1;
     taskListRequestRef.current = requestVersion;
@@ -120,9 +137,10 @@ export function Tarefas() {
     loadTaskPage(`/api/tarefas?${params}`).then((result) => {
       if (taskListRequestRef.current !== requestVersion) return;
       if (!focusedTaskId && page > result.totalPages) {
-        setPage(result.totalPages);
+        adjustPage(result.totalPages); setPage(result.totalPages);
         return;
       }
+      setResolvedPage(result.page);
       setTarefas(result.items);
       setTotalTasks(result.total);
       setTotalPages(result.totalPages);
@@ -139,7 +157,7 @@ export function Tarefas() {
     }).finally(() => {
       if (taskListRequestRef.current === requestVersion) setLoadingTasks(false);
     });
-  }, [dataFimFilter, dataInicioFilter, debouncedSearchTerm, focusedTaskId, page, prioridadeFilter, selectedProjeto]);
+  }, [dataFimFilter, dataInicioFilter, debouncedSearchTerm, focusedTaskId, page, prioridadeFilter, selectedProjeto, setPage]);
 
   useEffect(() => {
     if (!focusedTaskId) return;
@@ -337,6 +355,7 @@ export function Tarefas() {
       setTotalTasks((current) => Math.max(0, current - 1));
       setDeleteTarget(null);
       await invalidateTaskIntegrations();
+      fetchDados();
       toast.success('Tarefa excluída.');
     } catch {
       toast.error('Não foi possível excluir a tarefa. Tente novamente.');
@@ -370,6 +389,7 @@ export function Tarefas() {
 
   return (
     <Layout>
+      {planningBack ? <Link to={planningBack} className="geo-focus-ring mb-4 inline-flex rounded-lg px-3 py-2 text-sm font-semibold text-brand-primary-700 hover:bg-brand-primary-50 dark:text-brand-primary-200 dark:hover:bg-brand-primary-400/10">Voltar ao planejamento</Link> : null}
       <PageHeader
         eyebrow="Fluxo operacional"
         title="Tarefas"
@@ -380,7 +400,7 @@ export function Tarefas() {
             onClick={openTaskForm}
             className={cn(headerPrimaryActionButtonClass, 'w-full sm:w-auto')}
           >
-            <span>Nova Tarefa</span>
+            <span>Nova tarefa</span>
             <span aria-hidden="true" className={headerPrimaryActionIconClass}>
               <Plus className="h-3.5 w-3.5" weight="bold" />
             </span>
@@ -472,8 +492,8 @@ export function Tarefas() {
             </label>
           </div>
         )}
-        <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {filteredTarefas.length} {filteredTarefas.length === 1 ? 'tarefa exibida' : 'tarefas exibidas'} nesta página · {totalTasks} {totalTasks === 1 ? 'tarefa no conjunto filtrado' : 'tarefas no conjunto filtrado'}
+        <p ref={taskResultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          {filteredTarefas.length} {filteredTarefas.length === 1 ? 'tarefa exibida' : 'tarefas exibidas'} nesta página · {totalTasks} {totalTasks === 1 ? 'tarefa no conjunto filtrado' : 'tarefas no conjunto filtrado'} · Página {resolvedPage ?? page} de {totalPages} · Intervalo {tarefas.length ? ((resolvedPage ?? page) - 1) * 100 + 1 : 0}–{tarefas.length ? ((resolvedPage ?? page) - 1) * 100 + tarefas.length : 0}
         </p>
         {statusTotals.outros > 0 && (
           <p role="status" className="mt-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-800 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200">
@@ -681,9 +701,9 @@ export function Tarefas() {
 
       {totalPages > 1 && (
         <nav aria-label="Paginação de tarefas" className="mt-8 flex items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <button type="button" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Anterior</button>
+          <button type="button" disabled={page <= 1} onClick={() => changePage(Math.max(1, page - 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Anterior</button>
           <p className="text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">Página {page} de {totalPages}</p>
-          <button type="button" disabled={page >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Próxima</button>
+          <button type="button" disabled={page >= totalPages} onClick={() => changePage(Math.min(totalPages, page + 1))} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 text-sm disabled:cursor-not-allowed disabled:opacity-50">Próxima</button>
         </nav>
       )}
 
@@ -691,7 +711,7 @@ export function Tarefas() {
       <Modal
         isOpen={showAddForm}
         onClose={closeTaskForm}
-        title={editingTaskId ? 'Editar Tarefa' : 'Nova Tarefa'}
+        title={editingTaskId ? 'Editar tarefa' : 'Nova tarefa'}
         initialFocusId="tarefa-titulo"
         closeDisabled={submitting}
       >
@@ -704,7 +724,7 @@ export function Tarefas() {
           )}
           <FormSection title="Planejamento da tarefa" description="Defina o que precisa ser feito, o projeto associado e a prioridade operacional.">
           <div>
-            <label htmlFor="tarefa-titulo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Título da Tarefa</label>
+            <label htmlFor="tarefa-titulo" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Título da tarefa</label>
             <input 
               id="tarefa-titulo"
               name="titulo"
@@ -749,7 +769,7 @@ export function Tarefas() {
             </div>
 
             <div>
-              <label htmlFor="tarefa-data-limite" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data Limite</label>
+              <label htmlFor="tarefa-data-limite" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">Data limite</label>
               <DatePickerField
                 id="tarefa-data-limite"
                 name="dataLimite"
@@ -790,7 +810,7 @@ export function Tarefas() {
               disabled={submitting}
               className={cn(primarySubmitButtonClass, 'px-6 py-3')}
             >
-              {submitting ? 'Salvando…' : editingTaskId ? 'Salvar alterações' : 'Criar Tarefa'}
+              {submitting ? 'Salvando…' : editingTaskId ? 'Salvar alterações' : 'Criar tarefa'}
             </button>
           </FormFooter>
         </form>

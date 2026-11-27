@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -96,7 +97,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
       }
     ]);
 
-    const cancelResponse = await server.inject({
+    const cancelResponse = await injectWithRecordVersion(server, {
       method: 'PATCH',
       url: `/api/projetos/${projectId}`,
       headers: authHeaders,
@@ -104,7 +105,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     });
     assert.equal(cancelResponse.statusCode, 200, cancelResponse.body);
 
-    const pendingContextResponse = await server.inject({
+    const pendingContextResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/projetos/${projectId}/contexto-financeiro`,
       headers: authHeaders
@@ -124,7 +125,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     assert.equal(pendingContext.valorFaturado, 6_000);
     assert.equal(pendingContext.valorExecutadoInformado, null);
     assert.ok(pendingContext.eventosFinanceiros.some((event) => event.tipo === 'cancelamento_projeto_pendente'));
-    const pendingDiagnosticResponse = await server.inject({
+    const pendingDiagnosticResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/financeiro/diagnostico-vinculos',
       headers: authHeaders
@@ -135,7 +136,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
       1
     );
 
-    const decisionResponse = await server.inject({
+    const decisionResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: `/api/projetos/${projectId}/decisao-financeira`,
       headers: authHeaders,
@@ -148,7 +149,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     assert.equal(decisionResponse.statusCode, 201, decisionResponse.body);
     assert.equal(decisionResponse.json<{ valorExecutado: number }>().valorExecutado, 4_000);
 
-    const completedContextResponse = await server.inject({
+    const completedContextResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/projetos/${projectId}/contexto-financeiro`,
       headers: authHeaders
@@ -161,7 +162,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     assert.equal(completedContext.decisaoFinanceiraPendente, false);
     assert.equal(completedContext.valorExecutadoInformado, 4_000);
     assert.ok(completedContext.eventosFinanceiros.some((event) => event.tipo === 'decisao_financeira_projeto'));
-    const completedDiagnosticResponse = await server.inject({
+    const completedDiagnosticResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/financeiro/diagnostico-vinculos',
       headers: authHeaders
@@ -172,7 +173,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
       0
     );
 
-    const updatedExecutionResponse = await server.inject({
+    const updatedExecutionResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: `/api/projetos/${projectId}/decisao-financeira`,
       headers: authHeaders,
@@ -184,7 +185,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     });
     assert.equal(updatedExecutionResponse.statusCode, 201, updatedExecutionResponse.body);
 
-    const clientDashboardResponse = await server.inject({
+    const clientDashboardResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/clientes/${clientId}/dashboard`,
       headers: authHeaders
@@ -196,7 +197,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     assert.equal(clientKpis.valorExecutadoInformado, 5_000);
     assert.equal(clientKpis.execucaoInformada, true);
 
-    const documentsResponse = await server.inject({
+    const documentsResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/financeiro/comprovantes?clienteId=${clientId}&projetoId=${projectId}`,
       headers: authHeaders
@@ -205,7 +206,7 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     const availableDocumentIds = documentsResponse.json<Array<{ id: string }>>().map((document) => document.id);
     assert.deepEqual(new Set(availableDocumentIds), new Set([generalDocumentId, projectDocumentId]));
 
-    const receiptResponse = await server.inject({
+    const receiptResponse = await injectWithRecordVersion(server, {
       method: 'POST',
       url: `/api/financeiro/parcelas/${installmentId}/recebimentos`,
       headers: authHeaders,
@@ -222,8 +223,8 @@ test('cancelamento exige decisão, consolida execução, eventos e comprovante s
     );
 
     const [monthlyResponse, legacyMonthlyResponse] = await Promise.all([
-      server.inject({ method: 'GET', url: '/api/financeiro/resumo-mensal', headers: authHeaders }),
-      server.inject({ method: 'GET', url: '/api/financeiro/dre', headers: authHeaders })
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/financeiro/resumo-mensal', headers: authHeaders }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/financeiro/dre', headers: authHeaders })
     ]);
     assert.equal(monthlyResponse.statusCode, 200, monthlyResponse.body);
     assert.equal(legacyMonthlyResponse.statusCode, 200, legacyMonthlyResponse.body);

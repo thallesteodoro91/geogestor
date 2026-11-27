@@ -40,3 +40,33 @@ test('adiciona destaque sem contaminar os parâmetros persistentes', () => {
     '/orcamentos?query=Geo&page=2'
   );
 });
+
+test('retorna ao Financeiro com a aba, período e critérios da lista preservados', () => {
+  const returnTo = '/financeiro?tab=faturas&periodo=custom&inicio=2026-10-01&fim=2026-10-31&cliente=cliente_1&receberBusca=Campo&receberInicio=2026-10-01&receberFim=2026-10-31&receberSituacao=pendentes&receberPagina=3';
+  assert.equal(getSafeBudgetReturnTo(returnTo), returnTo);
+  const editor = new URL(buildBudgetEditorPath({ returnTo, clientId: 'cliente_1' }), 'https://geogestor.local');
+  assert.equal(editor.pathname, '/orcamentos/novo');
+  assert.equal(editor.searchParams.get('retorno'), returnTo);
+  assert.equal(withBudgetHighlight(returnTo, 'budget_1'), returnTo);
+});
+
+test('remove comandos de criação e retornos encadeados do destino Financeiro', () => {
+  assert.equal(getSafeBudgetReturnTo('/financeiro?tab=pagar&acao=despesa&retorno=%2Forcamentos%2Fnovo&highlightId=abc&arbitrario=1'), '/financeiro?tab=pagar');
+});
+
+test('preserva os critérios de Contas a pagar ao criar e concluir orçamento', () => {
+  const returnTo = '/financeiro?tab=pagar&pagarBusca=Campo&pagarCategoria=Transporte&pagarSubcategoria=Combustivel&pagarSituacao=Pendente&pagarTipo=Variavel&pagarCentro=Campo&pagarReembolso=sim&pagarInicio=2026-10-01&pagarFim=2026-10-31&pagarPagina=2';
+  assert.equal(getSafeBudgetReturnTo(returnTo), returnTo);
+  const editor = new URL(buildBudgetEditorPath({ returnTo }), 'https://geogestor.local');
+  assert.equal(editor.searchParams.get('retorno'), returnTo);
+  assert.equal(withBudgetHighlight(returnTo, 'budget_1'), returnTo);
+});
+
+test('recusa protocolos, URLs absolutas, caminhos arbitrários e travessia de diretórios', () => {
+  for (const input of [
+    'javascript:alert(1)', 'data:text/html,test', 'https://example.com/financeiro',
+    '//example.com/financeiro', 'https://geogestor.local/financeiro', '/configuracoes',
+    '/orcamentos/novo', '/financeiro/../configuracoes', '/configuracoes/../financeiro',
+    '/%66inanceiro', '/financeiro\\evil', '/financeiro\n?tab=faturas'
+  ]) assert.equal(getSafeBudgetReturnTo(input), '/orcamentos', input);
+});

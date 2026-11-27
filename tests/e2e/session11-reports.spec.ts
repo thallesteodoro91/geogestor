@@ -197,7 +197,10 @@ test.describe('Sessão 11 — Relatórios', () => {
     await fs.writeFile(path.join(evidenceRoot, 'pdfs-gerados.json'), `${JSON.stringify(pdfs, null, 2)}\n`, 'utf8');
 
     await unlock(page, `/relatorio-executivo?inicio=${today}&fim=${today}`);
-    await expect(page).toHaveURL(new RegExp(`/relatorios\\?inicio=${today}&fim=${today}&tipo=executivo`));
+    await expect.poll(() => {
+      const url = new URL(page.url());
+      return [url.pathname, url.searchParams.get('inicio'), url.searchParams.get('fim'), url.searchParams.get('tipo')];
+    }).toEqual(['/relatorios', today, today, 'executivo']);
     await expect(page.getByRole('tab', { name: 'Executivo' })).toHaveAttribute('aria-selected', 'true');
 
     await unlock(page, '/relatorios?tipo=FINANCEIRO&tipo=projetos&periodo=invalido');

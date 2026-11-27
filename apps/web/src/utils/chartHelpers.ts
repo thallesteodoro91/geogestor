@@ -1,3 +1,5 @@
+import { DefaultZIndexes } from 'recharts';
+
 export const chartTextColor = "hsl(var(--text-muted))";
 export const chartSecondaryTextColor = "hsl(var(--text-secondary))";
 export const chartBorder = "hsl(var(--border))";
@@ -35,6 +37,9 @@ export const chartCursor = {
 };
 
 export const chartAnimationDuration = 420;
+
+// Recharts promotes hovered bars above ordinary lines.
+export const chartResultLineZIndex = DefaultZIndexes.activeBar + 1;
 
 export const chartActiveDot = (color: string) => ({
   r: 5,

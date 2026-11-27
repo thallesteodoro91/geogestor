@@ -1,6 +1,6 @@
 import { ClientePayloadSchema, type ClientePayload } from '@geogestor/contracts';
 import { formatCnpj, formatCpf, formatPhoneBR, onlyDigits } from '../../utils/formatters';
-import { CLIENT_PRIMARY_ORIGIN_OPTIONS } from '../../utils/clientTags';
+import { CLIENT_PRIMARY_ORIGIN_OPTIONS, PUBLIC_ENTITY_CATEGORY, resolveClientClassification } from '../../utils/clientTags';
 
 export type PersonType = 'PF' | 'PJ';
 
@@ -37,7 +37,7 @@ export interface ClientRecordForForm {
 }
 
 export interface ClientFormState {
-  tipoPessoa: PersonType;
+  tipoPessoa: PersonType | '';
   nome: string;
   cpf: string;
   rg: string;
@@ -55,6 +55,8 @@ export interface ClientFormState {
   bairro: string;
   municipio: string;
   uf: string;
+  categoriaPrincipal: string;
+  categoriaPendente: string;
   perfis: string[];
   origemPrincipal: string;
   origemDetalhe: string;
@@ -69,22 +71,16 @@ export type ClientFormErrors = Partial<Record<keyof ClientFormState, string>>;
 const splitTags = (value?: string | null) =>
   (value || '').split(',').map((item) => item.trim()).filter(Boolean);
 
-const redundantProfiles = new Set(['Pessoa Física', 'Pessoa Jurídica', 'Empresa']);
-
 export const formatCep = (value?: string | null) => {
   const digits = onlyDigits(value).slice(0, 8);
   return digits.length <= 5 ? digits : `${digits.slice(0, 5)}-${digits.slice(5)}`;
 };
 
-export const inferPersonType = (client?: ClientRecordForForm | null): PersonType => {
-  if (client?.tipoPessoa === 'PF' || client?.tipoPessoa === 'PJ') return client.tipoPessoa;
-  const category = client?.categoria || '';
-  const documentLength = onlyDigits(client?.documento).length;
-  return client?.cnpj || documentLength === 14 || /Pessoa Jurídica|Empresa/i.test(category) ? 'PJ' : 'PF';
-};
+export const readPersonType = (client?: ClientRecordForForm | null): ClientFormState['tipoPessoa'] =>
+  client?.tipoPessoa === 'PF' || client?.tipoPessoa === 'PJ' ? client.tipoPessoa : '';
 
 export const createEmptyClientForm = (): ClientFormState => ({
-  tipoPessoa: 'PF',
+  tipoPessoa: '',
   nome: '',
   cpf: '',
   rg: '',
@@ -102,6 +98,8 @@ export const createEmptyClientForm = (): ClientFormState => ({
   bairro: '',
   municipio: '',
   uf: '',
+  categoriaPrincipal: '',
+  categoriaPendente: '',
   perfis: [],
   origemPrincipal: '',
   origemDetalhe: '',
@@ -114,9 +112,8 @@ export const createEmptyClientForm = (): ClientFormState => ({
 export const clientRecordToForm = (client?: ClientRecordForForm | null): ClientFormState => {
   if (!client) return createEmptyClientForm();
 
-  const tipoPessoa = inferPersonType(client);
-  const categorySource = client.perfis != null ? client.perfis : client.categoria;
-  const perfis = splitTags(categorySource).filter((profile) => !redundantProfiles.has(profile));
+  const tipoPessoa = readPersonType(client);
+  const classification = resolveClientClassification(client.categoria, client.perfis);
   const legacyOrigins = splitTags(client.origem);
   const legacyPrimary = legacyOrigins[0] || '';
   const hasSupportedLegacyOrigin = CLIENT_PRIMARY_ORIGIN_OPTIONS.includes(legacyPrimary);
@@ -143,7 +140,9 @@ export const clientRecordToForm = (client?: ClientRecordForForm | null): ClientF
     bairro: client.bairro || '',
     municipio: client.municipio || '',
     uf: (client.uf || '').toUpperCase(),
-    perfis,
+    categoriaPrincipal: classification.primary || '',
+    categoriaPendente: classification.legacyCategory || '',
+    perfis: classification.profiles,
     origemPrincipal,
     origemDetalhe: client.origemDetalhe || (!hasSupportedLegacyOrigin && legacyPrimary ? client.origem || '' : ''),
     indicadoPor: client.indicadoPor || '',
@@ -195,7 +194,7 @@ export const clientFormToPayload = (
 
   return {
     nome: form.nome.trim(),
-    tipoPessoa: form.tipoPessoa,
+    tipoPessoa: form.tipoPessoa as PersonType,
     documento: nullable(activeDocument),
     email: nullable(form.email),
     telefone: nullable(form.telefone),
@@ -219,7 +218,7 @@ export const clientFormToPayload = (
     origemDetalhe: form.origemPrincipal === 'Outro' ? nullable(form.origemDetalhe) : null,
     indicadoPor: form.origemPrincipal === 'Indicação' ? nullable(form.indicadoPor) : null,
     // Tipo de pessoa e categoria são taxonomias independentes.
-    categoria: nullable(form.perfis.join(', ')),
+    categoria: nullable(form.categoriaPrincipal || form.categoriaPendente),
     perfis: nullable(form.perfis.join(', ')),
     anotacoes: nullable(form.anotacoes),
     situacao: form.situacao || 'Ativo',
@@ -233,14 +232,23 @@ export const validateClientForm = (form: ClientFormState, existing?: ClientRecor
   const result = ClientePayloadSchema.safeParse(payload);
   const errors: ClientFormErrors = {};
 
+  if (!form.tipoPessoa) errors.tipoPessoa = 'Selecione Pessoa Física ou Pessoa Jurídica para revisar o cadastro.';
+  if (form.categoriaPendente && !form.categoriaPrincipal) {
+    errors.categoriaPrincipal = 'Escolha uma categoria principal para resolver a classificação anterior.';
+  }
+  if (form.categoriaPrincipal === PUBLIC_ENTITY_CATEGORY && form.tipoPessoa === 'PF') {
+    errors.categoriaPrincipal = 'Entidade Pública exige Pessoa Jurídica. Para um representante em nome próprio, mantenha Pessoa Física e escolha outro perfil.';
+  }
+
   if (!result.success) {
     result.error.issues.forEach((issue) => {
-      const field = issue.path[0] as keyof ClientFormState | undefined;
+      const pathField = issue.path[0];
+      const field = (pathField === 'categoria' ? 'categoriaPrincipal' : pathField) as keyof ClientFormState | undefined;
       if (field && !errors[field]) errors[field] = issue.message;
     });
   }
 
-  return { payload, errors, valid: result.success };
+  return { payload, errors, valid: result.success && Object.keys(errors).length === 0 };
 };
 
 export const clientFormFingerprint = (form: ClientFormState) => JSON.stringify(form);

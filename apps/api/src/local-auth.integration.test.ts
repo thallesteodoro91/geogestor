@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -28,7 +29,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     await dbReady;
     await runRuntimeMigrations();
 
-    const setup = await server.inject({
+    const setup = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/configuracoes',
       headers: { ...baseHeaders, 'content-type': 'application/json' },
@@ -43,10 +44,10 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(setup.statusCode, 200, setup.body);
     assert.equal('adminSenhaHash' in setup.json(), false);
 
-    const locked = await server.inject({ method: 'GET', url: '/api/clientes', headers: baseHeaders });
+    const locked = await injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes', headers: baseHeaders });
     assert.equal(locked.statusCode, 423, locked.body);
 
-    const wrongPassword = await server.inject({
+    const wrongPassword = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/auth/unlock',
       headers: { ...baseHeaders, 'content-type': 'application/json' },
@@ -55,7 +56,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(wrongPassword.statusCode, 401, wrongPassword.body);
     assert.equal(wrongPassword.json().code, 'invalid_password');
 
-    const unlocked = await server.inject({
+    const unlocked = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/auth/unlock',
       headers: { ...baseHeaders, 'content-type': 'application/json' },
@@ -65,7 +66,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     const sessionToken = unlocked.json<{ token: string }>().token;
     assert.ok(sessionToken.length >= 32);
 
-    const operational = await server.inject({
+    const operational = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/clientes',
       headers: { ...baseHeaders, 'x-local-session': sessionToken }
@@ -80,7 +81,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     };
     let uniformError = '';
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      const denied = await server.inject({
+      const denied = await injectWithRecordVersion(server, {
         method: 'POST',
         url: '/api/sistema/backups/recuperacao/codigo',
         headers: recoveryHeaders,
@@ -92,7 +93,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
       assert.equal(denied.json().code, 'recovery_authorization_failed');
     }
 
-    const threshold = await server.inject({
+    const threshold = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/sistema/backups/recuperacao/codigo',
       headers: recoveryHeaders,
@@ -103,7 +104,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(threshold.json().code, 'too_many_attempts');
     assert.ok(Number(threshold.headers['retry-after']) >= 1);
 
-    const blockedCorrectPassword = await server.inject({
+    const blockedCorrectPassword = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/sistema/backups/recuperacao/codigo',
       headers: recoveryHeaders,
@@ -113,7 +114,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(blockedCorrectPassword.json<{ error: string }>().error, uniformError);
 
     await new Promise((resolve) => setTimeout(resolve, 30));
-    const revealed = await server.inject({
+    const revealed = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/sistema/backups/recuperacao/codigo',
       headers: recoveryHeaders,
@@ -122,7 +123,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(revealed.statusCode, 200, revealed.body);
     assert.match(revealed.json<{ recoveryCode: string }>().recoveryCode, /^GG-R1-/);
 
-    const kit = await server.inject({
+    const kit = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/sistema/backups/recuperacao/kit',
       headers: recoveryHeaders,
@@ -133,13 +134,13 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(kit.body.includes('senha-segura-123'), false);
     assert.equal(kit.body.includes('senha-forte-kit-2026'), false);
 
-    const manualLock = await server.inject({
+    const manualLock = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/auth/lock',
       headers: { ...baseHeaders, 'x-local-session': sessionToken }
     });
     assert.equal(manualLock.statusCode, 200, manualLock.body);
-    const afterLock = await server.inject({
+    const afterLock = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/clientes',
       headers: { ...baseHeaders, 'x-local-session': sessionToken }
@@ -147,7 +148,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     assert.equal(afterLock.statusCode, 423, afterLock.body);
 
     process.env.GEOGESTOR_SESSION_IDLE_MS = '5';
-    const shortSession = await server.inject({
+    const shortSession = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/auth/unlock',
       headers: { ...baseHeaders, 'content-type': 'application/json' },
@@ -155,7 +156,7 @@ test('rotas operacionais exigem desbloqueio, expiração e bloqueio manual', asy
     });
     const expiringToken = shortSession.json<{ token: string }>().token;
     await new Promise((resolve) => setTimeout(resolve, 15));
-    const expired = await server.inject({
+    const expired = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/clientes',
       headers: { ...baseHeaders, 'x-local-session': expiringToken }

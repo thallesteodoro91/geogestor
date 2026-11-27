@@ -1,7 +1,36 @@
 import { ArrowsClockwise, CaretDown, CaretUp, CheckCircle, Info, WarningCircle, XCircle } from '@phosphor-icons/react';
 import { useState } from 'react';
-import type { FullMigrationPreview, FullMigrationResult, ReconciliationItem } from './fullMigration';
+import type { FullMigrationIssue, FullMigrationPreview, FullMigrationResult, ReconciliationItem } from './fullMigration';
 import { FormSelect } from '../../components/Form';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '../../services/apiClient';
+
+function useIssuePage(preview: FullMigrationPreview, kind: 'blocking' | 'general' | 'row') {
+  const [position, setPosition] = useState({ id: preview.previewId, page: 1 });
+  const page = position.id === preview.previewId ? position.page : 1;
+  const local = preview.issues.filter(issue => kind === 'blocking' ? issue.severity === 'blocking' : kind === 'general'
+    ? issue.row === null && ['warning', 'ambiguous'].includes(issue.severity)
+    : issue.row !== null && !['info', 'blocking'].includes(issue.severity));
+  const total = preview.issueTotals?.[kind] ?? local.length;
+  const query = useQuery({
+    queryKey: ['import-preview-issues', preview.previewId, kind, page],
+    enabled: Boolean(preview.issuesPaged && total),
+    queryFn: ({ signal }) => apiClient.get<{ items: FullMigrationIssue[]; totalPages: number }>(`/api/importacoes/${preview.previewId}/pendencias?kind=${kind}&page=${page}&limit=50`, { signal })
+  });
+  return { items: preview.issuesPaged ? query.data?.items ?? [] : local.slice((page - 1) * 50, page * 50), total, page,
+    pages: Math.max(1, Math.ceil(total / 50)), pending: query.isFetching, error: query.isError,
+    go: (next: number) => setPosition({ id: preview.previewId, page: next }) };
+}
+
+function IssuePager({ data, label }: { data: ReturnType<typeof useIssuePage>; label: string }) {
+  return <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-sm" aria-live="polite">
+    <span>{data.pending ? 'Carregando pendências…' : data.error ? 'Não foi possível carregar. Tente consultar esta página novamente.' : `Página ${data.page} de ${data.pages} · ${data.total} avisos`}</span>
+    <div className="flex gap-2">
+      <button type="button" aria-label={`Página anterior de ${label}`} className="geo-focus-ring rounded border px-3 py-2 hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800" disabled={data.pending || data.page <= 1} onClick={() => data.go(data.page - 1)}>Anterior</button>
+      <button type="button" aria-label={`Próxima página de ${label}`} className="geo-focus-ring rounded border px-3 py-2 hover:bg-zinc-100 disabled:opacity-50 dark:hover:bg-zinc-800" disabled={data.pending || data.page >= data.pages} onClick={() => data.go(data.page + 1)}>Próxima</button>
+    </div>
+  </div>;
+}
 
 const currency = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const dateTime = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'medium' });
@@ -66,9 +95,12 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
     ['Pendências parciais', preview.counts.partial],
     ['Erros impeditivos', preview.counts.blocking]
   ] as const;
-  const blockingIssues = preview.issues.filter(issue => issue.severity === 'blocking');
-  const generalIssues = preview.issues.filter(issue => issue.row === null && ['warning', 'ambiguous'].includes(issue.severity));
-  const rowIssues = preview.issues.filter(issue => issue.row !== null && !['info', 'blocking'].includes(issue.severity));
+  const blockingPage = useIssuePage(preview, 'blocking');
+  const generalPage = useIssuePage(preview, 'general');
+  const rowPage = useIssuePage(preview, 'row');
+  const blockingIssues = blockingPage.items;
+  const generalIssues = generalPage.items;
+  const rowIssues = rowPage.items;
   const ignoredDocumentColumn = preview.columns.ignored.some(source => /\b(cpf|cnpj|documento)\b/i.test(source));
 
   return (
@@ -90,7 +122,8 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
         ))}
       </div>
 
-      {blockingIssues.length > 0 && (
+      <p className="text-sm text-zinc-600 dark:text-zinc-300">A paginação organiza os avisos. A confirmação importa todas as linhas aprovadas da planilha.</p>
+      {blockingPage.total > 0 && (
         <section id="migration-blocking-issues" tabIndex={-1} aria-labelledby="migration-blocking-issues-title" className="scroll-mt-6 focus-visible:ring-2 focus-visible:ring-red-500/40">
           <h3 id="migration-blocking-issues-title" className="text-sm font-bold text-red-900 dark:text-red-200">Erros impeditivos</h3>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">A importação não está processando. Ela foi bloqueada por erros que precisam ser corrigidos.</p>
@@ -102,6 +135,7 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
               </tbody>
             </table>
           </div>
+          <IssuePager data={blockingPage} label="erros impeditivos" />
         </section>
       )}
 
@@ -225,7 +259,7 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
         </div>
       </section>
 
-      {generalIssues.length > 0 && (
+      {generalPage.total > 0 && (
         <section aria-labelledby="general-migration-issues-title">
           <h3 id="general-migration-issues-title" className="text-sm font-bold text-zinc-950 dark:text-zinc-100">Ajustes gerais da planilha</h3>
           <ul className="mt-3 space-y-2">
@@ -235,10 +269,11 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
               </li>
             ))}
           </ul>
+          <IssuePager data={generalPage} label="ajustes gerais" />
         </section>
       )}
 
-      {rowIssues.length > 0 && (
+      {rowPage.total > 0 && (
         <section aria-labelledby="migration-issues-title">
           <h3 id="migration-issues-title" className="text-sm font-bold text-zinc-950 dark:text-zinc-100">Pendências por linha</h3>
           <div className="mt-3 max-h-72 overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -258,6 +293,7 @@ export function FullMigrationReview({ preview, onMappingChange, isRefreshing = f
               </tbody>
             </table>
           </div>
+          <IssuePager data={rowPage} label="pendências por linha" />
         </section>
       )}
 

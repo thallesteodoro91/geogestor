@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -28,7 +29,7 @@ test('readiness comprova acesso leve ao banco sem executar o diagnóstico comple
   };
 
   try {
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/ready',
       headers: { 'x-api-token': 'readiness-test-token' }

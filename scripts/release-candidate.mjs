@@ -23,14 +23,22 @@ function record(name, approved, detail = null) {
   if (!approved) throw new Error(`${name}: ${detail || 'gate reprovado'}`);
 }
 
+function execute(command, args) {
+  if (process.platform === 'win32' && command === pnpm) {
+    const quoted = [command, ...args].map((arg) => /[\s&()^|<>"]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg).join(' ');
+    return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', quoted], { cwd: root, env, stdio: 'inherit', shell: false, windowsHide: true });
+  }
+  return spawnSync(command, args, { cwd: root, env, stdio: 'inherit', shell: false, windowsHide: true });
+}
+
 function run(name, command, args) {
-  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', shell: false });
+  const result = execute(command, args);
   if (result.error) record(name, false, result.error.message);
   record(name, result.status === 0, result.status === 0 ? null : `comando encerrou com código ${result.status ?? 1}`);
 }
 
 function runInformational(name, command, args, acceptedRisk) {
-  const result = spawnSync(command, args, { cwd: root, env, stdio: 'inherit', shell: false });
+  const result = execute(command, args);
   report.gates.push({
     name,
     required: false,
@@ -43,7 +51,7 @@ function runInformational(name, command, args, acceptedRisk) {
 try {
   const status = spawnSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8', shell: false });
   record('checkout limpo e reproduzível', status.status === 0 && !status.stdout.trim(),
-    status.status === 0 ? 'existem alterações locais' : 'não foi possível consultar o Git');
+    status.status === 0 ? (status.stdout.trim() ? 'existem alterações locais' : 'origem limpa') : 'não foi possível consultar o Git');
 
   const rootVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
   const desktopVersion = JSON.parse(fs.readFileSync(path.join(root, 'apps', 'desktop', 'package.json'), 'utf8')).version;

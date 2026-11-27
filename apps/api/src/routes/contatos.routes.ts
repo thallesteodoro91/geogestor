@@ -118,6 +118,11 @@ async function assertUniqueActiveContact(email?: string, telefone?: string, excl
 }
 
 export async function contatosRoutes(server: FastifyInstance) {
+  server.get('/:id', async (request, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const row = await db.select().from(schema.contatos).where(and(eq(schema.contatos.id, id), isNull(schema.contatos.deletedAt))).get();
+    return row || reply.code(404).send({ error: 'Lead não encontrado.' });
+  });
   // GET /api/contatos/analytics
   server.get('/analytics', async () => {
     const rows = await db.select({
@@ -232,7 +237,7 @@ export async function contatosRoutes(server: FastifyInstance) {
     const current = await db.select().from(schema.contatos).where(and(eq(schema.contatos.id, id), isNull(schema.contatos.deletedAt))).get();
     if (!current) return reply.status(404).send({ error: 'Lead não encontrado' });
     const { nome, email, telefone, empresa, cidade, observacoes, origem, status, dataCadastro } = parsed.data;
-    
+
     const updateData: any = {
       nome,
       email,
@@ -244,11 +249,11 @@ export async function contatosRoutes(server: FastifyInstance) {
       status,
       updatedAt: new Date().toISOString()
     };
-    
+
     if (dataCadastro) {
       updateData.createdAt = `${dataCadastro}T00:00:00.000Z`;
     }
-    
+
     // Remover campos undefined
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
@@ -305,7 +310,7 @@ export async function contatosRoutes(server: FastifyInstance) {
       eq(schema.contatos.id, id),
       isNull(schema.contatos.deletedAt)
     )).get();
-    
+
     if (!initialContato) {
       return reply.status(404).send({ error: 'Lead não encontrado' });
     }

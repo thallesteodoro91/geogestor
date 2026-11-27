@@ -8,11 +8,11 @@ import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
 import { motion } from 'framer-motion';
 import { Link as RouterLink, useSearchParams } from 'react-router-dom';
-import { 
+import {
   FolderOpen,
-  Check, 
+  Check,
   Database,
-  Gear, 
+  Gear,
   Info,
   Palette,
   FileText,
@@ -49,9 +49,10 @@ import { GoogleCalendarSettingsPanel } from './Configuracoes/GoogleCalendarSetti
 import { DocumentTemplateSettingsPanel } from './Configuracoes/DocumentTemplateSettingsPanel';
 import { ChecklistTemplateSettingsPanel } from './Configuracoes/ChecklistTemplateSettingsPanel';
 import { SecuritySettingsPanel } from './Configuracoes/SecuritySettingsPanel';
+import { GeospatialCacheSettingsPanel } from './Configuracoes/GeospatialCacheSettingsPanel';
 import { FormSelect } from '../components/Form';
 
-const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'seguranca', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
+const SETTINGS_SECTIONS = ['empresa', 'arquivos', 'armazenamento', 'seguranca', 'backups', 'alertas', 'modelos', 'integracoes', 'aparencia', 'manutencao'] as const;
 type SettingsSection = typeof SETTINGS_SECTIONS[number];
 
 interface MaintenanceOperation {
@@ -87,6 +88,7 @@ interface MaintenanceHistoryEntry {
 }
 
 const SETTINGS_SEARCH_INDEX: Array<{ section: SettingsSection; title: string; description: string; keywords: string[]; anchor?: string }> = [
+  { section: 'armazenamento', title: 'Cache geoespacial', description: 'Espaço usado e limpeza de arquivos órfãos.', keywords: ['dados', 'armazenamento', 'cache', 'órfãos', 'geoespacial'], anchor: 'geospatial-cache-title' },
   { section: 'empresa', title: 'Nome da empresa', description: 'Identificação usada no GeoGestor.', keywords: ['empresa', 'nome', 'responsável', 'usuário'], anchor: 'company-name' },
   { section: 'empresa', title: 'Logotipo do aplicativo', description: 'Imagem exibida no canto superior do menu do GeoGestor.', keywords: ['logo', 'logotipo', 'imagem', 'marca', 'menu'], anchor: 'application-logo' },
   { section: 'empresa', title: 'E-mail operacional', description: 'Contato do responsável pelo sistema.', keywords: ['email', 'administrador', 'responsável'], anchor: 'admin-email' },
@@ -986,6 +988,7 @@ export function Configuracoes() {
             {([
               ['empresa', 'Empresa e usuário', Buildings, 'system'],
               ['arquivos', 'Arquivos e pastas', Files, 'field'],
+              ['armazenamento', 'Dados e armazenamento', Database, 'system'],
               ['seguranca', 'Segurança', ShieldCheck, 'success'],
               ['alertas', 'Alertas', Bell, 'warning'],
               ['modelos', 'Modelo dos PDFs', FileText, 'success'],
@@ -1069,7 +1072,7 @@ export function Configuracoes() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label htmlFor="company-name" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Nome da empresa</label>
-                      <input 
+                      <input
                         id="company-name"
                         name="company_name"
                         type="text"
@@ -1087,7 +1090,7 @@ export function Configuracoes() {
 
                     <div>
                       <label htmlFor="admin-name" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">Nome completo do responsável</label>
-                      <input 
+                      <input
                         id="admin-name"
                         name="admin_name"
                         type="text"
@@ -1105,7 +1108,7 @@ export function Configuracoes() {
 
                     <div>
                       <label htmlFor="admin-email" className="block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">E-mail operacional</label>
-                      <input 
+                      <input
                         id="admin-email"
                         name="admin_email"
                         type="email"
@@ -1225,6 +1228,8 @@ export function Configuracoes() {
           )}
 
           {activeTab === 'seguranca' && <SecuritySettingsPanel />}
+
+          {activeTab === 'armazenamento' && <GeospatialCacheSettingsPanel />}
 
           {activeTab === 'alertas' && <AlertSettingsPanel />}
 

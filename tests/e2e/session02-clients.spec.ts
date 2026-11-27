@@ -95,19 +95,21 @@ test.describe('Sessão 02 — Comercial — Clientes', () => {
 
     await page.getByRole('button', { name: 'Novo cliente' }).first().click();
     await page.getByLabel('Nome completo').fill(`${PREFIX}Rascunho`);
-    page.once('dialog', async (confirmation) => {
-      expect(confirmation.message()).toContain('Descartar as alterações não salvas');
-      await confirmation.dismiss();
-    });
     await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(page.getByRole('alertdialog')).toBeVisible();
+    await page.getByRole('button', { name: 'Continuar editando', exact: true }).click();
     await expect(dialog).toBeVisible();
-    page.once('dialog', async (confirmation) => confirmation.accept());
     await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await page.getByRole('button', { name: 'Descartar alterações', exact: true }).click();
     await expect(dialog).toBeHidden();
 
     await page.getByRole('button', { name: 'Novo cliente' }).first().click();
     await expect(dialog).toBeVisible();
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
+    await expect(dialog.getByRole('radio', { name: /Pessoa física/ })).toBeFocused();
+    await expect(page.getByText('Selecione Pessoa Física ou Pessoa Jurídica para revisar o cadastro.')).toBeVisible();
+    await dialog.getByRole('radio', { name: /Pessoa física/ }).check();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByLabel('Nome completo')).toBeFocused();
     await expect(page.getByText('Informe o nome completo ou a razão social.')).toBeVisible();
     await expect(page.getByText('Informe um CPF válido com 11 dígitos.')).toBeVisible();
@@ -117,11 +119,14 @@ test.describe('Sessão 02 — Comercial — Clientes', () => {
     await page.getByLabel('CPF *').fill('52998224725');
     await expect(page.getByLabel('CPF *')).toHaveValue('529.982.247-25');
     await page.getByRole('textbox', { name: 'RG', exact: true }).fill('12.345.678-9');
-    await dialog.getByText('Produtor Rural', { exact: true }).click();
+    await dialog.getByLabel('Categoria principal', { exact: true }).click();
+    await page.getByRole('option', { name: 'Produtor Rural', exact: true }).click();
+    await dialog.getByRole('navigation', { name: 'Seções do cadastro do cliente' }).getByRole('button', { name: /^Contato/ }).click();
     await page.getByLabel('E-mail').fill('qa.s02@example.invalid');
     await page.getByRole('textbox', { name: 'Celular', exact: true }).fill('48999991234');
-    await dialog.getByText('Este número possui WhatsApp', { exact: true }).click();
+    await dialog.getByText('Este celular possui WhatsApp', { exact: true }).click();
     await page.getByLabel('Telefone adicional').fill('4833334444');
+    await dialog.getByRole('navigation', { name: 'Seções do cadastro do cliente' }).getByRole('button', { name: 'Endereço', exact: true }).click();
     await page.getByLabel('CEP').fill('88010000');
     await page.getByLabel('Logradouro').fill('Rua das Araucárias');
     const addressNumber = page.getByRole('textbox', { name: 'Número', exact: true });
@@ -135,15 +140,16 @@ test.describe('Sessão 02 — Comercial — Clientes', () => {
     await page.getByLabel('Município').fill('Florianópolis');
     await page.getByLabel('UF').fill('sc');
     await expect(page.getByLabel('UF')).toHaveValue('SC');
+    await dialog.getByRole('navigation', { name: 'Seções do cadastro do cliente' }).getByRole('button', { name: 'Comercial', exact: true }).click();
     await page.getByLabel('Origem do cliente').click();
     await page.getByRole('option', { name: 'Indicação', exact: true }).click();
     await page.getByLabel('Quem indicou? *').fill('QA indicação');
-    await dialog.getByText('Georreferenciamento', { exact: true }).click();
+    await dialog.getByRole('checkbox', { name: 'Georreferenciamento', exact: true }).check();
     await page.getByRole('tab', { name: 'Anotações fixas' }).click();
     await page.getByLabel('Observações').fill('Nota sintética com acentuação e quebra\nde linha.');
     await page.getByRole('tab', { name: 'Cadastro' }).click();
     await expectNoAxeViolations(page);
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
     const e2eRoot = process.env.GEOGESTOR_E2E_ROOT;
@@ -173,10 +179,10 @@ test.describe('Sessão 02 — Comercial — Clientes', () => {
 
     await reloadClients(page);
     await expect(page.getByText('32 resultados encontrados')).toBeVisible();
-    await expect(page.getByText('Página 1 de 2')).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Paginação de clientes' }).getByText('Página 1 de 2')).toBeVisible();
     await page.getByRole('button', { name: 'Próxima página' }).click();
     await expect(page).toHaveURL(/pagina=2/);
-    await expect(page.getByText('Página 2 de 2')).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Paginação de clientes' }).getByText('Página 2 de 2')).toBeVisible();
     await page.getByRole('button', { name: 'Página anterior' }).click();
 
     const search = page.getByRole('searchbox', { name: 'Buscar clientes' });
@@ -273,7 +279,7 @@ test.describe('Sessão 02 — Comercial — Clientes', () => {
     await page.getByLabel('Nome completo').fill(UPDATED_CLIENT_NAME);
     await page.getByLabel('Situação').click();
     await page.getByRole('option', { name: 'Em Prospecção', exact: true }).click();
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
     await expect(page.getByText(UPDATED_CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
     const filesAfterRename = await page.request.get(`${auth.origin}/api/arquivos/cliente/${clientId}`, { headers: auth.headers });

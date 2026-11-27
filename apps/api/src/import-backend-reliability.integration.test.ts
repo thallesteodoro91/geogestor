@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -34,7 +35,7 @@ test('importador preserva idempotência, histórico, limites, prévia e sucesso 
   const { db, dbReady, closeDb } = database;
   const { schema } = databasePackage;
   const { server } = serverModule;
-  const request = async (options: { method: 'GET' | 'POST'; url: string; payload?: any; key?: string }) => server.inject({
+  const request = async (options: { method: 'GET' | 'POST'; url: string; payload?: any; key?: string }) => injectWithRecordVersion(server, {
     method: options.method,
     url: options.url,
     payload: options.payload,
@@ -294,11 +295,11 @@ test('importador preserva idempotência, histórico, limites, prévia e sucesso 
     const bodySuffix = '"}';
     const exactBody = bodyPrefix + 'X'.repeat(apiBodyLimit - bodyPrefix.length - bodySuffix.length) + bodySuffix;
     assert.equal(Buffer.byteLength(exactBody), apiBodyLimit);
-    const atBodyLimit = await server.inject({
+    const atBodyLimit = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/importacoes/migracao-completa/preview', payload: exactBody, headers: authHeaders
     });
     assert.equal(atBodyLimit.statusCode, 400, 'O corpo no limite deve chegar à validação do schema.');
-    const aboveBodyLimit = await server.inject({
+    const aboveBodyLimit = await injectWithRecordVersion(server, {
       method: 'POST', url: '/api/importacoes/migracao-completa/preview', payload: exactBody + ' ', headers: authHeaders
     });
     assert.equal(aboveBodyLimit.statusCode, 413, 'O corpo um byte acima do limite deve ser recusado antes da validação.');

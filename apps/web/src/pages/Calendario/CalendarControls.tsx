@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import {
   CalendarBlank,
   CaretDown,
@@ -8,6 +8,8 @@ import {
 import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { PopoverSurface } from '../../components/form-controls/PopoverSurface';
+import { FormSelect } from '../../components/Form';
+import { appointmentTypes } from './calendarPresentation';
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -48,7 +50,7 @@ function usePopoverDismiss(
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
-      window.requestAnimationFrame(() => triggerRef.current?.focus());
+      window.requestAnimationFrame(() => {triggerRef.current?.focus();setOpen(false);});
     };
     document.addEventListener('mousedown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -105,14 +107,14 @@ export function MonthYearPicker({ id, value, onChange, className }: MonthYearPic
           if (!open) setViewYear(selectedYear);
           setOpen((current) => !current);
         }}
-        className="geo-focus-ring flex min-h-11 min-w-0 items-center gap-2 rounded-[var(--control-radius)] border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 transition-[background-color,border-color,color,box-shadow] hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-100"
+        className="geo-field-surface geo-focus-ring flex min-h-11 min-w-0 items-center gap-2 rounded-[var(--control-radius)] border border-zinc-200 bg-white px-3 text-xs font-semibold text-zinc-700 transition-[background-color,border-color,color,box-shadow] hover:border-indigo-300 hover:bg-indigo-50/60 hover:text-indigo-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-100"
       >
         <CalendarBlank aria-hidden="true" weight="duotone" className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-300" />
         <span className="min-w-0 truncate">{selectedLabel}</span>
         <CaretDown aria-hidden="true" weight="bold" className={cn('ml-auto h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
       </button>
 
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={popoverId} role="dialog" ariaLabel="Escolher mês e ano" minWidth={304} maxWidth={320} maxHeight={420} className="p-3">
+      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={popoverId} role="dialog" ariaLabel="Escolher mês e ano" minWidth={304} maxWidth={320} maxHeight={420} className="calendar-control-popover p-3">
           <div className="flex items-center justify-between gap-2">
             <button type="button" onClick={() => setViewYear((year) => year - 1)} aria-label="Ano anterior" className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-brand-surface-subtle hover:text-indigo-700 dark:text-zinc-300 dark:hover:text-indigo-200">
               <CaretLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
@@ -165,16 +167,35 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(() => selectedDate ? new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1) : new Date());
   const [showMonths, setShowMonths] = useState(false);
+  const [focusedDateKey, setFocusedDateKey] = useState(value || toDateKey(new Date()));
+  const pendingDateFocus = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const selectedDayRef = useRef<HTMLButtonElement>(null);
+  const dateGridRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const popoverId = useId();
   usePopoverDismiss(open, setOpen, containerRef, triggerRef, popoverRef);
 
+  const focusDate = (day: HTMLButtonElement | null | undefined) => {
+    const grid = dateGridRef.current;
+    if (!day || !grid) return;
+    day.focus({ preventScroll: true });
+    const target = day.getBoundingClientRect(), bounds = grid.getBoundingClientRect();
+    if (target.top < bounds.top + 3) grid.scrollTop += target.top - bounds.top - 3;
+    else if (target.bottom > bounds.bottom - 3) grid.scrollTop += target.bottom - bounds.bottom + 3;
+  };
+
+  useLayoutEffect(() => {
+    if (!pendingDateFocus.current) return;
+    pendingDateFocus.current = false;
+    focusDate(popoverRef.current?.querySelector<HTMLButtonElement>(`[data-calendar-date="${focusedDateKey}"]`));
+  },[focusedDateKey,viewMonth]);
+
   useEffect(() => {
     if (!open || showMonths) return;
-    window.requestAnimationFrame(() => selectedDayRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => focusDate(popoverRef.current?.querySelector<HTMLButtonElement>('[data-calendar-date][tabindex="0"]') ?? selectedDayRef.current));
+    return () => window.cancelAnimationFrame(frame);
   }, [open, showMonths]);
 
   const cells = useMemo(() => {
@@ -189,6 +210,21 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
     ? new Intl.DateTimeFormat('pt-BR').format(selectedDate)
     : 'Selecionar data';
   const todayKey = toDateKey(new Date());
+  const focusableDay = cells.some(date => toDateKey(date) === focusedDateKey) ? focusedDateKey : toDateKey(new Date(viewMonth.getFullYear(),viewMonth.getMonth(),1));
+  const handleDateKeyDown = (event: KeyboardEvent<HTMLButtonElement>, date: Date) => {
+    let next = new Date(date);
+    const offsets: Record<string, number> = {ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7,Home:-date.getDay(),End:6-date.getDay()};
+    if (event.key in offsets) next.setDate(date.getDate()+offsets[event.key]);
+    else if (event.key === 'PageUp' || event.key === 'PageDown') {
+      const month = new Date(date.getFullYear(),date.getMonth()+(event.key === 'PageDown' ? 1 : -1),1);
+      next = new Date(month.getFullYear(),month.getMonth(),Math.min(date.getDate(),new Date(month.getFullYear(),month.getMonth()+1,0).getDate()));
+    } else return;
+    event.preventDefault();
+    const key = toDateKey(next);
+    pendingDateFocus.current = true;
+    setFocusedDateKey(key);
+    if(next.getMonth() !== viewMonth.getMonth() || next.getFullYear() !== viewMonth.getFullYear())setViewMonth(new Date(next.getFullYear(),next.getMonth(),1));
+  };
 
   const chooseDate = (date: Date) => {
     onChange(toDateKey(date));
@@ -198,7 +234,13 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
   };
 
   return (
-    <div ref={containerRef} className="relative min-w-0">
+    <div ref={containerRef} className="relative min-w-0" onKeyDown={event => {
+      if (!open || event.key !== 'Tab' || !popoverRef.current?.contains(event.target as Node)) return;
+      const controls = Array.from(popoverRef.current.querySelectorAll<HTMLButtonElement>('button:not([disabled])')).filter(button => button.tabIndex >= 0 && button.getClientRects().length);
+      const first = controls[0], last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }}>
       <input type="hidden" name={name} value={value} />
       <button
         ref={triggerRef}
@@ -210,12 +252,13 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
         aria-invalid={invalid}
         aria-describedby={describedBy}
         onClick={() => {
-          if (!open && selectedDate) setViewMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+          if (!open && selectedDate) {setViewMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));setFocusedDateKey(value);}
           setOpen((current) => !current);
         }}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown') {
             event.preventDefault();
+            if(selectedDate){setViewMonth(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));setFocusedDateKey(value);}
             setOpen(true);
           }
         }}
@@ -225,8 +268,8 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
         <CaretDown aria-hidden="true" weight="bold" className={cn('h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
       </button>
 
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={popoverId} role="dialog" ariaLabel="Selecionar data do compromisso" minWidth={304} maxWidth={336} maxHeight={520} className="p-3">
-          <div className="flex items-center justify-between gap-2">
+      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} portalContainer={triggerRef.current?.closest<HTMLElement>('[role="dialog"]')} id={popoverId} role="dialog" ariaLabel="Selecionar data do compromisso" minWidth={304} maxWidth={336} maxHeight={520} minimumHeight={400} className="calendar-control-popover flex flex-col p-3">
+          <div className="flex shrink-0 items-center justify-between gap-2">
             <button type="button" onClick={() => setViewMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))} aria-label="Mês anterior" className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-lg text-zinc-500 hover:bg-brand-surface-subtle hover:text-indigo-700 dark:text-zinc-300 dark:hover:text-indigo-200">
               <CaretLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
             </button>
@@ -239,7 +282,7 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
           </div>
 
           {showMonths ? (
-            <div className="mt-2 grid grid-cols-3 gap-1.5">
+            <div className="mt-2 grid min-h-0 grid-cols-3 gap-1.5 overflow-y-auto overscroll-contain">
               {Array.from({ length: 12 }, (_, month) => {
                 const label = capitalize(new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(new Date(2024, month, 1)).replace('.', ''));
                 return (
@@ -254,10 +297,10 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
             </div>
           ) : (
             <>
-              <div className="mt-2 grid grid-cols-7 gap-1" aria-hidden="true">
+              <div className="mt-2 grid shrink-0 grid-cols-7 gap-1" aria-hidden="true">
                 {WEEKDAYS.map((weekday) => <span key={weekday} className="py-1 text-center text-[10px] font-bold uppercase text-zinc-400">{weekday}</span>)}
               </div>
-              <div className="grid grid-cols-7 gap-1">
+              <div ref={dateGridRef} className="-mx-1 grid min-h-0 grid-cols-7 gap-1 overflow-y-auto overscroll-contain p-1">
                 {cells.map((date) => {
                   const key = toDateKey(date);
                   const selected = key === value;
@@ -269,6 +312,10 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
                       key={key}
                       ref={selected ? selectedDayRef : undefined}
                       type="button"
+                      data-calendar-date={key}
+                      tabIndex={key === focusableDay ? 0 : -1}
+                      onFocus={() => setFocusedDateKey(key)}
+                      onKeyDown={event => handleDateKeyDown(event,date)}
                       aria-label={`${new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(date)}${hasEvents ? ', com eventos' : ''}`}
                       aria-current={today ? 'date' : undefined}
                       aria-pressed={selected}
@@ -289,7 +336,7 @@ export function CalendarDatePicker({ id, name, value, onChange, eventDates = new
                   );
                 })}
               </div>
-              <button type="button" onClick={() => chooseDate(new Date())} className="geo-focus-ring mt-2 min-h-11 w-full rounded-lg border border-brand-border text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-400/10">
+              <button type="button" onClick={() => chooseDate(new Date())} className="geo-focus-ring mt-2 min-h-11 w-full shrink-0 rounded-lg border border-brand-border text-xs font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-400/10">
                 Hoje
               </button>
             </>
@@ -372,10 +419,12 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
   const selectTime = (time: string) => {
     onChange(time);
     setTyped(false);
+    inputRef.current?.focus({preventScroll:true});
     setOpen(false);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Tab') {setOpen(false);setTyped(false);}
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setOpen(true);
@@ -387,10 +436,16 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
       selectTime(filteredSlots[activeIndex]);
     }
     if (event.key === 'Escape') {
+      if(open){event.preventDefault();event.stopPropagation();}
       setOpen(false);
       setTyped(false);
     }
   };
+
+  useEffect(() => {
+    if (!open || !filteredSlots[activeIndex]) return;
+    document.getElementById(`${listboxId}-${filteredSlots[activeIndex].replace(':', '')}`)?.scrollIntoView({block:'nearest'});
+  },[open,activeIndex,filteredSlots,listboxId]);
 
   return (
     <div ref={containerRef} className="relative min-w-0">
@@ -431,7 +486,7 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
       />
       <CaretDown aria-hidden="true" weight="bold" className={cn('pointer-events-none absolute right-4 top-[1.05rem] h-3.5 w-3.5 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
 
-      <PopoverSurface ref={popoverRef} open={open && !disabled} anchorRef={inputRef} minWidth={280} maxWidth={352} maxHeight={360} className="p-2">
+      <PopoverSurface ref={popoverRef} open={open && !disabled} anchorRef={inputRef} portalContainer={inputRef.current?.closest<HTMLElement>('[role="dialog"]')} minWidth={280} maxWidth={352} maxHeight={360} className="calendar-control-popover p-2">
           <div className="flex flex-wrap gap-1.5 border-b border-brand-border pb-2">
             {presets.map((preset) => (
               <button key={preset.label} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => selectTime(preset.value)} className="geo-focus-ring min-h-9 rounded-lg border border-brand-border bg-brand-surface px-2.5 text-[11px] font-semibold text-zinc-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-800 dark:text-zinc-300 dark:hover:border-cyan-300/30 dark:hover:bg-cyan-400/10 dark:hover:text-cyan-100">
@@ -446,6 +501,7 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
                 id={`${listboxId}-${slot.replace(':', '')}`}
                 type="button"
                 role="option"
+                tabIndex={-1}
                 aria-selected={slot === value}
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActiveIndex(index)}
@@ -466,16 +522,6 @@ export function TimePicker({ id, name, value, onChange, disabled, invalid, descr
   );
 }
 
-const appointmentTypes = [
-  { value: 'Visita de Campo', label: 'Visita de campo' },
-  { value: 'Reunião', label: 'Reunião' },
-  { value: 'Ligação', label: 'Ligação' },
-  { value: 'Administrativo', label: 'Administrativo' },
-  { value: 'Serviço', label: 'Serviço' },
-  { value: 'Entrega', label: 'Entrega' },
-  { value: 'Outro', label: 'Outro' }
-];
-
 interface AppointmentTypePickerProps {
   id: string;
   name: string;
@@ -483,29 +529,8 @@ interface AppointmentTypePickerProps {
   onChange: (value: string) => void;
 }
 
-export function AppointmentTypePicker({ id, name, value, onChange }: AppointmentTypePickerProps) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const listboxId = useId();
-  usePopoverDismiss(open, setOpen, containerRef, triggerRef, popoverRef);
-  const selected = appointmentTypes.find((type) => type.value === value) ?? appointmentTypes[appointmentTypes.length - 1];
-
-  return (
-    <div ref={containerRef} className="relative min-w-0">
-      <input type="hidden" name={name} value={value} />
-      <button ref={triggerRef} id={id} type="button" aria-expanded={open} aria-controls={listboxId} aria-haspopup="listbox" onClick={() => setOpen((current) => !current)} className={cn(geoFieldClass, 'flex h-12 w-full items-center gap-3 px-4 text-left text-sm font-semibold')}>
-        <span className="min-w-0 flex-1 truncate">{selected.label}</span>
-        <CaretDown aria-hidden="true" weight="bold" className={cn('h-3.5 w-3.5 shrink-0 text-zinc-400 transition-transform duration-150', open && 'rotate-180')} />
-      </button>
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={listboxId} role="listbox" ariaLabel="Tipo do compromisso" minWidth={288} maxWidth={384} maxHeight={360} className="grid grid-cols-1 gap-1 p-2 sm:grid-cols-2">
-          {appointmentTypes.map((type) => (
-            <button key={type.value} type="button" role="option" aria-selected={value === type.value} onClick={() => { onChange(type.value); setOpen(false); window.requestAnimationFrame(() => triggerRef.current?.focus()); }} className={cn('geo-focus-ring flex min-h-11 items-center gap-2.5 rounded-lg px-2.5 text-left text-xs font-semibold transition-[background-color,color]', value === type.value ? 'bg-brand-primary-50 text-brand-primary-800 dark:bg-brand-primary-400/15 dark:text-brand-primary-100' : 'text-zinc-700 hover:bg-brand-surface-subtle dark:text-zinc-200')}>
-              <span className="min-w-0 truncate">{type.label}</span>
-            </button>
-          ))}
-      </PopoverSurface>
-    </div>
-  );
+export function AppointmentTypePicker({id,name,value,onChange}: AppointmentTypePickerProps) {
+  return <FormSelect id={id} name={name} value={value} onChange={event => onChange(event.target.value)} density="formLarge" wrapperClassName="w-full min-w-0" className="w-full" searchable={false}>
+    {appointmentTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+  </FormSelect>;
 }

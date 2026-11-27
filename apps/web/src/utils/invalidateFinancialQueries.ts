@@ -9,6 +9,7 @@ const FINANCIAL_QUERY_PREFIXES = new Set([
   'despesas',
   'despesas-financeiro',
   'resumo-mensal-financeiro',
+  'financeiro-overview',
   // Compatibilidade temporária com versões anteriores.
   'dre-financeiro',
   'fluxo-caixa',

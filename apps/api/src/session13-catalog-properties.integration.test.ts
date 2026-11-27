@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -22,7 +23,7 @@ test('Sessão 13 protege catálogos e o ciclo de vida das propriedades', async (
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     payload?: Record<string, unknown>,
-  ) => server.inject({
+  ) => injectWithRecordVersion(server, {
     method,
     url,
     ...(payload === undefined ? {} : { payload }),
@@ -302,7 +303,7 @@ test('Sessão 13 protege catálogos e o ciclo de vida das propriedades', async (
     const auditRows = await db.select().from(schema.auditLogs);
     assert.ok(auditRows.some((row) => row.entity === 'Propriedade' && row.action === 'INSERT' && row.newData?.includes(propertyId)));
     assert.ok(auditRows.some((row) => row.entity === 'Propriedade' && row.action === 'DELETE (SOFT)' && row.oldData?.includes(propertyId)));
-    assert.equal(migration.schemaVersion, 17);
+    assert.equal(migration.schemaVersion, 19);
   } finally {
     await server.close();
     await closeDb();

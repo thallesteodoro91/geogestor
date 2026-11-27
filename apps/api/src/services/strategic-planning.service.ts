@@ -19,7 +19,7 @@ import type {
   StrategicRiskUpdate,
   StrategicSourceOption
 } from '@geogestor/contracts';
-import { StrategicSourceTypeSchema } from '@geogestor/contracts';
+import { StrategicSourceTypeSchema, strategicRiskObjectiveId } from '@geogestor/contracts';
 import { schema } from '@geogestor/database';
 import { db } from '../db';
 import { AuditLogService } from './audit.service';
@@ -534,10 +534,6 @@ export async function createStrategicCheckin(input: StrategicCheckinPayload) {
       currentSnapshot,
       legacyDecision ? [{ id: legacyDecision.id, status: legacyDecision.status }] : []
     ));
-    if (input.proximaRevisao) {
-      await tx.update(schema.ciclosEstrategicos).set({ proximaRevisao: input.proximaRevisao, updatedAt: nowIso() })
-        .where(eq(schema.ciclosEstrategicos.id, input.cicloId));
-    }
     await AuditLogService.log('INSERT', 'Revisão Estratégica', null, created, tx);
   });
   return findCheckin(id);
@@ -551,7 +547,7 @@ export async function updateStrategicCheckin(id: string, input: StrategicCheckin
   }
   const reviewDate = input.data || current.data;
   const nextReview = input.proximaRevisao === undefined ? current.proximaRevisao : input.proximaRevisao;
-  if (nextReview && nextReview < reviewDate) throw invalid('A próxima revisão não pode ser anterior a esta revisão.');
+  if (input.proximaRevisao !== undefined && nextReview && nextReview < reviewDate) throw invalid('A próxima revisão não pode ser anterior a esta revisão.');
   await db.transaction(async (tx) => {
     await tx.update(schema.checkinsEstrategicos).set({ ...input, updatedAt: nowIso() }).where(eq(schema.checkinsEstrategicos.id, id));
     await AuditLogService.log('UPDATE', 'Revisão Estratégica', current, { ...current, ...input }, tx);
@@ -559,10 +555,6 @@ export async function updateStrategicCheckin(id: string, input: StrategicCheckin
       await tx.update(schema.snapshotsEstrategicos)
         .set({ capturadoEm: `${reviewDate}T${nowIso().slice(11)}`, updatedAt: nowIso() })
         .where(and(eq(schema.snapshotsEstrategicos.checkinId, id), isNull(schema.snapshotsEstrategicos.deletedAt)));
-    }
-    if (input.proximaRevisao) {
-      await tx.update(schema.ciclosEstrategicos).set({ proximaRevisao: input.proximaRevisao, updatedAt: nowIso() })
-        .where(eq(schema.ciclosEstrategicos.id, current.cicloId));
     }
   });
   return findCheckin(id);
@@ -1000,7 +992,7 @@ async function buildStrategicSnapshot(cycleId: string, source: DbOrTx) {
   const pendingDecisions = decisionRows.filter((item) => ['pendente', 'em_andamento'].includes(item.status));
   const highRiskObjectiveIds = new Set(risks
     .filter((risk) => ['alto', 'critico'].includes(risk.impacto) && !['resolvido', 'aceito'].includes(risk.status))
-    .map((risk) => risk.objetivoId)
+    .map((risk) => strategicRiskObjectiveId(risk, initiativeRows))
     .filter(Boolean));
   const objectivesInRisk = new Set([
     ...objectives.filter((item) => item.status === 'em_risco').map((item) => item.id),
@@ -1057,9 +1049,9 @@ export async function getStrategicSnapshot(cycleId: string) {
 
 export async function getStrategicOptions() {
   const [projects, tasks] = await Promise.all([
-    db.select({ id: schema.projetos.id, nome: schema.projetos.nome, status: schema.projetos.status })
+    db.select({ id: schema.projetos.id, nome: schema.projetos.nome, status: schema.projetos.status, dataEntrega: schema.projetos.dataEntrega })
       .from(schema.projetos).where(isNull(schema.projetos.deletedAt)).orderBy(asc(schema.projetos.nome)),
-    db.select({ id: schema.tarefas.id, titulo: schema.tarefas.titulo, status: schema.tarefas.status, projetoId: schema.tarefas.projetoId })
+    db.select({ id: schema.tarefas.id, titulo: schema.tarefas.titulo, status: schema.tarefas.status, projetoId: schema.tarefas.projetoId, dataLimite: schema.tarefas.dataLimite })
       .from(schema.tarefas).where(isNull(schema.tarefas.deletedAt)).orderBy(asc(schema.tarefas.titulo))
   ]);
   return { fontes: SOURCE_OPTIONS, projetos: projects, tarefas: tasks };

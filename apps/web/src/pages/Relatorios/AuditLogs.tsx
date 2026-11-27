@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { APP_ROUTES } from '@geogestor/contracts';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation, useListUrlState } from '../../hooks/useListPageNavigation';
 import { PageFilterBar } from '../../components/PageFilterBar';
 import { PageHeader } from '../../components/PageHeader';
 import { ArrowClockwise, Plus, Pencil, Trash, FileText } from '@phosphor-icons/react';
@@ -16,31 +19,19 @@ import { cn } from '../../utils/cn';
 import { geoOrangeLabelClass, geoOrangeSurfaceClass, geoOrangeValueClass } from '../../utils/geoTheme';
 import { apiClient } from '../../services/apiClient';
 import { parseAuditData, redactSensitiveAuditValue } from './auditLogData';
-
-interface AuditLog {
-  id: string;
-  action: 'INSERT' | 'UPDATE' | 'DELETE';
-  entity: string;
-  userId: string;
-  oldData: string | null;
-  newData: string | null;
-  createdAt: string;
-}
-
-interface AuditPage {
-  items: AuditLog[];
-  page: number;
-  total: number;
-  totalPages: number;
-  summary: { inserts: number; updates: number; deletes: number };
-}
+import { parseAuditPage, type AuditLog, type AuditPage } from './auditPage';
 
 export function AuditLogs() {
-  const [page, setPage] = useState(1);
+  const listUrl = useListUrlState();
+  const requestedPage = Number(listUrl.params.get('auditoriaPagina') || 1);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const setPage = (value: number | ((current: number) => number)) => { const next = typeof value === 'function' ? value(page) : value; listUrl.update({ auditoriaPagina: next <= 1 ? null : String(next) }); };
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [actionFilter, setActionFilter] = useState<string>('ALL');
-  const [entityFilter, setEntityFilter] = useState<string>('ALL');
+  const actionFilter = listUrl.params.get('auditoriaAcao') || 'ALL';
+  const setActionFilter = (value: string) => listUrl.update({ auditoriaAcao: value === 'ALL' ? null : value, auditoriaPagina: null });
+  const entityFilter = listUrl.params.get('auditoriaEntidade') || 'ALL';
+  const setEntityFilter = (value: string) => listUrl.update({ auditoriaEntidade: value === 'ALL' ? null : value, auditoriaPagina: null });
 
   const auditParams = useMemo(() => new URLSearchParams({
     page: String(page), limit: '50',
@@ -49,9 +40,14 @@ export function AuditLogs() {
   }).toString(), [actionFilter, entityFilter, page]);
   const auditQuery = useQuery<AuditPage>({
     queryKey: ['audit-logs', auditParams],
-    queryFn: () => apiClient.get<AuditPage>(`/api/audit-logs?${auditParams}`),
+    queryFn: async () => parseAuditPage(
+      await apiClient.get<unknown>(`/api/audit-logs?${auditParams}`),
+      new URLSearchParams(auditParams)
+    ),
     placeholderData: (previous) => previous
   });
+  const listNavigation = useListPageNavigation({ page, resolvedPage: auditQuery.data?.page, ready: !auditQuery.isFetching, failed: auditQuery.isError, scope: [actionFilter, entityFilter].join('|') });
+  const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
   const logs = auditQuery.data?.items ?? [];
   const loading = auditQuery.isLoading;
   const loadError = auditQuery.error instanceof Error ? auditQuery.error.message : auditQuery.isError ? 'Não foi possível consultar os logs de auditoria.' : '';
@@ -216,8 +212,13 @@ export function AuditLogs() {
         eyebrow="Segurança & Conformidade"
         title="Auditoria de Logs"
         description="Histórico completo de alterações realizadas localmente no sistema."
+        navigation={
+          <Link to={APP_ROUTES.settings.path} className={secondarySmallActionButtonClass}>
+            Voltar às configurações
+          </Link>
+        }
         action={
-          <button 
+          <button
             type="button"
             onClick={fetchLogs}
             className={headerPrimaryActionButtonClass}
@@ -259,7 +260,7 @@ export function AuditLogs() {
               <label htmlFor="action-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Ação</label>
               <CustomSelect
                 id="action-filter"
-                value={actionFilter} 
+                value={actionFilter}
                 onChange={(value) => { setActionFilter(value); setPage(1); }}
                 placeholder="Todas as ações"
                 ariaLabel="Filtrar por ação"
@@ -277,7 +278,7 @@ export function AuditLogs() {
               <label htmlFor="entity-filter" className="text-xs text-zinc-500 dark:text-zinc-400 font-bold uppercase tracking-wider">Entidade</label>
               <CustomSelect
                 id="entity-filter"
-                value={entityFilter} 
+                value={entityFilter}
                 onChange={(value) => { setEntityFilter(value); setPage(1); }}
                 placeholder="Todas as tabelas"
                 ariaLabel="Filtrar por entidade"
@@ -294,6 +295,7 @@ export function AuditLogs() {
       </PageFilterBar>
 
       <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm mb-12">
+        <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mb-3 text-xs text-text-secondary">{auditQuery.data?.total ?? 0} registros encontrados · Página {auditQuery.data?.page ?? page} de {auditQuery.data?.totalPages ?? 1} · Intervalo {logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + 1 : 0}–{logs.length ? ((auditQuery.data?.page ?? page) - 1) * 50 + logs.length : 0}</p>
         {loading ? (
           <div aria-live="polite" className="text-center py-20 text-zinc-500 dark:text-zinc-400 font-medium">Carregando logs de auditoria…</div>
         ) : loadError ? (
@@ -346,9 +348,9 @@ export function AuditLogs() {
         )}
         {auditQuery.data && auditQuery.data.totalPages > 1 ? (
           <nav aria-label="Paginação dos logs" className="mt-6 flex items-center justify-between gap-4 border-t border-zinc-100 pt-5 dark:border-zinc-800">
-            <button type="button" disabled={page <= 1 || auditQuery.isFetching} onClick={() => setPage((current) => Math.max(1, current - 1))} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>Anterior</button>
+            <button type="button" disabled={page <= 1 || auditQuery.isFetching} onClick={() => changePage(Math.max(1, page - 1))} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>Anterior</button>
             <span className="text-sm font-semibold tabular-nums text-zinc-500">Página {auditQuery.data.page} de {auditQuery.data.totalPages}</span>
-            <button type="button" disabled={page >= auditQuery.data.totalPages || auditQuery.isFetching} onClick={() => setPage((current) => Math.min(auditQuery.data?.totalPages ?? current, current + 1))} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>Próxima</button>
+            <button type="button" disabled={page >= auditQuery.data.totalPages || auditQuery.isFetching} onClick={() => changePage(Math.min(auditQuery.data?.totalPages ?? page, page + 1))} className={cn(secondarySmallActionButtonClass, 'disabled:cursor-not-allowed disabled:opacity-50')}>Próxima</button>
           </nav>
         ) : null}
       </div>

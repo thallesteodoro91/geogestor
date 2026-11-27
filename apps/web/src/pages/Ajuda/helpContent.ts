@@ -51,7 +51,7 @@ export const HELP_CATEGORIES: HelpCategory[] = [
 ];
 
 const reviewDate = '2026-08-13';
-const minimumVersion = '1.0.4';
+const minimumVersion = '1.0.6';
 
 export const HELP_ARTICLES: HelpArticle[] = [
   {

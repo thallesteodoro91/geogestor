@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('Sessão 09 preserva contratos, paginação, vínculos, modelos e auditoria
     directTask: crypto.randomUUID(), deletedTask: crypto.randomUUID(), legacyTask: crypto.randomUUID()
   };
   const request: (input: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; payload?: unknown }) => Promise<any> =
-    (input) => (server.inject as any)({ ...input, headers });
+    (input) => injectWithRecordVersion(server, { ...input, payload: input.payload as object, headers });
 
   try {
     await dbReady;

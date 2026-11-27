@@ -42,6 +42,8 @@ export function BudgetEditorPage() {
   const safeClientIdParam = isSafeEntityId(clientIdParam) ? clientIdParam : null;
   const safeOpportunityIdParam = isSafeEntityId(opportunityIdParam) ? opportunityIdParam : null;
   const returnTo = getSafeBudgetReturnTo(searchParams.get('retorno'));
+  const returningToFinance = returnTo.split('?')[0] === '/financeiro';
+  const returnLabel = returningToFinance ? 'Voltar ao Financeiro' : 'Voltar para orçamentos';
 
   const optionsQuery = useQuery<BudgetOptions>({
     queryKey: ['budget-options'],
@@ -95,7 +97,7 @@ export function BudgetEditorPage() {
     return () => { document.title = previousTitle; };
   }, [editing]);
 
-  const returnToList = () => navigate(returnTo);
+  const returnToList = () => navigate(returnTo, { replace: returningToFinance });
 
   const handleSaved = async (saved: BudgetDetail) => {
     queryClient.setQueryData(['budget-detail', saved.id], saved);
@@ -135,10 +137,11 @@ export function BudgetEditorPage() {
         action={(
           <Link
             to={returnTo}
+            replace={returningToFinance}
             className={cn(secondarySmallActionButtonClass, 'min-h-11 w-full px-4 text-sm sm:w-auto')}
           >
             <ArrowLeft aria-hidden="true" size={17} weight="bold" />
-            Voltar para orçamentos
+            {returnLabel}
           </Link>
         )}
         navigation={<ModuleNavigation module="commercial" className="mb-0" />}
@@ -156,14 +159,14 @@ export function BudgetEditorPage() {
           <p className="mt-2 max-w-lg text-sm leading-6 text-text-secondary">Confira o endereço ou tente carregar novamente. Nenhuma informação foi alterada.</p>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <button type="button" onClick={() => { optionsQuery.refetch(); if (editing && safeBudgetId) detailQuery.refetch(); }} className="geo-button-base geo-button-primary geo-focus-ring min-h-11 px-5">Tentar novamente</button>
-            <button type="button" onClick={returnToList} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">Voltar para orçamentos</button>
+            <button type="button" onClick={returnToList} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">{returnLabel}</button>
           </div>
         </div>
       ) : readOnlyBudget ? (
         <div className="geo-card flex min-h-64 flex-col items-center justify-center px-6 text-center" role="alert">
           <h2 className="text-lg font-semibold text-text-primary">Este orçamento não pode mais ser editado</h2>
           <p className="mt-2 max-w-lg text-sm leading-6 text-text-secondary">Somente rascunhos podem ser alterados. O status atual é {initialBudget ? BUDGET_STATUS_LABELS[initialBudget.status] : 'indisponível'}.</p>
-          <button type="button" onClick={returnToList} className="mt-5 geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">Voltar para orçamentos</button>
+          <button type="button" onClick={returnToList} className="mt-5 geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">{returnLabel}</button>
         </div>
       ) : (
         <>

@@ -38,7 +38,34 @@ const sbomContent = `${JSON.stringify(sbom, null, 2)}\n`;
 fs.writeFileSync(path.join(distDir, 'sbom.cdx.json'), sbomContent);
 fs.writeFileSync(path.join(distDir, 'sbom.json'), sbomContent);
 
-const artifacts = [describeArtifact(installerPath)];
+const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+const inventoryName = 'dependency-inventory.csv';
+const inventory = [['Nome', 'Versão', 'Licença'], ...sbom.components.map((component) => [
+  component.group ? `${component.group}/${component.name}` : component.name,
+  component.version,
+  component.licenses?.map((item) => item.expression || item.license?.id || item.license?.name).filter(Boolean).join('; ') || 'Não identificada no pacote instalado'
+])];
+fs.writeFileSync(path.join(distDir, inventoryName), `\uFEFF${inventory.map((row) => row.map(csvCell).join(',')).join('\n')}\n`);
+const notesName = `NOTAS-DE-VERSAO-v${commercialVersion}.md`;
+const notesSource = path.join(rootDir, 'docs', notesName);
+const distributionNames = [expectedInstallerName, 'sbom.cdx.json', 'sbom.json', inventoryName];
+if (!fs.existsSync(notesSource)) throw new Error('Notas da versão corrente ausentes.');
+fs.copyFileSync(notesSource, path.join(distDir, notesName)); distributionNames.push(notesName);
+for (const optional of [`${expectedInstallerName}.blockmap`, 'latest.yml']) {
+  if (fs.existsSync(path.join(distDir, optional))) distributionNames.push(optional);
+}
+const provenanceName = 'build-provenance.json';
+fs.writeFileSync(path.join(distDir, provenanceName), `${JSON.stringify({
+  version: desktopPackage.version, commit: releaseMetadata.commit, dirty: releaseMetadata.dirty,
+  releaseRunId: releaseMetadata.releaseRunId, generatedAt: new Date().toISOString(),
+  environment: { platform: process.platform, arch: process.arch, node: process.version },
+  procedure: 'scripts/build.mjs → release-evidence.mjs → smoke-packaged-api.mjs → release-verify.mjs --package',
+  signing: 'Authenticode ausente; risco aceito conforme ADR do projeto',
+  dependencyComponents: sbom.components.length,
+  dependenciesWithoutLicense: sbom.components.filter((component) => !component.licenses?.length).length
+}, null, 2)}\n`);
+distributionNames.push(provenanceName);
+const artifacts = distributionNames.map((name) => describeArtifact(path.join(distDir, name)));
 fs.writeFileSync(path.join(distDir, 'artifact-hashes.json'), `${JSON.stringify({
   generatedAt: new Date().toISOString(),
   version: desktopPackage.version,

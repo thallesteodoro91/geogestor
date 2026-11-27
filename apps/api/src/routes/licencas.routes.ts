@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, asc, desc, eq, inArray, isNull, like, or, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, like, or, sql, type SQL } from 'drizzle-orm';
 import crypto from 'crypto';
 import { z } from 'zod';
 import {
@@ -30,7 +30,10 @@ const ListQuerySchema = z.object({
   status: z.string().trim().optional(),
   tipo: z.string().trim().optional(),
   clienteId: z.string().uuid().optional(),
-  vencimento: z.enum(['vencida', '30d', '60d', '90d', '120d']).optional()
+  vencimento: z.enum(['vencida', '30d', '60d', '90d', '120d']).optional(),
+  mode: z.literal('page').optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25)
 }).strict();
 
 type LicenseRow = {
@@ -109,6 +112,35 @@ function serializeLicense(
 export async function licencasRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
 
+  const todayKey = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const registeredStatus = sql<string>`CASE lower(trim(coalesce(${schema.licencas.status}, '')))
+    WHEN 'válida' THEN 'Válida' WHEN 'valida' THEN 'Válida' WHEN 'ativa' THEN 'Válida' WHEN 'valido' THEN 'Válida'
+    WHEN 'em renovação' THEN 'Em renovação' WHEN 'em renovacao' THEN 'Em renovação'
+    WHEN 'suspensa' THEN 'Suspensa' WHEN 'vencida' THEN 'Vencida' WHEN 'encerrada' THEN 'Encerrada'
+    ELSE 'Em análise' END`;
+  const effectiveStatus = () => sql<string>`CASE WHEN ${registeredStatus} IN ('Encerrada', 'Suspensa') THEN ${registeredStatus}
+    WHEN ${schema.licencas.dataVencimento} < ${todayKey()} THEN 'Vencida' ELSE ${registeredStatus} END`;
+
+  zServer.get('/summary', async () => {
+    const today = todayKey();
+    const nearEnd = new Date(`${today}T12:00:00Z`); nearEnd.setUTCDate(nearEnd.getUTCDate() + 120);
+    const [counts] = await db.select({
+      total: sql<number>`count(*)`, valid: sql<number>`sum(CASE WHEN ${effectiveStatus()} = 'Válida' THEN 1 ELSE 0 END)`,
+      expired: sql<number>`sum(CASE WHEN ${effectiveStatus()} = 'Vencida' THEN 1 ELSE 0 END)`,
+      renewal: sql<number>`sum(CASE WHEN ${registeredStatus} = 'Em renovação' THEN 1 ELSE 0 END)`,
+      near: sql<number>`sum(CASE WHEN ${schema.licencas.dataVencimento} BETWEEN ${today} AND ${nearEnd.toISOString().slice(0, 10)} AND ${effectiveStatus()} <> 'Encerrada' THEN 1 ELSE 0 END)`
+    }).from(schema.licencas).innerJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
+      .where(and(isNull(schema.licencas.deletedAt), isNull(schema.projetos.deletedAt)));
+    const overdue = sql`(${schema.condicionantesAmbientais.status} = 'Vencida' OR (${schema.condicionantesAmbientais.status} IN ('Pendente', 'Em andamento') AND ${schema.condicionantesAmbientais.dataLimite} < ${today}))`;
+    const [conditions] = await db.select({
+      pending: sql<number>`sum(CASE WHEN ${schema.condicionantesAmbientais.status} IN ('Pendente','Em andamento') AND NOT coalesce(${overdue}, 0) THEN 1 ELSE 0 END)`,
+      overdue: sql<number>`sum(CASE WHEN ${overdue} THEN 1 ELSE 0 END)`
+    }).from(schema.condicionantesAmbientais).innerJoin(schema.licencas, eq(schema.condicionantesAmbientais.licencaId, schema.licencas.id))
+      .innerJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
+      .where(and(isNull(schema.condicionantesAmbientais.deletedAt), isNull(schema.licencas.deletedAt), isNull(schema.projetos.deletedAt)));
+    return Object.fromEntries(Object.entries({ ...counts, ...conditions }).map(([key, value]) => [key, Number(value || 0)]));
+  });
+
   zServer.get('/', { schema: { querystring: ListQuerySchema } }, async (request, reply) => {
     const filters: SQL[] = [isNull(schema.licencas.deletedAt), isNull(schema.projetos.deletedAt)];
     if (request.query.clienteId) filters.push(eq(schema.projetos.clienteId, request.query.clienteId));
@@ -123,9 +155,18 @@ export async function licencasRoutes(server: FastifyInstance) {
         like(schema.clientes.nome, query)
       )!);
     }
+    if (request.query.status) filters.push(eq(request.query.status === 'Em renovação' ? registeredStatus : effectiveStatus(), request.query.status));
+    if (request.query.vencimento) {
+      const today = todayKey();
+      if (request.query.vencimento === 'vencida') filters.push(sql`${schema.licencas.dataVencimento} < ${today}`);
+      else {
+        const end = new Date(`${today}T12:00:00Z`); end.setUTCDate(end.getUTCDate() + Number(request.query.vencimento.replace('d', '')));
+        filters.push(sql`${schema.licencas.dataVencimento} BETWEEN ${today} AND ${end.toISOString().slice(0, 10)}`);
+      }
+    }
 
     try {
-      const rows = await db.select({
+      const query = db.select({
         license: schema.licencas,
         project: {
           id: schema.projetos.id,
@@ -142,7 +183,11 @@ export async function licencasRoutes(server: FastifyInstance) {
         .innerJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id))
         .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
         .where(and(...filters))
-        .orderBy(asc(schema.licencas.dataVencimento), desc(schema.licencas.updatedAt));
+        .orderBy(asc(schema.licencas.dataVencimento), desc(schema.licencas.updatedAt), asc(schema.licencas.id));
+      const rows = await (request.query.mode === 'page' ? query.limit(request.query.limit).offset((request.query.page - 1) * request.query.limit) : query);
+      const [count] = request.query.mode === 'page' ? await db.select({ total: sql<number>`count(*)` }).from(schema.licencas)
+        .innerJoin(schema.projetos, eq(schema.licencas.projetoId, schema.projetos.id)).leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
+        .where(and(...filters)) : [{ total: rows.length }];
 
       const licenseIds = rows.map((row) => row.license.id);
       const conditionRows = licenseIds.length ? await db.select()
@@ -158,24 +203,8 @@ export async function licencasRoutes(server: FastifyInstance) {
         conditionsByLicense.set(row.licencaId, list);
       });
 
-      let items = rows.map((row) => serializeLicense(row as LicenseRow, conditionsByLicense.get(row.license.id) || []));
-      if (request.query.status) {
-        items = items.filter((item) => request.query.status === 'Em renovação'
-          ? item.statusRegistrado === 'Em renovação'
-          : item.status === request.query.status);
-      }
-      if (request.query.vencimento) {
-        const today = new Date();
-        today.setHours(12, 0, 0, 0);
-        const windowDays = request.query.vencimento === 'vencida'
-          ? null
-          : Number(request.query.vencimento.replace('d', ''));
-        items = items.filter((item) => {
-          const expiration = new Date(`${item.dataVencimento}T12:00:00`);
-          const days = Math.ceil((expiration.getTime() - today.getTime()) / 86_400_000);
-          return windowDays === null ? days < 0 : days >= 0 && days <= windowDays;
-        });
-      }
+      const items = rows.map((row) => serializeLicense(row as LicenseRow, conditionsByLicense.get(row.license.id) || []));
+      if (request.query.mode === 'page') return { items, total: Number(count.total), page: request.query.page, limit: request.query.limit, totalPages: Math.max(1, Math.ceil(Number(count.total) / request.query.limit)) };
       return items;
     } catch (error) {
       server.log.error(error);

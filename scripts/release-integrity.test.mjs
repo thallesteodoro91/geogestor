@@ -38,5 +38,13 @@ test('manifesto de hashes é invalidado quando o instalador muda', async () => {
     releaseRunId: 'execucao-atual'
   });
   assert.equal(identityErrors.some((error) => error.includes('Execução')), true);
+  const sbom = path.join(root, 'sbom.cdx.json');
+  await fs.writeFile(sbom, '{"bomFormat":"CycloneDX"}');
+  await fs.writeFile(path.join(root, 'artifact-hashes.json'), JSON.stringify({ artifacts: [describeArtifact(installer), describeArtifact(sbom)] }));
+  assert.deepEqual(verifyArtifactHashes(root), []);
+  await fs.appendFile(sbom, 'corrompido');
+  assert.ok(verifyArtifactHashes(root).some((error) => error.includes('SHA-256 divergente') && error.includes('sbom.cdx.json')));
+  await fs.writeFile(path.join(root, 'artifact-hashes.json'), JSON.stringify({ artifacts: [describeArtifact(installer), { name: '../outside', bytes: 1, sha256: '0' }] }));
+  assert.ok(verifyArtifactHashes(root).some((error) => error.includes('obsoleto ou ausente')));
   await fs.rm(root, { recursive: true, force: true });
 });

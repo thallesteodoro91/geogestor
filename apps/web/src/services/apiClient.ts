@@ -1,3 +1,30 @@
+import { mutationRecordPath, recordResource } from '@geogestor/contracts/src/record-concurrency';
+
+const recordBaselines = new Map<string, string>();
+export function acceptReviewedRecordVersion(recordPath: string, updatedAt: string) { recordBaselines.set(recordPath, updatedAt); }
+
+async function trackRecordVersion(url: string, method: string, response: Response) {
+  const pathname = new URL(url).pathname;
+  const resource = recordResource(pathname);
+  if (!resource || !response.headers.get('content-type')?.includes('application/json')) return;
+  const body: unknown = await response.clone().json();
+  if (!response.ok) {
+    if (body && typeof body === 'object' && 'code' in body && body.code === 'RECORD_EDIT_CONFLICT') window.dispatchEvent(new CustomEvent('geogestor:record-conflict', { detail: body }));
+    return;
+  }
+  const collect = (value: unknown) => {
+    if (Array.isArray(value)) { value.forEach(collect); return; }
+    if (!value || typeof value !== 'object') return;
+    if ('id' in value && typeof value.id === 'string' && 'updatedAt' in value && typeof value.updatedAt === 'string') {
+      const key = `${resource}/${value.id}`;
+      if (method !== 'GET' || !recordBaselines.has(key)) recordBaselines.set(key, value.updatedAt);
+    }
+    if ('items' in value) collect(value.items);
+  };
+  collect(body);
+  if (method === 'DELETE') { const key = mutationRecordPath(pathname); if (key) recordBaselines.delete(key); }
+}
+
 export class ApiError extends Error {
   public status: number;
   public payload?: unknown;
@@ -123,14 +150,21 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   const headers = getAuthHeaders(init?.headers || (input instanceof Request ? input.headers : undefined));
   const options = { ...init, headers };
   const method = (options.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+  const recordPath = mutationRecordPath(new URL(url).pathname);
+  if (recordPath && ['PATCH', 'PUT', 'DELETE'].includes(method) && !headers.has('x-record-version')) {
+    const version = recordBaselines.get(recordPath);
+    if (version) headers.set('x-record-version', version);
+  }
 
   if (input instanceof Request) {
     const response = await fetch(new Request(url, input), options);
+    await trackRecordVersion(url, method, response);
     notifyAlertsAfterMutation(url, method, response);
     return response;
   }
 
   const response = await fetch(url, options);
+  await trackRecordVersion(url, method, response);
   notifyAlertsAfterMutation(url, method, response);
   return response;
 }
@@ -196,7 +230,7 @@ export const apiClient = {
 
     const baseUrl = getBaseUrl();
     const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-    
+
     fetchOptions.signal = controller.signal;
 
     try {

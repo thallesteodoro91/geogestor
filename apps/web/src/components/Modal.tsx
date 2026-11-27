@@ -5,6 +5,28 @@ import { X } from '@phosphor-icons/react';
 import { geoModalTransition } from '../utils/motion';
 import { cn } from '../utils/cn';
 
+const modalStack: HTMLElement[] = [];
+let lockedRoot: { hidden: string | null; inert: boolean; overflow: string } | null = null;
+function refreshModalStack() {
+  modalStack.forEach((element, index) => {
+    const covered = index !== modalStack.length - 1;
+    element.toggleAttribute('inert', covered);
+    if (covered) element.setAttribute('aria-hidden', 'true');
+    else element.removeAttribute('aria-hidden');
+  });
+  const root = document.getElementById('root');
+  if (modalStack.length) {
+    if (!lockedRoot) lockedRoot = { hidden: root?.getAttribute('aria-hidden') ?? null, inert: root?.hasAttribute('inert') ?? false, overflow: document.body.style.overflow };
+    root?.setAttribute('aria-hidden', 'true'); root?.setAttribute('inert', '');
+    document.body.style.overflow = 'hidden';
+  } else if (lockedRoot) {
+    root?.toggleAttribute('inert', lockedRoot.inert);
+    if (lockedRoot.hidden === null) root?.removeAttribute('aria-hidden'); else root?.setAttribute('aria-hidden', lockedRoot.hidden);
+    document.body.style.overflow = lockedRoot.overflow;
+    lockedRoot = null;
+  }
+}
+
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -15,6 +37,7 @@ interface ModalProps {
   panelClassName?: string;
   contentScrollable?: boolean;
   initialFocusId?: string;
+  initialFocusPreventScroll?: boolean;
   returnFocusSelector?: string;
   closeDisabled?: boolean;
   dialogRole?: 'dialog' | 'alertdialog';
@@ -32,6 +55,7 @@ export function Modal({
   panelClassName,
   contentScrollable = true,
   initialFocusId,
+  initialFocusPreventScroll = false,
   returnFocusSelector,
   closeDisabled = false,
   dialogRole = 'dialog',
@@ -41,25 +65,20 @@ export function Modal({
   const titleId = useId();
   const previousFocus = useRef<HTMLElement | null>(null);
   const modalRef = useRef<HTMLDivElement | null>(null);
-  const previousRootAriaHidden = useRef<string | null>(null);
   const reduceMotion = useReducedMotion();
   const modalTransition = reduceMotion ? { duration: 0 } : geoModalTransition;
 
-  // Store previously focused element and handle Escape key + scroll lock
+  // Only the top dialog owns keyboard interaction. Covered editors keep drafts.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && modalRef.current) {
+      const dialog = modalRef.current;
       previousFocus.current = document.activeElement as HTMLElement;
-      document.body.style.overflow = 'hidden';
-      const appRoot = document.getElementById('root');
-      if (appRoot) {
-        previousRootAriaHidden.current = appRoot.getAttribute('aria-hidden');
-        appRoot.setAttribute('aria-hidden', 'true');
-        appRoot.setAttribute('inert', '');
-      }
+      modalStack.push(dialog);
+      refreshModalStack();
 
       // Set focus to the modal container or first input
       const focusTimer = window.setTimeout(() => {
-        if (modalRef.current) {
+        if (modalRef.current && modalStack.at(-1) === dialog) {
           if (modalRef.current.contains(document.activeElement)) return;
           const requestedFocus = initialFocusId
             ? modalRef.current.querySelector<HTMLElement>(`#${CSS.escape(initialFocusId)}`)
@@ -68,7 +87,7 @@ export function Modal({
             'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
           );
           if (requestedFocus) {
-            requestedFocus.focus();
+            requestedFocus.focus({ preventScroll: initialFocusPreventScroll });
           } else if (focusable.length > 0) {
             (focusable[0] as HTMLElement).focus();
           } else {
@@ -79,50 +98,25 @@ export function Modal({
 
       return () => {
         window.clearTimeout(focusTimer);
-        document.body.style.overflow = 'unset';
-        const appRoot = document.getElementById('root');
-        if (appRoot) {
-          appRoot.removeAttribute('inert');
-          if (previousRootAriaHidden.current === null) appRoot.removeAttribute('aria-hidden');
-          else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
-        }
+        const index = modalStack.indexOf(dialog);
+        if (index >= 0) modalStack.splice(index, 1);
+        refreshModalStack();
+        dialog.removeAttribute('inert'); dialog.removeAttribute('aria-hidden');
+        const previousElement = previousFocus.current;
+        const visible = (element: HTMLElement | null | undefined) => Boolean(element?.isConnected && element.getClientRects().length && !element.closest('[inert]'));
+        const previousElementIsVisible = visible(previousElement);
+        const visibleFallback = returnFocusSelector ? Array.from(document.querySelectorAll<HTMLElement>(returnFocusSelector)).find(visible) : undefined;
+        (previousElementIsVisible ? previousElement : visibleFallback)?.focus();
       };
-    } else {
-      document.body.style.overflow = 'unset';
-      const appRoot = document.getElementById('root');
-      if (appRoot) {
-        appRoot.removeAttribute('inert');
-        if (previousRootAriaHidden.current === null) appRoot.removeAttribute('aria-hidden');
-        else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
-      }
-      const previousElement = previousFocus.current;
-      const previousElementIsVisible = Boolean(
-        previousElement?.isConnected && previousElement.getClientRects().length > 0
-      );
-      const visibleFallback = returnFocusSelector
-        ? Array.from(document.querySelectorAll<HTMLElement>(returnFocusSelector)).find(
-            (element) => element.isConnected && element.getClientRects().length > 0
-          )
-        : undefined;
-      (previousElementIsVisible ? previousElement : visibleFallback)?.focus();
     }
-
-    return () => {
-      document.body.style.overflow = 'unset';
-      const appRoot = document.getElementById('root');
-      if (appRoot) {
-        appRoot.removeAttribute('inert');
-        if (previousRootAriaHidden.current === null) appRoot.removeAttribute('aria-hidden');
-        else appRoot.setAttribute('aria-hidden', previousRootAriaHidden.current);
-      }
-    };
-  }, [initialFocusId, isOpen, returnFocusSelector]);
+  }, [initialFocusId, initialFocusPreventScroll, isOpen, returnFocusSelector]);
 
   // Escape key handler
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented && !closeDisabled) {
+      if (modalStack.at(-1) === modalRef.current && e.key === 'Escape' && !e.defaultPrevented && !closeDisabled) {
+        e.preventDefault();
         onClose();
       }
     };

@@ -937,15 +937,31 @@ export class GeospatialImportService {
     const referenced = new Set(rows.flatMap((row) => [row.precision, row.display]).filter(Boolean).map((item) => path.resolve(item!)));
     const entries = await fs.readdir(cacheDir, { withFileTypes: true });
     const orphans: Array<{ path: string; bytes: number }> = [];
+    let activeFiles = 0;
+    let activeBytes = 0;
+    let removedFiles = 0;
+    let removedBytes = 0;
     for (const entry of entries) {
       if (!entry.isFile() || entry.name.includes('.before-repair-')) continue;
       const filePath = path.join(cacheDir, entry.name);
-      if (referenced.has(path.resolve(filePath))) continue;
       const stat = await fs.stat(filePath);
+      if (referenced.has(path.resolve(filePath))) {
+        activeFiles += 1;
+        activeBytes += stat.size;
+        continue;
+      }
       orphans.push({ path: filePath, bytes: stat.size });
-      if (removeOrphans) await fs.unlink(filePath).catch(() => undefined);
+      if (removeOrphans) {
+        try {
+          await fs.unlink(filePath);
+          removedFiles += 1;
+          removedBytes += stat.size;
+        } catch {
+          // Keep the file in the orphan count so the next inspection can show it.
+        }
+      }
     }
-    if (removeOrphans && orphans.length) await GeospatialAuditService.record({ type: 'cache_removido', description: `${orphans.length} cache(s) órfão(s) removido(s).`, data: { files: orphans.length, bytes: orphans.reduce((sum, item) => sum + item.bytes, 0) } });
-    return { orphanCount: orphans.length, orphanBytes: orphans.reduce((sum, item) => sum + item.bytes, 0), removed: removeOrphans };
+    if (removedFiles) await GeospatialAuditService.record({ type: 'cache_removido', description: `${removedFiles} cache(s) órfão(s) removido(s).`, data: { files: removedFiles, bytes: removedBytes } });
+    return { activeFiles, activeBytes, orphanCount: orphans.length, orphanBytes: orphans.reduce((sum, item) => sum + item.bytes, 0), removedFiles };
   }
 }

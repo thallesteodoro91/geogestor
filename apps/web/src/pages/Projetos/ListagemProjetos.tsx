@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation } from '../../hooks/useListPageNavigation';
 import { PageHeader } from '../../components/PageHeader';
 import { Modal } from '../../components/Modal';
 import { Skeleton } from '../../components/Skeleton';
@@ -767,6 +768,8 @@ export function ListagemProjetos() {
     },
     placeholderData: (previous) => previous
   });
+  const listNavigation = useListPageNavigation({ page, resolvedPage: projectPage?.page, ready: !projectsFetching, failed: projectsError, scope: [baseFilterParams, sortOrder, pageSize, viewMode].join('|') });
+  const changePage = (next: number) => { listNavigation.preparePage(next); updateProjectQuery('pagina', String(next), '1'); };
   const projetos = projectPage?.items || [];
   const loading = projectsLoading;
   const pageError = projectsError && !projectPage;
@@ -1194,7 +1197,7 @@ export function ListagemProjetos() {
                 <div className="mt-2 flex min-w-0 flex-col gap-2 border-t border-brand-border pt-2 sm:flex-row sm:items-center sm:justify-between">
                   {hasProjectFilters ? <div aria-label="Filtros ativos" className="flex min-w-0 flex-wrap items-center gap-2">{renderActiveFilterChips()}</div> : <span />}
                   <div role="status" aria-live="polite" aria-atomic="true" className="flex min-h-8 shrink-0 items-center justify-end gap-3 text-right">
-                    <p className="text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">{filteredProjectsLabel}</p>
+                    <p ref={listNavigation.resultsRef} tabIndex={-1} className="geo-focus-ring scroll-mt-28 text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">{filteredProjectsLabel} · Página {projectPage?.page ?? page} de {totalPages}</p>
                     {projectsRefreshing && <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-primary-700 dark:text-brand-primary-200"><span aria-hidden="true" className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-brand-primary-200 border-t-brand-primary-600 motion-reduce:animate-none" />Atualizando…</span>}
                   </div>
                 </div>
@@ -1656,7 +1659,7 @@ export function ListagemProjetos() {
         <nav aria-label="Paginação de projetos" className="mt-8 flex flex-col items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white px-4 py-3 sm:flex-row dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-sm font-medium text-zinc-600 tabular-nums dark:text-zinc-300">{filteredProjectsLabel}</p>
           <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <button type="button" disabled={page <= 1 || projectsRefreshing} onClick={() => updateProjectQuery('pagina', String(page - 1), '1')} className={cn(secondarySmallActionButtonClass, 'min-h-11 px-3 disabled:cursor-not-allowed disabled:opacity-50')}>Anterior</button>
+            <button type="button" disabled={page <= 1 || projectsRefreshing} onClick={() => changePage(page - 1)} className={cn(secondarySmallActionButtonClass, 'min-h-11 px-3 disabled:cursor-not-allowed disabled:opacity-50')}>Anterior</button>
             {paginationPages.map((pageNumber) => (
               <button
                 key={pageNumber}
@@ -1664,11 +1667,11 @@ export function ListagemProjetos() {
                 disabled={projectsRefreshing}
                 aria-label={`Ir para a página ${pageNumber}`}
                 aria-current={pageNumber === page ? 'page' : undefined}
-                onClick={() => updateProjectQuery('pagina', String(pageNumber), '1')}
+                onClick={() => changePage(pageNumber)}
                 className={cn('geo-focus-ring min-h-11 min-w-11 rounded-lg px-3 text-sm font-semibold tabular-nums disabled:cursor-wait disabled:pointer-events-none', pageNumber === page ? 'bg-brand-primary-600 text-white' : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800')}
               >{pageNumber}</button>
             ))}
-            <button type="button" disabled={page >= totalPages || projectsRefreshing} onClick={() => updateProjectQuery('pagina', String(page + 1), '1')} className={cn(secondarySmallActionButtonClass, 'min-h-11 px-3 disabled:cursor-not-allowed disabled:opacity-50')}>Próxima</button>
+            <button type="button" disabled={page >= totalPages || projectsRefreshing} onClick={() => changePage(page + 1)} className={cn(secondarySmallActionButtonClass, 'min-h-11 px-3 disabled:cursor-not-allowed disabled:opacity-50')}>Próxima</button>
           </div>
         </nav>
       )}

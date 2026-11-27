@@ -5,11 +5,12 @@ import { toast } from 'sonner';
 import { Buildings, MagnifyingGlass, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import type { PropertyPayload } from '@geogestor/contracts/src/properties';
 import { Layout } from '../components/Layout';
+import { useListPageNavigation, useListUrlState } from '../hooks/useListPageNavigation';
 import { PageHeader } from '../components/PageHeader';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../components/Form';
-import { apiClient } from '../services/apiClient';
+import { apiClient, ApiError } from '../services/apiClient';
 import { RemoteCombobox } from '../components/RemoteCombobox';
 import { cn } from '../utils/cn';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primarySubmitButtonClass } from '../utils/actionStyles';
@@ -18,6 +19,7 @@ import { QuickClientModal, type CreatedProjectClient } from './Projetos/QuickCli
 
 type Client = { id: string; nome: string };
 type Property = {
+  editToken: string;
   id: string;
   clienteId: string;
   nome: string;
@@ -41,6 +43,11 @@ const emptyForm: PropertyFormState = {
   municipio: '', uf: '', situacaoImovel: '', latitude: '', longitude: '', observacoes: ''
 };
 const fieldClass = 'geo-field min-h-11 w-full';
+const propertyFieldLabels: Record<keyof PropertyFormState, string> = {
+  clienteId: 'Cliente', nome: 'Nome do imóvel', matricula: 'Matrícula', car: 'CAR', ccir: 'CCIR', itr: 'ITR',
+  areaHa: 'Área (ha)', cidade: 'Localidade ou distrito', municipio: 'Município', uf: 'UF',
+  situacaoImovel: 'Situação do imóvel', latitude: 'Latitude', longitude: 'Longitude', observacoes: 'Observações'
+};
 const propertyFieldIds: Partial<Record<keyof PropertyFormState, string>> = {
   clienteId: 'property-client',
   nome: 'property-name',
@@ -83,9 +90,14 @@ export function Propriedades() {
   const navigate = useNavigate();
   const handledRouteActionRef = useRef(false);
   const routeState = location.state as { createForClienteId?: string; clientName?: string; editPropertyId?: string; clientFilterId?: string } | null;
-  const [search, setSearch] = useState('');
-  const [clientFilter, setClientFilter] = useState('');
-  const [page, setPage] = useState(1);
+  const listUrl = useListUrlState();
+  const search = listUrl.params.get('propriedadesBusca') || '';
+  const clientFilter = listUrl.params.get('propriedadesCliente') || '';
+  const setSearch = (value: string) => listUrl.update({ propriedadesBusca: value, propriedadesPagina: null });
+  const setClientFilter = (value: string) => listUrl.update({ propriedadesCliente: value, propriedadesPagina: null });
+  const requestedPage = Number(listUrl.params.get('propriedadesPagina') || 1);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+  const setPage = (value: number | ((current: number) => number)) => { const next = typeof value === 'function' ? value(page) : value; listUrl.update({ propriedadesPagina: next <= 1 ? null : String(next) }); };
   const [editing, setEditing] = useState<Property | null>(null);
   const [form, setForm] = useState<PropertyFormState>(emptyForm);
   const [initialFingerprint, setInitialFingerprint] = useState('');
@@ -96,6 +108,7 @@ export function Propriedades() {
   const [selectedClientLabel, setSelectedClientLabel] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<Property | null>(null);
   const [formError, setFormError] = useState('');
+  const [currentConflict, setCurrentConflict] = useState<Property | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof PropertyFormState, string>>>({});
 
   const params = new URLSearchParams({ page: String(page), limit: '25' });
@@ -106,6 +119,9 @@ export function Propriedades() {
     queryFn: () => apiClient.get<PropertyResponse>('/api/dados-operacionais/propriedades?' + params.toString()),
     placeholderData: (previous) => previous
   });
+  const listNavigation = useListPageNavigation({ page, resolvedPage: propertiesQuery.data?.page, ready: !propertiesQuery.isFetching && !propertiesQuery.isPlaceholderData, failed: propertiesQuery.isError, scope: [search, clientFilter].join('|') });
+  const changePage = (next: number) => { listNavigation.preparePage(next); setPage(next); };
+  useEffect(() => { if (!propertiesQuery.data || propertiesQuery.isFetching || propertiesQuery.isPlaceholderData || propertiesQuery.isError || page <= Math.max(1, Math.ceil(propertiesQuery.data.total / propertiesQuery.data.limit))) return; listNavigation.adjustPage(Math.max(1, Math.ceil(propertiesQuery.data.total / propertiesQuery.data.limit))); listUrl.update({ propriedadesPagina: Math.max(1, Math.ceil(propertiesQuery.data.total / propertiesQuery.data.limit)) <= 1 ? null : String(Math.max(1, Math.ceil(propertiesQuery.data.total / propertiesQuery.data.limit))) }); }, [propertiesQuery.data, propertiesQuery.isFetching, propertiesQuery.isPlaceholderData, propertiesQuery.isError, page, listUrl.update]);
   const requestedPropertyQuery = useQuery({
     queryKey: ['property', routeState?.editPropertyId],
     queryFn: () => apiClient.get<Property>(`/api/dados-operacionais/propriedades/${routeState?.editPropertyId}`),
@@ -132,7 +148,7 @@ export function Propriedades() {
 
   const saveMutation = useMutation({
     mutationFn: (payload: PropertyPayload) => editing
-      ? apiClient.patch<Property>('/api/dados-operacionais/propriedades/' + editing.id, payload)
+      ? apiClient.patch<Property>('/api/dados-operacionais/propriedades/' + editing.id, payload, { headers: { 'if-match': editing.editToken } })
       : apiClient.post<Property>('/api/dados-operacionais/propriedades', payload),
     onSuccess: async () => {
       await Promise.all([
@@ -151,7 +167,7 @@ export function Propriedades() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient.delete('/api/dados-operacionais/propriedades/' + id),
+    mutationFn: (id: string) => apiClient.delete('/api/dados-operacionais/propriedades/' + id, { headers: { 'if-match': deleteTarget?.editToken || '' } }),
     onSuccess: async () => {
       if ((propertiesQuery.data?.items.length || 0) === 1 && page > 1) setPage((current) => current - 1);
       await Promise.all([
@@ -166,6 +182,7 @@ export function Propriedades() {
   });
 
   const openCreate = () => {
+    setCurrentConflict(null);
     const next = { ...emptyForm, clienteId: clientFilter };
     setEditing(null);
     setForm(next);
@@ -178,6 +195,7 @@ export function Propriedades() {
   };
 
   const openEdit = (property: Property) => {
+    setCurrentConflict(null);
     const next = propertyToForm(property);
     setEditing(property);
     setForm(next);
@@ -305,6 +323,7 @@ export function Propriedades() {
 
       <section aria-labelledby="property-list-title" className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800"><h2 id="property-list-title" className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Cadastros de propriedade</h2><span className="text-sm tabular-nums text-zinc-600 dark:text-zinc-300" role="status" aria-live="polite">{resultLabel}</span></div>
+        <p ref={listNavigation.resultsRef} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 px-4 py-3 text-xs text-text-secondary">{propertiesQuery.data?.total ?? 0} propriedades encontradas · Página {propertiesQuery.data?.page ?? page} de {lastPage} · Intervalo {items.length ? ((propertiesQuery.data?.page ?? page) - 1) * 25 + 1 : 0}–{items.length ? ((propertiesQuery.data?.page ?? page) - 1) * 25 + items.length : 0}</p>
         {propertiesQuery.isLoading ? <p className="p-8 text-center text-sm text-zinc-600" role="status">Carregando propriedades…</p>
           : propertiesQuery.isError ? <div className="p-10 text-center"><p className="font-semibold text-red-700 dark:text-red-200">Não foi possível carregar as propriedades.</p><button type="button" onClick={() => propertiesQuery.refetch()} className="geo-button-base geo-button-secondary geo-focus-ring mt-4 min-h-11 px-4">Tentar novamente</button></div>
           : items.length === 0 ? <div className="p-10 text-center"><Buildings className="mx-auto mb-3 text-zinc-500" size={34} aria-hidden="true" /><p className="font-semibold text-zinc-900 dark:text-white">{hasFilters ? 'Nenhuma propriedade corresponde aos filtros' : 'Nenhuma propriedade cadastrada'}</p><p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{hasFilters ? 'Limpe a busca ou selecione outro cliente.' : 'Cadastre o imóvel antes de vinculá-lo a projetos e orçamentos.'}</p>{hasFilters && <button type="button" onClick={() => { setSearch(''); setClientFilter(''); setPage(1); }} className="geo-button-base geo-button-secondary geo-focus-ring mt-4 min-h-11 px-4">Limpar filtros</button>}</div>
@@ -316,11 +335,20 @@ export function Propriedades() {
           ))}</div>}
       </section>
 
-      {lastPage > 1 && <nav aria-label="Paginação de propriedades" className="mt-4 flex flex-wrap items-center justify-end gap-3"><button type="button" disabled={page === 1} onClick={() => setPage((value) => value - 1)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-40">Anterior</button><span className="text-sm tabular-nums">Página {page} de {lastPage}</span><button type="button" disabled={page === lastPage} onClick={() => setPage((value) => value + 1)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-40">Próxima</button></nav>}
+      {lastPage > 1 && <nav aria-label="Paginação de propriedades" className="mt-4 flex flex-wrap items-center justify-end gap-3"><button type="button" disabled={page === 1} onClick={() => changePage(page - 1)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-40">Anterior</button><span className="text-sm tabular-nums">Página {page} de {lastPage}</span><button type="button" disabled={page === lastPage} onClick={() => changePage(page + 1)} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4 disabled:opacity-40">Próxima</button></nav>}
 
       {!showDiscardDialog && !showQuickClientModal && <Modal isOpen={isModalOpen} onClose={closeEditor} closeDisabled={saveMutation.isPending} title={editing ? 'Editar cadastro de propriedade' : 'Novo cadastro de propriedade'} maxWidth="max-w-3xl" initialFocusId={propertyInitialFocusId}>
         <form onSubmit={submit} className="space-y-5" noValidate>
           <FormError message={formError} />
+          {formError && editing && <div aria-live="polite" className="space-y-3">
+            <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" onClick={async () => {
+              try { setCurrentConflict(await apiClient.get<Property>('/api/dados-operacionais/propriedades/' + editing.id)); }
+              catch (error) { setFormError(error instanceof ApiError && error.status === 404 ? 'A propriedade foi excluída. Seu rascunho permanece nesta tela; copie-o antes de fechar.' : 'Não foi possível consultar a propriedade. Seu rascunho está preservado; tente novamente.'); setCurrentConflict(null); }
+            }}>Consultar versão atual</button>
+            {currentConflict && <><dl className="max-h-64 overflow-auto break-words rounded-lg border p-3">{Object.entries(propertyToForm(currentConflict)).map(([key, value]) => <div key={key} className="grid gap-1 border-b py-2 sm:grid-cols-2"><dt className="font-semibold">{propertyFieldLabels[key as keyof PropertyFormState]}</dt><dd>{key === 'clienteId' ? (currentConflict.clienteNome || 'Cliente vinculado') : (value || 'Não informado')}</dd></div>)}</dl>
+              <p>Compare os campos acima com seu rascunho. Revise os dados antes de salvar novamente.</p>
+              <button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" onClick={() => { setEditing(currentConflict); setCurrentConflict(null); setFormError('Versão atual consultada. Revise seu rascunho e use “Salvar alterações” para reaplicá-lo.'); }}>Revisar rascunho com esta versão</button></>}
+          </div>}
           <FormSection title="Identificação principal" description="Vincule o imóvel ao cliente e informe uma identificação oficial." className="bg-white/70 dark:border-zinc-700/80 dark:bg-zinc-800/35">
             <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="property-client" label="Cliente" required error={fieldErrors.clienteId}><RemoteCombobox<Client> id="property-client" name="clienteId" endpoint="/api/clientes/options" value={form.clienteId} selectedLabel={selectedClientLabel} onChange={(nextValue, option) => { update('clienteId', nextValue); setSelectedClientLabel(option?.nome || ''); }} placeholder="Pesquisar cliente…" required aria-invalid={Boolean(fieldErrors.clienteId)} aria-describedby={fieldErrors.clienteId ? 'property-client-error' : 'property-client-help'} /><div id="property-client-help" className={cn('mt-2 flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between', firstClientQuery.data?.length === 0 ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100' : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/70 dark:text-zinc-300')}><span>{firstClientQuery.data?.length === 0 ? 'Cadastre o primeiro cliente para vincular esta propriedade.' : 'Não encontrou o cliente? Cadastre-o sem perder este formulário.'}</span><button id="property-add-client" type="button" onClick={openQuickClient} className="geo-focus-ring min-h-11 shrink-0 rounded-lg px-3 font-semibold text-indigo-700 hover:bg-indigo-50 dark:text-indigo-200 dark:hover:bg-indigo-500/10">Cadastrar cliente</button></div></FormField><FormField htmlFor="property-name" label="Nome do imóvel" required error={fieldErrors.nome}><input id="property-name" required name="nome" autoComplete="off" value={form.nome} onChange={(event) => update('nome', event.target.value)} className={fieldClass} aria-invalid={Boolean(fieldErrors.nome)} aria-describedby={fieldErrors.nome ? 'property-name-error' : undefined} /></FormField></div>
             <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="property-matricula" label="Matrícula" required error={fieldErrors.matricula} hint="Informe ao menos matrícula, CAR, CCIR ou ITR."><input id="property-matricula" name="matricula" autoComplete="off" spellCheck={false} value={form.matricula} onChange={(event) => update('matricula', event.target.value)} className={fieldClass} aria-invalid={Boolean(fieldErrors.matricula)} aria-describedby={fieldErrors.matricula ? 'property-matricula-error' : 'property-matricula-hint'} /></FormField><FormField htmlFor="property-car" label="CAR" error={fieldErrors.car}><input id="property-car" name="car" autoComplete="off" spellCheck={false} value={form.car} onChange={(event) => update('car', event.target.value)} className={fieldClass} /></FormField><FormField htmlFor="property-ccir" label="CCIR" error={fieldErrors.ccir}><input id="property-ccir" name="ccir" autoComplete="off" spellCheck={false} value={form.ccir} onChange={(event) => update('ccir', event.target.value)} className={fieldClass} /></FormField><FormField htmlFor="property-itr" label="ITR" error={fieldErrors.itr}><input id="property-itr" name="itr" autoComplete="off" spellCheck={false} value={form.itr} onChange={(event) => update('itr', event.target.value)} className={fieldClass} /></FormField></div>

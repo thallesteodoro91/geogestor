@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -33,7 +34,7 @@ test('Sessão 03 mantém contratos, auditoria, métricas e integridade do CRM', 
     import('./services/runtime-migrations.service'),
     import('@geogestor/database'),
   ]);
-  const request = async (options: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; url: string; payload?: unknown }): Promise<any> => server.inject({
+  const request = async (options: { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; url: string; payload?: unknown }): Promise<any> => injectWithRecordVersion(server, {
     ...options,
     payload: options.payload as any,
     headers: options.payload === undefined ? { 'x-api-token': 'test-token' } : headers,

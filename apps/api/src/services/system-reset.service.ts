@@ -66,6 +66,7 @@ export class SystemResetService {
       const removedByTable = await db.transaction(async (tx) => {
         const removed: Record<string, number> = {};
         const deletionPlan = [
+          ['ambiental_documentos_emitidos', () => tx.delete(schema.ambientalDocumentosEmitidos)],
           ['alerta_ocorrencias', () => tx.delete(schema.alertaOcorrencias)],
           ['snapshots_estrategicos', () => tx.delete(schema.snapshotsEstrategicos)],
           ['decisoes_estrategicas', () => tx.delete(schema.decisoesEstrategicas)],

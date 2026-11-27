@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -33,7 +34,7 @@ test('cria PF estruturada e edita cadastro legado sem perder categoria ou origem
     import('./services/runtime-migrations.service'),
     import('@geogestor/database')
   ]);
-  const request = (options: { method: 'GET' | 'POST' | 'PATCH'; url: string; payload?: Record<string, unknown> }) => server.inject({
+  const request = (options: { method: 'GET' | 'POST' | 'PATCH'; url: string; payload?: Record<string, unknown> }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });

@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { CLIENT_ORIGIN_OPTIONS, getClientOriginTagClass } from '../../utils/clie
 import { cn } from '../../utils/cn';
 import { apiClient } from '../../services/apiClient';
 import { primaryActionButtonClass, primaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
+import { CRMRecentContactsWidget } from '../CRM/CRMAuraWidgets';
 import { 
   Plus, 
   AddressBook, 
@@ -63,19 +64,34 @@ export interface ContatosHandle {
 interface ContatosProps {
   embedded?: boolean;
   toolbarLeading?: ReactNode;
+  showRecentContacts?: boolean;
 }
 
 type LeadFormErrors = Partial<Record<'nome' | 'email' | 'telefone' | 'dataCadastro', string>>;
+type LeadStatusFilter = 'Todos' | Contato['status'];
+const pageSize = 12;
 
-export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Contatos({ embedded = false, toolbarLeading }, ref) {
+function contatosQuery(page: number, search: string, status: LeadStatusFilter) {
+  return {
+    queryKey: ['contatos', { page, pageSize, q: search, status }],
+    queryFn: () => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (search) params.set('q', search);
+      if (status !== 'Todos') params.set('status', status);
+      return apiClient.get<PaginatedContatos>(`/api/contatos?${params.toString()}`);
+    }
+  };
+}
+
+export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Contatos({ embedded = false, toolbarLeading, showRecentContacts = false }, ref) {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchTerm = searchParams.get('q') || '';
   const statusParam = searchParams.get('status');
-  const statusFilter: 'Todos' | 'ativo' | 'convertido' = statusParam === 'ativo' || statusParam === 'convertido' ? statusParam : 'Todos';
+  const statusFilter: LeadStatusFilter = statusParam === 'ativo' || statusParam === 'convertido' ? statusParam : 'Todos';
   const requestedPage = Number.parseInt(searchParams.get('page') || '1', 10);
   const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
-  const pageSize = 12;
+  const searchRef = useRef<HTMLInputElement>(null);
   const [showModal, setShowModal] = useState(false);
   const [editingContato, setEditingContato] = useState<Contato | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contato | null>(null);
@@ -107,14 +123,13 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
   const isFormDirty = showModal && JSON.stringify({ nome, email, telefone, empresa, cidade, origem, dataCadastro, observacoes }) !== JSON.stringify(initialFormSnapshot);
 
   const { data, isLoading, isError, error, refetch } = useQuery<PaginatedContatos>({
-    queryKey: ['contatos', { page, pageSize, q: searchTerm, status: statusFilter }],
-    queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-      if (searchTerm) params.set('q', searchTerm);
-      if (statusFilter !== 'Todos') params.set('status', statusFilter);
-      return apiClient.get<PaginatedContatos>(`/api/contatos?${params.toString()}`);
-    },
+    ...contatosQuery(page, searchTerm, statusFilter),
     placeholderData: (previous) => previous
+  });
+  const recentContacts = useQuery({
+    ...contatosQuery(1, '', 'Todos'),
+    enabled: showRecentContacts,
+    select: (response) => response.items.slice(0, 5)
   });
   const contatos = data?.items || [];
   const totalPages = data?.pagination.totalPages || 1;
@@ -319,6 +334,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
             <MagnifyingGlass aria-hidden="true" className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
             <label htmlFor="lead-search" className="sr-only">Buscar leads</label>
             <input
+              ref={searchRef}
               id="lead-search"
               name="lead-search"
               type="search"
@@ -349,6 +365,18 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
           </div>
           </div>
         </div>
+
+        {showRecentContacts && (
+          <CRMRecentContactsWidget
+            contacts={recentContacts.data ?? []}
+            loading={recentContacts.isLoading}
+            failed={recentContacts.isError}
+            onCreate={() => handleOpenModal()}
+            onOpen={handleOpenModal}
+            onSearch={() => searchRef.current?.focus()}
+            onRetry={() => { void recentContacts.refetch(); }}
+          />
+        )}
 
         {/* Grid List */}
         {isLoading ? (
@@ -658,7 +686,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                             }}
                             className={`rounded-lg px-2 py-1 text-xs font-bold transition-[background-color,border-color,color,box-shadow] ${
                               isSelected
-                                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-600/30'
+                                ? 'geo-button-primary geo-focus-ring text-white shadow-sm ring-2 ring-brand-primary-600/30'
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                             }`}
                           >
@@ -698,7 +726,7 @@ export const Contatos = forwardRef<ContatosHandle, ContatosProps>(function Conta
                       className="w-full min-w-0 px-3.5 py-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-sm font-medium focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                     />
                     {formErrors.dataCadastro && <p id="lead-created-at-error" className="mt-1 text-xs font-medium text-rose-600 dark:text-rose-300" role="alert">{formErrors.dataCadastro}</p>}
-                    <span className="text-xs text-zinc-400 mt-1 block">
+                    <span className="text-xs text-text-secondary mt-1 block">
                       Puxado automaticamente da data do seu computador
                     </span>
                   </div>

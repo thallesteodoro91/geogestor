@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { BUDGET_LIST_SORTS } from '@geogestor/contracts/src/budget-list';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { eq } from 'drizzle-orm';
@@ -10,6 +11,7 @@ import {
   BudgetAdditionAdjustmentSchema,
   BudgetCostInputSchema,
   BudgetDiscountAdjustmentSchema,
+  BudgetExecutionStartSchema,
   BudgetItemInputSchema,
   BudgetTaxInputSchema,
   InstallmentDefinitionSchema,
@@ -73,7 +75,7 @@ const budgetPayloadSchema = z.object({
   methodology: z.string().nullable().optional(),
   deliverables: z.string().nullable().optional(),
   executionDays: z.number().int().min(0).nullable().optional(),
-  characterization: z.record(z.unknown()).nullable().optional(),
+  characterization: z.object({ executionStart: BudgetExecutionStartSchema.optional() }).catchall(z.unknown()).nullable().optional(),
   globalDiscount: BudgetDiscountAdjustmentSchema,
   globalAddition: BudgetAdditionAdjustmentSchema,
   items: z.array(BudgetItemInputSchema),
@@ -81,6 +83,9 @@ const budgetPayloadSchema = z.object({
   taxes: z.array(BudgetTaxInputSchema),
   payment: paymentSchema
 }).strict().superRefine((payload, context) => {
+  if (payload.characterization?.executionStart && payload.executionDays == null) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['executionDays'], message: 'Informe o prazo de execução para definir seu início.' });
+  }
   if (payload.issueDate && payload.validUntil && payload.validUntil < payload.issueDate) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -91,6 +96,7 @@ const budgetPayloadSchema = z.object({
 });
 
 const filterSchema = z.object({
+  sort: z.enum(BUDGET_LIST_SORTS).optional(),
   query: z.string().optional(),
   clientId: z.string().uuid().optional(),
   projectId: z.string().uuid().optional(),

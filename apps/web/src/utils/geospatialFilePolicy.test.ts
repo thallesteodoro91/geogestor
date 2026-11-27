@@ -17,14 +17,12 @@ test('classifica raster, MBTiles, vetor e componente sem ambiguidade', () => {
   assert.equal(classifyVectorSurveyFileName('lotes.shx'), 'shapefile-component');
 });
 
-test('interface mantém seletores, ações e estados vazios separados', () => {
+test('interface mantém importação vetorial e enquadramento no mapa fixo', () => {
   const source = readFileSync(new URL('../pages/Clientes/ClienteDetalhes/ClienteMapaCard.tsx', import.meta.url), 'utf8');
   assert.match(source, /accept=\{VECTOR_SURVEY_ACCEPT\}/);
-  assert.match(source, /accept="\.mbtiles"/);
   assert.match(source, /uploadPurpose', 'vector-survey'/);
-  assert.match(source, /Adicionar levantamento vetorial/);
-  assert.match(source, /Configurar mapa-base offline/);
-  assert.match(source, /Nenhum levantamento vetorial cadastrado/);
-  assert.match(source, /Nenhum mapa-base MBTiles importado/);
-  assert.match(source, /Levantamentos, documentos e projetos serão preservados/);
+  assert.match(source, /Importar levantamento/);
+  assert.match(source, /Nenhum levantamento cadastrado/);
+  assert.match(source, /aria-label="Enquadrar levantamento"/);
+  assert.doesNotMatch(source, /Configurar mapa-base offline|Mapa-base exibido|Nenhum mapa-base MBTiles importado/);
 });

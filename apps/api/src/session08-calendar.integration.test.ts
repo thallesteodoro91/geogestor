@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('Sessão 08 preserva contratos, fontes, vínculos, ordem e auditoria do cal
     task: crypto.randomUUID(), deletedTask: crypto.randomUUID()
   };
   const request = (input: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; payload?: Record<string, unknown> }) =>
-    server.inject({ ...input, headers });
+    injectWithRecordVersion(server, { ...input, headers });
 
   try {
     await dbReady;

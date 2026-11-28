@@ -156,7 +156,7 @@ test.describe('Central do cliente — implementação', () => {
       await page.goto(`/clientes/${fixture.client}?tab=${scenario.tab}`); await expect(page.getByRole('heading',{name:'Desbloquear GeoGestor'})).toBeVisible(); await page.getByLabel('Senha local').fill('GeoGestor-E2E-2026'); await page.getByRole('button',{name:'Desbloquear',exact:true}).click();
       const target=scenario.tab==='financeiro'?page.locator('#main-content'):page.locator('#cliente-panel-'+scenario.tab);
       await expect(target.getByText(`Não foi possível carregar ${scenario.label}. Seus registros não foram alterados.`,{exact:true})).toBeVisible();
-      if(scenario.tab==='arquivos') await page.getByLabel('Pesquisar documento pelo nome').fill('EXEMPLO');
+      if(scenario.tab==='arquivos') await page.getByLabel('Buscar arquivos').fill('EXEMPLO');
       await capture(page,'erro-recuperavel-'+scenario.tab,false); failed=false; await target.getByRole('button',{name:'Tentar novamente',exact:true}).click(); await expect(page.locator('#cliente-panel-'+scenario.tab)).toBeVisible();
       if(scenario.tab==='arquivos') await expect(page.getByText('EXEMPLO-FICTICIO-upload.png',{exact:true})).toBeVisible();
       await page.unroute(scenario.pattern);

@@ -26,7 +26,7 @@ async function record(page:Page,name:string,data:any){await fs.mkdir(out,{recurs
 async function aux(page:Page,kind:'viagem'|'fiscal'){await visit(page,'/financeiro');await page.locator('#finance-primary-action').click();await page.getByRole('menuitem',{name:kind==='viagem'?/^Nova viagem/:/fiscal/i}).click();}
 
 test('zoom real 200%: menus, novos padrões auxiliares e oportunidade nos dois temas',async()=>{
- const executablePath=path.resolve('scratch/licensing-electron-runtime/runtime/electron.exe');
+ const executablePath=process.env.GEOGESTOR_E2E_ELECTRON_PATH;
  const env={...Object.fromEntries(Object.entries(process.env).filter(([k])=>k.toUpperCase()!=='ELECTRON_RUN_AS_NODE')),GEOGESTOR_E2E_OFFSCREEN:'1'};
  const app=await electron.launch({executablePath,args:[path.resolve('tests/e2e/support/licensing-desktop.cjs')],env,timeout:30000});const results=[];
  try{const page=await app.firstWindow(),win=await app.browserWindow(page);await start(page);await page.emulateMedia({reducedMotion:'reduce'});await win.evaluate(w=>{w.webContents.setBackgroundThrottling(false);w.setContentSize(1280,960);w.webContents.setZoomFactor(2);});await expect.poll(()=>page.evaluate(()=>innerWidth)).toBe(640);

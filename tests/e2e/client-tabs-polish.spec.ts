@@ -1,3 +1,4 @@
+import { protectedSourceBytes } from './support/isolated-session';
 import { test, expect, _electron as electron, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createRequire } from 'node:module';
@@ -98,7 +99,20 @@ test.describe('Polimento restrito às abas da Central do Cliente',()=>{
     const seen=new Set<string>();for(let n=1;n<=5;n++){await expect(panel.getByText(new RegExp(`Página ${n} de 5`))).toBeVisible();for(const value of await panel.locator('[data-client-record-id]').evaluateAll(nodes=>nodes.map(el=>el.getAttribute('data-client-record-id')!)))seen.add(value);if(n<5)await panel.getByRole('button',{name:'Próxima',exact:true}).click();}expect(seen.size).toBe(105);
     await page.getByLabel('Buscar propriedades',{exact:true}).fill('registro-inexistente');await expect(panel.getByText('Nenhum registro corresponde à busca ou aos filtros.',{exact:true})).toBeVisible();await expect(panel.getByText('Nenhuma propriedade cadastrada',{exact:true})).toHaveCount(0);await panel.getByRole('button',{name:'Mostrar todos os registros',exact:true}).click();await expect(panel.locator('[data-client-record-id]')).toHaveCount(24);
     const after=await presentation(page);expect(after).toEqual(before);await fs.writeFile(path.join(evidence,'estrutura-depois-dos-filtros.json'),JSON.stringify(after,null,2));
-    const protectedFiles=JSON.parse((await fs.readFile('scratch/client-tabs-polish-2026-10-12/protected-before.json','utf8')).replace(/^\uFEFF/,''));const hashes=[];for(const item of protectedFiles){const hash=crypto.createHash('sha256').update(await fs.readFile(item.path)).digest('hex').toUpperCase();expect(hash).toBe(item.hash);hashes.push({...item,after:hash,unchanged:true});}await fs.writeFile(path.join(evidence,'arquivos-protegidos.json'),JSON.stringify(hashes,null,2));
+    const reference = JSON.parse(await fs.readFile('tests/e2e/fixtures/ui-protected-2026-10-18.json', 'utf8'));
+    const protectedPaths = [
+      'apps/web/src/pages/Clientes/ClienteDetalhes.tsx',
+      'apps/web/src/pages/Clientes/ClienteDetalhes/ClienteMapaCard.tsx',
+      'apps/web/src/components/Layout.tsx',
+      'apps/web/src/index.css'
+    ];
+    const hashes = [];
+    for (const file of protectedPaths) {
+      const actual = crypto.createHash('sha256').update(await protectedSourceBytes(file)).digest('hex');
+      expect(actual, file).toBe(reference.sources[file]);
+      hashes.push({ path: file, sha256: actual });
+    }
+    await fs.writeFile(path.join(evidence, 'arquivos-protegidos.json'), JSON.stringify(hashes, null, 2));
   });
   test('estados vazios sem ações duplicadas; busca e ordenação de orçamentos',async({page})=>{
     const fixture=await seed();await open(page,fixture.empty,'servicos');await expect(page.locator('#cliente-panel-servicos').getByRole('button',{name:'Novo serviço',exact:true})).toHaveCount(1);await open(page,fixture.empty,'orcamentos');await expect(page.locator('#cliente-panel-orcamentos').getByRole('button',{name:'Novo orçamento',exact:true})).toHaveCount(1);await expect(page.getByRole('button',{name:'Gerar Orçamento',exact:true})).toHaveCount(0);
@@ -114,7 +128,7 @@ test.describe('Polimento restrito às abas da Central do Cliente',()=>{
   });
   test('arquivos de duas origens, filtros, ações identificáveis, prévia e download íntegro',async({page})=>{
     const fixture=await seed();await open(page,fixture.client,'arquivos');await upload(page,fixture);const projectName=await upload(page,fixture,true);await open(page,fixture.client,'arquivos');const panel=page.locator('#cliente-panel-arquivos');await expect(panel.getByText('2 de 2 documentos',{exact:true})).toBeVisible();
-    await panel.getByRole('button',{name:'Por projeto',exact:true}).click();await expect(panel.getByText('1 de 2 documentos neste filtro',{exact:true})).toBeVisible();await page.getByLabel('Pesquisar documento pelo nome',{exact:true}).fill('PROJETO');await page.locator('#cliente-tab-servicos').click();await page.locator('#cliente-tab-arquivos').click();await expect(page.getByLabel('Pesquisar documento pelo nome',{exact:true})).toHaveValue('PROJETO');await expect(panel.getByRole('button',{name:'Por projeto',exact:true})).toHaveAttribute('aria-pressed','true');
+    await panel.getByRole('button',{name:'Por projeto',exact:true}).click();await expect(panel.getByText('1 de 2 documentos neste filtro',{exact:true})).toBeVisible();await page.getByLabel('Buscar arquivos',{exact:true}).fill('PROJETO');await page.locator('#cliente-tab-servicos').click();await page.locator('#cliente-tab-arquivos').click();await expect(page.getByLabel('Buscar arquivos',{exact:true})).toHaveValue('PROJETO');await expect(panel.getByRole('button',{name:'Por projeto',exact:true})).toHaveAttribute('aria-pressed','true');
     await panel.getByRole('button',{name:'Documentos gerais',exact:true}).click();await expect(panel.getByText('0 de 2 documentos neste filtro',{exact:true})).toBeVisible();await panel.getByRole('button',{name:'Limpar filtros',exact:true}).click();await expect(panel.getByText('2 de 2 documentos',{exact:true})).toBeVisible();
     const preview=panel.getByRole('button',{name:'Visualizar arquivo '+projectName,exact:true});await preview.focus();if(!await preview.locator('.client-file-action-label').isVisible())await expect(preview.getByRole('tooltip')).toBeVisible();await preview.press('Enter');const dialog=page.getByRole('dialog',{name:projectName,exact:true});await expect(dialog).toBeVisible();await expect(dialog.locator('#client-preview-open')).toBeFocused();await expect.poll(()=>dialog.locator('img').evaluate((el:HTMLImageElement)=>el.complete&&el.naturalWidth>0)).toBe(true);await page.keyboard.press('Escape');await expect(preview).toBeFocused();
     const downloading=page.waitForEvent('download');await panel.getByRole('button',{name:'Baixar arquivo '+projectName,exact:true}).click();expect(await fs.readFile((await(await downloading).path())!)).toEqual(bytes);

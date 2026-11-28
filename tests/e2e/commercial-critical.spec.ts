@@ -166,7 +166,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('despesas por categoria usam barras compactas e preservam os valores exatos', async ({ page }) => {
+  test('despesas por categoria agrupam a barra e preservam os valores no detalhamento', async ({ page }) => {
     await unlock(page);
     const expense = (categoria: string, total: number) => ({
       categoria, total, pago: total, aberto: 0, count: 1, percentual: 0
@@ -192,10 +192,15 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     });
     await navigateBySidebar(page, 'Financeiro');
 
-    const categoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
-    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
-    await expect(categoryChart.getByText('Combustível', { exact: true })).toBeVisible();
-    await expect(categoryChart.getByText('R$ 450,00', { exact: true })).toBeVisible();
+    const openCategories = () => page.locator('summary').filter({ hasText: 'Despesas por categoria' }).click();
+    const chart = page.getByRole('article', { name: 'Despesas por categoria', exact: true });
+    const detail = page.getByRole('region', { name: 'Detalhamento por categoria', exact: true });
+    await openCategories();
+    await expect(chart.getByText('Outras categorias', { exact: true })).toBeVisible();
+    await expect(chart.locator('.finance-aura-category-strip > span')).toHaveCount(3);
+    await expect(detail.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(detail.getByText('R$ 450,00', { exact: true })).toBeVisible();
+    await expect(detail.getByText('Alimentação', { exact: true })).toBeVisible();
 
     visibleCategories = fourCategories.slice(0, 3);
     await page.reload();
@@ -204,10 +209,11 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('button', { name: 'Desbloquear' }).click();
     await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
 
-    const updatedCategoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
-    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
-    await expect(updatedCategoryChart.getByText('Combustível', { exact: true })).toBeVisible();
-    await expect(updatedCategoryChart.getByText('Alimentação', { exact: true })).toHaveCount(0);
+    await openCategories();
+    await expect(chart.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(chart.getByText('Outras categorias', { exact: true })).toHaveCount(0);
+    await expect(chart.locator('.finance-aura-category-strip > span')).toHaveCount(3);
+    await expect(detail.getByText('Alimentação', { exact: true })).toHaveCount(0);
     await page.unroute('**/api/financeiro/overview**');
   });
 

@@ -68,10 +68,14 @@ jobs:
           git diff --check
 
   e2e:
-    name: Jornadas comerciais E2E
+    name: Jornadas comerciais E2E (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: quality
     runs-on: windows-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -95,7 +99,18 @@ jobs:
         run: pnpm --config.verify-deps-before-run=false exec playwright install msedge
 
       - name: E2E com dados sintéticos e raiz gerenciada
-        run: pnpm --config.verify-deps-before-run=false run test:e2e
+        shell: pwsh
+        env:
+          E2E_SHARD_INDEX: ${{ matrix.shard }}
+          E2E_SHARD_COUNT: ${{ strategy.job-total }}
+        run: |
+          $specs = @(Get-ChildItem -LiteralPath tests/e2e -File -Filter '*.spec.ts' | Sort-Object Name)
+          $firstIndex = [int]$env:E2E_SHARD_INDEX - 1
+          $shardCount = [int]$env:E2E_SHARD_COUNT
+          $selected = @(for ($i = $firstIndex; $i -lt $specs.Count; $i += $shardCount) { $specs[$i].Name })
+          if ($selected.Count -eq 0) { throw 'O lote não contém jornadas.' }
+          pnpm --config.verify-deps-before-run=false run test:e2e -- @selected
+          exit $LASTEXITCODE
 
       - name: Prévia não destrutiva da limpeza
         if: always()
@@ -105,7 +120,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: geogestor-e2e-failure-${{ github.run_id }}
+          name: geogestor-e2e-failure-${{ github.run_id }}-${{ matrix.shard }}
           path: scratch/commercial-e2e/
           if-no-files-found: warn
           retention-days: 14

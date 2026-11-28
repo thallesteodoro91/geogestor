@@ -1,3 +1,4 @@
+import { budgetGroup } from './support/budget-editor-groups';
 import { expect, test } from '@playwright/test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -111,6 +112,7 @@ test('organização: temas, notebooks, condições estruturadas, edição, emiss
       }
       await expect(page.locator('form')).not.toContainText('Concluído');
       await expect(page.locator('form')).toContainText('1 parcela · À vista');
+      await budgetGroup(page, 'characterization');
       await expect(page.locator('#budget-execution-start')).toContainText('Pagamento inicial');
       await page.locator('#budget-execution-start').click();
       await page.getByRole('option', { name: 'Aprovação da proposta', exact: true }).click();
@@ -132,6 +134,7 @@ test('organização: temas, notebooks, condições estruturadas, edição, emiss
   await page.getByRole('button', { name: 'Desbloquear', exact: true }).click();
   await page.getByRole('dialog').first().getByRole('button', { name: 'Editar orçamento', exact: true }).click();
   await page.locator('#budget-description').fill('Proposta editada e persistida');
+  await budgetGroup(page, 'characterization');
   await page.locator('#budget-execution-start').click();
   await page.getByRole('option', { name: 'Outra condição', exact: true }).click();
   await page.locator('#budget-execution-start-description').fill('Liberação de acesso ao imóvel e entrega dos documentos.');

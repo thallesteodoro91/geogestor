@@ -33,7 +33,7 @@ import { expectUnclipped, expectCalendarCommands } from './support/calendar-asse
 test.setTimeout(240000);
 test('formulários reais no tema light: 200% amplo e estreito, grade completa e valores preservados',async()=>{
  const env={...Object.fromEntries(Object.entries(process.env).filter(([k])=>k.toUpperCase()!=='ELECTRON_RUN_AS_NODE')),GEOGESTOR_E2E_OFFSCREEN:'1'};
- const app=await electron.launch({executablePath:path.resolve('scratch/licensing-electron-runtime/runtime/electron.exe'),args:[path.resolve('tests/e2e/support/licensing-desktop.cjs')],env});const records:any[]=[],failures:any[]=[];
+ const app=await electron.launch({executablePath:process.env.GEOGESTOR_E2E_ELECTRON_PATH,args:[path.resolve('tests/e2e/support/licensing-desktop.cjs')],env});const records:any[]=[],failures:any[]=[];
  try{const page=await app.firstWindow(),win=await app.browserWindow(page);await prepare(page);await page.addInitScript(()=>localStorage.setItem('geogestor_theme','light'));await page.emulateMedia({reducedMotion:'reduce'});page.on('dialog',dialog=>dialog.accept());
  const scenes=[
  {name:'Nova viagem',route:'/financeiro',aux:'viagem'},

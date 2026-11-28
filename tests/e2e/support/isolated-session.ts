@@ -17,5 +17,5 @@ export function isolatedGet(page:Page,url:string){return page.request.get(url,{h
 
 export async function protectedSourceBytes(file:string){
  const fs=await import('node:fs/promises');const ref=JSON.parse(await fs.readFile('tests/e2e/fixtures/ui-protected-2026-10-18.json','utf8'));
- let bytes=await fs.readFile(file);for(const n of ref.normalizations||[])if(n.path===file){const source=bytes.toString('utf8');expect(source.split(n.from)).toHaveLength(2);bytes=Buffer.from(source.replace(n.from,n.to));}return bytes;
+ let bytes=Buffer.from((await fs.readFile(file, 'utf8')).replace(/\r\n/g, '\n'));for(const n of ref.normalizations||[])if(n.path===file){const source=bytes.toString('utf8');expect(source.split(n.from)).toHaveLength(2);bytes=Buffer.from(source.replace(n.from,n.to));}return bytes;
 }

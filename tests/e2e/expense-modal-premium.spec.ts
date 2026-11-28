@@ -1,3 +1,4 @@
+import { e2eReferenceDate, relativeDate } from './support/runtime';
 import { prepareIsolatedPage, openIsolatedPage, isolatedGet } from './support/isolated-session';
 import { test, expect, _electron as electron, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -33,7 +34,7 @@ async function seed() {
       { sql: "insert into projetos (id,cliente_id,nome,tipo,status) values (?,?,?,'Topografia','Em Andamento')", args: [project, client, projectName] },
       { sql: "insert into projetos (id,cliente_id,nome,tipo,status) values (?,?,?,'Topografia','Em Andamento')", args: [otherProject, client, otherName] },
       { sql: "insert into documentos (id,cliente_id,projeto_id,nome,extensao,caminho,categoria) values (?,?,?,?,'txt',?,'Outros')", args: [document, client, project, documentName, file] },
-      { sql: "insert into viagens (id,cliente_id,projeto_id,finalidade,destino,data_inicio,status) values (?,?,?,'EXEMPLO FICTÍCIO — Visita','Local fictício','2026-10-15','planejada')", args: [travel, client, project] }
+      { sql: "insert into viagens (id,cliente_id,projeto_id,finalidade,destino,data_inicio,status) values (?,?,?,'EXEMPLO FICTÍCIO — Visita','Local fictício',?,'planejada')", args: [travel, client, project, e2eReferenceDate()] }
     ], 'write');
   } finally { db.close(); }
   return { client, project, otherProject, document, travel, clientName, projectName, otherName, documentName };
@@ -57,19 +58,22 @@ async function section(dialog: Locator, name: string) {
   await dialog.getByRole('navigation', { name: 'Seções da despesa' }).getByRole('button', { name, exact: true }).click();
 }
 
-async function date(page: Page, dialog: Locator, id: string, day = 16) {
+async function date(page: Page, dialog: Locator, id: string, offsetDays = 1) {
   const trigger = dialog.locator('#' + id);
   await trigger.press('ArrowDown');
   const calendar = page.locator('.geo-expense-calendar');
   await expect(calendar).toBeVisible();
-  await calendar.getByRole('gridcell', { name: '15 de outubro de 2026', exact: true }).click();
-  if (day !== 15) {
+  const today = new Date(e2eReferenceDate() + 'T12:00:00');
+  const todayLabel = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long' }).format(today);
+  await calendar.getByRole('gridcell', { name: todayLabel, exact: true }).click();
+  if (offsetDays === 1) {
     await trigger.press('ArrowDown');
     await expect(calendar.locator('[role=gridcell][tabindex="0"]')).toBeFocused();
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('Enter');
   }
-  await expect(trigger).toContainText(`${day}/10/2026`);
+  const selectedDate = new Date(relativeDate(offsetDays) + 'T12:00:00');
+  await expect(trigger).toContainText(new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(selectedDate));
   await expect(trigger).toBeFocused();
   expect(await trigger.evaluate(el => {
     const r = el.getBoundingClientRect();
@@ -175,20 +179,20 @@ test('vínculos, comprovante, pagamento e preservação dos valores escolhidos',
   await section(dialog, 'Pagamento');
   await choose(page, dialog, 'despesa-status', 'Pago');
   await choose(page, dialog, 'despesa-forma', 'Dinheiro');
-  await date(page, dialog, 'despesa-data-pagamento', 15);
+  await date(page, dialog, 'despesa-data-pagamento', 0);
   await dialog.locator('label[for="despesa-reembolsavel"]').click();
   await expect(dialog.getByLabel('Despesa reembolsável pelo cliente')).toBeChecked();
   await section(dialog, 'Dados principais');
   await dialog.locator('#despesa-desc').fill(description + ' — vínculos');
   await dialog.locator('#despesa-valor').fill('0.01');
   await date(page, dialog, 'despesa-data');
-  await date(page, dialog, 'despesa-competencia', 15);
+  await date(page, dialog, 'despesa-competencia', 0);
   const responsePromise = page.waitForResponse(r => r.url().endsWith('/api/financeiro/despesas') && r.request().method() === 'POST');
   await dialog.getByRole('button', { name: 'Cadastrar despesa', exact: true }).click();
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
   const saved = await response.json();
-  expect(saved).toMatchObject({ clienteId: fixture.client, projetoId: fixture.project, comprovanteDocumentoId: fixture.document, viagemId: fixture.travel, valor: 1, data: '2026-10-16', dataCompetencia: '2026-10-15', dataPagamento: '2026-10-15', status: 'Pago', formaPagamento: 'Dinheiro', reembolsavel: true });
+  expect(saved).toMatchObject({ clienteId: fixture.client, projetoId: fixture.project, comprovanteDocumentoId: fixture.document, viagemId: fixture.travel, valor: 1, data: relativeDate(1), dataCompetencia: e2eReferenceDate(), dataPagamento: e2eReferenceDate(), status: 'Pago', formaPagamento: 'Dinheiro', reembolsavel: true });
   await expect(dialog).toHaveCount(0);
   await fs.writeFile(path.join(evidence, 'vinculos-payload.json'), JSON.stringify(saved, null, 2));
 });
@@ -209,7 +213,7 @@ test('falhas, envio lento, duplicação, criação e edição com centavos', asy
   await expect(dialog.getByRole('alert')).toContainText('tente novamente');
   await expect(dialog.locator('#despesa-desc')).toHaveValue(title);
   await expect(dialog.locator('#despesa-valor')).toHaveValue('1234.56');
-  await expect(dialog.locator('input[name=data]')).toHaveValue('2026-10-16');
+  await expect(dialog.locator('input[name=data]')).toHaveValue(relativeDate(1));
   await expect(dialog.locator('#despesa-obs')).toHaveValue('EXEMPLO FICTÍCIO — Não perder o preenchimento.');
   await dialog.screenshot({ path: path.join(evidence, 'falha-preservada.png') });
   await page.unroute(endpoint);

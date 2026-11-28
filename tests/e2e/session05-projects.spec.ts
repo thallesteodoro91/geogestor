@@ -260,9 +260,11 @@ test.describe('Sessão 05 — Projetos', () => {
 
     await page.getByRole('tab', { name: /Financeiro/ }).click();
     await expect(page).toHaveURL(/aba=financeiro/);
-    for (const amount of ['R$ 100,00', 'R$ 70,00', 'R$ 30,00', 'R$ 40,00', 'R$ 25,00']) {
+    for (const amount of ['R$ 100,00', 'R$ 70,00', 'R$ 30,00', 'R$ 25,00']) {
       await expect(page.getByText(amount, { exact: true }).first()).toBeVisible();
     }
+    const costWidget = page.getByRole('region', { name: 'Custo do projeto', exact: true });
+    await expect(costWidget.getByText('Custo previsto R$ 40,00', { exact: true })).toBeVisible();
     const executedCostCard = page.getByText('Custo total executado no projeto', { exact: true }).locator('..');
     await expect(executedCostCard.getByText('R$ 25,00', { exact: true })).toBeVisible();
     await expect(executedCostCard.getByText('R$ 30,00', { exact: true })).toHaveCount(0);

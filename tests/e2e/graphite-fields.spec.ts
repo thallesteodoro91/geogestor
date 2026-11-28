@@ -12,6 +12,7 @@ const origin=`http://127.0.0.1:${process.env.GEOGESTOR_E2E_WEB_PORT}`;
 const api=`http://127.0.0.1:${process.env.GEOGESTOR_E2E_API_PORT}`;
 const before=process.env.GEOGESTOR_GRAPHITE_BASELINE==='1';
 const phase=before?'antes':'depois';
+const compareBaseline = process.env.GEOGESTOR_GRAPHITE_COMPARE_BASELINE === '1';
 const client='7b7b7b7b-7777-4777-8777-777777777771',project='7b7b7b7b-7777-4777-8777-777777777772';
 const fields='.geo-field, input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]):not(.sr-only), textarea, select:not(.sr-only)';
 
@@ -77,7 +78,7 @@ test('campos globais: dois temas, largura ampla e estreita, geometria e áreas p
   results.push(await audit(page,'nova-propriedade',mode,width));
   await visit(page,'/projetos');await page.getByRole('button',{name:'Novo projeto',exact:true}).first().click();
   results.push(await audit(page,'novo-projeto',mode,width));
-  await visit(page,'/tarefas');await page.getByRole('button',{name:'Nova tarefa',exact:true}).click();
+  await visit(page,'/tarefas');await page.getByRole('button',{name:'Nova tarefa',exact:true}).first().click();
   results.push(await audit(page,'nova-tarefa',mode,width));
   await visit(page,'/crm');await page.getByRole('button',{name:'Nova oportunidade',exact:true}).click();
   results.push(await audit(page,'nova-oportunidade',mode,width));
@@ -87,7 +88,20 @@ test('campos globais: dois temas, largura ampla e estreita, geometria e áreas p
   results.push(await audit(page,'configuracoes',mode,width));
  }
  await fs.writeFile(path.join(output,`${phase}-campos.json`),JSON.stringify(results,null,2));
- if(!before){
+ if (!before) {
+  for (const dark of results.filter(result => result.mode === 'dark')) {
+   const light = results.find(result => result.mode === 'light' && result.name === dark.name && result.width === dark.width);
+   const label = `${dark.name} a ${dark.width} px`;
+   expect(light?.controls.length, label).toBe(dark.controls.length);
+   for (const [index, control] of dark.controls.entries()) {
+    const other = light.controls[index];
+    expect(control.width, label + ' largura').toBeCloseTo(other.width, 1);
+    expect(control.height, label + ' altura').toBeCloseTo(other.height, 1);
+   }
+  }
+ }
+ // A auditoria histórica pode apontar para a captura do perfil de referência local.
+ if(!before && compareBaseline){
   const baseline=JSON.parse(await fs.readFile(path.join(output,'antes-campos.json'),'utf8'));
   for(const [i,current] of results.entries()){
    const previous=baseline[i];expect(current.name).toBe(previous.name);expect(current.controls.length,current.name).toBe(previous.controls.length);

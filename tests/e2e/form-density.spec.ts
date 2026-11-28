@@ -22,7 +22,7 @@ test.beforeAll(async({request})=>{
   const clientId=crypto.randomUUID(),approved=crypto.randomUUID();
   await db.batch([
     {sql:"insert into clientes (id,nome,tipo_pessoa,situacao) values (?,?,'PF','Ativo')",args:[clientId,fake]},
-    {sql:"insert into orcamentos (id,cliente_id,descricao,status,valor_total) values (?,?,?,'aprovado',123457)",args:[approved,clientId,fake]},
+    {sql:"insert into orcamentos (id,cliente_id,descricao,status,valor_total) values (?,?,?,'aprovado',123457)",args:[approved,clientId,fake+' — Parcela de teste']},
     {sql:"insert into parcelas (id,orcamento_id,valor,valor_pago,data_vencimento,status_pagamento) values (?,?,123457,0,'2026-12-30','Pendente')",args:[crypto.randomUUID(),approved]}
   ],'write');db.close();
   const auth=await request.post(api+'/api/auth/unlock',{data:{password:'GeoGestor-E2E-2026'}});
@@ -89,7 +89,7 @@ async function checkForms(page:Page,suffix:string,capture:Capture){
     const wrapper=el.closest('.geo-numeric-input')!,unit=wrapper.nextElementSibling!;return {end:wrapper.getBoundingClientRect().right,start:unit.getBoundingClientRect().left};
   });expect(suffixRect.start).toBeGreaterThanOrEqual(suffixRect.end);
   await record('nova-oportunidade','#crm-value,#crm-probability',{'crm-value':288,'crm-probability':208});
-  await page.getByRole('button',{name:'Cancelar',exact:true}).click();await expect(page.locator('#crm-probability')).toBeHidden();
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Descartar alterações',exact:true}).click();await expect(page.locator('#crm-probability')).toBeHidden();
 
   await visit(page,'/clientes');await page.getByRole('button',{name:'Novo cliente',exact:true}).first().click();
   for(const address of await page.getByRole('button',{name:/^Endereço/}).all())if(await address.getAttribute('aria-expanded')==='false'){await address.click();break;}
@@ -135,17 +135,19 @@ async function checkForms(page:Page,suffix:string,capture:Capture){
 
   await visit(page,'/financeiro');await page.locator('#finance-primary-action').click();
   await page.getByRole('menuitem',{name:/^Nova viagem/}).click();
-  await page.getByLabel('Adiantamento (R$)',{exact:true}).fill('1234567,89');await page.getByLabel('Quilometragem',{exact:true}).fill('1234,56');
+  await page.getByLabel('Adiantamento (R$) — opcional',{exact:true}).fill('1234567,89');await page.getByLabel('Quilometragem — opcional',{exact:true}).fill('1234,56');
   await record('nova-viagem','[role="dialog"] input[inputmode="decimal"]');
   for(const el of await page.locator('[role="dialog"] input[inputmode="decimal"]').all())expect((await el.boundingBox())!.width).toBeLessThanOrEqual(256.05);
-  await page.getByRole('button',{name:'Cancelar',exact:true}).click();await expect(page.getByRole('dialog',{name:'Nova viagem',exact:true})).toBeHidden();
+  await page.getByRole('button',{name:'Cancelar',exact:true}).click();await page.getByRole('alertdialog').getByRole('button',{name:'Descartar alterações',exact:true}).click();await expect(page.getByRole('dialog',{name:'Nova viagem',exact:true})).toBeHidden();
 
   await visit(page,'/financeiro?tab=faturas');await page.locator('#finance-primary-action').click();
   await page.getByRole('menuitem',{name:/^Registrar recebimento/}).click();
   await page.getByRole('textbox',{name:'Buscar contas a receber'}).fill(fake);
-  await page.getByRole('group',{name:'Conta a receber de '+fake}).getByRole('button',{name:'Receber',exact:true}).click();
+  await page.getByRole('group',{name:'Conta a receber de '+fake}).filter({hasText:fake+' — Parcela de teste'}).getByRole('button',{name:'Receber',exact:true}).click();
   await page.locator('#receipt-principal').fill('123,45');await expect(page.locator('#receipt-principal')).toHaveValue('123,45');
-  await record('registrar-recebimento','#receipt-principal,input[name="juros"],input[name="multa"],input[name="desconto"],input[name="taxas"]',{'receipt-principal':288,'juros':288,'multa':288,'desconto':288,'taxas':288});
+  // A coluna única do modal AURA pode ocupar toda a largura disponível até 360 px.
+  const receiptFieldWidth = 360;
+  await record('registrar-recebimento','#receipt-principal,input[name="juros"],input[name="multa"],input[name="desconto"],input[name="taxas"]',{'receipt-principal':receiptFieldWidth,'juros':receiptFieldWidth,'multa':receiptFieldWidth,'desconto':receiptFieldWidth,'taxas':receiptFieldWidth});
   await page.getByRole('dialog',{name:'Registrar recebimento',exact:true}).getByRole('button',{name:'Cancelar',exact:true}).click();
   await page.getByRole('button',{name:'Continuar editando',exact:true}).click();await expect(page.locator('#receipt-principal')).toHaveValue('123,45');
   await page.getByRole('dialog',{name:'Registrar recebimento',exact:true}).getByRole('button',{name:'Cancelar',exact:true}).click();

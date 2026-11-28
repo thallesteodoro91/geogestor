@@ -1,3 +1,4 @@
+import { budgetGroup } from './support/budget-editor-groups';
 import { test, expect, _electron as electron, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs/promises';
@@ -132,7 +133,7 @@ test('orçamento: origem Financeiro, critérios, cancelamento, histórico e rasc
   popup = await menu(page);
   await popup.getByRole('menuitem', { name: /^Novo orçamento/ }).click();
   await page.locator('#budget-description').fill('EXEMPLO FICTÍCIO — Proposta criada pelo Financeiro');
-  await page.locator('[data-budget-nav-section="items"]:visible').click();
+  await budgetGroup(page, 'items');
   await page.locator('#budget-item-description-0').fill('EXEMPLO FICTÍCIO — Serviço proposto');
   await page.locator('#budget-item-price-0').fill('100,00');
   const countsBefore = await rows('select (select count(*) from parcelas) as p, (select count(*) from recebimentos) as r');

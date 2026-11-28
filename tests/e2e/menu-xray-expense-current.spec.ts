@@ -1,3 +1,4 @@
+import { selectCalendarDate } from './support/calendar-assertions';
 import { test, expect, _electron as electron, type Page, type Locator } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { createRequire } from 'node:module';
@@ -67,7 +68,7 @@ async function date(page: Page, dialog: Locator, id: string, day = 16) {
   await trigger.press('ArrowDown');
   const calendar = page.locator('.geo-expense-calendar');
   await expect(calendar).toBeVisible();
-  await calendar.getByRole('gridcell', { name: '15 de outubro de 2026', exact: true }).click();
+  await selectCalendarDate(calendar, '2026-10-15');
   if (day !== 15) {
     await trigger.press('ArrowDown');
     await expect(calendar.locator('[role=gridcell][tabindex="0"]')).toBeFocused();

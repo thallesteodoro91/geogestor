@@ -22,15 +22,6 @@ async function removeTestDatabase() {
   }
 }
 
-const localDateKey = (offset = 0) => {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + offset);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(date);
-};
-
 process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_API_TOKEN = 'test-token';
 process.env.GEOGESTOR_DISABLE_SCHEDULER = '1';
@@ -47,6 +38,9 @@ test('Sessão 06 protege contratos, prazos, vínculos, cascatas e alertas ambien
     import('@geogestor/database'),
     import('./services/deadline-alerts.service')
   ]);
+
+  const today = alerts.saoPauloDateKey();
+  const localDateKey = (offset = 0) => alerts.addCivilDays(today, offset);
 
   const request = (options: {
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';

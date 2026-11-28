@@ -193,7 +193,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await navigateBySidebar(page, 'Financeiro');
 
     const openCategories = () => page.locator('summary').filter({ hasText: 'Despesas por categoria' }).click();
-    const chart = page.getByRole('article', { name: 'Despesas por categoria', exact: true });
+    const chart = page.getByRole('region', { name: 'Despesas por categoria', exact: true });
     const detail = page.getByRole('region', { name: 'Detalhamento por categoria', exact: true });
     await openCategories();
     await expect(chart.getByText('Outras categorias', { exact: true })).toBeVisible();
@@ -239,7 +239,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     const tileRequest = page.waitForRequest(tileUrl);
     await page.getByRole('tab', { name: 'Distância e azimute' }).click();
     await tileRequest;
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    await page.context().setOffline(true);
     await expect(page.getByText('Mapa-base indisponível')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Mapa dos pontos de origem e destino' })).toBeVisible();
     await expect(page.getByText(/marcadores, geometrias e dados próprios continuam visíveis/i)).toBeVisible();

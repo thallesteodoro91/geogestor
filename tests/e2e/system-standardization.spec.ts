@@ -1,3 +1,4 @@
+import { selectCalendarDate } from './support/calendar-assertions';
 import {test,expect,type Page} from '@playwright/test';
 import fs from 'node:fs/promises';import path from 'node:path';import {createRequire} from 'node:module';import AxeBuilder from '@axe-core/playwright';
 test.setTimeout(900_000);test.use({actionTimeout:6000});
@@ -24,7 +25,7 @@ async function visit(page:Page,route:string){await page.goto(origin+route);const
 async function prepare(page:Page){await page.addInitScript(port=>{(window as any).electronAPI={getApiPort:()=>port};localStorage.setItem('geogestor_theme','dark');},Number(process.env.GEOGESTOR_E2E_API_PORT));await page.route(/^https?:\/\/(?!127\.0\.0\.1(?::|\/)|localhost(?::|\/))/,r=>r.abort());}
 async function database(sql:string,args:any[]=[]){const root=process.env.GEOGESTOR_E2E_ROOT!;if(!path.resolve(root).startsWith(path.resolve('scratch/commercial-e2e')+path.sep))throw Error('Banco isolado obrigatório');const req=createRequire(path.resolve('apps/api/package.json'));const db=req('@libsql/client').createClient({url:`file:${path.join(root,'geogestor.db')}`});try{return (await db.execute({sql,args})).rows;}finally{db.close();}}
 async function openAux(page:Page,kind:'viagem'|'fiscal'){await visit(page,'/financeiro');await page.locator('#finance-primary-action').click();await page.getByRole('menuitem',{name:kind==='viagem'?/^Nova viagem/:/fiscal/i}).click();const dialog=page.getByRole('dialog').last();await expect(dialog).toHaveCSS('opacity','1');return dialog;}
-async function date(page:Page,id:string){await page.locator('#'+id).click();await page.getByRole('gridcell',{name:'20 de outubro de 2026',exact:true}).click();}
+async function date(page:Page,id:string){await page.locator('#'+id).click();await selectCalendarDate(page.getByRole('dialog', { name: 'Selecionar data', exact: true }), '2026-10-20');}
 async function shot(page:Page,name:string){await fs.mkdir(out,{recursive:true});await page.screenshot({path:path.join(out,name+'.png'),animations:'disabled'});}
 
 test('viagem valida data, protege rascunho e envio, preserva falhas e confirma sucesso local',async({page})=>{

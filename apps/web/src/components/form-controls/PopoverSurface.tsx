@@ -66,7 +66,10 @@ export const PopoverSurface = forwardRef<HTMLDivElement, PopoverSurfaceProps>(fu
       const above = availableBelow < Math.min(minimumHeight || 240, maxHeight) && availableAbove > availableBelow;
       const available = above ? availableAbove : availableBelow;
       const viewportHeightAvailable = Math.max(0, boundaryBottom - boundaryTop);
-      const useViewport = minimumHeight > 0 && available < Math.min(minimumHeight, maxHeight, viewportHeightAvailable);
+      // Keep calendar navigation within the viewport at high zoom, even for anchors near an edge.
+      const useViewport = minimumHeight > 0 && (
+        viewportHeightAvailable <= maxHeight || available < Math.min(minimumHeight, maxHeight)
+      );
       const fittedHeight = Math.min(maxHeight, viewportHeightAvailable);
 
       setPosition({

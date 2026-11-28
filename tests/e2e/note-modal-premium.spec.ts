@@ -1,3 +1,4 @@
+import { selectCalendarDate } from './support/calendar-assertions';
 import { protectedSourceBytes } from './support/isolated-session';
 import { test, expect, _electron as electron, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -61,7 +62,7 @@ async function addNote(page:Page,client:string){
  await open(page,client);const timeline=page.locator('section').filter({has:page.getByRole('heading',{name:/^Jornada do cliente/})}).last();const opener=timeline.getByRole('button',{name:'Adicionar',exact:true});await opener.click();const dialog=page.getByRole('dialog',{name:'Adicionar nota',exact:true});await expect(dialog).toBeVisible();await expect(dialog.locator('#nota-titulo')).toBeFocused();await expect.poll(()=>dialog.evaluate(el=>Math.abs(el.getBoundingClientRect().width-(el as HTMLElement).offsetWidth))).toBeLessThan(.01);return {dialog,opener};
 }
 async function dateByKeyboard(page:Page,dialog:ReturnType<Page['locator']>){
- const trigger=dialog.getByRole('button',{name:'Data do evento',exact:true});await trigger.press('ArrowDown');const calendar=page.locator('.geo-note-calendar');await expect(calendar).toBeVisible();const cell=calendar.getByRole('gridcell',{name:'15 de outubro de 2026',exact:true});await cell.click();await trigger.press('ArrowDown');const active=calendar.locator('[role=gridcell][tabindex="0"]');await expect(active).toBeFocused();await active.press('ArrowRight');await page.keyboard.press('Enter');await expect(trigger).toContainText('16/10/2026');await expect(trigger).toBeFocused();return trigger;
+ const trigger=dialog.getByRole('button',{name:'Data do evento',exact:true});await trigger.press('ArrowDown');const calendar=page.locator('.geo-note-calendar');await expect(calendar).toBeVisible();await selectCalendarDate(calendar, '2026-10-15');await trigger.press('ArrowDown');const active=calendar.locator('[role=gridcell][tabindex="0"]');await expect(active).toBeFocused();await active.press('ArrowRight');await page.keyboard.press('Enter');await expect(trigger).toContainText('16/10/2026');await expect(trigger).toBeFocused();return trigger;
 }
 async function chooseCategory(page:Page,dialog:ReturnType<Page['locator']>,name:string){await dialog.getByRole('combobox',{name:'Categoria da nota',exact:true}).click();await page.getByRole('option',{name,exact:true}).click();}
 async function assertPanel(dialog:ReturnType<Page['locator']>){

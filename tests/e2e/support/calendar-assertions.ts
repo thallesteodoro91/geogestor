@@ -26,3 +26,26 @@ export async function expectCalendarCommands(popup: Locator) {
   const clear = popup.getByRole('button', { name: 'Limpar', exact: true });
   if (await clear.count()) await expectUnclipped(clear);
 }
+
+export async function selectCalendarDate(calendar: Locator, dateKey: string) {
+  const date = new Date(dateKey + 'T12:00:00');
+  const dayLabel = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+  const day = calendar.getByRole('gridcell', { name: dayLabel, exact: true });
+  await expect(calendar).toBeVisible();
+  if (!(await day.count())) {
+    const currentMonth = await calendar.getByRole('grid').getAttribute('aria-label');
+    const currentYear = Number(currentMonth?.slice(-4));
+    const targetYear = date.getFullYear();
+    expect(Number.isInteger(currentYear), 'Ano atual do calendário').toBe(true);
+    await calendar.getByRole('button', { name: currentMonth!, exact: true }).click();
+    const direction = targetYear > currentYear ? 1 : -1;
+    for (let year = currentYear; year !== targetYear;) {
+      year += direction;
+      await calendar.getByRole('button', { name: String(year), exact: true }).click();
+    }
+    const abbreviatedMonth = new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date).replace('.', '');
+    const month = abbreviatedMonth[0].toUpperCase() + abbreviatedMonth.slice(1);
+    await calendar.getByRole('button', { name: month, exact: true }).click();
+  }
+  await day.click();
+}

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -22,7 +23,7 @@ test('Projetos mantém resumo exclusivo, tipos consistentes e paginação estáv
     import('./services/runtime-migrations.service'),
     import('@geogestor/database')
   ]);
-  const request = (url: string) => server.inject({ method: 'GET', url, headers: { 'x-api-token': token } });
+  const request = (url: string) => injectWithRecordVersion(server, { method: 'GET', url, headers: { 'x-api-token': token } });
 
   try {
     await dbReady;

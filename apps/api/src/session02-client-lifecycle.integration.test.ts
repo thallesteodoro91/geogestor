@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('sessão 02 protege ciclo de vida, vínculos e histórico do cliente', asyn
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload
       ? { 'content-type': 'application/json', 'x-api-token': token }

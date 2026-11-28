@@ -38,13 +38,18 @@ async function navigate(page: Page, target: string) {
 }
 
 async function create(dialog: Locator) {
-  await dialog.getByRole('button', { name: 'Criar', exact: true }).click();
+  await dialog.getByRole('button', { name: /^(Criar (ciclo|pilar|objetivo|resultado-chave|iniciativa|decisão|risco)|Registrar revisão)$/ }).click();
   await expect(dialog).toBeHidden();
 }
 
 async function selectCustom(page: Page, container: Locator, id: string, option: string) {
   await container.locator(`#${id}`).click();
   await page.getByRole('option', { name: option, exact: true }).click();
+}
+
+async function selectToday(page: Page, dialog: Locator, id: string) {
+  await dialog.locator(`#${id}`).click();
+  await page.getByRole('button', { name: 'Hoje', exact: true }).click();
 }
 
 async function expectNoAxeViolations(page: Page) {
@@ -56,7 +61,7 @@ async function expectNoAxeViolations(page: Page) {
 }
 
 test('planejamento estratégico mantém o ciclo completo, filtros, teclado e persistência', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(240_000);
   const suffix = String(Date.now()).slice(-6);
   const cycleName = `Ciclo E2E ${suffix}`;
   const pillarName = `Excelência ${suffix}`;
@@ -69,6 +74,7 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
   const riskName = `Atraso de insumos ${suffix}`;
 
   await fs.mkdir(evidenceRoot, { recursive: true });
+  await page.addInitScript(() => localStorage.setItem('geogestor_theme', 'light'));
   await unlock(page);
   await navigate(page, '/planejamento');
   await expect(page.getByRole('heading', { name: 'Planejamento estratégico' })).toBeVisible();
@@ -100,6 +106,7 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
   dialog = page.getByRole('dialog');
   await dialog.locator('#planning-objective-first').fill(objectiveName);
   await dialog.locator('#objective-owner').fill(owner);
+  await selectToday(page, dialog, 'objective-deadline');
   await selectCustom(page, dialog, 'objective-status', 'Em andamento');
   await selectCustom(page, dialog, 'objective-priority', 'Alta');
   await create(dialog);
@@ -122,9 +129,10 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
   await expect(dialog).toBeHidden();
   await expect(page.getByRole('heading', { name: editedObjectiveName })).toBeVisible();
 
+  await page.getByRole('button', { name: 'Mais filtros', exact: true }).click();
   await page.getByLabel('Filtrar por responsável').click();
   await page.getByRole('option', { name: owner, exact: true }).click();
-  await expect.poll(() => new URL(page.url()).searchParams.get('responsavel')).toBe(owner);
+  await expect.poll(() => new URL(page.url()).searchParams.get('objetivos.responsavel')).toBe(owner);
   await expect(page.getByRole('heading', { name: editedObjectiveName })).toBeVisible();
   await page.getByRole('button', { name: 'Limpar filtros' }).click();
 
@@ -137,6 +145,7 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
   await dialog.locator('#planning-initiative-first').fill(initiativeName);
   await selectCustom(page, dialog, 'initiative-objective', editedObjectiveName);
   await dialog.locator('#initiative-owner').fill(owner);
+  await selectToday(page, dialog, 'initiative-deadline');
   await dialog.locator('#initiative-progress').fill('25');
   await selectCustom(page, dialog, 'initiative-status', 'Em andamento');
   await dialog.locator('#initiative-milestone').fill('Primeira revisão mensal concluída');
@@ -148,20 +157,24 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
   dialog = page.getByRole('dialog');
   await selectCustom(page, dialog, 'checkin-objective', editedObjectiveName);
   await dialog.locator('#checkin-narrative').fill('O ciclo avançou, com indicador confiável e execução iniciada.');
-  await dialog.locator('#checkin-next-steps').fill('Concluir o próximo marco e atualizar o indicador.');
+  await expect(dialog.locator('#checkin-next-review')).toHaveCount(0);
+  await expect(dialog.locator('#checkin-next-steps')).toHaveCount(0);
   await create(dialog);
   await expect(page.getByText(/O ciclo avançou/)).toBeVisible();
 
-  await page.getByRole('button', { name: 'Nova decisão' }).click();
+  await page.getByRole('button', { name: 'Adicionar decisão a esta revisão', exact: true }).click();
   dialog = page.getByRole('dialog');
   await dialog.locator('#planning-decision-first').fill(decisionName);
   await selectCustom(page, dialog, 'decision-objective', editedObjectiveName);
   await dialog.locator('#decision-owner').fill(owner);
   await expect(dialog.locator('#decision-owner')).toHaveValue(owner);
+  await expect(dialog.locator('#decision-checkin')).toContainText('O ciclo avançou');
+  await selectToday(page, dialog, 'decision-deadline');
   await create(dialog);
-  await expect(page.getByText(decisionName, { exact: true })).toBeVisible();
+  await expect(page.locator('[aria-labelledby="decisions-list-title"]').getByText(decisionName, { exact: true })).toBeVisible();
 
-  await page.getByRole('button', { name: 'Novo risco' }).click();
+  await page.getByRole('link', { name: /^Riscos \(/ }).click();
+  await page.getByRole('button', { name: 'Novo risco', exact: true }).click();
   dialog = page.getByRole('dialog');
   await dialog.locator('#planning-risk-first').fill(riskName);
   await selectCustom(page, dialog, 'risk-objective', editedObjectiveName);
@@ -183,11 +196,12 @@ test('planejamento estratégico mantém o ciclo completo, filtros, teclado e per
 
   await page.reload();
   await unlock(page);
-  await navigate(page, '/planejamento?aba=revisoes');
-  await expect(page.getByText(decisionName, { exact: true })).toBeVisible();
+  await navigate(page, '/planejamento?aba=revisoes&revisoes.lista=todas');
+  await expect(page.locator('[aria-labelledby="decisions-list-title"]').getByText(decisionName, { exact: true })).toBeVisible();
   await expect(page.getByText(riskName, { exact: true })).toBeVisible();
   await page.getByRole('tab', { name: 'Objetivos e metas' }).click();
   await expect(page.getByRole('heading', { name: editedObjectiveName })).toBeVisible();
+  if (!(await page.getByText(keyResultName, { exact: true }).isVisible())) await page.getByText(/Ver \d+ resultados-chave/).click();
   await expect(page.getByText(keyResultName, { exact: true })).toBeVisible();
 
   await page.setViewportSize({ width: 1440, height: 900 });

@@ -4,6 +4,7 @@ import { MotionConfig } from 'framer-motion';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthenticatedLayout } from './components/Layout';
 import { Toaster, toast } from 'sonner';
+import { RecordConflictDialog } from './components/RecordConflictDialog';
 import { APP_LEGACY_REDIRECTS, APP_ROUTES, resolveLegacyRedirect } from '@geogestor/contracts';
 
 // Converte alertas globais legados em notificações consistentes com o GeoGestor.
@@ -28,6 +29,7 @@ import { hydrateOperationalSettingsCache } from './services/operationalSettings'
 import { ApiAvailability } from './components/ApiAvailability';
 import { DesbloqueioLocal } from './pages/DesbloqueioLocal';
 import { AppSessionProvider, type AppIdentity } from './contexts/AppSessionContext';
+import { Relatorios } from './pages/Relatorios/Relatorios';
 import { scheduleCommonRoutePreload } from './utils/routePreloaders';
 import {
   initializeNavigationMetrics,
@@ -49,7 +51,6 @@ const Financeiro = lazy(() => import('./pages/Financeiro/Financeiro').then((modu
 const ImportacaoDados = lazy(() => import('./pages/Importacao/ImportacaoDados').then((module) => ({ default: module.ImportacaoDados })));
 const EsquemasImportacao = lazy(() => import('./pages/Importacao/EsquemasImportacao').then((module) => ({ default: module.EsquemasImportacao })));
 const Tarefas = lazy(() => import('./pages/Tarefas/Tarefas').then((module) => ({ default: module.Tarefas })));
-const Relatorios = lazy(() => import('./pages/Relatorios/Relatorios').then((module) => ({ default: module.Relatorios })));
 const CalculadoraTopografica = lazy(() => import('./pages/Topografia/CalculadoraTopografica').then((module) => ({ default: module.CalculadoraTopografica })));
 const Calendario = lazy(() => import('./pages/Calendario/Calendario').then((module) => ({ default: module.Calendario })));
 const CalendarioDetalhes = lazy(() => import('./pages/Calendario/CalendarioDetalhes').then((module) => ({ default: module.CalendarioDetalhes })));
@@ -159,9 +160,11 @@ function RouteTransition({ children }: { children: React.ReactNode }) {
   const { pathname } = useLocation();
 
   return (
-    <Suspense fallback={<RouteLoading pathname={pathname} />}>
-      <RouteReadyContent pathname={pathname}>{children}</RouteReadyContent>
-    </Suspense>
+    <ErrorBoundary key={pathname}>
+      <Suspense fallback={<RouteLoading pathname={pathname} />}>
+        <RouteReadyContent pathname={pathname}>{children}</RouteReadyContent>
+      </Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -437,6 +440,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <MotionConfig reducedMotion="user">
         <Toaster position="top-right" richColors closeButton />
+        <RecordConflictDialog />
         {shutdownProgress && (
           <div role="status" aria-live="assertive" className="fixed inset-0 z-[9999] flex items-center justify-center bg-zinc-950/70 p-6 backdrop-blur-sm">
             <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl dark:bg-zinc-900">

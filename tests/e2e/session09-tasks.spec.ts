@@ -76,7 +76,7 @@ async function ensureTasksJourneyFixture() {
   try {
     const existing = await database.execute({ sql: 'select id from projetos where id = ? limit 1', args: [ids.projects[0]] });
     if (existing.rows.length > 0) return;
-    const now = relativeInstant();
+    const now = relativeInstant(-1).replace('T', ' ').replace(/\.\d{3}Z$/, '');
     const volume = Array.from({ length: 101 }, (_, index) => ({
       id: index === 100 ? ids.secondPageTask : crypto.randomUUID(),
       title: `${PREFIX}Volume ${String(index).padStart(3, '0')}`,
@@ -172,28 +172,28 @@ test.describe('Sessão 09 — Agenda — Tarefas', () => {
     const auth = await unlock(page, '/tarefas');
     if (!auth) throw new Error('Credenciais isoladas da suíte ausentes.');
     const title = `${PREFIX}CRUD interface`;
-    await page.getByRole('button', { name: 'Nova Tarefa' }).click();
-    await page.getByLabel('Título da Tarefa').fill(`${PREFIX}Rascunho`);
+    await page.getByRole('button', { name: 'Nova tarefa' }).click();
+    await page.getByLabel('Título da tarefa').fill(`${PREFIX}Rascunho`);
     page.once('dialog', (dialog) => dialog.dismiss());
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Nova Tarefa' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Nova tarefa' })).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Nova Tarefa' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Nova tarefa' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Nova Tarefa' }).click();
-    await page.getByLabel('Título da Tarefa').fill(title);
+    await page.getByRole('button', { name: 'Nova tarefa' }).click();
+    await page.getByLabel('Título da tarefa').fill(title);
     await page.getByLabel('Projeto').click();
     await page.getByRole('option', { name: new RegExp(`${PREFIX}Projeto B`) }).click();
     await page.getByRole('combobox', { name: 'Prioridade', exact: true }).click();
     await page.getByRole('option', { name: 'Alta', exact: true }).click();
     await page.getByLabel('Descrição').fill('<script>inerte()</script> descrição com emoji 🧭');
-    await page.getByRole('button', { name: 'Criar Tarefa' }).click();
+    await page.getByRole('button', { name: 'Criar tarefa' }).click();
     await expect(page.getByText(title, { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: `Editar tarefa: ${title}` }).click();
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Editar Tarefa' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Editar tarefa' })).toHaveCount(0);
 
     await page.route(`**/api/tarefas/**`, async (route) => {
       if (route.request().method() === 'PATCH') await route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Falha controlada S09"}' });

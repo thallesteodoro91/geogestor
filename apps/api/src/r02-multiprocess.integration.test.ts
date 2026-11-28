@@ -8,6 +8,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { and, eq, isNull } from 'drizzle-orm';
 import { initDb, schema } from '@geogestor/database';
+import { mutationRecordPath } from '@geogestor/contracts/src/record-concurrency';
 
 const workspaceRoot = path.resolve(process.cwd());
 const testRoot = path.join(workspaceRoot, 'scratch', `run-r02-multiprocess-${process.pid}-${crypto.randomUUID()}`);
@@ -99,12 +100,18 @@ async function request(
   api: ApiProcess,
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   route: string,
-  body?: unknown
+  body?: unknown, extraHeaders: Record<string, string> = {}
 ) {
+  const recordPath = mutationRecordPath(route);
+  if (recordPath && ['PATCH', 'PUT', 'DELETE'].includes(method) && !extraHeaders['x-record-version']) {
+    const current = await request(api, 'GET', `/api/edicao/atual?path=${encodeURIComponent(recordPath)}`);
+    if (current.status === 200) extraHeaders = { ...extraHeaders, 'x-record-version': current.json<{ updatedAt: string }>().updatedAt };
+  }
   const response = await fetch(`http://127.0.0.1:${api.port}${route}`, {
     method,
     headers: {
       'x-api-token': apiToken,
+      ...extraHeaders,
       ...(body ? { 'content-type': 'application/json' } : {})
     },
     ...(body ? { body: JSON.stringify(body) } : {})
@@ -233,13 +240,14 @@ test('R02 preserva invariantes em dois processos sobre um SQLite descartável', 
       assert.equal(created.status, 201, created.text);
       const propertyId = created.json<{ id: string }>().id;
       policyPropertyId = propertyId;
+      const frozenToken = created.json<{ editToken: string }>().editToken;
       const candidates = ['Edição do processo A', 'Edição do processo B'];
       const attempts = await Promise.all([
-        request(firstApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { observacoes: candidates[0] }),
-        request(secondApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { observacoes: candidates[1] })
+        request(firstApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { observacoes: candidates[0] }, { 'if-match': frozenToken }),
+        request(secondApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { observacoes: candidates[1] }, { 'if-match': frozenToken })
       ]);
       assert.ok(attempts.every((attempt) => [200, 409].includes(attempt.status)), attempts.map((attempt) => attempt.text).join('\n'));
-      assert.ok(attempts.some((attempt) => attempt.status === 200));
+      assert.deepEqual(attempts.map((attempt) => attempt.status).sort(), [200, 409]);
       const finalState = await request(firstApi!, 'GET', `/api/dados-operacionais/propriedades/${propertyId}`);
       assert.equal(finalState.status, 200, finalState.text);
       assert.ok(candidates.includes(finalState.json<{ observacoes: string }>().observacoes));
@@ -256,8 +264,8 @@ test('R02 preserva invariantes em dois processos sobre um SQLite descartável', 
       assert.equal(created.status, 201, created.text);
       const propertyId = created.json<{ id: string }>().id;
       const attempts = await Promise.all([
-        request(firstApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { clienteId: clientB }),
-        request(secondApi!, 'DELETE', `/api/dados-operacionais/propriedades/${propertyId}`)
+        request(firstApi!, 'PATCH', `/api/dados-operacionais/propriedades/${propertyId}`, { clienteId: clientB }, { 'if-match': created.json<{ editToken: string }>().editToken }),
+        request(secondApi!, 'DELETE', `/api/dados-operacionais/propriedades/${propertyId}`, undefined, { 'if-match': created.json<{ editToken: string }>().editToken })
       ]);
       assert.ok([200, 404, 409].includes(attempts[0].status), attempts[0].text);
       assert.ok([204, 404, 409].includes(attempts[1].status), attempts[1].text);

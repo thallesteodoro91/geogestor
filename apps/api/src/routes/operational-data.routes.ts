@@ -25,6 +25,7 @@ import { db, dbPath } from '../db';
 import { AuditLogService } from '../services/audit.service';
 import { OperationalLogService } from '../services/operational-log.service';
 import { withSqliteBusyRetry } from '../services/sqlite-concurrency.service';
+import { editToken, unchangedRow, nextEditTime, editConflict } from '../services/edit-concurrency.service';
 import {
   RelationshipIntegrityError,
   assertActiveClient,
@@ -68,7 +69,8 @@ const operationalSettingKeys = new Set([
   'geogestor_alerta_dias'
 ]);
 const OperationalSettingsBody = z.object({
-  values: z.record(z.string(), z.unknown()).refine((value) => Object.keys(value).length > 0, 'Informe ao menos uma configuração.')
+  values: z.record(z.string(), z.unknown()).refine((value) => Object.keys(value).length > 0, 'Informe ao menos uma configuração.'),
+  expectedValues: z.record(z.string(), z.unknown()).optional()
 }).strict();
 
 function validateOperationalSetting(key: string, value: unknown) {
@@ -221,7 +223,7 @@ export async function operationalDataRoutes(server: FastifyInstance) {
       db.select({ total: sql<number>`CAST(COUNT(*) AS INTEGER)` }).from(schema.propriedades).where(where)
     ]);
     return {
-      items: items.map((item) => ({ ...item.property, clienteNome: item.clienteNome })),
+      items: items.map((item) => ({ ...item.property, clienteNome: item.clienteNome, editToken: editToken(item.property) })),
       total: Number(count?.total || 0),
       page: request.query.page,
       limit: request.query.limit
@@ -273,7 +275,7 @@ export async function operationalDataRoutes(server: FastifyInstance) {
       .where(and(eq(schema.propriedades.id, request.params.id), isNull(schema.propriedades.deletedAt)))
       .limit(1);
     if (!item) return reply.status(404).send({ error: 'Propriedade não encontrada.' });
-    return { ...item.property, clienteNome: item.clienteNome };
+    return { ...item.property, clienteNome: item.clienteNome, editToken: editToken(item.property) };
   });
 
   zServer.post('/propriedades', { schema: { body: PropertyPayloadSchema } }, async (request, reply) => {
@@ -281,7 +283,7 @@ export async function operationalDataRoutes(server: FastifyInstance) {
     return withSqliteBusyRetry(async () => {
       const [alreadyCreated] = await db.select().from(schema.propriedades)
         .where(eq(schema.propriedades.id, propertyId)).limit(1);
-      if (alreadyCreated) return reply.status(201).send(alreadyCreated);
+      if (alreadyCreated) return reply.status(201).send({ ...alreadyCreated, editToken: editToken(alreadyCreated) });
       await assertActiveClient(request.body.clienteId);
       const duplicate = await findPropertyDuplicate(request.body);
       if (duplicate) return reply.status(409).send({ error: duplicate });
@@ -295,7 +297,7 @@ export async function operationalDataRoutes(server: FastifyInstance) {
           await AuditLogService.log('INSERT', 'Propriedade', null, rows[0], tx);
           return rows;
         });
-        return reply.status(201).send(created);
+        return reply.status(201).send({ ...created, editToken: editToken(created) });
       } catch (error) {
         if (isPropertyUniquenessConflict(error)) return reply.status(409).send({ error: 'Já existe uma propriedade com o mesmo nome ou identificador.' });
         throw error;
@@ -310,7 +312,8 @@ export async function operationalDataRoutes(server: FastifyInstance) {
       const [current] = await db.select().from(schema.propriedades).where(and(
         eq(schema.propriedades.id, request.params.id), isNull(schema.propriedades.deletedAt)
       )).limit(1);
-      if (!current) return reply.status(404).send({ error: 'Propriedade não encontrada.' });
+      if (!current) return reply.status(request.headers['if-match'] ? 409 : 404).send(editConflict);
+      if (request.headers['if-match'] !== editToken(current)) return reply.status(409).send(editConflict);
       const parsed = PropertyPayloadSchema.safeParse({ ...propertyPayloadFromRow(current), ...request.body });
       if (!parsed.success) return reply.status(400).send({ error: parsed.error.issues[0]?.message || 'Revise os dados da propriedade.' });
       const nextProperty = parsed.data;
@@ -327,12 +330,14 @@ export async function operationalDataRoutes(server: FastifyInstance) {
           const rows = await tx.update(schema.propriedades).set({
             ...nextProperty,
             ...normalizedPropertyFields(nextProperty),
-            updatedAt: new Date().toISOString()
-          }).where(eq(schema.propriedades.id, current.id)).returning();
+            updatedAt: nextEditTime(current.updatedAt)
+          }).where(unchangedRow(schema.propriedades, current)).returning();
+          if (!rows[0]) return [];
           await AuditLogService.log('UPDATE', 'Propriedade', current, rows[0], tx);
           return rows;
         });
-        return updated;
+        if (!updated) return reply.status(409).send(editConflict);
+        return { ...updated, editToken: editToken(updated) };
       } catch (error) {
         if (isPropertyUniquenessConflict(error)) return reply.status(409).send({ error: 'Já existe uma propriedade com o mesmo nome ou identificador.' });
         throw error;
@@ -347,14 +352,18 @@ export async function operationalDataRoutes(server: FastifyInstance) {
       const [current] = await db.select().from(schema.propriedades).where(and(
         eq(schema.propriedades.id, request.params.id), isNull(schema.propriedades.deletedAt)
       )).limit(1);
-      if (!current) return reply.status(404).send({ error: 'Propriedade não encontrada.' });
+      if (!current) return reply.status(request.headers['if-match'] ? 409 : 404).send(editConflict);
+      if (request.headers['if-match'] !== editToken(current)) return reply.status(409).send(editConflict);
       const links = await propertyHasLinks(request.params.id);
       if (links.length) return reply.status(409).send({ error: propertyLinkMessage(links, 'ser excluída') });
-      await db.transaction(async (tx) => {
-        await tx.update(schema.propriedades).set({ deletedAt: new Date().toISOString() })
-          .where(eq(schema.propriedades.id, request.params.id));
+      const deleted = await db.transaction(async (tx) => {
+        const rows = await tx.update(schema.propriedades).set({ deletedAt: new Date().toISOString(), updatedAt: nextEditTime(current.updatedAt) })
+          .where(unchangedRow(schema.propriedades, current)).returning();
+        if (!rows.length) return false;
         await AuditLogService.log('DELETE (SOFT)', 'Propriedade', current, null, tx);
+        return true;
       });
+      if (!deleted) return reply.status(409).send(editConflict);
       return reply.status(204).send();
     });
   });
@@ -381,7 +390,7 @@ export async function operationalDataRoutes(server: FastifyInstance) {
       if (validationError) return reply.status(400).send({ error: validationError });
     }
     const timestamp = new Date().toISOString();
-    await withSqliteBusyRetry(async () => {
+    try { await withSqliteBusyRetry(async () => {
       const client = createClient(databaseClientConfig(dbPath));
       try {
         await client.execute('PRAGMA foreign_keys = ON;');
@@ -389,7 +398,13 @@ export async function operationalDataRoutes(server: FastifyInstance) {
         const transactionDb = drizzle(client, { schema });
         await transactionDb.transaction(async (tx) => {
           for (const [key, value] of Object.entries(request.body.values)) {
-            await tx.insert(schema.configuracoesOperacionais).values({
+            const [current] = await tx.select().from(schema.configuracoesOperacionais).where(eq(schema.configuracoesOperacionais.chave, key)).limit(1);
+            const expected = request.body.expectedValues;
+            if (expected && (!(key in expected) || JSON.stringify(expected[key]) !== (current && !current.deletedAt ? current.valorJson : 'null'))) {
+              throw new Error('EDIT_CONFLICT');
+            }
+            if (!expected && current && !current.deletedAt && (key === SERVICE_CATALOG_KEY || key === EXPENSE_CATALOG_KEY)) throw new Error('EDIT_CONFLICT');
+            const rows = await tx.insert(schema.configuracoesOperacionais).values({
               id: crypto.randomUUID(),
               chave: key,
               valorJson: JSON.stringify(value),
@@ -397,14 +412,19 @@ export async function operationalDataRoutes(server: FastifyInstance) {
               updatedAt: timestamp
             }).onConflictDoUpdate({
               target: schema.configuracoesOperacionais.chave,
-              set: { valorJson: JSON.stringify(value), origem: 'aplicacao', updatedAt: timestamp, deletedAt: null }
-            });
+              set: { valorJson: JSON.stringify(value), origem: 'aplicacao', updatedAt: timestamp, deletedAt: null },
+              setWhere: current ? unchangedRow(schema.configuracoesOperacionais, current) : sql`0`
+            }).returning();
+            if (!rows.length) throw new Error('EDIT_CONFLICT');
           }
         });
       } finally {
         client.close();
       }
-    });
+    }); } catch (error) {
+      if (error instanceof Error && error.message === 'EDIT_CONFLICT') return reply.status(409).send(editConflict);
+      throw error;
+    }
     return { updated: Object.keys(request.body.values), updatedAt: timestamp };
   });
 

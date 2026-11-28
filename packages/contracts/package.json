@@ -10,6 +10,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/pdfmake": "0.3.3",
     "typescript": "^5.5.3"
   }
 }

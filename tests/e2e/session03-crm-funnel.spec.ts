@@ -23,7 +23,7 @@ function dateLabel(offsetDays: number) {
 
 async function selectDate(page: Page, trigger: Locator, offsetDays: number) {
   await trigger.click();
-  const target = page.getByRole('gridcell', { name: dateLabel(offsetDays) });
+  const target = page.getByRole('gridcell', { name: dateLabel(offsetDays), exact: true });
   for (let attempts = 0; attempts < 14 && !await target.isVisible(); attempts += 1) {
     const direction = dateKey(offsetDays).localeCompare(dateKey(0));
     await page.getByRole('button', { name: direction >= 0 ? /próximo mês/i : /mês anterior/i }).click();
@@ -245,8 +245,8 @@ test.describe('Sessão 03 — Comercial — CRM e Funil', () => {
     const consoleErrors: string[] = [];
     page.on('console', message => { if (message.type() === 'error') consoleErrors.push(message.text()); });
     const auth = await unlock(page, '/crm?view=funil');
-    await expect(page.getByText(`${PREFIX}Prospectado Atrasado`, { exact: true })).toBeVisible();
-    await expect(page.getByText(`${PREFIX}Ganho`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Prospectado Atrasado`, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Ganho`, exact: true })).toBeVisible();
     await page.screenshot({ path: path.join(evidenceRoot, '05-funil-completo.png'), fullPage: true });
     await expectNoAxeViolations(page);
 
@@ -264,12 +264,12 @@ test.describe('Sessão 03 — Comercial — CRM e Funil', () => {
     await selectDate(page, createDialog.getByLabel('Data da próxima ação'), 2);
     await createDialog.getByLabel('Observações').fill('<img src=x onerror=alert(1)> Conteúdo comercial válido com acentuação.');
     await createDialog.getByRole('button', { name: 'Salvar oportunidade' }).click();
-    await expect(page.getByText(`${PREFIX}Oportunidade Interface`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Oportunidade Interface`, exact: true })).toBeVisible();
 
     const search = page.getByRole('searchbox', { name: 'Buscar oportunidades' });
     await search.fill('Proposta Futura');
-    await expect(page.getByText(`${PREFIX}Proposta Futura`, { exact: true })).toBeVisible();
-    await expect(page.getByText(`${PREFIX}Contato Hoje`, { exact: true })).toBeHidden();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Proposta Futura`, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Contato Hoje`, exact: true })).toBeHidden();
     await expect(page).toHaveURL(/q=Proposta(?:\+|%20)Futura/);
     await page.getByRole('button', { name: 'Filtros' }).click();
     await selectCombobox(page, page.getByLabel('Filtrar por responsável'), 'Thalles QA');
@@ -330,10 +330,10 @@ test.describe('Sessão 03 — Comercial — CRM e Funil', () => {
     await page.getByRole('button', { name: `Excluir ${PREFIX}Oportunidade Interface` }).click();
     const deleteDialog = page.getByRole('alertdialog', { name: 'Excluir oportunidade' });
     await deleteDialog.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.getByText(`${PREFIX}Oportunidade Interface`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Oportunidade Interface`, exact: true })).toBeVisible();
     await page.getByRole('button', { name: `Excluir ${PREFIX}Oportunidade Interface` }).click();
     await deleteDialog.getByRole('button', { name: 'Excluir oportunidade' }).click();
-    await expect(page.getByText(`${PREFIX}Oportunidade Interface`, { exact: true })).toBeHidden();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Oportunidade Interface`, exact: true })).toBeHidden();
     await page.screenshot({ path: path.join(evidenceRoot, '07-funil-apos-transicoes-exclusao.png'), fullPage: true });
 
     await page.getByRole('link', { name: 'Indicadores' }).click();
@@ -370,7 +370,7 @@ test.describe('Sessão 03 — Comercial — CRM e Funil', () => {
     await expect(page.getByText('Falha controlada S03')).toBeVisible();
     await page.unroute('**/api/oportunidades');
     await page.getByRole('button', { name: 'Tentar novamente' }).click();
-    await expect(page.getByText(`${PREFIX}Proposta Futura`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: `${PREFIX}Proposta Futura`, exact: true })).toBeVisible();
     expect(consoleErrors.filter(message => !message.includes('500'))).toEqual([]);
   });
 });

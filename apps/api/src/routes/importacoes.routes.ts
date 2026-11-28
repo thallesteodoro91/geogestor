@@ -10,6 +10,8 @@ import {
   importErrorsCsv,
   ImportRunError,
   listImportRows,
+  importRowsPage,
+  previewIssuesPage,
   listImportRuns,
   queueConfirmedPreview,
   recoverInterruptedImportRuns,
@@ -135,7 +137,13 @@ export async function importacoesRoutes(server: FastifyInstance) {
         blocking: preview.counts.blocking,
         warnings: preview.counts.warnings
       });
-      return { ...preview, importId: registration.previewId, ...registration };
+      const issuesPaged = preview.issues.length > 100;
+      const issueTotals = {
+        blocking: preview.issues.filter(issue => issue.severity === 'blocking').length,
+        general: preview.issues.filter(issue => issue.row === null && ['warning', 'ambiguous'].includes(issue.severity)).length,
+        row: preview.issues.filter(issue => issue.row !== null && !['info', 'blocking'].includes(issue.severity)).length
+      };
+      return { ...preview, issues: issuesPaged ? [] : preview.issues, issuesPaged, issueTotals, importId: registration.previewId, ...registration };
     } catch (error) {
       await OperationalLogService.error('spreadsheet-import-preview-failed', {
         operationId: crypto.randomUUID(), importType: 'complete',
@@ -185,8 +193,14 @@ export async function importacoesRoutes(server: FastifyInstance) {
   server.get('/:id/linhas', async (request, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
     if (!await getImportRun(id)) return reply.status(404).send({ error: 'Importação não encontrada.' });
-    const query = z.object({ errorsOnly: z.coerce.boolean().default(false) }).parse(request.query);
-    return { items: await listImportRows(id, query.errorsOnly) };
+    const query = z.object({ errorsOnly: z.enum(['true', 'false']).default('false'), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }).parse(request.query);
+    return importRowsPage(id, query.errorsOnly === 'true', query.page, query.limit);
+  });
+
+  server.get('/:id/pendencias', async (request) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(request.params);
+    const query = z.object({ kind: z.enum(['blocking', 'general', 'row']), page: z.coerce.number().int().min(1).default(1), limit: z.coerce.number().int().min(1).max(100).default(50) }).parse(request.query);
+    return previewIssuesPage(id, query.kind, query.page, query.limit);
   });
 
   server.get('/:id/erros.csv', async (request, reply) => {

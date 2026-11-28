@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -20,7 +21,7 @@ async function removeDatabase() {
 
 function syntheticInput(hashSeed: string, clientName = 'Cliente Migração Segura') {
   const headers = [
-    'Cliente', 'CNPJ', 'Telefone', 'Data_Cadastro', 'Nome da Propriedade', 'Cidade', 'Área_ha',
+    'Cliente', 'CNPJ', 'Telefone', 'Tipo de Cliente', 'Data_Cadastro', 'Nome da Propriedade', 'Cidade', 'Área_ha',
     'CAR', 'CCIR', 'ITR', 'Projeto', 'Categoria do Projeto', 'Situação do Serviço',
     'Data do Serviço (Início)', 'Data do Serviço (Fim)', 'Valor Unitário', 'Quantidade',
     'Receita Esperada', 'Valor Imposto', 'Receita Esperada + Imposto', 'Lucro Esperado',
@@ -37,6 +38,7 @@ function syntheticInput(hashSeed: string, clientName = 'Cliente Migração Segur
       Cliente: clientName,
       CNPJ: '45.723.174/0001-10',
       Telefone: '+55 (48) 99999-0000',
+      'Tipo de Cliente': 'Governo',
       Data_Cadastro: 43831,
       'Nome da Propriedade': 'Fazenda Modelo',
       Cidade: 'Florianópolis',
@@ -256,6 +258,8 @@ test('migração completa sintética grava vínculos, concilia, evita reimporta�
     const [client] = await db.select().from(schema.clientes).where(eq(schema.clientes.nome, 'Cliente Migração Segura'));
     assert.equal(client.telefone, '48999990000');
     assert.equal(client.tipoPessoa, 'PJ');
+    assert.equal(client.categoria, 'Entidade Pública');
+    assert.equal(client.categoriaLegada, 'Governo');
     const [property] = await db.select().from(schema.propriedades).where(eq(schema.propriedades.clienteId, client.id));
     assert.equal(property.car, null, 'Indicador Sim não pode virar número de CAR');
     const [project] = await db.select().from(schema.projetos).where(eq(schema.projetos.clienteId, client.id));
@@ -280,7 +284,7 @@ test('migração completa sintética grava vínculos, concilia, evita reimporta�
       id: crypto.randomUUID(), grupoId: crypto.randomUUID(), clienteId: client.id, projetoId: project.id,
       valorTotal: 10_000 + index, status: 'aprovado', descricao: `Orçamento de paginação ${index + 1}`
     })));
-    const budgetPage = await server.inject({
+    const budgetPage = await injectWithRecordVersion(server, {
       method: 'GET', url: '/api/financeiro/orcamentos?mode=page&page=1&limit=100',
       headers: { 'x-api-token': 'full-import-test-token' }
     });
@@ -289,7 +293,7 @@ test('migração completa sintética grava vínculos, concilia, evita reimporta�
     assert.equal(budgetPayload.items.length, 100);
     assert.equal(budgetPayload.total, 121 + realImportedBudgets);
     assert.equal(budgetPayload.totalPages, 2);
-    const projectPage = await server.inject({
+    const projectPage = await injectWithRecordVersion(server, {
       method: 'GET', url: '/api/projetos?mode=page&page=1&limit=48',
       headers: { 'x-api-token': 'full-import-test-token' }
     });

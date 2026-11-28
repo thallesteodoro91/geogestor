@@ -1,4 +1,4 @@
-import type { ManagerialReport, ReportFinancialComparison } from '@geogestor/contracts';
+import type { ManagerialReport, ReportAlert, ReportFinancialComparison } from '@geogestor/contracts';
 
 export type ReportType = 'financeiro' | 'projetos' | 'executivo';
 export const REPORT_TYPES: ReportType[] = ['financeiro', 'projetos', 'executivo'];
@@ -89,17 +89,49 @@ export function canonicalReportSearch(search: string) {
 
 export function executiveSummary(report: ManagerialReport) {
   const { financial, operational } = report;
-  const result = financial.kpis.cashResult;
-  const cashMessage = result > 0
-    ? `O caixa encerrou o período positivo em ${formatCurrency(result)}.`
-    : result < 0
-      ? `O caixa encerrou o período negativo em ${formatCurrency(Math.abs(result))}.`
-      : 'Entradas e saídas de caixa ficaram equilibradas no período.';
+  const cashMessage = executiveCashCopy(report);
   const deliveryMessage = operational.kpis.overdueProjects > 0
-    ? `${operational.kpis.overdueProjects} projeto(s) ativo(s) estão com prazo vencido.`
+    ? `${operational.kpis.overdueProjects} ${operational.kpis.overdueProjects === 1 ? "projeto ativo está" : "projetos ativos estão"} com prazo vencido.`
     : 'Não há projetos ativos com prazo vencido no recorte.';
   const receivablesMessage = financial.kpis.overdueRevenue > 0
     ? `A carteira vencida soma ${formatCurrency(financial.kpis.overdueRevenue)}.`
     : 'Não há recebíveis vencidos no recorte.';
   return [cashMessage, receivablesMessage, deliveryMessage];
+}
+
+// Presentation only: preserve the service's amounts, classifications and dates.
+export function executiveCashCopy(report: ManagerialReport) {
+  const { cashResult, receivedRevenue, paidExpenses } = report.financial.kpis;
+  const composition = report.financial.composition;
+  const hasMovement = receivedRevenue !== 0 || paidExpenses !== 0
+    || Boolean(composition && (composition.receivedEventCount > 0 || composition.paidExpenseCount > 0));
+  if (!hasMovement && cashResult === 0) return 'Sem movimentação financeira no período.';
+  if (cashResult === 0) return 'Entradas e saídas de caixa ficaram equilibradas no período.';
+  return `O resultado de caixa foi ${cashResult > 0 ? 'positivo' : 'negativo'} em ${formatCurrency(Math.abs(cashResult))}.`;
+}
+
+export function executiveAlerts(report: ManagerialReport): ReportAlert[] {
+  const rank = { critical: 0, warning: 1, info: 2 };
+  return [...report.financial.alerts, ...report.operational.alerts]
+    .map((alert, index) => ({ alert, index }))
+    .sort((a, b) => rank[a.alert.severity] - rank[b.alert.severity] || a.index - b.index)
+    .map(({ alert }) => alert);
+}
+
+export function executiveAlertAction(alert: ReportAlert) {
+  switch (alert.code) {
+    case 'overdue_revenue': return 'Consultar recebíveis';
+    case 'negative_cash': return 'Consultar financeiro';
+    case 'low_conversion': return 'Consultar orçamentos';
+    case 'overdue_projects': return 'Ver projetos';
+    case 'unknown_area': return 'Consultar áreas dos projetos';
+    default: return 'Consultar registros';
+  }
+}
+
+export function executiveCriteria(report: ManagerialReport) {
+  return [report.period.rules.receivedRevenue, report.period.rules.paidExpenses,
+    report.period.rules.projects, report.period.rules.activeArea,
+    `Prazos vencidos e próximos 30 dias: referência na data de geração, ${formatGeneratedAt(report.generatedAt)}.`,
+    'Os próximos prazos consideram os projetos pertencentes ao recorte selecionado.'];
 }

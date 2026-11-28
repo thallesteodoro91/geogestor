@@ -1,0 +1,65 @@
+/* Expense form only. Runtime GeoGestor tokens remain canonical. */
+.geo-expense-dialog .geo-field {
+  background-color: var(--geo-field-bg, hsl(var(--brand-surface-subtle)));
+  border-color: var(--geo-field-border, color-mix(in srgb, hsl(var(--brand-border-strong)) 75%, hsl(var(--text-primary))));
+}
+.geo-expense-dialog .geo-field::placeholder {
+  color: var(--geo-field-placeholder, hsl(var(--text-muted)));
+  opacity: 1;
+}
+.geo-expense-dialog .geo-field:hover:not(:disabled) {
+  border-color: var(--geo-field-hover-border, hsl(var(--text-muted)));
+}
+.geo-expense-dialog .geo-field:focus-visible {
+  border-color: var(--geo-field-focus, hsl(var(--brand-focus-ring)));
+}
+.geo-expense-dialog .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-500));
+}
+.dark .geo-expense-dialog .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-400));
+}
+.geo-expense-dialog form {
+  --expense-nav-height: 112px;
+}
+.geo-expense-dialog section,
+.geo-expense-dialog input,
+.geo-expense-dialog textarea,
+.geo-expense-dialog button[aria-haspopup] {
+  scroll-margin-top: calc(var(--expense-nav-height) + 12px);
+  scroll-margin-bottom: 16px;
+}
+.geo-expense-calendar {
+  overflow-y: auto;
+}
+.geo-expense-options {
+  display: flex;
+  flex-direction: column;
+}
+.geo-expense-options .geo-option-list {
+  min-height: 0;
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+@media (max-height: 550px) {
+  .geo-expense-dialog {
+    padding: 1rem;
+  }
+  .geo-expense-dialog > div:first-child {
+    margin-bottom: .5rem;
+  }
+  .geo-expense-dialog > div:last-child {
+    margin-top: .5rem;
+    padding-top: .5rem;
+  }
+  .geo-expense-dialog nav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-padding-inline: .25rem;
+  }
+  .geo-expense-dialog nav button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}

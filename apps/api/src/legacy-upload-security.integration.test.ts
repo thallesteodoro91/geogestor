@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -25,7 +26,7 @@ test('upload Base64 legado aplica schema, limites, MIME, nome seguro e aviso de 
   try {
     await dbReady;
     await runRuntimeMigrations();
-    const setup = await server.inject({
+    const setup = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/configuracoes',
       headers,
@@ -41,7 +42,7 @@ test('upload Base64 legado aplica schema, limites, MIME, nome seguro e aviso de 
     await db.insert(schema.clientes).values({ id: 'cliente-upload', nome: 'Cliente Upload' });
 
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
-    const accepted = await server.inject({
+    const accepted = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/arquivos/upload',
       headers,
@@ -65,7 +66,7 @@ test('upload Base64 legado aplica schema, limites, MIME, nome seguro e aviso de 
       { fileName: 'falso.pdf', fileContent: png.toString('base64'), mimeType: 'application/pdf' }
     ];
     for (const invalid of invalidCases) {
-      const response = await server.inject({
+      const response = await injectWithRecordVersion(server, {
         method: 'POST',
         url: '/api/arquivos/upload',
         headers,

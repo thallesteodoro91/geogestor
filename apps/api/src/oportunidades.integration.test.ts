@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -37,7 +38,7 @@ test('funil mantém estágios, histórico, métricas, orçamento e projeto consi
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     url: string;
     payload?: Record<string, unknown> | Array<Record<string, unknown>>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });

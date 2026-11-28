@@ -177,7 +177,7 @@ test.describe('relatórios gerenciais', () => {
 
     await page.getByRole('tab', { name: 'Executivo' }).click();
     await expect(page.locator('#report-panel')).toHaveAttribute('data-report-type', 'executivo');
-    await expect(page.getByRole('heading', { name: 'O que merece sua atenção neste período' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Próximas ações' })).toBeVisible();
     await expect(page.getByText('Recebimentos vencidos exigem atenção', { exact: true })).toBeVisible();
 
     await page.getByRole('button', { name: 'Pré-visualização do documento' }).click();

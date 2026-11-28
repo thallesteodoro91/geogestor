@@ -8,13 +8,14 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation, useListUrlState } from '../../hooks/useListPageNavigation';
 import { Modal } from '../../components/Modal';
 import { PageHeader } from '../../components/PageHeader';
 import { motion } from 'framer-motion';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckboxField, DatePickerField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
-import { apiFetch, apiClient, type PaginatedResponse } from '../../services/apiClient';
+import { CheckboxField, DatePickerField, FormSection, FormSelect, NumericInput } from '../../components/Form';
+import { apiFetch, apiClient, ApiError, type PaginatedResponse } from '../../services/apiClient';
 import { notifications } from '../../services/notifications';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { useAuxiliaryCatalogs } from '../../hooks/useAuxiliaryCatalogs';
@@ -37,9 +38,27 @@ import {
   geoPurpleValueClass
 } from '../../utils/geoTheme';
 import { formatDateKey, localDateKey } from '../../utils/localDate';
+import { geoFieldClass } from '../../utils/geoTheme';
+import { FinanceDueWidget } from '../Financeiro/FinanceDueWidget';
+import './expense-modal.css';
 
 const TIPOS_CUSTO = ['Fixo', 'Variável de campo', 'Cartório e taxas', 'Tributário', 'Operacional', 'Reembolsável'];
 const CENTROS_CUSTO = ['Administrativo', 'Campo', 'Cartório', 'Tributos', 'Software', 'Equipamentos', 'Serviços'];
+const expenseSections = [
+  ['expense-identification', 'Dados principais'],
+  ['expense-links', 'Vínculos'],
+  ['expense-classification', 'Classificação'],
+  ['expense-payment', 'Pagamento'],
+  ['expense-notes', 'Observações']
+] as const;
+
+const expenseFieldClass = cn(geoFieldClass, 'h-11 w-full min-w-0 px-3 text-sm font-medium');
+const expenseLabelClass = 'mb-1.5 block text-sm font-semibold text-zinc-800 dark:text-zinc-200';
+const expenseHelpClass = 'mt-1.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-300';
+const optionalLabel = <span className="font-normal text-zinc-500 dark:text-zinc-400"> — opcional</span>;
+const expenseSelectProps = { density: 'form', wrapperClassName: 'w-full min-w-0', matchTriggerWidth: true, popoverMaxWidth: 1024, popoverClassName: 'geo-expense-options' } as const;
+type ExpenseRequiredField = 'descricao' | 'valor' | 'data';
+type ExpenseSectionId = (typeof expenseSections)[number][0];
 
 export interface DespesaItem {
   id: string;
@@ -140,10 +159,18 @@ export function Despesas({
   onFocusHandled?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const listUrl = useListUrlState();
+  const expenseFormId = useId();
+  const expenseHintId = useId();
+  const expenseSubmitLock = useRef(false);
+  const [expenseSubmitError, setExpenseSubmitError] = useState('');
   const catalogsQuery = useAuxiliaryCatalogs();
   const [showModal, setShowModal] = useState(openCreateOnMount);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [initialFormFingerprint, setInitialFormFingerprint] = useState(() => openCreateOnMount ? newExpenseFingerprint(initialProjectId) : '');
+  const [formErrors, setFormErrors] = useState<Partial<Record<ExpenseRequiredField, string>>>({});
+  const [activeExpenseSection, setActiveExpenseSection] = useState<ExpenseSectionId>('expense-identification');
+  const expenseNavRef = useRef<HTMLElement>(null);
   const [selectedDespesa, setSelectedDespesa] = useState<DespesaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DespesaItem | null>(null);
   const [financialAction, setFinancialAction] = useState<{ type: 'cancelamento' | 'estorno'; item: DespesaItem } | null>(null);
@@ -171,18 +198,27 @@ export function Despesas({
   const [observacoes, setObservacoes] = useState('');
   const [status, setStatus] = useState('Pendente');
   const [formaPagamento, setFormaPagamento] = useState('Pix');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [categoriaFilter, setCategoriaFilter] = useState('Todos');
-  const [subcategoriaFilter, setSubcategoriaFilter] = useState('Todos');
-  const [statusFilter, setStatusFilter] = useState('Todos');
-  const [tipoCustoFilter, setTipoCustoFilter] = useState('Todos');
-  const [centroCustoFilter, setCentroCustoFilter] = useState('Todos');
-  const [reembolsavelFilter, setReembolsavelFilter] = useState('Todos');
-  const [dataInicioFilter, setDataInicioFilter] = useState('');
-  const [dataFimFilter, setDataFimFilter] = useState('');
+  const searchTerm = listUrl.params.get('pagarBusca') || '';
+  const setSearchTerm = (value: string) => listUrl.update({ pagarBusca: value === '' ? null : value, pagarPagina: null });
+  const categoriaFilter = listUrl.params.get('pagarCategoria') || 'Todos';
+  const setCategoriaFilter = (value: string) => listUrl.update({ pagarCategoria: value === 'Todos' ? null : value, pagarPagina: null });
+  const subcategoriaFilter = listUrl.params.get('pagarSubcategoria') || 'Todos';
+  const setSubcategoriaFilter = (value: string) => listUrl.update({ pagarSubcategoria: value === 'Todos' ? null : value, pagarPagina: null });
+  const statusFilter = listUrl.params.get('pagarSituacao') || 'Todos';
+  const setStatusFilter = (value: string) => listUrl.update({ pagarSituacao: value === 'Todos' ? null : value, pagarPagina: null });
+  const tipoCustoFilter = listUrl.params.get('pagarTipo') || 'Todos';
+  const setTipoCustoFilter = (value: string) => listUrl.update({ pagarTipo: value === 'Todos' ? null : value, pagarPagina: null });
+  const centroCustoFilter = listUrl.params.get('pagarCentro') || 'Todos';
+  const setCentroCustoFilter = (value: string) => listUrl.update({ pagarCentro: value === 'Todos' ? null : value, pagarPagina: null });
+  const reembolsavelFilter = listUrl.params.get('pagarReembolso') || 'Todos';
+  const setReembolsavelFilter = (value: string) => listUrl.update({ pagarReembolso: value === 'Todos' ? null : value, pagarPagina: null });
+  const dataInicioFilter = listUrl.params.get('pagarInicio') || '';
+  const setDataInicioFilter = (value: string) => listUrl.update({ pagarInicio: value === '' ? null : value, pagarPagina: null });
+  const dataFimFilter = listUrl.params.get('pagarFim') || '';
+  const setDataFimFilter = (value: string) => listUrl.update({ pagarFim: value === '' ? null : value, pagarPagina: null });
   const expenseFilterKey = [searchTerm, categoriaFilter, subcategoriaFilter, statusFilter, tipoCustoFilter, centroCustoFilter, reembolsavelFilter, dataInicioFilter, dataFimFilter].join('\u001f');
-  const [expensePagination, setExpensePagination] = useState({ filterKey: '', page: 1 });
-  const page = expensePagination.filterKey === expenseFilterKey ? expensePagination.page : 1;
+  const requestedPage = Number(listUrl.params.get('pagarPagina') || 1);
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
 
   // Queries
   const expenseQueryString = useMemo(() => {
@@ -202,11 +238,14 @@ export function Despesas({
     }
     return params.toString();
   }, [categoriaFilter, centroCustoFilter, dataFimFilter, dataInicioFilter, focusDespesaId, page, reembolsavelFilter, searchTerm, statusFilter, subcategoriaFilter, tipoCustoFilter]);
-  const { data: expensePage, isLoading: despesasLoading, isError: despesasFailed, refetch: refetchDespesas } = useQuery<ExpensePage>({
+  const { data: expensePage, isLoading: despesasLoading, isError: despesasFailed, refetch: refetchDespesas, isFetching: fetchingExpenses, isPlaceholderData: placeholderExpenses } = useQuery<ExpensePage>({
     queryKey: ['despesas', expenseQueryString],
     queryFn: () => apiClient.get<ExpensePage>(`/api/financeiro/despesas?${expenseQueryString}`),
     placeholderData: (previous) => previous
   });
+  const { preparePage, adjustPage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: expensePage?.page, ready: !fetchingExpenses && !placeholderExpenses, failed: despesasFailed, scope: expenseFilterKey });
+  const changePage = (next: number) => { preparePage(next); listUrl.update({ pagarPagina: next <= 1 ? null : String(next) }); };
+  useEffect(() => { if (!expensePage || fetchingExpenses || placeholderExpenses || despesasFailed || page <= expensePage.totalPages) return; adjustPage(expensePage.totalPages); listUrl.update({ pagarPagina: expensePage.totalPages <= 1 ? null : String(expensePage.totalPages) }); }, [expensePage, fetchingExpenses, placeholderExpenses, despesasFailed, page, listUrl.update]);
   const despesas = useMemo(() => expensePage?.items ?? [], [expensePage?.items]);
 
   const { data: viagens = [], isLoading: viagensLoading } = useQuery<ViagemMin[]>({
@@ -295,6 +334,12 @@ export function Despesas({
   }, [hasUnsavedExpense]);
 
   const filteredDespesas = despesas;
+  const today = localDateKey();
+  const priorityExpense = !loading && !despesasFailed && !placeholderExpenses
+    ? filteredDespesas
+        .filter(item => item.data && !item.dataPagamento && !item.canceladaEm && !item.estornadaEm && (item.status || '').toLowerCase() !== 'pago')
+        .sort((left, right) => left.data.localeCompare(right.data))[0]
+    : undefined;
   const hasExpenseFilters = Boolean(
     searchTerm ||
     categoriaFilter !== 'Todos' ||
@@ -349,8 +394,8 @@ export function Despesas({
 
   const submitMutation = useMutation({
     mutationFn: async (payload: Omit<DespesaItem, 'id'>) => {
-      const url = selectedDespesa 
-        ? `/api/financeiro/despesas/${selectedDespesa.id}` 
+      const url = selectedDespesa
+        ? `/api/financeiro/despesas/${selectedDespesa.id}`
         : '/api/financeiro/despesas';
       const method = selectedDespesa ? 'PATCH' : 'POST';
       const res = await apiFetch(url, {
@@ -360,7 +405,7 @@ export function Despesas({
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
-        throw new Error(errorData?.error || 'Erro ao salvar despesa');
+        throw new ApiError(errorData?.error || 'Erro ao salvar despesa', res.status);
       }
       return res.json();
     },
@@ -368,16 +413,24 @@ export function Despesas({
       setShowModal(false);
       setInitialFormFingerprint('');
       invalidateFinancialQueries(queryClient);
+      notifications.success(selectedDespesa ? 'Despesa salva.' : 'Despesa cadastrada.');
     },
     onError: (err) => {
-      notifications.error(err instanceof Error ? err.message : 'Erro ao salvar despesa.');
-    }
+      if (!(err instanceof ApiError) || err.status === 0) {
+        setExpenseSubmitError('Não foi possível confirmar o salvamento. Confira a lista de despesas antes de tentar novamente para evitar um registro duplicado.');
+      } else {
+        const detail = err.status === 400 || err.status === 409 ? `${err.message} ` : '';
+        setExpenseSubmitError(`${detail}Não foi possível salvar a despesa. Revise os dados e tente novamente.`);
+      }
+    },
+    onSettled: () => { expenseSubmitLock.current = false; }
   });
 
   // Actions
   const handledExpenseIdRef = useRef<string | null>(null);
 
   const openCreateModal = (preferredProjectId = initialProjectId) => {
+    setExpenseSubmitError('');
     const today = localDateKey();
     const initialValues = {
       projetoId: preferredProjectId,
@@ -401,6 +454,7 @@ export function Despesas({
       formaPagamento: 'Pix'
     };
     setSelectedDespesa(null);
+    setFormErrors({});
     setProjetoId(preferredProjectId);
     setClienteId('');
     setClienteNome('');
@@ -426,6 +480,7 @@ export function Despesas({
   };
 
   const openEditModal = useCallback((desp: DespesaItem) => {
+    setExpenseSubmitError('');
     const initialValues = {
       projetoId: desp.projetoId || '',
       clienteId: desp.projetoId ? '' : desp.clienteId || '',
@@ -448,6 +503,7 @@ export function Despesas({
       formaPagamento: desp.formaPagamento || 'Pix'
     };
     setSelectedDespesa(desp);
+    setFormErrors({});
     setProjetoId(desp.projetoId || '');
     setClienteId(desp.clienteId || '');
     setClienteNome(desp.clienteNome || '');
@@ -491,10 +547,11 @@ export function Despesas({
   const closeExpenseModal = () => {
     setShowModal(false);
     setInitialFormFingerprint('');
+    setFormErrors({});
   };
 
   const requestCloseExpenseModal = () => {
-    if (submitMutation.isPending) return;
+    if (expenseSubmitLock.current || submitMutation.isPending) return;
     if (hasUnsavedExpense) {
       setShowDiscardDialog(true);
       return;
@@ -502,12 +559,58 @@ export function Despesas({
     closeExpenseModal();
   };
 
+  const clearFormError = (field: ExpenseRequiredField) => {
+    setFormErrors((current) => current[field] ? { ...current, [field]: undefined } : current);
+  };
+
+  const jumpToExpenseSection = (sectionId: string) => {
+    setActiveExpenseSection(sectionId as ExpenseSectionId);
+    const heading = document.querySelector<HTMLElement>(`#${sectionId} h3`);
+    heading?.setAttribute('tabindex', '-1');
+    heading?.focus({ preventScroll: true });
+    document.getElementById(sectionId)?.scrollIntoView({ block: 'start', behavior: 'auto' });
+  };
+
+  useEffect(() => {
+    if (!showModal) return;
+    const nav = expenseNavRef.current;
+    const scroller = nav?.closest('form')?.parentElement;
+    if (!nav || !scroller) return;
+
+    const updateActiveSection = () => {
+      const navBounds = nav.getBoundingClientRect();
+      const form = nav.closest('form');
+      const navHeight = `${Math.ceil(navBounds.height)}px`;
+      if (form?.style.getPropertyValue('--expense-nav-height') !== navHeight) form?.style.setProperty('--expense-nav-height', navHeight);
+      const marker = navBounds.bottom + 72;
+      const atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 8;
+      let current: ExpenseSectionId = expenseSections[0][0];
+      for (const [sectionId] of expenseSections) {
+        const section = document.getElementById(sectionId);
+        if (section && section.getBoundingClientRect().top <= marker) current = sectionId;
+      }
+      if (atBottom) current = expenseSections[expenseSections.length - 1][0];
+      setActiveExpenseSection((previous) => previous === current ? previous : current);
+    };
+
+    const frame = window.requestAnimationFrame(updateActiveSection);
+    scroller.addEventListener('scroll', updateActiveSection, { passive: true });
+    window.addEventListener('resize', updateActiveSection);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      scroller.removeEventListener('scroll', updateActiveSection);
+      window.removeEventListener('resize', updateActiveSection);
+    };
+  }, [showModal, formErrors]);
+
   const handleDelete = (id: string) => {
     setDeleteTarget(despesas.find((despesa) => despesa.id === id) ?? null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (expenseSubmitLock.current || submitMutation.isPending) return;
+    setExpenseSubmitError('');
     const payload = {
       clienteId: effectiveExpenseClientId || null,
       projetoId: projetoId || null,
@@ -532,17 +635,30 @@ export function Despesas({
 
     // Validation
     const schema = z.object({
-      descricao: z.string().min(1, 'Descrição é obrigatória'),
+      descricao: z.string().trim().min(1, 'Descrição é obrigatória'),
       valor: z.number().min(1, 'Valor inválido'),
       data: z.string().min(1, 'Selecione uma data')
     });
 
     const validation = schema.safeParse(payload);
     if (!validation.success) {
-      notifications.warning(validation.error.issues[0].message);
+      const errors: Partial<Record<ExpenseRequiredField, string>> = {};
+      for (const issue of validation.error.issues) {
+        const field = issue.path[0];
+        if ((field === 'descricao' || field === 'valor' || field === 'data') && !errors[field]) errors[field] = issue.message;
+      }
+      setFormErrors(errors);
+      const firstField = validation.error.issues[0]?.path[0];
+      if (firstField === 'descricao' || firstField === 'valor' || firstField === 'data') {
+        const firstId = firstField === 'descricao' ? 'despesa-desc' : `despesa-${firstField}`;
+        window.requestAnimationFrame(() => document.getElementById(firstId)?.focus());
+      }
+      notifications.warning('Revise os campos obrigatórios destacados.');
       return;
     }
 
+    setFormErrors({});
+    expenseSubmitLock.current = true;
     submitMutation.mutate(payload);
   };
 
@@ -551,7 +667,7 @@ export function Despesas({
   };
 
   const getStatusColor = (status: string) => {
-    return status === 'Pago' 
+    return status === 'Pago'
       ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10'
       : 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10';
   };
@@ -560,10 +676,11 @@ export function Despesas({
     <PageFrame embedded={embedded}>
       <PageHeader
         title="Contas a pagar"
+        headingLevel={embedded ? 2 : 1}
         description="Controle de despesas, custos operacionais e reembolsos vinculados."
         className={embedded ? 'mb-8' : 'mb-12'}
         action={(
-          <button type="button" onClick={() => openCreateModal()} className={cn(primarySubmitButtonClass, 'w-full sm:w-auto')}>
+          <button id={`${expenseFormId}-create`} type="button" onClick={() => openCreateModal()} className={cn(primarySubmitButtonClass, 'w-full sm:w-auto')}>
             <Plus aria-hidden="true" className="h-4 w-4" weight="bold" />
             Nova despesa
           </button>
@@ -681,12 +798,22 @@ export function Despesas({
             </button>
           )}
         </div>
-        <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-          {filteredDespesas.length} de {expensePage?.total ?? 0} despesa(s) exibidas
+        <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+          {filteredDespesas.length} de {expensePage?.total ?? 0} despesa(s) exibidas · Página {expensePage?.page ?? page} de {expensePage?.totalPages ?? 1} · Intervalo {filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredDespesas.length ? ((expensePage?.page ?? page) - 1) * 25 + filteredDespesas.length : 0}
         </p>
       </div>
 
       <div className="space-y-4">
+        {priorityExpense && (
+          <FinanceDueWidget
+            label={priorityExpense.data.slice(0, 10) < today ? 'Despesa vencida' : 'Próxima despesa'}
+            amount={priorityExpense.valor}
+            date={priorityExpense.data}
+            title={priorityExpense.descricao}
+            actionLabel="Ver despesa"
+            onOpen={() => openEditModal(priorityExpense)}
+          />
+        )}
         {loading ? (
           <div className="py-24 flex justify-center">
             <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-8 h-8 rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 animate-spin" />
@@ -712,13 +839,13 @@ export function Despesas({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Data</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Descrição</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Categoria</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Projeto</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Status</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400">Valor</th>
-                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-zinc-400 text-right">Ações</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Data</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Descrição</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Categoria</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Projeto</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Status</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary">Valor</th>
+                  <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-text-secondary text-right">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -764,6 +891,7 @@ export function Despesas({
                           {!desp.canceladaEm && !desp.estornadaEm && (
                             <>
                               <button
+                                id={`${expenseFormId}-edit-${desp.id}`}
                                 onClick={() => openEditModal(desp)}
                                 className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/60 flex items-center justify-center text-indigo-600 dark:text-indigo-300 hover:bg-indigo-100 transition-[background-color,color,border-color,transform] shadow-sm"
                                 title="Editar despesa"
@@ -821,165 +949,177 @@ export function Despesas({
             </table>
             {(expensePage?.totalPages ?? 1) > 1 && (
               <nav aria-label="Paginação de despesas" className="flex items-center justify-between border-t border-zinc-100 px-6 py-4 text-xs dark:border-zinc-800">
-                <button type="button" disabled={page <= 1} onClick={() => setExpensePagination({ filterKey: expenseFilterKey, page: Math.max(1, page - 1) })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+                <button type="button" disabled={page <= 1} onClick={() => changePage(Math.max(1, page - 1))} className={secondarySmallActionButtonClass}>Anterior</button>
                 <span className="font-mono tabular-nums">Página {page} de {expensePage?.totalPages}</span>
-                <button type="button" disabled={page >= (expensePage?.totalPages ?? 1)} onClick={() => setExpensePagination({ filterKey: expenseFilterKey, page: page + 1 })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima</button>
+                <button type="button" disabled={page >= (expensePage?.totalPages ?? 1)} onClick={() => changePage(page + 1)} className={secondarySmallActionButtonClass}>Próxima</button>
               </nav>
             )}
           </div>
         )}
       </div>
 
-      {/* Modal structure */}
       <Modal
         isOpen={showModal}
         onClose={requestCloseExpenseModal}
         closeDisabled={submitMutation.isPending}
-        title={selectedDespesa ? 'Editar Despesa' : 'Nova Despesa'}
-        maxWidth="max-w-5xl"
+        title={selectedDespesa ? 'Editar despesa' : 'Nova despesa'}
+        maxWidth="max-w-4xl"
+        panelClassName="geo-expense-dialog"
+        initialFocusId="despesa-desc"
+        initialFocusPreventScroll
+        returnFocusSelector={`[id="${expenseFormId}-${selectedDespesa ? `edit-${selectedDespesa.id}` : 'create'}"]`}
+        ariaDescribedBy={expenseHintId}
+        footer={<div className="space-y-3">
+          {expenseSubmitError && <p role="alert" className="break-words text-sm font-medium text-red-700 dark:text-red-300">{expenseSubmitError}</p>}
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-2 sm:flex sm:justify-end sm:gap-3">
+            <button type="button" disabled={submitMutation.isPending} onClick={requestCloseExpenseModal} className={cn(secondarySmallActionButtonClass, 'h-12 min-w-0 justify-center px-3 py-0 text-sm sm:w-32')}>Cancelar</button>
+            <button type="submit" form={expenseFormId} disabled={submitMutation.isPending} aria-busy={submitMutation.isPending} className={cn(primarySubmitButtonClass, 'h-12 min-w-0 px-3 py-0 sm:w-52')}>
+              <span aria-live="polite">{submitMutation.isPending ? 'Salvando…' : selectedDespesa ? 'Salvar despesa' : 'Cadastrar despesa'}</span>
+            </button>
+          </div>
+        </div>}
       >
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <FormSection sectionId="expense-identification" title="Identificação e documento" description="Descreva a despesa e registre o fornecedor ou comprovante relacionado." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo">
-            <div>
-              <label htmlFor="despesa-desc" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Descrição *</label>
-              <input id="despesa-desc" name="descricao" type="text" required autoComplete="off" value={descricao} onChange={e => setDescricao(e.target.value)} placeholder="Ex.: Combustível para viagem de campo" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
-            </div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <form id={expenseFormId} onSubmit={handleSubmit} className="space-y-4" noValidate>
+          <p id={expenseHintId} className="text-xs text-zinc-600 dark:text-zinc-300">Campos com * são obrigatórios. Os demais são opcionais.</p>
+          <nav ref={expenseNavRef} aria-label="Seções da despesa" className="sticky top-0 z-20 flex flex-wrap gap-1 rounded-lg border border-brand-border bg-brand-surface p-1">
+            {expenseSections.map(([sectionId, label]) => {
+              const errorCount = sectionId === 'expense-identification' ? Object.values(formErrors).filter(Boolean).length : 0;
+              return <button key={sectionId} type="button" disabled={submitMutation.isPending} aria-controls={sectionId} aria-current={activeExpenseSection === sectionId ? 'location' : undefined}
+                aria-label={errorCount ? `${label}, ${errorCount} ${errorCount === 1 ? 'erro' : 'erros'}` : label}
+                onClick={() => jumpToExpenseSection(sectionId)}
+                className={cn('geo-focus-ring flex min-h-11 min-w-0 items-center gap-1.5 rounded-md px-2.5 py-2 text-xs font-semibold transition-[background-color,color,box-shadow] hover:bg-brand-surface-subtle hover:text-zinc-950 disabled:opacity-60 dark:hover:text-white', activeExpenseSection === sectionId ? 'bg-brand-surface-subtle text-zinc-950 shadow-sm ring-1 ring-brand-border dark:text-white' : 'text-zinc-600 dark:text-zinc-300')}>
+                {label}{errorCount > 0 && <span aria-hidden="true" className="flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold leading-none text-white">{errorCount}</span>}
+              </button>;
+            })}
+          </nav>
+          <fieldset disabled={submitMutation.isPending} className="min-w-0 space-y-4">
+            <FormSection sectionId="expense-identification" headingLevel={3} title="Dados principais" icon={<CurrencyDollar className="h-5 w-5" weight="duotone" />} tone="indigo">
               <div>
-                <label htmlFor="despesa-fornecedor" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Fornecedor</label>
-                <input id="despesa-fornecedor" name="fornecedor" type="text" autoComplete="organization" value={fornecedor} onChange={e => setFornecedor(e.target.value)} placeholder="Cartório, prefeitura, posto…" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+                <label htmlFor="despesa-desc" className={expenseLabelClass}>Descrição <span aria-hidden="true">*</span></label>
+                <input id="despesa-desc" name="descricao" type="text" required autoComplete="off" value={descricao} onChange={e => { setDescricao(e.target.value); clearFormError('descricao'); }} aria-invalid={Boolean(formErrors.descricao)} aria-describedby={formErrors.descricao ? 'despesa-desc-error' : undefined} placeholder="Ex.: Combustível para visita de campo" className={expenseFieldClass} />
+                {formErrors.descricao && <p id="despesa-desc-error" role="alert" className="mt-1.5 text-sm text-red-700 dark:text-red-300">{formErrors.descricao}</p>}
               </div>
-              <div>
-                <label htmlFor="despesa-numero-documento" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Documento / comprovante</label>
-                <input id="despesa-numero-documento" name="numeroDocumento" type="text" autoComplete="off" spellCheck={false} value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} placeholder="NF, recibo, guia ou protocolo" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="despesa-valor" className={expenseLabelClass}>Valor (R$) <span aria-hidden="true">*</span></label>
+                  <NumericInput id="despesa-valor" name="valor" inputMode="decimal" step="0.01" required autoComplete="off" value={valor} onChange={e => { setValor(e.target.value); clearFormError('valor'); }} aria-invalid={Boolean(formErrors.valor)} aria-describedby={formErrors.valor ? 'despesa-valor-error' : undefined} placeholder="0,00" wrapperClassName="max-w-[18rem]" className={cn(expenseFieldClass, 'tabular-nums')} />
+                  {formErrors.valor && <p id="despesa-valor-error" role="alert" className="mt-1.5 text-sm text-red-700 dark:text-red-300">{formErrors.valor}</p>}
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-data" className={expenseLabelClass}>Vencimento <span aria-hidden="true">*</span></label>
+                  <DatePickerField id="despesa-data" name="data" required value={data} onChange={e => { setData(e.target.value); clearFormError('data'); }} aria-invalid={Boolean(formErrors.data)} aria-describedby={formErrors.data ? 'despesa-data-help despesa-data-error' : 'despesa-data-help'} className={expenseFieldClass} popoverClassName="geo-expense-calendar" />
+                  <p id="despesa-data-help" className={expenseHelpClass}>Data usada para acompanhar o vencimento e calcular atrasos.</p>
+                  {formErrors.data && <p id="despesa-data-error" role="alert" className="mt-1.5 text-sm text-red-700 dark:text-red-300">{formErrors.data}</p>}
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-competencia" className={expenseLabelClass}>Competência{optionalLabel}</label>
+                  <DatePickerField id="despesa-competencia" name="dataCompetencia" value={dataCompetencia} onChange={e => setDataCompetencia(e.target.value)} aria-describedby="despesa-competencia-help" className={expenseFieldClass} popoverClassName="geo-expense-calendar" />
+                  <p id="despesa-competencia-help" className={expenseHelpClass}>Data de referência da despesa, independente do pagamento. Se não informada, será usado o vencimento.</p>
+                </div>
               </div>
-              <div className="md:col-span-2">
-                <label htmlFor="despesa-comprovante-vinculado" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Arquivo de comprovante vinculado</label>
-                <FormSelect
-                  id="despesa-comprovante-vinculado"
-                  name="comprovanteDocumentoId"
-                  value={comprovanteDocumentoId}
-                  onChange={(event) => setComprovanteDocumentoId(event.target.value)}
-                  disabled={!projetoId}
-                  className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
-                >
-                  <option value="">{projetoId ? 'Nenhum arquivo vinculado' : 'Selecione primeiro um projeto'}</option>
-                  {comprovantes.map((documento) => (
-                    <option key={documento.id} value={documento.id}>
-                      {documento.projetoId ? 'Projeto' : 'Cliente'} — {documento.nome}
-                    </option>
-                  ))}
-                </FormSelect>
-                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">O arquivo permanece em sua pasta original e apenas o vínculo é registrado.</p>
-              </div>
-            </div>
-          </FormSection>
+            </FormSection>
 
-          <FormSection sectionId="expense-value-dates" title="Valor e datas" description="Informe o valor, a competência e as datas efetivas da despesa." icon={<CurrencyDollar className="h-5 w-5" weight="duotone" />} tone="indigo">
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label htmlFor="despesa-valor" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Valor (R$) *</label>
-                <NumericInput id="despesa-valor" name="valor" inputMode="decimal" step="0.01" required autoComplete="off" value={valor} onChange={e => setValor(e.target.value)} placeholder="0,00" className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium tabular-nums text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
+            <FormSection sectionId="expense-links" headingLevel={3} title="Vínculos e comprovante" icon={<FolderSimple className="h-5 w-5" weight="duotone" />} tone="indigo" optional>
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="despesa-cliente" className={expenseLabelClass}>Cliente</label>
+                  <RemoteCombobox<ClienteMin> id="despesa-cliente" name="clienteId" endpoint="/api/clientes/options" fill inModal density="form" className={expenseFieldClass} value={effectiveExpenseClientId || ''} selectedLabel={effectiveExpenseClientName || ''} disabled={Boolean(projetoId) || submitMutation.isPending} aria-describedby="despesa-cliente-help" onChange={(nextClientId, option) => { setClienteId(nextClientId); setClienteNome(option?.nome || ''); }} emptyLabel="Administrativo / sem cliente" placeholder="Pesquisar cliente…" listLabel="Clientes da despesa" />
+                  <p id="despesa-cliente-help" className={expenseHelpClass}>{projetoId ? 'Definido automaticamente pelo projeto selecionado.' : 'Pode ficar sem vínculo em despesas administrativas ou gerais.'}</p>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-projeto" className={expenseLabelClass}>Projeto</label>
+                  <RemoteCombobox<ProjetoMin> id="despesa-projeto" name="projetoId" endpoint="/api/projetos/options" fill inModal density="form" className={expenseFieldClass} disabled={submitMutation.isPending} value={projetoId} onChange={(nextProjectId, option) => {
+                    if (comprovanteDocumentoId) notifications.info('O comprovante foi desvinculado porque o projeto mudou. Selecione um arquivo compatível.');
+                    setProjetoId(nextProjectId); setComprovanteDocumentoId(''); setViagemId('');
+                    if (option?.clienteId) { setClienteId(option.clienteId); setClienteNome(option.clienteNome || ''); }
+                  }} emptyLabel="Nenhum" placeholder="Pesquisar projeto…" listLabel="Projetos da despesa" />
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-fornecedor" className={expenseLabelClass}>Fornecedor</label>
+                  <input id="despesa-fornecedor" name="fornecedor" type="text" autoComplete="organization" value={fornecedor} onChange={e => setFornecedor(e.target.value)} placeholder="Ex.: Posto ou cartório" className={expenseFieldClass} />
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-numero-documento" className={expenseLabelClass}>Número do documento</label>
+                  <input id="despesa-numero-documento" name="numeroDocumento" type="text" autoComplete="off" spellCheck={false} value={numeroDocumento} onChange={e => setNumeroDocumento(e.target.value)} placeholder="Ex.: NF 1234 ou recibo 56" className={expenseFieldClass} />
+                </div>
+                <div className="min-w-0 md:col-span-2">
+                  <label htmlFor="despesa-comprovante-vinculado" className={expenseLabelClass}>Arquivo de comprovante</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-comprovante-vinculado" name="comprovanteDocumentoId" value={comprovanteDocumentoId} onChange={e => setComprovanteDocumentoId(e.target.value)} disabled={!projetoId || submitMutation.isPending} aria-describedby="despesa-comprovante-help" className={expenseFieldClass}>
+                    <option value="">{projetoId ? 'Nenhum arquivo vinculado' : 'Selecione primeiro um projeto'}</option>
+                    {comprovantes.map(documento => <option key={documento.id} value={documento.id}>{documento.projetoId ? 'Projeto' : 'Cliente'} — {documento.nome}</option>)}
+                  </FormSelect>
+                  <p id="despesa-comprovante-help" className={expenseHelpClass}>{!projetoId ? 'Selecione um projeto para consultar os comprovantes compatíveis. ' : ''}O arquivo permanece em sua pasta original; apenas o vínculo é registrado.</p>
+                </div>
+                <div className="min-w-0 md:col-span-2">
+                  <label htmlFor="despesa-viagem" className={expenseLabelClass}>Viagem / prestação de contas</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-viagem" name="viagemId" value={viagemId} onChange={e => setViagemId(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}>
+                    <option value="">Nenhuma</option>
+                    {viagens.filter(viagem => viagem.status !== 'encerrada' && (!projetoId || !viagem.projetoId || viagem.projetoId === projetoId)).map(viagem => <option key={viagem.id} value={viagem.id}>{viagem.finalidade} · {viagem.destino}</option>)}
+                  </FormSelect>
+                </div>
               </div>
-              <div>
-                <label htmlFor="despesa-data" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Data *</label>
-                <DatePickerField id="despesa-data" name="data" required autoComplete="off" value={data} onChange={e => setData(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
-              </div>
-              <div>
-                <label htmlFor="despesa-competencia" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Competência</label>
-                <DatePickerField id="despesa-competencia" name="dataCompetencia" autoComplete="off" value={dataCompetencia} onChange={e => setDataCompetencia(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
-              </div>
-              <div>
-                <label htmlFor="despesa-data-pagamento" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Data de pagamento</label>
-                <DatePickerField id="despesa-data-pagamento" name="dataPagamento" autoComplete="off" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
-              </div>
-            </div>
-          </FormSection>
+            </FormSection>
 
-          <FormSection sectionId="expense-classification" title="Classificação e vínculo" description="Associe a despesa ao projeto e à estrutura gerencial correta." icon={<FolderSimple className="h-5 w-5" weight="duotone" />} tone="indigo">
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label htmlFor="despesa-categoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Categoria</label>
-                <FormSelect id="despesa-categoria" name="categoria" value={categoria} onChange={e => { setCategoria(e.target.value); setSubcategoria(''); }} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{formExpenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+            <FormSection sectionId="expense-classification" headingLevel={3} title="Classificação" icon={<Tag className="h-5 w-5" weight="duotone" />} tone="indigo">
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="despesa-categoria" className={expenseLabelClass}>Categoria <span aria-hidden="true">*</span></label>
+                  <FormSelect {...expenseSelectProps} id="despesa-categoria" name="categoria" required value={categoria} onChange={e => { setCategoria(e.target.value); setSubcategoria(''); }} disabled={submitMutation.isPending} className={expenseFieldClass}>{formExpenseCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}</FormSelect>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-subcategoria" className={expenseLabelClass}>Subcategoria{optionalLabel}</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-subcategoria" name="subcategoria" value={subcategoria} onChange={e => setSubcategoria(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}>
+                    <option value="">Sem subcategoria</option>{formExpenseSubcategories.map(value => <option key={value} value={value}>{value}</option>)}
+                  </FormSelect>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-tipo-custo" className={expenseLabelClass}>Tipo de custo{optionalLabel}</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-tipo-custo" name="tipoCusto" value={tipoCusto} onChange={e => setTipoCusto(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}>{TIPOS_CUSTO.map(tipo => <option key={tipo} value={tipo}>{tipo}</option>)}</FormSelect>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-centro-custo" className={expenseLabelClass}>Centro de custo{optionalLabel}</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-centro-custo" name="centroCusto" value={centroCusto} onChange={e => setCentroCusto(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}>{CENTROS_CUSTO.map(centro => <option key={centro} value={centro}>{centro}</option>)}</FormSelect>
+                </div>
               </div>
-              <div>
-                <label htmlFor="despesa-subcategoria" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Subcategoria</label>
-                <FormSelect id="despesa-subcategoria" name="subcategoria" value={subcategoria} onChange={e => setSubcategoria(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                  <option value="">Sem subcategoria</option>
-                  {formExpenseSubcategories.map((value) => <option key={value} value={value}>{value}</option>)}
-                </FormSelect>
-              </div>
-              <div>
-                <label htmlFor="despesa-cliente" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Cliente vinculado</label>
-                <RemoteCombobox<ClienteMin> id="despesa-cliente" name="clienteId" endpoint="/api/clientes/options" value={effectiveExpenseClientId || ''} selectedLabel={effectiveExpenseClientName || ''} disabled={Boolean(projetoId)} onChange={(nextClientId, option) => { setClienteId(nextClientId); setClienteNome(option?.nome || ''); }} emptyLabel="Administrativo / sem cliente" placeholder="Pesquisar cliente…" />
-                <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{projetoId ? 'Definido automaticamente pelo projeto selecionado.' : 'Opcional para despesas administrativas ou gerais.'}</p>
-              </div>
-              <div>
-                <label htmlFor="despesa-projeto" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Projeto vinculado</label>
-                <RemoteCombobox<ProjetoMin> id="despesa-projeto" name="projetoId" endpoint="/api/projetos/options" value={projetoId} onChange={(nextProjectId, option) => {
-                  if (comprovanteDocumentoId) notifications.info('O comprovante foi desvinculado porque o projeto mudou. Selecione um arquivo compatível.');
-                  setProjetoId(nextProjectId);
-                  setComprovanteDocumentoId('');
-                  setViagemId('');
-                  if (option?.clienteId) {
-                    setClienteId(option.clienteId);
-                    setClienteNome(option.clienteNome || '');
-                  }
-                }} emptyLabel="Nenhum" placeholder="Pesquisar projeto…" />
-              </div>
-              <div>
-                <label htmlFor="despesa-viagem" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Viagem / prestação de contas</label>
-                <FormSelect id="despesa-viagem" name="viagemId" value={viagemId} onChange={e => setViagemId(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                  <option value="">Nenhuma</option>
-                  {viagens
-                    .filter((viagem) => viagem.status !== 'encerrada' && (!projetoId || !viagem.projetoId || viagem.projetoId === projetoId))
-                    .map((viagem) => <option key={viagem.id} value={viagem.id}>{viagem.finalidade} · {viagem.destino}</option>)}
-                </FormSelect>
-              </div>
-              <div>
-                <label htmlFor="despesa-tipo-custo" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Tipo de custo</label>
-                <FormSelect id="despesa-tipo-custo" name="tipoCusto" value={tipoCusto} onChange={e => setTipoCusto(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{TIPOS_CUSTO.map((tipo) => <option key={tipo} value={tipo}>{tipo}</option>)}</FormSelect>
-              </div>
-              <div>
-                <label htmlFor="despesa-centro-custo" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Centro de custo</label>
-                <FormSelect id="despesa-centro-custo" name="centroCusto" value={centroCusto} onChange={e => setCentroCusto(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">{CENTROS_CUSTO.map((centro) => <option key={centro} value={centro}>{centro}</option>)}</FormSelect>
-              </div>
-            </div>
-          </FormSection>
+            </FormSection>
 
-          <FormSection sectionId="expense-payment" title="Pagamento e reembolso" description="Controle a situação financeira e se o valor será reembolsado pelo cliente." icon={<Tag className="h-5 w-5" weight="duotone" />} tone="indigo">
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label htmlFor="despesa-status" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Status do pagamento</label>
-                <FormSelect id="despesa-status" name="status" value={status} onChange={e => setStatus(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="Pendente">Pendente</option><option value="Pago">Pago</option><option value="Atrasado">Atrasado</option></FormSelect>
+            <FormSection sectionId="expense-payment" headingLevel={3} title="Pagamento e reembolso" icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo" optional>
+              <div className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="despesa-status" className={expenseLabelClass}>Situação do pagamento</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-status" name="status" value={status} onChange={e => setStatus(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}><option value="Pendente">Pendente</option><option value="Pago">Pago</option><option value="Atrasado">Atrasado</option></FormSelect>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-forma" className={expenseLabelClass}>Forma de pagamento</label>
+                  <FormSelect {...expenseSelectProps} id="despesa-forma" name="formaPagamento" value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} disabled={submitMutation.isPending} className={expenseFieldClass}><option value="Pix">Pix</option><option value="Dinheiro">Dinheiro</option><option value="Cartão de Crédito">Cartão de crédito</option><option value="Boleto">Boleto</option><option value="Transferência">Transferência bancária</option></FormSelect>
+                </div>
+                <div className="min-w-0">
+                  <label htmlFor="despesa-data-pagamento" className={expenseLabelClass}>Data de pagamento</label>
+                  <DatePickerField id="despesa-data-pagamento" name="dataPagamento" value={dataPagamento} onChange={e => setDataPagamento(e.target.value)} aria-describedby="despesa-pagamento-help" className={expenseFieldClass} popoverClassName="geo-expense-calendar" />
+                </div>
+                <p id="despesa-pagamento-help" className={cn(expenseHelpClass, 'self-center')}>Informe a data efetiva somente para despesas com situação Pago. Na criação, se estiver como Pago e sem data informada, o serviço registra a data atual.</p>
               </div>
-              <div>
-                <label htmlFor="despesa-forma" className="mb-2 block text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Forma de pagamento</label>
-                <FormSelect id="despesa-forma" name="formaPagamento" value={formaPagamento} onChange={e => setFormaPagamento(e.target.value)} className="w-full appearance-none rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"><option value="Pix">Pix</option><option value="Dinheiro">Dinheiro</option><option value="Cartão de Crédito">Cartão de crédito</option><option value="Boleto">Boleto</option><option value="Transferência">Transferência bancária</option></FormSelect>
-              </div>
-            </div>
-            <CheckboxField id="despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={reembolsavel} onChange={setReembolsavel} className="rounded-xl border border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200" />
-          </FormSection>
+              <CheckboxField id="despesa-reembolsavel" label="Despesa reembolsável pelo cliente" checked={reembolsavel} onChange={setReembolsavel} className="rounded-lg border border-brand-border bg-brand-surface-subtle p-3 text-zinc-800 dark:text-zinc-200" />
+            </FormSection>
 
-          <FormSection sectionId="expense-notes" title="Observações" description="Registre detalhes úteis para conferência ou prestação de contas." icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo" optional>
-            <label htmlFor="despesa-obs" className="sr-only">Observações</label>
-            <textarea id="despesa-obs" name="observacoes" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Adicione notas adicionais sobre a despesa…" rows={4} className="w-full resize-y rounded-xl border border-zinc-200 bg-white px-4 py-3 font-medium leading-relaxed text-zinc-900 transition-[border-color,box-shadow] focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100" />
-          </FormSection>
-
-          <FormFooter>
-            <button type="button" onClick={requestCloseExpenseModal} className={cn(secondarySmallActionButtonClass, 'px-6 py-3')}>Cancelar</button>
-            <button type="submit" disabled={submitMutation.isPending} aria-busy={submitMutation.isPending} className={cn(primarySubmitButtonClass, 'px-6 py-3 disabled:cursor-wait disabled:opacity-70')}>{submitMutation.isPending ? 'Salvando…' : selectedDespesa ? 'Salvar despesa' : 'Cadastrar despesa'}</button>
-          </FormFooter>
+            <FormSection sectionId="expense-notes" headingLevel={3} title="Observações" icon={<Receipt className="h-5 w-5" weight="duotone" />} tone="indigo" optional>
+              <label htmlFor="despesa-obs" className="sr-only">Observações</label>
+              <textarea id="despesa-obs" name="observacoes" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Ex.: Detalhes para conferência ou prestação de contas…" rows={4} className={cn(geoFieldClass, 'min-h-28 w-full resize-none px-3 py-2.5 text-sm leading-relaxed')} />
+            </FormSection>
+          </fieldset>
         </form>
       </Modal>
+
       <ConfirmDialog
         isOpen={showDiscardDialog}
         onClose={() => setShowDiscardDialog(false)}
         onConfirm={() => {
           setShowDiscardDialog(false);
-          closeExpenseModal();
+          // Release the confirmation's focus ownership before closing its editor.
+          window.requestAnimationFrame(closeExpenseModal);
         }}
         title="Descartar alterações?"
+        returnFocusSelector={`[id="${expenseFormId}-${selectedDespesa ? `edit-${selectedDespesa.id}` : 'create'}"]`}
         description="As informações preenchidas nesta despesa ainda não foram salvas."
         confirmText="Descartar alterações"
         cancelText="Continuar editando"

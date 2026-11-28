@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -151,7 +152,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
       data: '2026-07-12', dataPagamento: '2026-07-12', categoria: 'QA', status: 'Pago'
     });
 
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?inicio=2026-09-01&fim=2026-09-30',
       headers
@@ -209,7 +210,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
     assert.equal(report.areaTotal, report.operational.kpis.activeAreaHa);
     assert.equal(report.financeiro?.resultadoCaixa, report.financial.kpis.cashResult);
 
-    const pendingOnlyResponse = await server.inject({
+    const pendingOnlyResponse = await injectWithRecordVersion(server, {
       method: 'GET', url: '/api/relatorios/geral?inicio=2026-06-01&fim=2026-06-30', headers
     });
     const pendingOnly = pendingOnlyResponse.json<ManagerialReport>();
@@ -218,7 +219,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
     assert.equal(pendingOnly.state.hasFilteredData, true);
     assert.ok(pendingOnly.state.filteredRecordCount >= 1);
 
-    const negativeLowConversionResponse = await server.inject({
+    const negativeLowConversionResponse = await injectWithRecordVersion(server, {
       method: 'GET', url: '/api/relatorios/geral?inicio=2026-07-01&fim=2026-07-31', headers
     });
     const negativeLowConversion = negativeLowConversionResponse.json<ManagerialReport>();
@@ -233,7 +234,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
       '/api/relatorios/geral?inicio[]=2026-09-01'
     ];
     for (const url of invalidUrls) {
-      const invalid = await server.inject({ method: 'GET', url, headers });
+      const invalid = await injectWithRecordVersion(server, { method: 'GET', url, headers });
       assert.equal(invalid.statusCode, 400, `${url} deveria retornar 400, recebeu ${invalid.statusCode}`);
       assert.doesNotMatch(invalid.body, /stack|sqlite|select |c:\\/i);
     }
@@ -253,7 +254,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
     }
     const heapBefore = process.memoryUsage().heapUsed;
     const volumeStartedAt = performance.now();
-    const volumeResponse = await server.inject({
+    const volumeResponse = await injectWithRecordVersion(server, {
       method: 'GET', url: '/api/relatorios/geral?inicio=2024-01-01&fim=2024-12-31', headers
     });
     const volumeElapsedMs = performance.now() - volumeStartedAt;
@@ -269,7 +270,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
     t.diagnostic(`volume=1500; latency=${volumeElapsedMs.toFixed(1)}ms; heapDelta=${(heapDeltaBytes / 1024 / 1024).toFixed(1)}MiB`);
 
     const beforeMutation = report.operational.kpis.totalProjects;
-    const createdProject = await server.inject({
+    const createdProject = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/projetos',
       headers,
@@ -279,7 +280,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
       }
     });
     assert.equal(createdProject.statusCode, 201);
-    const afterMutation = await server.inject({
+    const afterMutation = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?inicio=2026-09-01&fim=2026-09-30',
       headers
@@ -287,7 +288,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
     assert.equal(afterMutation.json<ManagerialReport>().operational.kpis.totalProjects, beforeMutation + 1);
 
     const beforeTopography = afterMutation.json<ManagerialReport>();
-    const calculation = await server.inject({
+    const calculation = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/dados-operacionais/calculos',
       headers,
@@ -297,7 +298,7 @@ test('Sessão 11 reconcilia centavos, coortes, categorias, alertas, cache e cont
       }
     });
     assert.equal(calculation.statusCode, 201);
-    const afterTopographyResponse = await server.inject({
+    const afterTopographyResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/relatorios/geral?inicio=2026-09-01&fim=2026-09-30',
       headers

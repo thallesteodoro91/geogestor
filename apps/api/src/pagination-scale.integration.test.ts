@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -56,15 +57,15 @@ test('busca paginada localiza registros após 1.000 sem duplicar e mantém KPIs 
 
     const headers = { 'x-api-token': 'test-token' };
     const [overview, clientsPage, clientSearch, projectsPage, projectSearch, tasksPage, taskSearch, propertiesPage, propertySearch] = await Promise.all([
-      server.inject({ method: 'GET', url: '/api/dashboard/overview', headers }),
-      server.inject({ method: 'GET', url: '/api/clientes/options?mode=page&page=15&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/clientes/options?mode=page&q=Cliente%20escala%201401', headers }),
-      server.inject({ method: 'GET', url: '/api/projetos?mode=page&page=12&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/projetos?mode=page&q=Projeto%20escala%201101', headers }),
-      server.inject({ method: 'GET', url: '/api/tarefas?mode=page&page=20&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/tarefas?mode=page&q=Tarefa%20escala%201901', headers }),
-      server.inject({ method: 'GET', url: '/api/dados-operacionais/propriedades?page=11&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/dados-operacionais/propriedades?q=Propriedade%20escala%201050', headers })
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/dashboard/overview', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes/options?mode=page&page=15&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes/options?mode=page&q=Cliente%20escala%201401', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/projetos?mode=page&page=12&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/projetos?mode=page&q=Projeto%20escala%201101', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/tarefas?mode=page&page=20&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/tarefas?mode=page&q=Tarefa%20escala%201901', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/dados-operacionais/propriedades?page=11&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/dados-operacionais/propriedades?q=Propriedade%20escala%201050', headers })
     ]);
 
     for (const response of [overview, clientsPage, clientSearch, projectsPage, projectSearch, tasksPage, taskSearch, propertiesPage, propertySearch]) {

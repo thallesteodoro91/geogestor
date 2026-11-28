@@ -37,6 +37,24 @@ export const ENVIRONMENTAL_PHASES = [
 
 export const EnvironmentalPhaseSchema = z.enum(ENVIRONMENTAL_PHASES);
 
+export function isEnvironmentalWorkCompleted(status?: string | null) {
+  const key = status?.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return key === 'concluido' || key === 'finalizado';
+}
+
+/** SQLite's legacy CURRENT_TIMESTAMP values are UTC, without a timezone suffix. */
+export function environmentalRecordedAtTime(value: string) {
+  return Date.parse(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? value.replace(' ', 'T') + 'Z' : value);
+}
+
+export const EnvironmentalProgressPayloadSchema = z.object({
+  titulo: z.string().trim().min(1, 'Informe um título.').max(180, 'Use no máximo 180 caracteres.'),
+  descricao: z.string().trim().min(1, 'Descreva o andamento.').max(3000, 'Use no máximo 3.000 caracteres.'),
+  data: z.string().trim().refine(isRealEnvironmentalDateKey, 'Informe uma data válida.'),
+  categoria: z.string().trim().min(1, 'Informe a categoria.').max(120, 'Use no máximo 120 caracteres.').default('Andamento ambiental')
+}).strict();
+export type EnvironmentalProgressPayload = z.infer<typeof EnvironmentalProgressPayloadSchema>;
+
 export function isRealEnvironmentalDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const [year, month, day] = value.split('-').map(Number);
@@ -153,6 +171,8 @@ export interface EnvironmentalDemandDetail extends EnvironmentalDemandListItem {
   propriedadeId: string | null;
   propriedadeNome: string | null;
   history: EnvironmentalHistoryItem[];
+  pendingTaskCount: number;
+  encerramento: { data: string; descricao: string } | null;
 }
 
 export interface LicenseCondition {
@@ -235,6 +255,7 @@ export function resolveEffectiveLicenseStatus(
   const normalized = normalizeLicenseStatus(status);
   if (normalized === 'Encerrada' || normalized === 'Suspensa') return normalized;
   const todayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'

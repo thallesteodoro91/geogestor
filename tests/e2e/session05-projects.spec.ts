@@ -77,8 +77,16 @@ async function ensureProjectsFixture() {
   await fs.mkdir(evidenceRoot, { recursive: true });
   const database = createClient({ url: `file:${path.join(e2eRoot, 'geogestor.db')}` });
   try {
-    const existing = await database.execute({ sql: 'select id from projetos where id = ? limit 1', args: [ids.project] });
-    if (existing.rows.length > 0) return;
+    const existing = await database.execute({ sql: 'select id, cliente_id, propriedade_id from projetos where nome = ? limit 1', args: [`${PREFIX}Projeto Principal Açores`] });
+    if (existing.rows.length > 0) {
+      ids.project = String(existing.rows[0].id); ids.client = String(existing.rows[0].cliente_id); ids.property = String(existing.rows[0].propriedade_id);
+      const client = await database.execute({ sql: 'select id from clientes where nome = ?', args: [`${PREFIX}Cliente Isolado`] }); ids.otherClient = String(client.rows[0].id);
+      const secondary = await database.execute({ sql: 'select id from projetos where nome = ?', args: [`${PREFIX}Projeto Receita Maior`] }); ids.secondaryProject = String(secondary.rows[0].id);
+      const budgets = await database.execute({ sql: 'select id, descricao from orcamentos where projeto_id in (?, ?)', args: [ids.project, ids.secondaryProject] });
+      ids.budget = String(budgets.rows.find(row => row.descricao === `${PREFIX}Contrato principal`)!.id); ids.secondaryBudget = String(budgets.rows.find(row => row.descricao === `${PREFIX}Contrato secundário`)!.id);
+      const installment = await database.execute({ sql: 'select id from parcelas where orcamento_id = ?', args: [ids.budget] }); ids.installment = String(installment.rows[0].id);
+      return;
+    }
     const now = relativeInstant();
     const projects = [
       { id: ids.project, name: `${PREFIX}Projeto Principal Açores`, status: 'Em Andamento', type: 'Rural', start: dateKey(-10), end: dateKey(20) },
@@ -181,8 +189,11 @@ test.describe('Sessão 05 — Projetos', () => {
     } finally {
       database.close();
     }
+    const currentProject = await page.request.get(`${auth.origin}/api/projetos/${ids.project}`, { headers: auth.headers });
+    expect(currentProject.ok()).toBe(true);
+    const { updatedAt } = await currentProject.json();
     const invalidation = await page.request.patch(`${auth.origin}/api/projetos/${ids.project}`, {
-      headers: auth.headers,
+      headers: { ...auth.headers, 'x-record-version': updatedAt },
       data: { observacoes: `${PREFIX}seed validado` }
     });
     expect(invalidation.ok(), await invalidation.text()).toBe(true);
@@ -197,7 +208,7 @@ test.describe('Sessão 05 — Projetos', () => {
 
     await page.getByLabel('Buscar projetos').fill('Principal Açores');
     await expect(page.getByText(`${PREFIX}Projeto Principal Açores`).first()).toBeVisible();
-    await expect(page.getByLabel('Busca e filtros de projetos').getByText('Exibindo 1–1 de 1 projeto', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Busca e filtros de projetos').locator('p[tabindex="-1"]')).toContainText('Exibindo 1–1 de 1 projeto');
     await page.getByRole('button', { name: 'Limpar busca' }).click();
 
     await page.getByRole('tab', { name: 'Grade' }).click();
@@ -249,9 +260,11 @@ test.describe('Sessão 05 — Projetos', () => {
 
     await page.getByRole('tab', { name: /Financeiro/ }).click();
     await expect(page).toHaveURL(/aba=financeiro/);
-    for (const amount of ['R$ 100,00', 'R$ 70,00', 'R$ 30,00', 'R$ 40,00', 'R$ 25,00']) {
+    for (const amount of ['R$ 100,00', 'R$ 70,00', 'R$ 30,00', 'R$ 25,00']) {
       await expect(page.getByText(amount, { exact: true }).first()).toBeVisible();
     }
+    const costWidget = page.getByRole('region', { name: 'Custo do projeto', exact: true });
+    await expect(costWidget.getByText('Custo previsto R$ 40,00', { exact: true })).toBeVisible();
     const executedCostCard = page.getByText('Custo total executado no projeto', { exact: true }).locator('..');
     await expect(executedCostCard.getByText('R$ 25,00', { exact: true })).toBeVisible();
     await expect(executedCostCard.getByText('R$ 30,00', { exact: true })).toHaveCount(0);

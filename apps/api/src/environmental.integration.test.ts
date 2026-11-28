@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -41,7 +42,7 @@ test('opera demandas, licenças e condicionantes ambientais com dados persistent
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });

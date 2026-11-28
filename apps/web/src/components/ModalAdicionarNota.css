@@ -1,0 +1,53 @@
+/* Scoped note variant: shared tokens and untouched defaults elsewhere. */
+.geo-note-dialog .geo-field {
+  background-color: var(--geo-field-bg, hsl(var(--brand-surface-subtle)));
+  border-color: var(--geo-field-border, color-mix(in srgb, hsl(var(--brand-border-strong)) 75%, hsl(var(--text-primary))));
+}
+.geo-note-dialog .geo-field::placeholder,
+.dark .geo-note-dialog .geo-field::placeholder {
+  color: var(--geo-field-placeholder, hsl(var(--text-muted)));
+  opacity: 1;
+}
+.geo-note-calendar {
+  overflow-y: auto;
+}
+.geo-note-options {
+  display: flex;
+  flex-direction: column;
+}
+.geo-note-options .geo-option-list {
+  min-height: 0;
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+.geo-note-tooltip {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + .5rem);
+  right: 0;
+  z-index: 1;
+  width: max-content;
+  max-width: 12rem;
+  border-radius: var(--control-radius);
+  padding: .375rem .625rem;
+  background: hsl(var(--text-primary));
+  color: hsl(var(--brand-surface));
+  font-size: .75rem;
+  pointer-events: none;
+}
+.geo-note-category-action:hover .geo-note-tooltip,
+.geo-note-category-action:focus-visible .geo-note-tooltip {
+  display: block;
+}
+
+.geo-note-dialog .geo-field:focus-visible,
+.dark .geo-note-dialog .geo-field:focus-visible {
+  border-color: var(--geo-field-focus, hsl(var(--brand-focus-ring)));
+}
+.geo-note-dialog .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-500));
+}
+.dark .geo-note-dialog .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-400));
+}

@@ -75,7 +75,7 @@ export const DEFAULT_COMPANY_TEMPLATE: CompanyTemplate = {
   conselhoProfissional: '',
   registroProfissional: '',
   cor: '#059669',
-  termos: 'Validade da proposta: 15 dias úteis.\nPagamento: 50% na aprovação e 50% na entrega técnica.'
+  termos: 'Esta proposta contempla exclusivamente os serviços e entregáveis descritos. Alterações de escopo serão objeto de revisão formal.'
 };
 
 const CompanyTemplateReadSchema = z.object({

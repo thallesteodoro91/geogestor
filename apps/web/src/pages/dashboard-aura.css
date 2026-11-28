@@ -1,0 +1,203 @@
+.dashboard-aura {
+  container-type: inline-size;
+  display: grid;
+  font-family: 'Rethink Sans', 'Geist Sans', sans-serif;
+}
+
+.dashboard-aura h3 { font-size: 1rem; font-weight: 550; line-height: 1.25; }
+
+.dashboard-cash-chart {
+  --dashboard-cash-received: #096145;
+  --dashboard-cash-paid: #a51b49;
+  --dashboard-cash-grid: #aaa3b9;
+  --dashboard-cash-axis: #676078;
+}
+
+.dark .dashboard-cash-chart {
+  --dashboard-cash-received: #71e5b7;
+  --dashboard-cash-paid: #ffa1b5;
+  --dashboard-cash-grid: #514960;
+  --dashboard-cash-axis: #a7a0b6;
+}
+
+.dashboard-aura--cash {
+  container-name: dashboard-cash;
+  width: min(100%, 280px);
+  min-height: 164px;
+  align-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dark .dashboard-aura--cash {
+  /* Small 17 (10002:3010), centered on the bottom edge of the frame. */
+  --aura-shade: radial-gradient(ellipse 100.68% 187.5% at 50% 100%, #000 15%, transparent 100%);
+  --aura-muted: #d9edea;
+}
+
+html:not(.dark) .aura-widget.dashboard-aura--cash {
+  --aura-start: #bcece0;
+  --aura-end: #c6e7f4;
+  --aura-shade: radial-gradient(ellipse 100.68% 187.5% at 50% 100%, #fff 15%, transparent);
+}
+
+.dashboard-aura__stack {
+  display: flex;
+  gap: 2px;
+  height: 32px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--aura-ink) 10%, transparent);
+}
+
+.dashboard-aura__entry { --dashboard-aura-series: #3f6212; background: var(--dashboard-aura-series); }
+.dashboard-aura__exit { --dashboard-aura-series: #a24412; background: var(--dashboard-aura-series); }
+.dashboard-aura__stack span {
+  flex-basis: 0;
+  min-width: 0;
+  border-radius: 3px;
+  background: repeating-linear-gradient(90deg, rgb(255 255 255 / 5%) 0 1.83px, transparent 1.83px 3.65px),
+    var(--dashboard-aura-bar, var(--dashboard-aura-series));
+}
+
+.dark .dashboard-aura__entry { --dashboard-aura-series: #a3e635; --dashboard-aura-bar: #84cc16; }
+.dark .dashboard-aura__exit { --dashboard-aura-series: #ef6820; }
+.dark .dashboard-aura__stack:has(> span) { background: transparent; }
+
+.dashboard-aura__cash-values {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 1fr) minmax(0, max-content);
+  gap: 3px 6px;
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.dashboard-aura__cash-values > div { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: start; }
+.dashboard-aura__cash-values dt { display: flex; align-items: start; min-width: 0; gap: 5px; overflow-wrap: anywhere; }
+.dashboard-aura__cash-values dt > [aria-hidden] { height: 8px; width: 8px; margin-top: 5px; flex: none; border-radius: 50%; }
+.dashboard-aura__cash-values dd { min-width: 0; margin: 0; text-align: right; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+@container dashboard-cash (200px <= width < 224px) {
+  .dashboard-aura__cash-values:has([data-long-amount]) {
+    grid-template-columns: minmax(0, 1fr) minmax(0, max-content);
+    font-size: 0.6875rem;
+  }
+}
+
+@container dashboard-cash (width < 200px) {
+  .dashboard-aura__cash-values {
+    grid-template-columns: minmax(3.625rem, 1fr) minmax(0, max-content);
+    gap: 4px;
+    font-size: 0.625rem;
+    line-height: 1.2;
+  }
+  .dashboard-aura__cash-values dt { gap: 4px; }
+  .dashboard-aura__cash-values dt > [aria-hidden] { margin-top: 2px; }
+  .dashboard-aura__cash-label-suffix {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+@container dashboard-cash (width < 160px) {
+  .dashboard-aura__cash-values:has([data-long-amount]) dd { grid-column: 1 / -1; }
+}
+
+.dashboard-deadline-list {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .dashboard-deadline-list:has(> :nth-child(2)) { grid-template-columns: minmax(164px, 200px) minmax(0, 1fr); }
+}
+
+.dashboard-aura--distribution {
+  container-name: dashboard-distribution;
+  min-height: 164px;
+  align-content: space-between;
+  gap: 20px;
+}
+
+.dark .dashboard-aura--distribution {
+  --aura-border: rgb(109 160 220 / 16%);
+  /* Medium 8 (10002:4787), measured against the frame bounds. */
+  --aura-shade: radial-gradient(ellipse 136.585% 136.585% at 50% 50%, #000 22.570264%, transparent 100%);
+}
+
+html:not(.dark) .aura-widget.dashboard-aura--distribution {
+  --aura-start: #bfd9fb;
+  --aura-end: #bfd9fb;
+  --aura-shade: radial-gradient(ellipse 136.585% 136.585% at 50% 50%, #fff 22.570264%, transparent);
+}
+
+.dashboard-aura__distribution-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+
+.dashboard-aura__distribution-header h3 { font-size: 0.9375rem; }
+.dashboard-aura__distribution-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #8e72fa;
+  border-radius: 999px;
+  background: #6240d9;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.dashboard-aura__distribution-link:hover { background: #5133bf; }
+.dashboard-aura__distribution-list { display: grid; gap: 8px; }
+.dashboard-aura__distribution-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 39%) minmax(0, 1fr) minmax(24px, auto);
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  line-height: 1.34;
+}
+
+.dashboard-aura__distribution-label { overflow-wrap: anywhere; }
+.dashboard-aura__distribution-percent { text-align: right; font-variant-numeric: tabular-nums; }
+.dashboard-aura__distribution-track {
+  display: flex;
+  align-items: center;
+  height: 12px;
+  padding-block: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(49 71 101 / 16%);
+}
+
+.dark .dashboard-aura__distribution-track { background: rgb(255 255 255 / 20%); }
+.dashboard-aura__distribution-track > span {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #124c9c, #176095 50%, #246aaa);
+}
+
+.dark .dashboard-aura__distribution-track > span {
+  background: linear-gradient(90deg, #2e90fa 0%, #7dd3fc 50%, #fff 100%);
+}
+
+@container dashboard-distribution (width < 260px) {
+  .dashboard-aura__distribution-list { row-gap: 12px; }
+  .dashboard-aura__distribution-list li {
+    grid-template-columns: minmax(0, 1fr) max-content;
+    gap: 4px 8px;
+  }
+  .dashboard-aura__distribution-track { grid-column: 1 / -1; grid-row: 2; }
+  .dashboard-aura__distribution-percent { grid-column: 2; grid-row: 1; }
+}

@@ -1,0 +1,45 @@
+/* Local geometry and surfaces for client registration; shared defaults stay intact. */
+.geo-client-registration .geo-badge-unsaved,
+.dark .geo-client-registration .geo-badge-unsaved {
+  background-color: hsl(var(--brand-red-700));
+}
+.geo-client-registration .geo-field {
+  background-color: var(--geo-field-bg, hsl(var(--brand-surface-subtle)));
+  border-color: var(--geo-field-border, color-mix(in srgb, hsl(var(--brand-border-strong)) 75%, hsl(var(--text-primary))));
+}
+.geo-client-registration .geo-field::placeholder {
+  color: var(--geo-field-placeholder, hsl(var(--text-muted)));
+  opacity: 1;
+}
+.geo-client-registration .geo-field:hover:not(:disabled) {
+  border-color: var(--geo-field-hover-border, hsl(var(--text-muted)));
+}
+.geo-client-registration .geo-field:focus-visible {
+  border-color: var(--geo-field-focus, hsl(var(--brand-focus-ring)));
+}
+.geo-client-registration .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-500));
+}
+.dark .geo-client-registration .geo-field[aria-invalid="true"] {
+  border-color: hsl(var(--brand-red-400));
+}
+.geo-client-registration section,
+.geo-client-registration input,
+.geo-client-registration textarea,
+.geo-client-registration button[aria-haspopup] {
+  scroll-margin-top: calc(var(--client-nav-height, 64px) + 12px);
+  scroll-margin-bottom: 12px;
+}
+.geo-client-registration fieldset:disabled {
+  opacity: .7;
+}
+.geo-client-registration-options { display: flex; flex-direction: column; }
+.geo-client-registration-options .geo-option-list { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
+@media (max-height: 550px) {
+  .geo-client-registration > div:first-child { margin-bottom: .25rem; }
+  .geo-client-registration > div:last-child { margin-top: .5rem; padding-top: .5rem; }
+  .geo-client-registration nav { flex-wrap: nowrap; }
+  .geo-client-registration nav > div { flex-basis: auto; }
+  .geo-client-registration #client-save-status { width: auto; }
+  .geo-client-registration nav > p { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+}

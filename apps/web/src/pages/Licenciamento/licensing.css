@@ -1,0 +1,65 @@
+/* License and condition semantics share the existing GeoGestor color tokens. */
+.license-tone-info { color: hsl(var(--brand-primary-800)); background-color: hsl(var(--brand-primary-50)); border-color: hsl(var(--brand-primary-200)); }
+.license-tone-success { color: hsl(var(--brand-green-800)); background-color: hsl(var(--brand-green-50)); border-color: hsl(var(--brand-green-200)); }
+.license-tone-warning { color: hsl(var(--brand-rajah-900)); background-color: hsl(var(--brand-rajah-50)); border-color: hsl(var(--brand-rajah-300)); }
+.license-tone-danger { color: hsl(var(--brand-red-800)); background-color: hsl(var(--brand-red-50)); border-color: hsl(var(--brand-red-200)); }
+.license-tone-neutral { color: hsl(var(--text-secondary)); background-color: hsl(var(--brand-surface-muted)); border-color: hsl(var(--brand-border-soft)); }
+.dark .license-tone-info { color: hsl(var(--brand-primary-100)); background-color: hsl(var(--brand-primary-900)); border-color: hsl(var(--brand-primary-600)); }
+.dark .license-tone-success { color: hsl(var(--brand-green-100)); background-color: hsl(var(--brand-green-900)); border-color: hsl(var(--brand-green-700)); }
+.dark .license-tone-warning { color: hsl(var(--brand-rajah-100)); background-color: hsl(var(--brand-rajah-900)); border-color: hsl(var(--brand-rajah-800)); }
+.dark .license-tone-danger { color: hsl(var(--brand-red-100)); background-color: hsl(var(--brand-red-900)); border-color: hsl(var(--brand-red-700)); }
+
+.licensing-surface, .licensing-dialog { min-width: 0; }
+.licensing-surface .license-filters .geo-dropdown-trigger[role="combobox"] {
+  height: auto; min-height: 2.75rem; padding-block: 0.625rem;
+}
+.licensing-surface .license-filters .geo-dropdown-trigger[role="combobox"] > span:first-child {
+  white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip;
+}
+.license-action { min-height: 2.75rem; transition: filter 150ms; }
+.license-action:hover:not(:disabled) { filter: brightness(0.95); }
+.dark .license-action:hover:not(:disabled) { filter: brightness(1.15); }
+.license-action:disabled { cursor: not-allowed; opacity: 0.65; }
+@media (prefers-reduced-motion: reduce) { .license-action { transition: none; } }
+.licensing-surface [hidden] { display: none !important; }
+.licensing-surface :is(dd, td) { overflow-wrap: anywhere; }
+.license-table { min-width: 64rem; }
+.license-table :is(a, .license-status-badge) { white-space: nowrap; }
+.licensing-dialog .text-zinc-400 { color: hsl(var(--text-muted)); }
+.licensing-surface :is(dt, .license-secondary), .licensing-dialog .license-secondary { color: hsl(var(--text-secondary)); }
+.licensing-surface :is(button, a), .licensing-dialog :is(button, a) { touch-action: manipulation; }
+.licensing-surface :is(.geo-focus-ring, button, a, summary):focus-visible,
+.licensing-dialog :is(.geo-focus-ring, button, input, textarea, summary):focus-visible {
+  outline: 2px solid hsl(var(--brand-primary-600)); outline-offset: 3px;
+}
+.dark .licensing-surface :is(.geo-focus-ring, button, a, summary):focus-visible,
+.dark .licensing-dialog :is(.geo-focus-ring, button, input, textarea, summary):focus-visible {
+  outline-color: hsl(var(--brand-primary-200));
+}
+.license-header-action.geo-button-primary, .licensing-surface .geo-button-primary, .licensing-dialog .geo-button-primary {
+  background-image: none; background-color: hsl(var(--brand-primary-600)); color: white;
+}
+.license-header-action.geo-button-primary:hover, .licensing-surface .geo-button-primary:hover, .licensing-dialog .geo-button-primary:hover { background-image: none; background-color: hsl(var(--brand-primary-700)); }
+.licensing-dialog :is(input, textarea)::placeholder,
+.licensing-surface input::placeholder { color: hsl(var(--text-muted)); opacity: 1; }
+.licensing-surface .license-summary { container-type: inline-size; }
+.license-summary-groups { display: grid; }
+.license-summary-conditions { border-top: 1px solid hsl(var(--brand-border-soft)); }
+.license-summary-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.license-summary-metric { display: flex; align-items: center; gap: 0.75rem; min-width: 0; padding: 0.75rem; }
+button.license-summary-metric { text-align: left; border-radius: var(--brand-radius-lg); transition: background-color 150ms; }
+button.license-summary-metric:hover { background-color: hsl(var(--brand-surface-muted)); }
+button.license-summary-metric[aria-pressed="true"] { outline: 1px solid hsl(var(--brand-primary-400)); outline-offset: -1px; }
+.license-summary-label { overflow-wrap: anywhere; font-size: 0.875rem; line-height: 1.4; }
+.license-summary-value { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+@container (min-width: 54rem) {
+  .license-summary-groups { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+  .license-summary-conditions { border-top: 0; border-left: 1px solid hsl(var(--brand-border-soft)); }
+  .license-summary-conditions .license-summary-metrics { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { button.license-summary-metric { transition: none; } }
+/* Keep every shell control available when text is enlarged on this surface. */
+@media (max-width: 767px) {
+  [data-app-layout]:has(.licensing-surface) > header { flex-wrap: wrap; gap: 0.75rem; }
+  [data-app-layout]:has(.licensing-surface) > header > :last-child { flex-wrap: wrap; max-width: 100%; }
+}

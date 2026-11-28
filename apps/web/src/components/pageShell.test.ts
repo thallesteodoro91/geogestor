@@ -7,12 +7,13 @@ const read = (relativePath: string) => readFileSync(new URL(relativePath, import
 test('PageHeader preserva a ordem canônica do cabeçalho antes da navegação', () => {
   const source = read('./PageHeader.tsx');
   const eyebrow = source.indexOf('{eyebrow ?');
-  const heading = source.indexOf('<h1');
+  const heading = source.indexOf('<Heading');
   const navigation = source.indexOf('{navigation ?');
 
   assert.ok(eyebrow >= 0);
   assert.ok(heading > eyebrow);
   assert.ok(navigation > heading);
+  assert.match(source, /const Heading = `h\$\{headingLevel\}`/);
   assert.match(source, /max-w-\[1400px\]/);
 });
 

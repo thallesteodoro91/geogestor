@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1" preserveAspectRatio="none">
+  <defs>
+    <!-- Small 1 (10001:228), using the normalized ellipse from the frame. -->
+    <radialGradient id="shade" gradientTransform="matrix(-1.463415 -1.555046 1.174680 -1.105462 .876074 2.107777)">
+      <stop offset="0" stop-color="#000"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <path fill="url(#shade)" d="M0 0H1V1H0Z"/>
+</svg>

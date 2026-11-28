@@ -66,7 +66,7 @@
     --success: 142 72% 29%;            /* green-700 / emerald-700 */
     --danger: 0 84.2% 40.2%;           /* red-700 */
     --focus-ring: 239 84% 58%;         /* indigo-600 */
-    
+
     /* Shadows */
     --shadow-genesis: 0 8px 30px rgba(0, 0, 0, 0.08);
 
@@ -187,7 +187,7 @@
     --brand-shadow-md: 0 18px 44px -28px rgba(1, 1, 9, 0.32);
     --brand-shadow-primary: 0 18px 42px -24px rgba(70, 72, 255, 0.68);
     --brand-focus-ring: 239 100% 63.7%;
-    
+
     /* Transitions */
     --motion-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
     --motion-fast: 180ms;
@@ -727,6 +727,16 @@
     line-height: 1.25rem;
   }
 
+  .geo-dropdown-trigger.geo-form-select[role="combobox"] {
+    height: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .geo-dropdown-trigger.geo-form-select-large[role="combobox"] {
+    height: 3rem;
+    min-height: 3rem;
+  }
+
   button.geo-dropdown-trigger[role="combobox"] {
     padding-block: 0;
     padding-inline: 0.625rem;
@@ -868,37 +878,6 @@
   .geo-field:disabled::placeholder,
   .geo-field[aria-disabled="true"]::placeholder {
     color: #52525b;
-  }
-
-  .dark .geo-field {
-    background-color: #000000;
-    border-color: #52525b;
-    color: #ffffff;
-  }
-
-  .dark .geo-field::placeholder {
-    color: #ffffff;
-  }
-
-  .dark .geo-field:hover:not(:disabled) {
-    border-color: #a1a1aa;
-  }
-
-  .dark .geo-field[aria-invalid="true"] {
-    border-color: #f87171;
-    box-shadow: 0 0 0 3px rgb(248 113 113 / 0.22);
-  }
-
-  .dark .geo-field:disabled,
-  .dark .geo-field[aria-disabled="true"] {
-    background-color: #27272a;
-    border-color: #71717a;
-    color: #e4e4e7;
-  }
-
-  .dark .geo-field:disabled::placeholder,
-  .dark .geo-field[aria-disabled="true"]::placeholder {
-    color: #d4d4d8;
   }
 
   .geo-calendar-day {
@@ -1215,20 +1194,76 @@ select:not([multiple]):not([size]):not(.geo-form-select) {
   border-color: #27272a;
 }
 
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: #d4d4d8 !important;
-  opacity: 1 !important;
-}
+/* Approved graphite field palette. Screen-only so document/print colors remain
+   independent. Native fallbacks also cover older forms without geo-field. */
+@media screen and (forced-colors: none) {
+  html.dark {
+    --geo-field-bg: #22262e;
+    --geo-field-text: #ffffff;
+    --geo-field-placeholder: #ffffff;
+    --geo-field-border: #6f7b8f;
+    --geo-field-hover-bg: #272c36;
+    --geo-field-hover-border: #8b95a7;
+    --geo-field-focus: #9294ff;
+    --geo-field-disabled-bg: #2a303a;
+    color-scheme: dark;
+  }
 
-.dark input.geo-filter-control::placeholder {
-  color: #ffffff !important;
-  opacity: 1 !important;
-}
+  html.dark :is(.geo-field, .geo-field-surface, textarea, select:where(:not(.sr-only)), input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"], .sr-only))) {
+    background-color: var(--geo-field-bg);
+    border-color: var(--geo-field-border);
+    color: var(--geo-field-text);
+    -webkit-text-fill-color: var(--geo-field-text);
+    caret-color: var(--geo-field-text);
+  }
 
-.dark .geo-select-trigger {
-  background-color: #09090b !important;
-  color: #ffffff !important;
+  html.dark :is(input, textarea)::placeholder {
+    color: var(--geo-field-placeholder) !important;
+    opacity: 1 !important;
+  }
+
+  html.dark :is(button.geo-field, button.geo-field-surface) > span:not([aria-hidden="true"]) {
+    color: var(--geo-field-text);
+  }
+
+  html.dark :is(.geo-field, .geo-field-surface, textarea, select, input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"], .sr-only))):hover:where(:not(:disabled):not([aria-disabled="true"]):not([aria-invalid="true"]):not(:focus)) {
+    background-color: var(--geo-field-hover-bg);
+    border-color: var(--geo-field-hover-border);
+  }
+
+  html.dark :is(.geo-field, .geo-field-surface, textarea, select, input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"], .sr-only))):is(:focus, :focus-visible, [data-state="open"]) {
+    border-color: var(--geo-field-focus);
+    box-shadow: 0 0 0 3px rgb(146 148 255 / .2);
+  }
+
+  html.dark :is(.geo-field, .geo-field-surface, textarea, select, input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"], .sr-only))):focus-visible,
+  html.dark .geo-input-group .geo-field:focus-visible {
+    outline: 2px solid var(--geo-field-focus);
+    outline-offset: 2px;
+  }
+
+  html.dark :is(.geo-field, .geo-field-surface, input, textarea, select)[aria-invalid="true"] {
+    border-color: #f87171;
+    box-shadow: 0 0 0 3px rgb(248 113 113 / .22);
+  }
+
+  html.dark :is(.geo-field, .geo-field-surface, textarea, select, input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="button"], [type="submit"], [type="reset"], [type="image"], .sr-only))):is(:disabled, [aria-disabled="true"]) {
+    background-color: var(--geo-field-disabled-bg);
+    border-color: #606b7d;
+    color: var(--geo-field-text);
+    opacity: 1;
+    cursor: not-allowed;
+  }
+
+  html.dark :is(input, textarea):autofill {
+    box-shadow: 0 0 0 1000px var(--geo-field-bg) inset;
+    -webkit-text-fill-color: var(--geo-field-text);
+  }
+
+  html.dark select option {
+    background-color: var(--geo-field-bg);
+    color: var(--geo-field-text);
+  }
 }
 
 .dark .shadow-sm {
@@ -1236,6 +1271,24 @@ select:not([multiple]):not([size]):not(.geo-form-select) {
 }
 
 /* Ensure Leaflet maps look decent in dark mode */
+.budget-client-summary {
+  --budget-paper: #ffffff;
+  --budget-ink: #18181b;
+  --budget-muted: #52525b;
+  --budget-rule: #d4d4d8;
+  --budget-accent: #4338ca;
+  color-scheme: light;
+  background-color: var(--budget-paper);
+  color: var(--budget-ink);
+  border-color: var(--budget-rule);
+}
+.budget-client-summary .budget-paper-secondary { color: var(--budget-muted); }
+.budget-client-summary .budget-paper-accent { color: var(--budget-accent); }
+.budget-client-summary .budget-paper-border { border-color: var(--budget-rule); }
+.budget-header-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); }
+.budget-tax-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); }
+.budget-installment-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); }
+
 .dark .leaflet-container {
   filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
 }
@@ -1281,6 +1334,15 @@ select:not([multiple]):not([size]):not(.geo-form-select) {
 }
 
 @media (forced-colors: active) {
+  html.dark :is(input, textarea, select, .geo-field, .geo-field-surface) {
+    -webkit-text-fill-color: CanvasText;
+    caret-color: CanvasText;
+  }
+
+  html.dark :is(input, textarea, select, .geo-field, .geo-field-surface):disabled {
+    -webkit-text-fill-color: GrayText;
+  }
+
   button,
   a,
   input,

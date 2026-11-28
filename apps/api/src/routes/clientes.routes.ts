@@ -4,9 +4,11 @@ import { schema } from '@geogestor/database';
 import { eq, isNull, desc, asc, count, sum, not, and, or, like, sql, getTableColumns } from 'drizzle-orm';
 import { z } from 'zod';
 import { ClientePatchPayloadSchema, ClientePayloadSchema } from '@geogestor/contracts';
+import { PUBLIC_ENTITY_CATEGORY, isPublicEntityCategory, normalizeClientCategoryText, resolveClientClassification } from '@geogestor/contracts/src/client-categories';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { AuditLogService } from '../services/audit.service';
 import { JornadaService } from '../services/jornada.service';
+import { assertEnvironmentalWorkWritable, CompletedWorkError } from '../services/environmental-work.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 import { activeClientDocumentWhere } from '../services/document-integrity.service';
 import { finishSimpleImport } from '../services/simple-import-result.service';
@@ -221,13 +223,14 @@ export async function clientesRoutes(server: FastifyInstance) {
         mode: z.enum(['legacy', 'page']).default('legacy'),
         q: z.string().trim().max(200).optional(),
         status: z.string().trim().max(100).optional(),
+        tipoPessoa: z.enum(['PF', 'PJ', 'NaoInformado']).optional(),
         categoria: z.string().trim().max(100).optional(),
         origem: z.string().trim().max(100).optional(),
         ordenar: z.enum(['recentes', 'antigos', 'az', 'za']).default('recentes')
       })
     }
   }, async (request, reply) => {
-    const { page, limit, mode, q, status, categoria, origem, ordenar } = request.query;
+    const { page, limit, mode, q, status, tipoPessoa, categoria, origem, ordenar } = request.query;
     try {
       const offset = (page - 1) * limit;
       const conditions = [isNull(schema.clientes.deletedAt)];
@@ -250,7 +253,15 @@ export async function clientesRoutes(server: FastifyInstance) {
           ? or(eq(schema.clientes.situacao, status), isNull(schema.clientes.situacao))!
           : eq(schema.clientes.situacao, status));
       }
-      if (categoria) conditions.push(like(schema.clientes.categoria, `%${categoria}%`));
+      if (tipoPessoa) conditions.push(tipoPessoa === 'NaoInformado'
+        ? isNull(schema.clientes.tipoPessoa)
+        : eq(schema.clientes.tipoPessoa, tipoPessoa));
+      if (categoria) {
+        const publicEntityAliases = ['Entidade Pública', 'Órgão Público', 'Orgao Publico', 'Governo'];
+        conditions.push(isPublicEntityCategory(categoria)
+          ? or(...publicEntityAliases.map((alias) => like(schema.clientes.categoria, `%${alias}%`)))!
+          : like(schema.clientes.categoria, `%${categoria}%`));
+      }
       if (origem) {
         conditions.push(or(
           eq(schema.clientes.origemPrincipal, origem),
@@ -267,6 +278,14 @@ export async function clientesRoutes(server: FastifyInstance) {
             : desc(schema.clientes.createdAt);
       const clientesList = await db.select({
         ...getTableColumns(schema.clientes),
+        // A coluna de relacionamento considera somente interações registradas manualmente.
+        ultimaInteracao: sql<string | null>`(
+          SELECT MAX(interaction.data) FROM interacoes_cliente AS interaction
+          WHERE interaction.cliente_id = clientes.id
+            AND interaction.deleted_at IS NULL
+            AND interaction.manual = 1
+            AND substr(interaction.data, 1, 10) <= date('now')
+        )`,
         propriedadesCount: sql<number>`CAST(
           (SELECT COUNT(*) FROM propriedades AS structured_properties
             WHERE structured_properties.cliente_id = clientes.id
@@ -390,7 +409,7 @@ export async function clientesRoutes(server: FastifyInstance) {
       const clienteRes = await db.select().from(schema.clientes)
         .where(and(eq(schema.clientes.id, id), isNull(schema.clientes.deletedAt)))
         .limit(1);
-        
+
       if (!clienteRes.length) {
         return reply.status(404).send({ error: 'Cliente não encontrado' });
       }
@@ -618,14 +637,15 @@ export async function clientesRoutes(server: FastifyInstance) {
           origemPrincipal: data.origemPrincipal || null,
           origemDetalhe: data.origemDetalhe || null,
           indicadoPor: data.indicadoPor || null,
-          categoria: data.categoria || null,
-          perfis: data.perfis || null,
+          categoria: normalizeClientCategoryText(data.categoria),
+          categoriaLegada: data.categoria && data.categoria !== normalizeClientCategoryText(data.categoria) ? data.categoria : null,
+          perfis: normalizeClientCategoryText(data.perfis),
           anotacoes: data.anotacoes || null,
           situacao: data.situacao || 'Ativo',
           previsaoEntrega: data.previsaoEntrega || null,
           servicos: data.servicos || null
         }).returning();
-        
+
         // Log de Auditoria
         await AuditLogService.log('INSERT', 'Cliente', null, result[0], tx);
         await JornadaService.logClienteEvento({
@@ -681,6 +701,18 @@ export async function clientesRoutes(server: FastifyInstance) {
         return reply.status(404).send({ error: 'Cliente não encontrado' });
       }
 
+      const nextCategory = data.categoria !== undefined ? normalizeClientCategoryText(data.categoria) : oldCliente[0].categoria;
+      const nextPersonType = data.tipoPessoa ?? oldCliente[0].tipoPessoa;
+      if (resolveClientClassification(nextCategory).primary === PUBLIC_ENTITY_CATEGORY && nextPersonType !== 'PJ') {
+        return reply.status(400).send({ error: 'Entidade Pública exige Pessoa Jurídica. Corrija o tipo de pessoa antes de salvar.' });
+      }
+      const previousClassification = resolveClientClassification(oldCliente[0].categoria);
+      const preserveLegacyCategory = data.categoria !== undefined
+        && oldCliente[0].categoria
+        && !oldCliente[0].categoriaLegada
+        && oldCliente[0].categoria !== previousClassification.primary
+        && oldCliente[0].categoria !== nextCategory;
+
       const clienteAtualizado = await db.transaction(async (tx) => {
         const documentChanged = ['tipoPessoa', 'cpf', 'cnpj', 'documento']
           .some((field) => data[field as keyof typeof data] !== undefined);
@@ -717,8 +749,9 @@ export async function clientesRoutes(server: FastifyInstance) {
           origemPrincipal: data.origemPrincipal !== undefined ? data.origemPrincipal : undefined,
           origemDetalhe: data.origemDetalhe !== undefined ? data.origemDetalhe : undefined,
           indicadoPor: data.indicadoPor !== undefined ? data.indicadoPor : undefined,
-          categoria: data.categoria !== undefined ? data.categoria : undefined,
-          perfis: data.perfis !== undefined ? data.perfis : undefined,
+          categoria: data.categoria !== undefined ? normalizeClientCategoryText(data.categoria) : undefined,
+          categoriaLegada: preserveLegacyCategory ? oldCliente[0].categoria : undefined,
+          perfis: data.perfis !== undefined ? normalizeClientCategoryText(data.perfis) : undefined,
           anotacoes: data.anotacoes !== undefined ? data.anotacoes : undefined,
           situacao: data.situacao !== undefined ? data.situacao : undefined,
           previsaoEntrega: data.previsaoEntrega !== undefined ? data.previsaoEntrega : undefined,
@@ -824,7 +857,7 @@ export async function clientesRoutes(server: FastifyInstance) {
   });
 
   // ========== HISTÓRICO CRM ==========
-  
+
   // Buscar histórico de um cliente
   zServer.get('/:id/historico', {
     schema: { params: z.object({ id: z.string().uuid() }) }
@@ -837,10 +870,10 @@ export async function clientesRoutes(server: FastifyInstance) {
       const historico = await db.select()
         .from(schema.interacoes_cliente)
         .where(and(eq(schema.interacoes_cliente.clienteId, id), isNull(schema.interacoes_cliente.deletedAt)));
-      
+
       // Ordenar do mais recente pro mais antigo
       historico.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
-      
+
       return historico;
     } catch (err) {
       server.log.error(err);
@@ -863,6 +896,10 @@ export async function clientesRoutes(server: FastifyInstance) {
       if (!client.length) return reply.status(404).send({ error: 'Cliente não encontrado' });
       await assertHistoryRelations(id, data);
       const novaInteracao = await db.transaction(async (tx) => {
+        if (data.projetoId) {
+          const [project] = await tx.select().from(schema.projetos).where(eq(schema.projetos.id, data.projetoId));
+          if (project) assertEnvironmentalWorkWritable(project);
+        }
         const [created] = await tx.insert(schema.interacoes_cliente).values({
           id: crypto.randomUUID(),
           clienteId: id,
@@ -878,9 +915,10 @@ export async function clientesRoutes(server: FastifyInstance) {
         await AuditLogService.log('INSERT', 'Interação do cliente', null, created, tx);
         return created;
       });
-      
+
       return reply.status(201).send(novaInteracao);
     } catch (err) {
+      if (err instanceof CompletedWorkError) return reply.status(409).send({ error: err.message });
       if (err instanceof Error && /não pertence a este cliente|está inativo/.test(err.message)) {
         return reply.status(400).send({ error: err.message });
       }
@@ -1028,8 +1066,9 @@ export async function clientesRoutes(server: FastifyInstance) {
               origemPrincipal: data.origemPrincipal || null,
               origemDetalhe: data.origemDetalhe || null,
               indicadoPor: data.indicadoPor || null,
-              categoria: data.categoria || null,
-              perfis: data.perfis || null,
+              categoria: normalizeClientCategoryText(data.categoria),
+              categoriaLegada: data.categoria && data.categoria !== normalizeClientCategoryText(data.categoria) ? data.categoria : null,
+              perfis: normalizeClientCategoryText(data.perfis),
               anotacoes: data.anotacoes || null,
               situacao: data.situacao || 'Ativo',
               previsaoEntrega: data.previsaoEntrega || null,

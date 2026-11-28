@@ -68,6 +68,8 @@ import {
   MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION
 } from './runtime-migrations/v17-multiprocess-finance-integrity';
 import { MaintenanceCoordinator } from './maintenance-coordinator.service';
+import { CALENDAR_SYNC_MIGRATION, ensureCalendarSync } from './runtime-migrations/v18-calendar-sync';
+import { ENVIRONMENTAL_DOCUMENTS_MIGRATION, ensureEnvironmentalDocuments } from './runtime-migrations/v19-environmental-documents';
 import { OperationalLogService } from './operational-log.service';
 import {
   addColumnIfTableExists,
@@ -85,8 +87,8 @@ import {
 } from './runtime-migrations/v1-legacy-schema';
 
 const dbPath = process.env.GEOGESTOR_DB_PATH || path.resolve(__dirname, '../../../../data/geogestor.db');
-const RUNTIME_MIGRATION_VERSION = MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.version;
-const RUNTIME_MIGRATION_NAME = MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.name;
+const RUNTIME_MIGRATION_VERSION = ENVIRONMENTAL_DOCUMENTS_MIGRATION.version;
+const RUNTIME_MIGRATION_NAME = ENVIRONMENTAL_DOCUMENTS_MIGRATION.name;
 const MIN_FREE_SPACE_BYTES = 64 * 1024 * 1024;
 
 export async function ensureRuntimeMigrations() {
@@ -517,8 +519,8 @@ async function executeRuntimeMigrations() {
 
     // Soft Deletes
     const tablesWithSoftDelete = [
-      'configuracoes', 'clientes', 'projetos', 'orcamentos', 'parcelas', 'despesas', 
-      'tarefas', 'compromissos', 'oportunidades', 'interacoes_cliente', 
+      'configuracoes', 'clientes', 'projetos', 'orcamentos', 'parcelas', 'despesas',
+      'tarefas', 'compromissos', 'oportunidades', 'interacoes_cliente',
       'contatos', 'documento_categorias', 'documentos'
     ];
     for (const table of tablesWithSoftDelete) {
@@ -570,6 +572,12 @@ async function executeRuntimeMigrations() {
     await ensureSharedWorkspacePolish(client);
     await ensurePropertyIntegrity(client);
     await ensureMultiprocessFinanceIntegrity(client);
+    await ensureCalendarSync(client);
+    await ensureEnvironmentalDocuments(client);
+    const calendarAppliedAt = new Date().toISOString();
+    await client.execute({ sql: `INSERT OR IGNORE INTO schema_migrations
+      (version, name, status, started_at, applied_at, updated_at) VALUES (?, ?, 'success', ?, ?, ?)`,
+      args: [CALENDAR_SYNC_MIGRATION.version, CALENDAR_SYNC_MIGRATION.name, calendarAppliedAt, calendarAppliedAt, calendarAppliedAt] });
 
     // Após migrar, os campos originais poderiam ser descartados, mas o SQLite não permite DROP COLUMN facilmente.
     // Vamos apenas deixá-los null ou ignora-los nas queries futuras.
@@ -686,6 +694,12 @@ async function executeRuntimeMigrations() {
           version, name, status, backup_path, error_message, started_at, applied_at, updated_at
         ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
       args: [PROPERTY_INTEGRITY_MIGRATION.version, PROPERTY_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
+    });
+    await client.execute({
+      sql: `INSERT OR IGNORE INTO schema_migrations (
+        version, name, status, backup_path, error_message, started_at, applied_at, updated_at
+      ) VALUES (?, ?, 'success', NULL, NULL, ?, ?, ?)`,
+      args: [MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.version, MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.name, appliedAt, appliedAt, appliedAt]
     });
     await client.execute({
       sql: `UPDATE schema_migrations

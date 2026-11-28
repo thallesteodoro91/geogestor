@@ -1,6 +1,6 @@
 {
   "name": "geogestor",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "engines": {
@@ -26,7 +26,7 @@
     "test:web": "pnpm --filter web test",
     "test:api": "pnpm --filter api test",
     "benchmark:geospatial": "node scripts/benchmark-geospatial.mjs",
-    "test:electron": "node --test apps/desktop/main.test.cjs apps/desktop/preload.test.cjs apps/desktop/restore-authorization.test.cjs",
+    "test:electron": "node --test apps/desktop/main.test.cjs apps/desktop/preload.test.cjs apps/desktop/license-draft-close.test.cjs apps/desktop/restore-authorization.test.cjs apps/desktop/budget-pdf.test.cjs",
     "test:e2e": "node scripts/run-commercial-e2e.mjs",
     "e2e:cleanup:preview": "node scripts/preview-e2e-cleanup.mjs",
     "governance:check": "node scripts/governance-checks.mjs",

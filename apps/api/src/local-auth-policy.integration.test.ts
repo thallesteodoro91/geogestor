@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -28,7 +29,7 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
   try {
     await dbReady;
     await runRuntimeMigrations();
-    const setup = await server.inject({
+    const setup = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/configuracoes',
       headers: jsonHeaders,
@@ -39,14 +40,14 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
     });
     assert.equal(setup.statusCode, 200, setup.body);
 
-    const initialStatus = await server.inject({ method: 'GET', url: '/api/auth/status', headers: baseHeaders });
+    const initialStatus = await injectWithRecordVersion(server, { method: 'GET', url: '/api/auth/status', headers: baseHeaders });
     assert.equal(initialStatus.statusCode, 200, initialStatus.body);
     assert.equal(initialStatus.json().authRequired, false);
     assert.equal(initialStatus.json().locked, false);
-    const openAccess = await server.inject({ method: 'GET', url: '/api/clientes', headers: baseHeaders });
+    const openAccess = await injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes', headers: baseHeaders });
     assert.equal(openAccess.statusCode, 200, openAccess.body);
 
-    const enabled = await server.inject({
+    const enabled = await injectWithRecordVersion(server, {
       method: 'PUT',
       url: '/api/auth/policy',
       headers: jsonHeaders,
@@ -56,16 +57,16 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
     assert.equal(enabled.json().enabled, true);
     const sessionToken = enabled.json<{ session: { token: string } }>().session.token;
 
-    const lockedAccess = await server.inject({ method: 'GET', url: '/api/clientes', headers: baseHeaders });
+    const lockedAccess = await injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes', headers: baseHeaders });
     assert.equal(lockedAccess.statusCode, 423, lockedAccess.body);
-    const protectedAccess = await server.inject({
+    const protectedAccess = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/clientes',
       headers: { ...baseHeaders, 'x-local-session': sessionToken }
     });
     assert.equal(protectedAccess.statusCode, 200, protectedAccess.body);
 
-    const wrongDisable = await server.inject({
+    const wrongDisable = await injectWithRecordVersion(server, {
       method: 'PUT',
       url: '/api/auth/policy',
       headers: { ...jsonHeaders, 'x-local-session': sessionToken },
@@ -73,7 +74,7 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
     });
     assert.equal(wrongDisable.statusCode, 401, wrongDisable.body);
 
-    const disabled = await server.inject({
+    const disabled = await injectWithRecordVersion(server, {
       method: 'PUT',
       url: '/api/auth/policy',
       headers: { ...jsonHeaders, 'x-local-session': sessionToken },
@@ -83,7 +84,7 @@ test('senha de abertura é opcional e pode ser ativada, redefinida e removida', 
     assert.equal(disabled.json().enabled, false);
     assert.equal(disabled.json().session, null);
 
-    const reopenedAccess = await server.inject({ method: 'GET', url: '/api/clientes', headers: baseHeaders });
+    const reopenedAccess = await injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes', headers: baseHeaders });
     assert.equal(reopenedAccess.statusCode, 200, reopenedAccess.body);
   } finally {
     await server.close();

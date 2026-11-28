@@ -341,12 +341,12 @@ test.describe('cadastros auxiliares e propriedades', () => {
     await page.unroute('**/api/dados-operacionais/propriedades');
 
     await navigateInApp(page, '/orcamentos');
-    await page.getByRole('button', { name: 'Novo orçamento' }).click();
+    await page.getByRole('button', { name: 'Novo orçamento' }).first().click();
     await expect(page).toHaveURL(/\/orcamentos\/novo\?retorno=/);
     await expect(page.getByRole('heading', { name: 'Novo orçamento', level: 1 })).toBeVisible();
     await expect(page.getByRole('dialog', { name: 'Novo orçamento' })).toHaveCount(0);
     await expect(page).toHaveTitle('Novo orçamento — GeoGestor');
-    await page.locator('button[aria-controls="budget-section-client-content"]').click();
+    await expect(page.locator('#budget-client')).toBeVisible();
     await page.locator('#budget-client').click();
     await page.getByRole('option', { name: CLIENT_NAME, exact: true }).click();
     const budgetClientValue = page.locator('select[name="clientId"]');

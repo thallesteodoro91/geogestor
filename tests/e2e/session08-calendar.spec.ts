@@ -169,7 +169,7 @@ test.describe('Sessão 08 — Agenda — Calendário', () => {
     if (!auth) throw new Error('Credenciais isoladas da suíte ausentes.');
     const title = `${PREFIX}Criado pela interface`;
     await page.getByRole('button', { name: 'Agendar compromisso' }).click();
-    const createDialog = page.getByRole('dialog', { name: /Novo compromisso/ });
+    const createDialog = page.getByRole('dialog', { name: /Agendar compromisso/ });
     await expect(createDialog).toBeVisible();
     await page.getByLabel('Título do compromisso').fill('   ');
     await createDialog.getByRole('button', { name: 'Agendar compromisso' }).click();
@@ -206,7 +206,7 @@ test.describe('Sessão 08 — Agenda — Calendário', () => {
     const restoredRows = await page.request.get(`${auth.origin}/api/compromissos?inicio=2024-02-29&fim=2024-02-29`, { headers: auth.headers });
     const restored = (await restoredRows.json() as Array<{ id: string; titulo: string }>).filter((item) => item.titulo === title);
     expect(restored).toHaveLength(1);
-    expect(restored[0].id).not.toBe(created?.id);
+    expect(restored[0].id).toBe(created?.id);
 
     await page.goto(`/calendario/tarefa/${ids.tasks[1]}`);
     await unlockCurrent(page);
@@ -222,7 +222,9 @@ test.describe('Sessão 08 — Agenda — Calendário', () => {
     await ensureCalendarJourneyFixture();
     await page.route('**/api/tarefas/calendar*', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: '{"error":"Falha controlada S08 em Tarefas"}' }));
     await unlock(page, '/calendario?mes=2024-13&data=2024-02-30&tipo=adulterado&status=legado');
-    await expect(page).not.toHaveURL(/2024-13|2024-02-30|tipo=adulterado|status=legado/);
+    await expect(page).not.toHaveURL(/2024-13|2024-02-30/);
+    await expect(page).toHaveURL(/tipo=adulterado&status=legado/);
+    await expect(page.getByText(/Há um tipo ou situação não reconhecido/)).toBeVisible();
     await page.goto('/calendario?mes=2024-02&data=2024-02-29');
     await unlockCurrent(page);
     await expect(page.getByRole('alert')).toContainText('Falha controlada S08 em Tarefas');

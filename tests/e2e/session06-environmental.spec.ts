@@ -178,20 +178,31 @@ test.describe('Sessão 06 — Ambiental', () => {
     await expect(page.getByText(`${PREFIX}Protocolo confirmado`)).toBeVisible();
 
     for (const [type, label] of [['vistoria', 'Vistoria Técnica'], ['fauna', 'Monitoramento de Fauna'], ['flora', 'Inventário Florestal'], ['outros', 'Laudo Ambiental Genérico']] as const) {
-      await page.getByRole('button', { name: 'Gerar laudo' }).click();
-      await page.getByLabel('Tipo de Laudo').click();
+      await page.getByRole('button', { name: 'Gerar relatório' }).click();
+      await page.getByLabel('Tipo de documento').click();
       await page.getByRole('option', { name: label, exact: true }).click();
-      await page.getByLabel('Cliente').fill(`${PREFIX}Cliente Açores`);
-      await page.getByLabel('Técnico Responsável').fill('Responsável Técnico QA');
-      await page.getByLabel('Parecer Técnico / Observações').fill(`Documento sintético: ${label}.`);
+      await page.getByRole('textbox', { name: 'Cliente', exact: true }).fill(`${PREFIX}Cliente Açores`);
+      await page.getByLabel('Responsável pelo documento').fill('EXEMPLO FICTÍCIO — Responsável Técnico QA');
+      await page.locator('#laudo-data').click();
+      const reference = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${relativeDate()}T12:00:00-03:00`));
+      await page.getByRole('gridcell', { name: reference, exact: true }).click();
+      await page.getByLabel('Observações técnicas (opcional)').fill(`EXEMPLO FICTÍCIO — Documento sintético: ${label}.`);
+      await page.getByRole('button', { name: 'Pré-visualizar PDF', exact: true }).click();
+      await expect(page.getByTitle('Pré-visualização do relatório')).toBeVisible();
+      const issueResponse = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith('/documentos/emitir'));
+      await page.getByRole('button', { name: 'Registrar emissão', exact: true }).click();
+      const issue = await issueResponse; expect(issue.ok()).toBe(true);
+      const issued = await issue.json() as { fileName: string };
+      await expect(page.getByText('Emissão registrada', { exact: true })).toBeVisible();
       const downloadPromise = page.waitForEvent('download');
-      await page.getByRole('button', { name: 'Gerar PDF' }).click();
+      await page.getByRole('button', { name: 'Baixar PDF', exact: true }).click();
       const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBe(`Laudo_${PREFIX}Demanda_Área_Norte_CAR.pdf`);
+      expect(download.suggestedFilename()).toBe(issued.fileName);
       const destination = path.join(evidenceRoot, `laudo-${type}.pdf`);
       await download.saveAs(destination);
       expect((await fs.stat(destination)).size).toBeGreaterThan(1000);
-      await expect(page.getByText('PDF gerado com sucesso.').last()).toBeVisible();
+      await page.getByRole('dialog').getByRole('button', { name: 'Fechar', exact: true }).click();
+      await expect(page.getByRole('dialog')).toBeHidden();
     }
 
     await expectNoAxeViolations(page);
@@ -244,8 +255,8 @@ test.describe('Sessão 06 — Ambiental', () => {
     await expect(page.getByText('Análise documental necessária')).toBeVisible();
 
     await page.getByRole('button', { name: 'Salvar cálculo' }).click();
-    await expect(page.getByText(`${PREFIX}Legado inválido`)).toBeVisible();
-    await expect(page.getByText('Dados legados inválidos')).toBeVisible();
+    await expect(page.getByText(`${PREFIX}Legado inválido`).first()).toBeVisible();
+    await expect(page.getByText('Dados legados inválidos').first()).toBeVisible();
     await page.getByLabel('Nome do cálculo').fill(`${PREFIX}CAR localizado`);
     await page.getByRole('button', { name: 'Confirmar salvamento' }).click();
     await expect(page.getByText(`${PREFIX}CAR localizado`)).toBeVisible();

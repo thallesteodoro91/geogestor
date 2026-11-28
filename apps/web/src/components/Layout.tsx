@@ -9,6 +9,7 @@ import { cn } from '../utils/cn';
 import { UnifiedNotificationCenter } from './UnifiedNotificationCenter';
 import { BackupStatusIndicator } from './BackupStatusIndicator';
 import { usePendingNavigationPath } from '../hooks/usePendingNavigationPath';
+import { useRouteScrollRestoration } from '../hooks/useRouteScrollRestoration';
 
 interface LayoutProps {
   children: ReactNode;
@@ -23,6 +24,7 @@ function LayoutShell({
   compactBottom = false,
   printContentOnly = false
 }: LayoutProps) {
+  useRouteScrollRestoration();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const pendingNavigationPath = usePendingNavigationPath();
   const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
@@ -82,7 +84,7 @@ function LayoutShell({
             <span className="text-[11px] text-zinc-500 font-sans tracking-wide">GESTÃO</span>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-1">
           <UnifiedNotificationCenter mobile />
 

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -56,10 +57,10 @@ test('KPIs e listagens não truncam 600 clientes, 250 projetos e 700 tarefas', a
 
     const headers = { 'x-api-token': 'test-token' };
     const [overviewResponse, clientsResponse, projectsResponse, tasksResponse] = await Promise.all([
-      server.inject({ method: 'GET', url: '/api/dashboard/overview', headers }),
-      server.inject({ method: 'GET', url: '/api/clientes?mode=page&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/projetos?mode=page&limit=100', headers }),
-      server.inject({ method: 'GET', url: '/api/tarefas?mode=page&limit=100', headers })
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/dashboard/overview', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/clientes?mode=page&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/projetos?mode=page&limit=100', headers }),
+      injectWithRecordVersion(server, { method: 'GET', url: '/api/tarefas?mode=page&limit=100', headers })
     ]);
 
     assert.equal(overviewResponse.statusCode, 200, overviewResponse.body);

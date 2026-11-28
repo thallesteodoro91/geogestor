@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync } from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
@@ -8,6 +9,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const source = path.join(root, 'apps', 'api', 'src');
 const requireFromApi = createRequire(path.join(root, 'apps', 'api', 'package.json'));
 const tsxCli = requireFromApi.resolve('tsx/cli');
+const fallbackDirectory = path.join(root, 'scratch', `api-suite-${process.pid}-${crypto.randomUUID()}`);
+mkdirSync(fallbackDirectory, { recursive: true });
 
 function collect(directory) {
   return readdirSync(directory, { withFileTypes: true })
@@ -21,21 +24,15 @@ function collect(directory) {
 const result = spawnSync(process.execPath, [tsxCli, '--test', '--test-concurrency=4', '--test-force-exit', ...collect(source)], {
   cwd: root,
   stdio: 'inherit',
-  env: { ...process.env, NODE_ENV: 'test' }
+  env: {
+    ...process.env, NODE_ENV: 'test', GEOGESTOR_DISABLE_SCHEDULER: '1',
+    // A unit test importing a database service before its own fixture is set
+    // must never fall back to the developer's operational database.
+    GEOGESTOR_DB_PATH: path.join(fallbackDirectory, 'fallback.db')
+  }
 });
 
-const scratch = path.join(root, 'scratch');
-if (existsSync(scratch)) {
-  for (const entry of readdirSync(scratch, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !['system-reset-', 'data-directory-', 'geospatial-'].some((prefix) => entry.name.startsWith(prefix))) continue;
-    try {
-      rmSync(path.join(scratch, entry.name), { recursive: true, force: true, maxRetries: 0 });
-    } catch (error) {
-      if (!['EBUSY', 'EPERM'].includes(error?.code)) throw error;
-      // O Windows pode manter o arquivo SQLite bloqueado por alguns instantes
-      // depois que o driver encerra. O próximo ciclo de testes tenta novamente.
-    }
-  }
-}
+// Each test owns its temporary paths. Never delete older diagnostics merely
+// because their directory name shares a prefix with this run's fixtures.
 
 process.exit(result.status ?? 1);

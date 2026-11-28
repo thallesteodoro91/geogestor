@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDefaultBudgetForm, formToPayload, resolveBudgetTerms, validateBudgetForm } from './budgetForm';
+import { createDefaultBudgetForm, detailToForm, formToPayload, resolveBudgetTerms, validateBudgetForm } from './budgetForm';
+import { commercialReviewWarnings, commercialRows, installmentText, installmentTexts, installmentAmounts } from './budgetPresentation';
+import { DEFAULT_COMPANY_TEMPLATE, normalizeCompanyTemplate } from '../../services/companyTemplate';
 import {
   createProfessionalBudgetPdfDefinition,
+  budgetPdfErrorMessage,
   downloadProfessionalBudgetPdf,
   professionalBudgetPdfFileName
 } from './budgetPdfGenerator';
@@ -131,6 +134,86 @@ test('usa termos corporativos como snapshot e preserva fallback seguro', () => {
   assert.notEqual(created.terms, laterTemplateTerms);
 });
 
+test('novas propostas usam 15 dias corridos e uma parcela à vista sem termos comerciais fixos', () => {
+  const form = createDefaultBudgetForm('client-1', DEFAULT_COMPANY_TEMPLATE.termos);
+  const days = (Date.parse(form.validUntil) - Date.parse(form.issueDate)) / 86_400_000;
+  assert.equal(days, 15);
+  assert.equal(form.paymentType, 'avista');
+  assert.equal(form.paymentDescription, '');
+  assert.deepEqual(form.installments, [{ percentage: '100', daysAfterApproval: 0, label: 'Pagamento na aprovação' }]);
+  assert.deepEqual(commercialReviewWarnings(form), []);
+  assert.equal(form.terms, createDefaultBudgetForm().terms);
+});
+
+test('divergências antigas são sinalizadas sem alterar textos, parcelas ou configuração', () => {
+  const terms = 'Validade: 15 dias úteis. Pagamento: 50% na aprovação e 50% na entrega.';
+  const budget = budgetFixture();
+  budget.termosCondicoes = terms;
+  budget.payment = { ...budget.payment!, type: 'parcelas', description: 'À vista na aprovação', installments: [{ percentage: '100', daysAfterApproval: 0 }] };
+  const original = JSON.stringify(budget);
+  const form = detailToForm(budget);
+  const before = JSON.stringify(formToPayload(form));
+  assert.equal(commercialReviewWarnings(form).length, 3);
+  assert.equal(JSON.stringify(formToPayload(form)), before);
+  assert.equal(JSON.stringify(budget), original);
+  assert.equal(form.terms, terms);
+  assert.equal(normalizeCompanyTemplate({ termos: terms }).termos, terms);
+});
+
+test('parcelas apresentam vencimento explícito ou relativo, com percentuais e valores preservados', () => {
+  assert.equal(installmentText({ percentage: '100', daysAfterApproval: 0 }, 0), '1. Parcela 1: 100%, na aprovação');
+  assert.equal(installmentText({ valueCents: 12345, dueDate: '2026-12-10', daysAfterApproval: 9, label: 'Saldo' }, 1), '2. Saldo: R$ 123,45, vencimento em 10/12/2026');
+  assert.match(installmentText({ percentage: '50', daysAfterApproval: 30 }, 1), /30 dias após a aprovação/);
+});
+
+test('PDF prioriza resumo, omite unidades sem área e usa aceite curto sem condições repetidas', () => {
+  const budget = budgetFixture();
+  budget.characterization = { estimatedArea: '', areaUnit: 'hectare', scopeDescription: 'Escopo fornecido pelo usuário' };
+  const form = detailToForm(budget);
+  assert.equal(formToPayload(form).characterization.scopeDescription, 'Escopo fornecido pelo usuário');
+  const serialized = JSON.stringify(createProfessionalBudgetPdfDefinition(budget, { razao: 'SkyGeo' }));
+  assert.ok(serialized.indexOf('RESUMO COMERCIAL') < serialized.indexOf('ITENS E INVESTIMENTO'));
+  assert.ok(serialized.indexOf('Forma de pagamento') < serialized.indexOf('ITENS E INVESTIMENTO'));
+  assert.ok(serialized.indexOf('RESUMO COMERCIAL') < serialized.indexOf('Escopo fornecido pelo usuário'));
+  assert.doesNotMatch(serialized, /Área estimada|Metodologia a detalhar|Investimento:|Validade:/);
+  assert.equal((serialized.match(/"text":"Investimento total"/g) || []).length, 1);
+  const acceptance = serialized.slice(serialized.indexOf('ACEITE DA PROPOSTA'));
+  assert.doesNotMatch(acceptance, /"table"|Validade|R\$/);
+  assert.match(acceptance, /Thalles Wesley Teodoro/);
+});
+
+test('valores apresentados nas parcelas usam o rateio de centavos da aprovação', () => {
+  const definitions = [{ percentage: '33.33' }, { percentage: '33.33' }, { percentage: '33.34', daysAfterApproval: 30 }];
+  assert.deepEqual(installmentAmounts(100, definitions), [33, 33, 34]);
+  const text = installmentTexts(100, definitions);
+  assert.match(text[2], /33,34% \(R\$\u00a00,34\), 30 dias após a aprovação/);
+  assert.match(installmentTexts(123457, [{ percentage: '100' }])[0], /100% \(R\$\u00a01.234,57\)/);
+  assert.deepEqual(installmentAmounts(123457, [{ percentage: '50' }]), []);
+  assert.doesNotMatch(installmentTexts(123457, [{ percentage: '50' }])[0], /R\$/);
+  assert.deepEqual(installmentAmounts(100, [{ percentage: '50' }, { valueCents: 50 }]), [50, 50]);
+});
+
+test('início do prazo é opcional e preservado na edição, no resumo e no PDF', () => {
+  const budget = budgetFixture();
+  assert.equal(detailToForm(budget).characterization.executionStart, undefined);
+  assert.equal(commercialRows(budget).find(([label]) => label === 'Prazo de execução')?.[1], '15 dias');
+  for (const start of [{ type: 'approval' as const }, { type: 'initial_payment' as const }, { type: 'custom' as const, description: 'Liberação de acesso ao imóvel e entrega dos documentos.' }]) {
+    budget.characterization = { ...budget.characterization, executionStart: start, outroCampo: 'Preservar' };
+    const form = detailToForm(budget);
+    assert.deepEqual(formToPayload(form).characterization.executionStart, start);
+    assert.equal((formToPayload(form).characterization as Record<string, unknown>).outroCampo, 'Preservar');
+    const deadline = commercialRows(budget).find(([label]) => label === 'Prazo de execução')?.[1];
+    assert.ok(deadline?.includes(start.type === 'approval' ? 'após a aprovação' : start.type === 'initial_payment' ? 'após o pagamento inicial' : start.description));
+    assert.ok(JSON.stringify(createProfessionalBudgetPdfDefinition(budget)).includes(deadline!));
+  }
+  const form = validForm();
+  form.characterization.executionStart = { type: 'custom', description: '  ' };
+  assert.ok(validateBudgetForm(form).some(issue => issue.fieldId === 'budget-execution-start-description'));
+  form.characterization.executionStart = { type: 'approval' };
+  form.executionDays = '';
+  assert.ok(validateBudgetForm(form).some(issue => issue.fieldId === 'budget-execution-days'));
+});
+
 test('valida encargos comerciais como percentuais e persiste em pontos-base', () => {
   const form = validForm();
   form.interestBasisPoints = '1,25';
@@ -214,10 +297,11 @@ test('definição do PDF preserva conteúdo longo e não expõe custos ou notas 
   assert.match(serialized, /Acréscimo: \+ R\$\s*50,00/);
   assert.match(serialized, /Desconto global/);
   assert.match(serialized, /Acréscimo global/);
-  assert.match(serialized, /Meio de pagamento: PIX/);
-  assert.match(serialized, /Juros: 1,00%/);
-  assert.match(serialized, /Multa: 2,00%/);
-  assert.match(serialized, /Desconto por antecipação: 0,50%/);
+  assert.match(serialized, /Meio de pagamento/);
+  assert.match(serialized, /PIX/);
+  assert.match(serialized, /Juros.*1,00%/);
+  assert.match(serialized, /Multa.*2,00%/);
+  assert.match(serialized, /Desconto por antecipação.*0,50%/);
   assert.match(serialized, /CREA-SC 000000-0/);
   assert.equal(professionalBudgetPdfFileName(budget), 'ORC-2026_001_v2_Cliente_Cao_Filhos.pdf');
 });
@@ -234,7 +318,7 @@ test('documento mínimo omite seções e linhas financeiras sem conteúdo', () =
   budget.valorTotal = 100_000;
   const serialized = JSON.stringify(createProfessionalBudgetPdfDefinition(budget, { razao: 'SkyGeo', cor: '#4f46e5' }));
 
-  assert.match(serialized, /INVESTIMENTO TOTAL/);
+  assert.match(serialized, /Investimento total/);
   assert.match(serialized, /R\$\s*1\.000,00/);
   assert.doesNotMatch(serialized, /ITENS OPCIONAIS/);
   assert.doesNotMatch(serialized, /Desconto global/);
@@ -242,6 +326,21 @@ test('documento mínimo omite seções e linhas financeiras sem conteúdo', () =
   assert.doesNotMatch(serialized, /Impostos cobrados por fora/);
   assert.doesNotMatch(serialized, /Despesas reembolsáveis incluídas/);
   assert.doesNotMatch(serialized, /Taxas repassadas incluídas/);
+});
+
+test('campos opcionais vazios não geram frases artificiais ou espaços para logo inexistente', () => {
+  const budget = { ...budgetFixture(), characterization: {}, prazoExecucaoDias: null, metodologia: null, entregaveis: null, observacoesCliente: null };
+  const definition = createProfessionalBudgetPdfDefinition(budget, { appLogo: 'ICONE_APP_NAO_USAR', razao: 'Empresa configurada' });
+  const serialized = JSON.stringify(definition);
+  assert.doesNotMatch(serialized, /Matrícula|Pontos de apoio|Estação base|OBSERVAÇÕES AO CLIENTE|Prazo previsto:|ICONE_APP_NAO_USAR/);
+  assert.match(serialized, /Empresa configurada/);
+  assert.match(serialized, /ACEITE DA PROPOSTA/);
+});
+
+test('falhas de PDF preservam orientação pública sem detalhes de IPC ou geração', () => {
+  assert.equal(budgetPdfErrorMessage(new Error("Error invoking remote method 'save-budget-pdf': Error: Não foi possível salvar o orçamento. Confira a pasta e tente novamente.")), 'Não foi possível salvar o orçamento. Confira a pasta e tente novamente.');
+  assert.doesNotMatch(budgetPdfErrorMessage(new Error('ENOENT: caminho privado')), /ENOENT|privado/);
+  assert.match(budgetPdfErrorMessage(new Error('Falha nativa'), 'open'), /leitor de PDF/);
 });
 
 test('marca somente estados não aptos para envio e preserva documentos emitidos', () => {
@@ -255,7 +354,7 @@ test('marca somente estados não aptos para envio e preserva documentos emitidos
   assert.match(JSON.stringify(canceled.watermark), /CANCELADO/);
 });
 
-test('download da proposta só resolve após a gravação e propaga falha', async () => {
+test('download web aguarda a entrega ao navegador e propaga falha de geração', async () => {
   let release!: () => void;
   let completed = false;
   const pending = new Promise<void>((resolve) => {
@@ -278,4 +377,45 @@ test('download da proposta só resolve após a gravação e propaga falha', asyn
     }, { content: [] }, 'proposta.pdf'),
     /download bloqueado/
   );
+});
+
+test('exportação desktop aguarda bytes e gravação, distingue cancelamento e propaga falha', async () => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  let release!: (value: string | null) => void;
+  let called = false;
+  const bytes = new Uint8Array([37, 80, 68, 70, 45]);
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: { electronAPI: {
+    saveBudgetPdf: (payload: { bytes: Uint8Array; fileName: string }) => {
+      called = true;
+      assert.equal(payload.bytes, bytes);
+      assert.equal(payload.fileName, 'proposta.pdf');
+      return new Promise<string | null>(resolve => { release = resolve; });
+    }
+  } } });
+  const make = { createPdf: () => ({ getBuffer: async () => bytes, download: () => { throw new Error('Não deve usar download web'); } }) };
+  try {
+    const operation = downloadProfessionalBudgetPdf(make, { content: [] }, 'proposta.pdf');
+    let settled = false;
+    void operation.then(() => { settled = true; });
+    await Promise.resolve();
+    assert.equal(called, true);
+    assert.equal(settled, false);
+    release('C:/Propostas São João/proposta.pdf');
+    assert.equal(await operation, 'C:/Propostas São João/proposta.pdf');
+    const cancelled = downloadProfessionalBudgetPdf(make, { content: [] }, 'proposta.pdf');
+    await Promise.resolve();
+    release(null);
+    assert.equal(await cancelled, null);
+    window.electronAPI!.saveBudgetPdf = async () => { throw new Error('Falha de gravação'); };
+    await assert.rejects(downloadProfessionalBudgetPdf(make, { content: [] }, 'proposta.pdf'), /Falha de gravação/);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, 'window', previous);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('nome de arquivo muito longo permanece utilizável no Windows e mantém extensão', () => {
+  const name = professionalBudgetPdfFileName({ ...budgetFixture(), clientName: 'Associação São João '.repeat(100) });
+  assert.equal(name.length, 164);
+  assert.match(name, /^[a-zA-Z0-9_-]+\.pdf$/);
 });

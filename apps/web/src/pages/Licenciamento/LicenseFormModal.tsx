@@ -8,6 +8,8 @@ import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { RemoteCombobox } from '../../components/RemoteCombobox';
+import { useLicenseDraftGuard } from './useLicenseDraftGuard';
+import './licensing.css';
 
 interface ProjectOption {
   id: string;
@@ -70,6 +72,7 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState('');
   const [selectedProject, setSelectedProject] = useState<ProjectOption | null>(null);
+  const { requestClose, confirmation } = useLicenseDraftGuard(form, loading, onClose);
 
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -111,13 +114,13 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} closeDisabled={loading} title={license ? 'Editar licença ambiental' : 'Nova licença ambiental'} maxWidth="max-w-4xl" initialFocusId="license-projetoId">
+    <><Modal isOpen={isOpen} onClose={requestClose} closeDisabled={loading} title={license ? 'Editar licença ambiental' : 'Nova licença ambiental'} maxWidth="max-w-4xl" panelClassName="licensing-dialog" initialFocusId={license ? 'license-numero' : 'license-projetoId'}>
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <FormError message={formError} />
-        <FormSection sectionId="license-enterprise" title="Empreendimento e vínculo" description="Associe a licença ao projeto e ao cliente responsáveis pelo processo." icon={<Buildings className="h-5 w-5" weight="duotone" />} tone="cyan">
+        <FormSection headingLevel={3} sectionId="license-enterprise" title="Empreendimento e vínculo" description="Associe a licença ao projeto e ao cliente responsáveis pelo processo." icon={<Buildings className="h-5 w-5" weight="duotone" />} tone="cyan">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField htmlFor="license-projetoId" label="Projeto ou empreendimento" required error={errors.projetoId}>
-              <RemoteCombobox<ProjectOption> id="license-projetoId" name="projetoId" endpoint="/api/projetos/options" disabled={Boolean(license)} value={form.projetoId} selectedLabel={license?.projetoNome || ''} onChange={(nextValue, option) => { setSelectedProject(option); update('projetoId', nextValue); }} getOptionDescription={(option) => option.clienteNome || 'Cliente não informado'} placeholder="Pesquisar projeto…" required aria-invalid={Boolean(errors.projetoId)} aria-describedby={errors.projetoId ? 'license-projetoId-error' : undefined} />
+              <RemoteCombobox<ProjectOption> id="license-projetoId" name="projetoId" endpoint="/api/projetos/options" listLabel="Projetos ou empreendimentos encontrados" fill density="form" className="h-11" disabled={Boolean(license)} value={form.projetoId} selectedLabel={license?.projetoNome || ''} onChange={(nextValue, option) => { setSelectedProject(option); update('projetoId', nextValue); }} getOptionDescription={(option) => option.clienteNome || 'Cliente não informado'} placeholder="Pesquisar projeto…" required aria-invalid={Boolean(errors.projetoId)} aria-describedby={errors.projetoId ? 'license-projetoId-error' : undefined} />
             </FormField>
             <FormField htmlFor="license-cliente" label="Cliente">
               <input id="license-cliente" name="cliente" type="text" value={selectedProject?.clienteNome || license?.clienteNome || ''} readOnly aria-readonly="true" placeholder="Definido pelo projeto" className={cn(fieldClass, 'bg-zinc-50 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-300')} />
@@ -125,52 +128,52 @@ function LicenseFormModalContent({ isOpen, onClose, onSubmit, license, loading =
           </div>
         </FormSection>
 
-        <FormSection sectionId="license-identification" title="Identificação da licença" description="Registre o tipo, o número oficial, o protocolo e o órgão ambiental emissor." icon={<IdentificationCard className="h-5 w-5" weight="duotone" />} tone="cyan">
+        <FormSection headingLevel={3} sectionId="license-identification" title="Identificação da licença" description="Registre o tipo, o número oficial, o protocolo e o órgão ambiental emissor." icon={<IdentificationCard className="h-5 w-5" weight="duotone" />} tone="cyan">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField htmlFor="license-tipoLicenca" label="Tipo da licença" required error={errors.tipoLicenca}>
-              <FormSelect id="license-tipoLicenca" name="tipoLicenca" autoComplete="off" value={form.tipoLicenca} onChange={(event) => update('tipoLicenca', event.target.value)} aria-invalid={Boolean(errors.tipoLicenca)} aria-describedby={errors.tipoLicenca ? 'license-tipoLicenca-error' : undefined} className={cn(fieldClass, 'geo-native-select')}>
+              <FormSelect id="license-tipoLicenca" name="tipoLicenca" required autoComplete="off" value={form.tipoLicenca} onChange={(event) => update('tipoLicenca', event.target.value)} aria-invalid={Boolean(errors.tipoLicenca)} aria-describedby={errors.tipoLicenca ? 'license-tipoLicenca-error' : undefined} className={cn(fieldClass, 'geo-native-select')}>
                 <option value="">Selecione…</option><option value="LP">Licença Prévia — LP</option><option value="LI">Licença de Instalação — LI</option><option value="LO">Licença de Operação — LO</option><option value="Renovação">Renovação</option><option value="Outros">Outros</option>
               </FormSelect>
             </FormField>
             <FormField htmlFor="license-numero" label="Número da licença" required error={errors.numero}>
-              <input id="license-numero" name="numero" type="text" autoComplete="off" spellCheck={false} maxLength={120} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: LAO 1234/2026" aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? 'license-numero-error' : undefined} className={fieldClass} />
+              <input id="license-numero" name="numero" required type="text" autoComplete="off" spellCheck={false} maxLength={120} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: LAO 1234/2026" aria-invalid={Boolean(errors.numero)} aria-describedby={errors.numero ? 'license-numero-error' : undefined} className={fieldClass} />
             </FormField>
-            <FormField htmlFor="license-protocolo" label="Processo ou protocolo">
-              <input id="license-protocolo" name="protocolo" type="text" autoComplete="off" spellCheck={false} maxLength={160} value={form.protocolo} onChange={(event) => update('protocolo', event.target.value)} placeholder="Ex.: IMA 000123/2026" className={fieldClass} />
+            <FormField htmlFor="license-protocolo" label="Processo ou protocolo" error={errors.protocolo}>
+              <input id="license-protocolo" aria-invalid={Boolean(errors.protocolo)} aria-describedby={errors.protocolo ? 'license-protocolo-error' : undefined} name="protocolo" type="text" autoComplete="off" spellCheck={false} maxLength={160} value={form.protocolo} onChange={(event) => update('protocolo', event.target.value)} placeholder="Ex.: IMA 000123/2026" className={fieldClass} />
             </FormField>
             <FormField htmlFor="license-orgao" label="Órgão ambiental" required error={errors.orgao}>
-              <input id="license-orgao" name="orgao" type="text" autoComplete="organization" maxLength={160} value={form.orgao} onChange={(event) => update('orgao', event.target.value)} placeholder="Ex.: IMA, IBAMA" aria-invalid={Boolean(errors.orgao)} aria-describedby={errors.orgao ? 'license-orgao-error' : undefined} className={fieldClass} />
+              <input id="license-orgao" name="orgao" required type="text" autoComplete="organization" maxLength={160} value={form.orgao} onChange={(event) => update('orgao', event.target.value)} placeholder="Ex.: IMA, IBAMA" aria-invalid={Boolean(errors.orgao)} aria-describedby={errors.orgao ? 'license-orgao-error' : undefined} className={fieldClass} />
             </FormField>
           </div>
         </FormSection>
 
-        <FormSection sectionId="license-validity" title="Validade e situação" description="Controle a emissão, o vencimento e a situação administrativa atual." icon={<CalendarBlank className="h-5 w-5" weight="duotone" />} tone="cyan">
+        <FormSection headingLevel={3} sectionId="license-validity" title="Validade e situação" description="Controle a emissão, o vencimento e a situação administrativa atual." icon={<CalendarBlank className="h-5 w-5" weight="duotone" />} tone="cyan">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <FormField htmlFor="license-dataEmissao" label="Data de emissão">
-              <DatePickerField id="license-dataEmissao" name="dataEmissao" autoComplete="off" value={form.dataEmissao} onChange={(event) => update('dataEmissao', event.target.value)} className={fieldClass} />
+            <FormField htmlFor="license-dataEmissao" label="Data de emissão" error={errors.dataEmissao}>
+              <DatePickerField id="license-dataEmissao" name="dataEmissao" autoComplete="off" value={form.dataEmissao} onChange={(event) => update('dataEmissao', event.target.value)} aria-invalid={Boolean(errors.dataEmissao)} aria-describedby={errors.dataEmissao ? 'license-dataEmissao-error' : undefined} className={fieldClass} />
             </FormField>
             <FormField htmlFor="license-dataVencimento" label="Data de vencimento" required error={errors.dataVencimento}>
-              <DatePickerField id="license-dataVencimento" name="dataVencimento" autoComplete="off" min={form.dataEmissao || undefined} value={form.dataVencimento} onChange={(event) => update('dataVencimento', event.target.value)} aria-invalid={Boolean(errors.dataVencimento)} aria-describedby={errors.dataVencimento ? 'license-dataVencimento-error' : undefined} className={fieldClass} />
+              <DatePickerField id="license-dataVencimento" name="dataVencimento" required autoComplete="off" min={form.dataEmissao || undefined} value={form.dataVencimento} onChange={(event) => update('dataVencimento', event.target.value)} aria-invalid={Boolean(errors.dataVencimento)} aria-describedby={errors.dataVencimento ? 'license-dataVencimento-error' : undefined} className={fieldClass} />
             </FormField>
-            <FormField htmlFor="license-status" label="Situação atual">
-              <FormSelect id="license-status" name="status" autoComplete="off" value={form.status} onChange={(event) => update('status', event.target.value as FormState['status'])} className={cn(fieldClass, 'geo-native-select')}>
+            <FormField htmlFor="license-status" label="Situação atual" error={errors.status}>
+              <FormSelect id="license-status" name="status" autoComplete="off" value={form.status} onChange={(event) => update('status', event.target.value as FormState['status'])} aria-invalid={Boolean(errors.status)} aria-describedby={errors.status ? 'license-status-error' : undefined} className={cn(fieldClass, 'geo-native-select')}>
                 {LICENSE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
               </FormSelect>
             </FormField>
           </div>
         </FormSection>
 
-        <FormSection sectionId="license-notes" title="Observações e referências" description="Registre restrições, orientações para renovação e referências documentais." icon={<NotePencil className="h-5 w-5" weight="duotone" />} tone="cyan" optional>
-          <FormField htmlFor="license-observacoes" label="Observações">
-            <textarea id="license-observacoes" name="observacoes" rows={4} maxLength={2000} value={form.observacoes} onChange={(event) => update('observacoes', event.target.value)} placeholder="Restrições, informações de renovação e referências documentais." className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
+        <FormSection headingLevel={3} sectionId="license-notes" title="Observações e referências" description="Registre restrições, orientações para renovação e referências documentais." icon={<NotePencil className="h-5 w-5" weight="duotone" />} tone="cyan" optional>
+          <FormField htmlFor="license-observacoes" label="Observações" error={errors.observacoes}>
+            <textarea id="license-observacoes" aria-invalid={Boolean(errors.observacoes)} aria-describedby={errors.observacoes ? 'license-observacoes-error' : undefined} name="observacoes" rows={4} maxLength={2000} value={form.observacoes} onChange={(event) => update('observacoes', event.target.value)} placeholder="Restrições, informações de renovação e referências documentais." className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
           </FormField>
         </FormSection>
         <FormFooter>
-          <button type="button" onClick={onClose} disabled={loading} className={secondarySmallActionButtonClass}>Cancelar</button>
+          <button type="button" onClick={requestClose} disabled={loading} className={secondarySmallActionButtonClass}>Cancelar</button>
           <button type="submit" disabled={loading} aria-busy={loading} className={primarySubmitButtonClass}>{loading ? 'Salvando…' : license ? 'Salvar alterações' : 'Criar licença'}</button>
         </FormFooter>
       </form>
-    </Modal>
+    </Modal>{confirmation}</>
   );
 }
 

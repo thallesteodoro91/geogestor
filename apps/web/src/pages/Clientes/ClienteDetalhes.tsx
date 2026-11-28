@@ -1,5 +1,5 @@
 import { toast } from 'sonner';
-import { appLinks } from '@geogestor/contracts';
+import { APP_PATHS, APP_ROUTES, appLinks } from '@geogestor/contracts';
 import { DatePickerField, FormSelect, TimePickerField } from '../../components/Form';
 import { PopoverSurface } from '../../components/form-controls/PopoverSurface';
 import { useEffect, useRef, useState, useMemo } from 'react';
@@ -7,61 +7,67 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
 import { SharedDataNotice } from '../../components/SharedDataNotice';
-import { motion } from 'framer-motion';
-import { 
-  ArrowLeft, 
-  EnvelopeSimple, 
-  Phone, 
+import {
+  ArrowLeft,
+  EnvelopeSimple,
+  Phone,
   CopySimple,
-  Trash, 
-  Note, 
-  Globe, 
-  Tag, 
-  IdentificationCard, 
-  MapPin, 
-  WhatsappLogo, 
-  FolderSimple, 
-  FileText, 
+  Trash,
+  Note,
+  IdentificationCard,
+  MapPin,
+  WhatsappLogo,
+  FolderSimple,
+  FileText,
   Receipt,
-  Files, 
-  Plus, 
-  Check, 
+  Files,
+  Plus,
+  Check,
   Calendar,
   ListChecks,
-  MapTrifold,
   X,
   ArrowSquareOut,
   Warning,
   Buildings,
-  Handshake,
   CurrencyDollar,
-  CalendarCheck,
-  Briefcase,
   CaretDown,
   Minus,
   PencilSimple,
   CheckCircle,
-  Leaf
+  Leaf,
+  Globe,
+  Tag,
+  MapTrifold,
+  Handshake,
+  CalendarCheck,
+  Briefcase
 } from '@phosphor-icons/react';
 import { ClienteCentralControle } from './ClienteCentralControle';
 import { ClienteMapaCard } from './ClienteDetalhes/ClienteMapaCard';
 import { ClienteSecondaryTabs } from './ClienteDetalhes/ClienteSecondaryTabs';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import {
+  getClientStatusTagClass,
+  resolveClientClassification,
   getClientCategoryTagClass,
   getClientOriginTagClass,
-  getClientStatusTagClass,
-  getClientServicoTagClass
+  getClientServicoTagClass,
+  normalizeClientCategoryText
 } from '../../utils/clientTags';
 import { getClientCategoryIcon, getClientCategoryColorClass } from '../../utils/clientIcons';
 import { formatCnpj, formatCpf, formatPhoneBR } from '../../utils/formatters';
-import { apiClient, apiFetch } from '../../services/apiClient';
+import { apiClient, apiFetch, ApiError } from '../../services/apiClient';
 import { listBudgetSummaries } from '../../services/budgets';
 import { primarySmallActionButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { cn } from '../../utils/cn';
 import { geoTabButtonClass, geoTabIconClass, geoTabListClass, type GeoTone } from '../../utils/geoTheme';
 import { isApprovedBudgetStatus } from '../../utils/budgetStatus';
 import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
+import { Modal } from '../../components/Modal';
+import { ClientLoadState } from './ClientLoadState';
+import { clientToday, formatClientDate, listAllClientProperties } from './clientWorkspace';
+import type { LicenseListItem } from '@geogestor/contracts';
+import './client-workspace.css';
 
 interface ClienteArquivoItem {
   documentId?: string;
@@ -316,12 +322,12 @@ export function ClienteDetalhes() {
   };
 
   // 1. Fetch Client Dashboard Info (Consolidated Endpoint)
-  const { data: dashboardData, isLoading: loadingCliente } = useQuery({
+  const { data: dashboardData, isLoading: loadingCliente, error: dashboardError, refetch: reloadDashboard } = useQuery({
     queryKey: ['cliente-dashboard', id],
     queryFn: async () => {
-      const res = await apiFetch(`/api/clientes/${id}/dashboard`);
-      if (!res.ok) throw new Error('Cliente não encontrado');
-      return res.json();
+      const response = await apiFetch(`/api/clientes/${id}/dashboard`);
+      if (!response.ok) throw new ApiError('Não foi possível carregar o cliente.', response.status);
+      return response.json();
     },
     enabled: !!id
   });
@@ -334,19 +340,6 @@ export function ClienteDetalhes() {
     document.title = `${cliente.nome} — GeoGestor`;
     return () => { document.title = previousTitle; };
   }, [cliente?.nome]);
-
-  useEffect(() => {
-    if (!previewFile) return undefined;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setPreviewFile(null);
-        setPreviewObjectUrl('');
-        setPreviewError('');
-      }
-    };
-    document.addEventListener('keydown', closeOnEscape);
-    return () => document.removeEventListener('keydown', closeOnEscape);
-  }, [previewFile]);
 
   useEffect(() => {
     if (!previewFile) return undefined;
@@ -401,7 +394,7 @@ export function ClienteDetalhes() {
   }, [activeTab, loadingCliente]);
 
   // 2. Fetch Client's CRM History
-  const { data: historico = [], isLoading: loadingHistorico } = useQuery<Array<{
+  const { data: historico = [], isLoading: loadingHistorico, isError: historyError, refetch: reloadHistory } = useQuery<Array<{
     id: string;
     tipo: string;
     titulo?: string | null;
@@ -415,14 +408,14 @@ export function ClienteDetalhes() {
     queryKey: ['cliente-historico', id],
     queryFn: async () => {
       const res = await apiFetch(`/api/clientes/${id}/historico`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar a jornada.');
       return res.json();
     },
     enabled: !!id
   });
 
   // 3. Fetch Projects (filtered by client in backend)
-  const { data: projetos = [] } = useQuery<Array<{
+  const { data: projetos = [], isLoading: loadingProjects, isError: projectsError, refetch: reloadProjects } = useQuery<Array<{
     id: string;
     nome: string;
     clienteId?: string | null;
@@ -445,18 +438,20 @@ export function ClienteDetalhes() {
   }>>({
     queryKey: ['projetos', id],
     queryFn: () => apiClient.getAllPages(`/api/projetos?clienteId=${id}`),
-    enabled: !!id && (activeTab === 'servicos' || activeTab === 'ambiental' || activeTab === 'visao-geral')
+    enabled: !!id
   });
 
   const clientProjetos = projetos;
 
-  const { data: propriedadesData } = useQuery<{ items: ClientePropriedade[] }>({
+  const { data: clientProperties = [], isLoading: loadingProperties, isError: propertiesError, refetch: reloadProperties } = useQuery<ClientePropriedade[]>({
     queryKey: ['cliente-propriedades', id],
-    queryFn: () => apiClient.get<{ items: ClientePropriedade[] }>(`/api/dados-operacionais/propriedades?clienteId=${id}&limit=100`),
-    enabled: !!id && (activeTab === 'visao-geral' || activeTab === 'propriedades')
+    queryFn: () => listAllClientProperties<ClientePropriedade>(id!),
+    enabled: !!id
   });
 
-  const clientProperties = propriedadesData?.items || [];
+  const { data: clientLicenses = [], isLoading: loadingLicenses, isError: licensesError, refetch: reloadLicenses } = useQuery<LicenseListItem[]>({
+    queryKey: ['cliente-licencas', id], queryFn: () => apiClient.getAllPages(`/api/licencas?clienteId=${id}`), enabled: !!id && activeTab === 'ambiental'
+  });
   const clientAmbientalProjetos = useMemo(
     () => clientProjetos.filter((project) => {
       const type = (project.tipo || '')
@@ -480,7 +475,7 @@ export function ClienteDetalhes() {
   // Agenda form state
   const [showAgendaForm, setShowAgendaForm] = useState(false);
   const [agendaTitulo, setAgendaTitulo] = useState('');
-  const [agendaData, setAgendaData] = useState(new Date().toISOString().split('T')[0]);
+  const [agendaData, setAgendaData] = useState(clientToday());
   const [agendaHora, setAgendaHora] = useState('14:00');
   const [agendaTipo, setAgendaTipo] = useState('Reunião');
   const [agendaProjetoId, setAgendaProjetoId] = useState('');
@@ -492,7 +487,7 @@ export function ClienteDetalhes() {
     queryKey: ['cliente-central-tarefas', id],
     queryFn: async () => {
       const res = await apiFetch(`/api/tarefas?clienteId=${id}`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar as tarefas.');
       return res.json();
     },
     enabled: !!id && activeTab === 'visao-geral'
@@ -503,7 +498,7 @@ export function ClienteDetalhes() {
     queryKey: ['cliente-central-compromissos', id],
     queryFn: async () => {
       const res = await apiFetch(`/api/compromissos?clienteId=${id}`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar a agenda.');
       return res.json();
     },
     enabled: !!id && activeTab === 'visao-geral'
@@ -573,7 +568,7 @@ export function ClienteDetalhes() {
       case 'Alta':
         return {
           cardClass: 'border-l-rose-500 bg-rose-50/20 dark:bg-rose-950/10 dark:border-l-rose-500',
-          badgeClass: 'bg-rose-50 text-rose-700 ring-rose-600/10 dark:bg-rose-950/20 dark:text-rose-450 dark:ring-rose-500/20',
+          badgeClass: 'bg-rose-50 text-rose-700 ring-rose-600/10 dark:bg-rose-950/20 dark:text-rose-300 dark:ring-rose-500/20',
           label: 'Alta'
         };
       case 'Média':
@@ -618,11 +613,11 @@ export function ClienteDetalhes() {
         clienteId: id,
         status: 'A Fazer'
       };
-      
+
       const endpoint = editingTaskId
         ? `/api/tarefas/${editingTaskId}`
         : '/api/tarefas';
-        
+
       const res = await apiFetch(endpoint, {
         method: editingTaskId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -679,7 +674,7 @@ export function ClienteDetalhes() {
   // Agenda mutations
   const resetAgendaForm = () => {
     setAgendaTitulo('');
-    setAgendaData(new Date().toISOString().split('T')[0]);
+    setAgendaData(clientToday());
     setAgendaHora('14:00');
     setAgendaTipo('Reunião');
     setAgendaProjetoId('');
@@ -709,11 +704,11 @@ export function ClienteDetalhes() {
         projetoId: agendaProjetoId || null,
         clienteId: id
       };
-      
+
       const endpoint = editingAgendaId
         ? `/api/compromissos/${editingAgendaId}`
         : '/api/compromissos';
-        
+
       const res = await apiFetch(endpoint, {
         method: editingAgendaId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -752,7 +747,7 @@ export function ClienteDetalhes() {
   });
 
   // 4. Fetch Budgets (filtered by client)
-  const { data: orcamentos = [] } = useQuery<Array<{
+  const { data: orcamentos = [], isLoading: loadingBudgets, isError: budgetsError, refetch: reloadBudgets } = useQuery<Array<{
     id: string;
     clienteId?: string | null;
     projetoId?: string | null;
@@ -765,6 +760,7 @@ export function ClienteDetalhes() {
     desconto?: number | null;
     createdAt?: string | null;
     dataOrcamento?: string | null;
+    propriedadeNome?: string | null;
   }>>({
     queryKey: ['orcamentos', id],
     queryFn: async () => (await listBudgetSummaries(id)).map((budget) => ({
@@ -778,8 +774,9 @@ export function ClienteDetalhes() {
       descricao: budget.description,
       createdAt: budget.createdAt,
       dataOrcamento: budget.issueDate
+      ,propriedadeNome: budget.propertyName
     })),
-    enabled: !!id && ['visao-geral', 'orcamentos', 'financeiro'].includes(activeTab)
+    enabled: !!id
   });
 
   const clientOrcamentos = orcamentos;
@@ -788,7 +785,7 @@ export function ClienteDetalhes() {
   const projectIdsForAlerts = clientProjetos.map((project) => project.id).join('|');
   const clientProjectIdSet = useMemo(() => new Set(clientProjetos.map((project) => project.id)), [clientProjetos]);
 
-  const { data: clienteTarefasResumo = [] } = useQuery<Array<{
+  const { data: clienteTarefasResumo = [], isLoading: loadingTaskSummary, isError: taskSummaryError, refetch: reloadTaskSummary } = useQuery<Array<{
     id: string;
     clienteId?: string | null;
     projetoId?: string | null;
@@ -798,22 +795,20 @@ export function ClienteDetalhes() {
     queryKey: ['cliente-central-tarefas', id],
     queryFn: async () => {
       const res = await apiFetch(`/api/tarefas?clienteId=${id}`);
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error('Não foi possível carregar as tarefas do cliente.');
       return res.json();
     },
     enabled: !!id
   });
 
-  const { data: arquivosResumoOperacional = { cliente: 0, projetos: {} as Record<string, number>, total: 0 } } = useQuery<{
+  const { data: arquivosResumoOperacional = { cliente: 0, projetos: {} as Record<string, number>, total: 0 }, isLoading: loadingFileCount, isError: fileCountError } = useQuery<{
     cliente: number;
     projetos: Record<string, number>;
     total: number;
   }>({
     queryKey: ['cliente-central-arquivos', id, projectIdsForAlerts],
     queryFn: async () => {
-      const consolidated = await apiFetch(`/api/arquivos/cliente/${id}?scope=all`)
-        .then((res) => (res.ok ? res.json() : { files: [] }))
-        .catch(() => ({ files: [] }));
+      const consolidated = await apiClient.get<{ files: Array<{ originType?: string; projetoId?: string | null }> }>(`/api/arquivos/cliente/${id}?scope=all`);
       const files = Array.isArray(consolidated.files) ? consolidated.files as Array<{ originType?: string; projetoId?: string | null }> : [];
       const projetosMap = files.reduce<Record<string, number>>((counts, file) => {
         if (file.originType === 'project' && file.projetoId) counts[file.projetoId] = (counts[file.projetoId] || 0) + 1;
@@ -885,9 +880,7 @@ export function ClienteDetalhes() {
       }
     })();
 
-    const propertyCount = activeTab === 'visao-geral' || activeTab === 'propriedades'
-      ? clientProperties.length
-      : Number(dashboardData?.kpis?.propriedades || 0);
+    const propertyCount = loadingProperties || propertiesError ? null : clientProperties.length;
 
     return [
       ...storedReviewReasons.map((reason) => ({
@@ -900,7 +893,7 @@ export function ClienteDetalhes() {
       ...(propertyCount === 0 ? ['Cliente sem propriedade'] : []),
       ...(Number(dashboardData?.quality?.documentReviewCount || 0) > 0 ? ['Documento ativo com arquivo ausente'] : [])
     ].filter((issue, index, values) => values.indexOf(issue) === index);
-  }, [activeTab, clientProperties.length, cliente, dashboardData?.kpis?.propriedades, dashboardData?.quality?.documentReviewCount]);
+  }, [loadingProperties, propertiesError, clientProperties.length, cliente, dashboardData?.quality?.documentReviewCount]);
 
   const qualityAlertSignature = useMemo(
     () => qualityIssues.slice().sort().join('\u001f'),
@@ -972,19 +965,18 @@ export function ClienteDetalhes() {
   if (loadingCliente) {
     return (
       <Layout>
-        <div className="py-24 flex justify-center">
-          <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }} className="w-8 h-8 rounded-full border-2 border-zinc-200 dark:border-zinc-800 border-t-zinc-900 animate-spin" />
-        </div>
+        <ClientLoadState label="os dados do cliente" />
       </Layout>
     );
   }
 
   if (!cliente) {
+    if (dashboardError && !(dashboardError instanceof ApiError && dashboardError.status === 404)) return <Layout><ClientLoadState label="os dados do cliente" error onRetry={() => void reloadDashboard()} /></Layout>;
     return (
       <Layout>
         <div className="text-center py-12">
-          <h2 className="text-2xl font-bold mb-4">Cliente não encontrado</h2>
-          <Link to="/clientes" className="inline-flex rounded-xl bg-zinc-950 px-4 py-2 text-white hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+          <h1 className="text-2xl font-bold mb-4">Cliente não encontrado</h1>
+          <Link to={APP_PATHS.clients} className="inline-flex rounded-xl bg-zinc-950 px-4 py-2 text-white hover:bg-zinc-800 focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
             Voltar para lista de clientes
           </Link>
         </div>
@@ -994,10 +986,8 @@ export function ClienteDetalhes() {
 
   // Calculate KPIs
   const totalAreaCadastroM2 = clientProperties.reduce((acc, property) => acc + ((Number(property.areaHa) || 0) * 10000), 0);
-  const totalAreaMapeadaM2 = totalAreaCadastroM2;
-  const areaSource = totalAreaCadastroM2 > 0 ? 'Soma das propriedades cadastradas' : 'Sem área informada';
   const featuredProperty = clientProperties[0] || null;
-  const featuredProject = clientProjetos.find((project) => ['Ativo', 'Em Andamento'].includes(project.status || '')) || clientProjetos[0] || null;
+  const nextDeliveryProject = clientProjetos.filter(project => !isCompletedStatus(project.status) && project.dataEntrega).sort((a,b) => a.dataEntrega!.localeCompare(b.dataEntrega!))[0];
   const addressNumber = cliente.semNumero ? 'S/N' : cliente.numero;
   const cityState = [cliente.municipio, cliente.uf].filter(Boolean).join(' / ');
   const fullAddressValue = [
@@ -1008,12 +998,6 @@ export function ClienteDetalhes() {
     cityState,
     cliente.cep
   ].filter(Boolean).join(', ');
-  const featuredProjectLocation = featuredProperty
-    ? [featuredProperty.cidade, featuredProperty.municipio].filter(Boolean).join(' / ') || fullAddressValue || 'Localidade não informada'
-    : fullAddressValue || 'Localidade não informada';
-  const operationalProjectName = featuredProperty?.nome || 'Cliente sem propriedade vinculada';
-  // A data pertence ao projeto; o campo do cliente é apenas um fallback para cadastros legados.
-  const deliveryForecast = featuredProject?.dataEntrega || cliente.previsaoEntrega || '';
   const featuredProjectRegistries = featuredProperty
     ? [
         { label: 'CAR', value: featuredProperty.car },
@@ -1022,15 +1006,12 @@ export function ClienteDetalhes() {
         { label: 'ITR', value: featuredProperty.itr }
       ].filter((registry) => Boolean(registry.value))
     : [];
-  const clientServicos = splitClientTags(cliente.servicos);
-  const featuredProjectTags = clientServicos.map((svc) => ({
-    label: svc,
-    className: getClientServicoTagClass(svc).replace('ring-1', 'border border-current/10')
-  }));
-  const totalReceita = clientOrcamentos
-    .filter((o) => isApprovedBudgetStatus(o.status))
-    .reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
   const clientFinancialKpis = dashboardData?.kpis || {};
+  const summaryLoading = loadingProperties || loadingProjects || loadingBudgets;
+  const summaryError = propertiesError || projectsError || budgetsError;
+  const retrySummary = () => { void reloadProperties(); void reloadProjects(); void reloadBudgets(); };
+  const tabCount = (loading: boolean, failed: boolean, value: number) => loading ? '…' : failed ? '—' : value;
+  const tabState = (label: string, error: boolean, onRetry: () => void) => <div id={`cliente-panel-${activeTab}`} role="tabpanel" aria-labelledby={`cliente-tab-${activeTab}`} className="client-workspace-panel"><ClientLoadState label={label} error={error} onRetry={onRetry} /></div>;
   const orcamentosPorStatus = clientOrcamentos.reduce<Record<string, { count: number; total: number }>>((acc, orc) => {
     const status = orc.status || 'Sem status';
     if (!acc[status]) acc[status] = { count: 0, total: 0 };
@@ -1038,8 +1019,8 @@ export function ClienteDetalhes() {
     acc[status].total += Number(orc.valorTotal) || 0;
     return acc;
   }, {});
-  const clientCategories = splitClientTags(cliente.categoria);
-  const clientOrigins = splitClientTags(cliente.origem);
+  const clientClassification = resolveClientClassification(cliente.categoria, cliente.perfis);
+  const clientCategory = clientClassification.primary;
   const primaryPhoneValue = cliente.celular || cliente.telefone || '';
   const secondaryPhoneValue = cliente.celular && cliente.telefone ? cliente.telefone : '';
   const documentValue = cliente.cpf
@@ -1052,13 +1033,32 @@ export function ClienteDetalhes() {
   const whatsappUrl = whatsappDigits
     ? `https://wa.me/${whatsappDigits.startsWith('55') ? whatsappDigits : `55${whatsappDigits}`}`
     : '';
-  const orcamentosSemPropriedadeResumo = clientOrcamentos.filter((orcamento) => !orcamento.projetoId).length;
-  const propriedadesSemMapaResumo = clientProjetos.filter((project) => !project.latitude || !project.longitude).length;
+  const totalAreaMapeadaM2 = totalAreaCadastroM2;
+  const areaSource = totalAreaCadastroM2 > 0 ? 'Soma das propriedades cadastradas' : 'Sem área informada';
+  const featuredProject = clientProjetos.find((project) => ['Ativo', 'Em Andamento'].includes(project.status || '')) || clientProjetos[0] || null;
+  const featuredProjectLocation = featuredProperty
+    ? [featuredProperty.cidade, featuredProperty.municipio].filter(Boolean).join(' / ') || fullAddressValue || 'Localidade não informada'
+    : fullAddressValue || 'Localidade não informada';
+  const operationalProjectName = featuredProperty?.nome || 'Cliente sem propriedade vinculada';
+  const deliveryForecast = featuredProject?.dataEntrega || cliente.previsaoEntrega || '';
+  const clientServicos = splitClientTags(cliente.servicos);
+  const featuredProjectTags = clientServicos.map((svc) => ({
+    label: svc,
+    className: getClientServicoTagClass(svc).replace('ring-1', 'border border-current/10')
+  }));
+  const totalReceita = clientOrcamentos
+    .filter((o) => isApprovedBudgetStatus(o.status))
+    .reduce((acc: number, cur) => acc + (Number(cur.valorTotal) || 0), 0);
+  const currentCategoryIsLegacyAlias = Boolean(cliente.categoria && cliente.categoria !== normalizeClientCategoryText(cliente.categoria));
+  const clientOrigins = splitClientTags(cliente.origem);
+  const trabalhosSemLocalizacaoResumo = clientProjetos.filter((project) => project.latitude == null || project.longitude == null).length;
+  const alertsLoading = summaryLoading || loadingFileCount || loadingTaskSummary;
+  const alertsError = summaryError || fileCountError || taskSummaryError;
+  const retryAlerts = () => { retrySummary(); void reloadTaskSummary(); void queryClient.invalidateQueries({ queryKey: ['cliente-central-arquivos', id] }); };
   const alertasOperacionaisResumo = [
-    tarefasVencidasResumo > 0 ? `${tarefasVencidasResumo} tarefa(s) vencida(s)` : null,
-    orcamentosSemPropriedadeResumo > 0 ? `${orcamentosSemPropriedadeResumo} orçamento(s) sem propriedade vinculada` : null,
-    propriedadesSemMapaResumo > 0 ? `${propriedadesSemMapaResumo} propriedade(s) sem coordenadas ou mapa` : null,
-    arquivosResumoOperacional.total === 0 ? 'Nenhum documento encontrado nas pastas do cliente ou propriedades' : null
+    !loadingTaskSummary && !taskSummaryError && tarefasVencidasResumo > 0 ? `${tarefasVencidasResumo} tarefa(s) vencida(s)` : null,
+    !loadingProjects && !projectsError && trabalhosSemLocalizacaoResumo > 0 ? `${trabalhosSemLocalizacaoResumo} trabalho(s) sem coordenadas de localização registradas` : null,
+    !loadingFileCount && !fileCountError && arquivosResumoOperacional.total === 0 ? 'Nenhum documento encontrado nas pastas do cliente ou dos trabalhos vinculados' : null
   ].filter(Boolean) as string[];
 
   const handleCopyContact = async (field: string, value?: string | null) => {
@@ -1124,7 +1124,7 @@ export function ClienteDetalhes() {
     {
       label: 'Propriedade',
       icon: <Plus className="h-6 w-6 text-emerald-600 dark:text-emerald-300" />,
-      onClick: () => navigate('/projetos', { state: { createForClienteId: id, modalTab: 'propriedade' } }),
+      onClick: () => navigate(APP_ROUTES.properties.path, { state: { createForClienteId: id, clientName: cliente.nome } }),
       className: 'border-emerald-200/70 bg-emerald-50/80 text-emerald-900 hover:border-emerald-300 hover:bg-emerald-100/80 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100 dark:hover:bg-emerald-500/15'
     },
     {
@@ -1152,7 +1152,7 @@ export function ClienteDetalhes() {
     {
       id: 'propriedades' as const,
       label: 'Propriedades',
-      count: activeTab === 'propriedades' || activeTab === 'visao-geral' ? clientProperties.length : Number(dashboardData?.kpis?.propriedades || 0),
+      count: tabCount(loadingProperties, propertiesError, clientProperties.length),
       tone: 'border-emerald-300/30 bg-zinc-100/85 text-emerald-700 ring-emerald-300/20 dark:bg-zinc-800/90 dark:text-emerald-300',
       iconTone: 'text-emerald-300',
       icon: <Buildings weight="duotone" className="h-5 w-5" />
@@ -1160,7 +1160,7 @@ export function ClienteDetalhes() {
     {
       id: 'servicos' as const,
       label: 'Serviços',
-      count: clientProjetos.length || Number(dashboardData?.kpis?.projetos || 0),
+      count: tabCount(loadingProjects, projectsError, clientProjetos.length),
       tone: 'border-orange-300/30 bg-zinc-100/85 text-orange-800 ring-orange-300/20 shadow-[inset_0_-2px_0_rgba(194,101,48,0.55)] dark:bg-zinc-800/90 dark:text-orange-300 dark:ring-orange-300/20 dark:shadow-[inset_0_-2px_0_rgba(253,186,116,0.52)]',
       iconTone: 'text-orange-300',
       icon: <FolderSimple weight="duotone" className="h-5 w-5" />
@@ -1168,7 +1168,7 @@ export function ClienteDetalhes() {
     {
       id: 'ambiental' as const,
       label: 'Ambiental',
-      count: clientAmbientalProjetos.length,
+      count: tabCount(loadingProjects, projectsError, clientAmbientalProjetos.length),
       tone: 'border-emerald-300/30 bg-zinc-100/85 text-emerald-700 ring-emerald-300/20 shadow-[inset_0_-2px_0_rgba(5,150,105,0.55)] dark:bg-zinc-800/90 dark:text-emerald-300 dark:ring-emerald-300/20 dark:shadow-[inset_0_-2px_0_rgba(110,231,183,0.55)]',
       iconTone: 'text-emerald-300',
       icon: <Leaf weight="duotone" className="h-5 w-5" />
@@ -1176,7 +1176,7 @@ export function ClienteDetalhes() {
     {
       id: 'orcamentos' as const,
       label: 'Orçamentos',
-      count: clientOrcamentos.length,
+      count: tabCount(loadingBudgets, budgetsError, clientOrcamentos.length),
       tone: 'border-amber-300/30 bg-zinc-100/85 text-amber-700 ring-amber-300/20 shadow-[inset_0_-2px_0_rgba(217,119,6,0.55)] dark:bg-zinc-800/90 dark:text-amber-300 dark:ring-amber-300/20 dark:shadow-[inset_0_-2px_0_rgba(252,211,77,0.55)]',
       iconTone: 'text-amber-300',
       icon: <Receipt weight="duotone" className="h-5 w-5" />
@@ -1191,7 +1191,7 @@ export function ClienteDetalhes() {
     {
       id: 'arquivos' as const,
       label: 'Arquivos',
-      count: arquivosResumoOperacional.total,
+      count: tabCount(loadingFileCount, fileCountError, arquivosResumoOperacional.total),
       tone: 'border-slate-300/30 bg-zinc-100/85 text-slate-700 ring-slate-300/20 shadow-[inset_0_-2px_0_rgba(148,163,184,0.55)] dark:bg-zinc-800/90 dark:text-slate-300 dark:ring-slate-300/20 dark:shadow-[inset_0_-2px_0_rgba(203,213,225,0.45)]',
       iconTone: 'text-slate-300',
       icon: <Files weight="duotone" className="h-5 w-5" />
@@ -1207,18 +1207,22 @@ export function ClienteDetalhes() {
       clientProjetos={clientProjetos}
       clientAmbientalProjetos={clientAmbientalProjetos}
       clientOrcamentos={clientOrcamentos}
+      clientLicenses={clientLicenses}
+      loadingLicenses={loadingLicenses}
+      licensesError={licensesError}
+      onRetryLicenses={() => void reloadLicenses()}
       focusedOrcamentoId={focusedOrcamentoId}
       clientFinancialKpis={clientFinancialKpis}
       orcamentosPorStatus={orcamentosPorStatus}
       focusedDocumentId={focusedDocumentId}
       initialDocumentSearch={initialDocumentSearch}
       onPreviewFile={handlePreviewFile}
-      onCreateProperty={() => navigate('/propriedades', { state: { createForClienteId: id, clientName: cliente.nome } })}
-      onOpenProperty={(propertyId) => navigate('/propriedades', { state: { editPropertyId: propertyId, clientFilterId: id } })}
+      onCreateProperty={() => navigate(APP_ROUTES.properties.path, { state: { createForClienteId: id, clientName: cliente.nome } })}
+      onOpenProperty={(propertyId) => navigate(APP_ROUTES.properties.path, { state: { editPropertyId: propertyId, clientFilterId: id } })}
       onCreateEnvironmentalProject={() => navigate('/projetos', { state: { createForClienteId: id, openCreateModal: true, contexto: 'ambiental' } })}
       onCreateService={() => navigate('/projetos', { state: { createForClienteId: id, modalTab: 'projeto' } })}
       renderEnvironmentalProjectLink={(project) => (
-        <Link to={`/ambiental/${project.id}`} className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:text-emerald-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-emerald-300">
+        <Link to={`/ambiental/${project.id}`} className="geo-focus-ring inline-flex min-h-11 items-center gap-1 font-semibold text-emerald-800 hover:text-emerald-900 dark:text-emerald-300 dark:hover:text-emerald-200">
           Abrir demanda
           <ArrowSquareOut className="h-3.5 w-3.5" aria-hidden="true" />
         </Link>
@@ -1226,7 +1230,7 @@ export function ClienteDetalhes() {
       renderProjectTitleLink={(proj) => <Link to={`/projetos/${proj.id}`}>{proj.nome}</Link>}
       renderProjectDetailsLink={(proj) => (
         <Link to={`/projetos/${proj.id}`} className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 hover:bg-zinc-50 dark:bg-zinc-950 rounded-xl text-xs font-bold transition-[background-color,border-color,color,box-shadow,transform]">
-          Detalhes
+          Abrir serviço
         </Link>
       )}
     />
@@ -1237,14 +1241,14 @@ export function ClienteDetalhes() {
       {/* Top Bar with back button */}
       <div className="mb-6 flex items-center gap-4">
         <Link
-          to="/clientes"
+          to={APP_PATHS.clients}
           aria-label="Voltar para clientes"
           className="w-10 h-10 rounded-full border border-zinc-200 dark:border-zinc-800 flex items-center justify-center text-zinc-600 hover:bg-zinc-50 dark:bg-zinc-950 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
         >
           <ArrowLeft weight="bold" className="w-4 h-4" aria-hidden="true" />
         </Link>
         <div className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          <Link to="/clientes" className="hover:text-zinc-900 dark:text-zinc-100 transition-colors">Clientes</Link>
+          <Link to={APP_PATHS.clients} className="underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-100 transition-colors">Clientes</Link>
           <span className="mx-2 text-zinc-300">/</span>
           <span className="text-zinc-950 dark:text-white">{cliente.nome}</span>
         </div>
@@ -1252,8 +1256,8 @@ export function ClienteDetalhes() {
 
       {/* Page Header */}
       <div className="mb-6 flex items-start gap-4">
-        <div className={`flex h-14 w-14 shrink-0 items-center justify-center ${getClientCategoryColorClass(cliente.categoria)}`}>
-          {getClientCategoryIcon(cliente.categoria, "w-12 h-12")}
+        <div className={`flex h-14 w-14 shrink-0 items-center justify-center ${getClientCategoryColorClass(clientCategory)}`}>
+          {getClientCategoryIcon(clientCategory, "w-12 h-12")}
         </div>
         <div>
           <div className="flex flex-wrap items-center gap-3">
@@ -1261,7 +1265,7 @@ export function ClienteDetalhes() {
           </div>
           <div className="mt-3 flex flex-wrap gap-2" aria-label="Classificação do cliente">
             <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800 ring-1 ring-blue-200 dark:bg-blue-500/15 dark:text-blue-200 dark:ring-blue-500/30">
-              {cliente.tipoPessoa === 'PJ' ? 'Pessoa Jurídica' : 'Pessoa Física'}
+              {cliente.tipoPessoa === 'PJ' ? 'Pessoa Jurídica' : cliente.tipoPessoa === 'PF' ? 'Pessoa Física' : 'Tipo de pessoa a revisar'}
             </span>
           </div>
           <p className="mt-2 text-sm font-medium leading-relaxed text-zinc-500 dark:text-zinc-400 md:text-base xl:whitespace-nowrap">
@@ -1272,14 +1276,8 @@ export function ClienteDetalhes() {
 
       <div className="mb-6 grid grid-cols-1 items-start gap-x-5 gap-y-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(310px,0.8fr)]">
         <div className="flex w-full min-w-0 flex-col gap-4 xl:col-start-1">
-        <div
-          className="grid w-full min-w-0 self-start gap-4 lg:grid-cols-[92px_minmax(0,1fr)] lg:grid-rows-[auto_auto]"
-        >
-          <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
-            <div className="flex min-w-max gap-2 rounded-2xl border border-zinc-200/80 bg-white/90 p-1.5 shadow-sm dark:border-zinc-700/70 dark:bg-zinc-800/80 lg:min-w-0 lg:flex-col">
-              <p className="hidden w-full px-1 py-1.5 text-center text-xs font-semibold uppercase tracking-[0.16em] text-zinc-600 dark:text-zinc-300 lg:block">
-                AÇÕES
-              </p>
+        <div className="flex w-full min-w-0 flex-col gap-3 self-start">
+          <div className="flex min-w-0 gap-2 rounded-2xl border border-zinc-200/80 bg-white/90 p-1.5 shadow-sm dark:border-zinc-700/70 dark:bg-zinc-800/80" role="group" aria-label="Ações do cliente">
               <p className="sr-only" aria-live="polite" aria-atomic="true">{alertAnnouncement}</p>
               {quickActions.map((action) => (
                 <button
@@ -1287,12 +1285,12 @@ export function ClienteDetalhes() {
                   type="button"
                   onClick={action.onClick}
                   className={cn(
-                    'relative inline-flex h-10 items-center justify-center gap-2 rounded-xl border px-3 text-[11px] font-semibold shadow-sm transition-[transform,box-shadow,background-color,border-color] active:scale-[0.98] lg:h-auto lg:min-h-[50px] lg:flex-col lg:gap-1.5 lg:px-1 lg:py-2.5',
+                    'relative inline-flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-1.5 text-[11px] font-semibold shadow-sm transition-[transform,box-shadow,background-color,border-color] active:scale-[0.98]',
                     action.className
                   )}
                 >
                   {action.icon}
-                  <span className="max-w-full text-center text-[11px] leading-tight lg:text-[10px]">{action.label}</span>
+                  <span className="max-w-full text-center text-[10px] leading-tight">{action.label}</span>
                 </button>
               ))}
               <button
@@ -1303,19 +1301,18 @@ export function ClienteDetalhes() {
                 aria-expanded={showAlertasPopover}
                 aria-controls="client-alerts-popover"
                 className={cn(
-                  'relative inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3 text-[11px] font-semibold text-amber-900 shadow-sm transition-[transform,box-shadow,background-color,border-color] hover:border-amber-300 hover:bg-amber-100/90 active:scale-[0.98] dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:bg-amber-500/20 lg:h-auto lg:min-h-[50px] lg:flex-col lg:gap-1.5 lg:px-1 lg:py-2.5',
+                  'relative inline-flex min-h-14 min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-xl border border-amber-200/80 bg-amber-50/90 px-1 py-1.5 text-[11px] font-semibold text-amber-900 shadow-sm transition-[transform,box-shadow,background-color,border-color] hover:border-amber-300 hover:bg-amber-100/90 active:scale-[0.98] dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:bg-amber-500/20',
                   isQualityAlertPulsing && 'client-alert-attention'
                 )}
               >
                 <Warning aria-hidden="true" className="h-6 w-6 text-amber-600 dark:text-amber-300" />
-                <span className="max-w-full text-center text-[11px] leading-tight lg:text-[10px]">Alertas</span>
+                <span className="max-w-full text-center text-[10px] leading-tight">Alertas</span>
                 {qualityIssues.length > 0 && (
                   <span aria-hidden="true" className="absolute right-1 top-1 inline-flex min-h-4 min-w-4 items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold leading-4 tabular-nums text-white shadow-sm ring-2 ring-amber-50 dark:bg-amber-400 dark:text-amber-950 dark:ring-zinc-900">
                     {qualityIssues.length > 99 ? '99+' : qualityIssues.length}
                   </span>
                 )}
               </button>
-            </div>
           </div>
           <div className="w-full min-w-0 min-h-44">
             <ClienteMapaCard clienteId={id!} clienteNome={cliente.nome} className="w-full min-w-0" />
@@ -1324,7 +1321,7 @@ export function ClienteDetalhes() {
         </div>
 
         <div className={cn(geoTabListClass, 'min-w-0 overflow-hidden')}>
-          <div className="flex w-full items-stretch gap-1 overflow-x-auto" role="tablist" aria-label="Central do Cliente" aria-orientation="horizontal">
+          <div className="flex w-full items-stretch gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Central do Cliente" aria-orientation="horizontal">
             {clientWorkspaceTabs.map((tab) => {
               const isActive = activeTab === tab.id;
 
@@ -1342,7 +1339,7 @@ export function ClienteDetalhes() {
                   className={geoTabButtonClass(
                     isActive,
                     CLIENT_DETAIL_TAB_TONES[tab.id],
-                    'h-11 min-w-max flex-1 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs xl:min-w-0 2xl:text-[13px]'
+                    'h-11 min-w-max shrink-0 touch-manipulation justify-center gap-1.5 px-3 text-[11px] sm:h-12 sm:text-xs 2xl:text-[13px]'
                   )}
                 >
                   <span aria-hidden="true" className={geoTabIconClass(isActive, CLIENT_DETAIL_TAB_TONES[tab.id], 'h-8 w-8')}>
@@ -1370,26 +1367,39 @@ export function ClienteDetalhes() {
           id="cliente-panel-visao-geral"
           role="tabpanel"
           aria-labelledby="cliente-tab-visao-geral"
-          className="h-full min-w-0"
+          className="client-workspace-panel h-full min-w-0"
         >
+          <section aria-labelledby="client-followup-title" className="mb-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+            <h2 id="client-followup-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Acompanhamento do cliente</h2>
+            {loadingProjects || projectsError ? <ClientLoadState label="os prazos dos trabalhos" error={projectsError} onRetry={() => void reloadProjects()} /> : nextDeliveryProject ? <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-200"><strong>{nextDeliveryProject.dataEntrega!.slice(0,10) < clientToday() ? 'Prazo vencido' : 'Próximo prazo registrado'}: {formatClientDate(nextDeliveryProject.dataEntrega)}</strong><br /><Link className="geo-focus-ring inline-flex min-h-11 items-center rounded text-sky-800 underline dark:text-sky-300" to={appLinks.project(nextDeliveryProject.id)}>{nextDeliveryProject.nome}</Link></p> : <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">Não há prazo registrado para os trabalhos em aberto.</p>}
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">As tarefas e a agenda abaixo apresentam os encaminhamentos efetivamente registrados.</p>
+          </section>
           <ClienteCentralControle
             clienteId={id!}
             projetos={clientProjetos}
             orcamentos={clientOrcamentos}
             historico={historico}
-            loadingHistorico={loadingHistorico}
+            loadingHistorico={loadingHistorico || loadingBudgets}
+            historyError={historyError || budgetsError}
+            onRetryHistory={() => { void reloadHistory(); void reloadBudgets(); }}
             onlyTimeline={true}
           />
         </div>
         )}
-        {activeTab !== 'visao-geral' && secondaryTabsPanel}
+
+        {activeTab !== 'visao-geral' && (activeTab === 'propriedades' && (loadingProperties || propertiesError)
+          ? tabState('as propriedades', propertiesError, () => void reloadProperties())
+          : (activeTab === 'servicos' || activeTab === 'ambiental') && (loadingProjects || projectsError)
+          ? tabState('os serviços e demandas', projectsError, () => void reloadProjects())
+          : (activeTab === 'orcamentos' || activeTab === 'financeiro') && (loadingBudgets || budgetsError)
+          ? tabState('os orçamentos', budgetsError, () => void reloadBudgets()) : secondaryTabsPanel)}
         </div>
 
       {/* Bento Grid layout for basic info and KPIs */}
-      <div className="grid gap-4 content-start xl:col-start-2">
-        <div className="grid gap-4 content-start">
+      <div className="grid min-w-0 grid-cols-1 gap-4 content-start xl:col-start-2">
+        <div className="grid min-w-0 grid-cols-1 gap-4 content-start">
         {/* Client details card */}
-        <div className="client-contact-card rounded-3xl border border-zinc-200/70 bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.03] dark:border-zinc-800 dark:bg-zinc-900/90 dark:ring-white/[0.04]">
+        <div className="client-contact-card min-w-0 rounded-3xl border border-zinc-200/70 bg-white p-4 shadow-sm ring-1 ring-zinc-950/[0.03] dark:border-zinc-800 dark:bg-zinc-900/90 dark:ring-white/[0.04]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="flex items-center gap-2.5 text-lg font-semibold text-zinc-950 dark:text-white">
@@ -1512,7 +1522,7 @@ export function ClienteDetalhes() {
                       onClick={() => handleCopyContact('documento', documentValue)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 transition-colors hover:border-amber-200 hover:text-amber-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:border-amber-500/30 dark:hover:text-amber-300"
                       title="Copiar documento"
-                      aria-label={`Copiar ${cliente.tipoPessoa === 'PJ' ? 'CNPJ' : 'CPF'}`}
+                      aria-label={`Copiar ${documentPrefix}`}
                     >
                       <CopySimple className="h-3.5 w-3.5" />
                     </button>
@@ -1557,15 +1567,15 @@ export function ClienteDetalhes() {
         </div>
 
         {/* KPIs card */}
-        <div className="relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-stone-950 via-stone-900 to-slate-800 p-6 text-white shadow-[0_24px_50px_-24px_rgba(15,23,42,0.75)]">
+        <div aria-labelledby="client-summary-title" className="relative flex flex-col justify-between overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-stone-950 via-stone-900 to-slate-800 p-6 text-white shadow-[0_24px_50px_-24px_rgba(15,23,42,0.75)]">
           <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" aria-hidden="true" />
           <div className="pointer-events-none absolute -bottom-20 left-1/3 h-44 w-44 rounded-full bg-emerald-500/10 blur-3xl" aria-hidden="true" />
           <div className="relative">
-            <h3 className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-stone-300">
+            <h2 id="client-summary-title" className="mb-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-stone-300">
               <Briefcase weight="duotone" className="h-4 w-4 text-indigo-400" />
               Resumo Operacional
-            </h3>
-            
+            </h2>
+
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -1691,23 +1701,20 @@ export function ClienteDetalhes() {
                     Categoria
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {clientCategories.length > 0 ? (
-                      clientCategories.map((category) => (
-                        <span
-                          key={category}
-                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${getClientCategoryTagClass(category)}`}
-                        >
-                          <span aria-hidden="true" className="shrink-0 [&_img]:h-3.5 [&_img]:w-3.5 [&_img]:object-contain [&_svg]:h-3.5 [&_svg]:w-3.5">
-                            {getClientCategoryIcon(category, 'h-3.5 w-3.5 object-contain')}
-                          </span>
-                          {category}
-                        </span>
-                      ))
+                    {clientCategory ? (
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${getClientCategoryTagClass(clientCategory)}`}>
+                        <span aria-hidden="true" className="shrink-0 [&_img]:h-3.5 [&_img]:w-3.5 [&_img]:object-contain">{getClientCategoryIcon(clientCategory, 'h-3.5 w-3.5 object-contain')}</span>
+                        {clientCategory}
+                      </span>
                     ) : (
                       <span className="rounded-full border border-stone-700 bg-stone-900 px-2.5 py-1 text-xs font-semibold text-stone-300">
-                        Sem categoria
+                        {clientClassification.needsReview ? 'Categoria a revisar' : 'Sem categoria'}
                       </span>
                     )}
+                    {clientClassification.profiles.map((profile) => <span key={profile} className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-200">Perfil: {profile}</span>)}
+                    {clientClassification.needsReview && <p className="w-full text-xs text-amber-300">Classificação anterior: {clientClassification.legacyCategory}. Escolha uma categoria principal em Editar.</p>}
+                    {cliente.categoriaLegada && !clientClassification.needsReview && <p className="w-full text-xs text-stone-400">Valor original registrado: {cliente.categoriaLegada}</p>}
+                    {currentCategoryIsLegacyAlias && !clientClassification.needsReview && <p className="w-full text-xs text-amber-300">Classificação herdada: {cliente.categoria}. Confirme se este cadastro é da própria entidade pública.</p>}
                   </div>
                 </div>
               </div>
@@ -1746,10 +1753,10 @@ export function ClienteDetalhes() {
         <section className="flex flex-1 flex-col rounded-3xl border border-zinc-200/80 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           <div className="flex items-center justify-between gap-3 mb-5">
             <div>
-              <h3 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-zinc-500 dark:text-zinc-400" />
                 Tarefas do cliente
-              </h3>
+              </h2>
               <p className="mt-1 text-sm font-medium text-zinc-500 dark:text-zinc-400">Progresso</p>
             </div>
             <span className="text-sm font-bold text-zinc-950 dark:text-white">{tarefasConcluidas}/{clienteTarefas.length} ({taskProgress}%)</span>
@@ -1851,9 +1858,9 @@ export function ClienteDetalhes() {
                 { key: 'projects', label: 'Tarefas por projeto', tasks: clienteTarefas.filter((tarefa) => Boolean(tarefa.projetoId)) }
               ].filter((group) => group.tasks.length > 0).map((group) => (
                 <section key={group.key} aria-labelledby={`client-task-group-${group.key}`} className="space-y-2">
-                  <h4 id={`client-task-group-${group.key}`} className="sticky top-0 z-10 bg-white/95 py-1 text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 backdrop-blur dark:bg-zinc-900/95 dark:text-zinc-400">
+                  <h3 id={`client-task-group-${group.key}`} className="sticky top-0 z-10 bg-white/95 py-1 text-[11px] font-extrabold uppercase tracking-wider text-zinc-500 backdrop-blur dark:bg-zinc-900/95 dark:text-zinc-400">
                     {group.label} <span className="tabular-nums">({group.tasks.length})</span>
-                  </h4>
+                  </h3>
                   {group.tasks.map((tarefa) => {
                 const priorityTone = getTaskPriorityTone(tarefa.prioridade);
 
@@ -1919,10 +1926,10 @@ export function ClienteDetalhes() {
         {/* Agenda Card */}
         <section className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800 rounded-3xl p-6 shadow-sm flex flex-col">
           <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
+            <h2 className="text-lg font-semibold text-zinc-950 dark:text-white flex items-center gap-2">
               <Calendar className="w-5 h-5 text-zinc-500 dark:text-zinc-400" />
               Agenda
-            </h3>
+            </h2>
             <button
               type="button"
               onClick={() => setShowAgendaForm(value => !value)}
@@ -2042,73 +2049,14 @@ export function ClienteDetalhes() {
       </div>
       </div>
 
-      {previewFile && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="client-file-preview-title"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm"
-        >
-          <div className="flex h-[85vh] w-[92vw] max-w-5xl flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="flex items-center justify-between gap-4 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-              <div className="min-w-0">
-                <p id="client-file-preview-title" className="truncate text-sm font-semibold text-zinc-950 dark:text-white">{previewFile.name}</p>
-                <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                  {formatFileSize(previewFile.sizeBytes)} • {previewFile.extension.toUpperCase().replace('.', '')}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleOpenFile(previewFile.path)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-700 transition-[background-color,border-color,color,box-shadow,transform] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                >
-                  <ArrowSquareOut className="h-4 w-4" />
-                  Abrir fora
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPreviewFile(null);
-                    setPreviewObjectUrl('');
-                    setPreviewError('');
-                  }}
-                  aria-label="Fechar pré-visualização"
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-600 transition-[background-color,border-color,color,box-shadow,transform] hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                  title="Fechar"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-            <div className="min-h-0 flex-1 bg-zinc-100 dark:bg-zinc-900">
-              {previewError ? (
-                <div className="flex h-full items-center justify-center p-6 text-center" role="alert">
-                  <p className="max-w-md text-sm font-semibold text-red-700 dark:text-red-300">{previewError} Feche esta janela e tente novamente.</p>
-                </div>
-              ) : !previewObjectUrl ? (
-                <div className="flex h-full items-center justify-center p-6" role="status" aria-live="polite">
-                  <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Carregando pré-visualização…</p>
-                </div>
-              ) : previewFile.extension === '.pdf' ? (
-                <iframe
-                  title={previewFile.name}
-                  src={previewObjectUrl}
-                  className="h-full w-full bg-white"
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center p-4">
-                  <img
-                    src={previewObjectUrl}
-                    alt={previewFile.name}
-                    className="max-h-full max-w-full rounded-2xl object-contain shadow-lg"
-                  />
-                </div>
-              )}
-            </div>
+      <Modal isOpen={Boolean(previewFile)} onClose={() => { setPreviewFile(null); setPreviewObjectUrl(''); setPreviewError(''); }} title={previewFile?.name || 'Pré-visualização do arquivo'} maxWidth="max-w-5xl" initialFocusId="client-preview-open" panelClassName="h-[85dvh]" contentScrollable={false}>
+        {previewFile && <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-zinc-600 dark:text-zinc-300">{formatFileSize(previewFile.sizeBytes)} · {previewFile.extension.toUpperCase().replace('.', '')}</p><button id="client-preview-open" type="button" onClick={() => void handleOpenFile(previewFile.path)} className={secondarySmallActionButtonClass}>Abrir no aplicativo padrão</button></div>
+          <div className="min-h-0 flex-1 bg-zinc-100 dark:bg-zinc-900">
+            {previewError ? <p role="alert" className="p-6 text-sm text-red-700 dark:text-red-300">{previewError} Feche a prévia e tente novamente.</p> : !previewObjectUrl ? <p role="status" aria-live="polite" className="p-6 text-sm text-zinc-700 dark:text-zinc-200">Carregando pré-visualização…</p> : previewFile.extension.toLowerCase() === '.pdf' ? <iframe title={previewFile.name} src={previewObjectUrl} tabIndex={0} className="geo-focus-ring h-full w-full bg-white" /> : <div className="flex h-full items-center justify-center p-4"><img src={previewObjectUrl} alt={previewFile.name} className="max-h-full max-w-full object-contain" /></div>}
           </div>
-        </div>
-      )}
+        </div>}
+      </Modal>
       <PopoverSurface
         ref={alertPopoverRef}
         open={showAlertasPopover}
@@ -2142,6 +2090,7 @@ export function ClienteDetalhes() {
         </div>
 
         <div className="max-h-[min(28rem,calc(100vh-8rem))] space-y-4 overflow-y-auto p-4">
+          {(alertsLoading || alertsError) && <ClientLoadState label="todos os dados dos alertas" error={alertsError} onRetry={retryAlerts} />}
           {qualityIssues.length > 0 && (
             <section aria-labelledby="client-quality-alert-title">
               <div className="flex items-center justify-between gap-3">
@@ -2187,11 +2136,11 @@ export function ClienteDetalhes() {
             </section>
           )}
 
-          {qualityIssues.length === 0 && alertasOperacionaisResumo.length === 0 && (
+          {!alertsLoading && !alertsError && qualityIssues.length === 0 && alertasOperacionaisResumo.length === 0 && (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-200 bg-zinc-50 py-7 text-center dark:border-zinc-700 dark:bg-zinc-800/50">
               <CheckCircle aria-hidden="true" className="mb-2 h-9 w-9 text-emerald-500" />
-              <p className="text-sm font-semibold text-zinc-950 dark:text-white">Tudo em ordem</p>
-              <p className="mt-1 px-4 text-xs text-zinc-500 dark:text-zinc-400">Nenhum alerta para este cliente.</p>
+              <p className="text-sm font-semibold text-zinc-950 dark:text-white">Nenhum alerta registrado</p>
+              <p className="mt-1 px-4 text-xs text-zinc-500 dark:text-zinc-400">Não foram encontrados alertas nas consultas desta central.</p>
             </div>
           )}
         </div>

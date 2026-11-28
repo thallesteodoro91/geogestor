@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -37,7 +38,7 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     url: string,
     payload?: Record<string, unknown>,
-  ) => server.inject({
+  ) => injectWithRecordVersion(server, {
     method,
     url,
     ...(payload === undefined ? {} : { payload }),
@@ -47,7 +48,7 @@ test('v8 persiste propriedades, configurações migradas e histórico de cálcul
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 17);
+    assert.equal(migration.schemaVersion, 19);
     const clientA = crypto.randomUUID();
     const clientB = crypto.randomUUID();
     const projectA = crypto.randomUUID();

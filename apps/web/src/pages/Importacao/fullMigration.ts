@@ -73,6 +73,8 @@ export type FullMigrationPreview = {
     duplicateAliases: string[];
   };
   issues: FullMigrationIssue[];
+  issuesPaged?: boolean;
+  issueTotals?: { blocking: number; general: number; row: number };
   reconciliation: ReconciliationItem[];
   limitations: string[];
 };

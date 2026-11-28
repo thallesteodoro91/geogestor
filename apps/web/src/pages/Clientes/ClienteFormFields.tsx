@@ -8,6 +8,7 @@ import { formatCnpj, formatCpf, formatPhoneBR, onlyDigits } from '../../utils/fo
 import { geoFieldClass } from '../../utils/geoTheme';
 import {
   CLIENT_PRIMARY_ORIGIN_OPTIONS,
+  CLIENT_CATEGORY_OPTIONS,
   CLIENT_PROFILE_OPTIONS,
   CLIENT_SERVICOS_BY_CATEGORY,
   CLIENT_STATUS_OPTIONS
@@ -54,6 +55,7 @@ const describedBy = (
 
 const FIELD_LABELS: Partial<Record<keyof ClientFormState, string>> = {
   tipoPessoa: 'Tipo de pessoa',
+  categoriaPrincipal: 'Categoria principal',
   nome: 'Nome completo ou razão social',
   cpf: 'CPF',
   cnpj: 'CNPJ',
@@ -76,7 +78,7 @@ interface ClientFormNavigationItem {
 }
 
 const BASE_FORM_SECTIONS: ClientFormNavigationItem[] = [
-  { id: 'client-section-identification', label: 'Identificação', fields: ['tipoPessoa', 'nome', 'cpf', 'cnpj', 'rg', 'inscricaoEstadual', 'perfis'] },
+  { id: 'client-section-identification', label: 'Identificação', fields: ['tipoPessoa', 'nome', 'cpf', 'cnpj', 'rg', 'inscricaoEstadual', 'categoriaPrincipal', 'perfis'] },
   { id: 'client-section-contact', label: 'Contato', fields: ['email', 'celular', 'telefone', 'celularWhatsapp'] },
   { id: 'client-section-address', label: 'Endereço', fields: ['cep', 'endereco', 'numero', 'semNumero', 'complemento', 'bairro', 'municipio', 'uf'] },
   { id: 'client-section-commercial', label: 'Comercial', fields: ['origemPrincipal', 'indicadoPor', 'origemDetalhe', 'servicos'] }
@@ -124,7 +126,7 @@ const documentFeedback = (
 ): FieldFeedbackValue | null => {
   if (!value) return null;
   const digitCount = onlyDigits(value).length;
-  if (valid) return { message: `${label} válido.`, tone: 'success' };
+  if (valid) return { message: `Dígitos verificadores do ${label} válidos.`, tone: 'success' };
   if (digitCount < expectedDigits) return { message: `${label} incompleto: ${digitCount} de ${expectedDigits} dígitos.`, tone: 'warning' };
   return { message: `Revise os dígitos do ${label}.`, tone: 'warning' };
 };
@@ -170,7 +172,7 @@ function PersonTypeOption({ value, label, description, icon, checked, onChange }
         checked={checked}
         onChange={onChange}
         required
-        className="peer sr-only"
+        className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
       />
       <span
         className={cn(
@@ -220,7 +222,7 @@ function CheckCard({ name, value, checked, onChange, tone = 'indigo' }: CheckCar
         value={value}
         checked={checked}
         onChange={onChange}
-        className="peer sr-only"
+        className="peer absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
       />
       <span
         className={cn(
@@ -309,12 +311,33 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
     [editing]
   );
   const [activeFormSection, setActiveFormSection] = useState<ClientFormSectionId>('client-section-identification');
+  const [expandedSections, setExpandedSections] = useState<Set<ClientFormSectionId>>(() => new Set([
+    ...(form.cep || form.endereco || form.numero || form.semNumero || form.complemento || form.bairro || form.municipio || form.uf ? ['client-section-address' as const] : []),
+    ...(form.origemPrincipal || form.indicadoPor || form.origemDetalhe || form.servicos.length ? ['client-section-commercial' as const] : [])
+  ]));
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(() => new Set());
+  const hasSectionErrors = (id: ClientFormSectionId) => Boolean(formSections.find(section => section.id === id)?.fields.some(field => errors[field]));
+  const disclosure = (id: ClientFormSectionId, summary: string) => ({
+    expanded: expandedSections.has(id) || hasSectionErrors(id),
+    summary: hasSectionErrors(id) ? `${summary} · Revise os campos indicados.` : summary,
+    onToggle: () => setExpandedSections(current => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    })
+  });
   const [openServiceCategories, setOpenServiceCategories] = useState<Set<string>>(() => {
     const selectedCategories = Object.entries(CLIENT_SERVICOS_BY_CATEGORY)
       .filter(([, services]) => services.some((service) => form.servicos.includes(service)))
       .map(([category]) => category);
     return new Set(selectedCategories.length > 0 ? selectedCategories : [Object.keys(CLIENT_SERVICOS_BY_CATEGORY)[0]]);
   });
+  useEffect(() => {
+    const invalidSections = formSections.filter(section => section.fields.some(field => errors[field])).map(section => section.id);
+    if (!invalidSections.length) return;
+    const frame = window.requestAnimationFrame(() => setExpandedSections(current => new Set([...current, ...invalidSections])));
+    return () => window.cancelAnimationFrame(frame);
+  }, [errors, formSections]);
 
   const update = <K extends keyof ClientFormState>(field: K, value: ClientFormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -337,18 +360,28 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
 
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const regionRect = scrollRegion.getBoundingClientRect();
-    const sectionRect = section.getBoundingClientRect();
-    const targetTop = scrollRegion.scrollTop + sectionRect.top - regionRect.top - 64;
-    focusTarget?.focus({ preventScroll: true });
+    const sectionRect = (focusTarget || section).getBoundingClientRect();
+    const nav = scrollRegion.querySelector('nav');
+    const targetTop = scrollRegion.scrollTop + sectionRect.top - regionRect.top - (nav?.getBoundingClientRect().height || 0) - 12;
+    const target = focusTarget || document.getElementById(`${sectionId}-title`);
+    if (target && !focusTarget) target.tabIndex = -1;
+    target?.focus({ preventScroll: true });
     scrollRegion.scrollTo({ top: Math.max(0, targetTop), behavior: reduceMotion ? 'auto' : 'smooth' });
     setActiveFormSection(sectionId);
+  };
+
+  const openFormSection = (sectionId: ClientFormSectionId, field?: keyof ClientFormState) => {
+    setExpandedSections(current => new Set([...current, sectionId]));
+    window.requestAnimationFrame(() => {
+      const fieldId = field === 'tipoPessoa' ? 'client-tipo-pf' : field ? `client-${field}` : '';
+      scrollToFormSection(sectionId, fieldId ? document.getElementById(fieldId) : undefined);
+    });
   };
 
   const focusErrorField = (field: keyof ClientFormState) => {
     const section = formSections.find((item) => item.fields.includes(field));
     if (!section) return;
-    const fieldId = field === 'tipoPessoa' ? 'client-tipo-pf' : `client-${field}`;
-    scrollToFormSection(section.id, document.getElementById(fieldId));
+    openFormSection(section.id, field);
   };
 
   useEffect(() => {
@@ -360,7 +393,9 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
     const updateActiveSection = () => {
       window.cancelAnimationFrame(animationFrame);
       animationFrame = window.requestAnimationFrame(() => {
-        const activationLine = scrollRegion.getBoundingClientRect().top + 112;
+        const navHeight = scrollRegion.querySelector('nav')?.getBoundingClientRect().height || 0;
+        scrollRegion.style.setProperty('--client-nav-height', `${navHeight}px`);
+        const activationLine = scrollRegion.getBoundingClientRect().top + navHeight + 16;
         let current = formSections[0].id;
         formSections.forEach((item) => {
           const section = document.getElementById(item.id);
@@ -371,10 +406,14 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
     };
 
     updateActiveSection();
+    const observer = new ResizeObserver(updateActiveSection);
+    const nav = scrollRegion.querySelector('nav');
+    if (nav) observer.observe(nav);
     scrollRegion.addEventListener('scroll', updateActiveSection, { passive: true });
     return () => {
       window.cancelAnimationFrame(animationFrame);
       scrollRegion.removeEventListener('scroll', updateActiveSection);
+      observer.disconnect();
     };
   }, [activeSection, formSections]);
 
@@ -382,6 +421,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
     return (
       <ClientFormSection
         sectionId="client-section-notes"
+        headingLevel={3}
         title="Anotações fixas"
         description="Registre informações comerciais permanentes sobre o relacionamento."
         icon={<NotePencil className="h-5 w-5" weight="duotone" />}
@@ -397,7 +437,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
             onChange={(event) => update('anotacoes', event.target.value)}
             rows={9}
             placeholder="Ex.: prefere contato pela manhã e solicita cópia digital dos documentos"
-            className={cn(fieldClass, 'resize-y leading-relaxed')}
+            className={cn(fieldClass, 'resize-none min-h-48 leading-relaxed')}
           />
         </div>
       </ClientFormSection>
@@ -408,20 +448,29 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
   const profileOptions = Array.from(new Set([...CLIENT_PROFILE_OPTIONS, ...form.perfis]));
   const knownServices = Object.values(CLIENT_SERVICOS_BY_CATEGORY).flat();
   const legacyServices = form.servicos.filter((service) => !knownServices.includes(service));
-  const cpfStatus = documentFeedback(form.cpf, 11, isValidCpf(form.cpf), 'CPF');
-  const cnpjStatus = documentFeedback(form.cnpj, 14, isValidCnpj(form.cnpj), 'CNPJ');
-  const emailStatus = emailFeedback(form.email);
-  const celularStatus = phoneFeedback(form.celular, 'Celular');
-  const telefoneStatus = phoneFeedback(form.telefone, 'Telefone');
-  const cepStatus = cepFeedback(form.cep);
+  const cpfStatus = touchedFields.has('cpf') ? documentFeedback(form.cpf, 11, isValidCpf(form.cpf), 'CPF') : null;
+  const cnpjStatus = touchedFields.has('cnpj') ? documentFeedback(form.cnpj, 14, isValidCnpj(form.cnpj), 'CNPJ') : null;
+  const emailStatus = touchedFields.has('email') ? emailFeedback(form.email) : null;
+  const celularStatus = touchedFields.has('celular') ? phoneFeedback(form.celular, 'Celular') : null;
+  const telefoneStatus = touchedFields.has('telefone') ? phoneFeedback(form.telefone, 'Telefone') : null;
+  const cepStatus = touchedFields.has('cep') ? cepFeedback(form.cep) : null;
+  const addressSummary = [form.endereco, form.numero, form.semNumero ? 'Sem número' : '', form.complemento, form.bairro, form.municipio, form.uf, form.cep].filter(Boolean).join(' · ') || 'Nenhum endereço informado';
+  const commercialSummary = [form.origemPrincipal ? `Origem: ${form.origemPrincipal}` : '', form.indicadoPor, form.origemDetalhe, form.servicos.length ? `${form.servicos.length} serviço(s) de interesse` : ''].filter(Boolean).join(' · ') || 'Nenhuma informação comercial preenchida';
   const errorEntries = Object.entries(errors) as Array<[keyof ClientFormState, string]>;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" onFocusCapture={(event) => {
+      const target = event.target as HTMLInputElement;
+      if (target.name) setTouchedFields(current => { const next = new Set(current); next.delete(target.name); return next; });
+    }} onBlurCapture={(event) => {
+      const target = event.target as HTMLInputElement;
+      if (target.name) setTouchedFields(current => new Set([...current, target.name]));
+    }}>
       <nav
         aria-label="Seções do cadastro do cliente"
-        className="sticky top-0 z-20 -mx-1 overflow-x-auto border-y border-brand-border bg-brand-surface/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-brand-surface/85"
+        className="sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-2 border-y border-brand-border bg-brand-surface/95 px-1 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-brand-surface/85"
       >
+        <div className="min-w-0 flex-1 basis-full overflow-x-auto sm:basis-auto">
         <div className="flex w-max min-w-full gap-1.5 sm:min-w-0">
           {formSections.map((section) => {
             const sectionErrorCount = section.fields.filter((field) => Boolean(errors[field])).length;
@@ -431,7 +480,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
                 key={section.id}
                 type="button"
                 aria-current={active ? 'location' : undefined}
-                onClick={() => scrollToFormSection(section.id)}
+                onClick={() => openFormSection(section.id)}
                 className={cn(
                   'geo-focus-ring inline-flex min-h-10 items-center gap-2 whitespace-nowrap rounded-lg border px-3 py-2 text-xs font-bold transition-[background-color,border-color,color] duration-150',
                   active
@@ -450,12 +499,11 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
             );
           })}
         </div>
-      </nav>
-
-      <p className="inline-flex items-center gap-2 rounded-lg border border-brand-border bg-brand-surface-subtle/55 px-3 py-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-        <span aria-hidden="true" className="text-indigo-600 dark:text-indigo-300">*</span>
-        Campos obrigatórios
+        </div>
+      <p className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-border bg-brand-surface-subtle/55 px-2 py-1.5 text-[11px] font-medium text-zinc-600 dark:text-zinc-300">
+        Campos com * são obrigatórios
       </p>
+      </nav>
 
       {errorEntries.length > 0 && (
         <div role="alert" aria-label="Resumo de erros do formulário" aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-950 dark:border-red-300/25 dark:bg-red-500/10 dark:text-red-100">
@@ -484,8 +532,9 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
 
       <ClientFormSection
         sectionId="client-section-identification"
+        headingLevel={3}
         title="Identificação"
-        description="Defina o tipo de pessoa, os documentos e o perfil comercial."
+        description="Defina o tipo de pessoa, a categoria principal e os perfis adicionais."
         icon={<IdentificationCard className="h-5 w-5" weight="duotone" />}
         tone="indigo"
       >
@@ -520,11 +569,12 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
           <div className="sm:col-span-2 md:col-span-2">
-            <label htmlFor="client-nome" className={labelClass}>{isBusiness ? 'Razão social' : 'Nome completo'} *</label>
+            <label htmlFor="client-nome" className={labelClass}>{form.tipoPessoa ? (isBusiness ? 'Razão social' : 'Nome completo') : 'Nome completo ou razão social'} *</label>
             <input
               id="client-nome"
               name="nome"
               type="text"
+              required
               autoComplete={isBusiness ? 'organization' : 'name'}
               value={form.nome}
               onChange={(event) => update('nome', event.target.value)}
@@ -535,11 +585,11 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
             />
             <ErrorMessage field="nome" errors={errors} />
           </div>
-          {isBusiness ? (
+          {form.tipoPessoa === 'PJ' ? (
             <>
               <div>
                 <label htmlFor="client-cnpj" className={labelClass}>CNPJ *</label>
-                <input id="client-cnpj" name="cnpj" type="text" inputMode="numeric" autoComplete="off" spellCheck={false} value={form.cnpj} onChange={(event) => update('cnpj', formatCnpj(event.target.value))} placeholder="00.000.000/0000-00" maxLength={18} aria-invalid={Boolean(errors.cnpj)} aria-describedby={describedBy('cnpj', errors, cnpjStatus)} className={fieldClass} />
+                <input id="client-cnpj" required name="cnpj" type="text" inputMode="numeric" autoComplete="off" spellCheck={false} value={form.cnpj} onChange={(event) => update('cnpj', formatCnpj(event.target.value))} placeholder="00.000.000/0000-00" maxLength={18} aria-invalid={Boolean(errors.cnpj)} aria-describedby={describedBy('cnpj', errors, cnpjStatus)} className={fieldClass} />
                 <ErrorMessage field="cnpj" errors={errors} />
                 <FieldFeedback field="cnpj" feedback={cnpjStatus} hasError={Boolean(errors.cnpj)} />
               </div>
@@ -548,11 +598,11 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
                 <input id="client-inscricaoEstadual" name="inscricaoEstadual" type="text" autoComplete="off" spellCheck={false} value={form.inscricaoEstadual} onChange={(event) => update('inscricaoEstadual', event.target.value)} placeholder="Ex.: 123.456.789" className={fieldClass} />
               </div>
             </>
-          ) : (
+          ) : form.tipoPessoa === 'PF' ? (
             <>
               <div>
                 <label htmlFor="client-cpf" className={labelClass}>CPF *</label>
-                <input id="client-cpf" name="cpf" type="text" inputMode="numeric" autoComplete="off" spellCheck={false} value={form.cpf} onChange={(event) => update('cpf', formatCpf(event.target.value))} placeholder="000.000.000-00" maxLength={14} aria-invalid={Boolean(errors.cpf)} aria-describedby={describedBy('cpf', errors, cpfStatus)} className={fieldClass} />
+                <input id="client-cpf" required name="cpf" type="text" inputMode="numeric" autoComplete="off" spellCheck={false} value={form.cpf} onChange={(event) => update('cpf', formatCpf(event.target.value))} placeholder="000.000.000-00" maxLength={14} aria-invalid={Boolean(errors.cpf)} aria-describedby={describedBy('cpf', errors, cpfStatus)} className={fieldClass} />
                 <ErrorMessage field="cpf" errors={errors} />
                 <FieldFeedback field="cpf" feedback={cpfStatus} hasError={Boolean(errors.cpf)} />
               </div>
@@ -561,12 +611,50 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
                 <input id="client-rg" name="rg" type="text" autoComplete="off" spellCheck={false} value={form.rg} onChange={(event) => update('rg', event.target.value)} placeholder="Ex.: 12.345.678-9" className={fieldClass} />
               </div>
             </>
+          ) : (
+            <p className="sm:col-span-2 md:col-span-2 self-center text-sm text-amber-700 dark:text-amber-300">Selecione o tipo de pessoa para informar CPF ou CNPJ.</p>
           )}
         </div>
 
+        <div>
+          <label htmlFor="client-categoriaPrincipal" className={labelClass}>Categoria principal</label>
+          <FormSelect
+            id="client-categoriaPrincipal"
+            density="form"
+            wrapperClassName="w-full"
+            matchTriggerWidth
+            popoverMaxWidth={960}
+            popoverClassName="geo-client-registration-options"
+            name="categoriaPrincipal"
+            autoComplete="off"
+            value={form.categoriaPrincipal}
+            onChange={(event) => {
+              const categoriaPrincipal = event.target.value;
+              setForm((current) => ({ ...current, categoriaPrincipal, categoriaPendente: '' }));
+              onClearErrors('categoriaPrincipal');
+            }}
+            aria-invalid={Boolean(errors.categoriaPrincipal)}
+            aria-describedby={errors.categoriaPrincipal ? 'client-categoriaPrincipal-error' : undefined}
+            className={cn(fieldClass, 'geo-native-select')}
+          >
+            <option value="">Sem categoria</option>
+            {form.categoriaPrincipal && !CLIENT_CATEGORY_OPTIONS.includes(form.categoriaPrincipal as typeof CLIENT_CATEGORY_OPTIONS[number]) && (
+              <option value={form.categoriaPrincipal}>{form.categoriaPrincipal} (legada)</option>
+            )}
+            {CLIENT_CATEGORY_OPTIONS.map((category) => <option key={category} value={category}>{category}</option>)}
+          </FormSelect>
+          <p className="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">Opcional. Escolha a categoria que melhor representa o cliente.</p>
+          {form.categoriaPendente && (
+            <p role="status" className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-200">
+              Classificação anterior: {form.categoriaPendente}. Há mais de uma categoria possível; escolha a principal para concluir a revisão.
+            </p>
+          )}
+          <ErrorMessage field="categoriaPrincipal" errors={errors} />
+        </div>
+
         <fieldset>
-          <legend className={labelClass}>Perfil do cliente</legend>
-          <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">Selecione todos os perfis comerciais aplicáveis.</p>
+          <legend className={labelClass}>Perfis adicionais</legend>
+          <p className="mb-3 text-sm text-zinc-500 dark:text-zinc-400">Opcional. Marque os papéis do cliente no relacionamento, como Parceiro. Você pode escolher mais de um.</p>
           <div className={selectionGridClass}>
             {profileOptions.map((profile) => (
               <CheckCard
@@ -583,8 +671,9 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
 
       <ClientFormSection
         sectionId="client-section-contact"
+        headingLevel={3}
         title="Contato"
-        description="Informe ao menos um celular ou telefone adicional para contato."
+        description="Informe pelo menos um número com DDD: celular ou telefone adicional. E-mail é opcional."
         icon={<Phone className="h-5 w-5" weight="duotone" />}
         tone="cyan"
       >
@@ -604,6 +693,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
             }} placeholder="(48) 99999-9999" maxLength={15} aria-invalid={Boolean(errors.celular)} aria-describedby={describedBy('celular', errors, celularStatus)} className={fieldClass} />
             <ErrorMessage field="celular" errors={errors} />
             <FieldFeedback field="celular" feedback={celularStatus} hasError={Boolean(errors.celular)} />
+            <SwitchField id="client-celularWhatsapp" name="celularWhatsapp" label="Este celular possui WhatsApp" checked={form.celularWhatsapp} disabled={!form.celular} disabledHint="Informe um celular para habilitar" onChange={(checked) => update('celularWhatsapp', checked)} tone="emerald" icon={<WhatsappLogo className="h-5 w-5" weight="fill" />} />
           </div>
           <div>
             <label htmlFor="client-telefone" className={labelClass}>Telefone adicional</label>
@@ -614,34 +704,23 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
             <ErrorMessage field="telefone" errors={errors} />
             <FieldFeedback field="telefone" feedback={telefoneStatus} hasError={Boolean(errors.telefone)} />
           </div>
-          <div className="flex items-end">
-            <SwitchField
-              id="client-celularWhatsapp"
-              name="celularWhatsapp"
-              label="Este número possui WhatsApp"
-              checked={form.celularWhatsapp}
-              disabled={!form.celular}
-              disabledHint="Informe um celular para habilitar"
-              onChange={(checked) => update('celularWhatsapp', checked)}
-              tone="emerald"
-              icon={<WhatsappLogo className="h-5 w-5" weight="fill" />}
-            />
-          </div>
         </div>
       </ClientFormSection>
 
       <ClientFormSection
         sectionId="client-section-address"
+        headingLevel={3}
         title="Endereço"
-        description="Preencha pelo CEP ou edite os dados manualmente."
+        description="Preencha o endereço manualmente, incluindo o CEP quando disponível."
         icon={<MapPin className="h-5 w-5" weight="duotone" />}
         tone="amber"
         optional
+        disclosure={disclosure('client-section-address', addressSummary)}
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
             <label htmlFor="client-cep" className={labelClass}>CEP</label>
-            <input id="client-cep" name="cep" type="text" inputMode="numeric" autoComplete="postal-code" value={form.cep} onChange={(event) => update('cep', formatCep(event.target.value))} placeholder="88000-000" maxLength={9} aria-invalid={Boolean(errors.cep)} aria-describedby={describedBy('cep', errors, cepStatus)} className={fieldClass} />
+            <input id="client-cep" name="cep" type="text" inputMode="numeric" autoComplete="postal-code" value={form.cep} onChange={(event) => update('cep', formatCep(event.target.value))} placeholder="88000-000" maxLength={9} aria-invalid={Boolean(errors.cep)} aria-describedby={describedBy('cep', errors, cepStatus)} className={cn(fieldClass, 'max-w-[10rem]')} />
             <ErrorMessage field="cep" errors={errors} />
             <FieldFeedback field="cep" feedback={cepStatus} hasError={Boolean(errors.cep)} />
           </div>
@@ -651,7 +730,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
           </div>
           <div>
             <label htmlFor="client-numero" className={labelClass}>Número</label>
-            <input id="client-numero" name="numero" type="text" inputMode="numeric" autoComplete="address-line2" disabled={form.semNumero} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: 120" className={fieldClass} />
+            <input id="client-numero" name="numero" type="text" inputMode="numeric" autoComplete="address-line2" disabled={form.semNumero} value={form.numero} onChange={(event) => update('numero', event.target.value)} placeholder="Ex.: 120" className={cn(fieldClass, 'max-w-[8rem]')} />
           </div>
         </div>
         <SwitchField
@@ -677,7 +756,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
           </div>
           <div>
             <label htmlFor="client-uf" className={labelClass}>UF</label>
-            <input id="client-uf" name="uf" type="text" autoComplete="address-level1" spellCheck={false} value={form.uf} onChange={(event) => update('uf', event.target.value.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase())} placeholder="SC" maxLength={2} aria-invalid={Boolean(errors.uf)} aria-describedby={describedBy('uf', errors)} className={fieldClass} />
+            <input id="client-uf" name="uf" type="text" autoComplete="address-level1" spellCheck={false} value={form.uf} onChange={(event) => update('uf', event.target.value.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase())} placeholder="SC" maxLength={2} aria-invalid={Boolean(errors.uf)} aria-describedby={describedBy('uf', errors)} className={cn(fieldClass, 'max-w-[5rem]')} />
             <ErrorMessage field="uf" errors={errors} />
           </div>
         </div>
@@ -685,16 +764,18 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
 
       <ClientFormSection
         sectionId="client-section-commercial"
+        headingLevel={3}
         title="Relacionamento comercial"
-        description="Registre a origem principal e os serviços que despertaram interesse."
+        description="Opcional. Se escolher Indicação ou Outro, complete o detalhe solicitado. Marque os serviços de interesse."
         icon={<Handshake className="h-5 w-5" weight="duotone" />}
         tone="emerald"
         optional
+        disclosure={disclosure('client-section-commercial', commercialSummary)}
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label htmlFor="client-origemPrincipal" className={labelClass}>Origem do cliente</label>
-            <FormSelect id="client-origemPrincipal" name="origemPrincipal" autoComplete="off" value={form.origemPrincipal} onChange={(event) => {
+            <FormSelect id="client-origemPrincipal" name="origemPrincipal" matchTriggerWidth popoverClassName="geo-client-registration-options" autoComplete="off" value={form.origemPrincipal} onChange={(event) => {
               update('origemPrincipal', event.target.value);
               onClearErrors('indicadoPor', 'origemDetalhe');
             }} className={cn(fieldClass, 'geo-native-select')}>
@@ -705,14 +786,14 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
           {form.origemPrincipal === 'Indicação' && (
             <div>
               <label htmlFor="client-indicadoPor" className={labelClass}>Quem indicou? *</label>
-              <input id="client-indicadoPor" name="indicadoPor" type="text" autoComplete="off" value={form.indicadoPor} onChange={(event) => update('indicadoPor', event.target.value)} placeholder="Nome da pessoa ou empresa" aria-invalid={Boolean(errors.indicadoPor)} aria-describedby={describedBy('indicadoPor', errors)} className={fieldClass} />
+              <input id="client-indicadoPor" required name="indicadoPor" type="text" autoComplete="off" value={form.indicadoPor} onChange={(event) => update('indicadoPor', event.target.value)} placeholder="Nome da pessoa ou empresa" aria-invalid={Boolean(errors.indicadoPor)} aria-describedby={describedBy('indicadoPor', errors)} className={fieldClass} />
               <ErrorMessage field="indicadoPor" errors={errors} />
             </div>
           )}
           {form.origemPrincipal === 'Outro' && (
             <div>
               <label htmlFor="client-origemDetalhe" className={labelClass}>Descrição da origem *</label>
-              <input id="client-origemDetalhe" name="origemDetalhe" type="text" autoComplete="off" value={form.origemDetalhe} onChange={(event) => update('origemDetalhe', event.target.value)} placeholder="Ex.: Feira regional" aria-invalid={Boolean(errors.origemDetalhe)} aria-describedby={describedBy('origemDetalhe', errors)} className={fieldClass} />
+              <input id="client-origemDetalhe" required name="origemDetalhe" type="text" autoComplete="off" value={form.origemDetalhe} onChange={(event) => update('origemDetalhe', event.target.value)} placeholder="Ex.: Feira regional" aria-invalid={Boolean(errors.origemDetalhe)} aria-describedby={describedBy('origemDetalhe', errors)} className={fieldClass} />
               <ErrorMessage field="origemDetalhe" errors={errors} />
             </div>
           )}
@@ -761,6 +842,7 @@ export function ClienteFormFields({ form, setForm, errors, activeSection, editin
       {editing && (
         <ClientFormSection
           sectionId="client-section-admin"
+          headingLevel={3}
           title="Informações administrativas"
           description="Altere a situação somente quando houver uma decisão administrativa."
           icon={<ClipboardText className="h-5 w-5" weight="duotone" />}

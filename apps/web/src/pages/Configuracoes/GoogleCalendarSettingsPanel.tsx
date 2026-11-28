@@ -1,3 +1,4 @@
+import { GoogleCalendarConflicts } from './GoogleCalendarConflicts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Calendar, Gear, ShieldCheck, WarningCircle } from '@phosphor-icons/react';
@@ -225,14 +226,15 @@ export function GoogleCalendarSettingsPanel() {
               <button type="button" onClick={handleConnectGoogle} disabled={!googleStatus.configured} className={cn('flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold shadow-sm transition-[background-color,color,box-shadow,transform] active:scale-95', googleStatus.configured ? 'geo-button-base geo-button-revenue geo-focus-ring text-white' : 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600')}>Conectar Google Agenda</button>
             ) : (
               <>
-                <button type="button" onClick={handleSyncGoogle} disabled={syncingGoogle} className={cn(primarySmallActionButtonClass, 'text-xs disabled:opacity-55')}>{syncingGoogle ? 'Sincronizando...' : 'Sincronização Total (Espelhada)'}</button>
+                <button type="button" onClick={handleSyncGoogle} disabled={syncingGoogle} className={cn(primarySmallActionButtonClass, 'text-xs disabled:opacity-55')}>{syncingGoogle ? 'Sincronizando…' : 'Sincronizar Agenda'}</button>
                 <button type="button" onClick={handleDisconnectGoogle} className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-xs font-bold text-red-700 transition-[background-color,border-color,color] hover:bg-red-100 dark:border-red-900/30 dark:bg-red-950/20 dark:text-red-400">Desconectar</button>
               </>
             )}
           </div>
         </div>
         {googleStatusError && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"><span>Não foi possível consultar o status da Google Agenda: {googleStatusError}</span><button type="button" onClick={() => void fetchGoogleStatus()} className="min-h-11 rounded-xl border border-red-300 px-4 font-semibold hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-500/40 dark:border-red-800">Tentar novamente</button></div>}
-        {!googleStatus.configured && <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-500"><WarningCircle className="h-4 w-4" /> Cadastre o ID e a Chave Secreta acima para poder conectar sua agenda.</p>}
+        {!googleStatus.configured && <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300"><WarningCircle aria-hidden="true" className="h-4 w-4" /> Cadastre o ID e a Chave Secreta acima para poder conectar sua agenda.</p>}
+        <GoogleCalendarConflicts />
       </div>
     </div>
   );

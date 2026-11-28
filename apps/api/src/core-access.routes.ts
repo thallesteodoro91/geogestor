@@ -7,6 +7,7 @@ import { schema } from '@geogestor/database';
 import { db } from './db';
 import { AuditLogService } from './services/audit.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
+import { CalendarSyncEngine } from './services/calendar-sync-engine';
 import { LocalSecretService } from './services/local-secret.service';
 import { LocalSessionService, verifyAdminPassword } from './services/local-session.service';
 import { LocalAuthPolicyService } from './services/local-auth-policy.service';
@@ -293,7 +294,7 @@ server.patch('/api/configuracoes', async (request, reply) => {
     }
 
     const configs = await db.select().from(schema.configuracoes).limit(1);
-    
+
     if (configs.length > 0) {
       const protectedClientSecret = data.googleClientSecret?.trim()
         ? LocalSecretService.protect(data.googleClientSecret.trim())
@@ -432,7 +433,7 @@ server.get('/api/google/callback', async (request, reply) => {
       </html>
     `);
   } catch (err) {
-    server.log.error(err);
+    server.log.error({ code: 'GOOGLE_AUTH_FAILED' }, 'Falha na autorização Google; detalhes sensíveis omitidos.');
     return reply.status(500).send({ error: 'Erro ao autenticar com o Google' });
   }
 });
@@ -442,8 +443,21 @@ server.post('/api/google/sync', async (request, reply) => {
     const results = await GoogleCalendarService.sync();
     return { success: true, ...results };
   } catch (err) {
-    server.log.error(err);
+    server.log.error({ code: 'GOOGLE_SYNC_FAILED' }, 'Falha na sincronização Google; detalhes sensíveis omitidos.');
     return reply.status(500).send({ error: getErrorMessage(err, 'Erro ao sincronizar com Google Agenda') });
+  }
+});
+
+server.get('/api/google/conflitos', async () => CalendarSyncEngine.conflicts());
+server.post('/api/google/conflitos/:id/resolver', async (request, reply) => {
+  const params = z.object({ id: z.string().uuid() }).safeParse(request.params);
+  const body = z.object({ choice: z.enum(['local', 'remote']), reviewToken: z.string().regex(/^[a-f0-9]{64}$/) }).strict().safeParse(request.body);
+  if (!params.success || !body.success) return reply.status(400).send({ error: 'Consulte as versões e escolha qual preservar.' });
+  try {
+    await (await GoogleCalendarService.engine()).resolve(params.data.id, body.data.choice, body.data.reviewToken);
+    return { success: true };
+  } catch (error) {
+    return reply.status(409).send({ error: getErrorMessage(error, 'Não foi possível resolver o conflito.') });
   }
 });
 

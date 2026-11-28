@@ -1,6 +1,6 @@
 import { appLinks, type EnvironmentalDemandListItem } from '@geogestor/contracts';
 import { ArrowRight, CalendarBlank, Scales } from '@phosphor-icons/react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import treesIllustration from '../../assets/magnific-icons/trees_5026999.png';
 import { cn } from '../../utils/cn';
 import { getWorkStatusPresentation } from '../../utils/workStatus';
@@ -50,6 +50,7 @@ function DemandStatusRing({ status }: { status: string }) {
 }
 
 export function EnvironmentalDemandCard({ demand }: { demand: EnvironmentalDemandListItem }) {
+  const location = useLocation();
   const isAssessment = demand.tipo === 'Perícia';
   const status = demand.status || 'Sem status';
   const demandType = demand.tipoDemanda || demand.tipo || 'Demanda ambiental';
@@ -59,7 +60,7 @@ export function EnvironmentalDemandCard({ demand }: { demand: EnvironmentalDeman
 
   return (
     <Link
-      to={appLinks.environmentalDemand(demand.id)}
+      to={`${appLinks.environmentalDemand(demand.id)}?${new URLSearchParams({ retorno: location.pathname + location.search })}`}
       aria-label={`Abrir demanda ${demand.nome}`}
       className={cn(
         classes.card,
@@ -109,15 +110,15 @@ export function EnvironmentalDemandCard({ demand }: { demand: EnvironmentalDeman
 
         <dl className={cn(classes.footer, '-mx-4 -mb-4 mt-4 bg-zinc-50/70 dark:bg-zinc-950/35')}>
           <div className="min-w-0 flex-1 border-r border-zinc-100 pr-3 dark:border-zinc-800">
-            <dt className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">Cliente</dt>
+            <dt className="text-xs font-medium text-text-secondary">Cliente</dt>
             <dd className="mt-1 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200" title={demand.clienteNome}>{demand.clienteNome}</dd>
           </div>
           <div className="min-w-0 flex-1 border-r border-zinc-100 px-3 dark:border-zinc-800">
-            <dt className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">Fase</dt>
-            <dd className="mt-1 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200" title={demand.statusFase || 'Inicial'}>{demand.statusFase || 'Inicial'}</dd>
+            <dt className="text-xs font-medium text-text-secondary">Fase</dt>
+            <dd className="mt-1 truncate text-[11px] font-semibold text-zinc-700 dark:text-zinc-200" title={demand.statusFase || 'Não informada'}>{demand.statusFase || 'Não informada'}</dd>
           </div>
           <div className="min-w-0 flex-1 pl-3">
-            <dt className="flex items-center gap-1 text-[10px] font-medium text-zinc-400 dark:text-zinc-500"><CalendarBlank aria-hidden="true" className="h-3 w-3" />Prazo</dt>
+            <dt className="flex items-center gap-1 text-xs font-medium text-text-secondary"><CalendarBlank aria-hidden="true" className="h-3 w-3" />Prazo</dt>
             <dd className={cn('mt-1 truncate text-[11px] font-semibold tabular-nums', deadlineTone(demand.dataEntrega))}>{formatDate(demand.dataEntrega)}</dd>
           </div>
         </dl>

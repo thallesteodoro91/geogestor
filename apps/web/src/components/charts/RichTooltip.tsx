@@ -19,6 +19,7 @@ const numberFormatter = new Intl.NumberFormat('pt-BR');
 
 interface TooltipPayloadItem {
   value: number;
+  type?: string;
   name?: string;
   dataKey?: string;
   color?: string;
@@ -65,7 +66,7 @@ const getSeriesColor = (item: TooltipPayloadItem): string => {
 
 export const RichTooltip = ({
   active,
-  payload,
+  payload: entries,
   label,
   format = 'currency',
   showVariation = false,
@@ -73,6 +74,7 @@ export const RichTooltip = ({
   differenceLabel = 'Lucro',
   className,
 }: RichTooltipProps) => {
+  const payload = entries?.filter((item) => item.type !== 'none');
   if (!active || !payload || payload.length === 0) return null;
 
   // Get context from first item if available
@@ -92,7 +94,7 @@ export const RichTooltip = ({
       aria-live="polite"
     >
       {/* Colored side indicator */}
-      <div 
+      <div
         className="absolute left-0 top-0 bottom-0 w-1.5 rounded-l-2xl"
         style={{ backgroundColor: getSeriesColor(payload[0]) }}
         aria-hidden="true"

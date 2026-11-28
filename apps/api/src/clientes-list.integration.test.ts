@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -22,7 +23,7 @@ test('listagem preserva contrato e pagina, busca e filtra mais de 500 clientes',
     import('./services/runtime-migrations.service'),
     import('@geogestor/database')
   ]);
-  const request = (url: string) => server.inject({ method: 'GET', url, headers: { 'x-api-token': token } });
+  const request = (url: string) => injectWithRecordVersion(server, { method: 'GET', url, headers: { 'x-api-token': token } });
 
   async function addClients(start: number, end: number) {
     const values = Array.from({ length: end - start }, (_, offset) => {
@@ -64,14 +65,22 @@ test('listagem preserva contrato e pagina, busca e filtra mais de 500 clientes',
       { id: 'structured-project', clienteId: 'cliente-0000', nome: 'Projeto vinculado', propriedadeId: 'property-active-1' },
       { id: 'deleted-project', clienteId: 'cliente-0000', nome: 'Projeto excluído', deletedAt: new Date().toISOString() }
     ]);
+    await db.insert(schema.interacoes_cliente).values([
+      { id: 'manual-earlier', clienteId: 'cliente-0000', tipo: 'Ligação', data: '2026-01-10T10:00:00.000Z', descricao: 'Contato registrado', manual: true },
+      { id: 'manual-latest', clienteId: 'cliente-0000', tipo: 'Reunião', data: '2026-01-20T10:00:00.000Z', descricao: 'Reunião registrada', manual: true },
+      { id: 'automatic-later', clienteId: 'cliente-0000', tipo: 'Sistema', data: '2026-02-01T10:00:00.000Z', descricao: 'Evento automático', manual: false },
+      { id: 'scheduled-future', clienteId: 'cliente-0000', tipo: 'Reunião', data: '2099-01-01T10:00:00.000Z', descricao: 'Reunião futura', manual: true },
+      { id: 'deleted-later', clienteId: 'cliente-0000', tipo: 'Email', data: '2026-03-01T10:00:00.000Z', descricao: 'Interação excluída', manual: true, deletedAt: new Date().toISOString() }
+    ]);
 
     const one = await request('/api/clientes?limit=500');
     assert.equal(one.statusCode, 200, one.body);
     const oneBody = one.json<Array<Record<string, unknown>>>();
     assert.equal(oneBody.length, 1);
     assert.equal(oneBody[0].propriedadesCount, 3);
+    assert.equal(oneBody[0].ultimaInteracao, '2026-01-20T10:00:00.000Z');
     const databaseRow = (await db.select().from(schema.clientes).limit(1))[0];
-    assert.deepEqual(Object.keys(oneBody[0]).sort(), [...Object.keys(databaseRow), 'propriedadesCount'].sort());
+    assert.deepEqual(Object.keys(oneBody[0]).sort(), [...Object.keys(databaseRow), 'propriedadesCount', 'ultimaInteracao'].sort());
     for (const [key, value] of Object.entries(databaseRow)) {
       assert.equal(typeof oneBody[0][key], typeof value, `tipo divergente no campo ${key}`);
     }
@@ -81,6 +90,24 @@ test('listagem preserva contrato e pagina, busca e filtra mais de 500 clientes',
     const hundred = await request('/api/clientes?limit=100');
     assert.equal(hundred.statusCode, 200, hundred.body);
     assert.equal(hundred.json<unknown[]>().length, 100);
+    assert.equal(hundred.json<Array<{ id: string; ultimaInteracao: string | null }>>().find((cliente) => cliente.id === 'cliente-0001')?.ultimaInteracao, null);
+
+    const physicalPersons = await request('/api/clientes?mode=page&tipoPessoa=PF');
+    const legalPersons = await request('/api/clientes?mode=page&tipoPessoa=PJ');
+    assert.equal(physicalPersons.json<{ total: number }>().total, 50);
+    assert.equal(legalPersons.json<{ total: number }>().total, 50);
+
+    await Promise.all([
+      db.update(schema.clientes).set({ categoria: 'Governo' }).where(eq(schema.clientes.id, 'cliente-0001')),
+      db.update(schema.clientes).set({ categoria: 'Órgão Público' }).where(eq(schema.clientes.id, 'cliente-0002')),
+      db.update(schema.clientes).set({ categoria: 'Entidade Pública' }).where(eq(schema.clientes.id, 'cliente-0003'))
+    ]);
+    const publicEntities = await request('/api/clientes?mode=page&categoria=Entidade%20P%C3%BAblica');
+    assert.equal(publicEntities.statusCode, 200, publicEntities.body);
+    assert.deepEqual(
+      publicEntities.json<{ items: Array<{ id: string }>; total: number }>().items.map((client) => client.id).sort(),
+      ['cliente-0001', 'cliente-0002', 'cliente-0003']
+    );
 
     await addClients(100, 400);
     const fourHundred = await request('/api/clientes?limit=500');
@@ -154,6 +181,36 @@ test('listagem preserva contrato e pagina, busca e filtra mais de 500 clientes',
     assert.equal(deepPageBody.total, 10_000);
     assert.equal(deepPageBody.totalPages, 100);
     assert.equal(deepPageBody.items.length, 100);
+
+    const editableClientId = '00000000-0000-4000-8000-000000000001';
+    await db.insert(schema.clientes).values({ id: editableClientId, nome: 'Entidade de teste', tipoPessoa: 'PJ', categoria: 'Pessoa Jurídica, Governo' });
+    const updatedCategory = await injectWithRecordVersion(server, {
+      method: 'PATCH',
+      url: `/api/clientes/${editableClientId}`,
+      headers: { 'x-api-token': token },
+      payload: { categoria: 'Entidade Pública', perfis: 'Parceiro' }
+    });
+    assert.equal(updatedCategory.statusCode, 200, updatedCategory.body);
+    const [editedClient] = await db.select().from(schema.clientes).where(eq(schema.clientes.id, editableClientId));
+    assert.equal(editedClient.categoria, 'Entidade Pública');
+    assert.equal(editedClient.perfis, 'Parceiro');
+    assert.equal(editedClient.categoriaLegada, 'Pessoa Jurídica, Governo');
+
+    const invalidPublicPerson = await injectWithRecordVersion(server, {
+      method: 'PATCH', url: `/api/clientes/${editableClientId}`,
+      headers: { 'x-api-token': token }, payload: { tipoPessoa: 'PF' }
+    });
+    assert.equal(invalidPublicPerson.statusCode, 400);
+    const ambiguousCategory = await injectWithRecordVersion(server, {
+      method: 'PATCH', url: `/api/clientes/${editableClientId}`,
+      headers: { 'x-api-token': token }, payload: { categoria: 'Empresa, Indústria' }
+    });
+    assert.equal(ambiguousCategory.statusCode, 400);
+
+    const missingTypeId = '00000000-0000-4000-8000-000000000002';
+    await db.insert(schema.clientes).values({ id: missingTypeId, nome: 'Tipo legado ausente', categoria: null });
+    const missingPersonType = await request('/api/clientes?mode=page&tipoPessoa=NaoInformado');
+    assert.deepEqual(missingPersonType.json<{ items: Array<{ id: string }> }>().items.map((client) => client.id), [missingTypeId]);
 
     const client = createClient({ url: `file:${dbPath}` });
     try {

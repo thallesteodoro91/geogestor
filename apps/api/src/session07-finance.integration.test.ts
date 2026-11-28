@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -45,7 +46,7 @@ test('Sessão 07 preserva contratos, reconciliação, concorrência e diagnósti
   }).format(yesterdayDate);
 
   const request = (input: { method: 'GET' | 'POST' | 'PATCH' | 'DELETE'; url: string; payload?: Record<string, unknown> }) =>
-    server.inject({ ...input, headers });
+    injectWithRecordVersion(server, { ...input, headers });
 
   try {
     await dbReady;
@@ -90,8 +91,11 @@ test('Sessão 07 preserva contratos, reconciliação, concorrência e diagnósti
       });
       assert.equal(extraExpense.statusCode, 400, extraExpense.body);
 
-      const emptyExpensePatch = await request({ method: 'PATCH', url: `/api/financeiro/despesas/${crypto.randomUUID()}`, payload: {} });
+      const patchTarget = await request({ method: 'POST', url: '/api/financeiro/despesas', payload: { clienteId: clientA, descricao: 'QA alvo de validação', valor: 100, data: today, categoria: 'Outros' } });
+      assert.equal(patchTarget.statusCode, 200, patchTarget.body);
+      const emptyExpensePatch = await request({ method: 'PATCH', url: `/api/financeiro/despesas/${patchTarget.json<{ id: string }>().id}`, payload: {} });
       assert.equal(emptyExpensePatch.statusCode, 400, emptyExpensePatch.body);
+      await request({ method: 'DELETE', url: `/api/financeiro/despesas/${patchTarget.json<{ id: string }>().id}` });
 
       const invalidInstallment = await request({
         method: 'POST', url: '/api/financeiro/parcelas', payload: {

@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 import { Modal } from './Modal';
-import { WarningCircle, Info, Trash } from '@phosphor-icons/react';
+import { WarningCircle, Info, Trash, CheckCircle } from '@phosphor-icons/react';
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
@@ -10,10 +10,11 @@ export interface ConfirmDialogProps {
   description: string;
   confirmText?: string;
   cancelText?: string;
-  variant?: 'danger' | 'warning' | 'info';
+  variant?: 'danger' | 'warning' | 'info' | 'success';
   loading?: boolean;
   loadingText?: string;
   error?: string;
+  returnFocusSelector?: string;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -27,7 +28,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   variant = 'danger',
   loading = false,
   loadingText,
-  error
+  error,
+  returnFocusSelector
 }) => {
   const cancelButtonId = useId();
   const descriptionId = useId();
@@ -35,18 +37,21 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const pendingLabel = loadingText ?? (variant === 'danger' ? 'Excluindo…' : 'Processando…');
 
   const getIcon = () => {
+    if (variant === 'success') return <CheckCircle aria-hidden="true" weight="bold" className="h-6 w-6 text-emerald-800 dark:text-emerald-200" />;
     if (variant === 'danger') return <Trash aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-red-800 dark:text-brand-red-200" />;
     if (variant === 'warning') return <WarningCircle aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-rajah-900 dark:text-brand-rajah-200" />;
     return <Info aria-hidden="true" weight="bold" className="h-6 w-6 text-brand-turquoise-900 dark:text-brand-turquoise-200" />;
   };
 
   const getBadgeBg = () => {
+    if (variant === 'success') return 'border-emerald-200 bg-emerald-50 dark:border-emerald-500/45 dark:bg-emerald-950/55';
     if (variant === 'danger') return 'border-brand-red-200 bg-brand-red-50 dark:border-brand-red-500/45 dark:bg-brand-red-900/55';
     if (variant === 'warning') return 'border-brand-rajah-300 bg-brand-rajah-50 dark:border-brand-rajah-500/45 dark:bg-brand-rajah-900/45';
     return 'border-brand-turquoise-200 bg-brand-turquoise-50 dark:border-brand-turquoise-500/45 dark:bg-brand-turquoise-900/55';
   };
 
   const getButtonBg = () => {
+    if (variant === 'success') return 'bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white shadow-emerald-700/20';
     if (variant === 'danger') return 'bg-brand-red-600 hover:bg-brand-red-700 active:bg-brand-red-800 text-white shadow-brand-red-600/20';
     if (variant === 'warning') return 'bg-brand-rajah-700 hover:bg-brand-rajah-800 active:bg-brand-rajah-900 text-black shadow-brand-rajah-700/20';
     return 'bg-brand-turquoise-700 hover:bg-brand-turquoise-800 active:bg-brand-turquoise-900 text-white shadow-brand-turquoise-700/20';
@@ -60,6 +65,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       maxWidth="max-w-md"
       initialFocusId={cancelButtonId}
       closeDisabled={loading}
+      returnFocusSelector={returnFocusSelector}
       dialogRole="alertdialog"
       ariaDescribedBy={[descriptionId, error ? errorId : ''].filter(Boolean).join(' ')}
     >
@@ -81,7 +87,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </p>
         )}
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-brand-border">
+        <div className="flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-brand-border">
           <button
             id={cancelButtonId}
             type="button"
@@ -101,11 +107,10 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             {loading && (
               <span
                 aria-hidden="true"
-                className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin"
+                className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin motion-reduce:animate-none"
               />
             )}
-            {loading && <span className="sr-only">Processando confirmação…</span>}
-            {loading ? pendingLabel : confirmText}
+            <span aria-live="polite">{loading ? pendingLabel : confirmText}</span>
           </button>
         </div>
       </div>

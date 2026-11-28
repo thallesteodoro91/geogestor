@@ -35,6 +35,8 @@ import { notifications } from '../services/notifications';
 import { saveExpenseCatalog, saveServiceCatalog } from '../services/auxiliaryCatalogs';
 import { auxiliaryCatalogQueryKey, useAuxiliaryCatalogs } from '../hooks/useAuxiliaryCatalogs';
 import { useDebounce } from '../hooks/useDebounce';
+import { getOperationalSettings } from '../services/operationalSettings';
+import { SERVICE_CATALOG_KEY, EXPENSE_CATALOG_KEY } from '@geogestor/contracts/src/auxiliary-catalogs';
 
 type CatalogTab = 'servicos' | 'despesas';
 type CatalogStatus = 'ativos' | 'inativos' | 'todos';
@@ -88,6 +90,8 @@ export function Cadastros() {
   const [initialFingerprint, setInitialFingerprint] = useState('');
   const [statusTarget, setStatusTarget] = useState<StatusTarget | null>(null);
   const [catalogActionError, setCatalogActionError] = useState('');
+  const [catalogBaseline, setCatalogBaseline] = useState({ services, expenses });
+  const [currentCatalogConflict, setCurrentCatalogConflict] = useState<typeof catalogBaseline | null>(null);
   const serviceTabRef = useRef<HTMLButtonElement>(null);
   const expenseTabRef = useRef<HTMLButtonElement>(null);
 
@@ -128,8 +132,8 @@ export function Cadastros() {
 
   const persistMutation = useMutation({
     mutationFn: async (input: { type: CatalogTab; services?: ServiceCatalogItem[]; expenses?: ExpenseCatalogItem[] }) => {
-      if (input.type === 'servicos') return { type: input.type, services: await saveServiceCatalog(input.services || []) } as const;
-      return { type: input.type, expenses: await saveExpenseCatalog(input.expenses || []) } as const;
+      if (input.type === 'servicos') return { type: input.type, services: await saveServiceCatalog(input.services || [], catalogBaseline.services) } as const;
+      return { type: input.type, expenses: await saveExpenseCatalog(input.expenses || [], catalogBaseline.expenses) } as const;
     },
     onSuccess: (result) => {
       queryClient.setQueryData(auxiliaryCatalogQueryKey, (current: typeof catalogsQuery.data) => ({
@@ -150,8 +154,8 @@ export function Cadastros() {
 
   const statusMutation = useMutation({
     mutationFn: async (target: StatusTarget) => {
-      if (target.type === 'servicos') return { type: target.type, services: await saveServiceCatalog(services.map((item) => item.id === target.id ? { ...item, ativo: target.nextActive } : item)) } as const;
-      return { type: target.type, expenses: await saveExpenseCatalog(expenses.map((item) => item.id === target.id ? { ...item, ativo: target.nextActive } : item)) } as const;
+      if (target.type === 'servicos') return { type: target.type, services: await saveServiceCatalog(catalogBaseline.services.map((item) => item.id === target.id ? { ...item, ativo: target.nextActive } : item), catalogBaseline.services) } as const;
+      return { type: target.type, expenses: await saveExpenseCatalog(catalogBaseline.expenses.map((item) => item.id === target.id ? { ...item, ativo: target.nextActive } : item), catalogBaseline.expenses) } as const;
     },
     onSuccess: (result) => {
       queryClient.setQueryData(auxiliaryCatalogQueryKey, (current: typeof catalogsQuery.data) => ({
@@ -195,6 +199,8 @@ export function Cadastros() {
   };
 
   const openCreateModal = () => {
+    setCatalogBaseline({ services, expenses });
+    setCurrentCatalogConflict(null);
     setSelectedId(null);
     setFormError('');
     setInitialFingerprint(activeTab === 'servicos' ? resetServiceForm() : resetExpenseForm());
@@ -202,6 +208,8 @@ export function Cadastros() {
   };
 
   const openEditModal = (item: ServiceCatalogItem | ExpenseCatalogItem) => {
+    setCatalogBaseline({ services, expenses });
+    setCurrentCatalogConflict(null);
     setSelectedId(item.id);
     setFormError('');
     setInitialFingerprint(activeTab === 'servicos' ? resetServiceForm(item as ServiceCatalogItem) : resetExpenseForm(item as ExpenseCatalogItem));
@@ -223,6 +231,7 @@ export function Cadastros() {
     event.preventDefault();
     setFormError('');
     if (activeTab === 'servicos') {
+      if (selectedId && !services.some((item) => item.id === selectedId)) return showFieldError('Este cadastro foi removido. Copie seu rascunho antes de fechar.', 'cadastro-serv-nome');
       const nome = servNome.trim().replace(/\s+/g, ' ');
       const categoria = currentServiceCategory.trim().replace(/\s+/g, ' ');
       const valorSugerido = parseCurrencyToCents(servValor);
@@ -240,6 +249,7 @@ export function Cadastros() {
       return;
     }
     const categoria = currentExpenseCategory.trim().replace(/\s+/g, ' ');
+    if (selectedId && !expenses.some((item) => item.id === selectedId)) return showFieldError('Este cadastro foi removido. Copie seu rascunho antes de fechar.', 'cadastro-desp-cat');
     const descricao = despDescricao.trim().replace(/\s+/g, ' ');
     const normalizedSubcategories = new Set<string>();
     const subcategorias = despSubcategorias.split(/[\n,;]/)
@@ -348,7 +358,7 @@ export function Cadastros() {
             <article key={item.id} className="grid min-w-0 gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm [content-visibility:auto] dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
               <div aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200"><Tag weight="duotone" className="h-6 w-6" /></div>
               <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words font-semibold leading-snug text-zinc-950 dark:text-white">{item.nome}</h2>{!item.ativo && <span className="rounded-full bg-zinc-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">Inativo</span>}</div><div className="mt-2 flex min-w-0 flex-col gap-1 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-300 sm:flex-row sm:flex-wrap sm:items-center sm:gap-2"><span className="break-words">{item.categoria}</span><span aria-hidden="true" className="hidden sm:inline">•</span><span className="whitespace-nowrap font-bold tabular-nums text-zinc-900 dark:text-zinc-100">Sugerido: {formatCurrency(item.valorSugerido)}</span></div></div>
-              <div className="flex shrink-0 justify-end gap-2"><button type="button" onClick={() => openEditModal(item)} aria-label={`Editar ${item.nome}`} className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 transition-[background-color,border-color,color] hover:bg-indigo-100 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"><PencilSimple aria-hidden="true" className="h-4 w-4" /></button><button type="button" onClick={() => { setCatalogActionError(''); setStatusTarget({ id: item.id, name: item.nome, type: 'servicos', nextActive: !item.ativo }); }} aria-label={`${item.ativo ? 'Inativar' : 'Reativar'} ${item.nome}`} className={cn('geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,color]', item.ativo ? 'border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20' : 'border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20')}>
+              <div className="flex shrink-0 justify-end gap-2"><button type="button" onClick={() => openEditModal(item)} aria-label={`Editar ${item.nome}`} className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 transition-[background-color,border-color,color] hover:bg-indigo-100 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"><PencilSimple aria-hidden="true" className="h-4 w-4" /></button><button type="button" onClick={() => { setCatalogActionError(''); setCatalogBaseline({ services: structuredClone(services), expenses: structuredClone(expenses) }); setStatusTarget({ id: item.id, name: item.nome, type: 'servicos', nextActive: !item.ativo }); }} aria-label={`${item.ativo ? 'Inativar' : 'Reativar'} ${item.nome}`} className={cn('geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,color]', item.ativo ? 'border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20' : 'border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20')}>
                 {item.ativo ? <Prohibit aria-hidden="true" className="h-4 w-4" /> : <ArrowCounterClockwise aria-hidden="true" className="h-4 w-4" />}
               </button></div>
             </article>
@@ -356,7 +366,7 @@ export function Cadastros() {
             <article key={item.id} className="grid min-w-0 gap-4 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm [content-visibility:auto] dark:border-zinc-800 dark:bg-zinc-900 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
               <div aria-hidden="true" className="flex h-12 w-12 items-center justify-center rounded-xl border border-sky-200/70 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-200"><SquaresFour weight="duotone" className="h-6 w-6" /></div>
               <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words font-semibold leading-snug text-zinc-950 dark:text-white">{item.categoria}</h2>{!item.ativo && <span className="rounded-full bg-zinc-200 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">Inativo</span>}</div><p className="mt-1 break-words text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">{item.descricao}</p>{item.subcategorias.length > 0 && <p className="mt-1 break-words text-xs text-zinc-500 dark:text-zinc-400">Subcategorias: {item.subcategorias.join(' · ')}</p>}</div>
-              <div className="flex shrink-0 justify-end gap-2"><button type="button" onClick={() => openEditModal(item)} aria-label={`Editar ${item.categoria}`} className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 transition-[background-color,border-color,color] hover:bg-indigo-100 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"><PencilSimple aria-hidden="true" className="h-4 w-4" /></button><button type="button" onClick={() => { setCatalogActionError(''); setStatusTarget({ id: item.id, name: item.categoria, type: 'despesas', nextActive: !item.ativo }); }} aria-label={`${item.ativo ? 'Inativar' : 'Reativar'} ${item.categoria}`} className={cn('geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,color]', item.ativo ? 'border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20' : 'border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20')}>
+              <div className="flex shrink-0 justify-end gap-2"><button type="button" onClick={() => openEditModal(item)} aria-label={`Editar ${item.categoria}`} className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-indigo-200/80 bg-indigo-50 text-indigo-700 transition-[background-color,border-color,color] hover:bg-indigo-100 dark:border-indigo-400/20 dark:bg-indigo-500/10 dark:text-indigo-200 dark:hover:bg-indigo-500/20"><PencilSimple aria-hidden="true" className="h-4 w-4" /></button><button type="button" onClick={() => { setCatalogActionError(''); setCatalogBaseline({ services: structuredClone(services), expenses: structuredClone(expenses) }); setStatusTarget({ id: item.id, name: item.categoria, type: 'despesas', nextActive: !item.ativo }); }} aria-label={`${item.ativo ? 'Inativar' : 'Reativar'} ${item.categoria}`} className={cn('geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border transition-[background-color,border-color,color]', item.ativo ? 'border-amber-200/80 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20' : 'border-emerald-200/80 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-400/20 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/20')}>
                 {item.ativo ? <Prohibit aria-hidden="true" className="h-4 w-4" /> : <ArrowCounterClockwise aria-hidden="true" className="h-4 w-4" />}
               </button></div>
             </article>
@@ -366,17 +376,23 @@ export function Cadastros() {
       {!showDiscardDialog && <Modal isOpen={showModal} onClose={closeEditor} closeDisabled={persistMutation.isPending} title={editorTitle} initialFocusId={activeTab === 'servicos' ? 'cadastro-serv-nome' : 'cadastro-desp-cat'}>
         <form onSubmit={handleSubmit} className="space-y-5" noValidate>
           <FormError message={formError} />
-          <FormSection title={activeTab === 'servicos' ? 'Tipo de serviço' : 'Categoria de despesa'} description={activeTab === 'servicos' ? 'Defina o serviço e o valor inicial sugerido para novos orçamentos.' : 'Defina como a categoria aparecerá nos lançamentos e relatórios.'} className="bg-white/70 dark:border-zinc-700/80 dark:bg-zinc-800/35">
+          {formError && <div aria-live="polite" className="space-y-3"><button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" onClick={async () => {
+            try { const values = await getOperationalSettings(true); setCurrentCatalogConflict({ services: values[SERVICE_CATALOG_KEY] as ServiceCatalogItem[], expenses: values[EXPENSE_CATALOG_KEY] as ExpenseCatalogItem[] }); }
+            catch { setFormError('Não foi possível consultar o catálogo atual. Seu rascunho permanece nesta tela.'); }
+          }}>Consultar catálogo atual</button>
+          {currentCatalogConflict && <><pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-lg border p-3">{JSON.stringify(activeTab === 'servicos' ? currentCatalogConflict.services : currentCatalogConflict.expenses, null, 2)}</pre><p>Revise a versão atual antes de reaplicar este cadastro. Outros cadastros serão preservados.</p><button type="button" className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-4" onClick={() => { setCatalogBaseline(currentCatalogConflict); queryClient.setQueryData(auxiliaryCatalogQueryKey, { ...currentCatalogConflict, source: 'database', degraded: false }); setCurrentCatalogConflict(null); setFormError('Catálogo atual consultado. Revise os campos e salve novamente.'); }}>Revisar rascunho com este catálogo</button></>}
+          </div>}
+          <FormSection headingLevel={3} title={activeTab === 'servicos' ? 'Tipo de serviço' : 'Categoria de despesa'} description={activeTab === 'servicos' ? 'Defina o serviço e o valor inicial sugerido para novos orçamentos.' : 'Defina como a categoria aparecerá nos lançamentos e relatórios.'} className="bg-white/70 dark:border-zinc-700/80 dark:bg-zinc-800/35">
             {activeTab === 'servicos' ? <>
-              <FormField htmlFor="cadastro-serv-nome" label="Nome do serviço" required><input id="cadastro-serv-nome" name="serviceName" type="text" required autoComplete="off" value={servNome} onChange={(event) => setServNome(event.target.value)} placeholder="Ex.: Demarcação topográfica" className="geo-field" /></FormField>
-              <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="cadastro-serv-cat" label="Categoria" required><FormSelect id="cadastro-serv-cat" name="serviceCategory" value={servCategoria} onChange={(event) => setServCategoria(event.target.value)} required>{SERVICE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField><FormField htmlFor="cadastro-serv-valor" label="Valor sugerido (R$)" required><NumericInput id="cadastro-serv-valor" name="suggestedValue" inputMode="decimal" min="0" step="0.01" required autoComplete="off" value={servValor} onChange={(event) => setServValor(event.target.value)} placeholder="0,00" className="tabular-nums" /></FormField></div>
-              {servCategoria === 'Outro' && <FormField htmlFor="cadastro-serv-cat-custom" label="Nome da categoria" required><input id="cadastro-serv-cat-custom" name="customServiceCategory" required autoComplete="off" value={servCategoriaCustom} onChange={(event) => setServCategoriaCustom(event.target.value)} className="geo-field" /></FormField>}
+              <FormField htmlFor="cadastro-serv-nome" label="Nome do serviço" required><input id="cadastro-serv-nome" name="serviceName" type="text" required autoComplete="off" value={servNome} onChange={(event) => setServNome(event.target.value)} placeholder="Ex.: Demarcação topográfica" className="geo-field h-11 w-full px-3" /></FormField>
+              <div className="grid gap-4 sm:grid-cols-2"><FormField htmlFor="cadastro-serv-cat" label="Categoria" required><FormSelect id="cadastro-serv-cat" name="serviceCategory" density="form" className="w-full" value={servCategoria} onChange={(event) => setServCategoria(event.target.value)} required>{SERVICE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField><FormField htmlFor="cadastro-serv-valor" label="Valor sugerido (R$)" required><NumericInput id="cadastro-serv-valor" name="suggestedValue" inputMode="decimal" min="0" step="0.01" required autoComplete="off" value={servValor} onChange={(event) => setServValor(event.target.value)} placeholder="0,00" className="tabular-nums" /></FormField></div>
+              {servCategoria === 'Outro' && <FormField htmlFor="cadastro-serv-cat-custom" label="Nome da categoria" required><input id="cadastro-serv-cat-custom" name="customServiceCategory" required autoComplete="off" value={servCategoriaCustom} onChange={(event) => setServCategoriaCustom(event.target.value)} className="geo-field h-11 w-full px-3" /></FormField>}
               <p className="rounded-xl border border-indigo-200/70 bg-indigo-50/80 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-100">O valor será sugerido ao iniciar um item vazio no orçamento e continuará editável.</p>
             </> : <>
-              <FormField htmlFor="cadastro-desp-cat" label="Categoria da despesa" required><FormSelect id="cadastro-desp-cat" name="expenseCategory" value={despCategoria} onChange={(event) => setDespCategoria(event.target.value)} required>{EXPENSE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField>
-              {despCategoria === 'Outro' && <FormField htmlFor="cadastro-desp-cat-custom" label="Nome da categoria" required><input id="cadastro-desp-cat-custom" name="customExpenseCategory" required autoComplete="off" value={despCategoriaCustom} onChange={(event) => setDespCategoriaCustom(event.target.value)} className="geo-field" /></FormField>}
-              <FormField htmlFor="cadastro-desp-desc" label="Descrição" required><textarea id="cadastro-desp-desc" name="expenseCategoryDescription" value={despDescricao} onChange={(event) => setDespDescricao(event.target.value)} rows={3} required autoComplete="off" placeholder="Ex.: Abastecimento e combustível para atividades operacionais." className="geo-field resize-y" /></FormField>
-              <FormField htmlFor="cadastro-desp-subcategorias" label="Subcategorias"><textarea id="cadastro-desp-subcategorias" name="expenseSubcategories" value={despSubcategorias} onChange={(event) => setDespSubcategorias(event.target.value)} rows={4} autoComplete="off" placeholder={'Uma por linha, por exemplo:\nGasolina\nEtanol\nDiesel'} className="geo-field resize-y" /><p className="mt-1 text-xs text-zinc-500">Separe por linha, vírgula ou ponto e vírgula.</p></FormField>
+              <FormField htmlFor="cadastro-desp-cat" label="Categoria da despesa" required><FormSelect id="cadastro-desp-cat" name="expenseCategory" density="form" className="w-full" value={despCategoria} onChange={(event) => setDespCategoria(event.target.value)} required>{EXPENSE_CATEGORY_PRESETS.map((category) => <option key={category}>{category}</option>)}<option value="Outro">Outra categoria…</option></FormSelect></FormField>
+              {despCategoria === 'Outro' && <FormField htmlFor="cadastro-desp-cat-custom" label="Nome da categoria" required><input id="cadastro-desp-cat-custom" name="customExpenseCategory" required autoComplete="off" value={despCategoriaCustom} onChange={(event) => setDespCategoriaCustom(event.target.value)} className="geo-field h-11 w-full px-3" /></FormField>}
+              <FormField htmlFor="cadastro-desp-desc" label="Descrição" required><textarea id="cadastro-desp-desc" name="expenseCategoryDescription" value={despDescricao} onChange={(event) => setDespDescricao(event.target.value)} rows={3} required autoComplete="off" placeholder="Ex.: Abastecimento e combustível para atividades operacionais." className="geo-field w-full resize-y px-3 py-2" /></FormField>
+              <FormField htmlFor="cadastro-desp-subcategorias" label="Subcategorias"><textarea id="cadastro-desp-subcategorias" name="expenseSubcategories" value={despSubcategorias} onChange={(event) => setDespSubcategorias(event.target.value)} rows={4} autoComplete="off" placeholder={'Uma por linha, por exemplo:\nGasolina\nEtanol\nDiesel'} className="geo-field w-full resize-y px-3 py-2" /><p className="mt-1 text-xs text-zinc-500">Separe por linha, vírgula ou ponto e vírgula.</p></FormField>
               <p className="rounded-xl border border-indigo-200/70 bg-indigo-50/80 px-4 py-3 text-xs font-medium leading-relaxed text-indigo-900 dark:border-indigo-400/20 dark:bg-indigo-400/10 dark:text-indigo-100">Uma descrição clara mantém filtros e relatórios financeiros consistentes.</p>
             </>}
           </FormSection>

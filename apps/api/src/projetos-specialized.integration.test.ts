@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -58,7 +59,7 @@ test('preserva dados especializados e bloqueia alteração destrutiva do tipo do
       statusFase: 'Inicial'
     });
 
-    const environmentalResponse = await server.inject({
+    const environmentalResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/projetos/${projectId}`,
       headers: { 'x-api-token': 'test-token' }
@@ -73,7 +74,7 @@ test('preserva dados especializados e bloqueia alteração destrutiva do tipo do
     assert.equal(environmentalProject.tipoDemanda, 'Estudo ambiental');
     assert.equal(environmentalProject.protocolo, 'IMA-2026-001');
 
-    const changeTypeResponse = await server.inject({
+    const changeTypeResponse = await injectWithRecordVersion(server, {
       method: 'PATCH',
       url: `/api/projetos/${projectId}`,
       headers: authHeaders,
@@ -92,7 +93,7 @@ test('preserva dados especializados e bloqueia alteração destrutiva do tipo do
     assert.equal(environmentalRows.length, 1);
     assert.equal(expertAssessmentRows.length, 0);
 
-    const expertAssessmentResponse = await server.inject({
+    const expertAssessmentResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/projetos/${projectId}`,
       headers: { 'x-api-token': 'test-token' }

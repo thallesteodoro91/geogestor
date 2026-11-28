@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LicenseStatusSchema } from './environmental';
+import { PUBLIC_ENTITY_CATEGORY, resolveClientClassification } from './client-categories';
 
 export * from './budgets';
 export * from './opportunities';
@@ -201,7 +202,7 @@ const ClientPrimaryOriginSchema = z.enum([
 
 export const ClientePayloadBaseSchema = z.object({
   nome: z.string().trim().min(1, 'Informe o nome completo ou a razão social.'),
-  tipoPessoa: z.enum(['PF', 'PJ']).default('PF'),
+  tipoPessoa: z.enum(['PF', 'PJ']),
   documento: z.string().nullable().optional(),
   email: z.string().email('Informe um e-mail válido.').nullable().optional().or(z.literal('')),
   telefone: z.string().nullable().optional(),
@@ -232,6 +233,12 @@ export const ClientePayloadBaseSchema = z.object({
 });
 
 export const ClientePayloadSchema = ClientePayloadBaseSchema.superRefine((data, context) => {
+  if (resolveClientClassification(data.categoria).needsReview) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoria'], message: 'Escolha uma única categoria principal. Cadastros antigos com múltiplas categorias exigem revisão manual.' });
+  }
+  if (resolveClientClassification(data.categoria).primary === PUBLIC_ENTITY_CATEGORY && data.tipoPessoa !== 'PJ') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoria'], message: 'Entidade Pública exige Pessoa Jurídica. Para um representante em nome próprio, selecione outra categoria.' });
+  }
   if (data.tipoPessoa === 'PF' && !isValidCpf(data.cpf)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'Informe um CPF válido com 11 dígitos.' });
   }
@@ -262,6 +269,12 @@ export const ClientePayloadSchema = ClientePayloadBaseSchema.superRefine((data, 
 });
 
 export const ClientePatchPayloadSchema = ClientePayloadBaseSchema.partial().superRefine((data, context) => {
+  if (data.categoria !== undefined && resolveClientClassification(data.categoria).needsReview) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoria'], message: 'Escolha uma única categoria principal.' });
+  }
+  if (resolveClientClassification(data.categoria).primary === PUBLIC_ENTITY_CATEGORY && data.tipoPessoa === 'PF') {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['categoria'], message: 'Entidade Pública exige Pessoa Jurídica.' });
+  }
   if (data.cpf !== undefined && data.cpf !== null && !isValidCpf(data.cpf)) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['cpf'], message: 'Informe um CPF válido com 11 dígitos.' });
   }

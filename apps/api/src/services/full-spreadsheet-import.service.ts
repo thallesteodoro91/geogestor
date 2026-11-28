@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { normalizePropertyIdentifier, normalizePropertyName } from '@geogestor/contracts/src/properties';
 import { and, eq, inArray, isNull, like } from 'drizzle-orm';
 import { isValidCnpj, isValidCpf } from '@geogestor/contracts';
+import { normalizeClientCategoryText } from '@geogestor/contracts/src/client-categories';
 import { schema } from '@geogestor/database';
 import { db } from '../db';
 import { AuditLogService } from './audit.service';
@@ -351,6 +352,7 @@ type PreparedRow = {
     address: string | null;
     registeredAt: string | null;
     category: string | null;
+    categoryOriginal: string | null;
     origin: string | null;
     status: string;
     notes: string;
@@ -551,7 +553,8 @@ async function prepare(input: FullImportInput, database: typeof db = db): Promis
         phone,
         address: textValue(cell(raw, headers.sourceByKey, 'endereco')),
         registeredAt: excelDateToIso(cell(raw, headers.sourceByKey, 'dataCadastro')),
-        category: textValue(cell(raw, headers.sourceByKey, 'tipoCliente')),
+        category: normalizeClientCategoryText(textValue(cell(raw, headers.sourceByKey, 'tipoCliente'))),
+        categoryOriginal: textValue(cell(raw, headers.sourceByKey, 'tipoCliente')),
         origin: textValue(cell(raw, headers.sourceByKey, 'indicacao')),
         status: clientStatus(cell(raw, headers.sourceByKey, 'situacaoCliente')),
         notes: rowNote(line, [['Idade informada', cell(raw, headers.sourceByKey, 'idade')]])
@@ -813,6 +816,8 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
           telefone: row.client.phone ?? existing.telefone,
           endereco: row.client.address ?? existing.endereco,
           categoria: row.client.category ?? existing.categoria,
+          categoriaLegada: existing.categoriaLegada
+            ?? (row.client.categoryOriginal !== row.client.category ? row.client.categoryOriginal : null),
           origem: row.client.origin ?? existing.origem,
           origemPrincipal: row.client.origin ?? existing.origemPrincipal,
           situacao: row.client.status,
@@ -835,6 +840,7 @@ export async function commitFullSpreadsheetImport(input: FullImportInput, databa
           telefone: row.client.phone,
           endereco: row.client.address,
           categoria: row.client.category,
+          categoriaLegada: row.client.categoryOriginal !== row.client.category ? row.client.categoryOriginal : null,
           origem: row.client.origin,
           origemPrincipal: row.client.origin,
           situacao: row.client.status,

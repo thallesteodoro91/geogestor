@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -102,7 +103,7 @@ test('dashboard aplica carteira atual e calcula conclusão pelas tarefas com pra
     ]);
 
     const headers = { 'x-api-token': 'test-token' };
-    const activeResponse = await server.inject({
+    const activeResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?projectScope=active&tasksInicio=2026-08-01&tasksFim=2026-08-31',
       headers,
@@ -132,7 +133,7 @@ test('dashboard aplica carteira atual e calcula conclusão pelas tarefas com pra
       rate: 50,
     });
 
-    const allResponse = await server.inject({
+    const allResponse = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?projectScope=all&tasksInicio=2026-09-01&tasksFim=2026-09-30',
       headers,
@@ -147,28 +148,28 @@ test('dashboard aplica carteira atual e calcula conclusão pelas tarefas com pra
     assert.equal(all.projectScope, 'all');
     assert.deepEqual(all.taskCompletion, { inicio: '2026-09-01', fim: '2026-09-30', total: 0, completed: 0, pending: 0, rate: 0 });
 
-    const invalidRange = await server.inject({
+    const invalidRange = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?tasksInicio=2026-08-31&tasksFim=2026-08-01',
       headers,
     });
     assert.equal(invalidRange.statusCode, 400);
 
-    const incompleteRange = await server.inject({
+    const incompleteRange = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?tasksInicio=2026-08-01',
       headers,
     });
     assert.equal(incompleteRange.statusCode, 400);
 
-    const impossibleDate = await server.inject({
+    const impossibleDate = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?tasksInicio=2026-02-30&tasksFim=2026-03-01',
       headers,
     });
     assert.equal(impossibleDate.statusCode, 400);
 
-    const invalidScope = await server.inject({
+    const invalidScope = await injectWithRecordVersion(server, {
       method: 'GET',
       url: '/api/dashboard/overview?projectScope=historico',
       headers,

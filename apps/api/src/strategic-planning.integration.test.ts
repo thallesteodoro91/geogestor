@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -25,7 +26,7 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
     import('./services/audit.service')
   ]);
 
-  const request = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: Record<string, unknown>) => server.inject({
+  const request = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: Record<string, unknown>) => injectWithRecordVersion(server, {
     method,
     url,
     headers: { 'x-api-token': 'test-token' },
@@ -35,7 +36,7 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
   try {
     await dbReady;
     const migration = await runRuntimeMigrations();
-    assert.equal(migration.schemaVersion, 17);
+    assert.equal(migration.schemaVersion, 19);
     const foreignKeys = await db.$client.execute('PRAGMA foreign_keys;');
     assert.equal(Number(foreignKeys.rows[0]?.foreign_keys), 1);
 
@@ -225,8 +226,8 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
 
     const riskResponse = await request('POST', '/api/planejamento/riscos', {
       cicloId: cycle.id,
-      objetivoId: objective.id,
-      iniciativaId: null,
+      objetivoId: null,
+      iniciativaId: initiative.id,
       descricao: 'Dependência excessiva de atualização manual.',
       impacto: 'alto',
       probabilidade: 'medio',
@@ -246,6 +247,8 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
     assert.equal(snapshot.riscos.length, 1);
     assert.equal(snapshot.resumo.decisoesPendentes, 1);
     assert.equal(snapshot.resumo.objetivosEmRisco, 1);
+    assert.equal(snapshot.riscos[0]?.objetivoId, null, 'O vínculo indireto não deve reescrever registros existentes.');
+    assert.equal(snapshot.riscos[0]?.iniciativaId, initiative.id);
     assert.equal(snapshot.resumo.dadosDesatualizados, 0);
     assert.equal(snapshot.decisoes.length, 1);
     assert.equal(snapshot.decisoes[0]?.descricao, 'Definir responsável substituto.');
@@ -376,6 +379,26 @@ test('planejamento estratégico persiste metas explícitas e não inventa valor 
       proximaRevisao: '2026-09-15'
     });
     assert.equal(secondCheckin.statusCode, 201);
+
+    // A review retains its historical forecast; only editing the cycle changes its live schedule.
+    const afterNewReview = (await request('GET', `/api/planejamento/ciclos/${cycle.id}`)).json<StrategicPlanningSnapshot>();
+    assert.equal(afterNewReview.ciclo.proximaRevisao, '2026-08-15');
+    assert.equal((await request('PATCH', `/api/planejamento/ciclos/${cycle.id}`, { proximaRevisao: '2026-10-15' })).statusCode, 200);
+    assert.equal((await request('PATCH', `/api/planejamento/checkins/${checkin.id}`, { proximaRevisao: '2026-08-01', narrativa: 'Revisão histórica ajustada, sem reagendar o ciclo.' })).statusCode, 200);
+    const afterOldReview = (await request('GET', `/api/planejamento/ciclos/${cycle.id}`)).json<StrategicPlanningSnapshot>();
+    assert.equal(afterOldReview.ciclo.proximaRevisao, '2026-10-15');
+    assert.equal(afterOldReview.checkins.find(item => item.id === checkin.id)?.proximaRevisao, '2026-08-01');
+    assert.equal(afterOldReview.checkins.find(item => item.id === checkin.id)?.decisoesPendentes, 'Definir responsável substituto.');
+    assert.equal((await request('PATCH', `/api/planejamento/ciclos/${cycle.id}`, { proximaRevisao: null })).statusCode, 200);
+    const afterClearSchedule = (await request('GET', `/api/planejamento/ciclos/${cycle.id}`)).json<StrategicPlanningSnapshot>();
+    assert.equal(afterClearSchedule.ciclo.proximaRevisao, null);
+    assert.equal(afterClearSchedule.checkins.find(item => item.id === checkin.id)?.proximaRevisao, '2026-08-01');
+    assert.equal((await request('PATCH', `/api/planejamento/checkins/${checkin.id}`, { data: '2026-08-02' })).statusCode, 200);
+    const correctedDate = (await request('GET', `/api/planejamento/ciclos/${cycle.id}`)).json<StrategicPlanningSnapshot>();
+    assert.equal(correctedDate.ciclo.proximaRevisao, null);
+    assert.equal(correctedDate.checkins.find(item => item.id === checkin.id)?.proximaRevisao, '2026-08-01');
+    // Restore the historical date used by the trend assertions below.
+    assert.equal((await request('PATCH', `/api/planejamento/checkins/${checkin.id}`, { data: '2026-07-30' })).statusCode, 200);
 
     const evolvedSnapshot = (await request('GET', `/api/planejamento/ciclos/${cycle.id}`)).json<StrategicPlanningSnapshot>();
     assert.equal(evolvedSnapshot.resumo.decisoesPendentes, 0);

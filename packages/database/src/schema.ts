@@ -548,6 +548,11 @@ export const compromissos = sqliteTable('compromissos', {
   };
 });
 
+export const googleCalendarSync = sqliteTable('google_calendar_sync', {
+  compromissoId: text('compromisso_id').primaryKey().references(() => compromissos.id),
+  stateJson: text('state_json').notNull()
+});
+
 export const oportunidades = sqliteTable('oportunidades', {
   id: text('id').primaryKey(),
   clienteId: text('cliente_id').references(() => clientes.id),
@@ -1034,6 +1039,13 @@ export const pericias = sqliteTable('pericias', {
     projetoIdIdx: index('idx_pericias_projeto_id').on(table.projetoId),
   };
 });
+
+export const ambientalDocumentosEmitidos = sqliteTable('ambiental_documentos_emitidos', {
+  id: text('id').primaryKey(), projetoId: text('projeto_id').references(() => projetos.id, { onDelete: 'cascade' }).notNull(),
+  grupoId: text('grupo_id').notNull(), codigo: text('codigo').notNull(), revisao: integer('revisao').notNull(),
+  requestId: text('request_id').notNull().unique(), requestHash: text('request_hash').notNull(), emitidoEm: text('emitido_em').notNull(),
+  nomeArquivo: text('nome_arquivo').notNull(), snapshotJson: text('snapshot_json').notNull(), pdfBase64: text('pdf_base64').notNull(), sha256: text('sha256').notNull()
+}, table => ({ groupRevision: uniqueIndex('idx_ambiental_emissao_revisao').on(table.grupoId, table.revisao), codeRevision: uniqueIndex('idx_ambiental_emissao_codigo').on(table.codigo, table.revisao) }));
 
 export const configuracoesOperacionais = sqliteTable('configuracoes_operacionais', {
   id: text('id').primaryKey(),

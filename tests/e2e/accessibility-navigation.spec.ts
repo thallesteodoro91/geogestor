@@ -162,22 +162,21 @@ test.describe('navegação e diálogos globais acessíveis', () => {
     await trigger.click();
     const dialog = page.getByRole('dialog', { name: 'Alertas e prazos' });
     const categoryFilter = dialog.getByLabel('Filtrar alertas por categoria');
-    const statusFilter = dialog.getByLabel('Filtrar alertas por leitura');
+    const statusFilter = dialog.getByRole('button', { name: 'Lidos', exact: true });
     await expect(dialog).toBeVisible();
     await expect(categoryFilter).toBeFocused();
     await expect(page.locator('#root')).toHaveAttribute('inert', '');
     await expect(dialog.getByRole('button', { name: 'Tentar novamente' })).toBeVisible();
-    await statusFilter.click();
     const failedFilteredRequest = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname === '/api/alertas' && url.searchParams.get('status') === 'read' && response.status() === 500;
     });
-    await page.getByRole('option', { name: 'Lidas', exact: true }).click();
+    await statusFilter.click();
     await failedFilteredRequest;
     await expect(dialog.getByRole('button', { name: 'Tentar novamente' })).toBeVisible();
     pageRequestsShouldFail = false;
     await dialog.getByRole('button', { name: 'Tentar novamente' }).click();
-    await expect(statusFilter).toContainText('Lidas');
+    await expect(statusFilter).toHaveAttribute('aria-pressed', 'true');
     await expect(dialog.getByRole('button', { name: 'Tarefas: Revisar acessibilidade. Vence hoje' })).toBeVisible();
 
     const closeButton = dialog.getByRole('button', { name: 'Fechar modal' });

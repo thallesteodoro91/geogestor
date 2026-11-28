@@ -1,12 +1,16 @@
 import { toast } from 'sonner';
 import { DatePickerField, FormSelect } from '../../components/Form';
-import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useBlocker, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Layout } from '../../components/Layout';
+import { useListPageNavigation } from '../../hooks/useListPageNavigation';
 import { Modal } from '../../components/Modal';
-import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass, Plus } from '@phosphor-icons/react';
+import { ConfirmDialog } from '../../components/ConfirmDialog';
+import { AuraWidget } from '../../components/AuraWidget';
+import { ArrowCounterClockwise, Check, Printer, MagnifyingGlass, Plus, Receipt as ReceiptIcon } from '@phosphor-icons/react';
 import { cn } from '../../utils/cn';
-import { apiFetch, apiClient } from '../../services/apiClient';
+import { apiFetch, apiClient, ApiError } from '../../services/apiClient';
 import type { PaginatedResponse } from '../../services/apiClient';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
@@ -22,6 +26,8 @@ import {
   geoPurpleValueClass
 } from '../../utils/geoTheme';
 import { formatDateKey, localDateKey } from '../../utils/localDate';
+import { FinanceDueWidget } from '../Financeiro/FinanceDueWidget';
+import './receipt-entry.css';
 
 interface Parcela {
   id: string;
@@ -94,6 +100,8 @@ function PageFrame({ embedded, children }: { embedded: boolean; children: ReactN
 export function Faturas({
   embedded = false,
   openCreateOnMount = false,
+  receiptSelectionRequest,
+  persistListState = false,
   initialProjectId = '',
   initialClientId = '',
   focusParcelaId,
@@ -101,13 +109,25 @@ export function Faturas({
 }: {
   embedded?: boolean;
   openCreateOnMount?: boolean;
+  receiptSelectionRequest?: number;
+  persistListState?: boolean;
   initialProjectId?: string;
   initialClientId?: string;
   focusParcelaId?: string;
-  onFocusHandled?: () => void;
+  onFocusHandled?: (tab?: 'pendentes' | 'recebidas') => void;
 }) {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [localActiveTab, setLocalActiveTab] = useState<'pendentes' | 'recebidas'>('pendentes');
+  const [selectingReceipt, setSelectingReceipt] = useState(Boolean(receiptSelectionRequest));
+  const receiptRequestRef = useRef<number | undefined>(undefined);
+  const receiptFormId = useId();
+  const receiptSummaryId = useId();
+  const [receiptInitial, setReceiptInitial] = useState('');
+  const receiptLock = useRef(false);
+  const allowReceiptNavigation = useRef(false);
+  const [receiptError, setReceiptError] = useState('');
+  const [showReceiptDiscard, setShowReceiptDiscard] = useState(false);
   const [selectedFatura, setSelectedFatura] = useState<Parcela | null>(null);
   const [receivingFatura, setReceivingFatura] = useState<Parcela | null>(null);
   const [receiptForm, setReceiptForm] = useState({
@@ -130,17 +150,79 @@ export function Faturas({
   const [savingReversal, setSavingReversal] = useState(false);
   const [loadingReceiptDocuments, setLoadingReceiptDocuments] = useState(false);
   const [savingReceipt, setSavingReceipt] = useState(false);
-  const [search, setSearch] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(openCreateOnMount);
   const [installmentForm, setInstallmentForm] = useState({
     orcamentoId: '', valor: '', dataVencimento: localDateKey(), statusPagamento: 'Pendente'
   });
-  const [dataInicioFilter, setDataInicioFilter] = useState('');
-  const [dataFimFilter, setDataFimFilter] = useState('');
+  const [localStart, setLocalStart] = useState('');
+  const [localEnd, setLocalEnd] = useState('');
+  const activeTab = persistListState ? searchParams.get('receberSituacao') === 'recebidas' ? 'recebidas' : 'pendentes' : localActiveTab;
+  const search = persistListState ? searchParams.get('receberBusca') || '' : localSearch;
+  const dataInicioFilter = persistListState ? searchParams.get('receberInicio') || '' : localStart;
+  const dataFimFilter = persistListState ? searchParams.get('receberFim') || '' : localEnd;
+  const updateListState = useCallback((changes: Record<string, string>) => {
+    setSearchParams(current => {
+      const next = new URLSearchParams(current);
+      next.delete('receberPagina');
+      Object.entries(changes).forEach(([key, value]) => { if (value) next.set(key, value); else next.delete(key); });
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const setActiveTab = useCallback((value: 'pendentes' | 'recebidas') => {
+    if (persistListState) updateListState({ receberSituacao: value });
+    else setLocalActiveTab(value);
+  }, [persistListState, updateListState]);
+  const setSearch = (value: string) => persistListState ? updateListState({ receberBusca: value }) : setLocalSearch(value);
+  const setDataInicioFilter = (value: string) => persistListState ? updateListState({ receberInicio: value }) : setLocalStart(value);
+  const setDataFimFilter = (value: string) => persistListState ? updateListState({ receberFim: value }) : setLocalEnd(value);
   const installmentFilterKey = [activeTab, search, dataInicioFilter, dataFimFilter].join('\u001f');
   const [installmentPagination, setInstallmentPagination] = useState({ filterKey: '', page: 1 });
-  const page = installmentPagination.filterKey === installmentFilterKey ? installmentPagination.page : 1;
+  const urlPage = Number(searchParams.get('receberPagina') || 1);
+  const page = persistListState ? Number.isSafeInteger(urlPage) && urlPage > 0 ? urlPage : 1 : installmentPagination.filterKey === installmentFilterKey ? installmentPagination.page : 1;
+  const setPage = useCallback((nextPage: number) => {
+    if (persistListState) updateListState({ receberPagina: String(nextPage) });
+    else setInstallmentPagination({ filterKey: installmentFilterKey, page: nextPage });
+  }, [installmentFilterKey, persistListState, updateListState]);
   const handledReceivableIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!receiptSelectionRequest || receiptRequestRef.current === receiptSelectionRequest) return;
+    const timer = window.setTimeout(() => {
+      receiptRequestRef.current = receiptSelectionRequest;
+      setSelectingReceipt(true);
+      setActiveTab('pendentes');
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [receiptSelectionRequest, setActiveTab]);
+
+  useEffect(() => {
+    if (!selectingReceipt) return;
+    const frame = window.requestAnimationFrame(() => {
+      const heading = document.getElementById('receipt-selection-heading');
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: 'center', behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectingReceipt, receiptSelectionRequest]);
+
+  const receiptDirty = Boolean(receivingFatura && JSON.stringify(receiptForm) !== receiptInitial);
+  const receiptBlocker = useBlocker(({ currentLocation, nextLocation }) => Boolean(receivingFatura) && (receiptDirty || receiptLock.current) && !allowReceiptNavigation.current && `${currentLocation.pathname}${currentLocation.search}` !== `${nextLocation.pathname}${nextLocation.search}`);
+  useEffect(() => {
+    if (!receivingFatura && receiptBlocker.state === 'blocked') receiptBlocker.reset();
+  }, [receivingFatura, receiptBlocker]);
+  useEffect(() => {
+    if (!receiptDirty && !savingReceipt) return;
+    const protect = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', protect);
+    return () => window.removeEventListener('beforeunload', protect);
+  }, [receiptDirty, savingReceipt]);
+
+  const requestCloseReceipt = () => {
+    if (receiptLock.current) return;
+    if (receiptDirty) setShowReceiptDiscard(true);
+    else setReceivingFatura(null);
+  };
 
   const installmentQueryString = useMemo(() => {
     const params = new URLSearchParams({ mode: 'page', page: String(page), limit: '25', status: activeTab });
@@ -153,13 +235,23 @@ export function Faturas({
     }
     return params.toString();
   }, [activeTab, dataFimFilter, dataInicioFilter, focusParcelaId, page, search]);
-  const { data: installmentPage, isLoading: loading, isError: failed, refetch } = useQuery<InstallmentPage>({
+  const { data: installmentPage, isLoading: loading, isError: failed, refetch, isFetching: fetchingInstallments, isPlaceholderData: placeholderInstallments } = useQuery<InstallmentPage>({
     queryKey: ['parcelas', installmentQueryString],
     queryFn: () => apiClient.get<InstallmentPage>(`/api/financeiro/parcelas?${installmentQueryString}`),
     placeholderData: (previous) => previous
   });
+  const { preparePage, adjustPage, resultsAnchor } = useListPageNavigation({ page, resolvedPage: installmentPage?.page, ready: !fetchingInstallments && !placeholderInstallments, failed, scope: installmentFilterKey });
+  const changePage = (next: number) => { preparePage(next); setPage(next); };
+  useEffect(() => {
+    if (!installmentPage || fetchingInstallments || placeholderInstallments || failed || page <= installmentPage.totalPages) return;
+    const nextPage = installmentPage.totalPages;
+    const frame = window.requestAnimationFrame(() => {
+      adjustPage(nextPage);
+      setPage(nextPage);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [adjustPage, failed, fetchingInstallments, installmentPage, page, placeholderInstallments, setPage]);
   const parcelas = useMemo(() => installmentPage?.items ?? [], [installmentPage?.items]);
-  const fetchDados = () => { void refetch(); };
   const { data: projectContextOptions = [] } = useQuery<ProjectContextOption[]>({
     queryKey: ['receivable-project-context', initialProjectId],
     queryFn: () => apiClient.get<ProjectContextOption[]>(`/api/projetos/options?selectedId=${encodeURIComponent(initialProjectId)}&limit=1`),
@@ -228,14 +320,16 @@ export function Faturas({
     queueMicrotask(() => {
       const focusedParcela = parcelas.find((item) => item.id === focusParcelaId);
       if (focusedParcela) {
-        setActiveTab(focusedParcela.statusPagamento === 'Pago' ? 'recebidas' : 'pendentes');
+        const targetTab = focusedParcela.statusPagamento === 'Pago' ? 'recebidas' : 'pendentes';
+        if (!persistListState) setActiveTab(targetTab);
         openDetails(focusedParcela);
+        onFocusHandled?.(targetTab);
       } else {
         toast.info('A conta a receber indicada pelo alerta não foi encontrada.');
+        onFocusHandled?.();
       }
-      onFocusHandled?.();
     });
-  }, [focusParcelaId, loading, onFocusHandled, openDetails, parcelas]);
+  }, [focusParcelaId, loading, onFocusHandled, openDetails, parcelas, persistListState, setActiveTab]);
 
   const parseCurrencyToCents = (value: string) => {
     const normalized = value.trim().replace(/\./g, '').replace(',', '.');
@@ -245,8 +339,11 @@ export function Faturas({
 
   const openReceiptForm = (item: Parcela) => {
     const outstanding = Math.max(0, item.valor - (item.valorPago || 0));
+    if (outstanding <= 0 || item.statusPagamento === 'Pago') { toast.info('Esta conta não tem saldo disponível para recebimento. Atualize a lista.'); return; }
+    allowReceiptNavigation.current = false;
+    setReceiptError('');
     setReceivingFatura(item);
-    setReceiptForm({
+    const initialForm = {
       valorPrincipal: (outstanding / 100).toFixed(2).replace('.', ','),
       juros: '0',
       multa: '0',
@@ -256,7 +353,9 @@ export function Faturas({
       meioPagamento: '',
       comprovanteDocumentoId: '',
       observacoes: ''
-    });
+    };
+    setReceiptInitial(JSON.stringify(initialForm));
+    setReceiptForm(initialForm);
     setReceiptDocuments([]);
     setLoadingReceiptDocuments(true);
     const params = new URLSearchParams({ clienteId: item.clienteId });
@@ -269,7 +368,8 @@ export function Faturas({
 
   const handleRegisterReceipt = async (event: FormEvent) => {
     event.preventDefault();
-    if (!receivingFatura) return;
+    if (!receivingFatura || receiptLock.current) return;
+    setReceiptError('');
     const payload = {
       valorPrincipal: parseCurrencyToCents(receiptForm.valorPrincipal),
       juros: parseCurrencyToCents(receiptForm.juros),
@@ -282,9 +382,11 @@ export function Faturas({
       observacoes: receiptForm.observacoes.trim() || null
     };
     if (payload.valorPrincipal <= 0) {
-      toast.error('Informe um valor principal maior que zero.');
+      setReceiptError('Informe um valor principal maior que zero.');
+      document.getElementById('receipt-principal')?.focus();
       return;
     }
+    receiptLock.current = true;
     setSavingReceipt(true);
     try {
       const response = await apiFetch(`/api/financeiro/parcelas/${receivingFatura.id}/recebimentos`, {
@@ -294,15 +396,21 @@ export function Faturas({
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        throw new Error(body?.error || 'Não foi possível registrar o recebimento.');
+        throw new ApiError(body?.error || 'Não foi possível registrar o recebimento.', response.status);
       }
+      allowReceiptNavigation.current = true;
       setReceivingFatura(null);
+      setSelectingReceipt(false);
       setSelectedFatura(null);
       setReceiptHistory([]);
-      fetchDados();
+      void invalidateFinancialQueries(queryClient);
+      toast.success('Recebimento registrado.');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível registrar o recebimento.');
+      setReceiptError(error instanceof ApiError && error.status > 0
+        ? `${error.status === 400 || error.status === 409 ? `${error.message} ` : ''}Não foi possível registrar o recebimento. Revise os dados e tente novamente.`
+        : 'Não foi possível confirmar o recebimento. Confira o histórico da conta antes de tentar novamente, para evitar duplicidade.');
     } finally {
+      receiptLock.current = false;
       setSavingReceipt(false);
     }
   };
@@ -320,7 +428,7 @@ export function Faturas({
       setReversalReason('');
       setSelectedFatura(null);
       setReceiptHistory([]);
-      fetchDados();
+      void invalidateFinancialQueries(queryClient);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Não foi possível estornar o recebimento.');
     } finally {
@@ -344,12 +452,23 @@ export function Faturas({
 
   // Filtrar parcelas
   const filteredParcelas = parcelas;
+  const today = localDateKey();
+  const priorityInstallment = activeTab === 'pendentes' && !selectingReceipt && !loading && !failed && !placeholderInstallments
+    ? filteredParcelas
+        .filter(item => item.dataVencimento && item.statusPagamento !== 'Pago' && item.valor > (item.valorPago || 0))
+        .sort((left, right) => left.dataVencimento.localeCompare(right.dataVencimento))[0]
+    : undefined;
   const hasInvoiceFilters = Boolean(search || dataInicioFilter || dataFimFilter);
 
   return (
     <PageFrame embedded={embedded}>
       {/* Esconder layout principal durante a impressão */}
       <div className="print:hidden">
+        {selectingReceipt && <section aria-labelledby="receipt-selection-heading" className="mb-5 rounded-xl border border-brand-border bg-brand-surface-subtle p-4">
+          <h2 id="receipt-selection-heading" tabIndex={-1} className="text-lg font-semibold text-zinc-950 dark:text-white">Selecione uma conta a receber</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Localize a parcela pelo cliente ou orçamento, confira o vencimento e o saldo e escolha Receber. Nenhum orçamento ou parcela será criado por esta ação.</p>
+          <button type="button" onClick={() => { setSelectingReceipt(false); document.getElementById('finance-primary-action')?.focus(); }} className={cn(secondarySmallActionButtonClass, 'mt-3')}>Sair da seleção</button>
+        </section>}
         {!embedded && <div className="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
           <div>
             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs uppercase tracking-[0.2em] font-medium bg-zinc-100 text-zinc-500 dark:text-zinc-400 mb-4">
@@ -428,9 +547,8 @@ export function Faturas({
               <button
                 type="button"
                 onClick={() => {
-                  setSearch('');
-                  setDataInicioFilter('');
-                  setDataFimFilter('');
+                  if (persistListState) updateListState({ receberBusca: '', receberInicio: '', receberFim: '' });
+                  else { setSearch(''); setDataInicioFilter(''); setDataFimFilter(''); }
                 }}
                 className="h-9 rounded-xl border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-50 hover:text-zinc-950 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-950 dark:hover:text-white"
               >
@@ -438,8 +556,8 @@ export function Faturas({
               </button>
             )}
           </div>
-          <p className="mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
-              {filteredParcelas.length} de {installmentPage?.total ?? 0} parcela(s) exibidas
+          <p ref={resultsAnchor} tabIndex={-1} role="status" aria-live="polite" aria-atomic="true" className="geo-focus-ring scroll-mt-28 mt-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+              {filteredParcelas.length} de {installmentPage?.total ?? 0} parcela(s) exibidas · Página {installmentPage?.page ?? page} de {installmentPage?.totalPages ?? 1} · Intervalo {filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + 1 : 0}–{filteredParcelas.length ? ((installmentPage?.page ?? page) - 1) * 25 + filteredParcelas.length : 0}
           </p>
         </div>
 
@@ -468,6 +586,16 @@ export function Faturas({
         </div>
 
         {/* Contas a receber */}
+        {priorityInstallment && (
+          <FinanceDueWidget
+            label={priorityInstallment.dataVencimento.slice(0, 10) < today ? 'Cobrança vencida' : 'Próxima cobrança'}
+            amount={priorityInstallment.valor - (priorityInstallment.valorPago || 0)}
+            date={priorityInstallment.dataVencimento}
+            title={priorityInstallment.clienteNome}
+            actionLabel="Ver cobrança"
+            onOpen={() => openDetails(priorityInstallment)}
+          />
+        )}
         <div className="bg-white dark:bg-zinc-900 rounded-[2.5rem] p-8 ring-1 ring-zinc-900/5 shadow-sm">
           {loading ? (
               <p className="text-zinc-500 dark:text-zinc-400 text-sm">Carregando contas a receber…</p>
@@ -478,15 +606,17 @@ export function Faturas({
                 <button type="button" onClick={() => void refetch()} className="mt-3 min-h-10 rounded-xl border border-rose-300 px-3 font-semibold hover:bg-rose-100 focus-visible:ring-2 focus-visible:ring-rose-500/40 dark:border-rose-500/40 dark:hover:bg-rose-500/20">Tentar novamente</button>
               </div>
           ) : filteredParcelas.length === 0 ? (
-              <p className="text-zinc-400 text-sm">Nenhuma conta a receber encontrada.</p>
+              <p role="status" className="text-sm text-zinc-600 dark:text-zinc-300">{selectingReceipt
+                ? hasInvoiceFilters ? 'Nenhuma conta em aberto encontrada com estes filtros. Ajuste a busca ou use Limpar para consultar outras contas.' : 'Não há contas em aberto disponíveis para recebimento. Quando uma conta elegível existir, ela aparecerá aqui.'
+                : 'Nenhuma conta a receber encontrada.'}</p>
           ) : (
             <div className="divide-y divide-zinc-50">
               {filteredParcelas.map(item => {
                 const status = getFaturaStatus(item);
                 return (
-                  <div key={item.id} className="py-5 flex items-center justify-between gap-6 hover:bg-zinc-50/50 dark:bg-zinc-900/50 px-4 rounded-2xl transition-colors">
+                  <div key={item.id} role="group" aria-label={`Conta a receber de ${item.clienteNome}`} className="flex flex-col items-stretch justify-between gap-3 rounded-2xl px-4 py-5 transition-colors hover:bg-zinc-50/50 dark:bg-zinc-900/50 sm:flex-row sm:items-center sm:gap-6">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-3 mb-1.5">
+                      <div className="mb-1.5 flex flex-wrap items-center gap-3">
                         <span className={`text-xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
                           status === 'Pago' ? 'bg-emerald-50 text-emerald-700' :
                           status === 'Atrasado' ? 'bg-red-50 text-red-700 animate-pulse' :
@@ -495,16 +625,17 @@ export function Faturas({
                         }`}>
                           {status}
                         </span>
-                        <span className="text-xs text-zinc-400">Vencimento: {formatDateKey(item.dataVencimento)}</span>
+                        <span className="text-xs text-text-secondary">Vencimento: {formatDateKey(item.dataVencimento)}</span>
                       </div>
                       <p className="font-semibold text-zinc-950 dark:text-white truncate">{item.clienteNome}</p>
                       <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate">{item.orcamentoDescricao || 'Sem descrição do orçamento'}</p>
                     </div>
 
-                    <div className="flex items-center gap-4">
+                    <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 sm:justify-end">
                       <div className="text-right">
-                        <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{formatCurrency(item.valor)}</p>
-                        {(item.valorPago || 0) > 0 && item.statusPagamento !== 'Pago' && (
+                        {selectingReceipt && <p className="text-xs text-zinc-600 dark:text-zinc-300">Saldo disponível</p>}
+                        <p className="font-bold text-zinc-900 dark:text-zinc-100 text-lg">{formatCurrency(selectingReceipt ? Math.max(0, item.valor - (item.valorPago || 0)) : item.valor)}</p>
+                        {!selectingReceipt && (item.valorPago || 0) > 0 && item.statusPagamento !== 'Pago' && (
                           <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
                             Saldo {formatCurrency(Math.max(0, item.valor - (item.valorPago || 0)))}
                           </p>
@@ -517,7 +648,7 @@ export function Faturas({
                         >
                             {status === 'Pago' ? 'Ver recibo' : 'Ver cobrança'}
                         </button>
-                        {status !== 'Pago' && (
+                        {status !== 'Pago' && item.valor > (item.valorPago || 0) && (
                           <button 
                             onClick={() => openReceiptForm(item)}
                             className="inline-flex min-h-8 items-center gap-1.5 rounded-xl bg-emerald-50 px-3 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-emerald-500/30"
@@ -536,9 +667,9 @@ export function Faturas({
           )}
           {(installmentPage?.totalPages ?? 1) > 1 && (
             <nav aria-label="Paginação de contas a receber" className="mt-6 flex items-center justify-between border-t border-zinc-100 pt-4 text-xs dark:border-zinc-800">
-              <button type="button" disabled={page <= 1} onClick={() => setInstallmentPagination({ filterKey: installmentFilterKey, page: Math.max(1, page - 1) })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Anterior</button>
+              <button type="button" disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))} className={secondarySmallActionButtonClass}>Anterior</button>
               <span className="font-mono tabular-nums">Página {page} de {installmentPage?.totalPages}</span>
-              <button type="button" disabled={page >= (installmentPage?.totalPages ?? 1)} onClick={() => setInstallmentPagination({ filterKey: installmentFilterKey, page: page + 1 })} className="rounded-lg border px-3 py-2 font-semibold disabled:opacity-40">Próxima</button>
+              <button type="button" disabled={page >= (installmentPage?.totalPages ?? 1)} onClick={() => changePage(page + 1)} className={secondarySmallActionButtonClass}>Próxima</button>
             </nav>
           )}
         </div>
@@ -688,7 +819,7 @@ export function Faturas({
               {selectedFatura.statusPagamento !== 'Pago' && (
                 <button 
                   onClick={() => openReceiptForm(selectedFatura)}
-                  className="bg-emerald-600 text-white rounded-full px-5 py-3 text-xs font-semibold hover:bg-emerald-500"
+                  className={primarySubmitButtonClass}
                 >
                   Registrar recebimento
                 </button>
@@ -741,19 +872,49 @@ export function Faturas({
 
       <Modal
         isOpen={!!receivingFatura}
-        onClose={() => !savingReceipt && setReceivingFatura(null)}
+        onClose={requestCloseReceipt}
+        closeDisabled={savingReceipt}
         title="Registrar recebimento"
         maxWidth="max-w-xl"
+        panelClassName="geo-receipt-dialog"
+        initialFocusId="receipt-principal"
+        returnFocusSelector="#finance-primary-action"
+        footer={<div className="space-y-3">
+          {receiptError && <p role="alert" className="break-words text-sm font-medium text-red-700 dark:text-red-300">{receiptError}</p>}
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)] gap-2">
+            <button type="button" onClick={requestCloseReceipt} disabled={savingReceipt} className={cn(secondarySmallActionButtonClass, 'h-12 min-w-0 justify-center px-2 py-0 text-sm')}>Cancelar</button>
+            <button type="submit" form={receiptFormId} disabled={savingReceipt} aria-busy={savingReceipt} className={cn(primarySubmitButtonClass, 'h-12 min-w-0 px-2 py-0 text-xs sm:text-sm')}>
+              <span aria-live="polite">{savingReceipt ? 'Registrando…' : 'Confirmar recebimento'}</span>
+            </button>
+          </div>
+        </div>}
       >
         {receivingFatura && (
-          <form onSubmit={handleRegisterReceipt} className="space-y-5">
-            <div className="rounded-2xl bg-zinc-50 p-4 text-sm dark:bg-zinc-950">
-              <p className="font-semibold text-zinc-950 dark:text-white">{receivingFatura.clienteNome}</p>
-              <p className="mt-1 text-zinc-500 dark:text-zinc-400">
-                Saldo principal: {formatCurrency(Math.max(0, receivingFatura.valor - (receivingFatura.valorPago || 0)))}
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <form id={receiptFormId} onSubmit={handleRegisterReceipt} className="receipt-entry-form space-y-5" noValidate>
+          <fieldset disabled={savingReceipt} className="min-w-0 space-y-5">
+            <AuraWidget as="section" tone="amber" size="medium" className="receipt-aura-summary" aria-labelledby={receiptSummaryId}>
+              <h3 id={receiptSummaryId}>Revisar recebimento</h3>
+              <div className="receipt-aura-summary__account">
+                <div className="receipt-aura-summary__icon" aria-hidden="true">
+                  <ReceiptIcon size={23} weight="duotone" />
+                </div>
+                <div className="receipt-aura-summary__identity">
+                  <p>{receivingFatura.orcamentoDescricao || 'Parcela do orçamento'}</p>
+                  <p>{receivingFatura.clienteNome}</p>
+                </div>
+              </div>
+              <dl className="receipt-aura-summary__details">
+                <div>
+                  <dt>Vencimento</dt>
+                  <dd><time dateTime={receivingFatura.dataVencimento.slice(0, 10)}>{formatDateKey(receivingFatura.dataVencimento)}</time></dd>
+                </div>
+                <div>
+                  <dt>Saldo principal</dt>
+                  <dd>{formatCurrency(Math.max(0, receivingFatura.valor - (receivingFatura.valorPago || 0)))}</dd>
+                </div>
+              </dl>
+            </AuraWidget>
+            <div className="receipt-entry-fields">
               {[
                 ['valorPrincipal', 'Principal recebido'],
                 ['juros', 'Juros'],
@@ -761,9 +922,10 @@ export function Faturas({
                 ['desconto', 'Desconto'],
                 ['taxas', 'Taxas bancárias']
               ].map(([name, label]) => (
-                <label key={name} className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                  <span>{label} (R$)</span>
+                <label key={name} className="block min-w-0 space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                  <span className="block">{label} (R$)</span>
                   <input
+                    id={name === 'valorPrincipal' ? 'receipt-principal' : undefined}
                     name={name}
                     inputMode="decimal"
                     value={receiptForm[name as keyof typeof receiptForm]}
@@ -773,9 +935,10 @@ export function Faturas({
                   />
                 </label>
               ))}
-              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                <span>Data do recebimento</span>
+              <label className="min-w-0 space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                <span className="block">Data do recebimento</span>
                 <DatePickerField
+                  popoverClassName="overflow-y-auto"
                   name="dataRecebimento"
                   value={receiptForm.dataRecebimento}
                   onChange={(event) => setReceiptForm((current) => ({ ...current, dataRecebimento: event.target.value }))}
@@ -783,8 +946,8 @@ export function Faturas({
                   required
                 />
               </label>
-              <label className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                <span>Meio de pagamento</span>
+              <label className="min-w-0 space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                <span className="block">Meio de pagamento</span>
                 <input
                   name="meioPagamento"
                   value={receiptForm.meioPagamento}
@@ -793,12 +956,17 @@ export function Faturas({
                   className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
                 />
               </label>
-              <div className="space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+              <div className="col-span-full min-w-0 space-y-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
                 <label htmlFor="receipt-document">Comprovante vinculado</label>
                 <FormSelect
                   id="receipt-document"
                   name="comprovanteDocumentoId"
                   aria-label="Comprovante vinculado"
+                  density="form"
+                  wrapperClassName="w-full min-w-0"
+                  matchTriggerWidth
+                  popoverMaxWidth={560}
+                  popoverClassName="geo-receipt-options"
                   value={receiptForm.comprovanteDocumentoId}
                   onChange={(event) => setReceiptForm((current) => ({ ...current, comprovanteDocumentoId: event.target.value }))}
                   disabled={loadingReceiptDocuments}
@@ -823,32 +991,27 @@ export function Faturas({
                 value={receiptForm.observacoes}
                 onChange={(event) => setReceiptForm((current) => ({ ...current, observacoes: event.target.value }))}
                 rows={3}
-                className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
+                className="w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 focus-visible:ring-2 focus-visible:ring-indigo-500/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white"
               />
             </label>
             <p className="text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
               O principal reduz o saldo da parcela. Juros, multa, desconto e taxas alteram apenas o valor efetivamente recebido no caixa.
             </p>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setReceivingFatura(null)}
-                disabled={savingReceipt}
-                className="rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={savingReceipt}
-                className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-60"
-              >
-                {savingReceipt ? 'Registrando…' : 'Confirmar recebimento'}
-              </button>
-            </div>
+          </fieldset>
           </form>
         )}
       </Modal>
+      <ConfirmDialog isOpen={showReceiptDiscard || receiptBlocker.state === 'blocked'} title="Descartar recebimento não salvo?"
+        description="As informações preenchidas ainda não foram enviadas. Continue editando para preservá-las."
+        variant="warning" confirmText="Descartar alterações" cancelText="Continuar editando" loading={savingReceipt}
+        returnFocusSelector="#finance-primary-action"
+        onClose={() => { setShowReceiptDiscard(false); if (receiptBlocker.state === 'blocked') receiptBlocker.reset(); }}
+        onConfirm={() => {
+          setShowReceiptDiscard(false);
+          allowReceiptNavigation.current = true;
+          if (receiptBlocker.state === 'blocked') receiptBlocker.proceed();
+          else window.requestAnimationFrame(() => setReceivingFatura(null));
+        }} />
     </PageFrame>
   );
 }

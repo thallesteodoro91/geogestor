@@ -36,6 +36,16 @@ test('calcula item com quantidade decimal e arredondamento determinístico em ce
   assert.equal(result.totalCents, 15_002);
 });
 
+test('alíquota utiliza a precisão em pontos-base antes do cálculo e permanece igual após persistência', () => {
+  const result = calculate({ items: [item({ unitPriceCents: 1_000_000 })], taxes: [{
+    name: 'ISS', acronym: 'ISS', ratePercent: '5.555', calculationBase: 'tributavel', includedInPrice: false
+  }] });
+  assert.equal(result.taxes[0].ratePercent, '5.56');
+  assert.equal(result.taxes[0].amountCents, 55_600);
+  assert.equal(result.totalCents, 1_055_600);
+  assert.deepEqual(calculate({ items: [item({ unitPriceCents: 1_000_000 })], taxes: result.taxes }), result);
+});
+
 test('aplica descontos fixo e percentual e acréscimos sem ponto flutuante monetário', () => {
   const fixed = calculate({ items: [item({ discount: { type: 'fixo', value: '1000' } })] });
   assert.equal(fixed.items[0].discountCents, 1_000);

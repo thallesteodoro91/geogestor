@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -33,6 +34,7 @@ const payload = (clientId: string) => ({
   deliverables: 'Planta, memorial descritivo e arquivos digitais',
   executionDays: 20,
   characterization: {
+    executionStart: { type: 'custom', description: 'Liberação de acesso ao imóvel.' },
     estimatedArea: '12.5',
     physicalGroundControl: 'Marco de concreto M-01',
     gnssElectronicBase: 'Receptor GNSS configurado como estação base eletrônica'
@@ -100,7 +102,7 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });
@@ -136,6 +138,16 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
       payload: { ...payload(clientId), campoNaoPermitido: 'mass-assignment' }
     });
     assert.equal(extraFieldResponse.statusCode, 400, extraFieldResponse.body);
+
+    for (const characterization of [
+      { executionStart: { type: 'custom', description: '  ' } },
+      { executionStart: { type: 'desconhecido' } }
+    ]) {
+      const invalidStart = await request({ method: 'POST', url: '/api/orcamentos', payload: { ...payload(clientId), characterization } });
+      assert.equal(invalidStart.statusCode, 400, invalidStart.body);
+    }
+    const missingDuration = await request({ method: 'POST', url: '/api/orcamentos', payload: { ...payload(clientId), executionDays: null } });
+    assert.equal(missingDuration.statusCode, 400, missingDuration.body);
 
     const invalidDateResponse = await request({
       method: 'POST',
@@ -272,6 +284,7 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.notEqual(duplicatedDraft.id, editableDraft.id);
     assert.equal(duplicatedDraft.status, 'rascunho');
     assert.equal(duplicatedDraft.descricao, 'Rascunho editado com sucesso');
+    assert.deepEqual(duplicateDraftResponse.json().characterization.executionStart, payload(clientId).characterization.executionStart);
 
     const draftListResponse = await request({
       method: 'GET',
@@ -323,6 +336,16 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.equal(emitted.status, 'emitido');
     assert.match(emitted.codigoOrcamento, /^ORC-\d{4}-0001$/);
     assert.equal(emitted.clientSnapshot.nome, 'Cliente Integração');
+
+    await db.update(schema.clientes).set({ nome: 'Cadastro alterado após emissão', email: 'novo@teste.local', telefone: null }).where(eq(schema.clientes.id, clientId));
+    const frozenResponse = await request({ method: 'GET', url: `/api/orcamentos/${created.id}` });
+    const frozen = frozenResponse.json<{ clientName: string; clientEmail: string; clientPhone: string }>();
+    assert.equal(frozen.clientName, 'Cliente Integração');
+    assert.equal(frozen.clientEmail, 'cliente@teste.local');
+    assert.equal(frozen.clientPhone, '48999999999');
+    const frozenList = await request({ method: 'GET', url: `/api/orcamentos?clientId=${clientId}&query=Cliente%20Integra%C3%A7%C3%A3o` });
+    assert.ok(frozenList.json<Array<{ id: string; clientName: string }>>().some(item => item.id === created.id && item.clientName === 'Cliente Integração'));
+    await db.update(schema.clientes).set({ nome: 'Cliente Integração', email: 'cliente@teste.local', telefone: '48999999999' }).where(eq(schema.clientes.id, clientId));
 
     for (const status of ['enviado', 'em_negociacao'] as const) {
       const transition = await request({
@@ -560,6 +583,7 @@ test('fluxo ponta a ponta de orçamento mantém estados, efeitos financeiros, re
     assert.equal(revision.status, 'rascunho');
     assert.equal(revision.versao, 2);
     assert.equal(revision.substituiOrcamentoId, created.id);
+    assert.deepEqual(revisionResponse.json().characterization.executionStart, payload(clientId).characterization.executionStart);
 
     const revisionEmit = await request({ method: 'POST', url: `/api/orcamentos/${revision.id}/emit` });
     assert.equal(revisionEmit.statusCode, 200, revisionEmit.body);

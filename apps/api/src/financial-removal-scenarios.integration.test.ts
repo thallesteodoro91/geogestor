@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -43,7 +44,7 @@ test('exclusões, estornos e cancelamentos recalculam KPIs sem apagar o históri
     method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...input,
     headers: input.payload === undefined ? { 'x-api-token': 'test-token' } : authHeaders
   });

@@ -1,14 +1,16 @@
-import { AddressBook, ArrowCounterClockwise, ArrowsLeftRight, CalendarBlank, CalendarCheck, CaretLeft, CaretRight, Check, ClockCountdown, ClockCounterClockwise, CurrencyDollar, DotsSixVertical, Eye, FileText, Funnel, Handshake, MagnifyingGlass, PencilSimple, Plus, Target, Trash, TrendUp, WarningCircle, X
+import { AddressBook, ArrowCounterClockwise, ArrowRight, ArrowsLeftRight, CalendarCheck, CaretLeft, CaretRight, Check, ClockCounterClockwise, CurrencyDollar, DotsSixVertical, Eye, FileText, Funnel, Handshake, MagnifyingGlass, PencilSimple, Plus, Trash, TrendUp, WarningCircle, X
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
+import { useFormDraftGuard } from '../../hooks/useFormDraftGuard';
 import { ModuleNavigation } from '../../components/ModuleNavigation';
 import { PageHeader } from '../../components/PageHeader';
+import { WidgetSection } from '../../components/WidgetSection';
 import { Modal } from '../../components/Modal';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { toast } from 'sonner';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { ACTIVE_OPPORTUNITY_STAGES, APP_QUERY_KEYS, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
+import { ACTIVE_OPPORTUNITY_STAGES, APP_PATHS, APP_QUERY_KEYS, OPPORTUNITY_STAGES, isActiveOpportunityStage, type OpportunityAnalytics, type OpportunityListItem, type OpportunityStage } from '@geogestor/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSelect, NumericInput } from '../../components/Form';
@@ -29,6 +31,8 @@ import { commercialContentClass } from '../../utils/commercialLayout';
 import { Contatos, type ContatosHandle } from '../Contatos/Contatos';
 import { buildBudgetEditorPath } from '../Orcamentos/budgetNavigation';
 import { useDebounce } from '../../hooks/useDebounce';
+import { CRMNextActionWidget } from './CRMAuraWidgets';
+import { AuraAttentionWidget, AuraBalanceSummary, AuraMediumMetric, AuraNumericValue, AuraProgressWidget, AuraSmallBalance } from '../../components/AuraWidget';
 
 type CRMOptions = {
   clients: Array<{ id: string; name: string }>;
@@ -185,28 +189,6 @@ function formatCurrencyInput(value: string) {
   return new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
 }
 
-type MetricTone = 'default' | 'danger' | 'warning';
-
-function Metric({ label, value, helper, icon, tone = 'default' }: { label: string; value: string; helper: string; icon: React.ReactNode; tone?: MetricTone }) {
-  return (
-    <div className={cn(
-      'geo-card relative min-w-0 p-4 shadow-sm',
-      tone === 'danger' && 'border-rose-200 bg-rose-50/45 dark:border-rose-400/20 dark:bg-rose-500/[0.07]',
-      tone === 'warning' && 'border-amber-200 bg-amber-50/45 dark:border-amber-400/20 dark:bg-amber-500/[0.07]'
-    )}>
-      <p className="pr-11 text-[10px] font-bold uppercase tracking-[0.13em] text-text-muted">{label}</p>
-      <p className="mt-2 whitespace-nowrap font-mono text-lg font-bold tabular-nums text-text-primary 2xl:text-base" title={value}>{value}</p>
-      <p className="mt-1 text-xs text-text-muted">{helper}</p>
-      <span className={cn(
-        'absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg ring-1',
-        tone === 'default' && 'bg-brand-surface-subtle text-brand-primary-700 ring-brand-border dark:text-brand-primary-200',
-        tone === 'danger' && 'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-200 dark:ring-rose-400/20',
-        tone === 'warning' && 'bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-100 dark:ring-amber-400/20'
-      )}>{icon}</span>
-    </div>
-  );
-}
-
 type CRMView = 'leads' | 'funil' | 'indicadores';
 
 interface LeadAnalytics {
@@ -235,7 +217,7 @@ function CRMSectionNavigation({ activeView }: { activeView: CRMView }) {
           return (
             <Link
               key={section.id}
-              to={`/crm?${nextSearchParams.toString()}`}
+              to={`${APP_PATHS.crm}?${nextSearchParams.toString()}`}
               aria-current={active ? 'page' : undefined}
               className={localNavigationButtonClass(
                 active,
@@ -314,6 +296,8 @@ export function CRM() {
   const [formError, setFormError] = useState('');
   const [formErrors, setFormErrors] = useState<OpportunityFormErrors>({});
   const [subjectSearch, setSubjectSearch] = useState('');
+  const opportunityLock = useRef(false);
+  const [initialOpportunityDraft, setInitialOpportunityDraft] = useState('');
   const debouncedSubjectSearch = useDebounce(subjectSearch, 250);
   const [deleteTarget, setDeleteTarget] = useState<OpportunityListItem | null>(null);
   const [pendingOutcome, setPendingOutcome] = useState<{ opportunity: OpportunityListItem; stage: 'Ganho' | 'Perdido' } | null>(null);
@@ -426,8 +410,12 @@ export function CRM() {
       await refresh();
       toast.success(selectedOpportunity ? 'Oportunidade atualizada.' : 'Oportunidade criada.');
     },
-    onError: (error) => setFormError(error instanceof Error ? error.message : 'Não foi possível salvar a oportunidade.')
+    onError: (error) => setFormError((error instanceof Error ? error.message : 'Não foi possível salvar a oportunidade.') + ' Seus dados foram preservados. Tente novamente.'),
+    onSettled: () => { opportunityLock.current = false; }
   });
+
+  const opportunityDraft = useFormDraftGuard({ open: showModal, dirty: JSON.stringify({ form, subjectSearch }) !== initialOpportunityDraft,
+    saving: saveMutation.isPending, lock: opportunityLock, onDiscard: () => setShowModal(false) });
 
   const transitionMutation = useMutation({
     mutationFn: ({ id, stage, reason, order }: { id: string; stage: OpportunityStage; reason?: string; order?: number }) => (
@@ -462,6 +450,7 @@ export function CRM() {
   });
 
   const openCreate = () => {
+    setInitialOpportunityDraft(JSON.stringify({ form: emptyForm(), subjectSearch: '' }));
     setSelectedOpportunity(null);
     setForm(emptyForm());
     setSubjectSearch('');
@@ -476,7 +465,9 @@ export function CRM() {
     const subject = commercialSubjectOptions.find((option) => (
       option.type === 'client' ? option.id === opportunity.clienteId : option.id === opportunity.leadId
     ));
-    setSubjectSearch(subject?.label || `${opportunity.vinculoTipo === 'lead' ? 'Lead' : 'Cliente'} · ${opportunity.clienteNome}`);
+    const subjectLabel = subject?.label || `${opportunity.vinculoTipo === 'lead' ? 'Lead' : 'Cliente'} · ${opportunity.clienteNome}`;
+    setSubjectSearch(subjectLabel);
+    setInitialOpportunityDraft(JSON.stringify({ form: opportunityToForm(opportunity), subjectSearch: subjectLabel }));
     setFormError('');
     setFormErrors({});
     setShowModal(true);
@@ -518,6 +509,7 @@ export function CRM() {
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (opportunityLock.current) return;
     const errors: OpportunityFormErrors = {};
     if (!form.clienteId && !form.leadId) errors.subject = 'Selecione uma opção válida da lista de clientes ou leads.';
     if (!form.titulo.trim()) errors.titulo = 'Informe o título do negócio.';
@@ -552,6 +544,7 @@ export function CRM() {
       return;
     }
 
+    opportunityLock.current = true;
     setFormError('');
     saveMutation.mutate();
   };
@@ -576,6 +569,11 @@ export function CRM() {
     if (attentionFilter === 'stale' && !(isActiveOpportunityStage(opportunity.estagio) && Date.parse(opportunity.estagioAlteradoEm) < staleLimit)) return false;
     return true;
   }), [attentionFilter, opportunities, responsibleFilter, searchTerm, serviceFilter, staleLimit, today]);
+  const nextCommercialAction = useMemo(() => filteredOpportunities
+    .flatMap(opportunity => isActiveOpportunityStage(opportunity.estagio) && opportunity.proximaAcao && opportunity.proximaAcaoEm
+      ? [{ opportunity, action: opportunity.proximaAcao, date: opportunity.proximaAcaoEm.slice(0, 10) }]
+      : [])
+    .sort((left, right) => left.date.localeCompare(right.date) || left.opportunity.ordem - right.opportunity.ordem)[0], [filteredOpportunities]);
   const boardFiltered = Boolean(searchTerm || responsibleFilter || serviceFilter || attentionFilter !== 'all');
   const activeFunnelFilterCount = [
     responsibleFilter,
@@ -663,6 +661,7 @@ export function CRM() {
           <Contatos
             ref={leadsRef}
             embedded
+            showRecentContacts
             toolbarLeading={<CRMSectionNavigation activeView={activeView} />}
           />
         </div>
@@ -677,9 +676,13 @@ export function CRM() {
     const hasCommercialData = leadAnalytics.total > 0 || hasOpportunityData;
     const funnelSearchParams = new URLSearchParams(searchParams);
     funnelSearchParams.set('view', 'funil');
+    const overdueSearchParams = new URLSearchParams(funnelSearchParams);
+    overdueSearchParams.set('atencao', 'overdue');
+    const staleSearchParams = new URLSearchParams(funnelSearchParams);
+    staleSearchParams.set('atencao', 'stale');
     return (
       <Layout contentClassName={commercialContentClass}>
-        <div className="min-w-0 space-y-6">
+        <div className="min-w-0 space-y-8">
           <CRMPageHeader description="Acompanhe conversão de leads, valor do pipeline e oportunidades que exigem atenção." />
           <CRMSectionNavigation activeView={activeView} />
           {indicatorsError ? (
@@ -702,31 +705,53 @@ export function CRM() {
             </section>
           ) : (
             <>
-              <section aria-label="Indicadores comerciais" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Metric label="Leads ativos" value={String(leadAnalytics.activeCount)} helper="Aguardando conversão" icon={<AddressBook aria-hidden="true" size={19} />} />
-                <Metric label="Pipeline em aberto" value={formatCurrency(analytics.openPipelineCents)} helper={`${analytics.activeCount} oportunidade(s) ativa(s)`} icon={<CurrencyDollar aria-hidden="true" size={19} />} />
-                <Metric label="Conversão de leads" value={formatPercentage(leadAnalytics.conversionBasisPoints)} helper={`${leadAnalytics.convertedCount} de ${leadAnalytics.total} leads`} icon={<Target aria-hidden="true" size={19} />} />
-                <Metric label="Próximas ações atrasadas" value={String(analytics.overdueNextActions)} helper="Prazo programado já ultrapassado" icon={<CalendarBlank aria-hidden="true" size={19} />} tone={analytics.overdueNextActions > 0 ? 'danger' : 'default'} />
-              </section>
-              <div>
-                <button
-                  type="button"
-                  aria-expanded={showAllIndicators}
-                  aria-controls="crm-secondary-indicators"
-                  onClick={() => setShowAllIndicators((current) => !current)}
-                  className="geo-button-base geo-button-secondary geo-focus-ring min-h-10 px-4 text-sm"
-                >
-                  {showAllIndicators ? 'Ocultar indicadores complementares' : 'Ver todos os indicadores'}
-                </button>
-              </div>
-              {showAllIndicators && (
-                <section id="crm-secondary-indicators" aria-label="Indicadores comerciais complementares" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <Metric label="Leads convertidos" value={String(leadAnalytics.convertedCount)} helper="Histórico preservado" icon={<Check aria-hidden="true" size={19} />} />
-                  <Metric label="Oportunidades ganhas" value={String(analytics.wonCount)} helper={formatCurrency(analytics.wonValueCents)} icon={<TrendUp aria-hidden="true" size={19} />} />
-                  <Metric label="Oportunidades perdidas" value={String(analytics.lostCount)} helper="Negócios encerrados sem ganho" icon={<X aria-hidden="true" size={19} />} />
-                  <Metric label="Oportunidades paradas" value={String(analytics.staleOpportunities)} helper="Mais de 14 dias na etapa" icon={<ClockCountdown aria-hidden="true" size={19} />} tone={analytics.staleOpportunities > 0 ? 'warning' : 'default'} />
-                </section>
-              )}
+              <WidgetSection id="crm-commercial-indicators-title" title="Indicadores comerciais" contentClassName="min-w-0">
+                <div className="grid gap-5 sm:grid-cols-2 lg:gap-6 xl:grid-cols-4">
+                  <AuraSmallBalance compact className="crm-aura--leads" label="Leads ativos" value={leadAnalytics.activeCount} context="Aguardando conversão" icon={<AddressBook size={16} />} />
+                  <AuraBalanceSummary
+                    className="crm-aura--pipeline-open"
+                    label="Pipeline em aberto"
+                    value={analytics.openPipelineCents}
+                    currency
+                    detail={`${analytics.activeCount} ${analytics.activeCount === 1 ? 'oportunidade ativa' : 'oportunidades ativas'}`}
+                    icon={<CurrencyDollar size={17} />}
+                    action={<Link to={`${APP_PATHS.crm}?${funnelSearchParams}`} className="geo-focus-ring aura-balance-summary__action">Abrir funil <ArrowRight aria-hidden="true" size={14} /></Link>}
+                  />
+                  <AuraProgressWidget as="article" className="crm-aura--conversion" label="Conversão de leads"
+                    value={leadAnalytics.total > 0 ? formatPercentage(leadAnalytics.conversionBasisPoints) : 'Sem leads'}
+                    badge={leadAnalytics.total > 0 ? `${leadAnalytics.convertedCount} de ${leadAnalytics.total} leads` : undefined}
+                    fraction={leadAnalytics.total > 0 ? leadAnalytics.conversionBasisPoints / 10_000 : undefined}
+                  />
+                  <AuraAttentionWidget compact className="crm-aura--overdue" label="Ações atrasadas"
+                    value={<AuraNumericValue value={analytics.overdueNextActions} />}
+                    context={analytics.overdueNextActions > 0 ? 'Prazo ultrapassado' : 'Nenhuma ação vencida'}
+                    action={analytics.overdueNextActions > 0 && <Link to={`${APP_PATHS.crm}?${overdueSearchParams}`} className="geo-focus-ring aura-attention__action">Ver atrasadas <ArrowRight aria-hidden="true" size={14} /></Link>}
+                  />
+                </div>
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    aria-expanded={showAllIndicators}
+                    aria-controls="crm-secondary-indicators"
+                    onClick={() => setShowAllIndicators((current) => !current)}
+                    className="geo-button-base geo-button-secondary geo-focus-ring min-h-10 px-4 text-sm"
+                  >
+                    {showAllIndicators ? 'Ocultar indicadores complementares' : 'Ver todos os indicadores'}
+                  </button>
+                </div>
+                {showAllIndicators && (
+                  <section id="crm-secondary-indicators" aria-label="Indicadores comerciais complementares" className="mt-5 grid gap-5 border-t border-brand-border pt-5 sm:grid-cols-2 lg:gap-6 xl:grid-cols-4">
+                    <AuraMediumMetric className="crm-aura--converted" label="Leads convertidos" value={leadAnalytics.convertedCount} context="Histórico preservado" icon={<Check size={17} />} />
+                    <AuraMediumMetric className="crm-aura--won" label="Oportunidades ganhas" value={analytics.wonCount} context={`Valor ganho · ${formatCurrency(analytics.wonValueCents)}`} icon={<TrendUp size={17} />} />
+                    <AuraSmallBalance compact className="crm-aura--lost" label="Oportunidades perdidas" value={analytics.lostCount} context="Encerradas sem ganho" icon={<X size={16} />} />
+                    <AuraAttentionWidget compact className="crm-aura--stale" label="Oportunidades paradas"
+                      value={<AuraNumericValue value={analytics.staleOpportunities} />}
+                      context="Mais de 14 dias na etapa"
+                      action={analytics.staleOpportunities > 0 && <Link to={`${APP_PATHS.crm}?${staleSearchParams}`} className="geo-focus-ring aura-attention__action">Ver paradas <ArrowRight aria-hidden="true" size={14} /></Link>}
+                    />
+                  </section>
+                )}
+              </WidgetSection>
               <section className="geo-card overflow-hidden" aria-labelledby="stage-indicators-title">
                 <div className="border-b border-brand-border p-5"><h2 id="stage-indicators-title" className="text-lg font-semibold text-text-primary">Oportunidades por etapa</h2><p className="mt-1 text-sm text-text-secondary">Quantidade e valor estimado em cada etapa do funil.</p></div>
                 {hasOpportunityData ? (
@@ -741,7 +766,7 @@ export function CRM() {
                     <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-primary-50 text-brand-primary-700 ring-1 ring-inset ring-brand-primary-200/70 dark:bg-brand-primary-400/10 dark:text-brand-primary-200 dark:ring-brand-primary-300/15"><Funnel aria-hidden="true" size={24} weight="duotone" /></span>
                     <p className="mt-4 font-semibold text-text-primary">Nenhuma oportunidade registrada</p>
                     <p className="mt-1 max-w-md text-sm leading-6 text-text-secondary">Crie ou acompanhe oportunidades no funil para visualizar quantidades e valores por etapa.</p>
-                    <Link to={`/crm?${funnelSearchParams.toString()}`} className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4">Ir para o funil</Link>
+                    <Link to={`${APP_PATHS.crm}?${funnelSearchParams.toString()}`} className="geo-button-base geo-button-secondary geo-focus-ring mt-5 min-h-11 px-4">Ir para o funil</Link>
                   </div>
                 )}
               </section>
@@ -814,6 +839,17 @@ export function CRM() {
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-[520px] rounded-2xl" />)}</div>
         ) : (
           <div>
+            {nextCommercialAction && (
+              <div className="mb-4">
+                <CRMNextActionWidget
+                  title={nextCommercialAction.opportunity.titulo}
+                  action={nextCommercialAction.action}
+                  date={nextCommercialAction.date}
+                  overdue={nextCommercialAction.date < today}
+                  onOpen={() => openEdit(nextCommercialAction.opportunity)}
+                />
+              </div>
+            )}
             <div className="mb-3 flex items-center justify-end gap-2 text-xs text-text-muted min-[1440px]:hidden"><ArrowsLeftRight aria-hidden="true" size={15} />Role horizontalmente para navegar entre todas as etapas</div>
             <div className="relative">
             <div className="geo-focus-ring snap-x snap-proximity overflow-x-auto rounded-xl pb-5 pr-8 overscroll-x-contain min-[1440px]:overflow-x-visible min-[1440px]:pr-0" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(148, 163, 184, 0.35) transparent' }} aria-label="Etapas do funil com rolagem horizontal" tabIndex={0}>
@@ -895,8 +931,8 @@ export function CRM() {
         )}
       </div>
 
-      <Modal isOpen={showModal} onClose={() => !saveMutation.isPending && setShowModal(false)} title={selectedOpportunity ? 'Editar oportunidade' : 'Nova oportunidade'} maxWidth="max-w-4xl" initialFocusId="crm-client">
-        <form onSubmit={handleFormSubmit} className="space-y-5" noValidate>
+      <Modal isOpen={showModal} onClose={opportunityDraft.requestClose} closeDisabled={saveMutation.isPending} title={selectedOpportunity ? 'Editar oportunidade' : 'Nova oportunidade'} maxWidth="max-w-4xl" initialFocusId="crm-client">
+        <form onSubmit={handleFormSubmit} noValidate><fieldset disabled={saveMutation.isPending} className="m-0 min-w-0 space-y-5 border-0 p-0">
           <FormError message={formError} />
           <FormSection
             sectionId="crm-section-identification"
@@ -941,15 +977,15 @@ export function CRM() {
                 <datalist id="crm-source-options">{CLIENT_ORIGIN_OPTIONS.map((origin) => <option key={origin} value={origin} />)}</datalist>
               </FormField>
               <FormField htmlFor="crm-value" label="Valor estimado" error={formErrors.valorEstimado}>
-                <div className="relative">
+                <div className="relative max-w-[18rem]">
                   <span aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-text-muted">R$</span>
                   <input id="crm-value" name="valorEstimado" type="text" inputMode="decimal" value={form.valorEstimado} onChange={(event) => updateFormField('valorEstimado', event.target.value)} onBlur={() => updateFormField('valorEstimado', formatCurrencyInput(form.valorEstimado))} placeholder="0,00" aria-invalid={Boolean(formErrors.valorEstimado)} aria-describedby={formErrors.valorEstimado ? 'crm-value-error' : undefined} className={cn(fieldClass, 'pl-11 font-mono tabular-nums')} />
                 </div>
               </FormField>
               <FormField htmlFor="crm-probability" label="Probabilidade de ganho" error={formErrors.probabilidade}>
-                <div className="relative">
-                  <NumericInput id="crm-probability" name="probabilidade" min="0" max="100" step="1" inputMode="numeric" value={form.probabilidade} onChange={(event) => updateFormField('probabilidade', event.target.value)} aria-invalid={Boolean(formErrors.probabilidade)} aria-describedby={formErrors.probabilidade ? 'crm-probability-error' : undefined} className={cn(fieldClass, 'font-mono tabular-nums')} />
-                  <span aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-text-muted">%</span>
+                <div className="flex items-center gap-2">
+                  <NumericInput id="crm-probability" name="probabilidade" min="0" max="100" step="1" inputMode="numeric" value={form.probabilidade} onChange={(event) => updateFormField('probabilidade', event.target.value)} aria-invalid={Boolean(formErrors.probabilidade)} aria-describedby={formErrors.probabilidade ? 'crm-probability-error' : undefined} wrapperClassName="max-w-[13rem]" className={cn(fieldClass, 'font-mono tabular-nums')} />
+                  <span aria-hidden="true" className="pointer-events-none shrink-0 text-sm font-semibold text-text-muted">%</span>
                 </div>
               </FormField>
               <FormField htmlFor="crm-forecast" label="Previsão de fechamento">
@@ -983,9 +1019,10 @@ export function CRM() {
               <textarea id="crm-notes" name="observacoes" rows={4} maxLength={4000} value={form.observacoes} onChange={(event) => updateFormField('observacoes', event.target.value)} aria-describedby="crm-notes-hint" className={cn(fieldClass, 'min-h-28 resize-y py-3 leading-relaxed')} />
             </FormField>
           </FormSection>
-          <FormFooter className="flex-wrap"><button type="button" onClick={() => setShowModal(false)} disabled={saveMutation.isPending} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">Cancelar</button><button type="submit" disabled={saveMutation.isPending} className={cn(primarySubmitButtonClass, 'min-h-11 px-6 disabled:opacity-50')}>{saveMutation.isPending ? 'Salvando…' : 'Salvar oportunidade'}</button></FormFooter>
-        </form>
+          <FormFooter className="flex-wrap"><button type="button" onClick={opportunityDraft.requestClose} disabled={saveMutation.isPending} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5">Cancelar</button><button type="submit" disabled={saveMutation.isPending} className={cn(primarySubmitButtonClass, 'min-h-11 px-6 disabled:opacity-50')}><span className="inline-grid"><span aria-hidden="true" className="invisible col-start-1 row-start-1">Salvar oportunidade</span><span className="col-start-1 row-start-1">{saveMutation.isPending ? 'Salvando…' : 'Salvar oportunidade'}</span></span></button></FormFooter>
+        </fieldset></form>
       </Modal>
+      {opportunityDraft.confirmation}
 
       <Modal isOpen={Boolean(pendingOutcome)} onClose={() => !transitionMutation.isPending && setPendingOutcome(null)} title={pendingOutcome?.stage === 'Ganho' ? 'Confirmar oportunidade ganha' : 'Registrar oportunidade perdida'} maxWidth="max-w-lg">
         <div className="space-y-5">

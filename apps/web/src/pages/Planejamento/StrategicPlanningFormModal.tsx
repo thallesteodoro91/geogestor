@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type ReactElement,
@@ -23,17 +24,18 @@ import type {
   StrategicSourceOption
 } from '@geogestor/contracts';
 import { Modal } from '../../components/Modal';
-import { DatePickerField, FormSelect, NumericInput } from '../../components/Form';
+import { DatePickerField, FormSection, FormSelect, NumericInput } from '../../components/Form';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { cn } from '../../utils/cn';
 import { saoPauloDateKey } from '../../utils/localDate';
+import { formatPlanningDate, planningEntities, planningExecutionSuggestion, planningDeadlineOutsideCycle, planningStatusOptions, planningPriorityOptions, planningImpactOptions } from './planningMetadata';
 import { validatePlanningForm, type PlanningFormErrors } from './planningFormValidation';
 
 export type StrategicOptions = {
   fontes: StrategicSourceOption[];
-  projetos: Array<{ id: string; nome: string; status: string }>;
-  tarefas: Array<{ id: string; titulo: string; status: string; projetoId: string | null }>;
+  projetos: Array<{ id: string; nome: string; status: string; dataEntrega?: string | null }>;
+  tarefas: Array<{ id: string; titulo: string; status: string; projetoId: string | null; dataLimite?: string | null }>;
 };
 
 export type PlanningDialog =
@@ -43,7 +45,7 @@ export type PlanningDialog =
   | { kind: 'keyResult'; initial?: StrategicKeyResult; parentId?: string }
   | { kind: 'initiative'; initial?: StrategicInitiative; parentId?: string }
   | { kind: 'checkin'; initial?: StrategicCheckin; parentId?: string }
-  | { kind: 'decision'; initial?: StrategicDecision; parentId?: string }
+  | { kind: 'decision'; initial?: StrategicDecision; parentId?: string; checkinId?: string }
   | { kind: 'risk'; initial?: StrategicRisk; parentId?: string };
 
 type Props = {
@@ -53,11 +55,11 @@ type Props = {
   options?: StrategicOptions;
   optionsError?: boolean;
   pending: boolean;
+  submitError?: string;
   onClose: () => void;
-  onSubmit: (payload: Record<string, unknown>) => void;
+  onSubmit: (payload: Record<string, unknown>, followWithDecision?: boolean) => void;
 };
 
-const today = saoPauloDateKey();
 
 function defaultEndDate() {
   const date = new Date();
@@ -116,6 +118,7 @@ function numberOrNull(value: string) {
 }
 
 function initialState(dialog: PlanningDialog, cycleId: string | null): Record<string, string> {
+  const today = saoPauloDateKey();
   if (dialog.kind === 'cycle') {
     const initial = dialog.initial;
     return {
@@ -144,7 +147,7 @@ function initialState(dialog: PlanningDialog, cycleId: string | null): Record<st
       titulo: initial?.titulo || '',
       descricao: initial?.descricao || '',
       responsavel: initial?.responsavel || '',
-      dataLimite: initial?.dataLimite || defaultEndDate(),
+      dataLimite: initial?.dataLimite || '',
       status: initial?.status || 'nao_iniciado',
       prioridade: initial?.prioridade || 'media',
       ordem: String(initial?.ordem ?? 0)
@@ -176,7 +179,7 @@ function initialState(dialog: PlanningDialog, cycleId: string | null): Record<st
       titulo: initial?.titulo || '',
       descricao: initial?.descricao || '',
       responsavel: initial?.responsavel || '',
-      dataLimite: initial?.dataLimite || defaultEndDate(),
+      dataLimite: initial?.dataLimite || '',
       progresso: String(initial?.progresso ?? 0),
       status: initial?.status || 'planejada',
       orcamento: initial?.orcamentoCentavos != null ? String(initial.orcamentoCentavos / 100) : '',
@@ -206,11 +209,11 @@ function initialState(dialog: PlanningDialog, cycleId: string | null): Record<st
     const initial = dialog.initial;
     return {
       cicloId: cycleId || '',
-      checkinId: initial?.checkinId || '',
+      checkinId: initial?.checkinId || dialog.checkinId || '',
       objetivoId: initial?.objetivoId || dialog.parentId || '',
       descricao: initial?.descricao || '',
       responsavel: initial?.responsavel || '',
-      dataLimite: initial?.prazo || defaultEndDate(),
+      dataLimite: initial?.prazo || '',
       status: initial?.status || 'pendente',
       dataConclusao: initial?.concluidaEm?.slice(0, 10) || '',
       notaConclusao: initial?.observacaoEncerramento || ''
@@ -230,17 +233,6 @@ function initialState(dialog: PlanningDialog, cycleId: string | null): Record<st
   };
 }
 
-const titles: Record<PlanningDialog['kind'], { create: string; edit: string }> = {
-  cycle: { create: 'Criar planejamento estratégico', edit: 'Editar ciclo estratégico' },
-  pillar: { create: 'Novo pilar estratégico', edit: 'Editar pilar estratégico' },
-  objective: { create: 'Novo objetivo estratégico', edit: 'Editar objetivo estratégico' },
-  keyResult: { create: 'Novo resultado-chave', edit: 'Editar resultado-chave' },
-  initiative: { create: 'Nova iniciativa', edit: 'Editar iniciativa' },
-  checkin: { create: 'Registrar revisão estratégica', edit: 'Editar revisão estratégica' },
-  decision: { create: 'Nova decisão estratégica', edit: 'Editar decisão estratégica' },
-  risk: { create: 'Novo risco estratégico', edit: 'Editar risco estratégico' }
-};
-
 export function StrategicPlanningFormModal(props: Props) {
   if (!props.dialog) return null;
   return <MountedForm key={`${props.dialog.kind}-${props.dialog.initial?.id || 'new'}`} {...props} dialog={props.dialog} />;
@@ -248,13 +240,19 @@ export function StrategicPlanningFormModal(props: Props) {
 
 function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) {
   const { dialog, snapshot, options, pending, onClose, onSubmit } = props;
+  const today = saoPauloDateKey();
   const [state, setState] = useState<Record<string, string>>(() => initialState(dialog, props.cycleId));
   const [initialFingerprint] = useState(() => JSON.stringify(state));
   const [errors, setErrors] = useState<PlanningFormErrors>({});
+  const [followWithDecision, setFollowWithDecision] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const submitErrorRef = useRef<HTMLDivElement>(null);
   const editing = Boolean(dialog.initial?.id);
-  const dirty = JSON.stringify(state) !== initialFingerprint;
+  const dirty = JSON.stringify(state) !== initialFingerprint || followWithDecision;
   const optionsBlockSave = editing && !options && (dialog.kind === 'keyResult' || dialog.kind === 'initiative');
+  useEffect(() => {
+    if (props.submitError) submitErrorRef.current?.focus();
+  }, [props.submitError]);
   const selectedSource = useMemo(() => {
     if (state.sourceKey === 'manual') return null;
     return options?.fontes.find((item) => `${item.tipo}:${item.codigo}` === state.sourceKey) || null;
@@ -295,7 +293,12 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
     setErrors(nextErrors);
     const firstErrorId = Object.keys(nextErrors)[0];
     if (firstErrorId) {
-      requestAnimationFrame(() => document.getElementById(firstErrorId)?.focus());
+      requestAnimationFrame(() => {
+        const control = document.getElementById(firstErrorId);
+        let disclosure = control?.closest('details');
+        while (disclosure) { disclosure.open = true; disclosure = disclosure.parentElement?.closest('details') || null; }
+        control?.focus();
+      });
       return;
     }
     if (dialog.kind === 'cycle') {
@@ -381,10 +384,9 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
         confianca: state.confianca,
         bloqueios: asNullable(state.bloqueios),
         decisoes: asNullable(state.decisoes),
-        decisoesPendentes: null,
-        proximosPassos: asNullable(state.proximosPassos),
-        proximaRevisao: asNullable(state.proximaRevisao)
-      });
+        ...(editing ? {} : { decisoesPendentes: null }),
+        proximosPassos: asNullable(state.proximosPassos)
+      }, followWithDecision);
       return;
     }
     if (dialog.kind === 'decision') {
@@ -422,12 +424,23 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
       isOpen
       onClose={requestClose}
       closeDisabled={pending}
-      title={titles[dialog.kind][editing ? 'edit' : 'create']}
+      title={planningEntities[dialog.kind][editing ? 'edit' : 'create']}
       maxWidth="max-w-3xl"
       initialFocusId={`planning-${dialog.kind}-first`}
+      footer={<div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <button type="button" onClick={requestClose} disabled={pending} className={secondarySmallActionButtonClass}>Cancelar</button>
+        <button type="submit" form="planning-editor" disabled={pending || optionsBlockSave} className={cn(primarySubmitButtonClass, 'planning-editor-submit')}>
+          {pending ? 'Salvando…' : editing ? 'Salvar alterações' : planningEntities[dialog.kind].submit}
+        </button>
+      </div>}
     >
       <FormErrorsContext.Provider value={errors}>
-      <form onSubmit={submit} noValidate className="space-y-5" aria-busy={pending}>
+      <form id="planning-editor" onSubmit={submit} noValidate className="space-y-5" aria-busy={pending}>
+        {props.submitError ? <div ref={submitErrorRef} tabIndex={-1} role="alert" className="geo-focus-ring rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-400/20 dark:bg-red-400/10 dark:text-red-100">
+          <p className="font-semibold">Não foi possível salvar</p>
+          <p className="mt-1 break-words leading-6">{props.submitError}</p>
+          <p className="mt-2 text-xs leading-5">Seu preenchimento foi preservado. Revise a mensagem e tente salvar novamente.</p>
+        </div> : null}
         {!options && (dialog.kind === 'keyResult' || dialog.kind === 'initiative') ? (
           <section role={props.optionsError ? 'alert' : 'status'} aria-live="polite" className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-400/20 dark:bg-amber-400/10 dark:text-amber-100">
             {props.optionsError
@@ -454,10 +467,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Situação" htmlFor="cycle-status">
                 <FormSelect id="cycle-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="rascunho">Rascunho</option>
-                  <option value="ativo">Ativo</option>
-                  <option value="em_revisao">Em revisão</option>
-                  <option value="encerrado">Encerrado</option>
+                  {planningStatusOptions.cycle.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Próxima revisão" htmlFor="cycle-review">
@@ -476,7 +486,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <textarea id="pillar-description" name="descricao" maxLength={1000} value={state.descricao} onChange={(event) => set('descricao', event.target.value)} className={textareaClass} />
             </Field>
             <Field label="Ordem de exibição" htmlFor="pillar-order">
-              <NumericInput id="pillar-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
+              <NumericInput id="pillar-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} wrapperClassName="max-w-[13rem]" className={inputClass} />
             </Field>
           </>
         ) : null}
@@ -499,28 +509,21 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <Field label="Responsável" htmlFor="objective-owner">
                 <input id="objective-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
-              <Field label="Prazo" htmlFor="objective-deadline">
+              <Field label="Prazo" htmlFor="objective-deadline" hint={planningDeadlineOutsideCycle(state.dataLimite, snapshot?.ciclo) ? `Prazo fora do ciclo (${formatPlanningDate(snapshot?.ciclo.dataInicio)} a ${formatPlanningDate(snapshot?.ciclo.dataFim)}). Confirme se esta data é intencional.` : `Informe o prazo. O ciclo termina em ${formatPlanningDate(snapshot?.ciclo.dataFim)}.`}>
                 <DatePickerField id="objective-deadline" name="dataLimite" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="objective-status">
                 <FormSelect id="objective-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="nao_iniciado">Não iniciado</option>
-                  <option value="em_andamento">Em andamento</option>
-                  <option value="em_risco">Em risco</option>
-                  <option value="concluido">Concluído</option>
-                  <option value="cancelado">Cancelado</option>
+                  {planningStatusOptions.objective.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Prioridade" htmlFor="objective-priority">
                 <FormSelect id="objective-priority" name="prioridade" value={state.prioridade} onChange={(event) => set('prioridade', event.target.value)} className={inputClass}>
-                  <option value="baixa">Baixa</option>
-                  <option value="media">Média</option>
-                  <option value="alta">Alta</option>
-                  <option value="critica">Crítica</option>
+                  {planningPriorityOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Ordem de exibição" htmlFor="objective-order">
-                <NumericInput id="objective-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} className={inputClass} />
+                <NumericInput id="objective-order" name="ordem" min="0" max="999" inputMode="numeric" required value={state.ordem} onChange={(event) => set('ordem', event.target.value)} wrapperClassName="max-w-[13rem]" className={inputClass} />
               </Field>
             </div>
           </>
@@ -604,6 +607,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
 
         {dialog.kind === 'initiative' ? (
           <>
+            <FormSection title="Identificação" headingLevel={3} description="Defina a iniciativa e o objetivo para o qual ela contribui.">
             <Field label="Título da iniciativa" htmlFor="planning-initiative-first">
               <input id="planning-initiative-first" name="titulo" autoComplete="off" required maxLength={180} value={state.titulo} onChange={(event) => set('titulo', event.target.value)} className={inputClass} />
             </Field>
@@ -615,50 +619,65 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
                 </FormSelect>
               </Field>
             ) : null}
-            <Field label="Descrição" htmlFor="initiative-description">
-              <textarea id="initiative-description" name="descricao" maxLength={2000} value={state.descricao} onChange={(event) => set('descricao', event.target.value)} className={textareaClass} />
-            </Field>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Responsável" htmlFor="initiative-owner">
-                <input id="initiative-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
-              </Field>
-              <Field label="Prazo" htmlFor="initiative-deadline">
-                <DatePickerField id="initiative-deadline" name="dataLimite" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
-              </Field>
-              <Field label="Progresso (%)" htmlFor="initiative-progress">
-                <NumericInput id="initiative-progress" name="progresso" min="0" max="100" step="1" inputMode="numeric" required value={state.progresso} onChange={(event) => set('progresso', event.target.value)} className={inputClass} />
-              </Field>
-              <Field label="Situação" htmlFor="initiative-status">
-                <FormSelect id="initiative-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="planejada">Planejada</option>
-                  <option value="em_andamento">Em andamento</option>
-                  <option value="bloqueada">Bloqueada</option>
-                  <option value="concluida">Concluída</option>
-                  <option value="cancelada">Cancelada</option>
-                </FormSelect>
-              </Field>
-              <Field label="Orçamento previsto (R$)" htmlFor="initiative-budget">
-                <NumericInput id="initiative-budget" name="orcamento" min="0" step="0.01" inputMode="decimal" value={state.orcamento} onChange={(event) => set('orcamento', event.target.value)} className={inputClass} />
-              </Field>
-              <Field label="Próximo marco" htmlFor="initiative-milestone">
-                <input id="initiative-milestone" name="proximoMarco" autoComplete="off" maxLength={500} value={state.proximoMarco} onChange={(event) => set('proximoMarco', event.target.value)} className={inputClass} />
-              </Field>
+            <details className="rounded-lg border border-brand-border p-3" open={Boolean(state.projetoId || state.tarefaId) || undefined}>
+              <summary className="geo-focus-ring cursor-pointer rounded text-sm font-semibold text-zinc-700 dark:text-zinc-200">Vincular execução existente (opcional)</summary>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
               <Field label="Projeto vinculado" htmlFor="initiative-project">
-                <FormSelect id="initiative-project" name="projetoId" value={state.projetoId} onChange={(event) => set('projetoId', event.target.value)} className={inputClass}>
+                <FormSelect searchable id="initiative-project" name="projetoId" value={state.projetoId} onChange={(event) => set('projetoId', event.target.value)} className={inputClass}>
                   <option value="">Nenhum projeto</option>
                   {options?.projetos.map((project) => <option key={project.id} value={project.id}>{project.nome} · {project.status}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Tarefa vinculada" htmlFor="initiative-task">
-                <FormSelect id="initiative-task" name="tarefaId" value={state.tarefaId} onChange={(event) => set('tarefaId', event.target.value)} className={inputClass}>
+                <FormSelect searchable id="initiative-task" name="tarefaId" value={state.tarefaId} onChange={(event) => set('tarefaId', event.target.value)} className={inputClass}>
                   <option value="">Nenhuma tarefa</option>
                   {options?.tarefas.map((task) => <option key={task.id} value={task.id}>{task.titulo} · {task.status}</option>)}
                 </FormSelect>
               </Field>
+              </div>
+              {state.tarefaId || state.projetoId ? <button type="button" className={cn(secondarySmallActionButtonClass, 'mt-3')} onClick={() => { setState(current => planningExecutionSuggestion(current, options?.tarefas.find(item => item.id === current.tarefaId), options?.projetos.find(item => item.id === current.projetoId))); setErrors({}); setConfirmDiscard(false); }}>Usar título e prazo nos campos vazios</button> : null}
+              <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">Aproveite um projeto ou tarefa. Os dados já preenchidos são preservados; o progresso estratégico continua manual.</p>
+            </details>
+            <details open={Boolean(state.descricao) || undefined} className="rounded-lg border border-brand-border p-3">
+              <summary className="geo-focus-ring cursor-pointer rounded text-sm font-semibold text-zinc-700 dark:text-zinc-200">Adicionar descrição (opcional)</summary>
+              <div className="mt-3"><Field label="Descrição (opcional)" htmlFor="initiative-description">
+                <textarea id="initiative-description" name="descricao" maxLength={2000} value={state.descricao} onChange={(event) => set('descricao', event.target.value)} className={textareaClass} />
+              </Field></div>
+            </details>
+            </FormSection>
+            <FormSection title="Execução" headingLevel={3} tone="emerald" description="Defina responsável, prazo e situação. O progresso é informado manualmente; vínculos não sincronizam o percentual.">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Responsável" htmlFor="initiative-owner">
+                <input id="initiative-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Prazo" htmlFor="initiative-deadline" hint={planningDeadlineOutsideCycle(state.dataLimite, snapshot?.ciclo) ? `Prazo fora do ciclo (${formatPlanningDate(snapshot?.ciclo.dataInicio)} a ${formatPlanningDate(snapshot?.ciclo.dataFim)}). Confirme se esta data é intencional.` : `Informe o prazo. O ciclo termina em ${formatPlanningDate(snapshot?.ciclo.dataFim)}.`}>
+                <DatePickerField id="initiative-deadline" name="dataLimite" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
+              </Field>
+              <Field label="Progresso (%)" htmlFor="initiative-progress">
+                <NumericInput id="initiative-progress" name="progresso" min="0" max="100" step="1" inputMode="numeric" required value={state.progresso} onChange={(event) => set('progresso', event.target.value)} wrapperClassName="max-w-[13rem]" className={inputClass} />
+              </Field>
+              <Field label="Situação" htmlFor="initiative-status">
+                <FormSelect id="initiative-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
+                  {planningStatusOptions.initiative.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
+                </FormSelect>
+              </Field>
+              <Field label="Próximo marco (opcional)" htmlFor="initiative-milestone">
+                <input id="initiative-milestone" name="proximoMarco" autoComplete="off" maxLength={500} value={state.proximoMarco} onChange={(event) => set('proximoMarco', event.target.value)} className={inputClass} />
+              </Field>
             </div>
-            <Field label="Dependências" htmlFor="initiative-dependencies">
+            </FormSection>
+            <details className="rounded-lg border border-brand-border p-4" open={Boolean(state.orcamento || state.dependencias) || undefined}>
+            <summary className="geo-focus-ring cursor-pointer rounded text-sm font-semibold text-zinc-800 dark:text-zinc-200">Orçamento e dependências (opcional)</summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Field label="Orçamento previsto (R$; opcional)" htmlFor="initiative-budget">
+                <NumericInput id="initiative-budget" name="orcamento" min="0" step="0.01" inputMode="decimal" value={state.orcamento} onChange={(event) => set('orcamento', event.target.value)} wrapperClassName="max-w-[18rem]" className={inputClass} />
+              </Field>
+
+            </div>
+            <Field label="Dependências (opcional)" htmlFor="initiative-dependencies">
               <textarea id="initiative-dependencies" name="dependencias" maxLength={1000} value={state.dependencias} onChange={(event) => set('dependencias', event.target.value)} className={textareaClass} />
             </Field>
+            </details>
           </>
         ) : null}
 
@@ -676,9 +695,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               </Field>
               <Field label="Situação" htmlFor="checkin-status">
                 <FormSelect id="checkin-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="no_rumo">No rumo</option>
-                  <option value="atencao">Atenção</option>
-                  <option value="critico">Crítico</option>
+                  {planningStatusOptions.checkin.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Confiança" htmlFor="checkin-confidence">
@@ -695,20 +712,23 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
             <Field label="Bloqueios" htmlFor="checkin-blockers">
               <textarea id="checkin-blockers" name="bloqueios" maxLength={2000} value={state.bloqueios} onChange={(event) => set('bloqueios', event.target.value)} className={textareaClass} />
             </Field>
-            <Field label="Decisões tomadas" htmlFor="checkin-decisions">
-              <textarea id="checkin-decisions" name="decisoes" maxLength={2000} value={state.decisoes} onChange={(event) => set('decisoes', event.target.value)} className={textareaClass} />
-            </Field>
             <p className="rounded-lg border border-brand-border bg-brand-background/60 px-4 py-3 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-              Registre pendências em <strong>Nova decisão</strong>. Assim cada decisão terá responsável, prazo, situação e histórico próprios.
+              Acompanhe decisões e encaminhamentos vinculados a esta revisão com responsável, prazo e situação.
             </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Próximos passos" htmlFor="checkin-next-steps">
-                <textarea id="checkin-next-steps" name="proximosPassos" maxLength={2000} value={state.proximosPassos} onChange={(event) => set('proximosPassos', event.target.value)} className={textareaClass} />
-              </Field>
-              <Field label="Próxima revisão" htmlFor="checkin-next-review">
-                <DatePickerField id="checkin-next-review" name="proximaRevisao" autoComplete="off" min={state.data} value={state.proximaRevisao} onChange={(event) => set('proximaRevisao', event.target.value)} className={inputClass} />
-              </Field>
-            </div>
+            <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+              <input type="checkbox" checked={followWithDecision} onChange={event => { setFollowWithDecision(event.target.checked); setConfirmDiscard(false); }} className="geo-focus-ring h-4 w-4 accent-indigo-600" /> Criar decisão após salvar a revisão
+            </label>
+            {dialog.initial?.decisoes || dialog.initial?.decisoesPendentes || dialog.initial?.proximosPassos ? <details className="rounded-lg border border-brand-border p-4">
+              <summary className="geo-focus-ring cursor-pointer rounded text-sm font-semibold text-zinc-700 dark:text-zinc-200">Anotações anteriores</summary>
+              <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Textos preservados. Novos encaminhamentos ficam nas decisões vinculadas.</p>
+              <div className="mt-3 space-y-4">
+                {dialog.initial?.decisoes ? <Field label="Decisões anotadas" htmlFor="checkin-decisions"><textarea id="checkin-decisions" name="decisoes" maxLength={2000} value={state.decisoes} onChange={event => set('decisoes', event.target.value)} className={textareaClass} /></Field> : null}
+                {state.decisoesPendentes ? <p className="break-words text-sm text-zinc-600 dark:text-zinc-300">Pendências anotadas: {state.decisoesPendentes}</p> : null}
+                {dialog.initial?.proximosPassos ? <Field label="Próximos passos anotados" htmlFor="checkin-next-steps"><textarea id="checkin-next-steps" name="proximosPassos" maxLength={2000} value={state.proximosPassos} onChange={event => set('proximosPassos', event.target.value)} className={textareaClass} /></Field> : null}
+              </div>
+            </details> : null}
+            <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">Próxima revisão do ciclo: {formatPlanningDate(snapshot?.ciclo.proximaRevisao)}. Altere a agenda em Editar ciclo.</p>
+            {dialog.initial?.proximaRevisao ? <p className="text-xs text-zinc-500 dark:text-zinc-400">Previsão registrada nesta revisão: {formatPlanningDate(dialog.initial.proximaRevisao)}.</p> : null}
           </>
         ) : null}
 
@@ -721,15 +741,12 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <Field label="Responsável" htmlFor="decision-owner">
                 <input id="decision-owner" name="responsavel" autoComplete="name" required maxLength={160} value={state.responsavel} onChange={(event) => set('responsavel', event.target.value)} className={inputClass} />
               </Field>
-              <Field label="Prazo" htmlFor="decision-deadline">
+              <Field label="Prazo" htmlFor="decision-deadline" hint={planningDeadlineOutsideCycle(state.dataLimite, snapshot?.ciclo) ? `Prazo fora do ciclo (${formatPlanningDate(snapshot?.ciclo.dataInicio)} a ${formatPlanningDate(snapshot?.ciclo.dataFim)}). Confirme se esta data é intencional.` : `Informe o prazo. O ciclo termina em ${formatPlanningDate(snapshot?.ciclo.dataFim)}.`}>
                 <DatePickerField id="decision-deadline" name="prazo" required autoComplete="off" value={state.dataLimite} onChange={(event) => set('dataLimite', event.target.value)} className={inputClass} />
               </Field>
               <Field label="Situação" htmlFor="decision-status">
                 <FormSelect id="decision-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="pendente">Pendente</option>
-                  <option value="em_andamento">Em andamento</option>
-                  <option value="concluida">Concluída</option>
-                  <option value="cancelada">Cancelada</option>
+                  {planningStatusOptions.decision.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Objetivo relacionado" htmlFor="decision-objective">
@@ -741,7 +758,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               <Field label="Revisão de origem" htmlFor="decision-checkin">
                 <FormSelect id="decision-checkin" name="checkinId" value={state.checkinId} onChange={(event) => set('checkinId', event.target.value)} className={inputClass}>
                   <option value="">Sem revisão vinculada</option>
-                  {snapshot?.checkins.map((checkin) => <option key={checkin.id} value={checkin.id}>{checkin.data} · {checkin.narrativa.slice(0, 70)}</option>)}
+                  {snapshot?.checkins.map((checkin) => <option key={checkin.id} value={checkin.id}>{formatPlanningDate(checkin.data)} · {checkin.narrativa.slice(0, 70)}</option>)}
                 </FormSelect>
               </Field>
             </div>
@@ -778,10 +795,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               </Field>
               <Field label="Impacto" htmlFor="risk-impact">
                 <FormSelect id="risk-impact" name="impacto" value={state.impacto} onChange={(event) => set('impacto', event.target.value)} className={inputClass}>
-                  <option value="baixo">Baixo</option>
-                  <option value="medio">Médio</option>
-                  <option value="alto">Alto</option>
-                  <option value="critico">Crítico</option>
+                  {planningImpactOptions.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
               <Field label="Probabilidade" htmlFor="risk-probability">
@@ -797,10 +811,7 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
               </Field>
               <Field label="Situação" htmlFor="risk-status">
                 <FormSelect id="risk-status" name="status" value={state.status} onChange={(event) => set('status', event.target.value)} className={inputClass}>
-                  <option value="aberto">Aberto</option>
-                  <option value="mitigando">Em mitigação</option>
-                  <option value="resolvido">Resolvido</option>
-                  <option value="aceito">Aceito</option>
+                  {planningStatusOptions.risk.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
                 </FormSelect>
               </Field>
             </div>
@@ -821,14 +832,6 @@ function MountedForm(props: Omit<Props, 'dialog'> & { dialog: PlanningDialog }) 
           </section>
         ) : null}
 
-        <div className="flex flex-col-reverse gap-3 border-t border-brand-border pt-5 sm:flex-row sm:justify-end">
-          <button type="button" onClick={requestClose} disabled={pending} className={secondarySmallActionButtonClass}>
-            Cancelar
-          </button>
-           <button type="submit" disabled={pending || optionsBlockSave} className={primarySubmitButtonClass}>
-            {pending ? 'Salvando…' : editing ? 'Salvar alterações' : 'Criar'}
-          </button>
-        </div>
       </form>
       </FormErrorsContext.Provider>
     </Modal>

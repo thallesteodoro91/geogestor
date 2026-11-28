@@ -193,7 +193,11 @@ export function ImportacaoDados() {
     });
     if (entity === 'clientes') {
       const declaredType = normalizeText(item.tipoPessoa || '');
-      item.tipoPessoa = declaredType === 'pj' || declaredType.includes('juridica') || Boolean(item.cnpj) ? 'PJ' : 'PF';
+      item.tipoPessoa = declaredType === 'pj' || declaredType.includes('juridica') || Boolean(item.cnpj)
+        ? 'PJ'
+        : declaredType === 'pf' || declaredType.includes('fisica') || Boolean(item.cpf)
+          ? 'PF'
+          : '';
     }
     return item;
   }), [data, entity, mapping]);

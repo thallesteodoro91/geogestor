@@ -1,7 +1,8 @@
 import { FastifyInstance } from 'fastify';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { normalizedSearchText, searchContains } from '../services/search-sql';
 import { activeDocumentWhere } from '../services/document-integrity.service';
 
 type SearchResult = {
@@ -43,7 +44,7 @@ export async function searchRoutes(server: FastifyInstance) {
     const { q } = request.query as { q?: string };
     const query = normalize(q).trim();
 
-    if (query.length < 2) {
+    if (query.length < 2 || query.length > 200 || query.includes('\0')) {
       return { query: q || '', results: [] };
     }
 
@@ -56,7 +57,7 @@ export async function searchRoutes(server: FastifyInstance) {
         compromissos,
         documentos
       ] = await Promise.all([
-        db.select().from(schema.clientes).where(isNull(schema.clientes.deletedAt)),
+        db.select().from(schema.clientes).where(and(isNull(schema.clientes.deletedAt), searchContains(query, [schema.clientes.nome, schema.clientes.email, schema.clientes.telefone, schema.clientes.celular, schema.clientes.cpf, schema.clientes.cnpj, schema.clientes.documento, schema.clientes.endereco, schema.clientes.categoria, schema.clientes.origem]))).orderBy(normalizedSearchText(schema.clientes.nome), asc(schema.clientes.id)).limit(8),
         db.select({
           id: schema.projetos.id,
           nome: schema.projetos.nome,
@@ -73,7 +74,7 @@ export async function searchRoutes(server: FastifyInstance) {
         })
           .from(schema.projetos)
           .leftJoin(schema.clientes, eq(schema.projetos.clienteId, schema.clientes.id))
-          .where(and(isNull(schema.projetos.deletedAt), isNull(schema.clientes.deletedAt))),
+          .where(and(isNull(schema.projetos.deletedAt), isNull(schema.clientes.deletedAt), searchContains(query, [schema.projetos.nome, schema.projetos.descricao, schema.projetos.status, schema.projetos.tipo, schema.projetos.cidade, schema.projetos.municipio, schema.projetos.matricula, schema.projetos.car, schema.clientes.nome]))).orderBy(normalizedSearchText(schema.projetos.nome), asc(schema.projetos.id)).limit(8),
         db.select({
           id: schema.orcamentos.id,
           clienteId: schema.orcamentos.clienteId,
@@ -89,7 +90,7 @@ export async function searchRoutes(server: FastifyInstance) {
           .from(schema.orcamentos)
           .innerJoin(schema.clientes, eq(schema.orcamentos.clienteId, schema.clientes.id))
           .leftJoin(schema.projetos, eq(schema.orcamentos.projetoId, schema.projetos.id))
-          .where(and(isNull(schema.orcamentos.deletedAt), isNull(schema.clientes.deletedAt))),
+          .where(and(isNull(schema.orcamentos.deletedAt), isNull(schema.clientes.deletedAt), searchContains(query, [schema.orcamentos.codigoOrcamento, schema.orcamentos.descricao, schema.orcamentos.status, schema.clientes.nome, schema.projetos.nome]))).orderBy(normalizedSearchText(sql`coalesce(nullif(${schema.orcamentos.codigoOrcamento}, ''), nullif(${schema.orcamentos.descricao}, ''), 'Orçamento ' || substr(${schema.orcamentos.id}, 1, 8))`), asc(schema.orcamentos.id)).limit(8),
         db.select({
           id: schema.tarefas.id,
           clienteId: schema.tarefas.clienteId,
@@ -108,10 +109,11 @@ export async function searchRoutes(server: FastifyInstance) {
           .leftJoin(schema.projetos, eq(schema.tarefas.projetoId, schema.projetos.id))
           .leftJoin(schema.clientes, eq(schema.tarefas.clienteId, schema.clientes.id))
           .where(and(
+            searchContains(query, [schema.tarefas.titulo, schema.tarefas.descricao, schema.tarefas.status, schema.tarefas.prioridade, schema.tarefas.categoria, schema.projetos.nome, schema.clientes.nome]),
             isNull(schema.tarefas.deletedAt),
             isNull(schema.projetos.deletedAt),
             isNull(schema.clientes.deletedAt)
-          )),
+          )).orderBy(normalizedSearchText(schema.tarefas.titulo), asc(schema.tarefas.id)).limit(8),
         db.select({
           id: schema.compromissos.id,
           clienteId: schema.compromissos.clienteId,
@@ -128,14 +130,15 @@ export async function searchRoutes(server: FastifyInstance) {
           .leftJoin(schema.projetos, eq(schema.compromissos.projetoId, schema.projetos.id))
           .leftJoin(schema.clientes, eq(schema.compromissos.clienteId, schema.clientes.id))
           .where(and(
+            searchContains(query, [schema.compromissos.titulo, schema.compromissos.descricao, schema.compromissos.tipo, schema.projetos.nome, schema.clientes.nome]),
             isNull(schema.compromissos.deletedAt),
             isNull(schema.projetos.deletedAt),
             isNull(schema.clientes.deletedAt)
-          )),
-        db.select().from(schema.documentos).where(activeDocumentWhere())
+          )).orderBy(normalizedSearchText(schema.compromissos.titulo), asc(schema.compromissos.id)).limit(8),
+        db.select().from(schema.documentos).innerJoin(schema.clientes, eq(schema.documentos.clienteId, schema.clientes.id)).where(and(activeDocumentWhere(), isNull(schema.clientes.deletedAt), searchContains(query, [schema.documentos.nome, schema.documentos.nomeOriginal, schema.documentos.categoria, schema.documentos.tags, schema.documentos.extensao, schema.documentos.caminhoRelativo]))).orderBy(normalizedSearchText(sql`coalesce(nullif(${schema.documentos.nomeOriginal}, ''), ${schema.documentos.nome})`), asc(schema.documentos.id)).limit(8).then((rows) => rows.map((row) => row.documentos))
       ]);
 
-      const activeClientIds = new Set(clientes.map((client) => client.id));
+
       const results: SearchResult[] = [
         ...take(clientes.filter((item) => matchesQuery(query, [
           item.nome,
@@ -223,7 +226,7 @@ export async function searchRoutes(server: FastifyInstance) {
           path: `/calendario/compromisso/${item.id}`,
           date: item.data || item.updatedAt
         }))),
-        ...take(documentos.filter((item) => activeClientIds.has(item.clienteId) && matchesQuery(query, [
+        ...take(documentos.filter((item) => matchesQuery(query, [
           item.nome,
           item.nomeOriginal,
           item.categoria,

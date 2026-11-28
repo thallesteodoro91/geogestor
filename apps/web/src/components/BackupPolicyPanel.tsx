@@ -70,7 +70,7 @@ type BackupOperationStatus = {
 };
 
 const fieldClass = `${geoFieldClass} w-full px-3 py-2 text-sm`;
-const numericWrapperClass = 'mt-1.5';
+const numericWrapperClass = 'mt-1.5 max-w-[14rem]';
 const formatDate = (value: string | null) => value
   ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value))
   : 'Ainda não realizado';

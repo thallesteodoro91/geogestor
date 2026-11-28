@@ -4,6 +4,7 @@ import { geoKickerClass } from '../utils/geoTheme';
 
 interface PageHeaderProps {
   title: ReactNode;
+  headingLevel?: 1 | 2;
   count?: ReactNode;
   description?: ReactNode;
   eyebrow?: ReactNode;
@@ -20,6 +21,7 @@ interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  headingLevel = 1,
   count,
   description,
   eyebrow,
@@ -33,6 +35,7 @@ export function PageHeader({
   descriptionClassName,
   navigationClassName,
 }: PageHeaderProps) {
+  const Heading = `h${headingLevel}` as const;
   return (
     <header className={cn('mb-6 min-w-0 max-w-full', className)}>
       <div className={cn('mx-auto w-full min-w-0 max-w-[1400px]', frameClassName)}>
@@ -44,7 +47,7 @@ export function PageHeader({
 
         <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0 flex-1">
-            <h1
+            <Heading
               className={cn(
                 'flex min-w-0 items-center gap-3 text-3xl font-semibold leading-10 tracking-tight text-zinc-950 dark:text-white sm:text-4xl',
                 titleClassName,
@@ -67,7 +70,7 @@ export function PageHeader({
                   <span className="text-zinc-600 dark:text-zinc-300"> · {count}</span>
                 ) : null}
               </span>
-            </h1>
+            </Heading>
             {description ? (
               <p
                 className={cn(

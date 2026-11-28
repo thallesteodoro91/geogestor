@@ -1,0 +1,63 @@
+.client-workspace-panel { min-width: 0; container-type: inline-size; scroll-margin-block-start: 5rem; }
+.client-workspace-panel article, .client-workspace-panel section, .client-workspace-panel dl, .client-workspace-panel p { min-width: 0; }
+.client-property-grid, .client-finance-grid { display: grid; grid-template-columns: minmax(0,1fr); gap: 1rem; }
+.client-file-row { display: flex; flex-direction: column; align-items: stretch; }
+.client-workspace-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(7rem,1fr)); gap: .5rem; }
+.client-workspace-panel p, .client-workspace-panel h1, .client-workspace-panel h2, .client-workspace-panel h3, .client-workspace-panel h4, .client-workspace-panel dd { overflow-wrap: anywhere; }
+.client-workspace-panel button, .client-workspace-panel a { touch-action: manipulation; }
+.client-service-row { display: flex; flex-direction: column; gap: 1rem; }
+.client-workspace-actions button { min-height: 44px; }
+.client-workspace-panel button { min-height: 44px; min-width: 44px; }
+@container (min-width: 34rem) {
+  .client-finance-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .client-file-row { flex-direction: row; align-items: center; }
+}
+@container (min-width: 44rem) {
+  .client-property-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .client-service-row { flex-direction: row; align-items: center; justify-content: space-between; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .client-workspace-panel .animate-spin, .client-workspace-panel .animate-pulse { animation: none; }
+}
+
+/* Local to the tab contents: the surrounding client sheet is preserved. */
+.client-workspace-panel .client-tab-heading,
+.client-workspace-panel .client-record-heading,
+.client-workspace-panel .client-budget-row { display: flex; flex-direction: column; align-items: flex-start; }
+.client-workspace-panel .client-list-controls { display: grid; grid-template-columns: minmax(0,1fr); gap: .75rem; }
+.client-workspace-panel .client-list-controls > div { min-width: 0; }
+.client-workspace-panel .client-list-controls input,
+.client-workspace-panel .client-list-controls select { min-height: 44px; }
+.client-workspace-panel .client-environment-metrics { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: 1rem; }
+.client-workspace-panel .client-property-details { display: grid; grid-template-columns: minmax(0,1fr); }
+.client-workspace-panel .client-file-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,7rem),1fr)); gap: .5rem; }
+.client-workspace-panel .client-file-action { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: .375rem; padding-inline: .5rem; font-size: .75rem; font-weight: 600; }
+.client-workspace-panel .client-file-action-hint { display: none; position: absolute; bottom: calc(100% + .375rem); left: 0; z-index: 20; width: max-content; max-width: 10rem; border-radius: .375rem; padding: .375rem .5rem; background: #27272a; color: #fff; pointer-events: none; }
+.client-workspace-panel button:disabled { opacity: .6; cursor: not-allowed; }
+.client-workspace-panel .client-list-tools input::placeholder { color: #52525b; }
+.dark .client-workspace-panel .client-list-tools input::placeholder { color: #d4d4d8; }
+@container (min-width: 20rem) {
+  .client-workspace-panel .client-property-details { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@container (min-width: 34rem) {
+  .client-workspace-panel .client-tab-heading,
+  .client-workspace-panel .client-record-heading { flex-direction: row; justify-content: space-between; align-items: flex-start; }
+  .client-workspace-panel .client-list-controls { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+  .client-workspace-panel .client-list-controls > div:first-child { grid-column: 1 / -1; }
+  .client-workspace-panel .client-file-actions { display: flex; flex-wrap: wrap; flex-shrink: 0; }
+  .client-workspace-panel .client-file-action-label { display: none; }
+  .client-workspace-panel .client-file-action:focus .client-file-action-hint,
+  .client-workspace-panel .client-file-action:hover .client-file-action-hint { display: block; }
+}
+@container (min-width: 44rem) {
+  .client-workspace-panel .client-budget-row { flex-direction: row; align-items: flex-start; justify-content: space-between; }
+}
+@container (min-width: 56rem) {
+  .client-workspace-panel .client-list-controls { grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr); }
+  .client-workspace-panel .client-list-controls > div:first-child { grid-column: auto; }
+  .client-workspace-panel .client-file-action-label { display: inline; }
+  .client-workspace-panel .client-file-action:focus .client-file-action-hint,
+  .client-workspace-panel .client-file-action:hover .client-file-action-hint { display: none; }
+}
+
+.client-workspace-panel .client-list-start { scroll-margin-block-start: 6rem; margin-block: .75rem; }

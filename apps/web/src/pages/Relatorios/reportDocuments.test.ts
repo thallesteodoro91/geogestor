@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { ManagerialReport } from '@geogestor/contracts';
 import { buildReportDocumentModel } from './reportDocumentModel';
 import { createManagerialReportPdfDefinition, downloadManagerialReportPdf } from './reportPdfGenerator';
+import { executivePdfCharts } from './executivePdfCharts';
 
 const report: ManagerialReport = {
   generatedAt: '2026-01-01T01:30:00.000Z',
@@ -88,4 +89,39 @@ test('download PDF só resolve após a operação assíncrona e propaga falha', 
     () => downloadManagerialReportPdf({ createPdf: () => ({ download: async () => { throw new Error('download bloqueado'); } }) }, { content: [] }, 'relatorio.pdf'),
     /download bloqueado/
   );
+});
+
+test('gráficos vetoriais pertencem ao PDF executivo e preservam a leitura das tabelas', () => {
+  const executive = JSON.stringify(createManagerialReportPdfDefinition(report, 'executivo'));
+  assert.match(executive, /viewBox=\\"0 0 348 365/);
+  assert.match(executive, /viewBox=\\"0 0 348 164/);
+  assert.match(executive, /Combustível &amp; campo/);
+  assert.match(executive, /Evolução do caixa/);
+  assert.match(executive, /Despesas pagas por categoria/);
+  for (const type of ['financeiro', 'projetos'] as const) {
+    assert.doesNotMatch(JSON.stringify(createManagerialReportPdfDefinition(report, type)), /"svg":/);
+  }
+});
+
+test('gráficos cobrem períodos extensos, valores negativos e ausência de dados', () => {
+  const long = structuredClone(report);
+  long.financial.monthly = Array.from({ length: 9 }, (_, index) => ({
+    month: `2026-${String(index + 1).padStart(2, '0')}`,
+    receivedRevenue: 0, paidExpenses: 200_000, cashResult: -200_000
+  }));
+  const pages = executivePdfCharts(long).map(page => JSON.stringify(page));
+  assert.equal(pages.length, 2);
+  assert.match(pages[0], /jan\/26/);
+  assert.match(pages[1], /set\/26/);
+  assert.match(pages[1], /Déficit/);
+  assert.doesNotMatch(pages[0], /category-panel/);
+  assert.match(pages[1], /category-panel/);
+  assert.doesNotMatch(pages.join(''), /NaN|Infinity/);
+
+  long.financial.monthly = [];
+  long.financial.expensesByCategory = [];
+  const empty = JSON.stringify(executivePdfCharts(long));
+  assert.match(empty, /Sem movimentações de caixa/);
+  assert.match(empty, /Sem despesas pagas por categoria/);
+  assert.doesNotMatch(empty, /NaN|Infinity/);
 });

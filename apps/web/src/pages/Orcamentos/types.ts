@@ -1,6 +1,7 @@
 import type {
   AdjustmentType,
   BudgetStatus,
+  BudgetExecutionStart,
   CostClassification,
   FinancialComponent,
   InstallmentDefinition
@@ -161,6 +162,8 @@ export interface BudgetFormState {
   deliverables: string;
   executionDays: string;
   characterization: {
+    executionStart?: BudgetExecutionStart;
+    scopeDescription: string;
     estimatedArea: string;
     areaUnit: string;
     estimatedPerimeter: string;
@@ -202,6 +205,7 @@ export interface BudgetFormState {
 }
 
 export interface BudgetDetail extends Omit<BudgetListItem, 'groupId' | 'version' | 'number' | 'totalCents'> {
+  updatedAt?: string;
   grupoId: string;
   versao: number;
   codigoOrcamento?: string | null;
@@ -233,6 +237,7 @@ export interface BudgetDetail extends Omit<BudgetListItem, 'groupId' | 'version'
   projectName?: string | null;
   characterization?: Record<string, unknown> | null;
   descontoGlobalTipo?: AdjustmentType | null;
+  desconto?: number | null;
   descontoGlobalValor?: string | null;
   acrescimoGlobalTipo?: AdjustmentType | null;
   acrescimoGlobalValor?: string | null;

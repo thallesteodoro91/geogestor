@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -21,7 +22,7 @@ test('Sessão 10 persiste cálculo topográfico com contrato, vínculo, auditori
     import('@geogestor/database'),
     import('./services/audit.service'),
   ]);
-  const request = (method: 'GET' | 'POST', url: string, payload?: Record<string, unknown>) => server.inject({
+  const request = (method: 'GET' | 'POST', url: string, payload?: Record<string, unknown>) => injectWithRecordVersion(server, {
     method,
     url,
     headers: payload === undefined ? { 'x-api-token': 'test-token' } : headers,

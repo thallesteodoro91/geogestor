@@ -23,9 +23,10 @@ export function documentContrastRatio(foreground: string, background: string) {
 }
 
 export function documentTextColorForBackground(background: string) {
-  return documentContrastRatio(DARK_DOCUMENT_TEXT, background) >= documentContrastRatio(LIGHT_DOCUMENT_TEXT, background)
+  const preferred = documentContrastRatio(DARK_DOCUMENT_TEXT, background) >= documentContrastRatio(LIGHT_DOCUMENT_TEXT, background)
     ? DARK_DOCUMENT_TEXT
     : LIGHT_DOCUMENT_TEXT;
+  return documentContrastRatio(preferred, background) >= 4.5 ? preferred : '#000000';
 }
 
 export function accessibleAccentOnWhite(accent: string, minimumRatio = 4.5) {

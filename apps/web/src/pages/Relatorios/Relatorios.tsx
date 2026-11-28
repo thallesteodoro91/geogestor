@@ -15,14 +15,14 @@ import {
   TrendUp,
 } from '@phosphor-icons/react';
 import { useQuery } from '@tanstack/react-query';
-import { useReducedMotion } from 'framer-motion';
 import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Area, Bar, ComposedChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Area, Bar, ComposedChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { toast } from 'sonner';
 import { ExpenseCategoryChart } from '../../components/charts/ExpenseCategoryChart';
 import { ProjectBreakdownChart } from '../../components/charts/ProjectBreakdownChart';
 import { RichTooltip } from '../../components/charts/RichTooltip';
+import { CashResultCurve } from '../../components/charts/CashResultCurve';
 import { Layout } from '../../components/Layout';
 import { PageHeader } from '../../components/PageHeader';
 import { KpiTransparency, type KpiCompositionItem } from '../../components/KpiTransparency';
@@ -30,7 +30,7 @@ import { apiClient } from '../../services/apiClient';
 import { getCachedCompanyTemplate } from '../../services/companyTemplate';
 import { cn } from '../../utils/cn';
 import { chartColors } from '../../data/chart-colors';
-import { chartActiveBar, chartActiveDot, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartActiveDot, chartCursor, chartResultLineZIndex, chartSecondaryTextColor, responsiveChartProps } from '../../utils/chartHelpers';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass } from '../../utils/actionStyles';
 import { RelatorioExecutivo } from './RelatorioExecutivo';
 import { ReportAlerts } from './ReportAlerts';
@@ -56,6 +56,7 @@ import {
   REPORT_TYPES,
   type ReportType
 } from './reportPresentation';
+import './report-cash-chart.css';
 
 const EMPTY_REPORT_COPY: Record<ReportType, {
   sourceTitle: string;
@@ -83,6 +84,14 @@ const compactCurrencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL'
 });
+const reportCashResult = 'var(--report-cash-result)';
+const reportCashOutline = 'var(--report-cash-outline)';
+const reportCashAxis = 'var(--report-cash-axis)';
+const reportCashLegend = [
+  { label: 'Recebido', color: chartColors.positive },
+  { label: 'Despesas', color: chartColors.negative },
+  { label: 'Resultado', color: reportCashResult },
+];
 
 const REPORT_PERIOD_OPTIONS = [
   ...REPORT_PERIOD_PRESETS,
@@ -127,7 +136,7 @@ function KpiCard({
 }
 
 function FinancialReport({ report }: { report: ManagerialReport }) {
-  const reduceMotion = useReducedMotion();
+  const [compactCashTooltip, setCompactCashTooltip] = useState(false);
   const { kpis, previous, monthly, expensesByCategory, alerts } = report.financial;
   const cashChartData = monthly.map((item) => ({
     name: formatMonth(item.month),
@@ -135,6 +144,9 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
     Despesas: item.paidExpenses / 100,
     Resultado: item.cashResult / 100
   }));
+  const hasNegativeCash = cashChartData.some(({ Recebido, Despesas, Resultado }) =>
+    Math.min(Recebido, Despesas, Resultado) < 0
+  );
   return (
     <div className="space-y-6">
       <section aria-labelledby="financial-kpis-title">
@@ -232,31 +244,79 @@ function FinancialReport({ report }: { report: ManagerialReport }) {
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Entradas recebidas e despesas pagas por mês.</p>
           {monthly.length ? (
             <div className="mt-5 min-w-0">
-              <div role="img" aria-label="Gráfico da evolução mensal do caixa" className="h-72 min-w-0">
-                <ResponsiveContainer {...responsiveChartProps}>
-                  <ComposedChart data={cashChartData} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+              <div role="img" aria-label="Gráfico da evolução mensal do caixa" className="report-cash-chart h-64 min-w-0">
+                <ResponsiveContainer {...responsiveChartProps} onResize={(width) => setCompactCashTooltip(width < 320)}>
+                  <ComposedChart data={cashChartData} margin={{ top: 8, right: 14, bottom: 4, left: 3 }}>
                     <defs>
                       <linearGradient id="reportsResultGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={chartColors.primary} stopOpacity={0.24} />
-                        <stop offset="95%" stopColor={chartColors.primary} stopOpacity={0} />
+                        <stop offset="5%" stopColor={reportCashResult} stopOpacity={0.16} />
+                        <stop offset="95%" stopColor={reportCashResult} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 11 }} minTickGap={18} />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--report-cash-grid)" />
+                    <ReferenceLine y={0} stroke={reportCashAxis} strokeWidth={1.5} />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={hasNegativeCash && { stroke: reportCashAxis }}
+                      tickLine={false}
+                      tick={{ fill: chartSecondaryTextColor, fontSize: 12, fontWeight: 500 }}
+                      minTickGap={18}
+                      allowDataOverflow
+                    />
                     <YAxis
                       axisLine={false}
                       tickLine={false}
-                      tick={{ fill: chartTextColor, fontSize: 10 }}
+                      tick={{ fill: chartSecondaryTextColor, fontSize: 12, fontWeight: 500 }}
                       tickFormatter={(value) => compactCurrencyFormatter.format(Number(value))}
+                      width={70}
+                      domain={[(minimum) => Math.min(0, minimum), 'auto']}
+                      padding={{ top: 8, bottom: 8 }}
+                      allowDataOverflow
                     />
-                    <Tooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
-                    <Legend iconType="circle" wrapperStyle={chartLegendStyle} />
-                    <Bar dataKey="Recebido" fill={chartColors.positive} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                    <Bar dataKey="Despesas" fill={chartColors.negative} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                    <Area type="monotone" dataKey="Resultado" stroke={chartColors.primary} strokeWidth={3} fill="url(#reportsResultGradient)" fillOpacity={1} dot={false} activeDot={chartActiveDot(chartColors.primary)} legendType="line" isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                    <Tooltip
+                      cursor={chartCursor}
+                      position={compactCashTooltip ? { x: 0 } : undefined}
+                      content={<RichTooltip format="currency" className={compactCashTooltip ? 'max-w-[calc(100vw-4rem)]' : undefined} />}
+                    />
+                    {/* Use the current scales for every series during resizing and period changes. */}
+                    <Bar dataKey="Recebido" fill={chartColors.positive} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={false} />
+                    <Bar dataKey="Despesas" fill={chartColors.negative} radius={[5, 5, 0, 0]} maxBarSize={30} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={false} />
+                    <Area
+                      type="monotone"
+                      dataKey="Resultado"
+                      stroke="none"
+                      fill="url(#reportsResultGradient)"
+                      fillOpacity={1}
+                      dot={false}
+                      activeDot={false}
+                      legendType="none"
+                      tooltipType="none"
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="Resultado"
+                      zIndex={chartResultLineZIndex}
+                      stroke={reportCashResult}
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      shape={(curve) => <CashResultCurve {...curve} outline={reportCashOutline} />}
+                      dot={cashChartData.length === 1 && { r: 3, fill: reportCashResult, stroke: reportCashOutline, strokeWidth: 1.5, clipDot: true }}
+                      activeDot={chartActiveDot(reportCashResult)}
+                      isAnimationActive={false}
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
+              <ul aria-label="Legenda da evolução do caixa" className="report-cash-legend text-text-secondary">
+                {reportCashLegend.map(({ label, color }) => (
+                  <li key={label}>
+                    <span aria-hidden="true" style={{ backgroundColor: color }} />
+                    {label}
+                  </li>
+                ))}
+              </ul>
               <div
                 role="region"
                 aria-label="Valores mensais da evolução do caixa"

@@ -23,6 +23,7 @@ interface AuditLog {
   oldData: string | null;
   newData: string | null;
   createdAt: string;
+  recordAvailable?: boolean;
 }
 
 type EntityFilter = 'Tudo' | 'Clientes' | 'Projetos' | 'Finanças' | 'Tarefas';
@@ -284,7 +285,7 @@ function getEntityRoute(log: AuditLog): string | null {
 
   switch (log.entity) {
     case 'Cliente':
-      return id ? `/clientes/${id}` : '/clientes';
+      return id && log.recordAvailable === true ? `/clientes/${id}` : null;
     case 'Projeto':
       return id ? `/projetos/${id}` : '/projetos';
     case 'Orcamento':
@@ -377,6 +378,7 @@ function ActivityRow({ log, now }: { log: AuditLog; now: Date }) {
             {recordName && <strong className="font-semibold text-zinc-900 dark:text-white">{recordName}</strong>}
           </span>
           <ActionBadge config={actionConfig} />
+          {log.entity === 'Cliente' && log.recordAvailable !== true && <span className="rounded-md bg-zinc-200/70 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">Cadastro não disponível</span>}
           {route && (
             <ArrowSquareOut weight="bold" className="h-4 w-4 text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true" />
           )}

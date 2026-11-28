@@ -1,10 +1,12 @@
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+import { withPdfAccessibilityMetadata } from './pdfAccessibility';
 
 type PdfMakeRuntime = {
   vfs?: Record<string, string>;
   addVirtualFileSystem?: (vfs: Record<string, string>) => void;
   createPdf: (definition: TDocumentDefinitions) => {
     download: (fileName?: string) => void | Promise<void>;
+    getBuffer: () => Promise<Uint8Array>;
   };
 };
 
@@ -26,6 +28,8 @@ export function loadPdfMake() {
     }
     if (make.addVirtualFileSystem) make.addVirtualFileSystem(vfs);
     else make.vfs = vfs;
+    const createPdf = make.createPdf.bind(make);
+    make.createPdf = (definition) => createPdf(withPdfAccessibilityMetadata(definition));
     return make;
   }).catch((error) => {
     runtimePromise = null;

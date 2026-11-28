@@ -102,7 +102,7 @@ export function AppearanceSettingsPanel() {
             }`}
           >
             <span className="block text-sm font-semibold text-zinc-950 dark:text-white">Usar o sistema</span>
-            <span className="mt-1 block text-xs text-zinc-400">Acompanha automaticamente o tema do Windows.</span>
+            <span className="mt-1 block text-xs text-text-secondary">Acompanha automaticamente o tema do Windows.</span>
           </button>
         </div>
       </div>

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -21,15 +22,6 @@ async function removeTestDatabase() {
   }
 }
 
-const localDateKey = (offset = 0) => {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + offset);
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(date);
-};
-
 process.env.GEOGESTOR_DB_PATH = dbPath;
 process.env.GEOGESTOR_API_TOKEN = 'test-token';
 process.env.GEOGESTOR_DISABLE_SCHEDULER = '1';
@@ -47,11 +39,14 @@ test('Sessão 06 protege contratos, prazos, vínculos, cascatas e alertas ambien
     import('./services/deadline-alerts.service')
   ]);
 
+  const today = alerts.saoPauloDateKey();
+  const localDateKey = (offset = 0) => alerts.addCivilDays(today, offset);
+
   const request = (options: {
     method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });

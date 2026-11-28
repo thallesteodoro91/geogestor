@@ -323,7 +323,10 @@ export function calculateBudget(input: BudgetCalculationInput): BudgetCalculatio
           ? adjustedTotalBeforeTaxes
           : cumulativeBase;
     if (base < 0n) base = 0n;
-    const rate = parseScaledDecimal(tax.ratePercent);
+    // SQLite stores tax rates in basis points. Use that same precision in
+    // previews and calculations, before persisting the resulting amounts.
+    const ratePercent = basisPointsToPercentage(percentageToBasisPoints(tax.ratePercent));
+    const rate = parseScaledDecimal(ratePercent);
     let amount = tax.includedInPrice
       ? signedRoundDiv(base * rate, 100n * DECIMAL_SCALE + rate)
       : signedRoundDiv(base * rate, 100n * DECIMAL_SCALE);
@@ -338,6 +341,7 @@ export function calculateBudget(input: BudgetCalculationInput): BudgetCalculatio
     if (tax.cumulative && !tax.includedInPrice) cumulativeBase += amount;
     calculatedTaxes.push({
       ...tax,
+      ratePercent,
       baseCents: toSafeNumber(base, 'Base tributável'),
       amountCents: toSafeNumber(amount, 'Imposto previsto')
     });
@@ -408,6 +412,17 @@ export interface InstallmentDefinition {
   percentage?: string | null;
   label?: string | null;
 }
+
+export const BudgetExecutionStartSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('approval') }).strict(),
+  z.object({ type: z.literal('initial_payment') }).strict(),
+  z.object({
+    type: z.literal('custom'),
+    description: z.string().refine(value => Boolean(value.trim()), 'Descreva a condição de início do prazo.')
+  }).strict()
+]);
+
+export type BudgetExecutionStart = z.infer<typeof BudgetExecutionStartSchema>;
 
 export interface CalculatedInstallment {
   number: number;

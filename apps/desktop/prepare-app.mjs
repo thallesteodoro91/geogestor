@@ -14,7 +14,7 @@ if (fs.realpathSync(resolvedStagingParent) !== resolvedDesktopDir) {
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(path.join(stagingDir, 'build'), { recursive: true });
 
-for (const fileName of ['main.js', 'preload.js', 'restore-authorization.cjs']) {
+for (const fileName of ['main.js', 'preload.js', 'restore-authorization.cjs', 'budget-pdf.cjs']) {
   fs.copyFileSync(path.join(desktopDir, fileName), path.join(stagingDir, fileName));
 }
 
@@ -56,6 +56,7 @@ const packageJson = {
       'main.js',
       'preload.js',
       'restore-authorization.cjs',
+      'budget-pdf.cjs',
       'package.json'
     ],
     extraResources: [

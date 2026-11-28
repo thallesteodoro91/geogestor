@@ -1,0 +1,103 @@
+.receipt-entry-form { container-type: inline-size; }
+
+.receipt-entry-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+@container (min-width: 360px) {
+  .receipt-entry-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.receipt-aura-summary {
+  padding: 15px;
+  font-family: 'Rethink Sans', 'Geist Sans', sans-serif;
+}
+
+.dark .aura-widget.receipt-aura-summary {
+  --aura-start: #f38744;
+  --aura-end: #f87171;
+  --aura-border: rgb(223 148 109 / 14%);
+  --aura-muted: #bdc6d4;
+  --aura-shade: url('/src/assets/aura-medium-15-radial.svg');
+  background-size: 100% 100%;
+}
+
+html:not(.dark) .aura-widget.receipt-aura-summary {
+  --aura-start: #f9d2ae;
+  --aura-end: #f8ccd4;
+  --aura-shade: radial-gradient(ellipse 130% 150% at left bottom, #fff 15%, transparent);
+}
+
+.receipt-aura-summary h3 {
+  margin-bottom: 14px;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375;
+  letter-spacing: -0.025em;
+}
+
+.receipt-aura-summary__account {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-height: 60px;
+  padding: 8px;
+  border-radius: 12px;
+  background: rgb(94 59 42 / 9%);
+}
+
+.dark .receipt-aura-summary__account { background: rgb(255 255 255 / 10%); }
+
+.receipt-aura-summary__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 5px;
+  background: #3b2623;
+  color: #ff956c;
+}
+
+.dark .receipt-aura-summary__icon { background: #100b0a; }
+
+.receipt-aura-summary__identity {
+  display: grid;
+  gap: 3px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.receipt-aura-summary__identity p:first-child { font-weight: 650; }
+.receipt-aura-summary__identity p:last-child { color: var(--aura-muted); }
+
+.receipt-aura-summary__details {
+  margin: 4px 0 0;
+  color: var(--aura-muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.receipt-aura-summary__details div { display: flex; flex-wrap: wrap; column-gap: 5px; }
+.receipt-aura-summary__details dd { margin: 0; font-variant-numeric: tabular-nums; }
+.receipt-aura-summary__details div:last-child dd { color: #5835b1; font-weight: 650; }
+.dark .receipt-aura-summary__details div:last-child dd { color: #b9a4ff; }
+
+.geo-receipt-options {
+  display: flex;
+  flex-direction: column;
+}
+.geo-receipt-options .geo-option-list {
+  min-height: 0;
+  flex: 1;
+  max-height: none;
+  overflow-y: auto;
+}
+@media (max-height: 550px) {
+  .geo-receipt-dialog { padding: 1rem; }
+  .geo-receipt-dialog > div:first-child { margin-bottom: .5rem; }
+  .geo-receipt-dialog > div:last-child { margin-top: .5rem; padding-top: .5rem; }
+}

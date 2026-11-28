@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -27,7 +28,7 @@ test('falha obrigatória de auditoria reverte integralmente a mutação financei
     if (action === 'INSERT' && entity === 'Despesa') throw new Error('Falha sintética de auditoria');
   });
   try {
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'POST',
       url: '/api/financeiro/despesas',
       headers: { 'content-type': 'application/json', 'x-api-token': 'test-token' },

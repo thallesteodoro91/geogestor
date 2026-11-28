@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -36,7 +37,7 @@ test('impede vínculos cruzados em PATCH, licença, CRM e reatribuição de proj
     method: 'GET' | 'POST' | 'PATCH';
     url: string;
     payload?: Record<string, unknown>;
-  }) => server.inject({
+  }) => injectWithRecordVersion(server, {
     ...options,
     headers: options.payload ? authHeaders : { 'x-api-token': 'test-token' }
   });

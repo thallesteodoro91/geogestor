@@ -1,0 +1,9 @@
+.geo-budget-workspace { container-type: inline-size; min-width: 0; }
+.geo-budget-workspace .budget-results { scroll-margin-top: 7rem; }
+.geo-budget-workspace .budget-card-list { display: none; }
+.budget-stable-label { display: grid; }
+.budget-stable-label > span { grid-area: 1 / 1; }
+@container (max-width: 760px) {
+  .geo-budget-workspace .budget-desktop-list { display: none; }
+  .geo-budget-workspace .budget-card-list { display: grid; }
+}

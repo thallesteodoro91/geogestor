@@ -2,18 +2,9 @@ import { google } from 'googleapis';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
 import { eq } from 'drizzle-orm';
-import crypto from 'crypto';
+import { CalendarSyncEngine } from './calendar-sync-engine';
 import { LocalSecretService } from './local-secret.service';
-import { buildGoogleCalendarEvent, googleEventStartToLocal } from './google-calendar-mapping';
 
-const getErrorStatus = (err: unknown) => {
-  const value = err as { code?: unknown; status?: unknown };
-  return value.code ?? value.status;
-};
-
-const getErrorMessage = (err: unknown) => (
-  err instanceof Error ? err.message : String(err)
-);
 
 export class GoogleCalendarService {
   public static async isSyncEnabled() {
@@ -63,8 +54,8 @@ export class GoogleCalendarService {
           googleAccessToken: LocalSecretService.protect(tokens.access_token),
           googleRefreshToken: LocalSecretService.protect(tokens.refresh_token || googleRefreshToken),
           updatedAt: new Date().toISOString()
-        }).where(eq(schema.configuracoes.id, configs[0].id)).execute().catch(err => {
-          console.error('Erro ao atualizar token OAuth no banco:', err);
+        }).where(eq(schema.configuracoes.id, configs[0].id)).execute().catch(() => {
+          console.error('Não foi possível persistir a renovação OAuth. Detalhes sensíveis omitidos.');
         });
       }
     });
@@ -100,163 +91,29 @@ export class GoogleCalendarService {
     }
   }
 
-  // Sincroniza compromissos Locais -> Google Calendar E Google -> Local (Bidirecional)
+  public static async engine() {
+    if (!await this.isSyncEnabled()) throw new Error('Sincronização da Google Agenda está desativada.');
+    const auth = await this.getOAuth2Client();
+    const calendarId = process.env.GEOGESTOR_GOOGLE_CALENDAR_ID || 'primary';
+    const calendar = google.calendar({ version: 'v3', auth });
+    const options = { timeout: 30_000, retry: false };
+    return new CalendarSyncEngine({
+      get: async (id) => {
+        try { return (await calendar.events.get({ calendarId, eventId: id }, options)).data; }
+        catch (error) {
+          const status = Number((error as { code?: unknown; response?: { status?: unknown } }).response?.status || (error as { code?: unknown }).code);
+          if ([404, 410].includes(status)) return null;
+          throw new Error('Não foi possível consultar o evento remoto. Verifique a conexão e a autorização Google.');
+        }
+      },
+      list: async (pageToken) => (await calendar.events.list({ calendarId, pageToken, maxResults: 250, showDeleted: true, singleEvents: false }, options)).data,
+      insert: async (body) => (await calendar.events.insert({ calendarId, requestBody: body, sendUpdates: 'none' }, options)).data,
+      patch: async (id, body, etag) => (await calendar.events.patch({ calendarId, eventId: id, requestBody: body, sendUpdates: 'none' }, { ...options, headers: { 'If-Match': etag } })).data,
+      delete: async (id, etag) => { await calendar.events.delete({ calendarId, eventId: id, sendUpdates: 'none' }, { ...options, headers: { 'If-Match': etag } }); }
+    }, calendarId);
+  }
+
   public static async sync(): Promise<{ sent: number; received: number }> {
-    if (!await this.isSyncEnabled()) {
-      throw new Error('Sincronização da Google Agenda está desativada.');
-    }
-    const oauth2Client = await this.getOAuth2Client();
-    
-    // Verifica se os tokens de fato existem
-    const credentials = oauth2Client.credentials;
-    if (!credentials.refresh_token) {
-      throw new Error('Google Agenda não autenticado ou sem token de refresh.');
-    }
-
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-    
-    // 1. Sincronia: Local -> Google
-    // Pegar compromissos que ainda não têm googleEventId ou foram modificados
-    const compromissosLocais = await db.select().from(schema.compromissos);
-    let sent = 0;
-    let failures = 0;
-
-    for (const comp of compromissosLocais) {
-      try {
-        const eventData = buildGoogleCalendarEvent(comp);
-
-        if (comp.googleEventId) {
-          // Evento já existe no Google, vamos atualizar
-          try {
-            await calendar.events.update({
-              calendarId: 'primary',
-              eventId: comp.googleEventId,
-              requestBody: eventData
-            });
-            await db.update(schema.compromissos).set({
-              ultimoSyncGoogle: new Date().toISOString()
-            }).where(eq(schema.compromissos.id, comp.id));
-          } catch (updateErr) {
-            // Se o evento foi deletado no Google, o update lança 404. Recriamos.
-            if (getErrorStatus(updateErr) === 404) {
-              const response = await calendar.events.insert({
-                calendarId: 'primary',
-                requestBody: eventData
-              });
-              if (response.data.id) {
-                await db.update(schema.compromissos).set({
-                  googleEventId: response.data.id,
-                  ultimoSyncGoogle: new Date().toISOString()
-                }).where(eq(schema.compromissos.id, comp.id));
-                sent++;
-              }
-            } else {
-              throw updateErr;
-            }
-          }
-        } else {
-          // Evento novo, insere no Google
-          const response = await calendar.events.insert({
-            calendarId: 'primary',
-            requestBody: eventData
-          });
-
-          if (response.data.id) {
-            await db.update(schema.compromissos).set({
-              googleEventId: response.data.id,
-              ultimoSyncGoogle: new Date().toISOString()
-            }).where(eq(schema.compromissos.id, comp.id));
-            sent++;
-          }
-        }
-      } catch (err) {
-        failures += 1;
-        console.error(`Erro ao sincronizar compromisso local ${comp.id} para Google:`, getErrorMessage(err));
-      }
-    }
-
-    // 2. Sincronia: Google -> Local
-    let received = 0;
-    try {
-      const now = new Date();
-      const minDate = new Date();
-      minDate.setMonth(now.getMonth() - 2); // Sincroniza eventos dos últimos 2 meses
-
-      let pageToken: string | undefined = undefined;
-      const googleEvents: any[] = [];
-
-      // Paginação para evitar perder eventos quando a agenda for grande
-      do {
-        const response = await calendar.events.list({
-          calendarId: 'primary',
-          timeMin: minDate.toISOString(),
-          singleEvents: true,
-          orderBy: 'startTime',
-          maxResults: 250,
-          pageToken
-        }) as { data: { items?: any[]; nextPageToken?: string | null } };
-        if (response.data.items) {
-          googleEvents.push(...response.data.items);
-        }
-        pageToken = response.data.nextPageToken || undefined;
-      } while (pageToken);
-
-      for (const event of googleEvents) {
-        if (!event.id) continue;
-
-        // Espelhamento total: remove filtro GeoGestor, captura qualquer evento do Google Agenda
-        const cleanTitle = event.summary 
-          ? event.summary.replace('[GeoGestor] ', '') 
-          : 'Sem Título (Google Agenda)';
-
-        const localStart = googleEventStartToLocal(event.start);
-        if (!localStart) continue;
-
-        // Checar se já existe no banco local via googleEventId
-        const localExistente = await db.select().from(schema.compromissos)
-          .where(eq(schema.compromissos.googleEventId, event.id)).limit(1);
-
-        if (localExistente.length > 0) {
-          // Já existe, atualiza localmente caso o título/data/descrição mudaram
-          if (
-            localExistente[0].titulo !== cleanTitle ||
-            localExistente[0].data !== localStart.data ||
-            localExistente[0].hora !== localStart.hora ||
-            localExistente[0].descricao !== (event.description || '')
-          ) {
-            await db.update(schema.compromissos).set({
-              titulo: cleanTitle,
-              data: localStart.data,
-              hora: localStart.hora,
-              descricao: event.description || '',
-              ultimoSyncGoogle: new Date().toISOString(),
-              updatedAt: new Date().toISOString()
-            }).where(eq(schema.compromissos.id, localExistente[0].id));
-            received++;
-          }
-        } else {
-          // Evento novo vindo do Google, cria no GeoGestor local
-          await db.insert(schema.compromissos).values({
-            id: crypto.randomUUID(),
-            titulo: cleanTitle,
-            descricao: event.description || '',
-            data: localStart.data,
-            hora: localStart.hora,
-            tipo: 'Outro',
-            googleEventId: event.id,
-            ultimoSyncGoogle: new Date().toISOString()
-          });
-          received++;
-        }
-      }
-    } catch (err) {
-      failures += 1;
-      console.error('Erro ao sincronizar compromissos do Google para o local:', getErrorMessage(err));
-    }
-
-    if (failures > 0) {
-      throw new Error(`Sincronização parcial: ${failures} etapa(s) falharam; enviados=${sent}; recebidos=${received}. Tente novamente.`);
-    }
-    return { sent, received };
+    return (await this.engine()).sync();
   }
 }

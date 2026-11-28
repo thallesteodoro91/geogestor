@@ -7,6 +7,8 @@ import { DatePickerField, FormError, FormField, FormFooter, FormSection, FormSel
 import { cn } from '../../utils/cn';
 import { geoFieldClass } from '../../utils/geoTheme';
 import { primarySubmitButtonClass, secondarySmallActionButtonClass } from '../../utils/actionStyles';
+import { useLicenseDraftGuard } from './useLicenseDraftGuard';
+import './licensing.css';
 
 interface ConditionFormModalProps {
   isOpen: boolean;
@@ -35,12 +37,13 @@ const formFromCondition = (condition?: LicenseCondition | null): FormState => co
   comprovante: condition.comprovante || ''
 } : emptyForm();
 const fieldClass = cn(geoFieldClass, 'h-11 w-full px-3 text-sm');
-const localToday = () => new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const localToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 
 function ConditionFormModalContent({ isOpen, onClose, onSubmit, condition, loading = false }: ConditionFormModalProps) {
   const [form, setForm] = useState<FormState>(() => formFromCondition(condition));
   const [errors, setErrors] = useState<FormErrors>({});
   const [formError, setFormError] = useState('');
+  const { requestClose, confirmation } = useLicenseDraftGuard(form, loading, onClose);
 
   const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -72,49 +75,49 @@ function ConditionFormModalContent({ isOpen, onClose, onSubmit, condition, loadi
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} closeDisabled={loading} title={condition ? 'Editar condicionante' : 'Nova condicionante'} maxWidth="max-w-3xl" initialFocusId="condition-titulo">
+    <><Modal isOpen={isOpen} onClose={requestClose} closeDisabled={loading} title={condition ? 'Editar condicionante' : 'Nova condicionante'} maxWidth="max-w-3xl" panelClassName="licensing-dialog" initialFocusId="condition-titulo">
       <form onSubmit={handleSubmit} noValidate className="space-y-5">
         <FormError message={formError} />
-        <FormSection sectionId="condition-identification" title="Identificação da condicionante" description="Descreva a obrigação ambiental e o resultado esperado para seu atendimento." icon={<ClipboardText className="h-5 w-5" weight="duotone" />} tone="amber">
+        <FormSection headingLevel={3} sectionId="condition-identification" title="Identificação da condicionante" description="Descreva a obrigação ambiental e o resultado esperado para seu atendimento." icon={<ClipboardText className="h-5 w-5" weight="duotone" />} tone="amber">
           <FormField htmlFor="condition-titulo" label="Título" required error={errors.titulo}>
             <input id="condition-titulo" name="titulo" type="text" autoComplete="off" maxLength={180} value={form.titulo} onChange={(event) => update('titulo', event.target.value)} aria-invalid={Boolean(errors.titulo)} aria-describedby={errors.titulo ? 'condition-titulo-error' : undefined} className={fieldClass} />
           </FormField>
-          <FormField htmlFor="condition-descricao" label="Descrição">
-            <textarea id="condition-descricao" name="descricao" rows={3} maxLength={2000} value={form.descricao} onChange={(event) => update('descricao', event.target.value)} className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
+          <FormField htmlFor="condition-descricao" label="Descrição" error={errors.descricao}>
+            <textarea id="condition-descricao" aria-invalid={Boolean(errors.descricao)} aria-describedby={errors.descricao ? 'condition-descricao-error' : undefined} name="descricao" rows={3} maxLength={2000} value={form.descricao} onChange={(event) => update('descricao', event.target.value)} className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
           </FormField>
         </FormSection>
 
-        <FormSection sectionId="condition-monitoring" title="Prazo, responsável e situação" description="Controle o prazo, a periodicidade, a responsabilidade e o cumprimento." icon={<CalendarCheck className="h-5 w-5" weight="duotone" />} tone="amber">
+        <FormSection headingLevel={3} sectionId="condition-monitoring" title="Prazo, responsável e situação" description="Controle o prazo, a periodicidade, a responsabilidade e o cumprimento." icon={<CalendarCheck className="h-5 w-5" weight="duotone" />} tone="amber">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormField htmlFor="condition-dataLimite" label="Data limite">
-              <DatePickerField id="condition-dataLimite" name="dataLimite" autoComplete="off" value={form.dataLimite} onChange={(event) => update('dataLimite', event.target.value)} className={fieldClass} />
+            <FormField htmlFor="condition-dataLimite" label="Data limite" error={errors.dataLimite}>
+              <DatePickerField id="condition-dataLimite" name="dataLimite" autoComplete="off" value={form.dataLimite} onChange={(event) => update('dataLimite', event.target.value)} aria-invalid={Boolean(errors.dataLimite)} aria-describedby={errors.dataLimite ? 'condition-dataLimite-error' : undefined} className={fieldClass} />
             </FormField>
-            <FormField htmlFor="condition-periodicidade" label="Periodicidade">
-              <input id="condition-periodicidade" name="periodicidade" type="text" autoComplete="off" maxLength={120} value={form.periodicidade} onChange={(event) => update('periodicidade', event.target.value)} placeholder="Ex.: Semestral" className={fieldClass} />
+            <FormField htmlFor="condition-periodicidade" label="Periodicidade" error={errors.periodicidade}>
+              <input id="condition-periodicidade" aria-invalid={Boolean(errors.periodicidade)} aria-describedby={errors.periodicidade ? 'condition-periodicidade-error' : undefined} name="periodicidade" type="text" autoComplete="off" maxLength={120} value={form.periodicidade} onChange={(event) => update('periodicidade', event.target.value)} placeholder="Ex.: Semestral" className={fieldClass} />
             </FormField>
-            <FormField htmlFor="condition-responsavel" label="Responsável">
-              <input id="condition-responsavel" name="responsavel" type="text" autoComplete="name" maxLength={160} value={form.responsavel} onChange={(event) => update('responsavel', event.target.value)} className={fieldClass} />
+            <FormField htmlFor="condition-responsavel" label="Responsável" error={errors.responsavel}>
+              <input id="condition-responsavel" aria-invalid={Boolean(errors.responsavel)} aria-describedby={errors.responsavel ? 'condition-responsavel-error' : undefined} name="responsavel" type="text" autoComplete="name" maxLength={160} value={form.responsavel} onChange={(event) => update('responsavel', event.target.value)} className={fieldClass} />
             </FormField>
-            <FormField htmlFor="condition-status" label="Situação">
-              <FormSelect id="condition-status" name="status" autoComplete="off" value={form.status} onChange={(event) => updateStatus(event.target.value as FormState['status'])} className={cn(fieldClass, 'geo-native-select')}>{CONDITION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</FormSelect>
+            <FormField htmlFor="condition-status" label="Situação" error={errors.status}>
+              <FormSelect id="condition-status" aria-invalid={Boolean(errors.status)} aria-describedby={errors.status ? 'condition-status-error' : undefined} name="status" autoComplete="off" value={form.status} onChange={(event) => updateStatus(event.target.value as FormState['status'])} className={cn(fieldClass, 'geo-native-select')}>{CONDITION_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</FormSelect>
             </FormField>
-            <FormField htmlFor="condition-dataCumprimento" label="Data de cumprimento" error={errors.dataCumprimento} className="md:col-span-2">
+            <FormField htmlFor="condition-dataCumprimento" label="Data de cumprimento" required={form.status === 'Cumprida'} error={errors.dataCumprimento} className="md:col-span-2">
               <DatePickerField id="condition-dataCumprimento" name="dataCumprimento" autoComplete="off" required={form.status === 'Cumprida'} value={form.dataCumprimento} onChange={(event) => update('dataCumprimento', event.target.value)} aria-invalid={Boolean(errors.dataCumprimento)} aria-describedby={errors.dataCumprimento ? 'condition-dataCumprimento-error' : undefined} className={fieldClass} />
             </FormField>
           </div>
         </FormSection>
 
-        <FormSection sectionId="condition-evidence" title="Evidências e observações" description="Registre protocolos, documentos comprobatórios e informações de acompanhamento." icon={<FileText className="h-5 w-5" weight="duotone" />} tone="amber" optional>
-          <FormField htmlFor="condition-comprovante" label="Comprovante ou referência documental">
-            <input id="condition-comprovante" name="comprovante" type="text" autoComplete="off" maxLength={1000} value={form.comprovante} onChange={(event) => update('comprovante', event.target.value)} placeholder="Caminho, protocolo ou nome do documento" className={fieldClass} />
+        <FormSection headingLevel={3} sectionId="condition-evidence" title="Evidências e observações" description="Registre protocolos, documentos comprobatórios e informações de acompanhamento." icon={<FileText className="h-5 w-5" weight="duotone" />} tone="amber" optional>
+          <FormField htmlFor="condition-comprovante" label="Comprovante ou referência documental" error={errors.comprovante}>
+            <input id="condition-comprovante" aria-invalid={Boolean(errors.comprovante)} aria-describedby={errors.comprovante ? 'condition-comprovante-error' : undefined} name="comprovante" type="text" autoComplete="off" maxLength={1000} value={form.comprovante} onChange={(event) => update('comprovante', event.target.value)} placeholder="Caminho, protocolo ou nome do documento" className={fieldClass} />
           </FormField>
-          <FormField htmlFor="condition-observacoes" label="Observações">
-            <textarea id="condition-observacoes" name="observacoes" rows={3} maxLength={2000} value={form.observacoes} onChange={(event) => update('observacoes', event.target.value)} className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
+          <FormField htmlFor="condition-observacoes" label="Observações" error={errors.observacoes}>
+            <textarea id="condition-observacoes" aria-invalid={Boolean(errors.observacoes)} aria-describedby={errors.observacoes ? 'condition-observacoes-error' : undefined} name="observacoes" rows={3} maxLength={2000} value={form.observacoes} onChange={(event) => update('observacoes', event.target.value)} className={cn(geoFieldClass, 'w-full resize-y px-3 py-2 text-sm')} />
           </FormField>
         </FormSection>
-        <FormFooter><button type="button" onClick={onClose} disabled={loading} className={secondarySmallActionButtonClass}>Cancelar</button><button type="submit" disabled={loading} aria-busy={loading} className={primarySubmitButtonClass}>{loading ? 'Salvando…' : 'Salvar condicionante'}</button></FormFooter>
+        <FormFooter><button type="button" onClick={requestClose} disabled={loading} className={secondarySmallActionButtonClass}>Cancelar</button><button type="submit" disabled={loading} aria-busy={loading} className={primarySubmitButtonClass}>{loading ? 'Salvando…' : 'Salvar condicionante'}</button></FormFooter>
       </form>
-    </Modal>
+    </Modal>{confirmation}</>
   );
 }
 

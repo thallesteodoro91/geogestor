@@ -12,7 +12,7 @@ import { MaintenanceHistoryService } from './maintenance-history.service';
 import { BackupDeviceService, type BackupDeviceIdentity } from './backup-device.service';
 import { BackupRecoveryService, type BackupKeyEnvelope } from './backup-recovery.service';
 import { UNIFIED_ALERTS_MIGRATION } from './runtime-migrations/v8-unified-alerts';
-import { MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION } from './runtime-migrations/v17-multiprocess-finance-integrity';
+import { ENVIRONMENTAL_DOCUMENTS_MIGRATION } from './runtime-migrations/v19-environmental-documents';
 import { cloneDatabaseEncryptedSync, cloneDatabaseWithKeysSync, databaseClientConfig, databaseKeyId, getDatabaseEncryptionKey, validateProtectedDatabaseIsolatedSync } from '@geogestor/database';
 
 const BACKUP_FORMAT_VERSION = 4;
@@ -898,7 +898,7 @@ export class BackupService {
     if (!Number.isInteger(manifest.schemaVersion) || manifest.schemaVersion < 0) {
       throw new Error('Versão de schema inválida no manifesto do backup.');
     }
-    if (manifest.schemaVersion > MULTIPROCESS_FINANCE_INTEGRITY_MIGRATION.version) {
+    if (manifest.schemaVersion > ENVIRONMENTAL_DOCUMENTS_MIGRATION.version) {
       throw new Error('Este backup foi criado por uma versão mais nova do GeoGestor. Atualize o aplicativo antes de restaurar.');
     }
     if (!Array.isArray(manifest.files) || !manifest.totals || !Number.isInteger(manifest.totals.files)) {

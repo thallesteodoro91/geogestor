@@ -26,3 +26,9 @@ test('valida CPF, CNPJ, telefone e e-mail antes do envio simples', () => {
   assert.ok(issues[0].errors.some(error => error.includes('e-mail')));
   assert.ok(issues[1].errors.some(error => error.includes('CNPJ')));
 });
+
+test('não importa cliente sem tipo de pessoa comprovado', () => {
+  const issues = validateSimpleClientPayload([{ nome: 'Tipo não informado', tipoPessoa: '', telefone: '(48) 3333-4444' }]);
+  assert.equal(issues.length, 1);
+  assert.ok(issues[0].errors.some((error) => error.includes('PF') || error.includes('PJ')));
+});

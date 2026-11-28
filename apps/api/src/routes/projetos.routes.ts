@@ -7,7 +7,7 @@ import { JornadaService } from '../services/jornada.service';
 import { FileSystemOutboxService } from '../services/filesystem-outbox.service';
 import crypto from 'crypto';
 import { z } from 'zod';
-import { normalizeBudgetStatus, ProjetoPatchPayloadSchema, ProjetoPayloadSchema } from '@geogestor/contracts';
+import { normalizeBudgetStatus, ProjetoPatchPayloadSchema, ProjetoPayloadSchema, isEnvironmentalWorkCompleted } from '@geogestor/contracts';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import {
   RelationshipIntegrityError,
@@ -1007,12 +1007,15 @@ export async function projetosRoutes(server: FastifyInstance) {
 
         const changes = buildProjetoChanges(oldProjeto[0], data);
         if (changes.length > 0) {
+          const environmentalWork = ['Ambiental', 'Perícia'].includes(result[0].tipo || '');
+          const completed = environmentalWork && !isEnvironmentalWorkCompleted(oldProjeto[0].status) && isEnvironmentalWorkCompleted(result[0].status);
+          const reopened = environmentalWork && isEnvironmentalWorkCompleted(oldProjeto[0].status) && !isEnvironmentalWorkCompleted(result[0].status);
           await JornadaService.logClienteEvento({
             clienteId: result[0].clienteId,
             projetoId: result[0].id,
             tipo: 'Observação',
-            titulo: 'Projeto atualizado',
-            categoria: 'Atualização',
+            titulo: completed ? 'Trabalho concluído' : reopened ? 'Trabalho reaberto' : 'Projeto atualizado',
+            categoria: completed ? 'Encerramento do trabalho' : reopened ? 'Reabertura do trabalho' : 'Atualização',
             descricao: changes.join('\n')
           }, tx);
         }

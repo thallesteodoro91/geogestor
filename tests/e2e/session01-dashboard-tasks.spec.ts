@@ -1,3 +1,4 @@
+import { selectCalendarDate } from './support/calendar-assertions';
 import AxeBuilder from '@axe-core/playwright';
 import { createRequire } from 'node:module';
 import crypto from 'node:crypto';
@@ -23,12 +24,7 @@ function monthBoundary() {
 
 async function chooseDate(page: Page, fieldLabel: string, value: string) {
   await page.getByLabel(fieldLabel, { exact: true }).click();
-  const accessibleDate = new Intl.DateTimeFormat('pt-BR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(new Date(`${value}T12:00:00`));
-  await page.getByRole('gridcell', { name: accessibleDate, exact: true }).click();
+  await selectCalendarDate(page.getByRole('dialog', { name: /^Selecionar data/ }), value);
 }
 
 async function unlock(page: Page) {
@@ -147,7 +143,8 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(indicators).toContainText('02');
     await expect(indicators).toContainText('123,5');
     await expect(indicators).toContainText('25%');
-    await expect(page.getByText('1 de 4')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('1 concluída');
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('4 no período');
     await expect(page.getByText(`${PREFIX}Atrasada`, { exact: true })).toBeVisible();
     await expect(page.getByText(`${PREFIX}Concluída`, { exact: true })).toHaveCount(0);
     await expect(page.getByRole('link', { name: `Abrir tarefa: ${PREFIX}Limite do período` })).toBeVisible();
@@ -184,13 +181,10 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(page.getByText('1 projeto do tipo Ambiental, agrupados por status.')).toBeVisible();
     await page.getByLabel('Filtrar distribuição por tipo de projeto').click();
     await page.getByRole('option', { name: 'Topografia', exact: true }).click();
-    const projectSector = page.locator('.recharts-sector').last();
-    const projectSectorBox = await projectSector.boundingBox();
-    if (!projectSectorBox) throw new Error('Segmento do gráfico de projetos não foi renderizado.');
-    await projectSector.hover({ position: { x: projectSectorBox.width / 2, y: 5 } });
-    await expect(page.getByText(/1 projeto · 100%/)).toBeVisible();
-    await expect(page.locator('[role="img"] ul.sr-only li').first()).toContainText('1 (100%)');
-    await page.mouse.move(0, 0);
+    const distribution = page.getByRole('article', { name: 'Distribuição de projetos', exact: true });
+    const projectStatus = distribution.getByRole('listitem').filter({ hasText: 'Em Andamento' });
+    await expect(projectStatus).toContainText('100% · 1 projeto');
+    await expect(distribution.getByRole('link', { name: 'Ver projetos' })).toHaveAttribute('href', '/projetos');
     await reloadUnlocked(page, 'Visão Geral');
     await expect(page.getByRole('button', { name: 'Unitário' })).toHaveAttribute('aria-pressed', 'true');
 
@@ -203,7 +197,8 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(page).toHaveURL(/tarefasPeriodo=custom/);
     await chooseDate(page, 'Data inicial', dateKey(-1));
     await chooseDate(page, 'Data final', monthBoundary());
-    await expect(page.getByText('1 de 4')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('1 concluída');
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('4 no período');
     await reloadUnlocked(page, 'Visão Geral');
     await expect(page.getByLabel('Período da taxa de conclusão')).toContainText('Personalizado');
 
@@ -245,27 +240,27 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(page.getByRole('searchbox')).toHaveValue('');
     await expectNoAxeViolations(page);
 
-    await page.getByRole('button', { name: 'Nova Tarefa' }).click();
-    await expect(page.getByLabel('Título da Tarefa')).toBeFocused();
-    expect(await page.getByLabel('Título da Tarefa').evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(false);
-    await page.getByLabel('Título da Tarefa').fill(`${PREFIX}Rascunho`);
+    await page.getByRole('button', { name: 'Nova tarefa' }).click();
+    await expect(page.getByLabel('Título da tarefa')).toBeFocused();
+    expect(await page.getByLabel('Título da tarefa').evaluate((input: HTMLInputElement) => input.checkValidity())).toBe(false);
+    await page.getByLabel('Título da tarefa').fill(`${PREFIX}Rascunho`);
     page.once('dialog', (dialog) => dialog.dismiss());
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Nova Tarefa' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Nova tarefa' })).toBeVisible();
     page.once('dialog', (dialog) => dialog.accept());
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('dialog', { name: 'Nova Tarefa' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Nova Tarefa' })).toBeFocused();
+    await expect(page.getByRole('dialog', { name: 'Nova tarefa' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Nova tarefa' })).toBeFocused();
 
-    await page.getByRole('button', { name: 'Nova Tarefa' }).click();
-    await page.getByLabel('Título da Tarefa').fill(`${PREFIX}CRUD`);
+    await page.getByRole('button', { name: 'Nova tarefa' }).click();
+    await page.getByLabel('Título da tarefa').fill(`${PREFIX}CRUD`);
     await page.getByLabel('Projeto').click();
     await page.getByRole('option', { name: new RegExp(`${PREFIX}Projeto ativo`) }).click();
     await page.getByRole('combobox', { name: 'Prioridade', exact: true }).click();
     await page.getByRole('option', { name: 'Alta', exact: true }).click();
-    await chooseDate(page, 'Data Limite', dateKey());
+    await chooseDate(page, 'Data limite', dateKey());
     await page.getByLabel('Descrição').fill('Descrição sintética com acentuação: ação, imóvel e órgão.');
-    await page.getByRole('button', { name: 'Criar Tarefa' }).click();
+    await page.getByRole('button', { name: 'Criar tarefa' }).click();
     await expect(page.getByText(`${PREFIX}CRUD`, { exact: true })).toBeVisible();
     const createdTask = await database.execute({
       sql: 'select projeto_id, prioridade, data_limite, descricao from tarefas where titulo = ?',
@@ -278,7 +273,7 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     expect(createdTask.rows[0]?.descricao).toBe('Descrição sintética com acentuação: ação, imóvel e órgão.');
 
     await page.getByRole('button', { name: `Editar tarefa: ${PREFIX}CRUD`, exact: true }).click();
-    await page.getByLabel('Título da Tarefa').fill(`${PREFIX}CRUD editada`);
+    await page.getByLabel('Título da tarefa').fill(`${PREFIX}CRUD editada`);
     await page.getByRole('button', { name: 'Salvar alterações' }).click();
     await expect(page.getByText(`${PREFIX}CRUD editada`, { exact: true })).toBeVisible();
     await reloadUnlocked(page, 'Tarefas');
@@ -305,7 +300,8 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(page.getByRole('button', { name: `Reabrir tarefa: ${PREFIX}CRUD editada`, exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Visão Geral', exact: true }).click();
     await expect(indicators).toContainText('40%');
-    await expect(page.getByText('2 de 5')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('2 concluídas');
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('5 no período');
 
     await page.getByRole('link', { name: 'Agenda', exact: true }).click();
     await page.getByRole('link', { name: 'Tarefas', exact: true }).click();
@@ -313,7 +309,8 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
     await expect(page.getByRole('button', { name: `Concluir tarefa: ${PREFIX}CRUD editada`, exact: true })).toBeVisible();
     await page.getByRole('link', { name: 'Visão Geral', exact: true }).click();
     await expect(indicators).toContainText('20%');
-    await expect(page.getByText('1 de 5')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('1 concluída');
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('5 no período');
     await page.getByRole('link', { name: 'Agenda', exact: true }).click();
     await page.getByRole('link', { name: 'Tarefas', exact: true }).click();
 
@@ -339,7 +336,8 @@ test('Sessão 01 — painel e ciclo integrado de tarefas', async ({ page, reques
 
     await page.getByRole('link', { name: 'Visão Geral', exact: true }).click();
     await expect(indicators).toContainText('25%');
-    await expect(page.getByText('1 de 4')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('1 concluída');
+    await expect(page.getByRole('region', { name: 'Tarefas concluídas', exact: true })).toContainText('4 no período');
     await expect(page.getByRole('tab', { name: 'Tarefas' })).toBeVisible();
     await page.getByRole('tab', { name: 'Tarefas' }).click();
     await expect(page.getByText('removeu a tarefa').first()).toBeVisible();

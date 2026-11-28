@@ -1,3 +1,4 @@
+import { ProjectFinanceWidgets } from './ProjectFinanceWidgets';
 import { toast } from 'sonner';
 import { APP_ROUTES, appLinks } from '@geogestor/contracts';
 import { Link, useBlocker, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -16,6 +17,9 @@ import { cn } from '../../utils/cn';
 import { geoFieldClass, geoPurpleSurfaceClass, geoTabButtonClass, geoTabIconClass, geoTabListClass } from '../../utils/geoTheme';
 import { invalidateFinancialQueries } from '../../utils/invalidateFinancialQueries';
 import { ProjectFormModal, type ProjectFormSavedRecord } from './ProjectFormModal';
+import { demandReturn } from '../Ambiental/environmentalNavigation';
+import { planningReturnPath } from '../Planejamento/planningPresentation';
+import { Modal } from '../../components/Modal';
 import {
   formatCoordinate,
   formatFileSize,
@@ -201,6 +205,9 @@ export function ProjetoDetalhes() {
   const activeTab = projectDetailTabByQuery[searchParams.get('aba') || ''] || 'tarefas';
   const tabRefs = useRef<Partial<Record<ProjectDetailTab, HTMLButtonElement | null>>>({});
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showUploadPrompt, setShowUploadPrompt] = useState(false);
+  const environmentalBack = demandReturn(searchParams.get('retorno'));
+  const planningBack = planningReturnPath(searchParams.get('retorno'));
   
   // File upload state
   const [uploading, setUploading] = useState(false);
@@ -300,6 +307,28 @@ export function ProjetoDetalhes() {
     },
     enabled: !!id
   });
+
+  useEffect(() => {
+    if (!projeto) return;
+    const action = searchParams.get('acao');
+    if (!['editar', 'nova-tarefa', 'anexar'].includes(action || '')) return;
+    // Dispatch the URL command after the loaded destination is mounted.
+    const frame = window.requestAnimationFrame(() => {
+      const next = new URLSearchParams(searchParams);
+      next.delete('acao');
+      if (action === 'editar') setShowEditModal(true);
+      if (action === 'nova-tarefa') { next.set('aba', 'checklist'); setShowNewTaskForm(true); }
+      if (action === 'anexar') { next.set('aba', 'documentos'); setShowUploadPrompt(true); }
+      setSearchParams(next, { replace: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [projeto, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!projeto || !showNewTaskForm || activeTab !== 'tarefas') return;
+    const timer = window.setTimeout(() => document.getElementById('project-task-title')?.focus(), 100);
+    return () => window.clearTimeout(timer);
+  }, [projeto, showNewTaskForm, activeTab]);
 
   // 2. Fetch Project Tasks
   const {
@@ -757,16 +786,15 @@ export function ProjetoDetalhes() {
   return (
     <Layout>
       <nav aria-label="Navegação estrutural" className="mb-8 flex min-w-0 items-center gap-4">
-        <button 
-          type="button"
-          onClick={() => navigate('/projetos')}
-          aria-label="Voltar para a lista de projetos"
+        <Link
+          to={planningBack || environmentalBack || '/projetos'}
+          aria-label={planningBack ? 'Voltar ao planejamento' : environmentalBack ? 'Voltar à demanda ambiental' : 'Voltar para a lista de projetos'}
           className="geo-focus-ring flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-brand-border bg-brand-surface text-zinc-600 transition-[background-color,color,border-color,transform] hover:bg-brand-surface-subtle active:scale-95 dark:text-zinc-300"
         >
           <ArrowLeft aria-hidden="true" weight="bold" className="h-4 w-4" />
-        </button>
+        </Link>
         <div className="min-w-0 truncate text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          <Link to={APP_ROUTES.projects.path} className="hover:text-zinc-900 dark:text-zinc-100 transition-colors">Projetos</Link>
+          <Link to={planningBack || environmentalBack || APP_ROUTES.projects.path} className="geo-focus-ring rounded hover:text-zinc-900 dark:text-zinc-100 transition-colors">{planningBack ? 'Voltar ao planejamento' : environmentalBack ? 'Voltar à demanda ambiental' : 'Projetos'}</Link>
           <span aria-hidden="true" className="mx-2 text-zinc-300">/</span>
           <span className="truncate text-zinc-950 dark:text-white">{projeto.nome}</span>
         </div>
@@ -1454,11 +1482,7 @@ export function ProjetoDetalhes() {
                     ['Orçado', financialContext?.valorOrcado ?? 0],
                     ['Contratado', financialContext?.valorContratado || 0],
                     ['Executado informado', financialContext?.valorExecutadoInformado],
-                    ['Faturado', financialContext?.valorFaturado || 0],
-                    ['Recebido', financialContext?.valorRecebido || 0],
-                    ['Saldo aberto', financialContext?.saldoAberto || 0],
-                    ['Custo previsto', financialContext?.custoPrevisto || 0],
-                    ['Custo realizado', financialContext?.custoRealizado || 0]
+                    ['Saldo aberto', financialContext?.saldoAberto || 0]
                   ].map(([label, value]) => (
                     <div key={String(label)} className="geo-card p-4">
                       <p className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">{label}</p>
@@ -1474,19 +1498,15 @@ export function ProjetoDetalhes() {
                       )}
                     </div>
                   ))}
-                  <div className="col-span-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950 lg:col-span-4">
-                    <span className="font-semibold text-zinc-700 dark:text-zinc-200">
-                      Desvio de custo: {formatCurrency(financialContext?.desvioCusto || 0)}
-                    </span>
-                    <span className="ml-3 text-zinc-500 dark:text-zinc-400">
-                      {financialContext?.percentualCustoConsumido == null
-                        ? financialContext?.despesasSemPrevisao
-                          ? 'Há despesas sem custo previsto no orçamento.'
-                          : 'Sem custo previsto informado.'
-                        : `${financialContext.percentualCustoConsumido}% do custo previsto consumido.`}
-                    </span>
-                  </div>
                 </div>
+                {financialContext && (
+                  <div className="min-w-0 lg:col-span-3">
+                    <ProjectFinanceWidgets
+                      metrics={financialContext}
+                      expensePath={appLinks.finance({ tab: 'pagar', acao: 'despesa', projeto: id })}
+                    />
+                  </div>
+                )}
 
                 <section className="geo-card p-6 lg:col-span-3" aria-labelledby="financial-decision-heading">
                   <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
@@ -1774,6 +1794,13 @@ export function ProjetoDetalhes() {
           setShowEditModal(false);
         }}
       />
+      <Modal isOpen={showUploadPrompt} onClose={() => setShowUploadPrompt(false)} title="Anexar documentos" initialFocusId="environmental-choose-files">
+        <p className="break-words text-sm text-zinc-600 dark:text-zinc-300">Selecione os arquivos para anexar ao projeto {projeto.nome}. Eles ficarão disponíveis na aba Documentos.</p>
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <button type="button" onClick={() => setShowUploadPrompt(false)} className={cn(secondarySmallActionButtonClass, 'min-h-11')}>Cancelar</button>
+          <button id="environmental-choose-files" type="button" className={cn(primarySmallActionButtonClass, 'min-h-11')} onClick={() => { document.getElementById('file-upload')?.click(); setShowUploadPrompt(false); }}>Selecionar arquivos</button>
+        </div>
+      </Modal>
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}

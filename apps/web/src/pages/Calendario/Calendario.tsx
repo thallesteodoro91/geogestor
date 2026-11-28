@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FormError, FormField, FormFooter, SwitchField } from '../../components/Form';
+import { FormField, SwitchField } from '../../components/Form';
 import { CustomSelect } from '../../components/CustomSelect';
 import { RemoteCombobox } from '../../components/RemoteCombobox';
 import { matchesSearch } from '../../utils/searchHelpers';
@@ -18,6 +18,8 @@ import { geoFieldClass, geoGreenSurfaceClass } from '../../utils/geoTheme';
 import { headerPrimaryActionButtonClass, headerPrimaryActionIconClass, primarySubmitButtonClass } from '../../utils/actionStyles';
 import { apiClient, apiFetch } from '../../services/apiClient';
 import { AppointmentTypePicker, CalendarDatePicker, MonthYearPicker, TimePicker } from './CalendarControls';
+import { appointmentRequestError, appointmentTextErrors, calendarStatuses, calendarTypes, normalizeCalendarFilter } from './calendarPresentation';
+import './calendar-workspace.css';
 import {
   filterBarClass,
   filterClearButtonClass,
@@ -82,6 +84,7 @@ interface CalendarioEvento {
 
 interface FormErrors {
   titulo?: string;
+  descricao?: string;
   data?: string;
   hora?: string;
   submit?: string;
@@ -302,7 +305,28 @@ export function Calendario() {
   const [deleteTarget, setDeleteTarget] = useState<Compromisso | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const appointmentTrigger = useRef<HTMLElement | null>(null);
+  const returnAppointmentFocus = useRef(false);
+  useEffect(() => {
+    if (showAddModal) {returnAppointmentFocus.current = true;return;}
+    if (!returnAppointmentFocus.current) return;
+    // Nested discard and editor dialogs can finish their exit in either order.
+    const restore = () => {
+      if (document.querySelector('.calendar-appointment-modal, [role="alertdialog"]')) return;
+      returnAppointmentFocus.current = false;
+      observer.disconnect();
+      appointmentTrigger.current?.focus({preventScroll:true});
+    };
+    const observer = new MutationObserver(restore);
+    observer.observe(document.body,{childList:true,subtree:true});
+    restore();
+    return () => observer.disconnect();
+  },[showAddModal]);
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [linkNotice, setLinkNotice] = useState('');
+  const [createdNotice, setCreatedNotice] = useState('');
   const [novoTitulo, setNovoTitulo] = useState('');
   const [novaDescricao, setNovaDescricao] = useState('');
   const [novoTipo, setNovoTipo] = useState('Visita de Campo');
@@ -312,10 +336,16 @@ export function Calendario() {
   const [novaHora, setNovaHora] = useState('09:00');
   const [diaInteiro, setDiaInteiro] = useState(false);
   const [formErrors, setFormErrors] = useState<FormErrors>({});
+  useEffect(() => {
+    if (formErrors.submit && !creating) document.getElementById('calendar-submit-error')?.focus({preventScroll:true});
+  },[creating,formErrors.submit]);
   const [busca, setBusca] = useState(searchParams.get('busca') ?? '');
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') ?? 'Todos');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') ?? 'Todos');
+  const [view, setView] = useState<'mes' | 'lista'>(() => searchParams.get('visao') === 'lista' ? 'lista'
+    : searchParams.get('visao') === 'mes' ? 'mes' : window.matchMedia('(max-width: 767px)').matches ? 'lista' : 'mes');
   const dayButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingDayFocus = useRef(false);
   const canonicalFallback = useRef({ month: initialMonth, date: initialSelectedDate });
 
   const calendarRange = useMemo(() => {
@@ -372,20 +402,20 @@ export function Calendario() {
           return new Date(urlMonth.getFullYear(), urlMonth.getMonth(), Math.min(current.getDate(), lastDay));
         });
       }
+      setCreatedNotice('');
       setBusca(params.get('busca') ?? '');
       setFiltroTipo(params.get('tipo') ?? 'Todos');
       setFiltroStatus(params.get('status') ?? 'Todos');
+      setView(params.get('visao') === 'lista' ? 'lista' : params.get('visao') === 'mes' ? 'mes'
+        : window.matchMedia('(max-width: 767px)').matches ? 'lista' : 'mes');
     };
     window.addEventListener('popstate', readBrowserHistory);
     return () => window.removeEventListener('popstate', readBrowserHistory);
   }, []);
 
-  const normalizedFiltroTipo = ['Todos', 'Projeto', 'Tarefa', ...compromissos.map((item) => item.tipo)].includes(filtroTipo)
-    ? filtroTipo
-    : 'Todos';
-  const normalizedFiltroStatus = ['Todos', 'Agendado', 'Início', 'Entrega', ...tarefas.map((item) => item.status)].includes(filtroStatus)
-    ? filtroStatus
-    : 'Todos';
+  const normalizedFiltroTipo = normalizeCalendarFilter(filtroTipo, calendarTypes);
+  const normalizedFiltroStatus = normalizeCalendarFilter(filtroStatus, calendarStatuses);
+  const invalidFilters = normalizedFiltroTipo !== filtroTipo || normalizedFiltroStatus !== filtroStatus;
 
   useEffect(() => {
     setSearchParams((previous) => {
@@ -403,11 +433,11 @@ export function Calendario() {
         next.set('data', toDateKey(canonicalDate));
       }
       if (busca) next.set('busca', busca); else next.delete('busca');
-      if (normalizedFiltroTipo !== 'Todos') next.set('tipo', normalizedFiltroTipo); else next.delete('tipo');
-      if (normalizedFiltroStatus !== 'Todos') next.set('status', normalizedFiltroStatus); else next.delete('status');
+      if (filtroTipo !== 'Todos') next.set('tipo', filtroTipo); else next.delete('tipo');
+      if (filtroStatus !== 'Todos') next.set('status', filtroStatus); else next.delete('status');
       return next.toString() === previous.toString() ? previous : next;
     }, { replace: true });
-  }, [busca, normalizedFiltroStatus, normalizedFiltroTipo, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, setSearchParams]);
 
   const allEvents = useMemo<CalendarioEvento[]>(() => {
     const events: CalendarioEvento[] = [];
@@ -514,12 +544,17 @@ export function Calendario() {
   )), [calendarCells]);
 
   const selectedKey = toDateKey(selectedDate);
+  useLayoutEffect(() => {
+    if (!pendingDayFocus.current) return;
+    pendingDayFocus.current = false;
+    dayButtonRefs.current.get(selectedKey)?.focus();
+  },[selectedKey,currentDate]);
   const selectedEvents = eventsByDate.get(selectedKey) ?? [];
   const selectedRawEvents = rawEventsByDate.get(selectedKey) ?? [];
   const monthKey = toMonthKey(currentDate);
   const totalMonthEvents = allEvents.filter((event) => event.data.startsWith(monthKey)).length;
   const filteredMonthEvents = filteredEvents.filter((event) => event.data.startsWith(monthKey)).length;
-  const hasActiveFilters = Boolean(busca || normalizedFiltroTipo !== 'Todos' || normalizedFiltroStatus !== 'Todos');
+  const hasActiveFilters = Boolean(busca || filtroTipo !== 'Todos' || filtroStatus !== 'Todos');
   const addFormDirty = showAddModal && Boolean(
     novoTitulo
     || novaDescricao
@@ -531,17 +566,13 @@ export function Calendario() {
     || diaInteiro
   );
 
-  const typeOptions = useMemo(() => {
-    const values = new Set(['Projeto', 'Tarefa', 'Reunião', 'Visita de Campo', 'Outro']);
-    compromissos.forEach((item) => values.add(item.tipo));
-    return [{ label: 'Todos os tipos', value: 'Todos' }, ...Array.from(values).sort().map((value) => ({ label: value, value }))];
-  }, [compromissos]);
-
-  const statusOptions = useMemo(() => {
-    const values = new Set(['Agendado', 'Início', 'Entrega', 'A Fazer', 'Em Progresso', 'Concluído']);
-    tarefas.forEach((item) => values.add(item.status));
-    return [{ label: 'Todos os status', value: 'Todos' }, ...Array.from(values).filter(Boolean).map((value) => ({ label: value, value }))];
-  }, [tarefas]);
+  const typeOptions = [{ label: 'Todos os tipos', value: 'Todos' }, ...calendarTypes.map(value => ({label: value, value}))];
+  const statusOptions = [{ label: 'Todos os status', value: 'Todos' }, ...calendarStatuses.map(value => ({label: value, value}))];
+  const monthEvents = filteredEvents.filter(event => event.data.startsWith(monthKey));
+  const changeView = (nextView: 'mes' | 'lista') => {
+    setView(nextView);
+    setSearchParams(previous => { const next = new URLSearchParams(previous); next.set('visao', nextView); return next; });
+  };
 
   useEffect(() => {
     if (!addFormDirty) return;
@@ -554,6 +585,7 @@ export function Calendario() {
   }, [addFormDirty]);
 
   const clearFilters = () => {
+    setCreatedNotice('');
     setBusca('');
     setFiltroTipo('Todos');
     setFiltroStatus('Todos');
@@ -569,6 +601,7 @@ export function Calendario() {
   };
 
   const selectDate = (date: Date, focus = false) => {
+    if (focus) pendingDayFocus.current = true;
     const normalized = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     const month = normalized.getMonth() !== currentDate.getMonth() || normalized.getFullYear() !== currentDate.getFullYear()
       ? new Date(normalized.getFullYear(), normalized.getMonth(), 1)
@@ -576,12 +609,10 @@ export function Calendario() {
     if (toDateKey(normalized) !== toDateKey(selectedDate)) publishTemporalUrl(month, normalized);
     setSelectedDate(normalized);
     if (month !== currentDate) setCurrentDate(month);
-    if (focus) {
-      window.requestAnimationFrame(() => dayButtonRefs.current.get(toDateKey(normalized))?.focus());
-    }
   };
 
   const moveMonth = (amount: number) => {
+    setCreatedNotice('');
     const next = addMonthsKeepingDay(selectedDate, currentDate, amount);
     publishTemporalUrl(next.month, next.selected);
     setCurrentDate(next.month);
@@ -589,6 +620,7 @@ export function Calendario() {
   };
 
   const goToToday = () => {
+    setCreatedNotice('');
     const today = new Date();
     const month = new Date(today.getFullYear(), today.getMonth(), 1);
     publishTemporalUrl(month, today);
@@ -597,6 +629,7 @@ export function Calendario() {
   };
 
   const changeMonth = (value: string) => {
+    setCreatedNotice('');
     const nextMonth = parseMonthKey(value);
     if (!nextMonth) return;
     const lastDay = new Date(nextMonth.getFullYear(), nextMonth.getMonth() + 1, 0).getDate();
@@ -621,7 +654,8 @@ export function Calendario() {
     selectDate(nextDate, true);
   };
 
-  const openAddModal = () => {
+  const openAddModal = (event: React.MouseEvent<HTMLButtonElement>) => {
+    appointmentTrigger.current = event.currentTarget;
     setNovaData(selectedKey);
     setFormErrors({});
     setShowAddModal(true);
@@ -636,29 +670,31 @@ export function Calendario() {
     setNovaHora('09:00');
     setDiaInteiro(false);
     setFormErrors({});
+    setLinkNotice('');
   };
 
   const closeAddModal = () => {
-    if (creating) return;
-    if (addFormDirty && !window.confirm('Descartar as alterações não salvas deste compromisso?')) return;
+    if (creatingRef.current) return;
+    if (addFormDirty) { setDiscardOpen(true); return; }
     setShowAddModal(false);
     resetForm();
   };
 
   const validateForm = () => {
-    const errors: FormErrors = {};
-    if (!novoTitulo.trim()) errors.titulo = 'Informe um título para identificar o compromisso.';
+    const errors: FormErrors = appointmentTextErrors(novoTitulo, novaDescricao);
     if (!parseDateKey(novaData)) errors.data = 'Escolha uma data válida.';
     if (!diaInteiro && !TIME_PATTERN.test(novaHora)) errors.hora = 'Informe um horário válido no formato 24 horas ou marque como evento de dia inteiro.';
     setFormErrors(errors);
-    const firstErrorId = errors.titulo ? 'calendar-title' : errors.data ? 'calendar-date' : errors.hora ? 'calendar-time' : null;
+    const firstErrorId = errors.titulo ? 'calendar-title' : errors.data ? 'calendar-date' : errors.hora ? 'calendar-time' : errors.descricao ? 'calendar-description' : null;
     if (firstErrorId) window.requestAnimationFrame(() => document.getElementById(firstErrorId)?.focus());
     return Object.keys(errors).length === 0;
   };
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (creatingRef.current) return;
     if (!validateForm()) return;
+    creatingRef.current = true;
     setCreating(true);
     setFormErrors({});
 
@@ -679,36 +715,38 @@ export function Calendario() {
 
       if (!response.ok) throw new Error(await getResponseError(response, 'Não foi possível agendar o compromisso.'));
       const created = await response.json() as Compromisso;
-      await fetchDados();
       const createdDate = parseDateKey(created.data) ?? selectedDate;
+      // A confirmed POST must never be retried just because refreshing a list fails.
+      const createdRange = new URLSearchParams({
+        inicio: toDateKey(new Date(createdDate.getFullYear(), createdDate.getMonth(), 1)),
+        fim: toDateKey(new Date(createdDate.getFullYear(), createdDate.getMonth() + 1, 0))
+      }).toString();
+      queryClient.setQueryData<CalendarQueryData>(['calendar', createdRange], current => ({
+        projetos: current?.projetos ?? [], tarefas: current?.tarefas ?? [], error: current?.error ?? '',
+        compromissos: [...(current?.compromissos ?? []).filter(item => item.id !== created.id), created]
+      }));
+      publishTemporalUrl(new Date(createdDate.getFullYear(), createdDate.getMonth(), 1), createdDate);
       setSelectedDate(createdDate);
       setCurrentDate(new Date(createdDate.getFullYear(), createdDate.getMonth(), 1));
       setShowAddModal(false);
       resetForm();
+      const hiddenByFilters = !matchesSearch([created.titulo, created.descricao, created.tipo, 'Agendado', created.clienteNome, created.projetoNome].filter(Boolean).join(' '), busca)
+        || (normalizedFiltroTipo !== 'Todos' && normalizedFiltroTipo !== created.tipo)
+        || (normalizedFiltroStatus !== 'Todos' && normalizedFiltroStatus !== 'Agendado');
+      setCreatedNotice(hiddenByFilters ? 'Compromisso agendado. Ele não aparece com os filtros atuais, que foram preservados. Limpe os filtros para consultá-lo.' : '');
       toast.success('Compromisso agendado com sucesso.');
+      void queryClient.invalidateQueries({ queryKey: ['calendar'] });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Não foi possível agendar o compromisso.';
-      setFormErrors({ submit: `${message} Revise os dados e tente novamente.` });
+      setFormErrors({ submit: appointmentRequestError(error) });
     } finally {
+      creatingRef.current = false;
       setCreating(false);
     }
   };
 
   const restoreDeletedCompromisso = async (deleted: Compromisso) => {
     try {
-      const response = await apiFetch('/api/compromissos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          titulo: deleted.titulo,
-          descricao: deleted.descricao || '',
-          tipo: deleted.tipo,
-          data: deleted.data,
-          hora: deleted.hora || null,
-          clienteId: deleted.clienteId || null,
-          projetoId: deleted.projetoId || null
-        })
-      });
+      const response = await apiFetch(`/api/compromissos/${deleted.id}/restaurar`, { method: 'POST' });
       if (!response.ok) throw new Error(await getResponseError(response, 'Não foi possível restaurar o compromisso.'));
       await fetchDados();
       toast.success('Compromisso restaurado.');
@@ -750,6 +788,63 @@ export function Calendario() {
     }
   };
 
+  const renderEventCard = (item: CalendarioEvento) => {
+    const cleanId = item.id.replace(/^(p-start-|p-end-|t-|c-)/, '');
+    const linkPath = item.id.startsWith('p-')
+      ? `/projetos/${cleanId}`
+      : item.id.startsWith('t-')
+        ? `/calendario/tarefa/${cleanId}`
+        : `/calendario/compromisso/${cleanId}`;
+
+    return (
+      <article key={item.id} className={cn('calendar-event-card flex min-w-0 flex-col gap-3 rounded-xl border p-4 ring-1', eventToneClasses[item.tone].card)}>
+        <Link
+          to={linkPath}
+          state={{ calendarReturnTo: `/calendario?${searchParams.toString()}` }}
+          className="geo-focus-ring min-w-0 flex-1 rounded-lg transition-opacity hover:opacity-80"
+        >
+          <p className="mb-3 flex items-center gap-2 text-base font-bold tabular-nums"><Clock aria-hidden="true" className="h-4 w-4 shrink-0" />{item.hora ?? (item.canDelete ? 'Dia inteiro' : 'Prazo do dia')}</p>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span aria-hidden="true" className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm', eventToneClasses[item.tone].icon)}>
+              <EventTypeIcon type={item.tipo} className="h-4 w-4" />
+            </span>
+            <p className="text-[11px] font-bold uppercase tracking-wider opacity-80">{item.tipo}</p>
+            {item.status && <span className="rounded-full border border-current/20 px-2 py-0.5 text-[11px] font-semibold">{item.status}</span>}
+          </div>
+          <p className="break-words text-sm font-semibold leading-snug hover:underline">{item.titulo}</p>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium opacity-80">
+
+            {item.clienteNome && <span className="flex items-center gap-1"><User aria-hidden="true" weight="duotone" className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-200" />{item.clienteNome}</span>}
+            {item.projetoNome && item.tipo !== 'Projeto' && <span className="flex items-center gap-1"><Briefcase aria-hidden="true" weight="duotone" className="h-3.5 w-3.5 text-violet-700 dark:text-violet-200" />{item.projetoNome}</span>}
+          </div>
+          {!item.canDelete && <p className="mt-2 text-xs font-medium">Prazo do {item.tipo === 'Projeto' ? 'projeto' : 'cadastro de tarefa'} · abra a origem para consultar.</p>}
+          {item.descricao && <p className="mt-2 break-words text-xs leading-relaxed opacity-80">{item.descricao}</p>}
+        </Link>
+        <div className="calendar-event-actions flex flex-wrap items-center justify-end gap-1.5 border-t border-current/10 pt-3">
+          <a
+            href={getGoogleCalendarUrl(item)}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={`Adicionar ${item.titulo} ao Google Agenda`} title={item.hora ? "Preparar no Google Agenda com duração de uma hora" : "Preparar no Google Agenda como dia inteiro"}
+            className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200/60 bg-white/85 text-zinc-600 shadow-sm transition-[background-color,color] hover:bg-white hover:text-indigo-700 dark:border-zinc-700/60 dark:bg-zinc-900/85 dark:text-zinc-300 dark:hover:text-indigo-300"
+          >
+            <Calendar aria-hidden="true" className="h-4 w-4" />
+          </a>
+          {item.canDelete && (
+            <button
+              type="button"
+              onClick={() => void handleDelete(cleanId)}
+              aria-label={`Excluir ${item.titulo}`}
+              className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200/60 bg-white/85 text-zinc-500 shadow-sm transition-[background-color,color] hover:bg-white hover:text-red-700 dark:border-zinc-700/60 dark:bg-zinc-900/85 dark:text-zinc-300 dark:hover:text-red-300"
+            >
+              <Trash aria-hidden="true" className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </article>
+    );
+  };
+
   const monthLabel = capitalize(new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' }).format(currentDate));
   const selectedDateLabel = capitalize(new Intl.DateTimeFormat('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
@@ -774,8 +869,9 @@ export function Calendario() {
         navigation={<ModuleNavigation module="agenda" className="mb-0" />}
       />
 
+      <div className="calendar-workspace">
       <section aria-label="Filtros do calendário" className={cn('mb-5', filterBarClass)}>
-        <div className="grid grid-cols-1 items-center gap-2.5 lg:grid-cols-[minmax(260px,1.4fr)_repeat(2,minmax(150px,0.7fr))_auto]">
+        <div className="grid grid-cols-1 items-center gap-2.5 calendar-filter-grid">
           <div className="relative">
             <label htmlFor="calendar-search" className="sr-only">Buscar eventos no calendário</label>
             <MagnifyingGlass aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
@@ -785,14 +881,14 @@ export function Calendario() {
               type="search"
               autoComplete="off"
               value={busca}
-              onChange={(event) => setBusca(event.target.value)}
-              placeholder="Buscar compromisso, tarefa, projeto ou descrição…"
+              onChange={(event) => { setCreatedNotice(''); setBusca(event.target.value); }}
+              placeholder="Ex.: reunião, cliente ou projeto…" aria-describedby="calendar-search-hint"
               className={filterSearchInputClass}
             />
           </div>
           <CustomSelect
             value={normalizedFiltroTipo}
-            onChange={setFiltroTipo}
+            onChange={(value) => { setCreatedNotice(''); setFiltroTipo(value); }}
             placeholder="Todos os tipos"
             ariaLabel="Filtrar por tipo de evento"
             className="min-w-0"
@@ -800,7 +896,7 @@ export function Calendario() {
           />
           <CustomSelect
             value={normalizedFiltroStatus}
-            onChange={setFiltroStatus}
+            onChange={(value) => { setCreatedNotice(''); setFiltroStatus(value); }}
             placeholder="Todos os status"
             ariaLabel="Filtrar por status do evento"
             className="min-w-0"
@@ -812,6 +908,7 @@ export function Calendario() {
             </button>
           )}
         </div>
+        <p id="calendar-search-hint" className="mt-2 px-1 text-xs text-zinc-600 dark:text-zinc-300">Busca no mês exibido: título, descrição, tipo, situação, cliente e projeto.</p>
         <p className="mt-2 px-1 text-xs font-medium text-zinc-500 dark:text-zinc-400" role="status" aria-live="polite">
           {hasActiveFilters
             ? `${filteredMonthEvents} de ${totalMonthEvents} eventos encontrados em ${monthLabel.toLocaleLowerCase('pt-BR')}.`
@@ -819,6 +916,8 @@ export function Calendario() {
         </p>
       </section>
 
+      {invalidFilters && <p role="status" className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">Há um tipo ou situação não reconhecido no endereço. Esse critério não foi aplicado. Use os seletores ou “Limpar filtros” para corrigir.</p>}
+      {createdNotice && <p role="status" className="mb-4 rounded-xl border border-brand-border bg-brand-surface-subtle p-3 text-sm text-text-primary">{createdNotice}</p>}
       {loadError && (
         <div role="alert" className="mb-6 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm font-medium text-amber-950 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-100">
           <span>{loadError} Os demais dados continuam disponíveis.</span>
@@ -828,18 +927,18 @@ export function Calendario() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-4">
-        <section aria-labelledby="calendar-month-heading" aria-busy={loading} className="flex flex-col rounded-[2rem] bg-gradient-to-br from-white via-white to-indigo-50/45 p-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-zinc-900/5 sm:p-6 xl:col-span-3 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/20 dark:ring-white/10">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 id="calendar-month-heading" className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+      <div className={cn("calendar-body", view === "lista" && "calendar-body-list")}>
+        <section aria-labelledby="calendar-month-heading" aria-busy={loading} className="calendar-month-panel min-w-0 flex flex-col rounded-[2rem] bg-gradient-to-br from-white via-white to-indigo-50/45 p-3 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-zinc-900/5 sm:p-6 dark:from-zinc-900 dark:via-zinc-900 dark:to-indigo-950/20 dark:ring-white/10">
+          <div className="calendar-period mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="calendar-month-heading" className="sr-only">
               {monthLabel}
             </h2>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="calendar-period-actions flex min-w-0 flex-wrap items-center gap-2">
               <MonthYearPicker
                 id="calendar-month-picker"
                 value={toMonthKey(currentDate)}
                 onChange={changeMonth}
-                className="w-full sm:w-auto"
+                className="calendar-month-select"
               />
               <button type="button" onClick={goToToday} className="geo-focus-ring min-h-11 rounded-full border border-zinc-200 bg-white px-4 text-xs font-semibold text-zinc-700 transition-[background-color,color,border-color] hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:border-indigo-400/40 dark:hover:bg-indigo-400/10 dark:hover:text-indigo-100">
                 Hoje
@@ -853,9 +952,23 @@ export function Calendario() {
             </div>
           </div>
 
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div role="group" aria-label="Visualização da agenda" className="calendar-view-switch">
+              <button type="button" aria-pressed={view === 'mes'} onClick={() => changeView('mes')} className="geo-focus-ring">Mês</button>
+              <button type="button" aria-pressed={view === 'lista'} onClick={() => changeView('lista')} className="geo-focus-ring">Lista</button>
+            </div>
+            <p className="text-xs text-zinc-600 dark:text-zinc-300">{view === 'lista' ? 'Todos os eventos encontrados no mês' : 'Selecione um dia para ver os eventos'}</p>
+          </div>
+          {view === 'lista' ? <div aria-label="Eventos do mês" aria-busy={loading} className="calendar-month-list">
+            {monthEvents.length === 0 ? <p className="rounded-xl border border-brand-border p-4 text-sm text-text-secondary">{loading ? 'Buscando eventos…' : hasActiveFilters ? 'Nenhum evento do mês corresponde aos filtros aplicados.' : 'Nenhum evento neste mês.'}</p>
+              : [...new Set(monthEvents.map(event => event.data))].map(date => <section key={date} aria-labelledby={'calendar-list-' + date} className="calendar-date-group">
+                  <h3 id={'calendar-list-' + date} className="mb-3 border-b border-brand-border pb-2 text-sm font-bold text-text-primary">{capitalize(fullDateFormatter.format(parseDateKey(date)!))} <span className="font-normal text-text-secondary">· {eventsByDate.get(date)?.length} eventos</span></h3>
+                  <div className="calendar-list-cards">{eventsByDate.get(date)?.map(renderEventCard)}</div>
+                </section>)}
+          </div> : <>
           <p id="calendar-keyboard-help" className="sr-only">Use as setas para navegar entre os dias, Home e End para ir ao início ou fim da semana e Page Up ou Page Down para trocar de mês.</p>
-          <div className="-mx-1 overflow-x-auto px-1 pb-1">
-            <div role="grid" aria-labelledby="calendar-month-heading" aria-describedby="calendar-keyboard-help" className="grid min-w-[336px] grid-cols-7 gap-1 sm:min-w-0 sm:gap-2">
+          <div className="px-1 pb-1">
+            <div role="grid" aria-labelledby="calendar-month-heading" aria-describedby="calendar-keyboard-help" className="grid min-w-0 grid-cols-7 gap-1 sm:gap-2">
               <div role="row" className="contents">
                 {weekdayLabels.map((label) => (
                   <div key={label} role="columnheader" aria-label={label} className="pb-2 text-center text-[11px] font-semibold uppercase tracking-wider text-zinc-500 sm:text-xs dark:text-zinc-400">
@@ -937,13 +1050,14 @@ export function Calendario() {
               ))}
             </div>
           </div>
+          </>}
         </section>
 
-        <aside
+        {view === 'mes' && <aside
           aria-labelledby="daily-agenda-heading"
           className={cn(
             geoGreenSurfaceClass,
-            'flex w-full self-start flex-col justify-between rounded-[2rem] p-6 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-emerald-300/15 sm:p-8',
+            'calendar-daily-panel min-w-0 flex w-full self-start flex-col justify-between rounded-[2rem] p-4 shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] ring-1 ring-emerald-300/15 sm:p-5',
             (loading || selectedEvents.length > 0) && 'min-h-[420px]'
           )}
         >
@@ -972,225 +1086,104 @@ export function Calendario() {
                   )}
                 </div>
               ) : (
-                selectedEvents.map((item) => {
-                  const cleanId = item.id.replace(/^(p-start-|p-end-|t-|c-)/, '');
-                  const linkPath = item.id.startsWith('p-')
-                    ? `/projetos/${cleanId}`
-                    : item.id.startsWith('t-')
-                      ? `/calendario/tarefa/${cleanId}`
-                      : `/calendario/compromisso/${cleanId}`;
-
-                  return (
-                    <article key={item.id} className={cn('flex items-start justify-between gap-3 rounded-xl border p-4 ring-1', eventToneClasses[item.tone].card)}>
-                      <Link
-                        to={linkPath}
-                        state={{ calendarReturnTo: `/calendario?${searchParams.toString()}` }}
-                        className="geo-focus-ring min-w-0 flex-1 rounded-lg transition-opacity hover:opacity-80"
-                      >
-                        <div className="mb-2 flex items-center gap-2">
-                          <span aria-hidden="true" className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg shadow-sm', eventToneClasses[item.tone].icon)}>
-                            <EventTypeIcon type={item.tipo} className="h-4 w-4" />
-                          </span>
-                          <p className="text-[11px] font-bold uppercase tracking-wider opacity-80">{item.tipo}</p>
-                        </div>
-                        <p className="break-words text-sm font-semibold leading-snug hover:underline">{item.titulo}</p>
-                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium opacity-80">
-                          {item.hora && <span className="flex items-center gap-1 tabular-nums"><Clock aria-hidden="true" weight="duotone" className="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-200" />{item.hora}</span>}
-                          {item.clienteNome && <span className="flex items-center gap-1"><User aria-hidden="true" weight="duotone" className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-200" />{item.clienteNome}</span>}
-                          {item.projetoNome && item.tipo !== 'Projeto' && <span className="flex items-center gap-1"><Briefcase aria-hidden="true" weight="duotone" className="h-3.5 w-3.5 text-violet-700 dark:text-violet-200" />{item.projetoNome}</span>}
-                        </div>
-                        {item.descricao && <p className="mt-2 break-words text-xs leading-relaxed opacity-80">{item.descricao}</p>}
-                      </Link>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <a
-                          href={getGoogleCalendarUrl(item)}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`Adicionar ${item.titulo} ao Google Agenda`}
-                          className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200/60 bg-white/85 text-zinc-600 shadow-sm transition-[background-color,color] hover:bg-white hover:text-indigo-700 dark:border-zinc-700/60 dark:bg-zinc-900/85 dark:text-zinc-300 dark:hover:text-indigo-300"
-                        >
-                          <Calendar aria-hidden="true" className="h-4 w-4" />
-                        </a>
-                        {item.canDelete && (
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(cleanId)}
-                            aria-label={`Excluir ${item.titulo}`}
-                            className="geo-focus-ring flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-200/60 bg-white/85 text-zinc-500 shadow-sm transition-[background-color,color] hover:bg-white hover:text-red-700 dark:border-zinc-700/60 dark:bg-zinc-900/85 dark:text-zinc-300 dark:hover:text-red-300"
-                          >
-                            <Trash aria-hidden="true" className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </article>
-                  );
-                })
+                selectedEvents.map(renderEventCard)
               )}
             </div>
           </div>
 
-          <div className="mt-6 border-t border-white/25 pt-6">
-            <span className="mb-3 block text-xs font-bold uppercase tracking-wider text-white/85">Legenda de cores</span>
-            <div className="grid grid-cols-2 gap-3 text-xs font-semibold text-white/90">
-              <div className="flex items-center gap-2"><span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-full bg-blue-500 text-[8px] font-bold text-white">P</span>Projeto</div>
-              <div className="flex items-center gap-2"><span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500 text-[8px] font-bold text-zinc-950">T</span>Tarefa</div>
-              <div className="flex items-center gap-2"><span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-full bg-indigo-500 text-[8px] font-bold text-white">R</span>Reunião</div>
-              <div className="flex items-center gap-2"><span aria-hidden="true" className="flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-[8px] font-bold text-zinc-950">V</span>Visita</div>
-            </div>
-          </div>
-        </aside>
+        </aside>}
+      </div>
       </div>
 
       <Modal
         isOpen={showAddModal}
         onClose={closeAddModal}
-        title={(
-          <span className="flex flex-wrap items-center gap-2">
-            <span>Novo compromisso</span>
-            {addFormDirty && (
-              <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">
-                Alterações não salvas
-              </span>
-            )}
-          </span>
-        )}
-        maxWidth="max-w-2xl"
+        title={<span className="flex flex-wrap items-center gap-2"><span>Agendar compromisso</span>{addFormDirty && <span className="geo-badge-base geo-badge-unsaved px-2.5 py-1 text-[11px] font-bold leading-none">Alterações não salvas</span>}</span>}
+        maxWidth="max-w-3xl"
+        panelClassName="calendar-appointment-modal"
+        density="compact"
         initialFocusId="calendar-title"
+        closeDisabled={creating}
+        ariaDescribedBy="calendar-required-hint"
+        footer={<div className="calendar-appointment-footer">
+          {formErrors.submit && <p id="calendar-submit-error" role="alert" tabIndex={-1} className="geo-focus-ring mb-3 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm leading-relaxed text-rose-900 dark:border-rose-400/40 dark:bg-rose-950/40 dark:text-rose-100">{formErrors.submit}</p>}
+          <div className="calendar-footer-actions">
+            <button type="button" disabled={creating} onClick={closeAddModal} className="geo-button-base geo-button-secondary geo-focus-ring min-h-11 px-5 text-sm disabled:opacity-60">Cancelar</button>
+            <button type="submit" form="calendar-appointment-form" disabled={creating} aria-busy={creating} className={cn(primarySubmitButtonClass,'calendar-submit min-h-11 px-6 text-sm disabled:cursor-wait disabled:opacity-65')}>
+              <span className={creating ? 'invisible' : ''}>Agendar compromisso</span><span className={creating ? '' : 'invisible'} aria-hidden={!creating}>{creating ? 'Agendando…' : ''}</span>
+            </button>
+          </div>
+          <span className="sr-only" role="status">{creating ? 'Agendando compromisso. Aguarde a confirmação do serviço local.' : ''}</span>
+        </div>}
       >
-        <form onSubmit={handleCreate} noValidate className="space-y-5">
-          <FormError message={formErrors.submit} />
-
-          <FormField htmlFor="calendar-title" label="Título do compromisso" required error={formErrors.titulo}>
-            <input
-              id="calendar-title"
-              name="titulo"
-              type="text"
-              autoComplete="off"
-              required
-              value={novoTitulo}
-              onChange={(event) => {
-                setNovoTitulo(event.target.value);
-                if (formErrors.titulo) setFormErrors((current) => ({ ...current, titulo: undefined }));
-              }}
-              aria-invalid={Boolean(formErrors.titulo)}
-              aria-describedby={formErrors.titulo ? 'calendar-title-error' : undefined}
-              placeholder="Ex.: Medição da Área de Preservação"
-              className={cn(geoFieldClass, 'h-12 w-full px-4 text-sm')}
-            />
-          </FormField>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField htmlFor="calendar-type" label={<FieldLabel icon={<Tag weight="duotone" className="h-3.5 w-3.5" />} tone="violet">Tipo</FieldLabel>}>
-              <AppointmentTypePicker
-                id="calendar-type"
-                name="tipo"
-                value={novoTipo}
-                onChange={setNovoTipo}
-              />
-            </FormField>
-
-            <FormField htmlFor="calendar-date" label={<FieldLabel icon={<CalendarBlank weight="duotone" className="h-3.5 w-3.5" />} tone="indigo">Data</FieldLabel>} required error={formErrors.data}>
-              <CalendarDatePicker
-                id="calendar-date"
-                name="data"
-                value={novaData}
-                onChange={(date) => {
-                  setNovaData(date);
-                  if (formErrors.data) setFormErrors((current) => ({ ...current, data: undefined }));
-                }}
-                eventDates={eventDateKeys}
-                invalid={Boolean(formErrors.data)}
-                describedBy={formErrors.data ? 'calendar-date-error' : undefined}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField htmlFor="calendar-time" label={<FieldLabel icon={<Clock weight="duotone" className="h-3.5 w-3.5" />} tone="cyan">Horário</FieldLabel>} required={!diaInteiro} error={formErrors.hora}>
-              <TimePicker
-                id="calendar-time"
-                name="hora"
-                disabled={diaInteiro}
-                value={novaHora}
-                onChange={(time) => {
-                  setNovaHora(time);
-                  if (formErrors.hora) setFormErrors((current) => ({ ...current, hora: undefined }));
-                }}
-                invalid={Boolean(formErrors.hora)}
-                describedBy={formErrors.hora ? 'calendar-time-error' : undefined}
-              />
-            </FormField>
-
-            <div className="flex items-end">
-              <SwitchField
-                id="calendar-all-day"
-                name="diaInteiro"
-                label="Evento de dia inteiro"
-                icon={<Sun weight="duotone" className="h-5 w-5 text-amber-500 dark:text-amber-300" />}
-                checked={diaInteiro}
-                onChange={(checked) => {
-                  setDiaInteiro(checked);
-                  if (checked) setFormErrors((current) => ({ ...current, hora: undefined }));
-                }}
-                className="min-h-12 px-4"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField htmlFor="calendar-client" label={<FieldLabel icon={<User weight="duotone" className="h-3.5 w-3.5" />} tone="emerald">Cliente</FieldLabel>} hint="Opcional">
-              <RemoteCombobox<{ id: string; nome: string }>
-                id="calendar-client"
-                name="clienteId"
-                endpoint="/api/clientes/options"
-                value={novoClienteId}
-                onChange={(clienteId) => {
-                  setNovoClienteId(clienteId);
-                  setNovoProjetoId('');
-                }}
-                emptyLabel="Sem vínculo"
-                placeholder="Pesquisar cliente…"
-              />
-            </FormField>
-
-            <FormField htmlFor="calendar-project" label={<FieldLabel icon={<Briefcase weight="duotone" className="h-3.5 w-3.5" />} tone="violet">Projeto</FieldLabel>} hint="Opcional">
-              <RemoteCombobox<Projeto>
-                id="calendar-project"
-                name="projetoId"
-                endpoint={`/api/projetos/options${novoClienteId ? `?clienteId=${encodeURIComponent(novoClienteId)}` : ''}`}
-                value={novoProjetoId}
-                onChange={(projetoId, project) => {
-                  setNovoProjetoId(projetoId);
-                  if (project?.clienteId) setNovoClienteId(project.clienteId);
-                }}
-                emptyLabel="Sem vínculo"
-                placeholder="Pesquisar projeto…"
-              />
-            </FormField>
-          </div>
-
-          <FormField htmlFor="calendar-description" label={<FieldLabel icon={<NotePencil weight="duotone" className="h-3.5 w-3.5" />} tone="amber">Descrição</FieldLabel>} hint="Opcional">
-            <textarea
-              id="calendar-description"
-              name="descricao"
-              value={novaDescricao}
-              onChange={(event) => setNovaDescricao(event.target.value)}
-              rows={4}
-              placeholder="Adicione observações, instruções ou o local do compromisso…"
-              className={cn(geoFieldClass, 'w-full resize-y px-4 py-3 text-sm')}
-            />
-          </FormField>
-
-          <FormFooter>
-            <button type="button" disabled={creating} onClick={closeAddModal} className="geo-focus-ring min-h-11 rounded-full px-5 text-sm font-semibold text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-950 disabled:opacity-60 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">
-              Cancelar
-            </button>
-            <button type="submit" disabled={creating} className={cn(primarySubmitButtonClass, 'min-h-11 px-6 text-sm disabled:cursor-wait disabled:opacity-65')}>
-              {creating ? 'Agendando…' : 'Agendar compromisso'}
-            </button>
-          </FormFooter>
+        <form id="calendar-appointment-form" onSubmit={handleCreate} noValidate aria-busy={creating}>
+          <p id="calendar-required-hint" className="mb-4 text-xs text-text-secondary">Campos com * são obrigatórios.</p>
+          <fieldset disabled={creating} className="calendar-form-fields min-w-0 disabled:opacity-70">
+            <section aria-labelledby="calendar-group-appointment" className="calendar-form-group">
+              <h3 id="calendar-group-appointment"><NotePencil aria-hidden="true" className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />Compromisso</h3>
+              <div className="calendar-form-identity">
+                <FormField htmlFor="calendar-title" label="Título do compromisso" required error={formErrors.titulo}>
+                  <input id="calendar-title" name="titulo" type="text" autoComplete="off" required maxLength={180} value={novoTitulo}
+                    onChange={event => {setNovoTitulo(event.target.value);if(formErrors.titulo)setFormErrors(current => ({...current,titulo:undefined}));}}
+                    aria-invalid={Boolean(formErrors.titulo)} aria-describedby={formErrors.titulo ? 'calendar-title-error calendar-title-hint' : 'calendar-title-hint'}
+                    placeholder="Ex.: Visita para levantamento" className={cn(geoFieldClass,'h-12 w-full px-4 text-sm')} />
+                  <p id="calendar-title-hint" className="mt-1.5 text-xs text-text-secondary">Até 180 caracteres.</p>
+                </FormField>
+                <FormField htmlFor="calendar-type" label={<FieldLabel icon={<Tag aria-hidden="true" weight="duotone" className="h-3.5 w-3.5" />} tone="violet">Tipo</FieldLabel>}>
+                  <AppointmentTypePicker id="calendar-type" name="tipo" value={novoTipo} onChange={setNovoTipo} />
+                </FormField>
+              </div>
+            </section>
+            <section aria-labelledby="calendar-group-when" className="calendar-form-group">
+              <h3 id="calendar-group-when"><CalendarBlank aria-hidden="true" className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />Quando</h3>
+              <div className="calendar-form-when">
+                <FormField htmlFor="calendar-date" label="Data" required error={formErrors.data}>
+                  <CalendarDatePicker id="calendar-date" name="data" value={novaData} onChange={date => {setNovaData(date);if(formErrors.data)setFormErrors(current => ({...current,data:undefined}));}}
+                    eventDates={eventDateKeys} invalid={Boolean(formErrors.data)} describedBy={formErrors.data ? 'calendar-date-error' : undefined} />
+                </FormField>
+                <FormField htmlFor="calendar-time" label="Horário" required={!diaInteiro} error={formErrors.hora}>
+                  <TimePicker id="calendar-time" name="hora" disabled={diaInteiro || creating} value={novaHora}
+                    onChange={time => {setNovaHora(time);if(formErrors.hora)setFormErrors(current => ({...current,hora:undefined}));}}
+                    invalid={Boolean(formErrors.hora)} describedBy={formErrors.hora ? 'calendar-time-error' : 'calendar-time-hint'} />
+                </FormField>
+                <div className="calendar-all-day">
+                  <SwitchField id="calendar-all-day" name="diaInteiro" label="Evento de dia inteiro" icon={<Sun aria-hidden="true" weight="duotone" className="h-5 w-5 text-amber-600 dark:text-amber-300" />} checked={diaInteiro} disabled={creating}
+                    onChange={checked => {setDiaInteiro(checked);if(checked)setFormErrors(current => ({...current,hora:undefined}));}} className="min-h-12 px-3" />
+                </div>
+              </div>
+              <p id="calendar-time-hint" className="mt-2 text-xs text-text-secondary">Formato de 24 horas. O horário preenchido é mantido ao alternar dia inteiro.</p>
+            </section>
+            <section aria-labelledby="calendar-group-links" className="calendar-form-group">
+              <h3 id="calendar-group-links"><Briefcase aria-hidden="true" className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />Vínculos e observações</h3>
+              <p id="calendar-links-hint" className="mb-3 text-xs leading-relaxed text-text-secondary">Vínculos opcionais. Selecionar um projeto preenche seu cliente. Trocar o cliente remove a seleção de projeto.</p>
+              <div className="calendar-form-links">
+                <FormField htmlFor="calendar-client" label="Cliente" hint="Opcional">
+                  <RemoteCombobox<{id:string;nome:string}> id="calendar-client" name="clienteId" endpoint="/api/clientes/options" value={novoClienteId} fill inModal density="formLarge" disabled={creating} aria-describedby="calendar-links-hint"
+                    onChange={clienteId => {if(clienteId !== novoClienteId){if(novoProjetoId)setLinkNotice('A seleção de projeto foi removida porque o cliente foi alterado.');setNovoClienteId(clienteId);setNovoProjetoId('');}}} emptyLabel="Sem vínculo" placeholder="Pesquisar cliente…" />
+                </FormField>
+                <FormField htmlFor="calendar-project" label="Projeto" hint="Opcional">
+                  <RemoteCombobox<Projeto> id="calendar-project" name="projetoId" endpoint={`/api/projetos/options${novoClienteId ? `?clienteId=${encodeURIComponent(novoClienteId)}` : ''}`} value={novoProjetoId} fill inModal density="formLarge" disabled={creating} aria-describedby="calendar-links-hint"
+                    onChange={(projetoId,project) => {setNovoProjetoId(projetoId);setLinkNotice('');if(project?.clienteId)setNovoClienteId(project.clienteId);}} emptyLabel="Sem vínculo" placeholder="Pesquisar projeto…" />
+                </FormField>
+              </div>
+              {linkNotice && <p role="status" className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs leading-relaxed text-amber-950 dark:border-amber-500/30 dark:bg-amber-950/40 dark:text-amber-100">{linkNotice}</p>}
+              <div className="mt-4">
+                <FormField htmlFor="calendar-description" label="Descrição" hint="Opcional" error={formErrors.descricao}>
+                  <textarea id="calendar-description" name="descricao" value={novaDescricao} onChange={event => {setNovaDescricao(event.target.value);if(formErrors.descricao)setFormErrors(current => ({...current,descricao:undefined}));}} rows={4} maxLength={4000}
+                    aria-invalid={Boolean(formErrors.descricao)} aria-describedby={formErrors.descricao ? 'calendar-description-error calendar-description-hint' : 'calendar-description-hint'}
+                    placeholder="Ex.: Ponto de encontro e orientações para a visita…" className={cn(geoFieldClass,'min-h-28 w-full resize-y px-4 py-3 text-sm')} />
+                  <p id="calendar-description-hint" className="mt-1.5 text-right text-xs tabular-nums text-text-secondary">{novaDescricao.length.toLocaleString('pt-BR')} / 4.000 caracteres</p>
+                </FormField>
+              </div>
+            </section>
+          </fieldset>
         </form>
       </Modal>
+      <ConfirmDialog isOpen={discardOpen} onClose={() => setDiscardOpen(false)}
+        onConfirm={() => {setDiscardOpen(false);setShowAddModal(false);resetForm();}}
+        title="Descartar compromisso não salvo?" description="Os campos preenchidos serão descartados. Você pode continuar preenchendo para manter suas alterações."
+        confirmText="Descartar compromisso" cancelText="Continuar preenchendo" variant="warning" />
+
       <ConfirmDialog
         isOpen={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}

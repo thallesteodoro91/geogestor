@@ -1,6 +1,12 @@
 const LIST_POSITION_KEY = 'geogestor:orcamentos:list-position:v1';
 const APP_ORIGIN = 'https://geogestor.local';
 const TRANSIENT_LIST_PARAMS = ['budgetId', 'highlightId'];
+const FINANCE_RETURN_KEYS = new Set([
+  'tab', 'periodo', 'inicio', 'fim', 'cliente', 'categoria', 'tipoCusto', 'centroCusto', 'projeto',
+  'receberBusca', 'receberInicio', 'receberFim', 'receberSituacao', 'receberPagina',
+  'pagarBusca', 'pagarCategoria', 'pagarSubcategoria', 'pagarSituacao', 'pagarTipo',
+  'pagarCentro', 'pagarReembolso', 'pagarInicio', 'pagarFim', 'pagarPagina'
+]);
 
 export interface BudgetListPosition {
   returnTo: string;
@@ -30,8 +36,17 @@ export function getBudgetListPath(params: URLSearchParams | string = '') {
 export function getSafeBudgetReturnTo(value: string | null | undefined) {
   if (!value) return '/orcamentos';
   try {
+    // Only explicit local destinations; never normalize an arbitrary path into one.
+    if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\') || Array.from(value).some(character => character.charCodeAt(0) < 32)) return '/orcamentos';
+    const rawPath = value.split(/[?#]/)[0];
+    if (rawPath !== '/orcamentos' && rawPath !== '/financeiro') return '/orcamentos';
     const url = new URL(value, APP_ORIGIN);
-    if (url.origin !== APP_ORIGIN || url.pathname !== '/orcamentos') return '/orcamentos';
+    if (url.origin !== APP_ORIGIN) return '/orcamentos';
+    if (url.pathname === '/financeiro') {
+      const query = new URLSearchParams();
+      url.searchParams.forEach((entry, key) => { if (FINANCE_RETURN_KEYS.has(key)) query.set(key, entry); });
+      return `/financeiro${query.size ? `?${query}` : ''}`;
+    }
     return getBudgetListPath(url.searchParams);
   } catch {
     return '/orcamentos';
@@ -51,6 +66,7 @@ export function buildBudgetEditorPath({ budgetId, clientId, opportunityId, retur
 
 export function withBudgetHighlight(returnTo: string, budgetId: string) {
   const safeReturnTo = getSafeBudgetReturnTo(returnTo);
+  if (safeReturnTo.split('?')[0] === '/financeiro') return safeReturnTo;
   if (!isSafeEntityId(budgetId)) return safeReturnTo;
   const url = new URL(safeReturnTo, APP_ORIGIN);
   url.searchParams.set('highlightId', budgetId);

@@ -1,3 +1,4 @@
+import { injectWithRecordVersion } from './test-support/record-request';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -27,7 +28,7 @@ test('pesquisa global exclui registros removidos, preserva seis destinos e aplic
   ]);
 
   const search = async (query: string) => {
-    const response = await server.inject({
+    const response = await injectWithRecordVersion(server, {
       method: 'GET',
       url: `/api/search?q=${encodeURIComponent(query)}`,
       headers: { 'x-api-token': 'test-token' }

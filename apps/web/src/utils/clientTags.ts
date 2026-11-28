@@ -1,21 +1,9 @@
-export const CLIENT_CATEGORY_OPTIONS = [
-  'Pessoa Física',
-  'Pessoa Jurídica',
-  'Produtor Rural',
-  'Empresa',
-  'Parceiro',
-  'Órgão Público',
-  'Indústria',
-  'Comércio'
-];
+export { CLIENT_PRIMARY_CATEGORIES, CLIENT_PROFILE_TAGS, PUBLIC_ENTITY_CATEGORY, normalizeClientCategoryTag, normalizeClientCategoryText, resolveClientClassification, splitClientCategoryTags } from '@geogestor/contracts/src/client-categories';
 
-export const CLIENT_PROFILE_OPTIONS = [
-  'Produtor Rural',
-  'Parceiro',
-  'Órgão Público',
-  'Indústria',
-  'Comércio'
-];
+import { CLIENT_PRIMARY_CATEGORIES, CLIENT_PROFILE_TAGS } from '@geogestor/contracts/src/client-categories';
+
+export const CLIENT_CATEGORY_OPTIONS = [...CLIENT_PRIMARY_CATEGORIES];
+export const CLIENT_PROFILE_OPTIONS = [...CLIENT_PROFILE_TAGS];
 
 export const CLIENT_PRIMARY_ORIGIN_OPTIONS = [
   'Site',
@@ -109,7 +97,7 @@ export function getClientCategoryTagClass(category?: string | null) {
   if (normalizedCategory.includes('comercio')) {
     return `${baseTagClass} geo-badge-danger`;
   }
-  if (normalizedCategory.includes('publico') || normalizedCategory.includes('orgao') || normalizedCategory.includes('prefeitura')) {
+  if (normalizedCategory.includes('publico') || normalizedCategory.includes('publica') || normalizedCategory.includes('orgao') || normalizedCategory.includes('prefeitura') || normalizedCategory.includes('governo')) {
     return `${baseTagClass} geo-badge-info`;
   }
   if (normalizedCategory.includes('juridica') || normalizedCategory.includes('empresa')) {
@@ -126,7 +114,7 @@ export function getClientCategoryTagClass(category?: string | null) {
       return `${baseTagClass} geo-badge-success`;
     case 'Parceiro':
       return `${baseTagClass} geo-badge-warning`;
-    case 'Órgão Público':
+    case 'Entidade Pública':
       return `${baseTagClass} geo-badge-info`;
     case 'Indústria':
       return `${baseTagClass} geo-badge-primary`;
@@ -166,14 +154,14 @@ export function getClientServicoTagClass(servico?: string | null) {
   if (CLIENT_SERVICOS_BY_CATEGORY['Ambiental'].includes(servico)) {
     return `${baseTagClass} geo-badge-success`;
   }
-  
+
   if (CLIENT_SERVICOS_BY_CATEGORY['Topografia'].includes(servico)) {
     return `${baseTagClass} geo-badge-warning`;
   }
-  
+
   if (CLIENT_SERVICOS_BY_CATEGORY['Agrimensura'].includes(servico)) {
     return `${baseTagClass} geo-badge-info`;
   }
-  
+
   return `${baseTagClass} geo-badge-neutral`;
 }

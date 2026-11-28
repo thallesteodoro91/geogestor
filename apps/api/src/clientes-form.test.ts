@@ -55,7 +55,7 @@ test('mantém origem múltipla legada, mas sincroniza origens simples', async ()
   assert.equal(clientFormToPayload(form, { origem: 'Site' }).origem, 'Google');
 });
 
-test('expõe perfis e serviços antigos para edição sem tratá-los como tipo de pessoa', async () => {
+test('preserva categoria ambígua e serviços antigos para revisão sem inferir tipo de pessoa', async () => {
   const { clientRecordToForm } = await loadClientFormModule();
   const form = clientRecordToForm({
     nome: 'Cliente legado',
@@ -63,8 +63,10 @@ test('expõe perfis e serviços antigos para edição sem tratá-los como tipo d
     servicos: 'Georreferenciamento, Serviço histórico'
   });
 
-  assert.equal(form.tipoPessoa, 'PJ');
-  assert.deepEqual(form.perfis, ['Cooperativa']);
+  assert.equal(form.tipoPessoa, '');
+  assert.equal(form.categoriaPrincipal, '');
+  assert.equal(form.categoriaPendente, 'Empresa, Cooperativa');
+  assert.deepEqual(form.perfis, []);
   assert.deepEqual(form.servicos, ['Georreferenciamento', 'Serviço histórico']);
 });
 
@@ -72,12 +74,14 @@ test('salva tipo de pessoa separado da categoria de relacionamento', async () =>
   const { clientFormToPayload, createEmptyClientForm } = await loadClientFormModule();
   const payload = clientFormToPayload({
     ...createEmptyClientForm(),
+    tipoPessoa: 'PF',
     nome: 'Cliente sintético',
     cpf: '529.982.247-25',
     celular: '(48) 99999-9999',
+    categoriaPrincipal: 'Produtor Rural',
     perfis: ['Parceiro']
   });
   assert.equal(payload.tipoPessoa, 'PF');
-  assert.equal(payload.categoria, 'Parceiro');
+  assert.equal(payload.categoria, 'Produtor Rural');
   assert.equal(payload.perfis, 'Parceiro');
 });

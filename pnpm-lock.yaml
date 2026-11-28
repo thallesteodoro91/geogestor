@@ -75,6 +75,9 @@ importers:
       googleapis:
         specifier: ^173.0.0
         version: 173.0.0
+      pdfmake:
+        specifier: 0.3.11
+        version: 0.3.11
       proj4:
         specifier: ^2.21.0
         version: 2.21.0
@@ -249,6 +252,9 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@types/pdfmake':
+        specifier: 0.3.3
+        version: 0.3.3
       typescript:
         specifier: ^5.5.3
         version: 5.9.3

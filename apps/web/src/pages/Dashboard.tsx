@@ -1,3 +1,5 @@
+import { DashboardCashWidget, DashboardCompletionWidget, DashboardDeadlineWidget, DashboardProjectDistributionWidget } from './DashboardAuraWidgets';
+import { cn } from '../utils/cn';
 import { DatePickerField, FormSelect } from '../components/Form';
 import { appLinks, type ManagerialReport } from '@geogestor/contracts';
 import { startTransition, useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -9,15 +11,16 @@ import { KpiTransparency } from '../components/KpiTransparency';
 import { Layout } from '../components/Layout';
 import { PageHeader } from '../components/PageHeader';
 import { RecentActivities } from '../components/RecentActivities';
+import { WidgetSection } from '../components/WidgetSection';
 import { MetricCard } from '../components/MetricCard';
 import { Skeleton } from '../components/Skeleton';
 import { useReducedMotion } from 'framer-motion';
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, ReferenceLine, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell
 } from 'recharts';
 import {
-  chartActiveDot, chartTextColor, chartBorder,
+  chartActiveDot, chartTextColor, chartSecondaryTextColor,
   chartCursor, chartSegmentStyle, responsiveChartProps
 } from '../utils/chartHelpers';
 import { chartColors, colorblindSafeColors } from '../data/chart-colors';
@@ -65,18 +68,25 @@ const cashFlowChartSeries = [
   {
     dataKey: 'recebimentos',
     label: 'Recebimentos',
-    color: chartColors.positive,
+    color: 'var(--dashboard-cash-received)',
+    dash: undefined,
     gradientId: 'dashboardRecebimentosGradient',
     gradientOpacity: 0.34,
   },
   {
     dataKey: 'pagamentos',
     label: 'Pagamentos',
-    color: chartColors.negative,
+    color: 'var(--dashboard-cash-paid)',
+    dash: '6 3',
     gradientId: 'dashboardPagamentosGradient',
     gradientOpacity: 0.3,
   },
 ] as const;
+
+const compactCashAxis = new Intl.NumberFormat('pt-BR', {
+  style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1,
+});
+const dashboardCashAxisColor = 'var(--dashboard-cash-axis)';
 
 const projectPercentFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'percent',
@@ -159,15 +169,15 @@ const getDaysLeftText = (targetDate: Date) => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
   if (diffDays < 0) {
-    return { text: `Vencido há ${Math.abs(diffDays)}d`, className: 'bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20' };
+    return { days: diffDays, text: `Vencido há ${Math.abs(diffDays)}d`, className: 'bg-red-500/15 text-red-700 dark:text-red-400 border border-red-500/20' };
   }
   if (diffDays === 0) {
-    return { text: 'Vence hoje', className: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20' };
+    return { days: diffDays, text: 'Vence hoje', className: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-500/20' };
   }
   if (diffDays === 1) {
-    return { text: 'Amanhã', className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/20' };
+    return { days: diffDays, text: 'Amanhã', className: 'bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/20' };
   }
-  return { text: `Em ${diffDays} dias`, className: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/80' };
+  return { days: diffDays, text: `Em ${diffDays} dias`, className: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700/80' };
 };
 
 export function Dashboard() {
@@ -323,20 +333,6 @@ export function Dashboard() {
       completed,
       rate: completedPart,
       pending,
-      segments: [
-        {
-          label: 'Concluídas',
-          count: completed,
-          part: completedPart,
-          color: chartColors.positive,
-        },
-        {
-          label: 'Pendentes',
-          count: pending,
-          part: total > 0 ? Math.max(0, 100 - completedPart) : 0,
-          color: chartColors.warning,
-        },
-      ],
     };
   }, [filteredOverview?.taskCompletion]);
 
@@ -401,8 +397,8 @@ export function Dashboard() {
       titulo: string;
       contexto: string;
       data: Date;
+      dateTime: string;
       dataString: string;
-      badgeColor: string;
       link: string;
     }> = [];
 
@@ -418,8 +414,8 @@ export function Dashboard() {
             titulo: t.titulo,
             contexto: t.projetoNome || t.clienteNome || 'Interno',
             data: date,
+            dateTime: t.dataLimite,
             dataString: formattedDate,
-            badgeColor: t.prioridade === 'Alta' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20',
             link: appLinks.task(t.id)
           });
         }
@@ -438,8 +434,8 @@ export function Dashboard() {
             titulo: `${l.numero} - ${l.orgao}`,
             contexto: l.projetoNome || 'Sem projeto',
             data: date,
+            dateTime: l.dataVencimento.slice(0, 10),
             dataString: formattedDate,
-            badgeColor: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
             link: appLinks.license(l.id)
           });
         }
@@ -448,6 +444,8 @@ export function Dashboard() {
 
     return items.sort((a, b) => a.data.getTime() - b.data.getTime()).slice(0, 5);
   }, [tasks, licencas]);
+  const [featuredDeadline, ...remainingDeadlines] = upcomingItems;
+  const featuredDeadlineStatus = featuredDeadline && getDaysLeftText(featuredDeadline.data);
   const failedWithoutData = (overviewError && !overview)
     || (statsError && !stats);
 
@@ -470,9 +468,7 @@ export function Dashboard() {
         title="Visão Geral"
         description="Monitoramento operacional, financeiro e geográfico consolidado."
       />
-      
-            {/* Top Row: Finance & Quick Stats */}
-      <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
+      <WidgetSection id="dashboard-cash-section-title" title="Caixa e indicadores" className="border-t-0 pt-0 sm:pt-0" contentClassName="grid grid-cols-1 gap-6 xl:grid-cols-12">
         
         {/* Fluxo de Caixa (Large Bento Box) */}
         <div
@@ -483,10 +479,10 @@ export function Dashboard() {
               <div className="w-12 h-12 flex items-center justify-center">
                 <img src={valueChainIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">Fluxo de Caixa</h2>
+              <h3 className="text-base font-semibold text-text-primary">Evolução do caixa</h3>
             </div>
             <div className="text-right">
-              <span className="text-sm font-medium text-text-muted block mb-1">Resultado de Caixa</span>
+              <span className="mb-1 block text-sm font-medium text-text-secondary">Resultado de caixa</span>
               <span className="whitespace-nowrap text-2xl font-semibold tracking-tight text-text-primary sm:text-3xl">
                 {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(netProfit / 100)}
               </span>
@@ -505,38 +501,49 @@ export function Dashboard() {
             </div>
           </div>
 
-          <div className="flex-1 min-h-[200px] w-full">
-            {financeChartReady ? <ResponsiveContainer {...responsiveChartProps}>
-              <AreaChart data={financeChartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                <defs>
+          <div className={cn('min-w-0', stats && 'grid gap-4 min-[1440px]:grid-cols-[minmax(0,240px)_minmax(0,1fr)]')}>
+            {stats && (
+              <DashboardCashWidget
+                received={stats.financial.kpis.receivedRevenue}
+                paid={stats.financial.kpis.paidExpenses}
+              />
+            )}
+            <div className="dashboard-cash-chart h-[220px] min-w-0 w-full">
+              {financeChartReady ? <ResponsiveContainer {...responsiveChartProps}>
+                <AreaChart data={financeChartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    {cashFlowChartSeries.map((series) => (
+                      <linearGradient key={series.gradientId} id={series.gradientId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={series.color} stopOpacity={series.gradientOpacity} />
+                        <stop offset="95%" stopColor={series.color} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--dashboard-cash-grid)" />
+                  <ReferenceLine y={0} stroke={dashboardCashAxisColor} strokeWidth={1.5} />
+                  <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: chartSecondaryTextColor }} padding={{ left: 8, right: 8 }} minTickGap={18} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: chartSecondaryTextColor }} width={62} tickFormatter={(value) => compactCashAxis.format(Number(value))} padding={{ top: 5, bottom: 5 }} />
+                  <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
                   {cashFlowChartSeries.map((series) => (
-                    <linearGradient key={series.gradientId} id={series.gradientId} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={series.color} stopOpacity={series.gradientOpacity} />
-                      <stop offset="95%" stopColor={series.color} stopOpacity={0} />
-                    </linearGradient>
+                    <Area
+                      key={series.dataKey}
+                      type="monotone"
+                      name={series.label}
+                      dataKey={series.dataKey}
+                      stroke={series.color}
+                      strokeWidth={3}
+                      strokeDasharray={series.dash}
+                      strokeLinecap="round"
+                      fill={`url(#${series.gradientId})`}
+                      fillOpacity={1}
+                      dot={false}
+                      activeDot={chartActiveDot(series.color)}
+                      isAnimationActive={false}
+                    />
                   ))}
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} opacity={0.4} />
-                <XAxis dataKey="mes" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} dy={10} minTickGap={18} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: chartTextColor }} tickFormatter={(value) => `R$ ${value}`} />
-                <RechartsTooltip cursor={chartCursor} content={<RichTooltip showDifference={true} differenceLabel="Saldo de caixa" format="currency" />} />
-                {cashFlowChartSeries.map((series) => (
-                  <Area
-                    key={series.dataKey}
-                    type="monotone"
-                    name={series.label}
-                    dataKey={series.dataKey}
-                    stroke={series.color}
-                    strokeWidth={3}
-                    fill={`url(#${series.gradientId})`}
-                    fillOpacity={1}
-                    dot={false}
-                    activeDot={chartActiveDot(series.color)}
-                    isAnimationActive={false}
-                  />
-                ))}
-              </AreaChart>
-            </ResponsiveContainer> : <div aria-hidden="true" className="h-full min-h-[200px] rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />}
+                </AreaChart>
+              </ResponsiveContainer> : <div aria-hidden="true" className="h-full min-h-[200px] rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />}
+            </div>
           </div>
         </div>
 
@@ -546,7 +553,7 @@ export function Dashboard() {
           aria-busy={overviewLoading || loadingStats}
           className="col-span-1 xl:col-span-4"
         >
-          <div className="grid h-full auto-rows-fr grid-cols-1 gap-4 sm:gap-5 md:grid-cols-2 lg:gap-6">
+          <div className="grid h-full auto-rows-fr grid-cols-1 gap-5 md:grid-cols-2 lg:gap-6">
             <MetricCard
               label="Clientes"
               value={overviewLoading ? <Skeleton className="h-9 w-20" /> : String(overview?.clientsTotal ?? 0).padStart(2, '0')}
@@ -591,10 +598,9 @@ export function Dashboard() {
           </div>
         </section>
 
-      </div>
+      </WidgetSection>
 
-      {/* Row 2: Vencimentos & Eficiência */}
-      {operationalPanelsReady ? <div className="mb-5 grid grid-cols-1 gap-5 lg:mb-6 lg:gap-6 xl:grid-cols-12">
+      {operationalPanelsReady ? <WidgetSection id="dashboard-deadlines-section-title" title="Prazos e execução" className="mt-8 sm:mt-10" contentClassName="grid grid-cols-1 gap-6 xl:grid-cols-12">
         
         {/* Próximos Vencimentos */}
         <div
@@ -606,48 +612,62 @@ export function Dashboard() {
                 <img src={calendarIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
               <div>
-                <h2 className="block text-sm font-semibold uppercase tracking-wider text-text-muted">Próximos Vencimentos</h2>
-                <span className="text-[10px] text-text-secondary font-medium block mt-0.5">Prazos de tarefas e licenças ambientais para os próximos dias</span>
+                <h3 className="text-base font-semibold text-text-primary">Próximos Vencimentos</h3>
+                <p className="mt-1 text-xs leading-5 text-text-secondary">Prazos de tarefas e licenças ambientais</p>
               </div>
             </div>
 
-            <div className="space-y-3">
-              {upcomingItems.length === 0 ? (
+            <div className="dashboard-deadline-list">
+              {featuredDeadline && featuredDeadlineStatus ? (
+                <DashboardDeadlineWidget
+                  title={featuredDeadline.titulo}
+                  context={featuredDeadline.contexto}
+                  kind={featuredDeadline.tipo === 'tarefa' ? 'Tarefa' : 'Licença'}
+                  date={featuredDeadline.data}
+                  dateTime={featuredDeadline.dateTime}
+                  days={featuredDeadlineStatus.days}
+                  status={featuredDeadlineStatus.text}
+                  href={featuredDeadline.link}
+                />
+              ) : (
                 <div className="py-12 text-center text-zinc-600 dark:text-zinc-300 text-sm">
                   Nenhum vencimento pendente para os próximos dias.
                 </div>
-              ) : (
-                upcomingItems.map((item) => {
-                  const daysBadge = getDaysLeftText(item.data);
-                  return (
-                    <Link
-                      key={`${item.tipo}-${item.id}`}
-                      to={item.link}
-                      aria-label={`Abrir ${item.tipo === 'tarefa' ? 'tarefa' : 'licença'}: ${item.titulo}`}
-                      className="geo-focus-ring flex items-center justify-between gap-4 rounded-2xl border border-zinc-100 bg-zinc-50 p-3 transition-colors hover:bg-zinc-100/50 dark:border-zinc-800/80 dark:bg-zinc-800/40 dark:hover:bg-zinc-800/70"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 flex items-center justify-center shrink-0">
-                          {item.tipo === 'tarefa' ? (
-                            <img src={calendarIcon} alt="" className="h-[22px] w-[22px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-                          ) : (
-                            <img src={diplomaIcon} alt="" className="h-[26px] w-[26px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
-                          )}
+              )}
+              {remainingDeadlines.length > 0 && (
+                <div className="min-w-0 space-y-3">
+                  {remainingDeadlines.map((item) => {
+                    const daysBadge = getDaysLeftText(item.data);
+                    return (
+                      <Link
+                        key={`${item.tipo}-${item.id}`}
+                        to={item.link}
+                        aria-label={`Abrir ${item.tipo === 'tarefa' ? 'tarefa' : 'licença'}: ${item.titulo}`}
+                        className="geo-focus-ring flex items-center justify-between gap-4 rounded-2xl border border-zinc-100 bg-zinc-50 p-3 transition-colors hover:bg-zinc-100/50 dark:border-zinc-800/80 dark:bg-zinc-800/40 dark:hover:bg-zinc-800/70"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                            {item.tipo === 'tarefa' ? (
+                              <img src={calendarIcon} alt="" className="h-[22px] w-[22px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                            ) : (
+                              <img src={diplomaIcon} alt="" className="h-[26px] w-[26px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="truncate text-xs font-bold text-text-primary">{item.titulo}</h4>
+                            <p className="text-[10px] text-text-secondary truncate mt-0.5">{item.contexto}</p>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <h3 className="text-xs font-bold text-text-primary truncate">{item.titulo}</h3>
-                          <p className="text-[10px] text-text-secondary truncate mt-0.5">{item.contexto}</p>
+                        <div className="flex flex-wrap items-center justify-end gap-1 sm:gap-3">
+                          <time dateTime={item.dateTime} className="text-[10px] text-text-secondary font-medium tabular-nums">{item.dataString}</time>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${daysBadge.className}`}>
+                            {daysBadge.text}
+                          </span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className="text-[10px] text-text-secondary font-medium tabular-nums">{item.dataString}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${daysBadge.className}`}>
-                          {daysBadge.text}
-                        </span>
-                      </div>
-                    </Link>
-                  );
-                })
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
             </div>
           </div>
@@ -664,7 +684,7 @@ export function Dashboard() {
                 <img src={stopwatchIcon} alt="" className="h-[34px] w-[34px] object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-text-primary">Taxa de conclusão</h2>
+                <h3 className="text-base font-semibold text-text-primary">Taxa de conclusão</h3>
                 <p className="mt-1 text-xs leading-5 text-text-secondary">
                   {taskPeriodLabel} · tarefas com prazo no período
                 </p>
@@ -741,58 +761,15 @@ export function Dashboard() {
                 <Skeleton className="h-[34px] w-full" />
                 <div className="grid grid-cols-2 gap-5"><Skeleton className="h-12" /><Skeleton className="h-12" /></div>
               </div>
-            ) : taskSummary.total === 0 ? (
-              <div className="flex min-h-32 items-center justify-center rounded-xl border border-dashed border-zinc-200 bg-zinc-50/70 px-4 text-center text-sm text-text-secondary dark:border-zinc-700 dark:bg-zinc-800/30" role="status">
-                Sem tarefas com prazo neste período.
-              </div>
             ) : (
-              <>
-                <div className="flex flex-wrap items-end gap-x-2 gap-y-1">
-                  <span className="text-3xl font-bold leading-none tracking-tight text-text-primary tabular-nums">
-                    {taskSummary.completed.toLocaleString('pt-BR')} de {taskSummary.total.toLocaleString('pt-BR')}
-                  </span>
-                  <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
-                    {taskSummary.rate}%
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">tarefas concluídas no período selecionado</p>
-
-                <div
-                  className="mt-6 flex h-[34px] w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800"
-                  role="img"
-                  aria-label={`${taskSummary.segments[0].count} tarefas concluídas e ${taskSummary.segments[1].count} pendentes`}
-                >
-                  {taskSummary.segments.map((segment) => segment.part > 0 && (
-                    <div
-                      key={segment.label}
-                      className="flex h-full items-center justify-center text-xs font-bold leading-none text-white dark:text-zinc-950 tabular-nums"
-                      style={{ width: `${segment.part}%`, backgroundColor: segment.color }}
-                      aria-hidden="true"
-                    >
-                      {segment.part > 10 ? `${segment.part}%` : null}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
-                  {taskSummary.segments.map((segment) => (
-                    <div key={segment.label} className="border-b-[3px] pb-1.5" style={{ borderBottomColor: segment.color }}>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{segment.label}</p>
-                      <div className="mt-1 flex items-end justify-between gap-2">
-                        <span className="font-bold text-text-primary tabular-nums">{segment.count.toLocaleString('pt-BR')}</span>
-                        <span className="text-sm font-bold leading-tight tabular-nums" style={{ color: segment.color }}>{segment.part}%</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
+              <DashboardCompletionWidget {...taskSummary} />
             )}
           </div>
         </div>
 
-      </div> : <div aria-hidden="true" className="mb-5 min-h-[360px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35 lg:mb-6" />}
-{/* Row 3: Distribuição e Despesas */}
-      {activityPanelsReady ? <div className="grid grid-cols-1 gap-5 lg:gap-6 xl:grid-cols-12">
+      </WidgetSection> : <div aria-hidden="true" className="mt-8 min-h-[360px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35 sm:mt-10" />}
+
+      {activityPanelsReady ? <WidgetSection id="dashboard-activity-section-title" title="Atividade e carteira" className="mt-8 sm:mt-10" contentClassName="grid grid-cols-1 gap-6 xl:grid-cols-12">
         
         {/* Atividades Recentes (span 8) */}
         <div
@@ -803,7 +780,7 @@ export function Dashboard() {
 
         {/* Distribuição de Projetos (span 4) */}
         <div
-          className="geo-card col-span-1 flex h-[380px] flex-col p-5 sm:h-[460px] sm:p-6 lg:p-8 xl:col-span-4"
+          className="geo-card col-span-1 flex min-h-[380px] flex-col p-5 sm:min-h-[460px] sm:p-6 lg:p-8 xl:col-span-4"
           aria-busy={overviewFetching}
         >
           <div className="flex flex-col gap-3">
@@ -813,7 +790,7 @@ export function Dashboard() {
                   <img src={blueprintIcon} alt="" className="h-8 w-8 object-contain drop-shadow-[0_1px_1px_rgba(15,23,42,0.16)] dark:drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" />
                 </div>
                 <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-text-primary">Distribuição de projetos</h2>
+                  <h3 className="text-base font-semibold text-text-primary">Distribuição de projetos</h3>
                   <p className="mt-1 text-xs leading-5 text-text-secondary">
                     {projectScope === 'active'
                       ? `Carteira atual · ${(filteredOverview?.projectsInScope ?? 0).toLocaleString('pt-BR')} ${(filteredOverview?.projectsInScope ?? 0) === 1 ? 'projeto ativo' : 'projetos ativos'}`
@@ -875,18 +852,20 @@ export function Dashboard() {
               )}
             </div>
           </div>
-          <div className="min-h-0 flex-1 py-2" aria-live="polite">
+          <div className="flex min-h-[180px] flex-1 flex-col justify-center py-2" aria-live="polite">
             {!filteredOverview ? (
               <div aria-hidden="true" className="h-full rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />
-            ) : projetosStatusData.length === 0 ? (
+            ) : projectDistributionTotal === 0 ? (
               <div className="flex h-full flex-col items-center justify-center px-4 text-center">
                 <img src={blueprintIcon} alt="" className="h-10 w-10 opacity-45 grayscale" />
                 <p className="mt-3 text-sm font-semibold text-text-secondary">Nenhum projeto neste escopo.</p>
                 <p className="mt-1 max-w-xs text-xs leading-5 text-text-muted">Selecione outro escopo ou cadastre um novo projeto para preencher o gráfico.</p>
               </div>
+            ) : projetosStatusData.length <= 3 ? (
+              <DashboardProjectDistributionWidget items={projetosStatusData} total={projectDistributionTotal} />
             ) : projectChartReady ? (
               <div
-                className="relative mx-auto h-full max-h-[240px] w-full max-w-[240px]"
+                className="relative mx-auto min-h-[164px] max-h-[240px] w-full max-w-[240px] flex-1"
                 role="img"
                 aria-label={`Distribuição de ${projectDistributionTotal} ${projectDistributionTotal === 1 ? 'projeto' : 'projetos'} no escopo selecionado`}
               >
@@ -951,7 +930,7 @@ export function Dashboard() {
               </div>
             ) : <div aria-hidden="true" className="h-full rounded-xl bg-zinc-100/70 dark:bg-zinc-800/40" />}
           </div>
-          {projetosStatusData.length > 0 && (
+          {projectDistributionTotal > 0 && (
             <div className="flex flex-col gap-1 border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800/80">
               <div className="font-medium leading-none text-text-primary">Base de cálculo</div>
               <p className="leading-5 text-text-secondary">
@@ -964,7 +943,7 @@ export function Dashboard() {
             </div>
           )}
         </div>
-      </div> : <div aria-hidden="true" className="min-h-[420px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35" />}
+      </WidgetSection> : <div aria-hidden="true" className="mt-8 min-h-[420px] rounded-2xl bg-zinc-100/55 dark:bg-zinc-900/35 sm:mt-10" />}
     </Layout>
   );
 }

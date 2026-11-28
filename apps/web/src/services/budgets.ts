@@ -6,6 +6,7 @@ export interface BudgetSummary {
   clientName?: string | null;
   projectId?: string | null;
   projectName?: string | null;
+  propertyName?: string | null;
   status: string;
   totalCents: number;
   issueDate?: string | null;

@@ -1,4 +1,4 @@
-import { basisPointsToPercentage, calculateBudget, percentageToBasisPoints, type BudgetCalculationResult } from '@geogestor/contracts/src/budgets';
+import { basisPointsToPercentage, BudgetExecutionStartSchema, calculateBudget, percentageToBasisPoints, type BudgetCalculationResult } from '@geogestor/contracts/src/budgets';
 import type { BudgetDetail, BudgetFormItem, BudgetFormState } from './types';
 
 export type BudgetValidationSection = 'header' | 'client' | 'characterization' | 'items' | 'costs' | 'taxes' | 'fees' | 'payment' | 'summary' | 'notes' | 'document';
@@ -13,6 +13,15 @@ export const formatCurrency = (cents: number | null | undefined) => new Intl.Num
   style: 'currency',
   currency: 'BRL'
 }).format((cents || 0) / 100);
+
+export function paymentTypeLabel(type?: string | null) {
+  const labels: Record<string, string> = { avista: 'À vista', entrada_saldo: 'Entrada + saldo', etapas: 'Por etapas', parcelas: 'Parcelado' };
+  return type ? labels[type] || type.replaceAll('_', ' ').replace(/^./, character => character.toLocaleUpperCase('pt-BR')) : 'Não informada';
+}
+
+export const formatQuantity = (value: string) => new Intl.NumberFormat('pt-BR', {
+  maximumFractionDigits: 6
+}).format(Number(value.replace(',', '.')));
 
 export const formatBasisPoints = (basisPoints: number | null | undefined) => basisPoints === null || basisPoints === undefined
   ? 'Não calculável'
@@ -119,7 +128,7 @@ export function createDefaultBudgetForm(clientId = '', companyTerms?: string | n
     deliverables: '',
     executionDays: '15',
     characterization: {
-      estimatedArea: '', areaUnit: 'hectare', estimatedPerimeter: '', estimatedVertices: '', neighbors: '',
+      scopeDescription: '', estimatedArea: '', areaUnit: 'hectare', estimatedPerimeter: '', estimatedVertices: '', neighbors: '',
       record: '', registryOffice: '', ruralCode: '', approximateCoordinates: '', distanceKm: '',
       accessConditions: '', terrain: '', vegetation: '', complexity: 'média', travelRequired: false,
       lodgingRequired: false, additionalTeam: false, equipment: '', surveyMethod: '', physicalGroundControl: '',
@@ -132,8 +141,8 @@ export function createDefaultBudgetForm(clientId = '', companyTerms?: string | n
     items: [emptyBudgetItem()],
     costs: [],
     taxes: [],
-    paymentType: 'parcelas',
-    paymentDescription: 'À vista na aprovação',
+    paymentType: 'avista',
+    paymentDescription: '',
     paymentMethod: 'PIX',
     financialAccount: '',
     interestBasisPoints: '0',
@@ -329,6 +338,11 @@ export function validateBudgetForm(form: BudgetFormState): BudgetValidationIssue
   }
   if (form.executionDays && (!Number.isInteger(Number(form.executionDays)) || Number(form.executionDays) < 0)) {
     add('budget-execution-days', 'Informe um prazo inteiro igual ou maior que zero.', 'header');
+  }
+  if (form.characterization.executionStart) {
+    const start = BudgetExecutionStartSchema.safeParse(form.characterization.executionStart);
+    if (!start.success) add('budget-execution-start-description', 'Descreva a condição de início do prazo.', 'header');
+    if (!form.executionDays) add('budget-execution-days', 'Informe o prazo de execução para definir seu início.', 'header');
   }
 
   if (!form.clientId) add('budget-client', 'Selecione o cliente desta proposta.', 'client');

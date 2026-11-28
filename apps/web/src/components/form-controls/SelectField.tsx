@@ -35,18 +35,22 @@ function readOptions(children: ReactNode): SelectOption[] {
 
 export interface SelectFieldProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'multiple' | 'size'> {
   wrapperClassName?: string;
+  density?: 'compact' | 'form' | 'formLarge';
   loading?: boolean;
   compactCaret?: boolean;
   searchable?: boolean | 'auto';
   searchPlaceholder?: string;
   emptyMessage?: string;
   popoverClassName?: string;
+  popoverMaxWidth?: number;
+  matchTriggerWidth?: boolean;
 }
 
 export function SelectField({
   children,
   className,
   wrapperClassName,
+  density = 'compact',
   disabled,
   loading = false,
   compactCaret = false,
@@ -54,6 +58,8 @@ export function SelectField({
   searchPlaceholder = 'Pesquisar…',
   emptyMessage = 'Nenhuma opção encontrada.',
   popoverClassName,
+  popoverMaxWidth = 420,
+  matchTriggerWidth = false,
   id,
   name,
   value,
@@ -79,6 +85,7 @@ export function SelectField({
   const listboxId = useId();
   const shouldSearch = searchable === true || (searchable === 'auto' && options.length > 12);
   const selected = options.find((option) => option.value === currentValue);
+  const optionWidth = Math.min(420, options.reduce((width, option) => Math.max(width, option.label.length * 9 + 48), 192));
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
     return normalized ? options.filter((option) => option.label.toLocaleLowerCase('pt-BR').includes(normalized)) : options;
@@ -189,6 +196,7 @@ export function SelectField({
         className={cn(
           geoFieldClass,
           'geo-select-trigger geo-dropdown-trigger flex w-48 max-w-full appearance-none items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60',
+          density !== 'compact' && (density === 'formLarge' ? 'geo-form-select-large' : 'geo-form-select'),
           compactCaret ? 'pr-8' : 'pr-10',
           className
         )}
@@ -197,7 +205,7 @@ export function SelectField({
         <CaretDown aria-hidden="true" weight="bold" className={cn('h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-150 motion-reduce:transition-none dark:text-zinc-400', open && 'rotate-180')} />
       </button>
 
-      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={listboxId} role="listbox" ariaLabel={ariaLabel || 'Opções'} minWidth={192} maxWidth={192} className={cn('geo-dropdown-content', popoverClassName)}>
+      <PopoverSurface ref={popoverRef} open={open} anchorRef={triggerRef} id={listboxId} role="listbox" ariaLabel={ariaLabel || 'Opções'} minWidth={matchTriggerWidth ? 0 : optionWidth} maxWidth={popoverMaxWidth} className={cn('geo-dropdown-content', popoverClassName)}>
         {shouldSearch && (
           <div className="border-b border-brand-border p-2">
             <label className="relative block">
@@ -234,7 +242,7 @@ export function SelectField({
                 onClick={() => choose(option.value)}
                 className={cn('geo-option-row geo-dropdown-item', active && 'geo-option-row-active', isSelected && 'geo-option-row-selected')}
               >
-                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                <span className="min-w-0 flex-1 break-words">{option.label}</span>
                 {isSelected && <Check aria-hidden="true" weight="bold" className="h-4 w-4 shrink-0" />}
               </button>
             );

@@ -1,12 +1,5 @@
-export type PlanningFormKind =
-  | 'cycle'
-  | 'pillar'
-  | 'objective'
-  | 'keyResult'
-  | 'initiative'
-  | 'checkin'
-  | 'decision'
-  | 'risk';
+import type { PlanningFormKind } from './planningMetadata';
+export type { PlanningFormKind } from './planningMetadata';
 
 export type PlanningFormErrors = Record<string, string>;
 
@@ -85,10 +78,6 @@ export function validatePlanningForm(
 
   if ((kind === 'pillar' || kind === 'objective') && (!Number.isInteger(Number(state.ordem)) || Number(state.ordem) < 0 || Number(state.ordem) > 999)) {
     errors[kind === 'pillar' ? 'pillar-order' : 'objective-order'] = 'Informe uma ordem inteira entre 0 e 999.';
-  }
-
-  if (kind === 'checkin' && state.proximaRevisao && state.data && state.proximaRevisao < state.data) {
-    errors['checkin-next-review'] = 'A próxima revisão não pode ser anterior a esta revisão.';
   }
 
   if (kind === 'decision' && state.status === 'concluida' && isBlank(state.notaConclusao)) {

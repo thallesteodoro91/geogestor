@@ -85,6 +85,7 @@ export function ProjetoFormFields({
       <div className="space-y-4">
         <FormSection
           sectionId="project-section-essential"
+          headingLevel={3}
           title={context === 'projeto' ? 'Identificação e planejamento' : 'Identificação da demanda'}
           description={context === 'projeto' ? 'Defina o cliente, o escopo resumido e as datas principais do trabalho.' : 'Defina o cliente, a natureza, o escopo resumido e as datas principais da demanda.'}
           icon={<PresentationChart className="h-5 w-5" weight="duotone" />}
@@ -106,11 +107,13 @@ export function ProjetoFormFields({
             />
           </FormField>
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <FormField htmlFor="project-clienteId" label="Cliente" required error={errors.clienteId}>
-              <div className="flex min-w-0 flex-col gap-2 sm:flex-row md:col-span-1 md:flex-col xl:flex-row">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormField htmlFor="project-clienteId" label="Cliente" required error={errors.clienteId} className="md:col-span-2">
+              <div className="flex min-w-0 items-stretch gap-2">
                 <RemoteCombobox<ProjectClientOption>
                   id="project-clienteId"
+                  fill
+                  density="formLarge"
                   name="clienteId"
                   endpoint="/api/clientes/options"
                   value={form.clienteId}
@@ -123,7 +126,7 @@ export function ProjetoFormFields({
                   }}
                   aria-invalid={Boolean(errors.clienteId)}
                   aria-describedby={describedBy('clienteId', errors)}
-                  className="min-w-0 flex-1"
+                  className="min-w-0"
                 />
                 <button
                   id="project-create-client"
@@ -139,6 +142,7 @@ export function ProjetoFormFields({
             <FormField htmlFor="project-tipo" label={copy.typeLabel} required error={errors.tipo}>
               <FormSelect
                 id="project-tipo"
+                density="formLarge"
                 name="tipo"
                 autoComplete="off"
                 value={form.tipo}
@@ -152,7 +156,7 @@ export function ProjetoFormFields({
               </FormSelect>
             </FormField>
             <FormField htmlFor="project-status" label="Status inicial">
-              <FormSelect id="project-status" name="status" autoComplete="off" value={form.status} onChange={(event) => update('status', event.target.value)} className={cn(fieldClass, 'geo-native-select cursor-pointer')}>
+              <FormSelect id="project-status" name="status" density="formLarge" autoComplete="off" value={form.status} onChange={(event) => update('status', event.target.value)} className={cn(fieldClass, 'geo-native-select cursor-pointer')}>
                 <option value="Planejamento">Planejamento</option>
                 <option value="Em Análise">Em análise</option>
                 <option value="Em Andamento">Em andamento</option>
@@ -184,6 +188,7 @@ export function ProjetoFormFields({
         {isEnvironmental && (
           <FormSection
             sectionId="project-section-environmental"
+            headingLevel={3}
             title={form.tipo === 'Licenciamento' ? 'Dados do licenciamento' : 'Dados da demanda ambiental'}
             description="Registre o órgão, o tipo de demanda e o número usado para acompanhamento."
             icon={<FileText className="h-5 w-5" weight="duotone" />}
@@ -258,6 +263,7 @@ export function ProjetoFormFields({
         {isExpertAssessment && (
           <FormSection
             sectionId="project-section-expert-assessment"
+            headingLevel={3}
             title="Dados da perícia"
             description="Registre a modalidade, o processo relacionado e a data prevista para a vistoria."
             icon={<Scales className="h-5 w-5" weight="duotone" />}
@@ -294,6 +300,7 @@ export function ProjetoFormFields({
       <div className="space-y-4">
         <FormSection
           sectionId="project-section-property"
+          headingLevel={3}
           title="Dados do imóvel"
           description="Informe a área e a situação documental do imóvel associado ao trabalho, quando aplicável."
           icon={<Compass className="h-5 w-5" weight="duotone" />}
@@ -362,6 +369,7 @@ export function ProjetoFormFields({
         {isRural && (
           <FormSection
             sectionId="project-section-rural-documents"
+            headingLevel={3}
             title="Documentação rural"
             description="Esses identificadores aparecem apenas para imóveis classificados como rurais."
             icon={<FileText className="h-5 w-5" weight="duotone" />}
@@ -389,6 +397,7 @@ export function ProjetoFormFields({
     <div className="space-y-4">
       <FormSection
         sectionId="project-section-location"
+        headingLevel={3}
         title="Localização"
         description="Use município e UF como referência administrativa e coordenadas em graus decimais."
         icon={<MapPin className="h-5 w-5" weight="duotone" />}
@@ -424,6 +433,7 @@ export function ProjetoFormFields({
 
       <FormSection
         sectionId="project-section-notes"
+        headingLevel={3}
         title="Notas técnicas"
         description="Registre limites, marcos, acessos, referências e trâmites relevantes para a equipe."
         icon={<FileText className="h-5 w-5" weight="duotone" />}

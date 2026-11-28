@@ -93,7 +93,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
     await page.locator('#client-cpf').fill('52998224725');
     await page.locator('#client-celular').fill('48999998888');
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
     await page.getByRole('searchbox', { name: 'Buscar clientes' }).fill(CLIENT_NAME);
@@ -107,7 +107,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('button', { name: `Ações de ${CLIENT_NAME}` }).click();
     await page.getByRole('menuitem', { name: 'Editar' }).click();
     await page.getByLabel('Nome completo').fill(UPDATED_CLIENT_NAME);
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
     await expect(page.getByRole('dialog', { name: /Editar cliente/ })).toHaveCount(0);
     const clientSearch = page.getByRole('searchbox', { name: 'Buscar clientes' });
     await clientSearch.fill(UPDATED_CLIENT_NAME);
@@ -128,7 +128,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByLabel('Nome completo').fill(CLIENT_NAME);
     await page.locator('#client-cpf').fill('11144477735');
     await page.locator('#client-celular').fill('48999997777');
-    await page.getByRole('button', { name: 'Salvar cliente' }).click();
+    await page.getByRole('button', { name: 'Cadastrar cliente' }).click();
     await expect(page.getByRole('dialog', { name: /Novo cliente/ })).toHaveCount(0);
     await expect(page.getByText(CLIENT_NAME, { exact: true }).first()).toBeVisible();
 
@@ -166,7 +166,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('tab', { name: 'Contas a receber' })).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('despesas por categoria usam barras compactas e preservam os valores exatos', async ({ page }) => {
+  test('despesas por categoria agrupam a barra e preservam os valores no detalhamento', async ({ page }) => {
     await unlock(page);
     const expense = (categoria: string, total: number) => ({
       categoria, total, pago: total, aberto: 0, count: 1, percentual: 0
@@ -192,10 +192,15 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     });
     await navigateBySidebar(page, 'Financeiro');
 
-    const categoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
-    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
-    await expect(categoryChart.getByText('Combustível', { exact: true })).toBeVisible();
-    await expect(categoryChart.getByText('R$ 450,00', { exact: true })).toBeVisible();
+    const openCategories = () => page.locator('summary').filter({ hasText: 'Despesas por categoria' }).click();
+    const chart = page.getByRole('region', { name: 'Despesas por categoria', exact: true });
+    const detail = page.getByRole('region', { name: 'Detalhamento por categoria', exact: true });
+    await openCategories();
+    await expect(chart.getByText('Outras categorias', { exact: true })).toBeVisible();
+    await expect(chart.locator('.finance-aura-category-strip > span')).toHaveCount(3);
+    await expect(detail.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(detail.getByText('R$ 450,00', { exact: true })).toBeVisible();
+    await expect(detail.getByText('Alimentação', { exact: true })).toBeVisible();
 
     visibleCategories = fourCategories.slice(0, 3);
     await page.reload();
@@ -204,10 +209,11 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await page.getByRole('button', { name: 'Desbloquear' }).click();
     await expect(page.getByRole('heading', { name: 'Financeiro', exact: true })).toBeVisible();
 
-    const updatedCategoryChart = page.getByRole('img', { name: 'Gráfico de barras das despesas por categoria' });
-    await expect(page.locator('[data-chart-mode="bars"]')).toBeVisible();
-    await expect(updatedCategoryChart.getByText('Combustível', { exact: true })).toBeVisible();
-    await expect(updatedCategoryChart.getByText('Alimentação', { exact: true })).toHaveCount(0);
+    await openCategories();
+    await expect(chart.getByText('Combustível', { exact: true })).toBeVisible();
+    await expect(chart.getByText('Outras categorias', { exact: true })).toHaveCount(0);
+    await expect(chart.locator('.finance-aura-category-strip > span')).toHaveCount(3);
+    await expect(detail.getByText('Alimentação', { exact: true })).toHaveCount(0);
     await page.unroute('**/api/financeiro/overview**');
   });
 
@@ -233,7 +239,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     const tileRequest = page.waitForRequest(tileUrl);
     await page.getByRole('tab', { name: 'Distância e azimute' }).click();
     await tileRequest;
-    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    await page.context().setOffline(true);
     await expect(page.getByText('Mapa-base indisponível')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Mapa dos pontos de origem e destino' })).toBeVisible();
     await expect(page.getByText(/marcadores, geometrias e dados próprios continuam visíveis/i)).toBeVisible();
@@ -291,10 +297,25 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(administrationLabel).toBeVisible();
     await expect(page.getByRole('button', { name: 'GESTÃO E SISTEMA' })).toHaveCount(0);
 
-    const navigationStartedAt = await page.evaluate(() => performance.now());
+    // Measure inside the browser, excluding automation round trips and polling.
+    await page.evaluate(() => {
+      const state = { startedAt: 0, elapsedMs: null as number | null };
+      (window as typeof window & { __sidebarTiming?: typeof state }).__sidebarTiming = state;
+      const observer = new MutationObserver(() => {
+        if (state.startedAt && document.querySelector('h1')?.textContent?.includes('Relatórios')) {
+          observer.disconnect();
+          requestAnimationFrame(() => { state.elapsedMs = performance.now() - state.startedAt; });
+        }
+      });
+      document.querySelector('a[href="/relatorios"]')?.addEventListener('click', () => {
+        state.startedAt = performance.now();
+        observer.observe(document.querySelector('main')!, { childList: true, subtree: true });
+      }, { once: true });
+    });
     await page.getByRole('link', { name: 'Relatórios', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Relatórios' })).toBeVisible();
-    expect(await page.evaluate((startedAt) => performance.now() - startedAt, navigationStartedAt)).toBeLessThan(250);
+    await page.waitForFunction(() => (window as typeof window & { __sidebarTiming?: { elapsedMs: number | null } }).__sidebarTiming?.elapsedMs != null);
+    expect(await page.evaluate(() => (window as typeof window & { __sidebarTiming?: { elapsedMs: number } }).__sidebarTiming!.elapsedMs)).toBeLessThan(250);
     expect(await page.evaluate(() => (
       (window as typeof window & { __geogestorSidebar?: Element | null }).__geogestorSidebar === document.querySelector('aside')
     ))).toBe(true);
@@ -384,11 +405,11 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
     await expect(page.getByRole('heading', { name: 'Visão Geral' })).toBeVisible();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /1 não lida/);
     await notificationTrigger.click();
-    await panel.getByRole('button', { name: 'Marcar alertas filtrados como lidos' }).click();
+    await panel.getByRole('button', { name: 'Marcar os alertas desta página como lidos' }).click();
     await expect(notificationTrigger).toHaveAttribute('aria-label', /0 não lida/);
-    await expect(panel).toContainText('Tudo lido');
+    await expect(panel).toContainText('0 não lidas');
 
-    await panel.getByRole('button', { name: 'Apagar alertas filtrados' }).click();
+    await panel.getByRole('button', { name: 'Ocultar os alertas desta página' }).click();
     await expect(panel.locator('article')).toHaveCount(0);
     expect(hiddenIds.size).toBe(2);
     await panel.getByRole('button', { name: 'Desfazer' }).click();
@@ -451,7 +472,7 @@ test.describe('jornadas comerciais críticas do GeoGestor', () => {
         && [...expected.searchParams].every(([key, value]) => url.searchParams.get(key) === value)
       ));
       await page.getByRole('button', {
-        name: `${destination.categoryLabel}: ${destination.title}. Vence hoje`,
+        name: `Abrir ${destination.categoryLabel}: ${destination.title}. Vence hoje`,
         exact: true
       }).click();
       await navigated;

@@ -299,6 +299,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                       <PreloadLink
                         key={item.name}
                         to={item.path}
+                        state={{ scrollToTopFromSidebar: true }}
                         onClick={onClose}
                         aria-current={isActive ? 'page' : undefined}
                         aria-busy={isPending || undefined}
@@ -356,6 +357,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
                   <PreloadLink
                     key={item.name}
                     to={item.path!}
+                    state={{ scrollToTopFromSidebar: true }}
                     onClick={onClose}
                     aria-current={isActive ? 'page' : undefined}
                     aria-busy={isPending || undefined}

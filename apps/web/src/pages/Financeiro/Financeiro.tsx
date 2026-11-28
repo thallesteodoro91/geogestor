@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { useReducedMotion } from 'framer-motion';
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   ArrowRight,
   CalendarBlank,
@@ -18,24 +17,27 @@ import {
   SuitcaseRolling,
   TrendDown,
   TrendUp,
-  Wallet,
   WarningCircle,
   X
 } from '@phosphor-icons/react';
 import { Layout } from '../../components/Layout';
 import { PageHeader } from '../../components/PageHeader';
+import { WidgetSection } from '../../components/WidgetSection';
 import { DatePickerField } from '../../components/Form';
+import { PopoverSurface } from '../../components/form-controls/PopoverSurface';
 import { CustomSelect } from '../../components/CustomSelect';
 import { ClientProfitabilityChart } from '../../components/charts/ClientProfitabilityChart';
-import { ExpenseCategoryChart } from '../../components/charts/ExpenseCategoryChart';
+import { prepareExpenseCategoryData } from '../../components/charts/chartBreakdowns';
 import { RichTooltip } from '../../components/charts/RichTooltip';
+import { CashResultCurve } from '../../components/charts/CashResultCurve';
 import { apiClient } from '../../services/apiClient';
 import {
   buildFinancialAnalytics,
+  cashBalancePresentation,
   formatCurrencyFromCents,
   type FinancialAnalytics
 } from '../../utils/financialAnalytics';
-import { chartActiveBar, chartActiveDot, chartAnimationDuration, chartBorder, chartCursor, chartLegendStyle, chartTextColor, responsiveChartProps } from '../../utils/chartHelpers';
+import { chartActiveBar, chartActiveDot, chartResultLineZIndex, responsiveChartProps } from '../../utils/chartHelpers';
 import { chartColors } from '../../data/chart-colors';
 import { cn } from '../../utils/cn';
 import { filterControlClass } from '../../utils/filterStyles';
@@ -47,6 +49,9 @@ import {
   localNavigationIconClass,
   localNavigationItemsClass,
 } from '../../utils/localNavigationStyles';
+import { AuraAttentionWidget, AuraMediumMetric, AuraNumericValue, AuraReceivedWidget, AuraSmallBalance, AuraWidget } from '../../components/AuraWidget';
+import './finance-aura.css';
+import './finance-overview.css';
 import { Faturas } from '../Faturas/Faturas';
 import { Despesas } from '../Despesas/Despesas';
 import { GestaoFinanceira } from './GestaoFinanceira';
@@ -60,7 +65,7 @@ type FinanceTab = 'visao' | 'faturas' | 'pagar' | 'auxiliares';
 const financeTabIds: FinanceTab[] = ['visao', 'faturas', 'pagar', 'auxiliares'];
 type PeriodKey = 'month' | '3m' | '6m' | '12m' | 'year' | 'custom';
 type EmbeddedFinanceAction = {
-  type: 'despesa' | 'parcela' | 'viagem' | 'fiscal';
+  type: 'despesa' | 'parcela' | 'recebimento' | 'viagem' | 'fiscal';
   requestId: number;
 };
 type RecentFinancialEntry = {
@@ -120,8 +125,8 @@ function formatCompactCurrencyAxisValue(value: number) {
   const normalizedValue = Number(value) || 0;
   const absoluteValue = Math.abs(normalizedValue);
   if (absoluteValue < 0.5) return '0';
-  if (absoluteValue >= 1_000_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000_000)} mi`;
-  if (absoluteValue >= 1_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000)} mil`;
+  if (absoluteValue >= 1_000_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000_000)}\u00a0mi`;
+  if (absoluteValue >= 1_000) return `${compactAxisNumberFormatter.format(normalizedValue / 1_000)}\u00a0mil`;
   return compactAxisNumberFormatter.format(normalizedValue);
 }
 
@@ -144,43 +149,31 @@ function buildCashFlowAxisScale(points: Array<{ Recebido: number; Despesas: numb
   };
 }
 
+const cashReceivedColor = `var(--finance-cash-received, ${chartColors.positive})`;
+const cashExpensesColor = `var(--finance-cash-expenses, ${chartColors.negative})`;
+const cashResultColor = `var(--finance-cash-result, ${chartColors.primary})`;
+const cashResultOutline = 'var(--finance-cash-result-outline)';
+const cashAxisColor = 'var(--finance-cash-axis)';
+
 function CashFlowLegend() {
   return (
-    <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-300">
+    <ul className="finance-aura-cash__legend">
       <li className="flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartColors.positive }} />
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cashReceivedColor }} />
         Recebido
       </li>
       <li className="flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: chartColors.negative }} />
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: cashExpensesColor }} />
         Despesas
       </li>
       <li className="flex items-center gap-1.5">
-        <span aria-hidden="true" className="h-0.5 w-4 rounded-full" style={{ backgroundColor: chartColors.primary }} />
+        <span aria-hidden="true" className="h-[3px] w-4 rounded-full" style={{ backgroundColor: cashResultColor }} />
         Resultado mensal
       </li>
     </ul>
   );
 }
 
-const metricToneClasses = {
-  positive: {
-    accent: 'bg-emerald-500',
-    icon: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200'
-  },
-  warning: {
-    accent: 'bg-amber-500',
-    icon: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'
-  },
-  danger: {
-    accent: 'bg-rose-500',
-    icon: 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200'
-  },
-  neutral: {
-    accent: 'bg-zinc-400',
-    icon: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
-  }
-} as const;
 const dashboardCardClass = 'min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/60 sm:p-6';
 
 function resolveTab(value: string | null): FinanceTab {
@@ -228,45 +221,12 @@ function financialStatusClass(status: string) {
   return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300';
 }
 
-function FinancialMetric({
-  label,
-  value,
-  detail,
-  icon,
-  tone,
-  featured = false
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: ReactNode;
-  tone: keyof typeof metricToneClasses;
-  featured?: boolean;
-}) {
-  const styles = metricToneClasses[tone];
-  return (
-    <article
-      className={cn(
-        'relative min-w-0 overflow-hidden rounded-2xl border bg-white p-5 dark:bg-zinc-900/70',
-        featured
-          ? 'border-emerald-300/80 ring-1 ring-emerald-200/50 dark:border-emerald-500/35 dark:ring-emerald-500/10'
-          : 'border-zinc-200/80 dark:border-zinc-800'
-      )}
-    >
-      <span aria-hidden="true" className={cn('absolute inset-y-5 left-0 w-1 rounded-r-full', styles.accent)} />
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-500 dark:text-zinc-400">{label}</p>
-          <p className="mt-4 truncate text-2xl font-semibold tracking-tight text-zinc-950 tabular-nums dark:text-white xl:text-[1.35rem] 2xl:text-2xl">{value}</p>
-        </div>
-        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', styles.icon)}>
-          {icon}
-        </span>
-      </div>
-      <p className="mt-3 truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">{detail}</p>
-    </article>
-  );
-}
+const cashFlowPeriods = [
+  { value: 'month', label: 'Mês' },
+  { value: '3m', label: '3 meses' },
+  { value: '6m', label: '6 meses' },
+  { value: '12m', label: '12 meses' }
+] as const;
 
 function FinancialSkeleton() {
   return (
@@ -282,7 +242,10 @@ function FinancialSkeleton() {
 }
 
 export function Financeiro() {
-  const reduceMotion = useReducedMotion();
+  const cashChartId = useId();
+  const receivedPattern = `${cashChartId}-received`;
+  const expensesPattern = `${cashChartId}-expenses`;
+  const [cashTooltipAbovePlot, setCashTooltipAbovePlot] = useState(false);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeTab = resolveTab(searchParams.get('tab'));
@@ -292,6 +255,8 @@ export function Financeiro() {
   const initialFinanceClientId = searchParams.get('cliente') || '';
   const overviewEnabled = activeTab === 'visao';
   const actionMenuRef = useRef<HTMLDivElement>(null);
+  const actionTriggerRef = useRef<HTMLButtonElement>(null);
+  const actionPopupRef = useRef<HTMLDivElement>(null);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [embeddedAction, setEmbeddedAction] = useState<EmbeddedFinanceAction | null>(() => (
@@ -299,7 +264,6 @@ export function Financeiro() {
       ? { type: searchParams.get('acao') as 'despesa' | 'parcela', requestId: Date.now() }
       : null
   ));
-  const [showAllAttention, setShowAllAttention] = useState(false);
 
   const dataInicio = searchParams.get('inicio') || '';
   const dataFim = searchParams.get('fim') || '';
@@ -342,15 +306,16 @@ export function Financeiro() {
     requestAnimationFrame(() => document.getElementById(`finance-tab-${nextTab}`)?.focus());
   };
 
-  const clearFocusedRecord = (key: typeof APP_QUERY_KEYS.receivable | typeof APP_QUERY_KEYS.payable) => {
+  const clearFocusedRecord = (key: typeof APP_QUERY_KEYS.receivable | typeof APP_QUERY_KEYS.payable, receivableTab?: 'pendentes' | 'recebidas') => {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
+    if (receivableTab) next.set('receberSituacao', receivableTab);
     setSearchParams(next, { replace: true });
   };
 
   const openEmbeddedAction = (type: EmbeddedFinanceAction['type']) => {
     setEmbeddedAction({ type, requestId: Date.now() });
-    setActiveTab(type === 'despesa' ? 'pagar' : type === 'parcela' ? 'faturas' : 'auxiliares');
+    setActiveTab(type === 'despesa' ? 'pagar' : type === 'parcela' || type === 'recebimento' ? 'faturas' : 'auxiliares');
   };
 
   useEffect(() => {
@@ -365,14 +330,19 @@ export function Financeiro() {
   useEffect(() => {
     if (!actionMenuOpen) return undefined;
     const dismiss = (event: MouseEvent) => {
-      if (!actionMenuRef.current?.contains(event.target as Node)) setActionMenuOpen(false);
+      if (!actionMenuRef.current?.contains(event.target as Node) && !actionPopupRef.current?.contains(event.target as Node)) setActionMenuOpen(false);
     };
     const escape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setActionMenuOpen(false);
+      if (event.key === 'Escape') {
+        setActionMenuOpen(false);
+        document.getElementById('finance-primary-action')?.focus();
+      }
     };
+    const frame = window.requestAnimationFrame(() => actionPopupRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus());
     document.addEventListener('mousedown', dismiss);
     document.addEventListener('keydown', escape);
     return () => {
+      window.cancelAnimationFrame(frame);
       document.removeEventListener('mousedown', dismiss);
       document.removeEventListener('keydown', escape);
     };
@@ -512,7 +482,18 @@ export function Financeiro() {
       'Resultado mensal': item.resultadoCaixa / 100
     }));
   const cashFlowAxisScale = buildCashFlowAxisScale(monthlyData);
+  const cashBalance = cashBalancePresentation(analytics.kpis.resultadoCaixa);
   const hasChartData = monthlyData.some((item) => item.Recebido !== 0 || item.Despesas !== 0);
+  const expenseBreakdown = prepareExpenseCategoryData(analytics.categorias.map((item) => ({
+    name: item.categoria, value: item.total, count: item.count
+  })));
+  const expenseCategorySummary = expenseBreakdown.length <= 3 ? expenseBreakdown : [
+    ...expenseBreakdown.slice(0, 2),
+    expenseBreakdown.slice(2).reduce(
+      (total, item) => ({ ...total, value: total.value + item.value, percentage: total.percentage + item.percentage }),
+      { name: 'Outras categorias', value: 0, percentage: 0 }
+    )
+  ];
   const launchCount = overviewQuery.data?.meta.launchCount ?? 0;
   const expenseCount = overviewQuery.data?.meta.expenseCount ?? 0;
   const hasSourceData = overviewQuery.data?.meta.hasSourceData ?? false;
@@ -552,13 +533,7 @@ export function Financeiro() {
   ];
   const attentionPriority = { critico: 0, atencao: 1, info: 2 } as const;
   const orderedAttentionItems = [...attentionItems].sort((a, b) => attentionPriority[a.tipo] - attentionPriority[b.tipo]);
-  const collapsedAttentionItems = orderedAttentionItems.filter((item) => item.tipo === 'critico');
-  orderedAttentionItems
-    .filter((item) => item.tipo !== 'critico')
-    .slice(0, Math.max(0, 4 - collapsedAttentionItems.length))
-    .forEach((item) => collapsedAttentionItems.push(item));
-  const visibleAttentionItems = showAllAttention ? orderedAttentionItems : collapsedAttentionItems;
-  const hiddenAttentionCount = Math.max(0, orderedAttentionItems.length - collapsedAttentionItems.length);
+  const priorityAttention = orderedAttentionItems[0];
 
   const attentionAction = (title: string) => {
     const normalizedTitle = title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -566,6 +541,7 @@ export function Financeiro() {
     if (normalizedTitle.includes('orcamento')) return { label: 'Revisar orçamentos', action: () => navigate('/orcamentos') };
     return { label: normalizedTitle.includes('sem cliente') ? 'Revisar lançamentos' : 'Ver contas a pagar', action: () => setActiveTab('pagar') };
   };
+  const priorityAttentionAction = priorityAttention ? attentionAction(priorityAttention.titulo) : null;
 
   const openFirstLaunch = () => {
     setActionMenuOpen(true);
@@ -582,6 +558,7 @@ export function Financeiro() {
           <div ref={actionMenuRef} className="relative shrink-0">
           <button
             id="finance-primary-action"
+            ref={actionTriggerRef}
             type="button"
             aria-haspopup="menu"
             aria-expanded={actionMenuOpen}
@@ -594,22 +571,45 @@ export function Financeiro() {
             <CaretDown aria-hidden="true" size={15} weight="bold" className={cn('transition-transform duration-150 motion-reduce:transition-none', actionMenuOpen && 'rotate-180')} />
           </button>
           {actionMenuOpen && (
+            <PopoverSurface open anchorRef={actionTriggerRef} minWidth={352} maxWidth={352} maxHeight={360} className="overflow-y-auto rounded-2xl p-2 shadow-xl shadow-zinc-950/10">
             <div
+              ref={actionPopupRef}
               id="finance-new-entry-menu"
               role="menu"
-              className="absolute left-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl shadow-zinc-950/10 dark:border-zinc-800 dark:bg-zinc-900 lg:left-auto lg:right-0"
+              aria-label="Novo lançamento"
+              onBlur={event => { if (!actionMenuRef.current?.contains(event.relatedTarget as Node | null) && !actionPopupRef.current?.contains(event.relatedTarget as Node | null)) setActionMenuOpen(false); }}
+              onKeyDown={event => {
+                const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+                const current = items.indexOf(document.activeElement as HTMLButtonElement);
+                let next: number | null = null;
+                if (event.key === 'ArrowDown') next = (current + 1) % items.length;
+                if (event.key === 'ArrowUp') next = (current - 1 + items.length) % items.length;
+                if (event.key === 'Home') next = 0;
+                if (event.key === 'End') next = items.length - 1;
+                if (next !== null) { event.preventDefault(); items[next]?.focus(); }
+              }}
+              className="min-w-0"
             >
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => {
                   setActionMenuOpen(false);
-                  navigate(buildBudgetEditorPath());
+                  navigate(buildBudgetEditorPath({ returnTo: `/financeiro${searchParams.size ? `?${searchParams}` : ''}`, clientId: initialFinanceClientId }));
                 }}
                 className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
               >
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200"><CurrencyDollar aria-hidden="true" size={19} /></span>
-                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Nova receita</span><span className="block truncate text-xs text-zinc-500">Criar orçamento e cronograma de recebimento</span></span>
+                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Novo orçamento</span><span className="block text-xs text-zinc-500">Criar proposta e definir condições de pagamento</span></span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setActionMenuOpen(false); openEmbeddedAction('recebimento'); }}
+                className="geo-focus-ring flex min-h-14 w-full items-center gap-3 rounded-xl px-3 text-left hover:bg-zinc-100 active:scale-[0.99] dark:hover:bg-zinc-800"
+              >
+                <span aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200"><CheckCircle size={19} /></span>
+                <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Registrar recebimento</span><span className="block text-xs text-zinc-500">Selecionar uma conta a receber existente</span></span>
               </button>
               <button
                 type="button"
@@ -648,6 +648,7 @@ export function Financeiro() {
                 <span className="min-w-0"><span className="block text-sm font-semibold text-zinc-950 dark:text-white">Informar documento fiscal</span><span className="block truncate text-xs text-zinc-500">Vincular nota fiscal ao cliente ou projeto</span></span>
               </button>
             </div>
+            </PopoverSurface>
           )}
           </div>
         }
@@ -835,26 +836,21 @@ export function Financeiro() {
               <p className="mt-2 text-sm">Nenhum saldo foi substituído por zero. Restabeleça a conexão local e tente novamente.</p>
             </section>
           ) : !hasSourceData ? (
-            <section className="rounded-2xl border border-zinc-200 bg-white px-6 py-12 text-center dark:border-zinc-800 dark:bg-zinc-900/60 sm:px-10 sm:py-16" aria-labelledby="financial-first-use-title">
+            <AuraWidget tone="violet" className="px-6 py-12 text-center sm:px-10 sm:py-16" aria-labelledby="financial-first-use-title">
               <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/20">
                 <ChartBar aria-hidden="true" size={28} weight="duotone" />
               </span>
-              <h2 id="financial-first-use-title" className="mt-5 text-xl font-semibold text-zinc-950 dark:text-white">
+              <h2 id="financial-first-use-title" className="mt-5 text-xl font-semibold">
                 Comece pelo primeiro lançamento
               </h2>
-              <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+              <p className="aura-widget__muted mx-auto mt-2 max-w-xl text-sm leading-6">
                 Registre uma receita ou despesa. Depois disso, o GeoGestor apresentará fluxo de caixa, pendências, rentabilidade por cliente e despesas por categoria.
               </p>
               <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring mt-6 min-h-11 px-5 text-sm">
                 <Plus aria-hidden="true" size={17} />
                 Criar primeiro lançamento
               </button>
-              <div className="mx-auto mt-8 grid max-w-2xl gap-3 border-t border-zinc-200 pt-6 text-left text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-300 sm:grid-cols-3">
-                <p><strong className="block text-zinc-950 dark:text-white">1. Registre</strong> Receitas e despesas.</p>
-                <p><strong className="block text-zinc-950 dark:text-white">2. Acompanhe</strong> Contas e vencimentos.</p>
-                <p><strong className="block text-zinc-950 dark:text-white">3. Analise</strong> Caixa e rentabilidade.</p>
-              </div>
-            </section>
+            </AuraWidget>
           ) : !hasFilteredData ? (
             <section className="rounded-2xl border border-dashed border-zinc-300 px-6 py-12 text-center dark:border-zinc-700" aria-labelledby="financial-filter-empty-title">
               <Receipt aria-hidden="true" size={30} className="mx-auto text-zinc-400" />
@@ -877,88 +873,231 @@ export function Financeiro() {
               </div>
             </section>
           ) : (
-            <div className="space-y-10">
-              <section aria-label="Indicadores financeiros" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <FinancialMetric
-                  label="Recebido"
-                  value={formatCurrencyFromCents(analytics.kpis.receitaRecebida)}
-                  detail="Entradas confirmadas no período"
-                  tone={analytics.kpis.receitaRecebida > 0 ? 'positive' : 'neutral'}
-                  icon={<Wallet aria-hidden="true" className="h-5 w-5" />}
-                />
-                <FinancialMetric
-                  label="A receber"
-                  value={formatCurrencyFromCents(analytics.kpis.receitaPendente)}
-                  detail={countLabel(analytics.kpis.contasReceberCount, 'conta em aberto', 'contas em aberto')}
-                  tone={analytics.kpis.receitaPendente > 0 ? 'warning' : 'neutral'}
-                  icon={<TrendUp aria-hidden="true" className="h-5 w-5" />}
-                />
-                <FinancialMetric
-                  label="Despesas pagas"
-                  value={formatCurrencyFromCents(analytics.kpis.despesasPagas)}
-                  detail={countLabel(expenseCount, 'despesa no período', 'despesas no período')}
-                  tone={analytics.kpis.despesasPagas > 0 ? 'danger' : 'neutral'}
-                  icon={<TrendDown aria-hidden="true" className="h-5 w-5" />}
-                />
-                <FinancialMetric
+            <div className="finance-overview">
+              <WidgetSection id="finance-priority-title" title="Resultado e pendências" className="finance-overview-panel" contentClassName="finance-overview-priority-grid">
+                <AuraSmallBalance
+                  className="finance-aura-metric"
                   label="Resultado de caixa"
-                  value={formatCurrencyFromCents(analytics.kpis.resultadoCaixa)}
-                  detail={analytics.kpis.resultadoCaixa >= 0 ? 'Recebimentos acima das despesas' : 'Despesas acima dos recebimentos'}
-                  tone={analytics.kpis.resultadoCaixa > 0 ? 'positive' : analytics.kpis.resultadoCaixa < 0 ? 'danger' : 'neutral'}
-                  featured
-                  icon={<ChartBar aria-hidden="true" className="h-5 w-5" />}
+                  value={analytics.kpis.resultadoCaixa}
+                  currency
+                  status={cashBalance}
+                  detail={cashBalance.detail}
+                  icon={<ChartBar size={17} />}
                 />
-              </section>
+                <div className="min-w-0">
+                  <AuraAttentionWidget
+                    as="section"
+                    headingId="financial-alerts-title"
+                    className="finance-aura-attention"
+                    label="Pendências"
+                    value={<AuraNumericValue value={orderedAttentionItems.length} />}
+                    detail={priorityAttention?.titulo ?? 'Tudo em dia.'}
+                    action={priorityAttentionAction && <button type="button" onClick={priorityAttentionAction.action} className="aura-attention__action geo-focus-ring">
+                      {priorityAttentionAction.label} <ArrowRight aria-hidden="true" size={13} />
+                    </button>}
+                  />
+                  {priorityAttention && (
+                    <details className="mt-2 rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+                      <summary className="geo-focus-ring cursor-pointer rounded-xl px-3 py-2.5 text-sm font-semibold hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                        {orderedAttentionItems.length === 1 ? 'Ver detalhes da pendência' : 'Ver todas as pendências'}
+                      </summary>
+                      <ul className="divide-y divide-zinc-200 px-3 dark:divide-zinc-700">
+                        {orderedAttentionItems.map((alerta) => {
+                          const action = attentionAction(alerta.titulo);
+                          return (
+                            <li key={`${alerta.tipo}-${alerta.titulo}`} className="flex min-w-0 gap-2 py-3">
+                              <WarningCircle aria-hidden="true" size={17} weight="fill" className={cn('mt-0.5 shrink-0', alerta.tipo === 'critico' ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-200')} />
+                              <div className="min-w-0 [overflow-wrap:anywhere]">
+                                <p className="text-sm font-semibold">{alerta.titulo}</p>
+                                <p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{alerta.descricao}</p>
+                                <button type="button" onClick={action.action} className="geo-focus-ring mt-1 inline-flex min-h-8 items-center gap-1 rounded-md text-left text-xs font-semibold hover:underline">
+                                  <span>{action.label}</span> <ArrowRight aria-hidden="true" size={13} className="shrink-0" />
+                                </button>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              </WidgetSection>
 
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-12">
-                <section aria-labelledby="cash-flow-title" aria-describedby="cash-flow-description" className={cn(dashboardCardClass, 'xl:col-span-8')}>
-                  <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-                    <div>
-                      <h2 id="cash-flow-title" className="text-xl font-semibold tracking-tight text-zinc-950 dark:text-white">Evolução do fluxo de caixa</h2>
-                      <p id="cash-flow-description" className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Compare recebimentos e despesas pagas; a linha indica o resultado mensal.</p>
-                    </div>
-                    <span className="w-fit rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{periodLabel}</span>
+              <WidgetSection id="finance-movements-title" title="Movimentações" className="finance-overview-panel" contentClassName="min-w-0">
+                <section aria-labelledby="recent-financial-title" className="min-w-0">
+                  <h3 id="recent-financial-title" className="mb-3 text-base font-semibold">Últimos lançamentos</h3>
+                  {recentEntries.length > 0 ? (
+                    <ul className="finance-overview-movement-grid">
+                      {recentEntries.map((entry) => (
+                        <li key={entry.id} className="min-w-0">
+                          <AuraWidget tone="plum" size="medium" as="article" className={cn("finance-aura-recent", `finance-overview-entry--${entry.type}`)}>
+                            <h4>{entry.type === 'receita' ? 'Receita' : 'Despesa'}</h4>
+                            <button type="button" onClick={() => setActiveTab(entry.tab)} className="finance-aura-entry finance-aura-action geo-focus-ring">
+                              <span className="finance-aura-entry__main">
+                                <span className="finance-aura-entry__icon" aria-hidden="true">
+                                  {entry.type === 'receita' ? <TrendUp size={20} /> : <TrendDown size={20} />}
+                                </span>
+                                <span className="finance-aura-entry__description">
+                                  <span className="font-semibold">{entry.title}</span>
+                                  <span className="aura-widget__muted text-xs">{entry.context}</span>
+                                </span>
+                                <span className="finance-aura-entry__amount">
+                                  {entry.type === 'receita' ? '+' : '−'} {formatCurrencyFromCents(entry.amount)}
+                                </span>
+                              </span>
+                              <span className="finance-aura-entry__foot">
+                                {entry.date ? <time dateTime={entry.date}>{formatDate(entry.date)}</time> : <span>Sem data</span>}
+                                <span className={cn('rounded-full px-2 py-0.5 font-semibold', financialStatusClass(entry.status))}>{entry.status}</span>
+                              </span>
+                            </button>
+                          </AuraWidget>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <AuraWidget tone="plum" className="finance-aura-recent">
+                      <p className="aura-widget__muted py-4 text-center text-sm">Nenhum lançamento recente neste recorte.</p>
+                    </AuraWidget>
+                  )}
+                  <div className="finance-overview-movement-actions">
+                    <button type="button" onClick={() => setActiveTab('faturas')} className="geo-button-base geo-button-secondary geo-focus-ring min-h-8 px-2.5 text-xs">Ver recebimentos</button>
+                    <button type="button" onClick={() => setActiveTab('pagar')} className="geo-button-base geo-button-secondary geo-focus-ring min-h-8 px-2.5 text-xs">Ver despesas</button>
+                  </div>
+                </section>
+              </WidgetSection>
+
+              <div className="finance-overview-indicators">
+                <details className="group rounded-xl border border-brand-border">
+                  <summary className="geo-focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-base font-semibold text-text-primary hover:bg-brand-surface-subtle [&::-webkit-details-marker]:hidden">
+                    Indicadores complementares
+                    <CaretDown aria-hidden="true" size={16} className="shrink-0 group-open:rotate-180" />
+                  </summary>
+                  <div className="finance-overview-indicator-grid">
+                    <AuraReceivedWidget
+                      className="finance-aura-metric"
+                      value={analytics.kpis.receitaRecebida}
+                      context={periodLabel}
+                      action={{ label: 'Ver recebimentos', onClick: () => setActiveTab('faturas') }}
+                    />
+                    <AuraSmallBalance
+                      className="finance-aura-metric"
+                      label="A receber"
+                      value={analytics.kpis.receitaPendente}
+                      currency
+                      context={countLabel(analytics.kpis.contasReceberCount, 'conta em aberto', 'contas em aberto')}
+                      icon={<TrendUp size={17} />}
+                    />
+                    <AuraMediumMetric
+                      className="finance-aura-metric"
+                      label="Despesas pagas"
+                      value={analytics.kpis.despesasPagas}
+                      currency
+                      context={countLabel(expenseCount, 'despesa no período', 'despesas no período')}
+                      icon={<TrendDown size={17} />}
+                    />
+                  </div>
+                </details>
+              </div>
+
+              <WidgetSection id="finance-cash-section-title" title="Evolução" className="finance-overview-panel" contentClassName="min-w-0">
+                <AuraWidget tone="violet" size="large" aria-labelledby="cash-flow-title" aria-describedby={hasChartData ? 'cash-flow-description' : undefined} className="finance-aura-cash">
+                  <div className="finance-aura-heading finance-aura-cash__heading">
+                    <h3 id="cash-flow-title">Evolução do fluxo de caixa</h3>
+                    <button type="button" className="finance-aura-plus geo-focus-ring" aria-label="Novo lançamento pelo fluxo de caixa" onClick={openFirstLaunch}>
+                      <Plus aria-hidden="true" size={18} />
+                    </button>
+                  </div>
+                  <div className="finance-aura-periods" role="group" aria-label="Períodos rápidos do fluxo de caixa">
+                    {cashFlowPeriods.map(({ value, label }) => (
+                      <button key={value} type="button" className="geo-focus-ring" aria-pressed={selectedPeriod === value} onClick={() => updatePeriod(value)}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="finance-aura-cash__reading">
+                    <p className="aura-widget__muted text-xs font-medium">Resultado de caixa · {periodLabel}</p>
+                    <AuraNumericValue value={analytics.kpis.resultadoCaixa} currency />
                   </div>
                   {hasChartData ? (
                     <>
-                      <div className="flex h-72 w-full min-w-0 flex-col" aria-hidden="true">
-                        <p className="h-5 shrink-0 text-[11px] font-medium text-zinc-500 dark:text-zinc-400">Valores em <span translate="no">R$</span></p>
+                      <div className="finance-aura-plot flex w-full min-w-0 flex-col" aria-hidden="true">
+                        <p className="aura-widget__muted shrink-0 text-[10px] font-medium leading-3">Valores em <span translate="no">R$</span></p>
                         <div className="min-h-0 min-w-0 flex-1">
-                          <ResponsiveContainer {...responsiveChartProps}>
-                            <ComposedChart accessibilityLayer={false} data={monthlyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={chartBorder} />
-                              <ReferenceLine y={0} stroke={chartTextColor} strokeOpacity={0.45} />
-                              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTextColor, fontSize: 12 }} minTickGap={18} />
+                          <ResponsiveContainer {...responsiveChartProps} onResize={(width) => setCashTooltipAbovePlot(width < 700)}>
+                            <ComposedChart accessibilityLayer={false} data={monthlyData} margin={{ top: 9, right: 8, left: 0, bottom: 0 }}>
+                              <defs>
+                                {[[receivedPattern, cashReceivedColor], [expensesPattern, cashExpensesColor]].map(([id, fill]) => (
+                                  <pattern key={id} id={id} patternUnits="userSpaceOnUse" width="3.65" height="1">
+                                    <rect width="3.65" height="1" fill={fill} />
+                                    <rect width="1.83" height="1" fill="#fff" fillOpacity="var(--finance-cash-stripe-opacity, 0)" />
+                                  </pattern>
+                                ))}
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--finance-cash-grid)" />
+                              <ReferenceLine y={0} stroke={cashAxisColor} strokeWidth={1.5} />
+                              <XAxis dataKey="name" height={22} axisLine={cashFlowAxisScale.domain[0] < 0 && { stroke: cashAxisColor }} tickLine={false} tick={{ fill: 'var(--aura-muted)', fontSize: 11 }} minTickGap={14} />
                               <YAxis
                                 axisLine={false}
                                 tickLine={false}
-                                tick={{ fill: chartTextColor, fontSize: 12 }}
+                                tick={{ fill: 'var(--aura-muted)', fontSize: 11 }}
                                 tickFormatter={formatCompactCurrencyAxisValue}
-                                width={58}
+                                width={53}
                                 domain={cashFlowAxisScale.domain}
                                 ticks={cashFlowAxisScale.ticks}
+                                padding={{ top: 6, bottom: 6 }}
+                                allowDataOverflow
+                                interval={0}
                               />
-                              <Tooltip cursor={chartCursor} content={<RichTooltip format="currency" />} />
-                              <Legend
-                                wrapperStyle={chartLegendStyle}
-                                content={<CashFlowLegend />}
+                              <Tooltip
+                                cursor={{ stroke: cashAxisColor, strokeWidth: 2 }}
+                                offset={{ x: 60, y: 10 }}
+                                isAnimationActive={false}
+                                position={cashTooltipAbovePlot ? { x: 0, y: -6 } : undefined}
+                                wrapperStyle={cashTooltipAbovePlot ? { translate: '0 -100%' } : undefined}
+                                content={<RichTooltip format="currency" className={cashTooltipAbovePlot ? 'max-w-[calc(100vw-5.5rem)]' : undefined} />}
                               />
-                              <Bar dataKey="Recebido" fill={chartColors.positive} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.positive)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
-                              <Bar dataKey="Despesas" fill={chartColors.negative} radius={[6, 6, 0, 0]} maxBarSize={36} activeBar={chartActiveBar(chartColors.negative)} isAnimationActive={!reduceMotion} animationDuration={chartAnimationDuration} />
+                              {/* Keep both series types on the current scales during resizing and period changes. */}
+                              <Bar
+                                dataKey="Recebido"
+                                fill={cashReceivedColor}
+                                shape={{ fill: `url(#${receivedPattern})` }}
+                                radius={[6, 6, 0, 0]}
+                                maxBarSize={36}
+                                activeBar={{ ...chartActiveBar(cashReceivedColor), fill: `url(#${receivedPattern})` }}
+                                isAnimationActive={false}
+                              />
+                              <Bar
+                                dataKey="Despesas"
+                                fill={cashExpensesColor}
+                                shape={{ fill: `url(#${expensesPattern})` }}
+                                radius={[6, 6, 0, 0]}
+                                maxBarSize={36}
+                                activeBar={{ ...chartActiveBar(cashExpensesColor), fill: `url(#${expensesPattern})` }}
+                                isAnimationActive={false}
+                              />
                               <Line
                                 type="linear"
                                 dataKey="Resultado mensal"
-                                stroke={chartColors.primary}
-                                strokeWidth={2}
-                                dot={{ r: 2.5, fill: chartColors.primary, strokeWidth: 0 }}
-                                activeDot={chartActiveDot(chartColors.primary)}
-                                isAnimationActive={!reduceMotion}
-                                animationDuration={chartAnimationDuration}
+                                zIndex={chartResultLineZIndex}
+                                stroke={cashResultColor}
+                                strokeWidth={3}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                shape={(curve) => <CashResultCurve {...curve} outline={cashResultOutline} />}
+                                dot={{ r: 3, fill: cashResultColor, stroke: cashResultOutline, strokeWidth: 1.5, clipDot: true }}
+                                activeDot={chartActiveDot(cashResultColor)}
+                                isAnimationActive={false}
                               />
                             </ComposedChart>
                           </ResponsiveContainer>
                         </div>
                       </div>
+                      <div className="mt-1" aria-hidden="true">
+                        <CashFlowLegend />
+                      </div>
+                      <p id="cash-flow-description" className="aura-widget__muted text-center text-xs">
+                        A linha mostra o resultado mensal, calculado pelo valor recebido menos as despesas pagas.
+                      </p>
                       <table className="sr-only">
                         <caption>Fluxo de caixa mensal em reais para o período {periodLabel}.</caption>
                         <thead>
@@ -982,178 +1121,142 @@ export function Financeiro() {
                       </table>
                     </>
                   ) : (
-                    <div className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 px-6 text-center dark:border-zinc-700">
+                    <div className="aura-widget__well flex min-h-72 flex-col items-center justify-center px-6 py-5 text-center">
                       <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300"><Receipt aria-hidden="true" size={24} /></span>
-                      <h3 className="mt-4 font-semibold text-zinc-950 dark:text-white">Ainda não existem lançamentos neste período</h3>
-                      <p className="mt-1 max-w-md text-sm leading-6 text-zinc-500">Registre uma receita ou despesa para acompanhar a evolução do caixa.</p>
+                      <p className="mt-4 font-semibold">Ainda não existem lançamentos neste período</p>
+                      <p className="aura-widget__muted mt-1 max-w-md text-sm leading-6">Registre uma receita ou despesa para acompanhar a evolução do caixa.</p>
                       <button type="button" onClick={openFirstLaunch} className="geo-button-base geo-button-primary geo-focus-ring mt-5 min-h-11 px-5 text-sm">
                         <Plus aria-hidden="true" size={17} /> Criar primeiro lançamento
                       </button>
                     </div>
                   )}
-                </section>
+                </AuraWidget>
+              </WidgetSection>
 
-                <section aria-labelledby="financial-alerts-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h2 id="financial-alerts-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Requer sua atenção</h2>
-                      <p className="mt-1 text-sm text-zinc-500">Pendências que afetam a leitura financeira.</p>
-                    </div>
-                    <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold tabular-nums', orderedAttentionItems.length > 0 ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200')}>
-                      {orderedAttentionItems.length}
-                    </span>
-                  </div>
-                  {orderedAttentionItems.length > 0 ? (
-                    <div className="mt-4 space-y-3">
-                      {visibleAttentionItems.map((alerta) => {
-                        const action = attentionAction(alerta.titulo);
-                        return (
-                          <article key={`${alerta.tipo}-${alerta.titulo}`} className="rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
-                            <div className="flex min-w-0 gap-3">
-                              <span className={cn('mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', alerta.tipo === 'critico' ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200')}>
-                                <WarningCircle aria-hidden="true" size={17} weight="fill" />
-                              </span>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{alerta.titulo}</p>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">{alerta.descricao}</p>
-                                <button type="button" onClick={action.action} className="geo-focus-ring mt-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg text-xs font-semibold text-zinc-700 hover:text-zinc-950 dark:text-zinc-200 dark:hover:text-white">
-                                  {action.label} <ArrowRight aria-hidden="true" size={13} />
-                                </button>
-                              </div>
-                            </div>
-                          </article>
-                        );
-                      })}
-                      {hiddenAttentionCount > 0 || showAllAttention ? (
-                        <button type="button" onClick={() => setShowAllAttention((current) => !current)} className="geo-focus-ring min-h-10 w-full rounded-xl text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">
-                          {showAllAttention ? 'Mostrar menos' : `Ver todas (${orderedAttentionItems.length})`}
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="mt-5 flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-emerald-900 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-100">
-                      <CheckCircle aria-hidden="true" size={22} weight="fill" className="shrink-0" />
-                      <p className="text-sm font-medium leading-6">Tudo em dia. Nenhuma pendência financeira requer sua atenção.</p>
-                    </div>
-                  )}
-                </section>
-
-                <section aria-labelledby="recent-financial-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 id="recent-financial-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Últimos lançamentos</h2>
-                      <p className="mt-1 text-sm text-zinc-500">Receitas e despesas mais recentes no recorte atual.</p>
-                    </div>
-                    <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-semibold tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{recentEntries.length}</span>
-                  </div>
-                  {recentEntries.length > 0 ? (
-                    <div className="mt-4 divide-y divide-zinc-100 border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-                      {recentEntries.map((entry) => (
-                        <button key={entry.id} type="button" onClick={() => setActiveTab(entry.tab)} className="geo-focus-ring flex min-h-[72px] w-full items-center gap-3 px-1 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                          <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', entry.type === 'receita' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200' : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-200')}>
-                            {entry.type === 'receita' ? <TrendUp aria-hidden="true" size={19} /> : <TrendDown aria-hidden="true" size={19} />}
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="truncate text-sm font-semibold text-zinc-950 dark:text-white">{entry.title}</span>
-                              <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-bold', financialStatusClass(entry.status))}>{entry.status}</span>
-                            </span>
-                            <span className="mt-1 block truncate text-xs text-zinc-500">{entry.date ? formatDate(entry.date) : 'Sem data'} · {entry.context}</span>
-                          </span>
-                          <span className={cn('shrink-0 text-right text-sm font-semibold tabular-nums', entry.type === 'receita' ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300')}>
-                            {entry.type === 'receita' ? '+' : '−'} {formatCurrencyFromCents(entry.amount)}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Nenhum lançamento recente neste recorte.</p>
-                  )}
-                  <div className="mt-4 flex flex-wrap justify-end gap-2">
-                    <button type="button" onClick={() => setActiveTab('faturas')} className="geo-focus-ring min-h-10 rounded-xl px-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">Ver recebimentos</button>
-                    <button type="button" onClick={() => setActiveTab('pagar')} className="geo-focus-ring min-h-10 rounded-xl px-3 text-sm font-semibold text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-white">Ver despesas</button>
-                  </div>
-                </section>
-
-                <section aria-labelledby="expense-category-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
-                  <h2 id="expense-category-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Despesas por categoria</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Categorias com maior valor no recorte.</p>
-                  <ExpenseCategoryChart
-                    compact
-                    items={analytics.categorias.map((item) => ({
-                      name: item.categoria,
-                      value: item.total,
-                      count: item.count
-                    }))}
-                  />
-                </section>
-
-                <section aria-labelledby="client-profit-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
-                  <h2 id="client-profit-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Rentabilidade por cliente</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Cinco maiores resultados realizados.</p>
-                  {analytics.clientes.length === 0 ? (
-                    <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Sem dados suficientes.</p>
-                  ) : (
-                    <>
-                      <ClientProfitabilityChart
-                        items={analytics.clientes.map((item) => ({
-                          name: item.cliente,
-                          result: item.resultado / 100,
-                          margin: item.margem
-                        }))}
-                      />
-                      <div className="mt-4 overflow-x-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
-                        <table className="w-full min-w-[420px] text-left text-sm">
-                          <caption className="sr-only">Detalhamento da rentabilidade por cliente</caption>
-                          <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
-                            <tr><th className="py-3">Cliente</th><th className="py-3 text-right">Resultado</th><th className="py-3 text-right">Margem</th></tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                            {analytics.clientes.slice(0, 5).map((item) => (
-                              <tr key={item.clienteId}>
-                                <th scope="row" className="max-w-72 break-words py-3 pr-3 text-left font-semibold">{item.cliente}</th>
-                                <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
-                                <td className="py-3 text-right font-mono tabular-nums">{percentageFormatter.format(item.margem)}%</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+              <WidgetSection id="finance-analysis-section-title" title="Análises" className="finance-overview-panel" contentClassName="grid gap-3">
+                <details className="group rounded-xl border border-brand-border">
+                  <summary className="geo-focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-base font-semibold text-text-primary hover:bg-brand-surface-subtle [&::-webkit-details-marker]:hidden">
+                    Despesas por categoria
+                    <CaretDown aria-hidden="true" size={16} className="shrink-0 group-open:rotate-180" />
+                  </summary>
+                  <div className="min-w-0 p-3 finance-overview-analysis">
+                    <AuraWidget tone="magenta" size="medium" aria-labelledby="expense-category-title" className="finance-aura-categories">
+                      <div className="finance-aura-heading">
+                        <h3 id="expense-category-title">Despesas por categoria</h3>
                       </div>
-                    </>
-                  )}
-                </section>
-
-                <section aria-labelledby="financial-summary-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
-                  <h2 id="financial-summary-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Resumo financeiro</h2>
-                  <p className="mt-1 text-sm text-zinc-500">Pendências e próximos passos do período.</p>
-                  <dl className="mt-5 divide-y divide-zinc-100 dark:divide-zinc-800">
-                    <div className="flex items-start justify-between gap-4 py-3 first:pt-0">
-                      <dt className="text-sm text-zinc-500">Total vencido</dt>
-                      <dd className={cn('text-right text-sm font-semibold tabular-nums', analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-zinc-950 dark:text-white')}>{formatCurrencyFromCents(analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas)}</dd>
-                    </div>
-                    <div className="flex items-start justify-between gap-4 py-3">
-                      <dt className="text-sm text-zinc-500">Contas abertas</dt>
-                      <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{openAccountCount}</dd>
-                    </div>
-                    <div className="flex items-start justify-between gap-4 py-3">
-                      <dt className="text-sm text-zinc-500">Próximo vencimento</dt>
-                      <dd className="max-w-40 text-right text-sm font-semibold text-zinc-950 dark:text-white">{nextDueDate ? formatDate(nextDueDate) : 'Sem vencimentos futuros'}</dd>
-                    </div>
-                    <div className="flex items-start justify-between gap-4 py-3">
-                      <dt className="text-sm text-zinc-500">Aprovados sem parcelas</dt>
-                      <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{analytics.kpis.orcamentosSemParcelas}</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-5 grid gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                    <Link to="/relatorios?tipo=financeiro" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                      Relatório financeiro <ArrowRight aria-hidden="true" size={15} />
-                    </Link>
-                    <Link to="/orcamentos" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                      Gerenciar orçamentos <ArrowRight aria-hidden="true" size={15} />
-                    </Link>
+                      {expenseCategorySummary.length > 0 ? (
+                        <>
+                          <div className="finance-aura-category-strip" aria-hidden="true">
+                            {expenseCategorySummary.map((item, index) => (
+                              <span key={index} data-category-color={index} title={item.name} style={{ flex: item.percentage }} />
+                            ))}
+                          </div>
+                          <ul className="finance-overview-category-legend">
+                            {expenseCategorySummary.map((item, index) => (
+                              <li key={index} data-category-color={index} tabIndex={0}>
+                                {item.name}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : (
+                        <p className="aura-widget__muted text-sm">Nenhuma despesa paga neste recorte.</p>
+                      )}
+                      <button type="button" className="finance-aura-cta geo-focus-ring w-full" onClick={() => setActiveTab('pagar')}>Ver despesas</button>
+                    </AuraWidget>
+                    {expenseBreakdown.length > 0 && (
+                      <section className="finance-overview-category-breakdown" aria-labelledby="finance-category-breakdown-title">
+                        <h3 id="finance-category-breakdown-title">Detalhamento por categoria</h3>
+                        {expenseBreakdown.length > expenseCategorySummary.length && (
+                          <p className="text-xs text-text-secondary">As linhas em azul compõem o segmento Outras categorias.</p>
+                        )}
+                        <dl className="finance-overview-category-details">
+                          {expenseBreakdown.map((item, index) => (
+                            <div key={item.name} data-category-color={Math.min(index, expenseCategorySummary.length - 1)} tabIndex={0}>
+                              <dt className="text-sm font-medium">{item.name}</dt>
+                              <dd className="text-sm tabular-nums">{formatCurrencyFromCents(item.value)}</dd>
+                              <dd className="text-xs text-zinc-600 dark:text-zinc-300">{percentageFormatter.format(item.percentage)}% do total · {countLabel(item.count ?? 0, 'lançamento', 'lançamentos')}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </section>
+                    )}
                   </div>
-                </section>
-              </div>
+                </details>
+                <details className="group rounded-xl border border-brand-border">
+                  <summary className="geo-focus-ring flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-3 py-2 text-base font-semibold text-text-primary hover:bg-brand-surface-subtle [&::-webkit-details-marker]:hidden">
+                    Rentabilidade e resumo financeiro
+                    <CaretDown aria-hidden="true" size={16} className="shrink-0 group-open:rotate-180" />
+                  </summary>
+                  <div className="mt-4 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+                    <section aria-labelledby="client-profit-title" className={cn(dashboardCardClass, 'xl:col-span-8')}>
+                      <h3 id="client-profit-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Rentabilidade por cliente</h3>
+                      <p className="mt-1 text-sm text-text-secondary">Cinco maiores resultados realizados.</p>
+                      {analytics.clientes.length === 0 ? (
+                        <p className="mt-5 rounded-xl border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700">Sem dados suficientes.</p>
+                      ) : (
+                        <>
+                          <ClientProfitabilityChart
+                            items={analytics.clientes.map((item) => ({
+                              name: item.cliente,
+                              result: item.resultado / 100,
+                              margin: item.margem
+                            }))}
+                          />
+                          <div className="mt-4 overflow-x-auto border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                            <table className="w-full min-w-[420px] text-left text-sm">
+                              <caption className="sr-only">Detalhamento da rentabilidade por cliente</caption>
+                              <thead className="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-800">
+                                <tr><th className="py-3">Cliente</th><th className="py-3 text-right">Resultado</th><th className="py-3 text-right">Margem</th></tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                                {analytics.clientes.slice(0, 5).map((item) => (
+                                  <tr key={item.clienteId}>
+                                    <th scope="row" className="max-w-72 break-words py-3 pr-3 text-left font-semibold">{item.cliente}</th>
+                                    <td className={cn('py-3 text-right font-mono font-bold tabular-nums', item.resultado >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600')}>{formatCurrencyFromCents(item.resultado)}</td>
+                                    <td className="py-3 text-right font-mono tabular-nums">{percentageFormatter.format(item.margem)}%</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </section>
+
+                    <section aria-labelledby="financial-summary-title" className={cn(dashboardCardClass, 'xl:col-span-4')}>
+                      <h3 id="financial-summary-title" className="text-lg font-semibold text-zinc-950 dark:text-white">Resumo financeiro</h3>
+                      <p className="mt-1 text-sm text-text-secondary">Pendências e próximos passos do período.</p>
+                      <dl className="mt-5 divide-y divide-zinc-100 dark:divide-zinc-800">
+                        <div className="flex items-start justify-between gap-4 py-3 first:pt-0">
+                          <dt className="text-sm text-zinc-500">Total vencido</dt>
+                          <dd className={cn('text-right text-sm font-semibold tabular-nums', analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas > 0 ? 'text-rose-700 dark:text-rose-300' : 'text-zinc-950 dark:text-white')}>{formatCurrencyFromCents(analytics.kpis.receitaAtrasada + analytics.kpis.despesasAtrasadas)}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 py-3">
+                          <dt className="text-sm text-zinc-500">Contas abertas</dt>
+                          <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{openAccountCount}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 py-3">
+                          <dt className="text-sm text-zinc-500">Próximo vencimento</dt>
+                          <dd className="max-w-40 text-right text-sm font-semibold text-zinc-950 dark:text-white">{nextDueDate ? formatDate(nextDueDate) : 'Sem vencimentos futuros'}</dd>
+                        </div>
+                        <div className="flex items-start justify-between gap-4 py-3">
+                          <dt className="text-sm text-zinc-500">Aprovados sem parcelas</dt>
+                          <dd className="text-right text-sm font-semibold tabular-nums text-zinc-950 dark:text-white">{analytics.kpis.orcamentosSemParcelas}</dd>
+                        </div>
+                      </dl>
+                      <div className="mt-5 grid gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                        <Link to="/relatorios?tipo=financeiro" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                          Relatório financeiro <ArrowRight aria-hidden="true" size={15} />
+                        </Link>
+                        <Link to="/orcamentos" className="geo-focus-ring inline-flex min-h-11 items-center justify-between rounded-xl px-3 text-sm font-semibold text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800">
+                          Gerenciar orçamentos <ArrowRight aria-hidden="true" size={15} />
+                        </Link>
+                      </div>
+                    </section>
+                  </div>
+                </details>
+              </WidgetSection>
             </div>
           )}
         </section>
@@ -1165,10 +1268,12 @@ export function Financeiro() {
             key={embeddedAction?.type === 'parcela' ? embeddedAction.requestId : 'financial-receivables'}
             embedded
             openCreateOnMount={embeddedAction?.type === 'parcela'}
+            receiptSelectionRequest={embeddedAction?.type === 'recebimento' ? embeddedAction.requestId : undefined}
+            persistListState
             initialProjectId={initialExpenseProjectId}
             initialClientId={initialFinanceClientId}
             focusParcelaId={focusedReceivableId}
-            onFocusHandled={() => clearFocusedRecord(APP_QUERY_KEYS.receivable)}
+            onFocusHandled={tab => clearFocusedRecord(APP_QUERY_KEYS.receivable, tab)}
           />
         </section>
       )}

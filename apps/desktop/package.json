@@ -1,6 +1,6 @@
 {
   "name": "geogestor-desktop",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "description": "GeoGestor - Gestao para Topografia (Desktop)",
   "main": "main.js",
   "author": "GeoGestor",
@@ -21,7 +21,8 @@
     "files": [
       "main.js",
       "preload.js",
-      "restore-authorization.cjs"
+      "restore-authorization.cjs",
+      "budget-pdf.cjs"
     ],
     "extraResources": [
       {

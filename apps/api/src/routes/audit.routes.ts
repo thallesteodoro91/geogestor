@@ -3,7 +3,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { db } from '../db';
 import { schema } from '@geogestor/database';
-import { and, count, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { sanitizeStoredAuditJson } from '../services/audit.service';
 
 function sanitizeAuditRows<T extends { oldData: string | null; newData: string | null }>(rows: T[]) {
@@ -14,11 +14,23 @@ function sanitizeAuditRows<T extends { oldData: string | null; newData: string |
   }));
 }
 
+function auditClientId(row: { oldData: string | null; newData: string | null }): string | null {
+  for (const raw of [row.newData, row.oldData]) {
+    if (!raw) continue;
+    try {
+      const id = JSON.parse(raw)?.id;
+      if (typeof id === 'string' && id.length > 0) return id;
+    } catch { /* Historical audit data can contain incomplete JSON. */ }
+  }
+  return null;
+}
+
 export async function auditRoutes(server: FastifyInstance) {
   const zServer = server.withTypeProvider<ZodTypeProvider>();
   zServer.get('/recent', {
     schema: { querystring: z.object({ limit: z.coerce.number().int().min(1).max(20).default(10) }) }
-  }, async (request) => sanitizeAuditRows(await db.select({
+  }, async (request) => {
+    const rows = sanitizeAuditRows(await db.select({
       id: schema.auditLogs.id,
       action: schema.auditLogs.action,
       entity: schema.auditLogs.entity,
@@ -26,7 +38,12 @@ export async function auditRoutes(server: FastifyInstance) {
       oldData: sql<string | null>`substr(${schema.auditLogs.oldData}, 1, 2000)`,
       newData: sql<string | null>`substr(${schema.auditLogs.newData}, 1, 2000)`,
       createdAt: schema.auditLogs.createdAt
-    }).from(schema.auditLogs).orderBy(desc(schema.auditLogs.createdAt)).limit(request.query.limit)));
+    }).from(schema.auditLogs).orderBy(desc(schema.auditLogs.createdAt)).limit(request.query.limit));
+    const clientIds = [...new Set(rows.filter((row) => row.entity === 'Cliente').map(auditClientId).filter((id): id is string => Boolean(id)))];
+    const available = new Set(clientIds.length ? (await db.select({ id: schema.clientes.id }).from(schema.clientes)
+      .where(and(inArray(schema.clientes.id, clientIds), isNull(schema.clientes.deletedAt)))).map((client) => client.id) : []);
+    return rows.map((row) => row.entity === 'Cliente' ? { ...row, recordAvailable: available.has(auditClientId(row) || '') } : row);
+  });
 
   zServer.get('/', {
     schema: { querystring: z.object({
